@@ -402,10 +402,7 @@ class WEPCalculation(object):
         butlerRootPath = self._getButlerRootPath()
         self.wepCntlr.setPostIsrCcdInputs(butlerRootPath)
 
-        # Get the target stars map neighboring stars
-        neighborStarMap = self._getTargetStar()
-
-        # Calculate the wavefront error
+        # Get the visit IDs
         intraObsIdList = rawExpData.getVisit()
         intraObsId = intraObsIdList[0]
         if extraRawExpData is None:
@@ -415,7 +412,14 @@ class WEPCalculation(object):
             extraObsId = extraObsIdList[0]
             obsIdList = [intraObsId, extraObsId]
 
-        donutMap = self._calcWfErr(neighborStarMap, obsIdList)
+        # Get the sensor images
+        wfsImgMap = self._getWfsImgMap(obsIdList)
+
+        # Get the target stars map neighboring stars
+        neighborStarMap = self._getTargetStar(wfsImgMap)
+
+        # Calculate the wavefront error
+        donutMap = self._calcWfErr(neighborStarMap, wfsImgMap)
 
         listOfWfErr = self._populateListOfSensorWavefrontData(donutMap)
 
@@ -520,8 +524,15 @@ class WEPCalculation(object):
         elif imgType == ImageType.Eimg:
             return self.isrDir
 
-    def _getTargetStar(self):
+    def _getTargetStar(self, wfsImgMap):
         """Get the target stars
+
+        Parameters
+        ----------
+        wfsImgMap : dict
+            Image map. The dictionary key is the sensor name. The dictionary
+            item is the defocal image on the camera coordinate. (type:
+            DefocalImage).
 
         Returns
         -------
@@ -556,6 +567,10 @@ class WEPCalculation(object):
             neighborStarMap = sourSelc.getTargetStarByFile(
                 skyFile, offset=camDimOffset
             )[0]
+        elif bscDbType == BscDbType.LocalDbFromImage:
+            neighborStarMap = sourSelc.getTargetStarFromImage(
+                wfsImgMap, offset=camDimOffset
+            )
 
         # Disconnect the database
         sourSelc.disconnect()
@@ -587,17 +602,11 @@ class WEPCalculation(object):
 
         return skyFile
 
-    def _calcWfErr(self, neighborStarMap, obsIdList):
-        """Calculate the wavefront error.
-
-        Only consider one intra-focal and one extra-focal images at this
-        moment
+    def _getWfsImgMap(self, obsIdList):
+        """Get the images of the sensors.
 
         Parameters
         ----------
-        neighborStarMap : dict
-            Information of neighboring stars and candidate stars with the name
-            of sensor as a dictionary.
         obsIdList : list[int]
             Observation Id list in [intraObsId, extraObsId]. If the input is
             [intraObsId], this means the corner WFS.
@@ -605,12 +614,19 @@ class WEPCalculation(object):
         Returns
         -------
         dict
-            Donut image map with the calculated wavefront error. The dictionary
-            key is the sensor name. The dictionary item is the donut image
-            (type: DonutImage).
+            Image map. The dictionary key is the sensor name. The dictionary
+            item is the defocal image on the camera coordinate. (type:
+            DefocalImage).
         """
 
-        sensorNameList = list(neighborStarMap)
+        sensorList = self.wepCntlr.sourSelc.camera.getWavefrontSensor()
+        sensorNameList = []
+        for sensorName in sensorList.keys():
+            raft, sensor = sensorName.split('_')
+            if self.wepCntlr.butlerWrapper.checkPostIsrDataExists(
+                obsIdList[0], raft, sensor
+            ):
+                sensorNameList.append(sensorName)
 
         imgType = self._getImageType()
         if imgType == ImageType.Amp:
@@ -621,6 +637,32 @@ class WEPCalculation(object):
             wfsImgMap = self.wepCntlr.getEimgMapByPistonDefocal(
                 sensorNameList, obsIdList
             )
+
+        return wfsImgMap
+
+    def _calcWfErr(self, neighborStarMap, wfsImgMap):
+        """Calculate the wavefront error.
+
+        Only consider one intra-focal and one extra-focal images at this
+        moment
+
+        Parameters
+        ----------
+        neighborStarMap : dict
+            Information of neighboring stars and candidate stars with the name
+            of sensor as a dictionary.
+        wfsImgMap : dict
+            Image map. The dictionary key is the sensor name. The dictionary
+            item is the defocal image on the camera coordinate. (type:
+            DefocalImage).
+
+        Returns
+        -------
+        dict
+            Donut image map with the calculated wavefront error. The dictionary
+            key is the sensor name. The dictionary item is the donut image
+            (type: DonutImage).
+        """
 
         doDeblending = self.settingFile.getSetting("doDeblending")
         donutMap = self.wepCntlr.getDonutMap(

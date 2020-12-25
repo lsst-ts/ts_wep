@@ -8,9 +8,10 @@ imageType: amp
 # 1 pixel = 0.2 arcsec
 pixelToArcsec: 0.2
 
-# Bright star catalog (BSC) database type ("localDb" or "file")
+# Bright star catalog (BSC) database type ("localDb", "file" or "image")
 # localDb: Use the local database (not support yet)
 # file: Use the sky file
+# image: Get the sources by source detection on the image
 bscDbType: file
 
 # Default BSC database path relative to the root of module

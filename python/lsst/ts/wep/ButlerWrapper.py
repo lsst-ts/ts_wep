@@ -195,6 +195,28 @@ class ButlerWrapper(object):
 
         return self._butler.get("eimage", dataId=dataId)
 
+    def checkPostIsrDataExists(self, visit, raft, sensor):
+        """Check that the Post-ISR image exists.
+
+        Parameters
+        ----------
+        visit : int
+            Visit Id.
+        raft : str
+            Abbreviated raft name (e.g. "R22").
+        sensor : str
+            Abbreviated sensor name (e.g. "S11").
+
+        Returns
+        -------
+        boolean
+            True if data exists in repository.
+        """
+
+        dataId = self._getDefaultDataId(visit, raft, sensor)
+
+        return self._butler.datasetExists('postISRCCD', dataId=dataId)
+
     @staticmethod
     def getImageData(exposure):
         """Get the image data.
