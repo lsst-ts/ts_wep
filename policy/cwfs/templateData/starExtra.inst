@@ -1,0 +1,73 @@
+Opsim_obshistid 9006001
+Opsim_filter 1
+mjd 51591.0935280000
+SIM_SEED 1000
+rightascension 0.000000
+declination 0.000000
+rotskypos 0.000000
+rottelpos 0
+SIM_VISTIME 15.0
+SIM_NSNAP 1
+moonphase 0.0
+moonalt -90
+Opsim_rawseeing -1
+move 5  0.0000
+move 6  0.0000
+move 7  0.0000
+move 8  0.0000
+move 9  0.0000
+move 10 -1500.0000
+move 11  0.0000
+move 12  0.0000
+move 13  0.0000
+move 14  0.0000
+move 15  0.0000
+move 16  0.0000
+move 17  0.0000
+move 18  0.0000
+move 19  0.0000
+move 20  0.0000
+move 21  0.0000
+move 22  0.0000
+move 23  0.0000
+move 24  0.0000
+move 25  0.0000
+move 26  0.0000
+move 27  0.0000
+move 28  0.0000
+move 29  0.0000
+move 30  0.0000
+move 31  0.0000
+move 32  0.0000
+move 33  0.0000
+move 34  0.0000
+move 35  0.0000
+move 36  0.0000
+move 37  0.0000
+move 38  0.0000
+move 39  0.0000
+move 40  0.0000
+move 41  0.0000
+move 42  0.0000
+move 43  0.0000
+move 44  0.0000
+move 45  0.0000
+move 46  0.0000
+move 47  0.0000
+move 48  0.0000
+move 49  0.0000
+move 50  0.0000
+move 51  0.0000
+move 52  0.0000
+move 53  0.0000
+move 54  0.0000
+camconfig 3
+object  0	359.773633	-0.226367 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 0.0 none none
+object  1	359.773633	 0.008333 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 1.0 none none
+object  2	359.773633	 0.243033 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 2.0 none none
+object  3	 0.008333	-0.226367 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 3.0 none none
+object  4	 0.008333	 0.008333 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 4.0 none none
+object  5	 0.008333	 0.243033 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 5.0 none none
+object  6	 0.243033	-0.226367 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 6.0 none none
+object  7	 0.243033	 0.008333 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 7.0 none none
+object  8	 0.243033	 0.243033 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 8.0 none none
