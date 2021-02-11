@@ -72,3 +72,6 @@ deblendDonutAlgo: adapt
 # This is just a placeholder at this moment
 # This will begin to work when the super task is implemented
 numOfProc: 1
+
+# Donut Template Type. It can be "model" or "phosim".
+donutTemplateType: model

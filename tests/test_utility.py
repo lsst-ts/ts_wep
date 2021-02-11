@@ -36,6 +36,8 @@ from lsst.ts.wep.Utility import (
     CentroidFindType,
     getDeblendDonutType,
     DeblendDonutType,
+    getDonutTemplateType,
+    DonutTemplateType,
 )
 
 
@@ -88,6 +90,9 @@ class TestUtility(unittest.TestCase):
 
         self.assertEqual(getCentroidFindType("randomWalk"), CentroidFindType.RandomWalk)
         self.assertEqual(getCentroidFindType("otsu"), CentroidFindType.Otsu)
+        self.assertEqual(
+            getCentroidFindType("convolveTemplate"), CentroidFindType.ConvolveTemplate
+        )
 
     def testGetCentroidFindTypeWithWrongInput(self):
 
@@ -100,6 +105,15 @@ class TestUtility(unittest.TestCase):
     def testGetDeblendDonutTypeWithWrongInput(self):
 
         self.assertRaises(ValueError, getDeblendDonutType, "wrongType")
+
+    def testGetDonutTemplateType(self):
+
+        self.assertEqual(getDonutTemplateType("model"), DonutTemplateType.Model)
+        self.assertEqual(getDonutTemplateType("phosim"), DonutTemplateType.Phosim)
+
+    def testGetDonutTemplateTypeWithWrongInput(self):
+
+        self.assertRaises(ValueError, getDonutTemplateType, "wrongType")
 
 
 if __name__ == "__main__":

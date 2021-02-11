@@ -411,3 +411,30 @@ def getDeblendDonutType(deblendDonutType):
         return DeblendDonutType.Adapt
     else:
         raise ValueError("The %s is not supported." % deblendDonutType)
+
+
+def getDonutTemplateType(donutTemplateType):
+    """Get the donut template type.
+
+    Parameters
+    ----------
+    donutTemplateType : str
+        Donut template type to use (model or phosim).
+
+    Returns
+    -------
+    enum 'DonutTemplateType'
+        Donut template type algorithm.
+
+    Raises
+    ------
+    ValueError
+        The donut template type is not supported.
+    """
+
+    if donutTemplateType == "model":
+        return DonutTemplateType.Model
+    elif donutTemplateType == "phosim":
+        return DonutTemplateType.Phosim
+    else:
+        raise ValueError("The %s is not supported." % donutTemplateType)
