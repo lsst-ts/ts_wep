@@ -5,7 +5,8 @@
 ### policy/cwfs/templateData directory and to be used with
 ### donutTemplatePhosim.py
 
-NUM_PROCS=$1
+# Integer to specify number of processors to use in phosim
+NUM_PROCS="${1:-1}"
 
 TEMPLATE_CAMERA=PHOSIM_MAPPER
 
@@ -50,6 +51,9 @@ else
 fi
 
 echo "Run phosim with $NUM_PROCS processors"
+
+DETECTOR_LIST_DONUTS="R22_S11"
+DETECTOR_LIST_FLATS="R22_S11"
 
 # Generate the extrafocal images
 python $PHOSIMPATH/phosim.py -w $TS_WEP_DIR/policy/cwfs/templateData/tempDir/workDir \

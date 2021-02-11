@@ -3,6 +3,8 @@ here in templateData/phosimTemplates. The phosim templates here are designed
 to be used with DonutTemplatePhosim.py
 
 ## Generating templates
-1) Make sure your environment is set up to use ts_wep and you phosim installed
-2) Run the following bash command: `bash CreateTemplates.bash`
-3) Templates should appear in ts_wep/policy/cwfs/templateData/phosimTemplates
+1) Make sure your environment is set up to use ts_wep and you phosim installed.
+2) Run the following bash command: `bash CreateTemplates.bash NUM_PROCS`
+   where `NUM_PROCS` is an integer specifying the number of processors to use
+   in phosim. The default NUM_PROCS value is 1.
+3) Templates should appear in ts_wep/policy/cwfs/templateData/phosimTemplates.
