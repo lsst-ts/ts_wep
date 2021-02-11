@@ -5,6 +5,13 @@
 ### policy/cwfs/templateData directory and to be used with
 ### donutTemplatePhosim.py
 
+NUM_PROCS=$1
+
+TEMPLATE_CAMERA=PHOSIM_MAPPER
+
+echo 'Making template directory'
+mkdir $TS_WEP_DIR/policy/cwfs/templateData/phosimTemplates
+
 echo 'Making temporary work directory'
 mkdir $TS_WEP_DIR/policy/cwfs/templateData/tempDir
 mkdir $TS_WEP_DIR/policy/cwfs/templateData/tempDir/workDir
@@ -15,15 +22,38 @@ mkdir $TS_WEP_DIR/policy/cwfs/templateData/tempDir/input
 mkdir $TS_WEP_DIR/policy/cwfs/templateData/tempDir/raw
 mkdir $TS_WEP_DIR/policy/cwfs/templateData/tempDir/calibs
 
-echo 'Run phosim'
+echo 'Creating detector lists'
+echo $TEMPLATE_CAMERA
+if [ "$TEMPLATE_CAMERA" == "PHOSIM_MAPPER" ]
+then
+    file="$TS_WEP_DIR/policy/sensorNameToId.yaml"
+    DETECTOR_LIST_DONUTS=""
+    DETECTOR_LIST_FLATS=""
+    i=1
+    # Done this way to include last line in file that has no newline at end
+    # See: https://stackoverflow.com/questions/12916352/shell-script-read-missing-last-line
+    while read line || [ -n "$line" ]; do
+        if ((i < 4))
+            then
+            i=$((i+1))
+            else
+            #Reading each line and add in sensor name
+            SENSORNAME=${line:0:7}
+            DETECTOR_LIST_DONUTS+="$SENSORNAME|"
+            DETECTOR_LIST_FLATS+="$SENSORNAME "
+            i=$((i+1))
+        fi
+    done < $file
+else
+    echo "Template Generation FAILED: Unidentified Camera"
+    exit
+fi
 
-# The different commands expect the detector list in different formats
-DETECTOR_LIST_DONUTS="R22_S00|R22_S01|R22_S02|R22_S10|R22_S11|R22_S12|R22_S20|R22_S21|R22_S22|"
-DETECTOR_LIST_FLATS="R22_S00 R22_S01 R22_S02 R22_S10 R22_S11 R22_S12 R22_S20 R22_S21 R22_S22"
+echo "Run phosim with $NUM_PROCS processors"
 
 # Generate the extrafocal images
 python $PHOSIMPATH/phosim.py -w $TS_WEP_DIR/policy/cwfs/templateData/tempDir/workDir \
--s  $DETECTOR_LIST_DONUTS  \
+-s $DETECTOR_LIST_DONUTS -p $NUM_PROCS \
 $TS_WEP_DIR/policy/cwfs/templateData/starExtra.inst \
 -i lsst -e 1 -c $TS_WEP_DIR/policy/cwfs/templateData/star.cmd \
 -o $TS_WEP_DIR/policy/cwfs/templateData/tempDir/phosimOutput/extra
@@ -34,7 +64,7 @@ $TS_WEP_DIR/policy/cwfs/templateData/tempDir/phosimOutput/extra
 
 # Generate the intrafocal images
 python $PHOSIMPATH/phosim.py -w $TS_WEP_DIR/policy/cwfs/templateData/tempDir/workDir \
--s  $DETECTOR_LIST_DONUTS  \
+-s $DETECTOR_LIST_DONUTS  -p $NUM_PROCS \
 $TS_WEP_DIR/policy/cwfs/templateData/starIntra.inst \
 -i lsst -e 1 -c $TS_WEP_DIR/policy/cwfs/templateData/star.cmd \
 -o $TS_WEP_DIR/policy/cwfs/templateData/tempDir/phosimOutput/intra
@@ -53,7 +83,6 @@ $TS_WEP_DIR/policy/cwfs/templateData/tempDir/input/_mapper
 outputDir=$TS_WEP_DIR/policy/cwfs/templateData/tempDir/input
 ampImg=$TS_WEP_DIR/policy/cwfs/templateData/tempDir/raw/*.fits
 ingestImages.py $outputDir $ampImg
-
 
 echo 'Make flats'
 

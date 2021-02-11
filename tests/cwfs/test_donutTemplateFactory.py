@@ -24,6 +24,7 @@ import unittest
 from lsst.ts.wep.Utility import DonutTemplateType
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
+from lsst.ts.wep.cwfs.DonutTemplatePhosim import DonutTemplatePhosim
 
 
 class TestTemplateMakerFactory(unittest.TestCase):
@@ -35,6 +36,13 @@ class TestTemplateMakerFactory(unittest.TestCase):
             DonutTemplateType.Model
         )
         self.assertTrue(isinstance(donutTemplate, DonutTemplateModel))
+
+    def testCreateTemplatePhosim(self):
+
+        donutTemplate = DonutTemplateFactory.createDonutTemplate(
+            DonutTemplateType.Phosim
+        )
+        self.assertTrue(isinstance(donutTemplate, DonutTemplatePhosim))
 
     def testCreateCentroidFindWrongType(self):
 

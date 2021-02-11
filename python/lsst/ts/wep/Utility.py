@@ -67,6 +67,7 @@ class CentroidFindType(IntEnum):
 
 class DonutTemplateType(IntEnum):
     Model = 1
+    Phosim = auto()
 
 
 class DeblendDonutType(IntEnum):
