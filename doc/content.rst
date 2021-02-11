@@ -109,6 +109,7 @@ This module calculates the wavefront error by solving the TIE.
 * **DonutTemplateFactory**: Factory for creating donut template objects used by CentroidConvolveTemplate.
 * **DonutTemplateDefault**: Default donut template class.
 * **DonutTemplateModel**: DonutTemplateDefault child class to make donut templates using an Instrument model.
+* **DonutTemplatePhosim**: DonutTemplateDefault child class to make donut templates from templates created with Phosim.
 
 .. _lsst.ts.wep-modules_wep_deblend:
 

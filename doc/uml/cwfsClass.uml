@@ -11,7 +11,9 @@ CentroidFindFactory ..> CentroidOtsu
 CentroidFindFactory ..> CentroidConvolveTemplate
 CentroidConvolveTemplate *-- CentroidRandomWalk
 DonutTemplateDefault <|-- DonutTemplateModel
+DonutTemplateDefault <|-- DonutTemplatePhosim
 DonutTemplateFactory ..> DonutTemplateModel
+DonutTemplateFactory ..> DonutTemplatePhosim
 DonutTemplateModel ..> CompensableImage
 DonutTemplateModel ..> Instrument
 Image ..> CentroidFindFactory
