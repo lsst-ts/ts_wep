@@ -1,0 +1,251 @@
+Opsim_obshistid 9006002
+Opsim_filter 1
+mjd 59580.0000000000
+SIM_SEED 1000
+rightascension 0.000000
+declination 0.000000
+rotskypos 0.000000
+rottelpos 0
+SIM_VISTIME 15.0
+SIM_NSNAP 1
+Opsim_rawseeing -1
+move 5  0.0000
+move 6  0.0000
+move 7  0.0000
+move 8  0.0000
+move 9  0.0000
+move 10 1500.0000
+move 11  0.0000
+move 12  0.0000
+move 13  0.0000
+move 14  0.0000
+move 15  0.0000
+move 16  0.0000
+move 17  0.0000
+move 18  0.0000
+move 19  0.0000
+move 20  0.0000
+move 21  0.0000
+move 22  0.0000
+move 23  0.0000
+move 24  0.0000
+move 25  0.0000
+move 26  0.0000
+move 27  0.0000
+move 28  0.0000
+move 29  0.0000
+move 30  0.0000
+move 31  0.0000
+move 32  0.0000
+move 33  0.0000
+move 34  0.0000
+move 35  0.0000
+move 36  0.0000
+move 37  0.0000
+move 38  0.0000
+move 39  0.0000
+move 40  0.0000
+move 41  0.0000
+move 42  0.0000
+move 43  0.0000
+move 44  0.0000
+move 45  0.0000
+move 46  0.0000
+move 47  0.0000
+move 48  0.0000
+move 49  0.0000
+move 50  0.0000
+move 51  0.0000
+move 52  0.0000
+move 53  0.0000
+move 54  0.0000
+camconfig 3
+object  0	-1.642023	-0.946442 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 0.0 none none
+object  1	-1.642744	-0.711699 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 1.0 none none
+object  2	-1.643022	-0.476987 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 2.0 none none
+object  3	-1.407356	-0.946267 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 3.0 none none
+object  4	-1.407800	-0.711276 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 4.0 none none
+object  5	-1.408355	-0.476484 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 5.0 none none
+object  6	-1.172586	-0.945633 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 6.0 none none
+object  7	-1.173031	-0.710787 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 7.0 none none
+object  8	-1.173475	-0.476084 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 8.0 none none
+object  9	-1.643688	-0.240705 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 9.0 none none
+object 10	-1.644409	-0.005914 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 10.0 none none
+object 11	-1.644687	 0.228821 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 11.0 none none
+object 12	-1.409021	-0.240454 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 12.0 none none
+object 13	-1.409466	-0.005415 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 13.0 none none
+object 14	-1.410021	 0.229402 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 14.0 none none
+object 15	-1.174252	-0.239754 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 15.0 none none
+object 16	-1.174696	-0.004860 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 16.0 none none
+object 17	-1.175141	 0.229867 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 17.0 none none
+object 18	-1.645353	 0.465103 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 18.0 none none
+object 19	-1.646075	 0.699871 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 19.0 none none
+object 20	-1.646352	 0.934559 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 20.0 none none
+object 21	-1.410687	 0.465432 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 21.0 none none
+object 22	-1.411131	 0.700447 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 22.0 none none
+object 23	-1.411686	 0.935216 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 23.0 none none
+object 24	-1.175918	 0.466197 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 24.0 none none
+object 25	-1.176362	 0.701067 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 25.0 none none
+object 26	-1.176807	 0.935747 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 26.0 none none
+object 27	-0.935722	-1.650684 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 27.0 none none
+object 28	-0.936444	-1.415995 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 28.0 none none
+object 29	-0.936722	-1.181314 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 29.0 none none
+object 30	-0.700937	-1.650503 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 30.0 none none
+object 31	-0.701382	-1.415578 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 31.0 none none
+object 32	-0.701937	-1.180827 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 32.0 none none
+object 33	-0.466073	-1.649850 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 33.0 none none
+object 34	-0.466517	-1.415082 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 34.0 none none
+object 35	-0.466962	-1.180433 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 35.0 none none
+object 36	-0.936833	-0.945038 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 36.0 none none
+object 37	-0.937555	-0.710230 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 37.0 none none
+object 38	-0.937833	-0.475453 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 38.0 none none
+object 39	-0.702048	-0.944816 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 39.0 none none
+object 40	-0.702493	-0.709771 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 40.0 none none
+object 41	-0.703048	-0.474926 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 41.0 none none
+object 42	-0.467184	-0.944133 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 42.0 none none
+object 43	-0.467629	-0.709246 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 43.0 none none
+object 44	-0.468073	-0.474501 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 44.0 none none
+object 45	-0.937944	-0.239105 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 45.0 none none
+object 46	-0.938666	-0.004249 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 46.0 none none
+object 47	-0.938944	 0.230551 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 47.0 none none
+object 48	-0.703159	-0.238842 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 48.0 none none
+object 49	-0.703604	-0.003750 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 49.0 none none
+object 50	-0.704159	 0.231120 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 50.0 none none
+object 51	-0.468295	-0.238130 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 51.0 none none
+object 52	-0.468740	-0.003194 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 52.0 none none
+object 53	-0.469184	 0.231574 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 53.0 none none
+object 54	-0.940166	 0.466344 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 54.0 none none
+object 55	-0.940888	 0.701176 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 55.0 none none
+object 56	-0.941165	 0.935929 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 56.0 none none
+object 57	-0.705381	 0.466649 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 57.0 none none
+object 58	-0.705825	 0.701717 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 58.0 none none
+object 59	-0.706381	 0.936540 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 59.0 none none
+object 60	-0.470517	 0.467391 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 60.0 none none
+object 61	-0.470962	 0.702302 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 61.0 none none
+object 62	-0.471406	 0.937024 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 62.0 none none
+object 63	-0.941276	 1.172206 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 63.0 none none
+object 64	-0.941998	 1.406944 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 64.0 none none
+object 65	-0.942276	 1.641579 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 65.0 none none
+object 66	-0.706492	 1.172553 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 66.0 none none
+object 67	-0.706936	 1.407526 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 67.0 none none
+object 68	-0.707492	 1.642230 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 68.0 none none
+object 69	-0.471628	 1.173324 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 69.0 none none
+object 70	-0.472073	 1.408141 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 70.0 none none
+object 71	-0.472517	 1.642744 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 71.0 none none
+object 72	-0.229138	-1.649226 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 72.0 none none
+object 73	-0.229860	-1.414507 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 73.0 none none
+object 74	-0.230138	-1.179796 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 74.0 none none
+object 75	 0.005694	-1.648961 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 75.0 none none
+object 76	 0.005250	-1.414018 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 76.0 none none
+object 77	 0.004694	-1.179250 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 77.0 none none
+object 78	 0.240582	-1.648225 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 78.0 none none
+object 79	 0.240137	-1.413451 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 79.0 none none
+object 80	 0.239693	-1.178796 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 80.0 none none
+object 81	-0.231360	-0.944046 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 81.0 none none
+object 82	-0.232082	-0.709208 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 82.0 none none
+object 83	-0.232360	-0.474402 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 83.0 none none
+object 84	 0.003472	-0.943776 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 84.0 none none
+object 85	 0.003028	-0.708714 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 85.0 none none
+object 86	 0.002472	-0.473850 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 86.0 none none
+object 87	 0.238360	-0.943046 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 87.0 none none
+object 88	 0.237915	-0.708152 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 88.0 none none
+object 89	 0.237471	-0.473402 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 89.0 none none
+object 90	-0.232471	-0.238024 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 90.0 none none
+object 91	-0.233193	-0.003139 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 91.0 none none
+object 92	-0.233471	 0.231691 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 92.0 none none
+object 93	 0.002361	-0.237749 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 93.0 none none
+object 94	 0.001917	-0.002639 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 94.0 none none
+object 95	 0.001361	 0.232249 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 95.0 none none
+object 96	 0.237249	-0.237024 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 96.0 none none
+object 97	 0.236804	-0.002083 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 97.0 none none
+object 98	 0.236360	 0.232691 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 98.0 none none
+object 99	-0.234138	 0.468069 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 99.0 none none
+object 100	-0.234860	 0.702931 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 100.0 none none
+object 101	-0.235138	 0.937714 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 101.0 none none
+object 102	 0.000694	 0.468351 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 102.0 none none
+object 103	 0.000250	 0.703437 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 103.0 none none
+object 104	-0.000306	 0.938277 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 104.0 none none
+object 105	 0.235582	 0.469069 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 105.0 none none
+object 106	 0.235138	 0.703986 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 106.0 none none
+object 107	 0.234693	 0.938714 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 107.0 none none
+object 108	-0.235249	 1.174020 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 108.0 none none
+object 109	-0.235971	 1.408787 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 109.0 none none
+object 110	-0.236249	 1.643452 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 110.0 none none
+object 111	-0.000417	 1.174308 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 111.0 none none
+object 112	-0.000861	 1.409299 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 112.0 none none
+object 113	-0.001417	 1.644021 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 113.0 none none
+object 114	 0.234471	 1.175020 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 114.0 none none
+object 115	 0.234026	 1.409843 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 115.0 none none
+object 116	 0.233582	 1.644451 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 116.0 none none
+object 117	 0.476406	-1.648072 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 117.0 none none
+object 118	 0.475684	-1.413359 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 118.0 none none
+object 119	 0.475406	-1.178654 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 119.0 none none
+object 120	 0.711213	-1.647724 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 120.0 none none
+object 121	 0.710769	-1.412799 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 121.0 none none
+object 122	 0.710214	-1.178049 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 122.0 none none
+object 123	 0.946053	-1.646905 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 123.0 none none
+object 124	 0.945609	-1.412160 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 124.0 none none
+object 125	 0.945164	-1.177535 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 125.0 none none
+object 126	 0.475295	-0.942355 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 126.0 none none
+object 127	 0.474572	-0.707523 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 127.0 none none
+object 128	 0.474295	-0.472723 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 128.0 none none
+object 129	 0.710103	-0.942037 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 129.0 none none
+object 130	 0.709658	-0.706993 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 130.0 none none
+object 131	 0.709103	-0.472148 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 131.0 none none
+object 132	 0.944942	-0.941260 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 132.0 none none
+object 133	 0.944498	-0.706396 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 133.0 none none
+object 134	 0.944053	-0.471675 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 134.0 none none
+object 135	 0.473628	-0.236352 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 135.0 none none
+object 136	 0.472906	-0.001472 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 136.0 none none
+object 137	 0.472628	 0.233352 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 137.0 none none
+object 138	 0.708436	-0.236064 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 138.0 none none
+object 139	 0.707992	-0.000972 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 139.0 none none
+object 140	 0.707436	 0.233898 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 140.0 none none
+object 141	 0.943276	-0.235328 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 141.0 none none
+object 142	 0.942832	-0.000417 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 142.0 none none
+object 143	 0.942387	 0.234328 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 143.0 none none
+object 144	 0.471962	 0.469724 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 144.0 none none
+object 145	 0.471239	 0.704580 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 145.0 none none
+object 146	 0.470962	 0.939356 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 146.0 none none
+object 147	 0.706770	 0.469981 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 147.0 none none
+object 148	 0.706325	 0.705050 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 148.0 none none
+object 149	 0.705770	 0.939872 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 149.0 none none
+object 150	 0.941610	 0.470676 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 150.0 none none
+object 151	 0.941165	 0.705564 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 151.0 none none
+object 152	 0.940721	 0.940261 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 152.0 none none
+object 153	 0.470295	 1.175101 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 153.0 none none
+object 154	 0.469573	 1.409862 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 154.0 none none
+object 155	 0.469295	 1.644521 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 155.0 none none
+object 156	 0.705103	 1.175329 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 156.0 none none
+object 157	 0.704659	 1.410303 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 157.0 none none
+object 158	 0.704103	 1.645007 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 158.0 none none
+object 159	 0.939943	 1.175982 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 159.0 none none
+object 160	 0.939499	 1.410775 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 160.0 none none
+object 161	 0.939055	 1.645354 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 161.0 none none
+object 162	 1.181249	-0.940521 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 162.0 none none
+object 163	 1.180527	-0.705731 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 163.0 none none
+object 164	 1.180250	-0.470973 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 164.0 none none
+object 165	 1.415962	-0.940156 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 165.0 none none
+object 166	 1.415517	-0.705166 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 166.0 none none
+object 167	 1.414962	-0.470374 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 167.0 none none
+object 168	 1.650682	-0.939331 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 168.0 none none
+object 169	 1.650238	-0.704533 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 169.0 none none
+object 170	 1.649794	-0.469878 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 170.0 none none
+object 171	 1.179028	-0.234643 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 171.0 none none
+object 172	 1.178306	 0.000194 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 172.0 none none
+object 173	 1.178028	 0.234977 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 173.0 none none
+object 174	 1.413741	-0.234344 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 174.0 none none
+object 175	 1.413297	 0.000694 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 175.0 none none
+object 176	 1.412741	 0.235510 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 176.0 none none
+object 177	 1.648462	-0.233596 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 177.0 none none
+object 178	 1.648018	 0.001249 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 178.0 none none
+object 179	 1.647574	 0.235929 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 179.0 none none
+object 180	 1.177917	 0.470751 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 180.0 none none
+object 181	 1.177195	 0.705565 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 181.0 none none
+object 182	 1.176918	 0.940300 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 182.0 none none
+object 183	 1.412630	 0.470985 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 183.0 none none
+object 184	 1.412186	 0.706000 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 184.0 none none
+object 185	 1.411631	 0.940769 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 185.0 none none
+object 186	 1.647351	 0.471655 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 186.0 none none
+object 187	 1.646907	 0.706478 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 187.0 none none
+object 188	 1.646463	 0.941110 15.000000 ../sky/sed_500.txt 0.0 0.0 0.0 0.0 0.0 0.0 star 188.0 none none

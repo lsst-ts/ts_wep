@@ -34,7 +34,7 @@ class TestTemplateModel(unittest.TestCase):
 
         modulePath = getModulePath()
         self.testDataPath = os.path.join(
-            modulePath, "tests", "testData", "testTemplates"
+            modulePath, "tests", "testData", "testDonutTemplates"
         )
         self.templateExtra = np.genfromtxt(
             os.path.join(self.testDataPath, "extra_template-R22_S11.txt")
@@ -72,3 +72,9 @@ class TestTemplateModel(unittest.TestCase):
         self.assertEqual(np.max(templateArray), 1)
         np.testing.assert_array_equal(np.shape(templateArray), (imageSize, imageSize))
         np.testing.assert_array_equal(templateArray, self.templateIntra[40:-40, 40:-40])
+
+
+if __name__ == "__main__":
+
+    # Do the unit test
+    unittest.main()

@@ -23,8 +23,6 @@ import os
 import numpy as np
 from lsst.ts.wep.Utility import (
     getConfigDir,
-    readPhoSimSettingData,
-    CamType,
     DefocalType,
 )
 from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
@@ -36,9 +34,9 @@ class DonutTemplatePhosim(DonutTemplateDefault):
     def makeTemplate(self, sensorName, defocalType, imageSize, phosimTemplateDir=None):
         """
         Make the donut template image from phosim templates.
-        The templates should have been created using `CreateTemplates.bash`
-        and `GenerateTemplates.bash` in the `policy/cwfs/templateData`
-        directory. See the README in that directory for information on
+        The templates should have been created using
+        `bin.src/runCreatePhosimDonutTemplates.py`.
+        See the `ts_wep` docs for more information on
         how to generate the templates.
 
         Parameters
@@ -50,7 +48,7 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             The defocal state of the sensor.
         imageSize : int
             Size of template in pixels. The template will be a square.
-        phosimTemplateDir : str
+        phosimTemplateDir : str, optional
             Specify the location where the phosim templates are stored. If None
             then the code will look in `policy/cwfs/templateData/phosimTemplates`.
             (The default is None)
@@ -64,7 +62,7 @@ class DonutTemplatePhosim(DonutTemplateDefault):
         if phosimTemplateDir is None:
             configDir = getConfigDir()
             phosimTemplateDir = os.path.join(
-                configDir, "policy", "cwfs", "templateData", "phosimTemplates"
+                configDir, "cwfs", "donutTemplateData", "phosimTemplates"
             )
 
         if defocalType == DefocalType.Extra:
@@ -77,8 +75,11 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             )
         templateArray = np.genfromtxt(templateFilename, dtype=np.int)
 
+        # Make the template the desired square shape by trimming edges of template
         templateSize = np.shape(templateArray)
+        # Find the excess number of pixels in x and y direction
         templateTrim = templateSize - np.array((imageSize, imageSize))
+        # Trim an equal number of pix from the top and bottom. Same with left and right.
         templateTrim = np.array(templateTrim / 2, dtype=np.int)
         templateArray = templateArray[
             templateTrim[0] : -templateTrim[0], templateTrim[1] : -templateTrim[1]

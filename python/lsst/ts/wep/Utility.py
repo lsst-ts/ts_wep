@@ -437,4 +437,4 @@ def getDonutTemplateType(donutTemplateType):
     elif donutTemplateType == "phosim":
         return DonutTemplateType.Phosim
     else:
-        raise ValueError("The %s is not supported." % donutTemplateType)
+        raise ValueError(f"The {donutTemplateType} is not supported.")

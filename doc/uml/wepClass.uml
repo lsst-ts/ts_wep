@@ -11,4 +11,5 @@ WepController ..> DefocalImage
 WepController ..> DonutImage
 SourceSelector *-- ParamReader
 SourceProcessor *-- ParamReader
+CreatePhosimDonutTemplates ..> CamIsrWrapper
 @enduml
