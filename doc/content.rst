@@ -32,6 +32,7 @@ This module is a high-level module to use other modules.
 * **PlotUtil**: Plot utility functions used in WEP.
 * **ParamReader**: Parameter reader class to read the yaml configuration files used in the calculation.
 * **DonutImageCheck**: Donut image check class to judge the donut image is effective or not.
+* **CreatePhosimDonutTemplates**: Create donut templates on camera detectors using Phosim. See :doc:`here <phosimDonutTemplates>` for more information on generating Phosim donut templates.
 
 .. _lsst.ts.wep-modules_wep_bsc:
 
