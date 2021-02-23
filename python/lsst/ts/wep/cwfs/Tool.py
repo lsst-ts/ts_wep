@@ -210,7 +210,7 @@ def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=28):
         h[:, ii] = ZernikeAnnularEval(z, xFinite, yFinite, e, nMax=nMax)
 
     # Solve the equation: H*Z = S => Z = H^(-1)S
-    z = np.linalg.lstsq(h, s, rcond=None)[0]
+    z = np.linalg.lstsq(h, sFinite, rcond=None)[0]
 
     return z
 

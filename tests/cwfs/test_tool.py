@@ -30,6 +30,7 @@ from lsst.ts.wep.cwfs.Tool import (
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
     ZernikeAnnularFit,
+    ZernikeMaskedFit,
     padArray,
     extractArray,
 )
@@ -218,6 +219,26 @@ class TestTool(unittest.TestCase):
         ansOpdFilePath = os.path.join(self.testDataDir, ansOpdFileName)
         allOpdAns = np.loadtxt(ansOpdFilePath)
         self.assertLess(np.sum(np.abs(coef - allOpdAns[0, :])), 1e-10)
+
+    def testZernikeMaskFit(self):
+        e = 0.2
+        nc = 6
+        surface = ZernikeAnnularEval(self.zerCoef[0:nc], self.xx, self.yy, e)
+
+        # mask data
+        cut = -0.9
+        r = np.sqrt(self.xx**2 + self.yy**2)
+        idx = (r > 1) | (r < e) | (self.xx < cut)
+
+        xx = self.xx[:].copy()
+        yy = self.yy[:].copy()
+        xx[idx] = np.nan
+        yy[idx] = np.nan
+        mask = ~np.isnan(xx)
+
+        zr = ZernikeMaskedFit(surface, xx, yy, nc, mask, e)
+
+        self.assertLess(np.sum(np.abs(zr - self.zerCoef[0:nc])**2), 1e-10)
 
     def testPadArray(self):
 
