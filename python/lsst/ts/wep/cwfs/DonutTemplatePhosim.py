@@ -77,11 +77,16 @@ class DonutTemplatePhosim(DonutTemplateDefault):
 
         # Make the template the desired square shape by trimming edges of template
         templateSize = np.shape(templateArray)
+
         # Find the excess number of pixels in x and y direction
         templateTrim = templateSize - np.array((imageSize, imageSize))
-        # Trim an equal number of pix from the top and bottom. Same with left and right.
-        templateTrim = np.array(templateTrim / 2, dtype=np.int)
-        templateArray = templateArray[
-            templateTrim[0] : -templateTrim[0], templateTrim[1] : -templateTrim[1]
-        ]
+
+        # Find the left and right edges by trimming half pixels from left and right.
+        # Then do the same for the top.
+        leftEdge = np.int(templateTrim[0] / 2)
+        rightEdge = np.int(templateSize[0] - (templateTrim[0] - leftEdge))
+        topEdge = np.int(templateTrim[1] / 2)
+        bottomEdge = np.int(templateSize[1] - (templateTrim[1] - topEdge))
+
+        templateArray = templateArray[leftEdge:rightEdge, topEdge:bottomEdge]
         return templateArray

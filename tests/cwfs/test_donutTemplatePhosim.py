@@ -21,14 +21,15 @@
 
 import unittest
 import os
+import shutil
 import numpy as np
 
 from lsst.ts.wep.cwfs.DonutTemplatePhosim import DonutTemplatePhosim
 from lsst.ts.wep.Utility import DefocalType, getModulePath
 
 
-class TestTemplateModel(unittest.TestCase):
-    """Test the TemplateModel class."""
+class TestTemplatePhosim(unittest.TestCase):
+    """Test the DonutTemplatePhosim class."""
 
     def setUp(self):
 
@@ -36,13 +37,43 @@ class TestTemplateModel(unittest.TestCase):
         self.testDataPath = os.path.join(
             modulePath, "tests", "testData", "testDonutTemplates"
         )
+        extraTemplateName = "extra_template-R22_S11.txt"
         self.templateExtra = np.genfromtxt(
-            os.path.join(self.testDataPath, "extra_template-R22_S11.txt")
+            os.path.join(self.testDataPath, extraTemplateName)
         )
+        intraTemplateName = "intra_template-R22_S11.txt"
         self.templateIntra = np.genfromtxt(
-            os.path.join(self.testDataPath, "intra_template-R22_S11.txt")
+            os.path.join(self.testDataPath, intraTemplateName)
         )
         self.templateMaker = DonutTemplatePhosim()
+
+        # Create default location for test
+        self.defaultTemplatePath = os.path.join(
+            modulePath, "policy", "cwfs", "donutTemplateData", "phosimTemplates"
+        )
+
+        # Keep track of whether directory existed before for tearDown
+        if os.path.exists(self.defaultTemplatePath):
+            self.defaultPathExists = True
+        else:
+            os.mkdir(self.defaultTemplatePath)
+            self.defaultPathExists = False
+
+        # Copy test templates to default path with non-existent raft name
+        shutil.copyfile(
+            os.path.join(self.testDataPath, extraTemplateName),
+            os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt"),
+        )
+
+    def tearDown(self):
+
+        # If the folder already existed only remove the files we added
+        if self.defaultPathExists:
+            os.remove(
+                os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt")
+            )
+        else:
+            shutil.rmtree(self.defaultTemplatePath)
 
     def testMakeTemplateExtra(self):
 
@@ -56,22 +87,29 @@ class TestTemplateModel(unittest.TestCase):
         self.assertEqual(templateArray.dtype, int)
         self.assertEqual(np.max(templateArray), 1)
         np.testing.assert_array_equal(np.shape(templateArray), (imageSize, imageSize))
-        np.testing.assert_array_equal(templateArray, self.templateExtra[40:-40, 40:-40])
+        np.testing.assert_array_equal(templateArray, self.templateExtra[40:200, 40:200])
 
     def testMakeTemplateIntra(self):
 
-        # Generate a test template on the center chip
-        imageSize = 160
+        # Generate a test template on the center chip. Test odd imageSize.
+        imageSize = 161
         templateArray = self.templateMaker.makeTemplate(
             "R22_S11", DefocalType.Intra, imageSize, phosimTemplateDir=self.testDataPath
         )
 
-        print(np.max(templateArray))
         self.assertTrue(isinstance(templateArray, np.ndarray))
         self.assertEqual(templateArray.dtype, int)
         self.assertEqual(np.max(templateArray), 1)
         np.testing.assert_array_equal(np.shape(templateArray), (imageSize, imageSize))
-        np.testing.assert_array_equal(templateArray, self.templateIntra[40:-40, 40:-40])
+        np.testing.assert_array_equal(templateArray, self.templateIntra[39:200, 39:200])
+
+    def testDefaultFilePath(self):
+
+        templateArray = self.templateMaker.makeTemplate(
+            "R99_S99", DefocalType.Extra, 240
+        )
+
+        np.testing.assert_array_equal(templateArray, self.templateExtra)
 
 
 if __name__ == "__main__":
