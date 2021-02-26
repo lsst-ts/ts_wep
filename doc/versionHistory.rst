@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.2:
+
+-------------
+1.5.1
+-------------
+
+* Fix the ``ZernikeMaskedFit()`` when passing masked data 
+
 .. _lsst.ts.wep-1.5.1:
 
 -------------
