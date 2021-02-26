@@ -101,7 +101,7 @@ class DonutTemplateModel(DonutTemplateDefault):
         sensorXPixel = float(sensorXMicron) / pixelSizeInUm
         sensorYPixel = float(sensorYMicron) / pixelSizeInUm
 
-        # Multiply by pixelScale then divide by 3600 for arcsec -> deg conversion
+        # Multiply by pixelScale then divide by 3600 for arcsec->deg conversion
         sensorXDeg = sensorXPixel * pixelScale / 3600
         sensorYDeg = sensorYPixel * pixelScale / 3600
         fieldXY = [sensorXDeg, sensorYDeg]
