@@ -31,11 +31,12 @@ from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
 class DonutTemplatePhosim(DonutTemplateDefault):
     """Class to make the donut templates from phosim template images."""
 
-    def makeTemplate(self, sensorName, defocalType, imageSize, phosimTemplateDir=None):
+    def makeTemplate(self, sensorName, defocalType, imageSize):
         """
         Make the donut template image from phosim templates.
         The templates should have been created using
-        `bin.src/runCreatePhosimDonutTemplates.py`.
+        `bin.src/runCreatePhosimDonutTemplates.py` and exist
+        in `policy/cwfs/donutTemplateData/phosimTemplates`.
         See the `ts_wep` docs for more information on
         how to generate the templates.
 
@@ -48,10 +49,6 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             The defocal state of the sensor.
         imageSize : int
             Size of template in pixels. The template will be a square.
-        phosimTemplateDir : str, optional
-            Specify the location where the phosim templates are stored. If None
-            then the code will look in `policy/cwfs/templateData/phosimTemplates`.
-            (The default is None)
 
         Returns
         -------
@@ -59,11 +56,10 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             The donut template as a binary image.
         """
 
-        if phosimTemplateDir is None:
-            configDir = getConfigDir()
-            phosimTemplateDir = os.path.join(
-                configDir, "cwfs", "donutTemplateData", "phosimTemplates"
-            )
+        configDir = getConfigDir()
+        phosimTemplateDir = os.path.join(
+            configDir, "cwfs", "donutTemplateData", "phosimTemplates"
+        )
 
         if defocalType == DefocalType.Extra:
             templateFilename = os.path.join(
@@ -76,17 +72,29 @@ class DonutTemplatePhosim(DonutTemplateDefault):
         templateArray = np.genfromtxt(templateFilename, dtype=np.int)
 
         # Make the template the desired square shape by trimming edges of template
-        templateSize = np.shape(templateArray)
+        # Phosim templates from file are already a square
+        templateSize = np.shape(templateArray)[0]
 
-        # Find the excess number of pixels in x and y direction
-        templateTrim = templateSize - np.array((imageSize, imageSize))
+        if templateSize >= imageSize:
+            # Find the excess number of pixels in x and y direction
+            templateTrim = templateSize - imageSize
 
-        # Find the left and right edges by trimming half pixels from left and right.
-        # Then do the same for the top.
-        leftEdge = np.int(templateTrim[0] / 2)
-        rightEdge = np.int(templateSize[0] - (templateTrim[0] - leftEdge))
-        topEdge = np.int(templateTrim[1] / 2)
-        bottomEdge = np.int(templateSize[1] - (templateTrim[1] - topEdge))
+            # Find the left and right edges by trimming half pixels from left and right.
+            # Do the same for the top and bottom.
+            leftEdge = topEdge = np.int(templateTrim / 2)
+            rightEdge = bottomEdge = np.int(templateSize - (templateTrim - leftEdge))
 
-        templateArray = templateArray[leftEdge:rightEdge, topEdge:bottomEdge]
-        return templateArray
+            templateFinal = templateArray[leftEdge:rightEdge, topEdge:bottomEdge]
+        else:
+            # If requesting a larger template than the phosim template
+            # add padding of zeros to edges of template returned
+            templatePad = imageSize - templateSize
+
+            # Pad each side by equal amount of pixels
+            padLeft = padTop = np.int(templatePad / 2)
+            padRight = padBottom = np.int(imageSize - (templatePad - padLeft))
+
+            templateFinal = np.zeros((imageSize, imageSize))
+            templateFinal[padLeft:padRight, padTop:padBottom] = templateArray
+
+        return templateFinal

@@ -34,53 +34,48 @@ class TestTemplatePhosim(unittest.TestCase):
     def setUp(self):
 
         modulePath = getModulePath()
-        self.testDataPath = os.path.join(
+        testDataPath = os.path.join(
             modulePath, "tests", "testData", "testDonutTemplates"
         )
+        # Specify location of test Phosim donut templates in testData
         extraTemplateName = "extra_template-R22_S11.txt"
         self.templateExtra = np.genfromtxt(
-            os.path.join(self.testDataPath, extraTemplateName)
+            os.path.join(testDataPath, extraTemplateName)
         )
         intraTemplateName = "intra_template-R22_S11.txt"
         self.templateIntra = np.genfromtxt(
-            os.path.join(self.testDataPath, intraTemplateName)
+            os.path.join(testDataPath, intraTemplateName)
         )
         self.templateMaker = DonutTemplatePhosim()
 
-        # Create default location for test
+        # Specify template location for test
         self.defaultTemplatePath = os.path.join(
             modulePath, "policy", "cwfs", "donutTemplateData", "phosimTemplates"
         )
 
-        # Keep track of whether directory existed before for tearDown
-        if os.path.exists(self.defaultTemplatePath):
-            self.defaultPathExists = True
-        else:
-            os.mkdir(self.defaultTemplatePath)
-            self.defaultPathExists = False
-
-        # Copy test templates to default path with non-existent raft name
+        # Copy test templates to phosim template folder. R99 is a fake
+        # raft so it will not overwrite existing templates in the folder.
         shutil.copyfile(
-            os.path.join(self.testDataPath, extraTemplateName),
-            os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt"),
+            os.path.join(testDataPath, extraTemplateName),
+            os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt")
+        )
+        shutil.copyfile(
+            os.path.join(testDataPath, intraTemplateName),
+            os.path.join(self.defaultTemplatePath, "intra_template-R99_S99.txt")
         )
 
     def tearDown(self):
 
-        # If the folder already existed only remove the files we added
-        if self.defaultPathExists:
-            os.remove(
-                os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt")
-            )
-        else:
-            shutil.rmtree(self.defaultTemplatePath)
+        # Only remove the files we added to the template folder
+        os.remove(os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt"))
+        os.remove(os.path.join(self.defaultTemplatePath, "intra_template-R99_S99.txt"))
 
     def testMakeTemplateExtra(self):
 
-        # Generate a test template on the center chip
+        # Generate a test extrafocal template
         imageSize = 160
         templateArray = self.templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, imageSize, phosimTemplateDir=self.testDataPath
+            "R99_S99", DefocalType.Extra, imageSize
         )
 
         self.assertTrue(isinstance(templateArray, np.ndarray))
@@ -91,10 +86,10 @@ class TestTemplatePhosim(unittest.TestCase):
 
     def testMakeTemplateIntra(self):
 
-        # Generate a test template on the center chip. Test odd imageSize.
+        # Generate a test intrafocal template. Test odd imageSize.
         imageSize = 161
         templateArray = self.templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Intra, imageSize, phosimTemplateDir=self.testDataPath
+            "R99_S99", DefocalType.Intra, imageSize
         )
 
         self.assertTrue(isinstance(templateArray, np.ndarray))
@@ -103,13 +98,16 @@ class TestTemplatePhosim(unittest.TestCase):
         np.testing.assert_array_equal(np.shape(templateArray), (imageSize, imageSize))
         np.testing.assert_array_equal(templateArray, self.templateIntra[39:200, 39:200])
 
-    def testDefaultFilePath(self):
+    def testLargerTemplate(self):
 
+        # Request to return a template larger than the phosim template
+        imageSize = 280
         templateArray = self.templateMaker.makeTemplate(
-            "R99_S99", DefocalType.Extra, 240
+            "R99_S99", DefocalType.Extra, imageSize
         )
 
-        np.testing.assert_array_equal(templateArray, self.templateExtra)
+        np.testing.assert_array_equal(np.shape(templateArray), (imageSize, imageSize))
+        np.testing.assert_array_equal(templateArray[20:-20, 20:-20], self.templateExtra)
 
 
 if __name__ == "__main__":

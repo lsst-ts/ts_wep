@@ -16,7 +16,7 @@ Running the code
    installed with the environment variable $PHOSIMPATH set to the phosim directory.
 2) Use python to run `runCreatePhosimDonutTemplates.py` in the bin.src directory.
    Use `--help` to see all options.
-3) Templates by default will appear in
+3) Templates will appear in
    `ts_wep/policy/cwfs/templateDonutData/phosimTemplates`.
 
 Input files

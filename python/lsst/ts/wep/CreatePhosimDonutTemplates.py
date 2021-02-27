@@ -20,51 +20,40 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import yaml
 import shutil
 import numpy as np
-from astropy.io import fits
-from lsst.ts.wep.Utility import getConfigDir, runProgram, DefocalType
+from lsst.ts.wep.Utility import getConfigDir, runProgram, DefocalType, CentroidFindType
 from lsst.ts.wep.CamIsrWrapper import CamIsrWrapper
-from lsst.ts.wep.cwfs.CentroidRandomWalk import CentroidRandomWalk
+from lsst.ts.wep.CamDataCollector import CamDataCollector
+from lsst.ts.wep.cwfs.Image import Image
+from lsst.ts.wep.cwfs.CentroidFindFactory import CentroidFindFactory
+from lsst.ts.wep.ctrlIntf.MapSensorNameAndId import MapSensorNameAndId
 
 
 class CreatePhosimDonutTemplates(object):
-    def __init__(self, templateDestDir=""):
+    def __init__(self):
         """
-        Class to create donut templates from Phosim.
-
-        Parameters
-        ----------
-        templateDestDir : str, optional
-            The destination directory for the Phosim donut templates.
-            If the string is "" then it will put the final templates in
-            ts_wep/policy/cwfs/donutTemplateData/phosimTemplates.
-            (The default is "".)
+        Class to create donut templates from Phosim. The templates
+        will be saved to `policy/cwfs/donutTemplateData/phosimTemplates`.
         """
 
-        self.policyDir = getConfigDir()
+        # Location of the data needed for Phosim to generate the templates
         self.templateDataPath = os.path.join(
-            self.policyDir, "cwfs", "donutTemplateData"
+            getConfigDir(), "cwfs", "donutTemplateData"
         )
+        # Set up the temporary work directory for Phosim output
         self.tempWorkPath = os.path.join(self.templateDataPath, "tempDir")
+        # Specify the location of the butler repo for ingestion of
+        # Phosim output and to store the postISR images
         self.repoDir = os.path.join(self.tempWorkPath, "input")
+        # The location where we will store the final templates
+        self.templateDestDir = os.path.join(self.templateDataPath, "phosimTemplates")
 
-        if templateDestDir == "":
-            self.templateDestDir = os.path.join(
-                self.templateDataPath, "phosimTemplates"
-            )
-        else:
-            self.templateDestDir = templateDestDir
-
-    def createDirectories(self):
+    def createWorkDirectories(self):
         """
         Create the final template directory as well as
         temporary work directories.
         """
-
-        print("Making template directory")
-        os.makedirs(self.templateDestDir, exist_ok=True)
 
         print("Making temporary work directories")
         # First clean up previous work if it exists
@@ -101,24 +90,15 @@ class CreatePhosimDonutTemplates(object):
         """
 
         if detectorStr == "":
-
-            sensorNameFile = os.path.join(self.policyDir, "sensorNameToId.yaml")
-
-            with open(sensorNameFile, "r") as f:
-                sensorData = yaml.load(f, Loader=yaml.FullLoader)
-
-            sensorNameList = list(sensorData.keys())
-
+            # Load default sensor file for ts_wep
+            sensorNameFile = MapSensorNameAndId()._sensorNameToIdFile
+            # Get all sensors in file
+            sensorNameList = list(sensorNameFile.getContent().keys())
         else:
-
             sensorNameList = detectorStr.split(" ")
 
-        detectorStrPhosim = ""
-        detectorStrFlats = ""
-
-        for sensorName in sensorNameList:
-            detectorStrPhosim += f"{sensorName}|"
-            detectorStrFlats += f"{sensorName} "
+        detectorStrPhosim = "|".join(sensorNameList)
+        detectorStrFlats = " ".join(sensorNameList)
 
         return detectorStrPhosim, detectorStrFlats
 
@@ -142,7 +122,7 @@ class CreatePhosimDonutTemplates(object):
         phosimPath = os.getenv("PHOSIMPATH")
         runPhosimCmd = f"python {phosimPath}/phosim.py"
         runPhosimArgs = f"-w {self.tempWorkPath}/phosimWorkDir "
-        runPhosimArgs += f'-s "{detectorStrPhosim[:-1]}" '
+        runPhosimArgs += f'-s "{detectorStrPhosim}" '
         runPhosimArgs += f"-p {numOfProc} "
         runPhosimArgs += f"-i lsst "
         runPhosimArgs += f"-e 1 "
@@ -182,13 +162,11 @@ class CreatePhosimDonutTemplates(object):
 
         print("Ingest images")
 
+        dataCollector = CamDataCollector(f"{self.tempWorkPath}/input")
         # Create mapper file
-        cmdString = f"echo lsst.obs.lsst.phosim.PhosimMapper > {self.tempWorkPath}/input/_mapper"
-        runProgram(cmdString)
-
+        dataCollector.genPhoSimMapper()
         # Run Ingestion
-        ampImg = f"{self.tempWorkPath}/raw/*.fits"
-        runProgram("ingestImages.py", argstring=f"{self.repoDir} {ampImg}")
+        dataCollector.ingestImages(f"{self.tempWorkPath}/raw/*.fits")
 
     def makeFlats(self, detectorStrFlats):
         """
@@ -210,10 +188,8 @@ class CreatePhosimDonutTemplates(object):
 
         print("Ingest Flats")
 
-        argString = f"{self.repoDir} "
-        argString += f"{self.tempWorkPath}/calibs/*.fits "
-        argString += f"--validity 99999 --output {self.repoDir}"
-        runProgram("ingestCalibs.py", argstring=argString)
+        dataCollector = CamDataCollector(f"{self.tempWorkPath}/input")
+        dataCollector.ingestCalibs(f"{self.tempWorkPath}/calibs/*.fits")
 
     def runISR(self):
         """
@@ -235,10 +211,8 @@ class CreatePhosimDonutTemplates(object):
         ---------
         templateWidth : int
             Width of square template image in pixels.
-
         intraVisitId : int
             Visit Id of the intrafocal images from Phosim.
-
         extraVisitId : int
             Visit Id of the extrafocal images from Phosim.
         """
@@ -261,13 +235,7 @@ class CreatePhosimDonutTemplates(object):
         )
 
     def cutOutTemplatesAndSave(
-        self,
-        phosimImageDir,
-        templateWidth,
-        defocalType,
-        visitId,
-        phosimTemplateDir="",
-        phosimCentroidDir="",
+        self, phosimImageDir, templateWidth, defocalType, visitId
     ):
         """
         Loop through all detectors in folder and cut out square region
@@ -279,49 +247,38 @@ class CreatePhosimDonutTemplates(object):
         phosimImageDir : str
             Directory where the visit ISR output is located. Inside should
             be folders for each raft.
-
         templateWidth : int
             Width of square template image in pixels.
-
         defocalType : enum 'DefocalType'
             Defocal type.
-
         visitId : int
             Visit Id of the defocal image from Phosim.
-
-        phosimTemplateDir : str, optional
-            Directory where templates will be stored. If it is an empty string
-            then it will assign it to
-            ts_wep/policy/cwfs/donutTemplateData/phosimTemplates.
-            (The default is "".)
-
-        phosimCentroidDir : str, optional
-            The path to the phosim centroid file for the image. If it is
-            an empty string then it will look in temporary phosimOutput
-            directory. (The default is "".)
         """
         if defocalType == DefocalType.Intra:
             defocalLabel = "intra"
         else:
             defocalLabel = "extra"
 
-        # Set default paths
-        if phosimTemplateDir == "":
-            phosimTemplateDir = os.path.join(self.templateDataPath, "phosimTemplates")
-        if phosimCentroidDir == "":
-            phosimCentroidDir = os.path.join(
-                self.tempWorkPath, "phosimOutput", defocalLabel
-            )
+        # Set output path
+        phosimTemplateDir = os.path.join(self.templateDataPath, "phosimTemplates")
+        # Set path to centroid file
+        phosimCentroidDir = os.path.join(
+            self.tempWorkPath, "phosimOutput", defocalLabel
+        )
 
         stampHalfWidth = int(templateWidth / 2)
 
-        centroidRW = CentroidRandomWalk()
+        centroidFind = CentroidFindFactory.createCentroidFind(
+            CentroidFindType.RandomWalk
+        )
 
         for sensorDir in os.listdir(phosimImageDir):
             sensorPath = os.path.join(phosimImageDir, sensorDir)
             for templateFile in os.listdir(sensorPath):
-                # Open ISR File
-                testHdu = fits.open(os.path.join(sensorPath, templateFile))
+                # Open postISR File
+                imgObj = Image()
+                imgObj.setImg(imageFile=os.path.join(sensorPath, templateFile))
+                imgData = imgObj.getImg()
                 splitName = templateFile.split("-")
                 templateName = (
                     f"{defocalLabel}_template-{splitName[2]}_{splitName[3]}.txt"
@@ -336,12 +293,12 @@ class CreatePhosimDonutTemplates(object):
                 )
                 centroidX = int(centroidData[2])
                 centroidY = int(centroidData[3])
-                templateStamp = testHdu[1].data[
+                templateStamp = imgData[
                     centroidX - stampHalfWidth : centroidX + stampHalfWidth,
                     centroidY - stampHalfWidth : centroidY + stampHalfWidth,
                 ]
                 # Reduce background noise
-                templateStampBinary = centroidRW.getImgBinary(templateStamp)
+                templateStampBinary = centroidFind.getImgBinary(templateStamp)
                 # Save to file
                 np.savetxt(
                     os.path.join(phosimTemplateDir, "%s" % templateName),

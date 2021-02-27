@@ -31,12 +31,6 @@ if __name__ == "__main__":
         description="Generate donut templates for AOS using Phosim."
     )
     parser.add_argument(
-        "--templateDestDir",
-        type=str,
-        default="",
-        help="Destination directory for phosim templates.",
-    )
-    parser.add_argument(
         "--numOfProc",
         type=int,
         default=1,
@@ -73,8 +67,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Run tasks
-    phosimDonuts = CreatePhosimDonutTemplates(args.templateDestDir)
-    phosimDonuts.createDirectories()
+    phosimDonuts = CreatePhosimDonutTemplates()
+    phosimDonuts.createWorkDirectories()
     decListPhosim, decListFlats = phosimDonuts.createDetectorLists(
         detectorStr=args.detectorList
     )
