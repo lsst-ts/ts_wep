@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.3:
+
+-------------
+1.5.3
+-------------
+
+* Add ``DonutTemplatePhosim`` class.
+* Add ``CreatePhosimDonutTemplates`` class and add ``bin.src/runCreatePhosimDonutTemplates.py``
+
 .. _lsst.ts.wep-1.5.2:
 
 -------------
