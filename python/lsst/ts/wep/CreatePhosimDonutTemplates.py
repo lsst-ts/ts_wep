@@ -35,6 +35,8 @@ class CreatePhosimDonutTemplates(object):
         """
         Class to create donut templates from Phosim. The templates
         will be saved to `policy/cwfs/donutTemplateData/phosimTemplates`.
+        Requires path to Phosim to be set as environment variable
+        `PHOSIMPATH`.
         """
 
         # Location of the data needed for Phosim to generate the templates

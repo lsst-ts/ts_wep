@@ -103,54 +103,6 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         self.assertEqual(detStrPhosim, "R22_S00|R22_S11")
         self.assertEqual(detStrFlats, "R22_S00 R22_S11")
 
-    def testGenerateDefocalImagesAndRepackaging(self):
-        """
-        Combine into one test so we only generate Phosim images once.
-        """
-
-        self.createPhosimDonuts.createWorkDirectories()
-        self.createPhosimDonuts.generateDefocalImages("R22_S11", 1)
-
-        phosimExtraName = "lsst_a_9006001_f1_R22_S11_C00_E000.fits.gz"
-        phosimIntraName = "lsst_a_9006002_f1_R22_S11_C00_E000.fits.gz"
-        centroidExtraName = "centroid_lsst_e_9006001_f1_R22_S11_E000.txt"
-        centroidIntraName = "centroid_lsst_e_9006002_f1_R22_S11_E000.txt"
-        self.assertTrue(
-            os.path.exists(
-                os.path.join(self.tempWorkDir, "phosimOutput", "extra", phosimExtraName)
-            )
-        )
-        self.assertTrue(
-            os.path.exists(
-                os.path.join(self.tempWorkDir, "phosimOutput", "intra", phosimIntraName)
-            )
-        )
-        self.assertTrue(
-            os.path.exists(
-                os.path.join(
-                    self.tempWorkDir, "phosimOutput", "extra", centroidExtraName
-                )
-            )
-        )
-        self.assertTrue(
-            os.path.exists(
-                os.path.join(
-                    self.tempWorkDir, "phosimOutput", "intra", centroidIntraName
-                )
-            )
-        )
-
-        rawExtraName = "lsst_a_9006001_f1_R22_S11_E000.fits"
-        rawIntraName = "lsst_a_9006002_f1_R22_S11_E000.fits"
-        self.createPhosimDonuts.repackagePhosimImages()
-        self.assertTrue(
-            os.path.exists(os.path.join(self.tempWorkDir, "raw", rawExtraName))
-        )
-        self.assertTrue(
-            os.path.exists(os.path.join(self.tempWorkDir, "raw", rawIntraName))
-        )
-        self.createPhosimDonuts.cleanUpWorkDirs()
-
     def testIngestImages(self):
 
         # Populate the raw phosim output directory
