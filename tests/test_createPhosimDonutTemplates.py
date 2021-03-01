@@ -42,6 +42,8 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         self.templateDir = os.path.join(self.templateDataDir, "phosimTemplates")
         # Temporary work directory
         self.tempWorkDir = os.path.join(self.templateDataDir, "tempDir")
+        # Make the temporary directory for all tests
+        os.mkdir(self.tempWorkDir)
 
     def tearDown(self):
 
@@ -52,10 +54,7 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
             pass
 
         # Remove work directory in case of clean up method test failure
-        try:
-            shutil.rmtree(self.tempWorkDir)
-        except FileNotFoundError:
-            pass
+        shutil.rmtree(self.tempWorkDir)
 
     def _copyPhosimFiles(self):
 
@@ -74,12 +73,16 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
             os.path.join(
                 self.testDataDir,
                 "testDonutTemplates",
-                "centroid_lsst_e_9006001_f1_R99_S11_E000.txt"
+                "centroid_lsst_e_9006001_f1_R99_S11_E000.txt",
             ),
-            os.path.join(self.tempWorkDir, "phosimOutput", "extra")
+            os.path.join(self.tempWorkDir, "phosimOutput", "extra"),
         )
 
     def testCreateAndCleanUpWorkDirectories(self):
+
+        # Test clean up of work directories
+        self.createPhosimDonuts.cleanUpWorkDirs()
+        self.assertFalse(os.path.exists(self.tempWorkDir))
 
         # Test creation of work directories
         self.createPhosimDonuts.createWorkDirectories()
@@ -87,10 +90,6 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         self.assertTrue(
             os.path.exists(os.path.join(self.tempWorkDir, "phosimOutput", "extra"))
         )
-
-        # Test clean up of work directories
-        self.createPhosimDonuts.cleanUpWorkDirs()
-        self.assertFalse(os.path.exists(self.tempWorkDir))
 
     def testCreateDetectorLists(self):
 
@@ -123,7 +122,6 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
                 )
             )
         )
-        self.createPhosimDonuts.cleanUpWorkDirs()
 
     def testMakeFlatsAndIngest(self):
 
@@ -138,7 +136,6 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         self.assertTrue(
             os.path.exists(os.path.join(self.tempWorkDir, "input", "flat", "g"))
         )
-        self.createPhosimDonuts.cleanUpWorkDirs()
 
     def testRunISR(self):
 
@@ -164,7 +161,6 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
                 )
             )
         )
-        self.createPhosimDonuts.cleanUpWorkDirs()
 
     def testCutOutTemplatesAndSave(self):
 
@@ -176,10 +172,7 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         self._copyPhosimFiles()
 
         self.createPhosimDonuts.cutOutTemplatesAndSave(
-            testPhosimPath,
-            240,
-            DefocalType.Extra,
-            9006001,
+            testPhosimPath, 240, DefocalType.Extra, 9006001,
         )
 
         newTemplate = np.genfromtxt(
@@ -191,7 +184,6 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
             )
         )
         np.testing.assert_array_equal(newTemplate, trueTemplate)
-        self.createPhosimDonuts.cleanUpWorkDirs()
 
 
 if __name__ == "__main__":
