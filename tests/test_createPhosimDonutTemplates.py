@@ -22,6 +22,7 @@
 import unittest
 import os
 import shutil
+import tempfile
 import numpy as np
 
 from lsst.ts.wep.CreatePhosimDonutTemplates import CreatePhosimDonutTemplates
@@ -41,9 +42,9 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         # Location where templates are created
         self.templateDir = os.path.join(self.templateDataDir, "phosimTemplates")
         # Temporary work directory
-        self.tempWorkDir = os.path.join(self.templateDataDir, "tempDir")
-        # Make the temporary directory for all tests
-        os.mkdir(self.tempWorkDir)
+        self.tempTestDirectory = tempfile.TemporaryDirectory()
+        self.tempWorkDir = self.tempTestDirectory.name
+        self.createPhosimDonuts.setTempWorkPaths(self.tempWorkDir)
 
     def tearDown(self):
 
@@ -54,7 +55,7 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
             pass
 
         # Remove work directory in case of clean up method test failure
-        shutil.rmtree(self.tempWorkDir)
+        self.tempTestDirectory.cleanup()
 
     def _copyPhosimFiles(self):
 

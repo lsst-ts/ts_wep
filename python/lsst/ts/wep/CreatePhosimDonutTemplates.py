@@ -51,6 +51,19 @@ class CreatePhosimDonutTemplates(object):
         # The location where we will store the final templates
         self.templateDestDir = os.path.join(self.templateDataPath, "phosimTemplates")
 
+    def setTempWorkPaths(self, newBasePath):
+        """
+        Point to a new temporary work directory. Update work repo as well.
+
+        Parameters
+        ----------
+        newBasePath : str
+            New location of temporary work directories.
+        """
+
+        self.tempWorkPath = newBasePath
+        self.repoDir = os.path.join(self.tempWorkPath, 'input')
+
     def createWorkDirectories(self):
         """
         Create the final template directory as well as
