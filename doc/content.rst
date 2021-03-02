@@ -32,6 +32,7 @@ This module is a high-level module to use other modules.
 * **PlotUtil**: Plot utility functions used in WEP.
 * **ParamReader**: Parameter reader class to read the yaml configuration files used in the calculation.
 * **DonutImageCheck**: Donut image check class to judge the donut image is effective or not.
+* **CreatePhosimDonutTemplates**: Create donut templates on camera detectors using Phosim. See :doc:`here <phosimDonutTemplates>` for more information on generating Phosim donut templates.
 
 .. _lsst.ts.wep-modules_wep_bsc:
 
@@ -109,6 +110,7 @@ This module calculates the wavefront error by solving the TIE.
 * **DonutTemplateFactory**: Factory for creating donut template objects used by CentroidConvolveTemplate.
 * **DonutTemplateDefault**: Default donut template class.
 * **DonutTemplateModel**: DonutTemplateDefault child class to make donut templates using an Instrument model.
+* **DonutTemplatePhosim**: DonutTemplateDefault child class to make donut templates from templates created with Phosim.
 
 .. _lsst.ts.wep-modules_wep_deblend:
 

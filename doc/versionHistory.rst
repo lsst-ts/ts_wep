@@ -6,13 +6,22 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.3:
+
+-------------
+1.5.3
+-------------
+
+* Add ``DonutTemplatePhosim`` class.
+* Add ``CreatePhosimDonutTemplates`` class and add ``bin.src/runCreatePhosimDonutTemplates.py``
+
 .. _lsst.ts.wep-1.5.2:
 
 -------------
 1.5.2
 -------------
 
-* Fix the ``ZernikeMaskedFit()`` when passing masked data 
+* Fix the ``ZernikeMaskedFit()`` when passing masked data
 
 .. _lsst.ts.wep-1.5.1:
 

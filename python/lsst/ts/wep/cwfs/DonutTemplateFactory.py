@@ -21,6 +21,7 @@
 
 from lsst.ts.wep.Utility import DonutTemplateType
 from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
+from lsst.ts.wep.cwfs.DonutTemplatePhosim import DonutTemplatePhosim
 
 
 class DonutTemplateFactory(object):
@@ -51,5 +52,7 @@ class DonutTemplateFactory(object):
 
         if donutTemplateType == DonutTemplateType.Model:
             return DonutTemplateModel()
+        elif donutTemplateType == DonutTemplateType.Phosim:
+            return DonutTemplatePhosim()
         else:
             raise ValueError(f"The {donutTemplateType} is not supported.")

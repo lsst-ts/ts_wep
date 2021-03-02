@@ -28,3 +28,6 @@ pytest_session.txt
 
 # Mac metadata
 .DS_Store
+
+# Existing Phosim Donut Templates
+policy/cwfs/donutTemplateData/phosimTemplates/
