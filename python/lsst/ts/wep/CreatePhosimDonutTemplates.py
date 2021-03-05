@@ -91,8 +91,9 @@ class CreatePhosimDonutTemplates(object):
         detectorStr : str, optional
             String specifying a set of detectors to generate phosim templates.
             A space is required between each detector name
-            (Example: "R22_S11 R22_S10"). If the str is "" then it will generate
-            a template for every detector in the focal plane. (The default is "".)
+            (Example: "R22_S11 R22_S10"). If the str is "" then it will 
+            generate a template for every detector in the focal plane. (The 
+            default is "".)
 
         Returns
         -------
@@ -139,8 +140,8 @@ class CreatePhosimDonutTemplates(object):
         runPhosimArgs = f"-w {self.tempWorkPath}/phosimWorkDir "
         runPhosimArgs += f'-s "{detectorStrPhosim}" '
         runPhosimArgs += f"-p {numOfProc} "
-        runPhosimArgs += f"-i lsst "
-        runPhosimArgs += f"-e 1 "
+        runPhosimArgs += "-i lsst "
+        runPhosimArgs += "-e 1 "
         runPhosimArgs += f"-c {self.templateDataPath}/star.cmd "
 
         runPhosimArgsExtra = f"{self.templateDataPath}/starExtra.inst "
@@ -160,7 +161,7 @@ class CreatePhosimDonutTemplates(object):
         Run the phosim repackager.
         """
 
-        print(f"Repackaging phosim output")
+        print("Repackaging phosim output")
 
         argString = f"--out_dir {self.tempWorkPath}/raw "
         argStringExtra = argString + f"{self.tempWorkPath}/phosimOutput/extra"
