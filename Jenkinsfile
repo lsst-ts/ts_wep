@@ -32,7 +32,7 @@ pipeline {
         stage('Cloning Repos') {
             steps {
                 dir(env.WORKSPACE + '/phosim_utils') {
-                    git branch: 'master', url: 'https://github.com/lsst-dm/phosim_utils.git'
+                    git tag: 'v0.2', url: 'https://github.com/lsst-dm/phosim_utils.git'
                 }
             }
         }
