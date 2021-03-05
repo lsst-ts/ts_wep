@@ -1,0 +1,29 @@
+description: phosim basic processing pipeline
+instrument: lsst.obs.lsst.LsstCamPhoSim
+tasks:
+  isr:
+    class: lsst.ip.isr.isrTask.IsrTask
+    config:
+      connections.outputExposure: 'postISRCCD'
+      doBias: False
+      doVariance: False
+      doLinearize: False
+      doCrosstalk: False
+      doDefect: False
+      doNanMasking: False
+      doInterpolate: False
+      doBrighterFatter: False
+      doDark: False
+      doFlat: False
+      doApplyGains: True
+      doFringe: False
+      doOverscan: True
+  detectDonuts:
+    class: lsst.ts.wep.DetectDonutsTask.DetectDonutsTask
+    config:
+      connections.exposure: 'postISRCCD'
+  zernikeEstimate:
+    class: lsst.ts.wep.ZernikeEstimateTask.ZernikeEstimateTask
+    config:
+      connections.exposures: 'postISRCCD'
+      connections.inputCatalogs: 'donutCatalog'
