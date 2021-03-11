@@ -35,16 +35,6 @@ class CamDataCollector(object):
 
         self.destDir = destDir
 
-    def genPhoSimMapper(self):
-        """Generate the PhoSim mapper."""
-
-        fileName = "_mapper"
-        filePath = os.path.join(self.destDir, fileName)
-
-        content = "lsst.obs.lsst.phosim.PhosimMapper"
-
-        writeFile(filePath, content)
-
     def genLsstCamMapper(self):
         """Generate the LsstCam mapper."""
 
