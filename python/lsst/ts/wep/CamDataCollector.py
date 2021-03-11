@@ -45,6 +45,16 @@ class CamDataCollector(object):
 
         writeFile(filePath, content)
 
+    def genLsstCamMapper(self):
+        """Generate the LsstCam mapper."""
+
+        fileName = "_mapper"
+        filePath = os.path.join(self.destDir, fileName)
+
+        content = "lsst.obs.lsst.lsstCamMapper.LsstCamMapper"
+
+        writeFile(filePath, content)
+
     def ingestCalibs(self, calibFiles):
         """Ingest the calibration files.
 
@@ -102,7 +112,7 @@ class CamDataCollector(object):
         """
 
         eimgConfigFile = os.path.join(
-            getObsLsstCmdTaskConfigDir(), "phosim", "ingestEimg.py"
+            getObsLsstCmdTaskConfigDir(), "lsstCam", "ingestEimg.py"
         )
         self._ingestImagesByButler(imgFiles, configFile=eimgConfigFile)
 
