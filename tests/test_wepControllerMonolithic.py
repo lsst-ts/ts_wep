@@ -226,7 +226,7 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
             ampFiles = getAmpImagesFromDir(defocalImgDir)
 
             # provide a full path to CamDataCollector
-            rawImgFiles = " "
+            rawImgFiles = ""
             for ampFile in ampFiles:
                 rawImgFiles += " %s" % os.path.join(defocalImgDir, ampFile)
 
