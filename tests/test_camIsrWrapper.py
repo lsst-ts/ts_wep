@@ -37,7 +37,14 @@ class TestCamIsrWrapper(unittest.TestCase):
         self.dataDir = tempfile.TemporaryDirectory(dir=testDir)
         self.isrDir = tempfile.TemporaryDirectory(dir=self.dataDir.name)
 
-        self.repackagedTestData = os.path.join(testDir, "testData", "repackagedFiles")
+        self.repackagedTestData = os.path.join(
+            testDir,
+            "testData",
+            "phosimOutput",
+            "realComCam",
+            "repackagedFiles",
+            "intra",
+        )
 
         self.camIsrWrapper = CamIsrWrapper(self.isrDir.name)
 
@@ -54,7 +61,7 @@ class TestCamIsrWrapper(unittest.TestCase):
         self.assertTrue(os.path.isfile(isrConfigfilePath))
 
         numOfLine = self._getNumOfLineInFile(isrConfigfilePath)
-        self.assertEqual(numOfLine, 6)
+        self.assertEqual(numOfLine, 7)
 
     def _doIsrConfig(self):
 
@@ -71,11 +78,11 @@ class TestCamIsrWrapper(unittest.TestCase):
     def testDoIsr(self):
 
         # Get the camDataCollector and ingest the calibs
-        detector = "R00_S22"
+        detector = "R22_S11"
         camDataCollector = self._getCamDataCollectorAndIngestCalibs(detector)
 
         # Ingest the raw images and do the ISR
-        imgFileName = "lsst_a_20_f5_R00_S22_E000.fits"
+        imgFileName = "MC_H_20211231_006002_R22_S11.fits"
         rerunName = "run1"
         self._ingestRawAndDoIsr(
             imgFileName, camDataCollector, rerunName, doIsrConfig=True
@@ -92,7 +99,7 @@ class TestCamIsrWrapper(unittest.TestCase):
 
         # Generate the camera mapper
         camDataCollector = CamDataCollector(self.isrDir.name)
-        camDataCollector.genPhoSimMapper()
+        camDataCollector.genLsstCamMapper()
 
         # Generate the fake flat images
         fakeFlatDir = tempfile.TemporaryDirectory(dir=self.dataDir.name)
@@ -153,30 +160,34 @@ class TestCamIsrWrapper(unittest.TestCase):
     def testDoIsrContinuous(self):
 
         # Get the camDataCollector and ingest the calibs
-        detector = "R00_S22 R22_S10"
+        detector = "R22_S11 R22_S10"
         camDataCollector = self._getCamDataCollectorAndIngestCalibs(detector)
 
         # Ingest the first raw images and do the ISR
-        imgFileName = "lsst_a_20_f5_R00_S22_E000.fits"
+        imgFileName = "MC_H_20211231_006002_R22_S11.fits"
         rerunName = "run1"
         self._ingestRawAndDoIsr(
             imgFileName, camDataCollector, rerunName, doIsrConfig=True
         )
 
         # Check the condition
-        postIsrCcdDir = os.path.join(self.isrDir.name, "rerun", rerunName, "postISRCCD")
-        numOfDir = self._getNumOfDir(postIsrCcdDir)
-        self.assertEqual(numOfDir, 1)
+        postIsrCcdDir = os.path.join(
+            self.isrDir.name, "rerun", rerunName, "postISRCCD", "4021123106002-g", "R22"
+        )
+        numOfFiles = len(os.listdir(postIsrCcdDir))
+        self.assertEqual(numOfFiles, 1)
 
         # Ingest the second raw image and do the ISR again
-        imgFileName = "lsst_a_9005000_f1_R22_S10_E000.fits"
+        imgFileName = "MC_H_20211231_006002_R22_S10.fits"
         self._ingestRawAndDoIsr(
             imgFileName, camDataCollector, rerunName, doIsrConfig=False
         )
 
-        # Check the condition again
-        numOfDir = self._getNumOfDir(postIsrCcdDir)
-        self.assertEqual(numOfDir, 2)
+        # Check the condition again -
+        # we get two files within the same dir for
+        # the same  visit and raft
+        numOfFiles = len(os.listdir(postIsrCcdDir))
+        self.assertEqual(numOfFiles, 2)
 
 
 if __name__ == "__main__":

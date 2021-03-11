@@ -51,7 +51,7 @@ donutImgSizeInPixel: 160
 centroidFindAlgo: randomWalk
 
 # Camera mapper for the data butler to use
-camMapper: phosim
+camMapper: lsstCam
 
 # Instrument signature removal (ISR) rerun name
 rerunName: run1

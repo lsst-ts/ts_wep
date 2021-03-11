@@ -46,15 +46,18 @@ class TestButlerWrapper(unittest.TestCase):
 
         # Generate the camera mapper
         camDataCollector = CamDataCollector(cls.dataDir.name)
-        camDataCollector.genPhoSimMapper()
+        camDataCollector.genLsstCamMapper()
 
         # Ingest the E image
         imgFilesEimg = os.path.join(
             getModulePath(),
             "tests",
             "testData",
+            "phosimOutput",
+            "realComCam",
             "repackagedFiles",
-            "lsst_e_9006001_f1_R22_S00_E000.fits.gz",
+            "intra",
+            "MC_H_20211231_006002_R22_S10_e.fits.gz",
         )
         camDataCollector.ingestEimages(imgFilesEimg)
 
@@ -63,8 +66,11 @@ class TestButlerWrapper(unittest.TestCase):
             getModulePath(),
             "tests",
             "testData",
+            "phosimOutput",
+            "realComCam",
             "repackagedFiles",
-            "lsst_a_20_f5_R00_S22_E000.fits",
+            "intra",
+            "MC_H_20211231_006002_R22_S11.fits",
         )
         camDataCollector.ingestImages(imgFilesRaw)
 
@@ -76,43 +82,43 @@ class TestButlerWrapper(unittest.TestCase):
     def testGetRawExp(self):
 
         exposure = self._getRawExp()
-        self.assertEqual(exposure.getDimensions().getX(), 4176)
-        self.assertEqual(exposure.getDimensions().getY(), 4020)
+        self.assertEqual(exposure.getDimensions().getX(), 4608)
+        self.assertEqual(exposure.getDimensions().getY(), 4096)
 
     def _getRawExp(self):
 
-        visit = 20
-        raft = "R00"
-        sensor = "S22"
+        visit = 9006002
+        raft = "R22"
+        sensor = "S11"
         return self.butlerWrapper.getRawExp(visit, raft, sensor)
 
     def testGetEimage(self):
 
         exposure = self._getEimage()
-        self.assertEqual(exposure.getDimensions().getX(), 4072)
-        self.assertEqual(exposure.getDimensions().getY(), 4000)
+        self.assertEqual(exposure.getDimensions().getX(), 4096)
+        self.assertEqual(exposure.getDimensions().getY(), 4004)
 
     def _getEimage(self):
 
-        visit = 9006001
+        visit = 9006002
         raft = "R22"
-        sensor = "S00"
+        sensor = "S10"
         return self.butlerWrapper.getEimage(visit, raft, sensor)
 
     def testSetInputsAndOutputs(self):
 
         self.butlerWrapper.setInputsAndOutputs(self.dataDir.name)
 
-        eimg = self._getEimage()
-        self.assertEqual(eimg.getDimensions().getX(), 4072)
+        exposure = self._getEimage()
+        self.assertEqual(exposure.getDimensions().getX(), 4096)
 
     def testGetImageData(self):
 
-        eimg = self._getEimage()
+        exposure = self._getEimage()
 
-        image = ButlerWrapper.getImageData(eimg)
+        image = ButlerWrapper.getImageData(exposure)
         self.assertTrue(isinstance(image, np.ndarray))
-        self.assertEqual(image.shape, (4000, 4072))
+        self.assertEqual(image.shape, (4004, 4096))
 
     def testExtendDataId(self):
 

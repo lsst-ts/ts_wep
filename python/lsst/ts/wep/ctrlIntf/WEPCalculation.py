@@ -31,6 +31,7 @@ from lsst.ts.wep.Utility import (
     getImageType,
     getCentroidFindType,
     ImageType,
+    getAmpImagesFromDir,
 )
 from lsst.ts.wep.CamDataCollector import CamDataCollector
 from lsst.ts.wep.CamIsrWrapper import CamIsrWrapper
@@ -438,8 +439,8 @@ class WEPCalculation(object):
             dataCollector = self.wepCntlr.getDataCollector()
 
             camMapper = self.settingFile.getSetting("camMapper")
-            if camMapper == "phosim":
-                dataCollector.genPhoSimMapper()
+            if camMapper == "lsstCam":
+                dataCollector.genLsstCamMapper()
             else:
                 raise ValueError("Mapper (%s) is not supported yet." % camMapper)
 
@@ -459,10 +460,13 @@ class WEPCalculation(object):
 
             imgType = self._getImageType()
             if imgType == ImageType.Amp:
-                rawImgFiles = os.path.join(rawExpDir, "*_a_*.fits*")
+                ampFiles = getAmpImagesFromDir(rawExpDir)
+                rawImgFiles = ""
+                for ampFile in ampFiles:
+                    rawImgFiles += " %s" % os.path.join(rawExpDir, ampFile)
                 dataCollector.ingestImages(rawImgFiles)
             elif imgType == ImageType.Eimg:
-                rawImgFiles = os.path.join(rawExpDir, "*_e_*.fits*")
+                rawImgFiles = os.path.join(rawExpDir, "*_e.fits*")
                 dataCollector.ingestEimages(rawImgFiles)
 
     def _getImageType(self):

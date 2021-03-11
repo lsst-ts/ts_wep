@@ -40,22 +40,22 @@ class TestSourceProcessor(unittest.TestCase):
         self.sourProc = SourceProcessor()
 
         # Set the configuration
-        self.sourProc.config(sensorName="R00_S22_C0")
+        self.sourProc.config(sensorName="R00_SW1")
 
     def testInit(self):
 
-        self.assertEqual(self.sourProc.sensorName, "R00_S22_C0")
+        self.assertEqual(self.sourProc.sensorName, "R00_SW1")
         self.assertEqual(len(self.sourProc.sensorDimList), 205)
         self.assertEqual(len(self.sourProc.sensorEulerRot), 205)
         self.assertEqual(len(self.sourProc.sensorFocaPlaneInDeg), 205)
         self.assertEqual(len(self.sourProc.sensorFocaPlaneInUm), 205)
 
-        self.assertEqual(self.sourProc.sensorDimList["R00_S22_C0"], (2000, 4072))
-        self.assertEqual(self.sourProc.sensorDimList["R22_S11"], (4000, 4072))
+        self.assertEqual(self.sourProc.sensorDimList["R00_SW1"], (2000, 4072))
+        self.assertEqual(self.sourProc.sensorDimList["R22_S11"], (4004, 4096))
         self.assertEqual(self.sourProc.sensorFocaPlaneInDeg["R22_S11"], (0, 0))
         self.assertNotEqual(
-            self.sourProc.sensorFocaPlaneInDeg["R00_S22_C0"],
-            self.sourProc.sensorFocaPlaneInDeg["R00_S22_C1"],
+            self.sourProc.sensorFocaPlaneInDeg["R00_SW0"],
+            self.sourProc.sensorFocaPlaneInDeg["R00_SW1"],
         )
 
     def testConfig(self):
@@ -67,7 +67,7 @@ class TestSourceProcessor(unittest.TestCase):
 
     def testGetEulerZinDeg(self):
 
-        wfsSensorName = "R40_S02_C1"
+        wfsSensorName = "R40_SW0"
         eulerZ = self.sourProc.getEulerZinDeg(wfsSensorName)
 
         self.assertEqual(eulerZ, 90.004585)
@@ -86,24 +86,27 @@ class TestSourceProcessor(unittest.TestCase):
 
     def testCamXYtoFieldXYforWfs(self):
 
-        oxR00S22C0, oyR00S22C0 = self._camXYtoFieldXY("R00_S22_C0", 0, 0)
-        oxR00S22C1, oyR00S22C1 = self._camXYtoFieldXY("R00_S22_C1", 0, 0)
-        oxR40S02C0, oyR40S02C0 = self._camXYtoFieldXY("R40_S02_C0", 0, 0)
-        oxR40S02C1, oyR40S02C1 = self._camXYtoFieldXY("R40_S02_C1", 0, 0)
-        oxR44S00C0, oyR44S00C0 = self._camXYtoFieldXY("R44_S00_C0", 0, 0)
-        oxR44S00C1, oyR44S00C1 = self._camXYtoFieldXY("R44_S00_C1", 0, 0)
-        oxR04S20C0, oyR04S20C0 = self._camXYtoFieldXY("R04_S20_C0", 0, 0)
-        oxR04S20C1, oyR04S20C1 = self._camXYtoFieldXY("R04_S20_C1", 0, 0)
+        oxR00SW1, oyR00SW1 = self._camXYtoFieldXY("R00_SW1", 0, 0)
+        oxR00SW0, oyR00SW0 = self._camXYtoFieldXY("R00_SW0", 0, 0)
+
+        oxR40SW1, oyR40SW1 = self._camXYtoFieldXY("R40_SW1", 0, 0)
+        oxR40SW0, oyR40SW0 = self._camXYtoFieldXY("R40_SW0", 0, 0)
+
+        oxR44SW1, oyR44SW1 = self._camXYtoFieldXY("R44_SW1", 0, 0)
+        oxR44SW0, oyR44SW0 = self._camXYtoFieldXY("R44_SW0", 0, 0)
+
+        oxR04SW1, oyR04SW1 = self._camXYtoFieldXY("R04_SW1", 0, 0)
+        oxR04SW0, oyR04SW0 = self._camXYtoFieldXY("R04_SW0", 0, 0)
 
         # Compare with the same RXX_SYY
-        self.assertEqual(oyR00S22C0, oyR00S22C1)
-        self.assertEqual(oxR40S02C0, oxR40S02C1)
-        self.assertEqual(oyR44S00C0, oyR44S00C1)
-        self.assertEqual(oxR04S20C0, oxR04S20C1)
+        self.assertLess(abs(oyR00SW1 - oyR00SW0), 1e-3)
+        self.assertLess(abs(oxR40SW1 - oxR40SW0), 1e-3)
+        self.assertLess(abs(oyR44SW1 - oyR44SW0), 1e-3)
+        self.assertLess(abs(oxR04SW1 - oxR04SW0), 1e-3)
 
         # Campare with different RXX_SYY
-        self.assertEqual((oxR00S22C0 + oxR44S00C0, oyR00S22C0 + oyR44S00C0), (0, 0))
-        self.assertEqual((oxR40S02C1 + oxR04S20C1, oyR40S02C1 + oyR04S20C1), (0, 0))
+        self.assertEqual((oxR00SW1 + oxR44SW1, oyR00SW1 + oyR44SW1), (0, 0))
+        self.assertEqual((oxR40SW0 + oxR04SW0, oyR40SW0 + oyR04SW0), (0, 0))
 
     def _camXYtoFieldXY(self, sensorName, pixelX, pixelY):
 

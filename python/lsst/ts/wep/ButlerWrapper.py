@@ -117,7 +117,7 @@ class ButlerWrapper(object):
             Default data Id.
         """
 
-        dataId = dict(expId=int(visit), raftName=raft, detectorName=sensor)
+        dataId = dict(run=str(visit), raftName=raft, detectorName=sensor)
 
         return dataId
 

@@ -62,7 +62,7 @@ class CreatePhosimDonutTemplates(object):
         """
 
         self.tempWorkPath = newBasePath
-        self.repoDir = os.path.join(self.tempWorkPath, 'input')
+        self.repoDir = os.path.join(self.tempWorkPath, "input")
 
     def createWorkDirectories(self):
         """
@@ -91,8 +91,9 @@ class CreatePhosimDonutTemplates(object):
         detectorStr : str, optional
             String specifying a set of detectors to generate phosim templates.
             A space is required between each detector name
-            (Example: "R22_S11 R22_S10"). If the str is "" then it will generate
-            a template for every detector in the focal plane. (The default is "".)
+            (Example: "R22_S11 R22_S10"). If the str is "" then it will
+            generate a template for every detector in the focal plane.
+            (The default is "".)
 
         Returns
         -------
@@ -135,12 +136,12 @@ class CreatePhosimDonutTemplates(object):
         print(f"Running phosim with {numOfProc} processors")
 
         phosimPath = os.getenv("PHOSIMPATH")
-        runPhosimCmd = f"python {phosimPath}/phosim.py"
+        runPhosimCmd = f"python {phosimPath}phosim.py"
         runPhosimArgs = f"-w {self.tempWorkPath}/phosimWorkDir "
         runPhosimArgs += f'-s "{detectorStrPhosim}" '
         runPhosimArgs += f"-p {numOfProc} "
-        runPhosimArgs += f"-i lsst "
-        runPhosimArgs += f"-e 1 "
+        runPhosimArgs += "-i lsst "
+        runPhosimArgs += "-e 1 "
         runPhosimArgs += f"-c {self.templateDataPath}/star.cmd "
 
         runPhosimArgsExtra = f"{self.templateDataPath}/starExtra.inst "
@@ -160,7 +161,7 @@ class CreatePhosimDonutTemplates(object):
         Run the phosim repackager.
         """
 
-        print(f"Repackaging phosim output")
+        print("Repackaging phosim output")
 
         argString = f"--out_dir {self.tempWorkPath}/raw "
         argStringExtra = argString + f"{self.tempWorkPath}/phosimOutput/extra"
@@ -179,7 +180,7 @@ class CreatePhosimDonutTemplates(object):
 
         dataCollector = CamDataCollector(f"{self.tempWorkPath}/input")
         # Create mapper file
-        dataCollector.genPhoSimMapper()
+        dataCollector.genLsstCamMapper()
         # Run Ingestion
         dataCollector.ingestImages(f"{self.tempWorkPath}/raw/*.fits")
 
@@ -232,12 +233,28 @@ class CreatePhosimDonutTemplates(object):
             Visit Id of the extrafocal images from Phosim.
         """
 
-        intraDir = os.path.join(
-            self.repoDir, "rerun", "run1", "postISRCCD", f"{intraVisitId:#08}-g"
+        postIsrDir = os.path.join(
+            self.repoDir,
+            "rerun",
+            "run1",
+            "postISRCCD",
         )
-        extraDir = os.path.join(
-            self.repoDir, "rerun", "run1", "postISRCCD", f"{extraVisitId:#08}-g"
-        )
+        expIds = os.listdir(postIsrDir)
+
+        intraSuffix = str(intraVisitId)[-5:]
+        extraSuffix = str(extraVisitId)[-5:]
+
+        #  Always generate both extra- and intra- focal images
+        #  so that both  Ids exist
+        for expId in expIds:
+
+            if intraSuffix in expId:
+                intraExpId = expId
+            elif extraSuffix in expId:
+                extraExpId = expId
+
+        intraDir = os.path.join(postIsrDir, intraExpId)
+        extraDir = os.path.join(postIsrDir, extraExpId)
 
         print("Generating intra templates")
         self.cutOutTemplatesAndSave(

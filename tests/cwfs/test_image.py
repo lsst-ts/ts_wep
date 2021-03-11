@@ -67,7 +67,7 @@ class TestImage(unittest.TestCase):
     def testSetImgByFitsFile(self):
 
         opdFitsFile = os.path.join(
-            self.testDataDir, "opdOutput", "9005000", "opd_9005000_0.fits.gz"
+            self.testDataDir, "opdOutput", "9006000", "opd_9006000_0.fits.gz"
         )
         self.img.setImg(imageFile=opdFitsFile)
 

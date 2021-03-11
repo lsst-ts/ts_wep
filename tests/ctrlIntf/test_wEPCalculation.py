@@ -212,10 +212,10 @@ class TestWEPCalculation(unittest.TestCase):
         extraImgDir = os.path.join(comcamDataDir, "repackagedFiles", "extra")
 
         rawExpData = RawExpData()
-        rawExpData.append(9005001, 0, intraImgDir)
+        rawExpData.append(9006002, 0, intraImgDir)
 
         extraRawExpData = RawExpData()
-        extraRawExpData.append(9005000, 0, extraImgDir)
+        extraRawExpData.append(9006001, 0, extraImgDir)
 
         return rawExpData, extraRawExpData
 
@@ -228,8 +228,7 @@ class TestWEPCalculation(unittest.TestCase):
         self.assertTrue(len(listOfDonut), 2)
 
         avgWfErr = sensorWavefrontData.getAnnularZernikePoly()
-        self.assertEqual(avgWfErr.argmax(), 2)
-        self.assertGreater(avgWfErr.max(), 0.1)
+        self.assertGreater(avgWfErr.max(), 0.5)
 
     def testCalculateWavefrontErrorsOfEimg(self):
 
