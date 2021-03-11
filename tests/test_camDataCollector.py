@@ -55,7 +55,7 @@ class TestCamDataCollector(unittest.TestCase):
 
     def _genMapper(self):
 
-        self.camDataCollector.genPhoSimMapper()
+        self.camDataCollector.genLsstCamMapper()
 
     def _getNumOfLineInFile(self, filePath):
 
@@ -67,7 +67,7 @@ class TestCamDataCollector(unittest.TestCase):
         # Make fake gain images
         fakeFlatDir = tempfile.TemporaryDirectory(dir=self.dataDir.name)
 
-        detector = "R00_S22"
+        detector = "R22_S10"
         self._genFakeFlat(fakeFlatDir.name, detector)
 
         # Generate the mapper
@@ -114,8 +114,11 @@ class TestCamDataCollector(unittest.TestCase):
             getModulePath(),
             "tests",
             "testData",
+            "phosimOutput",
+            "realComCam",
             "repackagedFiles",
-            "lsst_a_20_f5_R00_S22_E000.fits",
+            "intra",
+            "MC_H_20211231_006002_R22_S10.fits",
         )
         self.camDataCollector.ingestImages(imgFiles)
 
@@ -138,8 +141,11 @@ class TestCamDataCollector(unittest.TestCase):
             getModulePath(),
             "tests",
             "testData",
+            "phosimOutput",
+            "realComCam",
             "repackagedFiles",
-            "lsst_e_9006001_f1_R22_S00_E000.fits.gz",
+            "intra",
+            "MC_H_20211231_006002_R22_S10_e.fits.gz",
         )
         self.camDataCollector.ingestEimages(imgFiles)
 
