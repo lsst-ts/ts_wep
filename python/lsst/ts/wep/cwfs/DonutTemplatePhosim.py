@@ -71,7 +71,8 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             )
         templateArray = np.genfromtxt(templateFilename, dtype=np.int)
 
-        # Make the template the desired square shape by trimming edges of template
+        # Make the template the desired square shape by trimming edges of
+        # template
         # Phosim templates from file are already a square
         templateSize = np.shape(templateArray)[0]
 
@@ -79,7 +80,8 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             # Find the excess number of pixels in x and y direction
             templateTrim = templateSize - imageSize
 
-            # Find the left and right edges by trimming half pixels from left and right.
+            # Find the left and right edges by trimming half pixels from
+            # left and right.
             # Do the same for the top and bottom.
             leftEdge = topEdge = np.int(templateTrim / 2)
             rightEdge = bottomEdge = np.int(templateSize - (templateTrim - leftEdge))
