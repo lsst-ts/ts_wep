@@ -41,6 +41,7 @@ from lsst.ts.wep.Utility import (
     BscDbType,
     runProgram,
     getConfigDir,
+    getAmpImagesFromDir,
 )
 
 
@@ -59,10 +60,10 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
         self.isrDir = tempfile.TemporaryDirectory(dir=self.dataDir.name)
 
         self.opdDir = os.path.join(
-            self.modulePath, "tests", "testData", "opdOutput", "9005000"
+            self.modulePath, "tests", "testData", "opdOutput", "9006000"
         )
 
-        # Configurate the WEP components
+        # Configure the WEP components
         dataCollector = CamDataCollector(self.isrDir.name)
         isrWrapper = CamIsrWrapper(self.isrDir.name)
         sourSelc = self._configSourceSelector()
@@ -74,7 +75,7 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
             dataCollector, isrWrapper, sourSelc, sourProc, wfEsti
         )
 
-        # Intemediate data used in the test
+        # Intermediate data used in the test
         self.filter = FilterType.REF
 
         self.neighborStarMap = dict()
@@ -185,8 +186,8 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
         detector = "R22_S11 R22_S10"
         self._genFakeFlat(fakeFlatDir.name, detector)
 
-        # Generate the PhoSim mapper
-        self.wepCntlr.getDataCollector().genPhoSimMapper()
+        # Generate the LsstCam mapper
+        self.wepCntlr.getDataCollector().genLsstCamMapper()
 
         # Do the ingestion
         calibFiles = os.path.join(fakeFlatDir.name, "*")
@@ -208,29 +209,28 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
 
     def step2_ingestExp(self):
 
-        intraImgFiles = os.path.join(
-            getModulePath(),
-            "tests",
-            "testData",
-            "phosimOutput",
-            "realComCam",
-            "repackagedFiles",
-            "intra",
-            "lsst_a*.fits",
-        )
-        extraImgFiles = os.path.join(
-            getModulePath(),
-            "tests",
-            "testData",
-            "phosimOutput",
-            "realComCam",
-            "repackagedFiles",
-            "extra",
-            "lsst_a*.fits",
-        )
+        #  Ingest by butler raw extra and intra-focal
+        #  amplifier images
 
-        self.wepCntlr.getDataCollector().ingestImages(intraImgFiles)
-        self.wepCntlr.getDataCollector().ingestImages(extraImgFiles)
+        for defocalType in ["intra", "extra"]:
+            defocalImgDir = os.path.join(
+                getModulePath(),
+                "tests",
+                "testData",
+                "phosimOutput",
+                "realComCam",
+                "repackagedFiles",
+                defocalType,
+            )
+            # get names of amp files
+            ampFiles = getAmpImagesFromDir(defocalImgDir)
+
+            # provide a full path to CamDataCollector
+            rawImgFiles = " "
+            for ampFile in ampFiles:
+                rawImgFiles += " %s" % os.path.join(defocalImgDir, ampFile)
+
+            self.wepCntlr.getDataCollector().ingestImages(rawImgFiles)
 
     def step3_doIsr(self):
 
@@ -287,8 +287,8 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
 
         sensorNameList = list(self.wavefrontSensors)
 
-        intraObsId = 9005001
-        extraObsId = 9005000
+        intraObsId = 9006002
+        extraObsId = 9006001
         obsIdList = [intraObsId, extraObsId]
 
         wfsImgMap = self.wepCntlr.getPostIsrImgMapByPistonDefocal(
@@ -319,7 +319,6 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
         for sensor, donutList in self.donutMap.items():
             for donut in donutList:
                 wfErr = donut.getWfErr()
-                self.assertEqual(wfErr.argmax(), 2)
                 self.assertGreater(wfErr.max(), 100)
 
         # Compare with OPD
@@ -331,12 +330,12 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
             wfErr = donutList[aId].getWfErr()
             zkOfOpd = self._getZkInNmFromOpd(aId)[3:]
             delta = np.abs(wfErr[7] - zkOfOpd[7])
-            self.assertLess(delta, 5)
+            self.assertLess(delta, 8)
 
     def _getZkInNmFromOpd(self, opdId):
 
         # Get the OPD data
-        opdFileName = "opd_9005000_%d.fits.gz" % opdId
+        opdFileName = "opd_9006000_%d.fits.gz" % opdId
         opdFitsFile = os.path.join(self.opdDir, opdFileName)
         opd = fits.getdata(opdFitsFile)
 
@@ -362,19 +361,18 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
             avgErrMap[sensor] = avgErr
 
             # Do the assertion
-            self.assertEqual(avgErr.argmax(), 2)
             self.assertGreater(avgErr.max(), 100)
 
         # Compare with the central OPD
         wfErrOnR22S11 = avgErrMap["R22_S11"]
         zkOfOpdOnR22S11 = self._getZkInNmFromOpd(4)[3:]
         deltaOnR22S11 = np.abs(wfErrOnR22S11[7] - zkOfOpdOnR22S11[7])
-        self.assertLess(deltaOnR22S11, 5)
+        self.assertLess(deltaOnR22S11, 7)
 
         wfErrOnR22S10 = avgErrMap["R22_S10"]
         zkOfOpdOnR22S10 = self._getZkInNmFromOpd(5)[3:]
         deltaOnR22S10 = np.abs(wfErrOnR22S10[7] - zkOfOpdOnR22S10[7])
-        self.assertLess(deltaOnR22S10, 5)
+        self.assertLess(deltaOnR22S10, 7)
 
     def step9a_genMasterDonut(self):
 
