@@ -461,7 +461,7 @@ class WEPCalculation(object):
             imgType = self._getImageType()
             if imgType == ImageType.Amp:
                 ampFiles = getAmpImagesFromDir(rawExpDir)
-                rawImgFiles = " "
+                rawImgFiles = ""
                 for ampFile in ampFiles:
                     rawImgFiles += " %s" % os.path.join(rawExpDir, ampFile)
                 dataCollector.ingestImages(rawImgFiles)
