@@ -78,6 +78,8 @@ class CamIsrWrapper(object):
             Do the defect correction. (the default is False.)
         doOverscan : bool, optional
             Do the overscan correction. (the default is False.)
+        doCrosstalk : bool, optional
+            Do the crosstalk correction. (the default is False.)
         fileName : str, optional
             Config override file name. (the default is "isr_config.py".)
         """
