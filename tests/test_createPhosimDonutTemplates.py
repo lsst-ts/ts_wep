@@ -35,14 +35,19 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
     def setUp(self):
 
         self.createPhosimDonuts = CreatePhosimDonutTemplates()
-        self.testDataDir = os.path.join(getModulePath(), "tests", "testData")
+        modulePath = getModulePath()
+        self.testDataDir = os.path.join(modulePath, "tests", "testData")
+
         # Location where phosim input files exist.
         # Also where temp work directory is created.
         self.templateDataDir = os.path.join(getConfigDir(), "cwfs", "donutTemplateData")
+
         # Location where templates are created
         self.templateDir = os.path.join(self.templateDataDir, "phosimTemplates")
-        # Temporary work directory
-        self.tempTestDirectory = tempfile.TemporaryDirectory()
+
+        # Temporary work directory inside ts_wep/tests/
+        testDir = os.path.join(modulePath, "tests")
+        self.tempTestDirectory = tempfile.TemporaryDirectory(dir=testDir)
         self.tempWorkDir = self.tempTestDirectory.name
         self.createPhosimDonuts.setTempWorkPaths(self.tempWorkDir)
 
@@ -59,17 +64,20 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
 
     def _copyPhosimFiles(self):
 
+        # copy the raw amp image file
         shutil.copy(
             os.path.join(
                 self.testDataDir,
+                "phosimOutput",
+                "realComCam",
                 "repackagedFiles",
-                "lsst_a_9005000_f1_R22_S10_E000.fits",
+                "extra",
+                "MC_H_20211231_006001_R22_S10.fits",
             ),
-            os.path.join(
-                self.tempWorkDir, "raw", "lsst_a_9006001_f1_R22_S10_E000.fits"
-            ),
+            os.path.join(self.tempWorkDir, "raw", "MC_H_20211231_006001_R22_S10.fits"),
         )
 
+        # copy the centroid file ( for a different visit )
         shutil.copy(
             os.path.join(
                 self.testDataDir,
@@ -111,18 +119,15 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         # Run the ingest
         self.createPhosimDonuts.ingestImages()
 
-        self.assertTrue(
-            os.path.exists(
-                os.path.join(
-                    self.tempWorkDir,
-                    "input",
-                    "raw",
-                    "9005000",
-                    "R22",
-                    "09005000-R22-S10-det093.fits",
-                )
-            )
+        path_to_ingested_raws = os.path.join(
+            self.tempWorkDir,
+            "input",
+            "raw",
+            "2021-12-31",
+            "4021123106001",
+            "4021123106001-R22-S10-det093.fits",
         )
+        self.assertTrue(os.path.exists(path_to_ingested_raws))
 
     def testMakeFlatsAndIngest(self):
 
@@ -151,14 +156,19 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         # Run the ISR
         self.createPhosimDonuts.runISR()
         isrPath = os.path.join(
-            "input", "rerun", "run1", "postISRCCD", "09005000-g", "R22"
+            "input",
+            "rerun",
+            "run1",
+            "postISRCCD",
+            "4021123106001-g",
+            "R22",
         )
         self.assertTrue(
             os.path.exists(
                 os.path.join(
                     self.tempWorkDir,
                     isrPath,
-                    "postISRCCD_09005000-g-R22-S10-det093.fits",
+                    "postISRCCD_4021123106001-g-R22-S10-det093.fits",
                 )
             )
         )
@@ -173,7 +183,10 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         self._copyPhosimFiles()
 
         self.createPhosimDonuts.cutOutTemplatesAndSave(
-            testPhosimPath, 240, DefocalType.Extra, 9006001,
+            testPhosimPath,
+            240,
+            DefocalType.Extra,
+            9006001,
         )
 
         newTemplate = np.genfromtxt(
