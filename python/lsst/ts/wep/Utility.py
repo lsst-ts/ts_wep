@@ -454,7 +454,7 @@ def getAmpImagesFromDir(rawExpDir):
 
     Returns
     -------
-    list
+    list [str]
         raw amplifier image files
     """
     return list(filter(re.compile(r"^((?!_e).)*fits$").match, os.listdir(rawExpDir)))
