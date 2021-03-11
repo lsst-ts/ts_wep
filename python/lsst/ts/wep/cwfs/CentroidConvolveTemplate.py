@@ -24,7 +24,7 @@ from copy import copy
 from lsst.ts.wep.cwfs.CentroidDefault import CentroidDefault
 from lsst.ts.wep.cwfs.CentroidRandomWalk import CentroidRandomWalk
 from scipy.signal import correlate
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
 
 
 class CentroidConvolveTemplate(CentroidDefault):
@@ -128,7 +128,12 @@ class CentroidConvolveTemplate(CentroidDefault):
         return x[0], y[0], radius
 
     def getCenterAndRfromTemplateConv(
-        self, imageBinary, templateImgBinary=None, nDonuts=1, peakThreshold=0.95
+        self,
+        imageBinary,
+        templateImgBinary=None,
+        nDonuts=1,
+        peakThreshold=0.95,
+        dbscanEps=5.0,
     ):
         """
         Get the centers of the donuts by convolving a binary template image
@@ -147,14 +152,22 @@ class CentroidConvolveTemplate(CentroidDefault):
             Binary image of template donut. If set to None then the image
             is convolved with itself. (The default is None)
         nDonuts: int, optional
-            Number of donuts there should be in the binary image. Needs to
-            be >= 1. (The default is 1)
+            Number of donuts there should be in the binary image. If the number
+            is >= 1 then K-Means clustering will be used to return the
+            specified number of donut centers. However, this can also be set to
+            -1 if the number of donuts is unknown and it will perform DBSCAN
+            clustering to find and return a set of donut centers.
+            (The default is 1)
         peakThreshold: float, optional
             This value is a specifies a number between 0 and 1 that is
             the fraction of the highest pixel value in the convolved image.
             The code then sets all pixels with a value below this to 0 before
             running the K-means algorithm to find peaks that represent possible
             donut locations. (The default is 0.95)
+        dbscanEps: float, optional
+            Maximum distance scikit-learn DBSCAN algorithm allows "between two
+            samples for one to considered in the neighborhood of the other".
+            (The default is 5.0)
 
         Returns
         -------
@@ -169,8 +182,10 @@ class CentroidConvolveTemplate(CentroidDefault):
         if templateImgBinary is None:
             templateImgBinary = copy(imageBinary)
 
-        nDonutsAssertStr = "nDonuts must be an integer >= 1"
-        assert (nDonuts >= 1) & (type(nDonuts) is int), nDonutsAssertStr
+        nDonutsAssertStr = "nDonuts must be an integer >= 1 or -1"
+        assert ((nDonuts >= 1) | (nDonuts == -1)) & (
+            type(nDonuts) is int
+        ), nDonutsAssertStr
 
         # We set the mode to be "same" because we need to return the same
         # size image to the code.
@@ -185,20 +200,36 @@ class CentroidConvolveTemplate(CentroidDefault):
         rankedConvolveCutoff = rankedConvolve[:cutoff]
         nx, ny = np.unravel_index(rankedConvolveCutoff, np.shape(imageBinary))
 
-        # Then to find peaks in the image we use K-Means with the
-        # specified number of donuts
-        kmeans = KMeans(n_clusters=nDonuts)
-        labels = kmeans.fit_predict(np.array([nx, ny]).T)
-
-        # Then in each cluster we take the brightest pixel as the centroid
+        # Donut centers lists
         centX = []
         centY = []
-        for labelNum in range(nDonuts):
-            nxLabel, nyLabel = np.unravel_index(
-                rankedConvolveCutoff[labels == labelNum][0], np.shape(imageBinary)
-            )
-            centX.append(nxLabel)
-            centY.append(nyLabel)
+
+        if nDonuts >= 1:
+            # Then to find peaks in the image we use K-Means with the
+            # specified number of donuts
+            kmeans = KMeans(n_clusters=nDonuts)
+            labels = kmeans.fit_predict(np.array([nx, ny]).T)
+
+            # Then in each cluster we take the brightest pixel as the centroid
+            for labelNum in range(nDonuts):
+                nxLabel, nyLabel = np.unravel_index(
+                    rankedConvolveCutoff[labels == labelNum][0], np.shape(imageBinary)
+                )
+                centX.append(nxLabel)
+                centY.append(nyLabel)
+        elif nDonuts == -1:
+            # Use DBSCAN to find clusters of points when the
+            # number of donuts is unknown
+            labels = DBSCAN(eps=dbscanEps).fit_predict(np.array([ny, nx]).T)
+
+            # Save the centroid as the brightest pixel
+            # within each identified cluster
+            for labelNum in np.unique(labels):
+                nxLabel, nyLabel = np.unravel_index(
+                    rankedConvolveCutoff[labels == labelNum][0], np.shape(imageBinary)
+                )
+                centX.append(nxLabel)
+                centY.append(nyLabel)
 
         # Get the radius of the donut from the template image
         radius = np.sqrt(np.sum(templateImgBinary) / np.pi)
