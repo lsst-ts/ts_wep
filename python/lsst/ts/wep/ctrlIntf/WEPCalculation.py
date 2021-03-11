@@ -439,9 +439,7 @@ class WEPCalculation(object):
             dataCollector = self.wepCntlr.getDataCollector()
 
             camMapper = self.settingFile.getSetting("camMapper")
-            if camMapper == "phosim":
-                dataCollector.genPhoSimMapper()
-            elif camMapper == "lsstCam":
+            if camMapper == "lsstCam":
                 dataCollector.genLsstCamMapper()
             else:
                 raise ValueError("Mapper (%s) is not supported yet." % camMapper)
