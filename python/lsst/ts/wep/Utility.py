@@ -21,6 +21,7 @@
 
 import os
 import subprocess
+import re
 from scipy.ndimage.measurements import center_of_mass
 from enum import IntEnum, auto
 
@@ -273,7 +274,7 @@ def readPhoSimSettingData(folderPath, fileName, atype):
                     data = lineElement[1:6]
                 elif atype == "eulerRot":
                     # Collect the euler Rotation (degrees)
-                    data = lineElement[10:13]
+                    data = lineElement[12:15]
 
         # Collect the data
         if data:
@@ -438,3 +439,22 @@ def getDonutTemplateType(donutTemplateType):
         return DonutTemplateType.Phosim
     else:
         raise ValueError(f"The {donutTemplateType} is not supported.")
+
+
+def getAmpImagesFromDir(rawExpDir):
+    """Apply regular expression to find
+    repackaged amplifier image files.
+    Use the negative lookahead to find those
+    fits files that do not contain '_e' in their name.
+
+    Parameters
+    ----------
+    rawExpDir : str
+        path to the input directory with raw repackaged files
+
+    Returns
+    -------
+    list
+        raw amplifier image files
+    """
+    return list(filter(re.compile(r"^((?!_e).)*fits$").match, os.listdir(rawExpDir)))
