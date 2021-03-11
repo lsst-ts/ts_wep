@@ -140,8 +140,8 @@ class CreatePhosimDonutTemplates(object):
         runPhosimArgs = f"-w {self.tempWorkPath}/phosimWorkDir "
         runPhosimArgs += f'-s "{detectorStrPhosim}" '
         runPhosimArgs += f"-p {numOfProc} "
-        runPhosimArgs += f'{"-i lsst "}'
-        runPhosimArgs += f'{"-e 1 "}'
+        runPhosimArgs += "-i lsst "
+        runPhosimArgs += "-e 1 "
         runPhosimArgs += f"-c {self.templateDataPath}/star.cmd "
 
         runPhosimArgsExtra = f"{self.templateDataPath}/starExtra.inst "
@@ -161,7 +161,7 @@ class CreatePhosimDonutTemplates(object):
         Run the phosim repackager.
         """
 
-        print(f'{"Repackaging phosim output"}')
+        print("Repackaging phosim output")
 
         argString = f"--out_dir {self.tempWorkPath}/raw "
         argStringExtra = argString + f"{self.tempWorkPath}/phosimOutput/extra"
@@ -250,7 +250,6 @@ class CreatePhosimDonutTemplates(object):
 
             if intraSuffix in expId:
                 intraExpId = expId
-
             elif extraSuffix in expId:
                 extraExpId = expId
 
