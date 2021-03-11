@@ -38,6 +38,7 @@ from lsst.ts.wep.Utility import (
     DeblendDonutType,
     getDonutTemplateType,
     DonutTemplateType,
+    getAmpImagesFromDir,
 )
 
 
@@ -114,6 +115,39 @@ class TestUtility(unittest.TestCase):
     def testGetDonutTemplateTypeWithWrongInput(self):
 
         self.assertRaises(ValueError, getDonutTemplateType, "wrongType")
+
+    def testGetAmpImagesFromDir(self):
+
+        # path to repackaged phosim files
+        # with amplifier images and e-images
+        defocalImgDir = os.path.join(
+            getModulePath(),
+            "tests",
+            "testData",
+            "phosimOutput",
+            "realComCam",
+            "repackagedFiles",
+            "extra",
+        )
+        # test that there are e-images in that dir
+        filesInDir = os.listdir(defocalImgDir)
+        self.assertTrue("MC_H_20211231_006001_R22_S11_e.fits.gz" in filesInDir)
+        self.assertTrue("MC_H_20211231_006001_R22_S10_e.fits.gz" in filesInDir)
+
+        # get names of amp files
+        ampFiles = getAmpImagesFromDir(defocalImgDir)
+
+        # assert the returned content
+        self.assertIsInstance(ampFiles, list)
+
+        # assert that amp images are on the returned list
+        self.assertTrue("MC_H_20211231_006001_R22_S10.fits" in ampFiles)
+        self.assertTrue("MC_H_20211231_006001_R22_S11.fits" in ampFiles)
+
+        # assert that no other files are there
+        # by checking that the length of list corresponds to
+        # two files tested above
+        self.assertEqual(len(ampFiles), 2)
 
 
 if __name__ == "__main__":
