@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.4:
+
+-------------
+1.5.4
+-------------
+
+* Update to using ``LsstCamMapper`` and new geometry, including ``focalplanelayout.txt``
+
 .. _lsst.ts.wep-1.5.3:
 
 -------------
