@@ -156,12 +156,7 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         # Run the ISR
         self.createPhosimDonuts.runISR()
         isrPath = os.path.join(
-            "input",
-            "rerun",
-            "run1",
-            "postISRCCD",
-            "4021123106001-g",
-            "R22",
+            "input", "rerun", "run1", "postISRCCD", "4021123106001-g", "R22",
         )
         self.assertTrue(
             os.path.exists(
@@ -183,10 +178,7 @@ class TestCreatePhosimDonutTemplates(unittest.TestCase):
         self._copyPhosimFiles()
 
         self.createPhosimDonuts.cutOutTemplatesAndSave(
-            testPhosimPath,
-            240,
-            DefocalType.Extra,
-            9006001,
+            testPhosimPath, 240, DefocalType.Extra, 9006001,
         )
 
         newTemplate = np.genfromtxt(
