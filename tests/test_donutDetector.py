@@ -65,13 +65,13 @@ class TestDonutDetector(unittest.TestCase):
 
         return template, blendedImg
 
-    def testLabelUnblended(self):
+    def testIdentifyBlendedDonuts(self):
 
         testDataFrame = pd.DataFrame()
         testDataFrame["x_center"] = [50.0, 100.0, 120.0]
         testDataFrame["y_center"] = [100.0, 100.0, 100.0]
 
-        labeledDf = self.donutDetector.labelUnblended(testDataFrame, 30.0)
+        labeledDf = self.donutDetector.identifyBlendedDonuts(testDataFrame, 30.0)
 
         self.assertCountEqual(
             labeledDf.columns,

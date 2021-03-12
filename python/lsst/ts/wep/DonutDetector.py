@@ -30,7 +30,6 @@ from scipy.spatial.distance import cdist
 
 
 class DonutDetector(object):
-
     """
     Class to detect donuts directly from an out of focus image
     by convolution with a template image.
@@ -39,19 +38,18 @@ class DonutDetector(object):
     def detectDonuts(
         self, expArray, template, blendRadius, peakThreshold=0.95, dbscanEps=5
     ):
-
         """
         Detect and categorize donut sources as blended/unblended
 
         Parameters
         -------
-        expArray: numpy ndarray
-            The input image data
-        template: numpy ndarray
-            Donut template appropriate for the image
+        expArray: numpy.ndarray
+            The input image data.
+        template: numpy.ndarray
+            Donut template appropriate for the image.
         blendRadius: float
             Minimum distance in pixels two donut centers need to
-            be apart in order to be tagged as unblended
+            be apart in order to be tagged as unblended.
         peakThreshold: float, optional
             This value is a specifies a number between 0 and 1 that is
             the fraction of the highest pixel value in the convolved image.
@@ -65,7 +63,7 @@ class DonutDetector(object):
 
         Returns
         -------
-        pandas dataframe
+        pandas.DataFrame
             Dataframe identifying donut positions and if they
             are blended with other donuts. If blended also identfies
             which donuts are blended with which.
@@ -86,28 +84,27 @@ class DonutDetector(object):
         donutDf = pd.DataFrame(
             np.array([centroidX, centroidY]).T, columns=["x_center", "y_center"]
         )
-        donutDf = self.labelUnblended(donutDf, blendRadius)
+        donutDf = self.identifyBlendedDonuts(donutDf, blendRadius)
 
         return donutDf
 
-    def labelUnblended(self, donutDf, blendRadius):
-
+    def identifyBlendedDonuts(self, donutDf, blendRadius):
         """
         Label donuts as blended/unblended if the centroids are within
         the blendRadius number of pixels.
 
         Parameters
         ----------
-        donutDf: pandas dataframe
+        donutDf: pandas.DataFrame
             Dataframe identifying donut positions with labels
             'x_center' and 'y_center'.
         blendRadius: float
             Minimum distance in pixels two donut centers need to
-            be apart in order to be tagged as unblended
+            be apart in order to be tagged as unblended.
 
         Returns
         -------
-        pandas dataframe
+        pandas.DataFrame
             Dataframe identifying donut positions and if they
             are blended with other donuts. If blended also identfies
             which donuts are blended with which.
@@ -130,21 +127,23 @@ class DonutDetector(object):
         donutDf["blended"] = False
         donutDf.loc[blendedCenters, "blended"] = True
         donutDf["blended_with"] = None
-        for i, j in blendedPairs:
-            if donutDf.loc[i, "blended_with"] is None:
-                donutDf.at[i, "blended_with"] = []
-            if donutDf.loc[j, "blended_with"] is None:
-                donutDf.at[j, "blended_with"] = []
-            donutDf.loc[i, "blended_with"].append(j)
-            donutDf.loc[j, "blended_with"].append(i)
+        for donutOne, donutTwo in blendedPairs:
+            if donutDf.loc[donutOne, "blended_with"] is None:
+                donutDf.at[donutOne, "blended_with"] = []
+            if donutDf.loc[donutTwo, "blended_with"] is None:
+                donutDf.at[donutTwo, "blended_with"] = []
+            donutDf.loc[donutOne, "blended_with"].append(donutTwo)
+            donutDf.loc[donutTwo, "blended_with"].append(donutOne)
 
         # Count the number of other donuts overlapping
         # each donut
         donutDf["num_blended_neighbors"] = 0
-        for i in range(len(donutDf)):
-            if donutDf["blended_with"].iloc[i] is None:
+        for donutIdx in range(len(donutDf)):
+            if donutDf["blended_with"].iloc[donutIdx] is None:
                 continue
 
-            donutDf.at[i, "num_blended_neighbors"] = len(donutDf["blended_with"].loc[i])
+            donutDf.at[donutIdx, "num_blended_neighbors"] = len(
+                donutDf["blended_with"].loc[donutIdx]
+            )
 
         return donutDf
