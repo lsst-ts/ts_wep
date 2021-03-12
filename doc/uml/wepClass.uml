@@ -1,5 +1,6 @@
 @startuml
 class DonutImageCheck
+class DonutDetector
 WepController *-- ButlerWrapper
 WepController *-- CamDataCollector
 WepController *-- CamIsrWrapper

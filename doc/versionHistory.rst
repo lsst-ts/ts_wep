@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.5:
+
+-------------
+1.5.5
+-------------
+
+* Add `DonutDetector` class.
+
 .. _lsst.ts.wep-1.5.4:
 
 -------------
