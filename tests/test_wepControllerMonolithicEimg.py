@@ -38,7 +38,7 @@ from lsst.ts.wep.Utility import (
     FilterType,
     CamType,
     BscDbType,
-    getConfigDir
+    getConfigDir,
 )
 
 

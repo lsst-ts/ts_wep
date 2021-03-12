@@ -57,11 +57,11 @@ class TestTemplatePhosim(unittest.TestCase):
         # raft so it will not overwrite existing templates in the folder.
         shutil.copyfile(
             os.path.join(testDataPath, extraTemplateName),
-            os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt")
+            os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt"),
         )
         shutil.copyfile(
             os.path.join(testDataPath, intraTemplateName),
-            os.path.join(self.defaultTemplatePath, "intra_template-R99_S99.txt")
+            os.path.join(self.defaultTemplatePath, "intra_template-R99_S99.txt"),
         )
 
     def tearDown(self):

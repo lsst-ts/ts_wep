@@ -227,7 +227,7 @@ class TestTool(unittest.TestCase):
 
         # mask data
         cut = -0.9
-        r = np.sqrt(self.xx**2 + self.yy**2)
+        r = np.sqrt(self.xx ** 2 + self.yy ** 2)
         idx = (r > 1) | (r < e) | (self.xx < cut)
 
         xx = self.xx[:].copy()
@@ -238,7 +238,7 @@ class TestTool(unittest.TestCase):
 
         zr = ZernikeMaskedFit(surface, xx, yy, nc, mask, e)
 
-        self.assertLess(np.sum(np.abs(zr - self.zerCoef[0:nc])**2), 1e-10)
+        self.assertLess(np.sum(np.abs(zr - self.zerCoef[0:nc]) ** 2), 1e-10)
 
     def testPadArray(self):
 

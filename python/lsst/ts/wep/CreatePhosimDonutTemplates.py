@@ -233,12 +233,7 @@ class CreatePhosimDonutTemplates(object):
             Visit Id of the extrafocal images from Phosim.
         """
 
-        postIsrDir = os.path.join(
-            self.repoDir,
-            "rerun",
-            "run1",
-            "postISRCCD",
-        )
+        postIsrDir = os.path.join(self.repoDir, "rerun", "run1", "postISRCCD",)
         expIds = os.listdir(postIsrDir)
 
         intraSuffix = str(intraVisitId)[-5:]
