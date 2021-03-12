@@ -31,7 +31,10 @@ from scipy.spatial.distance import cdist
 
 class DonutDetector(object):
 
-    """Class to detect donuts directly from an out of focus image."""
+    """
+    Class to detect donuts directly from an out of focus image
+    by convolution with a template image.
+    """
 
     def detectDonuts(
         self, expArray, template, blendRadius, peakThreshold=0.95, dbscanEps=5
