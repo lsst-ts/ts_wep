@@ -33,6 +33,7 @@ This module is a high-level module to use other modules.
 * **ParamReader**: Parameter reader class to read the yaml configuration files used in the calculation.
 * **DonutImageCheck**: Donut image check class to judge the donut image is effective or not.
 * **CreatePhosimDonutTemplates**: Create donut templates on camera detectors using Phosim. See :doc:`here <phosimDonutTemplates>` for more information on generating Phosim donut templates.
+* **DonutDetector**: Detect donuts directly from an out of focus image by convolution with a template image.
 
 .. _lsst.ts.wep-modules_wep_bsc:
 
