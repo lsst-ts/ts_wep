@@ -18,12 +18,18 @@ tasks:
       doApplyGains: True
       doFringe: False
       doOverscan: True
-  detectDonuts:
-    class: lsst.ts.wep.DetectDonutsTask.DetectDonutsTask
+  generateDonutCatalog:
+    class: lsst.ts.wep.GenerateDonutCatalogTask.GenerateDonutCatalogTask
     config:
       connections.exposure: 'postISRCCD'
+  cutOutDonuts:
+    class: lsst.ts.wep.CutOutDonutStampsTask.CutOutDonutStampsTask
+    config:
+      connections.exposure: 'postISRCCD'
+      connections.donutCatalog: 'donutCatalog'
   zernikeEstimate:
     class: lsst.ts.wep.ZernikeEstimateTask.ZernikeEstimateTask
     config:
       connections.exposures: 'postISRCCD'
-      connections.inputCatalogs: 'donutCatalog'
+      connections.donutCatalogs: 'donutCatalog'
+      connections.donutStamps: 'donutStamps'
