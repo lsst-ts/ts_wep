@@ -135,7 +135,7 @@ class CameraData(object):
 
         Parameters
         ----------
-        detectorType : lsst.afw.cameraGeom.detector.detector.DetectorType
+        detectorType : lsst.afw.cameraGeom.DetectorType
             Detector type.
         """
 
