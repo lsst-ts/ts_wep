@@ -20,7 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from lsst.obs.lsst import LsstCamMapper
-from lsst.afw.cameraGeom.detector.detector import DetectorType
+from lsst.afw.cameraGeom import DetectorType
 
 from lsst.ts.wep.bsc.CameraData import CameraData
 
