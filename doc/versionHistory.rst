@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.7:
+
+-------------
+1.5.7
+-------------
+
+* Update import of `DetectorType`.
+
 .. _lsst.ts.wep-1.5.6:
 
 -------------
