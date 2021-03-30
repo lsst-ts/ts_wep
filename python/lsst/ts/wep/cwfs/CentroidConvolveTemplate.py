@@ -30,7 +30,7 @@ from sklearn.cluster import KMeans, DBSCAN
 class CentroidConvolveTemplate(CentroidDefault):
     def __init__(self):
         """CentroidDefault child class to get the centroid of donut by
-    convolution with a template donut image."""
+        convolution with a template donut image."""
 
         super(CentroidConvolveTemplate, self).__init__()
         self._centRandomWalk = CentroidRandomWalk()
@@ -86,7 +86,9 @@ class CentroidConvolveTemplate(CentroidDefault):
             templateBinary = self.getImgBinary(templateDonut)
 
         return self.getCenterAndRfromImgBinary(
-            imgBinary, templateBinary=templateBinary, peakThreshold=peakThreshold,
+            imgBinary,
+            templateBinary=templateBinary,
+            peakThreshold=peakThreshold,
         )
 
     def getCenterAndRfromImgBinary(

@@ -35,7 +35,14 @@ class TestNelderMeadModify(unittest.TestCase):
         vars = (1, 2, 1)
         self.assertEqual(feval(self.func, vars), 4)
 
-        xopt = nelderMeadModify(self.func, np.array([2.1]), args=(2, 8,))
+        xopt = nelderMeadModify(
+            self.func,
+            np.array([2.1]),
+            args=(
+                2,
+                8,
+            ),
+        )
         self.assertEqual(xopt[0], 2)
 
 

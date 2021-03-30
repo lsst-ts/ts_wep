@@ -210,7 +210,9 @@ class TestCompensableImage(unittest.TestCase):
         wfsImgIntra = CompensableImage()
         wfsImgExtra = CompensableImage()
         wfsImgIntra.setImg(
-            self.fieldXY, DefocalType.Intra, imageFile=self.imgFilePathIntra,
+            self.fieldXY,
+            DefocalType.Intra,
+            imageFile=self.imgFilePathIntra,
         )
         wfsImgExtra.setImg(
             self.fieldXY, DefocalType.Extra, imageFile=self.imgFilePathExtra

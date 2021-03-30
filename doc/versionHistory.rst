@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.8:
+
+-------------
+1.5.8
+-------------
+
+* Reformat the code by `black` v20.8b1.
+
 .. _lsst.ts.wep-1.5.7:
 
 -------------

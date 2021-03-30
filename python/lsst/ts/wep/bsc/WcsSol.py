@@ -347,7 +347,11 @@ class WcsSol(object):
                 "chipName is an unallowed type. Can be None, string or array of strings."
             )
 
-        pixArray = self._pixelCoordsFromRaDec(ra, dec, chipNameList,)
+        pixArray = self._pixelCoordsFromRaDec(
+            ra,
+            dec,
+            chipNameList,
+        )
 
         if nPts == 1:
             return pixArray.flatten()
