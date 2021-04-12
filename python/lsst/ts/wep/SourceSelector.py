@@ -86,7 +86,7 @@ class SourceSelector(object):
 
         Parameters
         ----------
-        *args : str or *list
+        *args : `str` or `*list`
             Information to connect to the database.
         """
 
