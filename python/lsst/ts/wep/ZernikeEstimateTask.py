@@ -58,7 +58,7 @@ class ZernikeEstimateTask(pipeBase.PipelineTask):
         zerArray = []
 
         if len(donutStamps[0]) == 0:
-            return pipeBase.Struct(outputZernikes=np.ones(19)*-9999)
+            return pipeBase.Struct(outputZernikes=np.ones(19) * -9999)
 
         configDir = getConfigDir()
         instDir = os.path.join(configDir, "cwfs", "instData")
@@ -73,15 +73,17 @@ class ZernikeEstimateTask(pipeBase.PipelineTask):
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
             centroidXY = donutExtra.centroid_position
-            fieldXY = sourProc.camXYtoFieldXY(
-                centroidXY.getX(), centroidXY.getY()
-            )
+            fieldXY = sourProc.camXYtoFieldXY(centroidXY.getX(), centroidXY.getY())
 
             wfEsti.setImg(
-                fieldXY, DefocalType.Extra, image=donutExtra.stamp_im.getImage().getArray()
+                fieldXY,
+                DefocalType.Extra,
+                image=donutExtra.stamp_im.getImage().getArray(),
             )
             wfEsti.setImg(
-                fieldXY, DefocalType.Intra, image=donutIntra.stamp_im.getImage().getArray()
+                fieldXY,
+                DefocalType.Intra,
+                image=donutIntra.stamp_im.getImage().getArray(),
             )
             wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()

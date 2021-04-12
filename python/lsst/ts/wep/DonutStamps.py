@@ -56,8 +56,9 @@ class DonutStamp(AbstractStamp):
                 lsst.geom.Angle(metadata.getArray("RA_DEG")[index], lsst.geom.degrees),
                 lsst.geom.Angle(metadata.getArray("DEC_DEG")[index], lsst.geom.degrees),
             ),
-            centroid_position=lsst.geom.Point2I(metadata.getArray("CENT_X")[index],
-                                                metadata.getArray("CENT_Y")[index]),
+            centroid_position=lsst.geom.Point2I(
+                metadata.getArray("CENT_X")[index], metadata.getArray("CENT_Y")[index]
+            ),
             detector_name=metadata.getArray("DET_NAME")[index],
         )
 

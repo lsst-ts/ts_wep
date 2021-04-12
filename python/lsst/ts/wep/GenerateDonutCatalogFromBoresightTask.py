@@ -32,12 +32,19 @@ class GenerateDonutCatalogFromBoresightTaskConnections(
 
 
 class GenerateDonutCatalogFromBoresightTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=GenerateDonutCatalogFromBoresightTaskConnections
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=GenerateDonutCatalogFromBoresightTaskConnections,
 ):
     filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
-    boresightRa = pexConfig.Field(doc="Boresight RA in degrees", dtype=float, default=0.0)
-    boresightDec = pexConfig.Field(doc="Boresight Dec in degrees", dtype=float, default=0.0)
-    boresightRotAng = pexConfig.Field(doc="Boresight Rotation Angle in degrees", dtype=float, default=0.0)
+    boresightRa = pexConfig.Field(
+        doc="Boresight RA in degrees", dtype=float, default=0.0
+    )
+    boresightDec = pexConfig.Field(
+        doc="Boresight Dec in degrees", dtype=float, default=0.0
+    )
+    boresightRotAng = pexConfig.Field(
+        doc="Boresight Rotation Angle in degrees", dtype=float, default=0.0
+    )
     cameraName = pexConfig.Field(doc="Camera Name", dtype=str, default="lsstCam")
 
 
@@ -86,11 +93,11 @@ class GenerateDonutCatalogFromBoresightTask(pipeBase.PipelineTask):
         for detector in lsst_cam:
             # Create WCS from boresight information
             detWcs = createInitialSkyWcsFromBoresight(
-                    lsst.geom.SpherePoint(self.boresightRa,
-                                          self.boresightDec,
-                                          lsst.geom.degrees),
-                    (90.0 - self.boresightRotAng) * lsst.geom.degrees,
-                    detector,
+                lsst.geom.SpherePoint(
+                    self.boresightRa, self.boresightDec, lsst.geom.degrees
+                ),
+                (90.0 - self.boresightRotAng) * lsst.geom.degrees,
+                detector,
             )
 
             try:
@@ -98,19 +105,19 @@ class GenerateDonutCatalogFromBoresightTask(pipeBase.PipelineTask):
                     detector.getBBox(), detWcs, filterName=self.filterName
                 ).refCat
 
-                ra.append(donutCatalog['coord_ra'])
-                dec.append(donutCatalog['coord_dec'])
-                centroid_x.append(donutCatalog['centroid_x'])
-                centroid_y.append(donutCatalog['centroid_y'])
-                det_names.append([detector.getName()]*len(donutCatalog))
+                ra.append(donutCatalog["coord_ra"])
+                dec.append(donutCatalog["coord_dec"])
+                centroid_x.append(donutCatalog["centroid_x"])
+                centroid_y.append(donutCatalog["centroid_y"])
+                det_names.append([detector.getName()] * len(donutCatalog))
 
             except RuntimeError:
                 continue
 
-        field_objects['coord_ra'] = np.hstack(ra).squeeze()
-        field_objects['coord_dec'] = np.hstack(dec).squeeze()
-        field_objects['centroid_x'] = np.hstack(centroid_x).squeeze()
-        field_objects['centroid_y'] = np.hstack(centroid_y).squeeze()
-        field_objects['detector'] = np.hstack(det_names).squeeze()
+        field_objects["coord_ra"] = np.hstack(ra).squeeze()
+        field_objects["coord_dec"] = np.hstack(dec).squeeze()
+        field_objects["centroid_x"] = np.hstack(centroid_x).squeeze()
+        field_objects["centroid_y"] = np.hstack(centroid_y).squeeze()
+        field_objects["detector"] = np.hstack(det_names).squeeze()
 
         return pipeBase.Struct(donutCatalog=field_objects)

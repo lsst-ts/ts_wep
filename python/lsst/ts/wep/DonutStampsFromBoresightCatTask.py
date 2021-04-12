@@ -40,7 +40,8 @@ class DonutStampsFromBoresightCatTaskConnections(
 
 
 class DonutStampsFromBoresightCatTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=DonutStampsFromBoresightCatTaskConnections
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=DonutStampsFromBoresightCatTaskConnections,
 ):
     donutTemplateSize = pexConfig.Field(doc="Size of Template", dtype=int, default=160)
     donutStampSize = pexConfig.Field(doc="Size of donut stamps", dtype=int, default=160)
@@ -79,7 +80,9 @@ class DonutStampsFromBoresightCatTask(pipeBase.PipelineTask):
         yLowList = []
         finalXList = []
         finalYList = []
-        detectorCatalog = donutCatalog.query(f'detector == "{detectorName}"').reset_index(drop=True)
+        detectorCatalog = donutCatalog.query(
+            f'detector == "{detectorName}"'
+        ).reset_index(drop=True)
         for idx in np.arange(len(detectorCatalog)):
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
@@ -134,7 +137,7 @@ class DonutStampsFromBoresightCatTask(pipeBase.PipelineTask):
                     sky_position=lsst.geom.SpherePoint(
                         detectorCatalog.iloc[idx]["coord_ra"],
                         detectorCatalog.iloc[idx]["coord_dec"],
-                        lsst.geom.radians
+                        lsst.geom.radians,
                     ),
                     centroid_position=lsst.geom.Point2I(finalDonutX, finalDonutY),
                     detector_name=detectorName,
