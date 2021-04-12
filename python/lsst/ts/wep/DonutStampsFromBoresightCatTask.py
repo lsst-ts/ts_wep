@@ -16,7 +16,7 @@ from lsst.ts.wep.DonutStamps import DonutStamp, DonutStamps
 from lsst.pipe.base import connectionTypes
 
 
-class CutOutDonutStampsTaskConnections(
+class DonutStampsFromBoresightCatTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("exposure", "detector", "instrument")
 ):
     exposure = connectionTypes.Input(
@@ -27,8 +27,8 @@ class CutOutDonutStampsTaskConnections(
     )
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="SimpleCatalog",
+        dimensions=("instrument",),
+        storageClass="DataFrame",
         name="donutCatalog",
     )
     donutStamps = connectionTypes.Output(
@@ -39,8 +39,8 @@ class CutOutDonutStampsTaskConnections(
     )
 
 
-class CutOutDonutStampsTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=CutOutDonutStampsTaskConnections
+class DonutStampsFromBoresightCatTaskConfig(
+    pipeBase.PipelineTaskConfig, pipelineConnections=DonutStampsFromBoresightCatTaskConnections
 ):
     donutTemplateSize = pexConfig.Field(doc="Size of Template", dtype=int, default=160)
     donutStampSize = pexConfig.Field(doc="Size of donut stamps", dtype=int, default=160)
@@ -49,13 +49,13 @@ class CutOutDonutStampsTaskConfig(
     )
 
 
-class CutOutDonutStampsTask(pipeBase.PipelineTask):
+class DonutStampsFromBoresightCatTask(pipeBase.PipelineTask):
 
-    ConfigClass = CutOutDonutStampsTaskConfig
-    _DefaultName = "CutOutDonutStampsTask"
+    ConfigClass = DonutStampsFromBoresightCatTaskConfig
+    _DefaultName = "DonutStampsFromBoresightCatTask"
 
-    def __init__(self, config: pexConfig.Config, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.donutTemplateSize = self.config.donutTemplateSize
         self.donutStampSize = self.config.donutStampSize
         self.initialCutoutSize = self.config.initialCutoutSize
@@ -75,14 +75,18 @@ class CutOutDonutStampsTask(pipeBase.PipelineTask):
         initialHalfWidth = int(self.initialCutoutSize / 2)
         stampHalfWidth = int(self.donutStampSize / 2)
         finalStamps = []
+        xLowList = []
+        yLowList = []
         finalXList = []
         finalYList = []
-        for donutRow in donutCatalog:
+        detectorCatalog = donutCatalog.query(f'detector == "{detectorName}"').reset_index(drop=True)
+        for idx in np.arange(len(detectorCatalog)):
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
             # on the donut
-            xCent = int(donutRow["centroid_x"])
-            yCent = int(donutRow["centroid_y"])
+            # NOTE: Switched x and y because when loading exposure transpose occurs
+            yCent = int(detectorCatalog.iloc[idx]["centroid_x"])
+            xCent = int(detectorCatalog.iloc[idx]["centroid_y"])
             initialCutout = exposure.image.array[
                 xCent - initialHalfWidth : xCent + initialHalfWidth,
                 yCent - initialHalfWidth : yCent + initialHalfWidth,
@@ -110,37 +114,43 @@ class CutOutDonutStampsTask(pipeBase.PipelineTask):
             xHigh = finalDonutX + stampHalfWidth
             yLow = finalDonutY - stampHalfWidth
             yHigh = finalDonutY + stampHalfWidth
-            finalCutout = exposure.image.array[xLow:xHigh, yLow:yHigh]
-            finalMask = exposure.mask.array[xLow:xHigh, yLow:yHigh]
-            finalVariance = exposure.variance.array[xLow:xHigh, yLow:yHigh]
+            xLowList.append(xLow)
+            yLowList.append(yLow)
+            finalCutout = exposure.image.array[xLow:xHigh, yLow:yHigh].T.copy()
+            finalMask = exposure.mask.array[xLow:xHigh, yLow:yHigh].T.copy()
+            finalVariance = exposure.variance.array[xLow:xHigh, yLow:yHigh].T.copy()
 
             # Turn into MaskedImage object to add into a Stamp object for reading by butler
             finalStamp = afwImage.maskedImage.MaskedImageF(
                 self.donutStampSize, self.donutStampSize
             )
-            finalStamp.image.array = finalCutout
-            finalStamp.mask.array = finalMask
-            finalStamp.variance.array = finalVariance
+            finalStamp.setImage(afwImage.ImageF(finalCutout))
+            finalStamp.setMask(afwImage.Mask(finalMask))
+            finalStamp.setVariance(afwImage.ImageF(finalVariance))
+            finalStamp.setXY0(lsst.geom.Point2I(xLow, yLow))
             finalStamps.append(
                 DonutStamp(
                     stamp_im=finalStamp,
                     sky_position=lsst.geom.SpherePoint(
-                        donutRow["coord_ra"], donutRow["coord_dec"]
+                        detectorCatalog.iloc[idx]["coord_ra"],
+                        detectorCatalog.iloc[idx]["coord_dec"],
+                        lsst.geom.radians
                     ),
-                    pixel_position=lsst.geom.Point2I(finalDonutX, finalDonutY),
+                    centroid_position=lsst.geom.Point2I(finalDonutX, finalDonutY),
                     detector_name=detectorName,
                 )
             )
 
-        # print(type(finalStamps[0]))
         stampsMetadata = PropertyList()
-        stampsMetadata["RA_DEG"] = np.degrees(donutCatalog["coord_ra"])
-        stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"])
+        stampsMetadata["RA_DEG"] = np.degrees(detectorCatalog["coord_ra"])
+        stampsMetadata["DEC_DEG"] = np.degrees(detectorCatalog["coord_dec"])
         stampsMetadata["DET_NAME"] = np.array(
             [detectorName] * len(donutCatalog), dtype=str
         )
-        stampsMetadata["X_PIXEL"] = np.array(finalXList)
-        stampsMetadata["Y_PIXEL"] = np.array(finalYList)
+        stampsMetadata["CENT_X"] = np.array(finalXList)
+        stampsMetadata["CENT_Y"] = np.array(finalYList)
+        stampsMetadata["X0"] = np.array(xLowList)
+        stampsMetadata["Y0"] = np.array(yLowList)
 
         return pipeBase.Struct(
             donutStamps=DonutStamps(finalStamps, metadata=stampsMetadata)

@@ -46,7 +46,7 @@ class WcsSol(object):
         self.rotOffset = 90.0
 
         if camera is None:
-            self._camera = obs_lsst.lsstCamMapper.LsstCamMapper().camera
+            self._camera = obs_lsst.LsstCam.getCamera()
         else:
             self._camera = camera
 
@@ -300,9 +300,9 @@ class WcsSol(object):
             xPixList.append(xPix)
             yPixList.append(yPix)
 
-        return np.array([xPixList, yPixList])
+        return np.array([xPixList, yPixList]), detList
 
-    def pixelCoordsFromRaDec(self, ra, dec, chipName=None):
+    def pixelCoordsFromRaDec(self, ra, dec, chipName=None, returnDetName=False):
         """Get the pixel positions (or nan if not on a chip) for objects based
         on their RA, and Dec (in degrees).
 
@@ -320,6 +320,9 @@ class WcsSol(object):
             this method will calculate which chip each(RA, Dec) pair actually
             falls on, and return pixel coordinates for each (RA, Dec) pair on
             the appropriate chip. (the default is None.)
+        returnDetName : boolean
+            If returnDetName is true then the list of detectors corresponding
+            to the pixel positions will also be returned. (the default is False.)
 
         Returns
         -------
@@ -347,16 +350,22 @@ class WcsSol(object):
                 "chipName is an unallowed type. Can be None, string or array of strings."
             )
 
-        pixArray = self._pixelCoordsFromRaDec(
+        pixArray, detList = self._pixelCoordsFromRaDec(
             ra,
             dec,
             chipNameList,
         )
 
         if nPts == 1:
-            return pixArray.flatten()
+            if returnDetName is False:
+                return pixArray.flatten()
+            else:
+                return pixArray.flatten(), detList
         else:
-            return pixArray
+            if returnDetName is False:
+                return pixArray
+            else:
+                return pixArray, detList
 
     def focalPlaneCoordsFromRaDec(self, ra, dec):
         """Get the focal plane coordinates for all objects in the catalog.

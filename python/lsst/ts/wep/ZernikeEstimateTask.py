@@ -4,13 +4,15 @@ import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
 import lsst.afw.table as afwTable
 import lsst.afw.image as afwImage
-from lsst.meas.algorithms import Stamps
+
+# from lsst.meas.algorithms import Stamps
 
 import os
 import typing
 from lsst.ts.wep.WfEstimator import WfEstimator
 from lsst.ts.wep.SourceProcessor import SourceProcessor
 from lsst.ts.wep.Utility import getConfigDir, DefocalType
+from lsst.ts.wep.DonutStamps import DonutStamps
 
 from lsst.pipe.base import connectionTypes
 
@@ -18,25 +20,11 @@ from lsst.pipe.base import connectionTypes
 class ZernikeEstimateTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("detector", "instrument")
 ):
-    exposures = connectionTypes.Input(
-        doc="Input exposure to make measurements on",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="Exposure",
-        name="postISRCCD",
-        multiple=True,
-    )
     donutStamps = connectionTypes.Input(
-        doc="Input exposure to make measurements on",
+        doc="Donut Postage Stamp Images",
         dimensions=("exposure", "detector", "instrument"),
-        storageClass="Stamps",
+        storageClass="StampsBase",
         name="donutStamps",
-        multiple=True,
-    )
-    donutCatalogs = connectionTypes.Input(
-        doc="Input donut location catalog",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="SimpleCatalog",
-        name="donutCatalog",
         multiple=True,
     )
     outputZernikes = connectionTypes.Output(
@@ -58,18 +46,19 @@ class ZernikeEstimateTask(pipeBase.PipelineTask):
     ConfigClass = ZernikeEstimateTaskConfig
     _DefaultName = "ZernikeEstimateTask"
 
-    def __init__(self, config: pexConfig.Config, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.donutImageSize = self.config.donutImageSize
 
     def run(
         self,
-        exposures: typing.List[afwImage.Exposure],
-        donutStamps: typing.List[Stamps],
-        donutCatalogs: typing.List[afwTable.SourceCatalog],
+        donutStamps: typing.List[DonutStamps],
     ) -> pipeBase.Struct:
 
         zerArray = []
+
+        if len(donutStamps[0]) == 0:
+            return pipeBase.Struct(outputZernikes=np.ones(19)*-9999)
 
         configDir = getConfigDir()
         instDir = os.path.join(configDir, "cwfs", "instData")
@@ -77,20 +66,23 @@ class ZernikeEstimateTask(pipeBase.PipelineTask):
         wfEsti = WfEstimator(instDir, algoDir)
         wfEsti.config(sizeInPix=self.donutImageSize)
         sourProc = SourceProcessor()
-        sourProc.config(sensorName=exposures[0].getDetector().getName())
+        sourProc.config(sensorName=donutStamps[0][0].detector_name)
 
-        extraImages = donutStamps[0].getMaskedImages()
-        intraImages = donutStamps[1].getMaskedImages()
+        donutStampsExtra = donutStamps[0]
+        donutStampsIntra = donutStamps[1]
 
-        for idx in range(len(donutCatalogs[0])):
+        for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
+            centroidXY = donutExtra.centroid_position
             fieldXY = sourProc.camXYtoFieldXY(
-                donutCatalogs[0][idx]["centroid_x"], donutCatalogs[0][idx]["centroid_y"]
+                centroidXY.getX(), centroidXY.getY()
             )
 
-            wfEsti.setImg(fieldXY, DefocalType.Extra,
-                          image=extraImages[idx].image.array)
-            wfEsti.setImg(fieldXY, DefocalType.Intra,
-                          image=intraImages[idx].image.array)
+            wfEsti.setImg(
+                fieldXY, DefocalType.Extra, image=donutExtra.stamp_im.getImage().getArray()
+            )
+            wfEsti.setImg(
+                fieldXY, DefocalType.Intra, image=donutIntra.stamp_im.getImage().getArray()
+            )
             wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()
             zer4UpMicrons = zer4UpNm * 1e-3
