@@ -6,6 +6,17 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.5.9:
+
+-------------
+1.5.9
+-------------
+
+* Build and upload documentation as part of the CI job.
+* Use develop-env image for the CI job, due to the need of java to build the documentation.
+* Disable concurrent builds.
+* Fix docstring in `SourceSelector.connect` method.
+
 .. _lsst.ts.wep-1.5.8:
 
 -------------

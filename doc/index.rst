@@ -56,6 +56,19 @@ Contributing
 
 ``lsst.ts.wep`` is developed at https://github.com/lsst-ts/ts_wep.
 
+
+.. _lsst.ts.wep-see-also:
+
+See Also
+========
+
+.. toctree::
+    :maxdepth: 2
+    :titlesonly:
+    :glob:
+
+    phosimDonutTemplates.rst
+
 .. _lsst.ts.wep-version:
 
 Version
