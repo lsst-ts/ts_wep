@@ -1,0 +1,126 @@
+#
+# LSST Data Management System
+# Copyright 2008-2017 AURA/LSST.
+#
+# This product includes software developed by the
+# LSST Project (http://www.lsst.org/).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the LSST License Statement and
+# the GNU General Public License along with this program.  If not,
+# see <https://www.lsstcorp.org/LegalNotices/>.
+#
+
+import os
+import unittest
+import numpy as np
+
+from lsst.daf import butler as dafButler
+from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.GenerateDonutCatalogOnlineTask import (
+    GenerateDonutCatalogOnlineTask,
+    GenerateDonutCatalogOnlineTaskConfig,
+)
+
+
+class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
+    def setUp(self):
+
+        self.config = GenerateDonutCatalogOnlineTaskConfig()
+        self.task = GenerateDonutCatalogOnlineTask(config=self.config)
+
+        moduleDir = getModulePath()
+        self.testDataDir = os.path.join(moduleDir, "tests", "testData")
+        self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
+
+        self.butler = dafButler.Butler(self.repoDir)
+        self.registry = self.butler.registry
+
+    def validateConfigs(self):
+
+        self.config.boresightRa = 0.03
+        self.config.boresightDec = -0.02
+        self.config.boresightRotAng = 90.0
+        self.config.filterName = "r"
+        self.cameraName = "lsstFamCam"
+        self.task = GenerateDonutCatalogOnlineTask(config=self.config)
+
+        self.assertEqual(self.task.boresightRa, 0.03)
+        self.assertEqual(self.task.boresightDec, -0.02)
+        self.assertEqual(self.task.boresightRotAng, 90.0)
+        self.assertEqual(self.task.filterName, "r")
+        self.assertEqual(self.task.cameraName, "lsstFamCam")
+
+    def testFilterResults(self):
+
+        refCat = self.butler.get(
+            "cal_ref_cat", dataId={"htm7": 253952}, collections=["refcats"]
+        )
+        testDataFrame = refCat.asAstropy().to_pandas()
+        filteredDataFrame = self.task.filterResults(testDataFrame)
+        np.testing.assert_array_equal(filteredDataFrame, testDataFrame)
+
+    def testDonutCatalogGeneration(self):
+        """
+        Test that task creates a dataframe with detector information.
+        """
+
+        # Create list of deferred loaders for the ref cat
+        deferredList = []
+        datasetGenerator = self.registry.queryDatasets(
+            datasetType="cal_ref_cat", collections=["refcats"]
+        ).expanded()
+        for ref in datasetGenerator:
+            deferredList.append(self.butler.getDeferred(ref, collections=["refcats"]))
+        taskOutput = self.task.run(deferredList)
+        outputDf = taskOutput.donutCatalog
+
+        # Compare ra, dec info to original input catalog
+        inputCat = np.genfromtxt(
+            os.path.join(
+                self.testDataDir, "phosimOutput", "realComCam", "skyComCamInfo.txt"
+            ),
+            names=["id", "ra", "dec", "mag"],
+        )
+
+        # Check that all 8 sources are present and 4 assigned to each detector
+        self.assertEqual(len(outputDf), 8)
+        self.assertCountEqual(np.radians(inputCat["ra"]), outputDf["coord_ra"])
+        self.assertCountEqual(np.radians(inputCat["dec"]), outputDf["coord_dec"])
+        self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
+        self.assertEqual(len(outputDf.query('detector == "R22_S10"')), 4)
+        self.assertCountEqual(
+            [
+                3806.7636478057957,
+                2806.982895217227,
+                607.3861483168994,
+                707.3972344551466,
+                614.607342274194,
+                714.6336433247832,
+                3815.2649173460436,
+                2815.0561553920156,
+            ],
+            outputDf["centroid_x"],
+        )
+        self.assertCountEqual(
+            [
+                3196.070534224157,
+                2195.666002294077,
+                394.8907003737886,
+                394.9087004171349,
+                396.2407036464963,
+                396.22270360324296,
+                3196.1965343932648,
+                2196.188002312585,
+            ],
+            outputDf["centroid_y"],
+        )
