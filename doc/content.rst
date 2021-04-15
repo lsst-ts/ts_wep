@@ -128,3 +128,18 @@ This module does the image deblending.
 * **DeblendDefault**: Default deblend class.
 * **DeblendAdapt**: DeblendDefault child class to do the deblending by the adaptive threshold method.
 * **nelderMeadModify**: Do the numerical optimation according to the Nelder-Mead algorithm.
+
+.. _lsst.ts.wep-modules_wep_task:
+
+-------------
+wep.task
+-------------
+
+This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware.
+
+.. uml:: uml/taskClass.uml
+    :caption: Class diagram of wep.task
+
+* **GenerateDonutCatalogOnlineTaskConnections**: Connections setup for GenerateDonutCatalogOnlineTask to run in a pipeline with Gen 3 middleware.
+* **GenerateDonutCatalogOnlineTaskConfig**: Configuration setup for GenerateDonutCatalogOnlineTask.
+* **GenerateDonutCatalogOnlineTask**: Gen 3 middleware task to take pointing information and create a catalog of donut sources in that pointing.
