@@ -155,8 +155,10 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         for detector in camera:
             # Set WCS from boresight information
             detWcs.setObsMetaData(
-                self.boresightRa, self.boresightDec, self.boresightRotAng,
-                centerCcd=detector.getName()
+                self.boresightRa,
+                self.boresightDec,
+                self.boresightRotAng,
+                centerCcd=detector.getName(),
             )
 
             try:
