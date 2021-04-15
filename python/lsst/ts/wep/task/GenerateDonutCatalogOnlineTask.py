@@ -35,6 +35,12 @@ from lsst.ts.wep.bsc.WcsSol import WcsSol
 class GenerateDonutCatalogOnlineTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("instrument",)
 ):
+    """
+    Specify the connections needed for GenerateDonutCatalogOnlineTask.
+    We need the reference catalogs and will produce donut catalogs for
+    a specified instrument.
+    """
+
     refCatalogs = connectionTypes.PrerequisiteInput(
         doc="Reference catalog",
         storageClass="SimpleCatalog",
@@ -55,6 +61,11 @@ class GenerateDonutCatalogOnlineTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=GenerateDonutCatalogOnlineTaskConnections,
 ):
+    """
+    Configuration settings for GenerateDonutCatalogOnlineTask. Specifies
+    pointing information, filter and camera details.
+    """
+
     filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
     boresightRa = pexConfig.Field(
         doc="Boresight RA in degrees", dtype=float, default=0.0
