@@ -123,6 +123,21 @@ setup -k -r .
 1. While testing with the sky images obtained with the auxiliary telescope (localed in `tests/testData/testImages/auxTel`), this package and [cwfs](https://github.com/bxin/cwfs) show the similar result in "onAxis" optical model. However, for the "paraxial" optical model, the results of two packages are different.
 2. The main difference comes from the stratege of compensation in the initial loop of solving the TIE. However, it is hard to have a conclusion at this moment because of the low singal-to-noise ratio in test images.
 
+## Test Gen 3 Repository
+
+In the folder `tests/testData/` there is a test repository for tasks that run with the Gen 3 DM middleware. This repository is the folder `tests/testData/gen3TestRepo` and was built using the
+files `tests/testData/createGen3TestRepo.sh`. This script performs the following steps to create the Gen 3 repository:
+
+  1. Ingest a reference catalog with the Gen 2 middleware. This reference catalog is the file `tests/testData/phosimOutput/realComCam/skyComCamInfoRefCatalog.txt` which contains the same information as
+  `skyComCamInfo.txt` in the same folder but formatted to be read in by the Gen 2 middleware as a reference catalog. A column of g magnitude error is added with a value of 0.1 to fit reference catalog format.
+  The format of the reference catalog is configured with the file `tests/testData/gen3TestRepo/refCat.cfg`.
+  2. Convert the Gen 2 repository with the reference catalog into a Gen 3 repository since this is currently the only way to create a Gen 3 reference catalog. This requires the configuration file
+  `tests/testData/gen3TestRepo/convertRefCat.cfg`.
+  3. Ingest the raw files in `tests/testData/phosimOutput/realComCam/repackagedFiles`.
+  4. Clean up the original Gen 2 repository.
+
+Inside the Gen 3 repository there are files for the Gen 3 Butler configuration (`butler.yaml`) and the repository database (`gen3.sqlite3`).
+
 ## Build the Document
 
 To build project documentation, run `package-docs build` to build the documentation.
