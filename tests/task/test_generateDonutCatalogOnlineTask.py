@@ -1,9 +1,10 @@
+# This file is part of ts_wep.
 #
-# LSST Data Management System
-# Copyright 2008-2017 AURA/LSST.
-#
-# This product includes software developed by the
-# LSST Project (http://www.lsst.org/).
+# Developed for the LSST Telescope and Site Systems.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,10 +16,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the LSST License Statement and
-# the GNU General Public License along with this program.  If not,
-# see <https://www.lsstcorp.org/LegalNotices/>.
-#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
 import unittest
@@ -26,7 +25,7 @@ import numpy as np
 
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.GenerateDonutCatalogOnlineTask import (
+from lsst.ts.wep.task.GenerateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTask,
     GenerateDonutCatalogOnlineTaskConfig,
 )
