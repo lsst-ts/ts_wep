@@ -86,7 +86,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
     """
 
     ConfigClass = GenerateDonutCatalogOnlineTaskConfig
-    _DefaultName = "GenerateDonutCatalogOnlineTask"
+    _DefaultName = "generateDonutCatalogOnlineTask"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -125,16 +125,18 @@ setup -k -r .
 
 ## Test Gen 3 Repository
 
-In the folder `tests/testData/` there is a test repository for tasks that run with the Gen 3 DM middleware. This repository is the folder `tests/testData/gen3TestRepo` and was built using the
-files `tests/testData/createGen3TestRepo.sh`. This script performs the following steps to create the Gen 3 repository:
+In the folder `tests/testData/` there is a test repository for tasks that run with the Gen 3 DM middleware.
+This repository is the folder `tests/testData/gen3TestRepo` and was built using the files `tests/testData/createGen3TestRepo.sh`.
+This script performs the following steps to create the Gen 3 repository:
 
-  1. Ingest a reference catalog with the Gen 2 middleware. This reference catalog is the file `tests/testData/phosimOutput/realComCam/skyComCamInfoRefCatalog.txt` which contains the same information as
-  `skyComCamInfo.txt` in the same folder but formatted to be read in by the Gen 2 middleware as a reference catalog. A column of g magnitude error is added with a value of 0.1 to fit reference catalog format.
-  The format of the reference catalog is configured with the file `tests/testData/gen3TestRepo/refCat.cfg`.
-  2. Convert the Gen 2 repository with the reference catalog into a Gen 3 repository since this is currently the only way to create a Gen 3 reference catalog. This requires the configuration file
-  `tests/testData/gen3TestRepo/convertRefCat.cfg`.
-  3. Ingest the raw files in `tests/testData/phosimOutput/realComCam/repackagedFiles`.
-  4. Clean up the original Gen 2 repository.
+1. Ingest a reference catalog with the Gen 2 middleware.
+This reference catalog is the file `tests/testData/phosimOutput/realComCam/skyComCamInfoRefCatalog.txt` which contains the same information as `skyComCamInfo.txt` in the same folder but formatted to be read in by the Gen 2 middleware as a reference catalog.
+A column of g magnitude error is added with a value of 0.1 to fit reference catalog format.
+The format of the reference catalog is configured with the file `tests/testData/gen3TestRepo/refCat.cfg`.
+2. Convert the Gen 2 repository with the reference catalog into a Gen 3 repository since this is currently the only way to create a Gen 3 reference catalog.
+This requires the configuration file `tests/testData/gen3TestRepo/convertRefCat.cfg`.
+3. Ingest the raw files in `tests/testData/phosimOutput/realComCam/repackagedFiles`.
+4. Clean up the original Gen 2 repository.
 
 Inside the Gen 3 repository there are files for the Gen 3 Butler configuration (`butler.yaml`) and the repository database (`gen3.sqlite3`).
 
