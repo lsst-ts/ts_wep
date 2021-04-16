@@ -6,6 +6,16 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.0:
+
+-------------
+1.6.0
+-------------
+
+* Create new task module
+* Add GenerateDonutCatalogOnlineTask.py in task module
+* Add `tests/testData/gen3TestRepo` as sample Gen 3 repo for testing
+
 .. _lsst.ts.wep-1.5.9:
 
 -------------
