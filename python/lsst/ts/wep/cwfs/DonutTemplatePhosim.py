@@ -69,7 +69,7 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             templateFilename = os.path.join(
                 phosimTemplateDir, "intra_template-%s.txt" % sensorName
             )
-        templateArray = np.genfromtxt(templateFilename, dtype=np.int)
+        templateArray = np.genfromtxt(templateFilename, dtype=int)
 
         # Make the template the desired square shape by trimming edges of
         # template
@@ -83,8 +83,8 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             # Find the left and right edges by trimming half pixels from
             # left and right.
             # Do the same for the top and bottom.
-            leftEdge = topEdge = np.int(templateTrim / 2)
-            rightEdge = bottomEdge = np.int(templateSize - (templateTrim - leftEdge))
+            leftEdge = topEdge = int(templateTrim / 2)
+            rightEdge = bottomEdge = int(templateSize - (templateTrim - leftEdge))
 
             templateFinal = templateArray[leftEdge:rightEdge, topEdge:bottomEdge]
         else:
@@ -93,8 +93,8 @@ class DonutTemplatePhosim(DonutTemplateDefault):
             templatePad = imageSize - templateSize
 
             # Pad each side by equal amount of pixels
-            padLeft = padTop = np.int(templatePad / 2)
-            padRight = padBottom = np.int(imageSize - (templatePad - padLeft))
+            padLeft = padTop = int(templatePad / 2)
+            padRight = padBottom = int(imageSize - (templatePad - padLeft))
 
             templateFinal = np.zeros((imageSize, imageSize))
             templateFinal[padLeft:padRight, padTop:padBottom] = templateArray
