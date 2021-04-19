@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.1:
+
+-------------
+1.6.1
+-------------
+
+* Update GenerateDonutCatalogOnlineTask.py to get instrument directly from pipeline configuration.
+* Setup `ctrl_mpexec` package in Jenkinsfile so tests can run `pipetask` command.
+
 .. _lsst.ts.wep-1.6.0:
 
 -------------
