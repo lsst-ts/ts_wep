@@ -29,6 +29,7 @@ from lsst.ts.wep.task.GenerateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTask,
     GenerateDonutCatalogOnlineTaskConfig,
 )
+from lsst.ts.wep.Utility import runProgram
 
 
 class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
@@ -50,14 +51,12 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         self.config.boresightDec = -0.02
         self.config.boresightRotAng = 90.0
         self.config.filterName = "r"
-        self.cameraName = "lsstFamCam"
         self.task = GenerateDonutCatalogOnlineTask(config=self.config)
 
         self.assertEqual(self.task.boresightRa, 0.03)
         self.assertEqual(self.task.boresightDec, -0.02)
         self.assertEqual(self.task.boresightRotAng, 90.0)
         self.assertEqual(self.task.filterName, "r")
-        self.assertEqual(self.task.cameraName, "lsstFamCam")
 
     def testFilterResults(self):
 
@@ -67,6 +66,65 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         testDataFrame = refCat.asAstropy().to_pandas()
         filteredDataFrame = self.task.filterResults(testDataFrame)
         np.testing.assert_array_equal(filteredDataFrame, testDataFrame)
+
+    def testPipeline(self):
+        """
+        Test that the task runs in a pipeline. Also functions as a test of
+        runQuantum function.
+        """
+
+        # Run pipeline command
+        runName = "run1"
+        pipetaskCmd = "pipetask run "
+        pipetaskCmd += f"-b {self.repoDir} "  # Specify repo
+        pipetaskCmd += "-i refcats "  # Specify collections with data to use
+        # Specify task
+        taskName = "GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask"
+        pipetaskCmd += f"-t lsst.ts.wep.task.{taskName} "
+        pipetaskCmd += "--instrument lsst.obs.lsst.LsstCam "
+        pipetaskCmd += f"--register-dataset-types --output-run {runName}"
+
+        runProgram(pipetaskCmd)
+
+        # Test instrument matches
+        pipelineButler = dafButler.Butler(self.repoDir)
+        outputDf = pipelineButler.get(
+            "donutCatalog", dataId={"instrument": "LSSTCam"}, collections=[f"{runName}"]
+        )
+        self.assertEqual(len(outputDf), 8)
+        self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
+        self.assertEqual(len(outputDf.query('detector == "R22_S10"')), 4)
+        self.assertCountEqual(
+            [
+                3806.7636478057957,
+                2806.982895217227,
+                607.3861483168994,
+                707.3972344551466,
+                614.607342274194,
+                714.6336433247832,
+                3815.2649173460436,
+                2815.0561553920156,
+            ],
+            outputDf["centroid_x"],
+        )
+        self.assertCountEqual(
+            [
+                3196.070534224157,
+                2195.666002294077,
+                394.8907003737886,
+                394.9087004171349,
+                396.2407036464963,
+                396.22270360324296,
+                3196.1965343932648,
+                2196.188002312585,
+            ],
+            outputDf["centroid_y"],
+        )
+
+        # Clean up
+        cleanUpCmd = "butler prune-collection "
+        cleanUpCmd += f"{self.repoDir} {runName} --purge --unstore"
+        runProgram(cleanUpCmd)
 
     def testDonutCatalogGeneration(self):
         """
@@ -80,7 +138,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         ).expanded()
         for ref in datasetGenerator:
             deferredList.append(self.butler.getDeferred(ref, collections=["refcats"]))
-        taskOutput = self.task.run(deferredList)
+        taskOutput = self.task.run("LSSTCam", deferredList)
         outputDf = taskOutput.donutCatalog
 
         # Compare ra, dec info to original input catalog
