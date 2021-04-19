@@ -99,10 +99,6 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         self.boresightDec = self.config.boresightDec
         self.boresightRotAng = self.config.boresightRotAng
 
-        # Need camera name to get the detectors to use to find X,Y pixel
-        # values for the sources
-        self.cameraName = self.config.cameraName
-
         # TODO: Temporary until DM-24162 is closed at which point we
         # can remove this
         os.environ["NUMEXPR_MAX_THREADS"] = "1"
@@ -131,9 +127,27 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
 
         return resultsDataFrame
 
-    def run(
+    def runQuantum(
         self,
-        refCatalogs: typing.List[afwTable.SimpleCatalog],
+        butlerQC: pipeBase.ButlerQuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ):
+
+        # Get the instrument we are running the pipeline with
+        cameraName = outputRefs.donutCatalog.dataId["instrument"]
+
+        # Get the input reference catalogs for the task
+        inputs = butlerQC.get(inputRefs)
+
+        # Run task on specified instrument
+        outputs = self.run(cameraName, **inputs)
+
+        # Use butler to store output in repository
+        butlerQC.put(outputs, outputRefs)
+
+    def run(
+        self, cameraName: str, refCatalogs: typing.List[afwTable.SimpleCatalog]
     ) -> pipeBase.Struct:
 
         refObjLoader = ReferenceObjectLoader(
@@ -154,11 +168,11 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         centroidY = []
         det_names = []
 
-        # Get camera. Only 'lsstCam' for now.
-        if self.cameraName == "lsstCam":
+        # Get camera. Only 'LSSTCam' for now.
+        if cameraName == "LSSTCam":
             camera = obs_lsst.LsstCam.getCamera()
         else:
-            raise ValueError(f"{self.cameraName} is not a valid camera name.")
+            raise ValueError(f"{cameraName} is not a valid camera name.")
 
         # Create WCS holder
         detWcs = WcsSol(camera=camera)
