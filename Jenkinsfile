@@ -57,6 +57,7 @@ pipeline {
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
                         source ${env.LSST_STACK}/loadLSST.bash
+                        setup ctrl_mpexec -t ${env.STACK_VERSION}
                         cd phosim_utils/
                         setup -k -r . -t ${env.STACK_VERSION}
                         scons
@@ -74,6 +75,7 @@ pipeline {
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
                         source ${env.LSST_STACK}/loadLSST.bash
+                        setup ctrl_mpexec -t ${env.STACK_VERSION}
                         cd phosim_utils/
                         setup -k -r . -t ${env.STACK_VERSION}
                         cd ..
@@ -128,7 +130,7 @@ pipeline {
                 }
               }
             }
-            
+
             // Change the ownership of workspace to Jenkins for the clean up
             // This is to work around the condition that the user ID of jenkins
             // is 1003 on TSSW Jenkins instance. In this post stage, it is the
