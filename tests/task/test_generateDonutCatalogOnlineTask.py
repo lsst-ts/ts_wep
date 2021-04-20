@@ -45,6 +45,18 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
+    def _writePipetaskCmd(self, runName, taskName):
+
+        pipetaskCmd = "pipetask run "
+        pipetaskCmd += f"-b {self.repoDir} "  # Specify repo
+        pipetaskCmd += "-i refcats "  # Specify collections with data to use
+        # Specify task
+        pipetaskCmd += f"-t lsst.ts.wep.task.{taskName} "
+        pipetaskCmd += "--instrument lsst.obs.lsst.LsstCam "
+        pipetaskCmd += f"--register-dataset-types --output-run {runName}"
+
+        return pipetaskCmd
+
     def validateConfigs(self):
 
         self.config.boresightRa = 0.03
@@ -75,15 +87,8 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
         # Run pipeline command
         runName = "run1"
-        pipetaskCmd = "pipetask run "
-        pipetaskCmd += f"-b {self.repoDir} "  # Specify repo
-        pipetaskCmd += "-i refcats "  # Specify collections with data to use
-        # Specify task
         taskName = "GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask"
-        pipetaskCmd += f"-t lsst.ts.wep.task.{taskName} "
-        pipetaskCmd += "--instrument lsst.obs.lsst.LsstCam "
-        pipetaskCmd += f"--register-dataset-types --output-run {runName}"
-
+        pipetaskCmd = self._writePipetaskCmd(runName, taskName)
         runProgram(pipetaskCmd)
 
         # Test instrument matches
