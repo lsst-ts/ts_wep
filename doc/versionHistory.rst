@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.2:
+
+-------------
+1.6.2
+-------------
+
+* Update ROTANG header in realComcam test files
+
 .. _lsst.ts.wep-1.6.1:
 
 -------------
