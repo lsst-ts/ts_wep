@@ -39,6 +39,8 @@ from lsst.ts.wep.Utility import (
     getDonutTemplateType,
     DonutTemplateType,
     getAmpImagesFromDir,
+    writePipetaskCmd,
+    writeCleanUpRepoCmd,
 )
 
 
@@ -148,6 +150,46 @@ class TestUtility(unittest.TestCase):
         # by checking that the length of list corresponds to
         # two files tested above
         self.assertEqual(len(ampFiles), 2)
+
+    def testWritePipetaskCmd(self):
+
+        repoName = "testRepo"
+        runName = "run2"
+        taskName = "lsst.ts.wep.testTask"
+        instrument = "lsst.obs.lsst.LsstCam"
+        collections = "refcats"
+        pipelineYamlFile = "testPipeOut.yaml"
+
+        testCmd = f"pipetask run -b {repoName} -i {collections} "
+        testCmd += f"--instrument {instrument} "
+        testCmd += f"--register-dataset-types --output-run {runName}"
+        testCmdTask = testCmd + f" -t {taskName}"
+        testCmdYaml = testCmd + f" -p {pipelineYamlFile}"
+
+        pipeOutTask = writePipetaskCmd(
+            repoName, runName, instrument, collections, taskName=taskName
+        )
+        self.assertEqual(testCmdTask, pipeOutTask)
+
+        testCmd += f" -p {pipelineYamlFile}"
+        pipeOutYaml = writePipetaskCmd(
+            repoName, runName, instrument, collections, pipelineYaml=pipelineYamlFile
+        )
+        self.assertEqual(testCmdYaml, pipeOutYaml)
+
+        assertMsg = "At least one of taskName or pipelineYaml must not be None"
+        with self.assertRaises(ValueError) as context:
+            writePipetaskCmd(repoName, runName, instrument, collections)
+        self.assertTrue(assertMsg in str(context.exception))
+
+    def testWriteCleanUpRepoCmd(self):
+
+        repoName = "testRepo"
+        runName = "run2"
+
+        testCmd = f"butler prune-collection {repoName} {runName}"
+        testCmd += " --purge --unstore"
+        self.assertEqual(testCmd, writeCleanUpRepoCmd(repoName, runName))
 
 
 if __name__ == "__main__":
