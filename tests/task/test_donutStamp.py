@@ -81,9 +81,9 @@ class TestDonutStamp(unittest.TestCase):
                 np.ones((self.stampSize, self.stampSize)) * 100,
             )
             self.assertEqual(donutStamp.detector_name, "R22_S11")
-            sky_pos = donutStamp.sky_position
-            self.assertEqual(sky_pos.getRa().asDegrees(), i)
-            self.assertEqual(sky_pos.getDec().asDegrees(), i + 5)
-            centroid_pos = donutStamp.centroid_position
-            self.assertEqual(centroid_pos.getX(), i + 20)
-            self.assertEqual(centroid_pos.getY(), i + 25)
+            skyPos = donutStamp.sky_position
+            self.assertEqual(skyPos.getRa().asDegrees(), i)
+            self.assertEqual(skyPos.getDec().asDegrees(), i + 5)
+            centroidPos = donutStamp.centroid_position
+            self.assertEqual(centroidPos.getX(), i + 20)
+            self.assertEqual(centroidPos.getY(), i + 25)
