@@ -1,0 +1,28 @@
+description: wep basic processing pipeline
+instrument: lsst.obs.lsst.LsstCam
+tasks:
+  isr:
+    class: lsst.ip.isr.isrTask.IsrTask
+    config:
+      connections.outputExposure: 'postISRCCD'
+      doBias: False
+      doVariance: False
+      doLinearize: False
+      doCrosstalk: False
+      doDefect: False
+      doNanMasking: False
+      doInterpolate: False
+      doBrighterFatter: False
+      doDark: False
+      doFlat: False
+      doApplyGains: True
+      doFringe: False
+      doOverscan: True
+  generateDonutCatalogOnlineTask:
+    class: lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask
+    config:
+      boresightRa: 0.0
+      boresightDec: 0.0
+      boresightRotAng: 0.0
+  estimateZernikesTask:
+    class: lsst.ts.wep.task.EstimateZernikesTask.EstimateZernikesTask
