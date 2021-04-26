@@ -143,3 +143,5 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutCatalogOnlineTaskConnections**: Connections setup for GenerateDonutCatalogOnlineTask to run in a pipeline with Gen 3 middleware.
 * **GenerateDonutCatalogOnlineTaskConfig**: Configuration setup for GenerateDonutCatalogOnlineTask.
 * **GenerateDonutCatalogOnlineTask**: Gen 3 middleware task to take pointing information and create a catalog of donut sources in that pointing.
+* **DonutStamp**: Storage class for a single donut postage stamp and associated metadata.
+* **DonutStamps**: Gen 3 Butler readable storage class for a list of DonutStamp objects with helper functions to get metadata and to save DonutStamps object as FITS file.

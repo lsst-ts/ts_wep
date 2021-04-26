@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.3:
+
+-------------
+1.6.3
+-------------
+
+* Add DonutStamp and DonutStamps storage classes to hold postage stamps of donuts.
+
 .. _lsst.ts.wep-1.6.2:
 
 -------------

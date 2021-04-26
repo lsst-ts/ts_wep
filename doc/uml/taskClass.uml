@@ -1,4 +1,5 @@
 @startuml
 GenerateDonutCatalogOnlineTaskConfig *-- GenerateDonutCatalogOnlineTaskConnections
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
+DonutStamps *-- DonutStamp
 @enduml
