@@ -25,32 +25,35 @@ from lsst.ts.wep.task.DonutStamp import DonutStamp
 
 class DonutStamps(StampsBase):
     """
-    Holds a list of DonutStamp objects with helper functions.
+    Holds a list of DonutStamp objects with additional functions
+    to get metadata as well as save as FITS files.
+    This storage class is able to be used with the Gen 3 Butler
+    and is storable and readable within a Gen 3 repository.
     """
 
     def _refresh_metadata(self):
         sky_positions = self.getSkyPositions()
-        self._metadata["RA_DEG"] = [p.getRa().asDegrees() for p in sky_positions]
-        self._metadata["DEC_DEG"] = [p.getDec().asDegrees() for p in sky_positions]
+        self.metadata["RA_DEG"] = [p.getRa().asDegrees() for p in sky_positions]
+        self.metadata["DEC_DEG"] = [p.getDec().asDegrees() for p in sky_positions]
         xy0_positions = self.getXY0Positions()
-        self._metadata["X0"] = [p.getX() for p in xy0_positions]
-        self._metadata["Y0"] = [p.getY() for p in xy0_positions]
+        self.metadata["X0"] = [p.getX() for p in xy0_positions]
+        self.metadata["Y0"] = [p.getY() for p in xy0_positions]
         centroid_positions = self.getCentroidPositions()
-        self._metadata["CENT_X"] = [p.getX() for p in centroid_positions]
-        self._metadata["CENT_Y"] = [p.getY() for p in centroid_positions]
+        self.metadata["CENT_X"] = [p.getX() for p in centroid_positions]
+        self.metadata["CENT_Y"] = [p.getY() for p in centroid_positions]
         det_names = self.getDetectorNames()
-        self._metadata["DET_NAME"] = [det for det in det_names]
+        self.metadata["DET_NAME"] = [det for det in det_names]
 
     def getSkyPositions(self):
         """
-        Get the ra, dec coordinates in degrees of the DonutStamps
+        Get the ra, dec coordinates in degrees of the DonutStamps.
 
         Returns
         -------
         list [lsst.geom.SpherePoint]
-            Ra, Dec locations of donuts
+            Ra, Dec locations of donuts.
         """
-        return [s.sky_position for s in self._stamps]
+        return [stamp.sky_position for stamp in self]
 
     def getXY0Positions(self):
         """
@@ -59,9 +62,9 @@ class DonutStamps(StampsBase):
         Returns
         -------
         list [lsst.geom.Point2I]
-            Corner of BBox of DonutStamp lsst.afw.image.MaskedImage
+            Corner of BBox of DonutStamp lsst.afw.image.MaskedImage.
         """
-        return [s.stamp_im.getXY0() for s in self._stamps]
+        return [stamp.stamp_im.getXY0() for stamp in self]
 
     def getCentroidPositions(self):
         """
@@ -70,9 +73,9 @@ class DonutStamps(StampsBase):
         Returns
         -------
         list [lsst.geom.Point2I]
-            X,Y pixel locations of center of DonutStamp images
+            X,Y pixel locations of center of DonutStamp images.
         """
-        return [s.centroid_position for s in self._stamps]
+        return [stamp.centroid_position for stamp in self]
 
     def getDetectorNames(self):
         """
@@ -81,61 +84,80 @@ class DonutStamps(StampsBase):
         Returns
         -------
         list [str]
-            Detector Names for each stamp
+            Detector Names for each stamp.
         """
-        return [s.detector_name for s in self._stamps]
+        return [stamp.detector_name for stamp in self]
 
-    def append(self, item):
+    def append(self, newStamp):
         """Add an additional stamp.
-        Parameters
-        ----------
-        item : DonutStamp
-            DonutStamp object to append.
-        """
-        if not isinstance(item, DonutStamp):
-            raise ValueError("Objects added must be a DonutStamp object.")
-        self._stamps.append(item)
-        return None
 
-    def extend(self, stamp_list):
-        """Extend DonutStamps instance by appending elements from another instance.
         Parameters
         ----------
-        stamps_list : list [DonutStamp]
-            List of DonutStamp object to append.
+        newStamp : DonutStamp
+            DonutStamp object to append.
+
+        Raises
+        ------
+        ValueError
+            newStamp must be a DonutStamp object.
         """
-        for s in stamp_list:
-            if not isinstance(s, DonutStamp):
+        if not isinstance(newStamp, DonutStamp):
+            raise ValueError("Objects added must be a DonutStamp object.")
+        # Utilize functionality from upstream (StampsBase) code.
+        stampList = self[:]
+        stampList.append(newStamp)
+
+    def extend(self, newStampList):
+        """Extend DonutStamps instance by appending elements from another instance.
+
+        Parameters
+        ----------
+        newStampList : list [DonutStamp]
+            List of DonutStamp object to append.
+
+        Raises
+        ------
+        ValueError
+            newStampList must only contain DonutStamp objects.
+        """
+        for stamp in newStampList:
+            if not isinstance(stamp, DonutStamp):
                 raise ValueError("Can only extend with DonutStamp objects.")
-        self._stamps += stamp_list
+        # Utilize functionality from upstream (StampsBase) code.
+        stampList = self[:]
+        stampList.extend(newStampList)
 
     @classmethod
     def readFits(cls, filename):
         """Build an instance of this class from a file.
+
         Parameters
         ----------
         filename : str
-            Name of the file to read
+            Name of the file to read.
+
         Returns
         -------
         DonutStamps
-            An instance of this class
+            An instance of this class.
         """
         return cls.readFitsWithOptions(filename, None)
 
     @classmethod
     def readFitsWithOptions(cls, filename, options):
         """Build an instance of this class with options.
+
         Parameters
         ----------
         filename : str
-            Name of the file to read
-        options : PropertyList or dict
-            Collection of metadata parameters
+            Name of the file to read.
+        options : lsst.daf.base.PropertyList or dict
+            Collection of metadata parameters.
+
         Returns
         -------
         DonutStamps
-            An instance of this class
+            An instance of this class.
         """
         stamps, metadata = readFitsWithOptions(filename, DonutStamp.factory, options)
         return cls(

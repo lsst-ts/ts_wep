@@ -29,12 +29,13 @@ from lsst.meas.algorithms.stamps import AbstractStamp
 @dataclass
 class DonutStamp(AbstractStamp):
     """Single donut stamp
+
     Parameters
     ----------
     stamp_im : lsst.afw.image.MaskedImageF
         The actual pixel values for the postage stamp
     sky_position : lsst.geom.SpherePoint
-        Position of the center of the stamp.  Note the user
+        Position of the center of the stamp. Note the user
         must keep track of the coordinate system
     centroid_position : lsst.geom.Point2I
         Position of the center of the stamp in pixels
@@ -54,6 +55,7 @@ class DonutStamp(AbstractStamp):
         Parameters needed to construct this object are passed in via
         a metadata dictionary and then passed to the constructor of
         this class. They should each point to lists of values.
+
         Parameters
         ----------
         stamp : lsst.afw.image.MaskedImage
@@ -63,6 +65,7 @@ class DonutStamp(AbstractStamp):
             needed by the constructor.
         idx : int
             Index into the lists in ``metadata``
+
         Returns
         -------
         DonutStamp
@@ -74,8 +77,10 @@ class DonutStamp(AbstractStamp):
                 lsst.geom.Angle(metadata.getArray("RA_DEG")[index], lsst.geom.degrees),
                 lsst.geom.Angle(metadata.getArray("DEC_DEG")[index], lsst.geom.degrees),
             ),
+            # Centroid position "CENT_X" and "CENT_Y" is in pixels
             centroid_position=lsst.geom.Point2I(
                 metadata.getArray("CENT_X")[index], metadata.getArray("CENT_Y")[index]
             ),
+            # "DET_NAME" stands for detector (CCD) name
             detector_name=metadata.getArray("DET_NAME")[index],
         )

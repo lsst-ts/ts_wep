@@ -43,12 +43,12 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         randState = np.random.RandomState(42)
         stampList = []
 
-        for i in range(nStamps):
+        for idx in range(nStamps):
             stamp = afwImage.maskedImage.MaskedImageF(stampSize, stampSize)
             stamp.image.array += randState.rand(stampSize, stampSize)
             stamp.mask.array += 10
             stamp.variance.array += 100
-            stamp.setXY0(i + 10, i + 15)
+            stamp.setXY0(idx + 10, idx + 15)
             stampList.append(stamp)
 
         ras = np.arange(nStamps)
@@ -65,59 +65,57 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         metadata["DET_NAME"] = detectorNames
 
         donutStampList = [
-            DonutStamp.factory(stampList[i], metadata, i) for i in range(nStamps)
+            DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)
         ]
 
-        donutStamps = DonutStamps(donutStampList, metadata=metadata)
-
-        return donutStamps
+        return DonutStamps(donutStampList, metadata=metadata)
 
     # Adapting some tests here from meas_algorithms/tests/test_stamps.py
-    def _roundtrip(self, ss):
-        """Round trip a Stamps object to disk and check values"""
+    def _roundtrip(self, donutStamps):
+        """Round trip a DonutStamps object to disk and check values"""
         with tempfile.NamedTemporaryFile() as f:
-            ss.writeFits(f.name)
+            donutStamps.writeFits(f.name)
             options = PropertyList()
-            ss2 = DonutStamps.readFitsWithOptions(f.name, options)
-            self.assertEqual(len(ss), len(ss2))
-            for s1, s2 in zip(ss, ss2):
-                self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)
+            donutStamps2 = DonutStamps.readFitsWithOptions(f.name, options)
+            self.assertEqual(len(donutStamps), len(donutStamps2))
+            for stamp1, stamp2 in zip(donutStamps, donutStamps2):
+                self.assertMaskedImagesAlmostEqual(stamp1.stamp_im, stamp2.stamp_im)
                 self.assertAlmostEqual(
-                    s1.sky_position.getRa().asDegrees(),
-                    s2.sky_position.getRa().asDegrees(),
+                    stamp1.sky_position.getRa().asDegrees(),
+                    stamp2.sky_position.getRa().asDegrees(),
                 )
                 self.assertAlmostEqual(
-                    s1.sky_position.getDec().asDegrees(),
-                    s2.sky_position.getDec().asDegrees(),
+                    stamp1.sky_position.getDec().asDegrees(),
+                    stamp2.sky_position.getDec().asDegrees(),
                 )
                 self.assertAlmostEqual(
-                    s1.centroid_position.getX(), s2.centroid_position.getX()
+                    stamp1.centroid_position.getX(), stamp2.centroid_position.getX()
                 )
                 self.assertAlmostEqual(
-                    s1.centroid_position.getY(), s2.centroid_position.getY()
+                    stamp1.centroid_position.getY(), stamp2.centroid_position.getY()
                 )
-                self.assertEqual(s1.detector_name, s2.detector_name)
+                self.assertEqual(stamp1.detector_name, stamp2.detector_name)
 
     def testGetSkyPositions(self):
 
         skyPos = self.donutStamps.getSkyPositions()
-        for i in range(self.nStamps):
-            self.assertEqual(skyPos[i].getRa().asDegrees(), i)
-            self.assertEqual(skyPos[i].getDec().asDegrees(), i + 5)
+        for idx in range(self.nStamps):
+            self.assertEqual(skyPos[idx].getRa().asDegrees(), idx)
+            self.assertEqual(skyPos[idx].getDec().asDegrees(), idx + 5)
 
     def testGetXY0Positions(self):
 
         xyPos = self.donutStamps.getXY0Positions()
-        for i in range(self.nStamps):
-            self.assertEqual(xyPos[i].getX(), i + 10)
-            self.assertEqual(xyPos[i].getY(), i + 15)
+        for idx in range(self.nStamps):
+            self.assertEqual(xyPos[idx].getX(), idx + 10)
+            self.assertEqual(xyPos[idx].getY(), idx + 15)
 
     def testGetCentroidPositions(self):
 
         xyPos = self.donutStamps.getCentroidPositions()
-        for i in range(self.nStamps):
-            self.assertEqual(xyPos[i].getX(), i + 20)
-            self.assertEqual(xyPos[i].getY(), i + 25)
+        for idx in range(self.nStamps):
+            self.assertEqual(xyPos[idx].getX(), idx + 20)
+            self.assertEqual(xyPos[idx].getY(), idx + 25)
 
     def testGetDetectorNames(self):
 
@@ -126,25 +124,23 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
 
     def testAppend(self):
         """Test ability to append to a Stamps object"""
-        ss = copy(self.donutStamps)
-        ss.append(self.donutStamps[0])
-        self._roundtrip(ss)
+        self.donutStamps.append(self.donutStamps[0])
+        self._roundtrip(self.donutStamps)
         # check if appending something other than a DonutStamp raises
         with self.assertRaises(ValueError) as context:
-            ss.append("hello world")
+            self.donutStamps.append("hello world")
         self.assertEqual(
             "Objects added must be a DonutStamp object.", str(context.exception)
         )
 
     def testExtend(self):
-        ss = copy(self.donutStamps)
-        ss2 = copy(self.donutStamps)
-        ss.extend([s for s in ss2])
-        self._roundtrip(ss)
+        donutStamps2 = copy(self.donutStamps)
+        self.donutStamps.extend([stamp for stamp in donutStamps2])
+        self._roundtrip(self.donutStamps)
         # check if extending with something other than a DonutStamps
         # object raises
         with self.assertRaises(ValueError) as context:
-            ss.extend(["hello", "world"])
+            self.donutStamps.extend(["hello", "world"])
         self.assertEqual(
             "Can only extend with DonutStamp objects.", str(context.exception)
         )
@@ -154,11 +150,12 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         Test the class' write and readFits when passing on a bounding box.
         """
         bbox = lsst.geom.Box2I(lsst.geom.Point2I(25, 25), lsst.geom.Extent2I(3, 3))
-        ss = copy(self.donutStamps)
         with tempfile.NamedTemporaryFile() as f:
-            ss.writeFits(f.name)
+            self.donutStamps.writeFits(f.name)
             options = {"bbox": bbox}
             subStamps = DonutStamps.readFitsWithOptions(f.name, options)
-            for s1, s2 in zip(ss, subStamps):
-                self.assertEqual(bbox.getDimensions(), s2.stamp_im.getDimensions())
-                self.assertMaskedImagesAlmostEqual(s1.stamp_im[bbox], s2.stamp_im)
+            for stamp1, stamp2 in zip(self.donutStamps, subStamps):
+                self.assertEqual(bbox.getDimensions(), stamp2.stamp_im.getDimensions())
+                self.assertMaskedImagesAlmostEqual(
+                    stamp1.stamp_im[bbox], stamp2.stamp_im
+                )
