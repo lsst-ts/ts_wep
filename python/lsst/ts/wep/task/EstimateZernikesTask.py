@@ -127,7 +127,7 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
 
         return template
 
-    def cutOutStamps(self, exposure, detectorName, donutCatalog, template):
+    def cutOutStamps(self, exposure, donutCatalog, defocalType):
         """
         Cut out postage stamps for sources in catalog.
 
@@ -135,12 +135,10 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
         ----------
         exposure: afwImage.Exposure
             Post-ISR image with defocal donuts sources.
-        detectorName: str
-            Name of the CCD (e.g. 'R22_S11').
         donutCatalog: pandas DataFrame
             Source catalog for the pointing.
-        template: numpy.ndarray
-            Template donut for the detector and defocal type.
+        defocalType: enum 'DefocalType'
+            Defocal type of the donut image
 
         Returns
         -------
@@ -148,6 +146,10 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
             Collection of postage stamps as afwImage.MaskedImages
             with additional metadata
         """
+
+        detectorName = exposure.getDetector().getName()
+        template = self.getTemplate(detectorName, defocalType)
+        detectorCatalog = donutCatalog.query(f'detector == "{detectorName}"')
 
         initialHalfWidth = int(self.initialCutoutSize / 2)
         stampHalfWidth = int(self.donutStampSize / 2)
@@ -157,7 +159,7 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
         xLowList = []
         yLowList = []
 
-        for donutRow in donutCatalog.to_records():
+        for donutRow in detectorCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
             # on the donut
@@ -220,10 +222,10 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
             )
 
         stampsMetadata = PropertyList()
-        stampsMetadata["RA_DEG"] = np.degrees(donutCatalog["coord_ra"].values)
-        stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"].values)
+        stampsMetadata["RA_DEG"] = np.degrees(detectorCatalog["coord_ra"].values)
+        stampsMetadata["DEC_DEG"] = np.degrees(detectorCatalog["coord_dec"].values)
         stampsMetadata["DET_NAME"] = np.array(
-            [detectorName] * len(donutCatalog), dtype=str
+            [detectorName] * len(detectorCatalog), dtype=str
         )
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXList)
@@ -248,7 +250,10 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
         Returns
         -------
         numpy.ndarray
-            Zernike coefficients for the exposure
+            Zernike coefficients for the exposure. Will return one set of
+            coefficients per set of stamps, not one set of coefficients
+            per detector so this array will have shape
+            (# of stamps, # of zernike coefficients).
         """
 
         zerArray = []
@@ -287,29 +292,42 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
         self, exposures: typing.List[afwImage.Exposure], donutCatalog: pd.DataFrame
     ) -> pipeBase.Struct:
 
-        # Get templates for detector
-        detectorName = exposures[0].getDetector().getName()
-        extraTemplate = self.getTemplate(detectorName, DefocalType.Extra)
-        intraTemplate = self.getTemplate(detectorName, DefocalType.Intra)
-        detectorCatalog = donutCatalog.query(f'detector == "{detectorName}"')
+        # TODO: For now use dataId to sort extra and intrafocal.
+        # In closed loop currently with full array mode the lower
+        # exposure id is the extra focal image.
+        # Chris is adding new header metadata so we don't have to
+        # resort to this temporary hack in the future. (BK 4/26/21)
+        expId0 = exposures[0].getInfo().getVisitInfo().getExposureId()
+        expId1 = exposures[1].getInfo().getVisitInfo().getExposureId()
+        if expId0 < expId1:
+            extraExpIdx = 0
+            intraExpIdx = 1
+        else:
+            extraExpIdx = 1
+            intraExpIdx = 0
 
-        # If no sources in exposure exit with default values
-        if len(detectorCatalog) == 0:
-            return pipeBase.Struct(
-                outputZernikes=np.ones(19) * -9999,
-                donutStampsExtra=DonutStamps(),
-                donutStampsIntra=DonutStamps(),
-            )
-
+        # Get the donut stamps from extra and intra focal images
         donutStampsExtra = self.cutOutStamps(
-            exposures[0], detectorName, detectorCatalog, extraTemplate
+            exposures[extraExpIdx], donutCatalog, DefocalType.Extra
         )
         donutStampsIntra = self.cutOutStamps(
-            exposures[1], detectorName, detectorCatalog, intraTemplate
+            exposures[intraExpIdx], donutCatalog, DefocalType.Intra
         )
 
+        # If no sources in exposure exit with default values
+        if len(donutStampsExtra) == 0:
+            return pipeBase.Struct(
+                outputZernikes=np.ones(19) * -9999,
+                donutStampsExtra=DonutStamps([]),
+                donutStampsIntra=DonutStamps([]),
+            )
+
+        # Estimate Zernikes from collection of stamps
         zernikeCoeffs = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
 
+        # Return extra-focal DonutStamps, intra-focal DonutStamps and
+        # Zernike coefficient numpy array as Struct that can be saved to
+        # Gen 3 repository all with the same dataId.
         return pipeBase.Struct(
             outputZernikes=np.array(zernikeCoeffs),
             donutStampsExtra=donutStampsExtra,

@@ -20,9 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import unittest
 import numpy as np
+from copy import copy
 
+import lsst.utils.tests
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.Utility import getModulePath
 from lsst.ts.wep.task.EstimateZernikesTask import (
@@ -37,9 +38,13 @@ from lsst.ts.wep.Utility import (
 )
 
 
-class TestEstimateZernikesTask(unittest.TestCase):
+class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
+        """
+        Run the pipeline only once since it takes a
+        couple minutes with the ISR.
+        """
 
         moduleDir = getModulePath()
         testDataDir = os.path.join(moduleDir, "tests", "testData")
@@ -71,12 +76,16 @@ class TestEstimateZernikesTask(unittest.TestCase):
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
-        datasetRefs = list(
-            self.registry.queryDatasets(
-                datasetType="postISRCCD", collections=[self.runName]
-            ).expanded()
-        )
-        self.dataIds = [ref.dataId for ref in datasetRefs]
+        self.dataIdExtra = {
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106001,
+        }
+        self.dataIdIntra = {
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106002,
+        }
 
     def validateConfigs(self):
 
@@ -105,10 +114,10 @@ class TestEstimateZernikesTask(unittest.TestCase):
     def testCutOutStamps(self):
 
         exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIds[0], collections=[self.runName]
+            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutCatalog = self.butler.get(
-            "donutCatalog", dataId=self.dataIds[0], collections=[self.runName]
+            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutStamps = self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra)
         self.assertTrue(len(donutStamps), 4)
@@ -123,15 +132,61 @@ class TestEstimateZernikesTask(unittest.TestCase):
     def testEstimateZernikes(self):
 
         donutStampsExtra = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIds[0], collection=[self.runName]
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutStampsIntra = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIds[0], collection=[self.runName]
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
         zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
+
+    def testTaskRun(self):
+
+        # Grab two exposures from the same detector at two different visits to
+        # get extra and intra
+        exposureExtra = self.butler.get(
+            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        exposureIntra = self.butler.get(
+            "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
+        )
+
+        donutCatalog = self.butler.get(
+            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+
+        # Test return values when no sources in catalog
+        noSrcDonutCatalog = copy(donutCatalog)
+        noSrcDonutCatalog["detector"] = "R22_S99"
+        testOutNoSrc = self.task.run([exposureExtra, exposureIntra], noSrcDonutCatalog)
+
+        np.testing.assert_array_equal(testOutNoSrc.outputZernikes, np.ones(19) * -9999)
+        self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
+        self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
+
+        # Test normal behavior
+        taskOut = self.task.run([exposureIntra, exposureExtra], donutCatalog)
+
+        testExtraStamps = self.task.cutOutStamps(
+            exposureExtra, donutCatalog, DefocalType.Extra
+        )
+        testIntraStamps = self.task.cutOutStamps(
+            exposureIntra, donutCatalog, DefocalType.Intra
+        )
+
+        for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
+            self.assertMaskedImagesAlmostEqual(
+                donutStamp.stamp_im, cutOutStamp.stamp_im
+            )
+        for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
+            self.assertMaskedImagesAlmostEqual(
+                donutStamp.stamp_im, cutOutStamp.stamp_im
+            )
+
+        testCoeffs = self.task.estimateZernikes(testExtraStamps, testIntraStamps)
+        np.testing.assert_array_equal(taskOut.outputZernikes, np.array(testCoeffs))
 
     @classmethod
     def tearDownClass(cls):
