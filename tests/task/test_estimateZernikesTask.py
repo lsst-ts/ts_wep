@@ -122,11 +122,12 @@ class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
         donutStamps = self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra)
         self.assertTrue(len(donutStamps), 4)
 
-        stamp_centroid = donutStamps[0].centroid_position
-        expCutOut = exposure.image.array[
-            stamp_centroid.getX() - 80 : stamp_centroid.getX() + 80,
-            stamp_centroid.getY() - 80 : stamp_centroid.getY() + 80,
-        ].T
+        stampCentroid = donutStamps[0].centroid_position
+        stampBBox = lsst.geom.Box2I(
+            lsst.geom.Point2I(stampCentroid.getX() - 80, stampCentroid.getY() - 80),
+            lsst.geom.Extent2I(160),
+        )
+        expCutOut = exposure[stampBBox].image.array
         np.testing.assert_array_equal(donutStamps[0].stamp_im.image.array, expCutOut)
 
     def testEstimateZernikes(self):
