@@ -163,17 +163,22 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
             # on the donut
-            # NOTE: Switched x and y because when loading exposure transpose occurs
-            yCent = int(donutRow["centroid_x"])
-            xCent = int(donutRow["centroid_y"])
-            initialCutout = exposure.image.array[
-                xCent - initialHalfWidth : xCent + initialHalfWidth,
-                yCent - initialHalfWidth : yCent + initialHalfWidth,
-            ]
+            xCent = int(donutRow["centroid_x"])
+            yCent = int(donutRow["centroid_y"])
+            initCutoutHalfWidth = self.initialCutoutSize / 2
+            # BBox measured from corner of stamp not center
+            initCent = lsst.geom.Point2I(
+                donutRow["centroid_x"] - initCutoutHalfWidth,
+                donutRow["centroid_y"] - initCutoutHalfWidth,
+            )
+            initBBox = lsst.geom.Box2I(
+                initCent, lsst.geom.Extent2I(self.initialCutoutSize)
+            )
+            initialCutout = exposure[initBBox]
 
             # Find the centroid by finding the max point in an initial
             # cutout convolved with a template
-            correlatedImage = correlate(initialCutout, template)
+            correlatedImage = correlate(initialCutout.image.array, template)
             maxIdx = np.argmax(correlatedImage)
             maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
 
@@ -181,8 +186,8 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
             # But the peak of correlation will correspond to the [0, 0]
             # corner of the template
             templateHalfWidth = int(self.donutTemplateSize / 2)
-            newX = maxLoc[0] - templateHalfWidth
-            newY = maxLoc[1] - templateHalfWidth
+            newX = maxLoc[1] - templateHalfWidth
+            newY = maxLoc[0] - templateHalfWidth
             finalDonutX = xCent + (newX - initialHalfWidth)
             finalDonutY = yCent + (newY - initialHalfWidth)
             finalXList.append(finalDonutX)
@@ -190,24 +195,17 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
 
             # Get the final cutout
             xLow = finalDonutX - stampHalfWidth
-            xHigh = finalDonutX + stampHalfWidth
             yLow = finalDonutY - stampHalfWidth
-            yHigh = finalDonutY + stampHalfWidth
+            finalCent = lsst.geom.Point2I(xLow, yLow)
+            finalBBox = lsst.geom.Box2I(
+                finalCent, lsst.geom.Extent2I(self.donutStampSize)
+            )
             xLowList.append(xLow)
             yLowList.append(yLow)
-            # Transpose image back
-            finalCutout = exposure.image.array[xLow:xHigh, yLow:yHigh].T.copy()
-            finalMask = exposure.mask.array[xLow:xHigh, yLow:yHigh].T.copy()
-            finalVariance = exposure.variance.array[xLow:xHigh, yLow:yHigh].T.copy()
+            finalCutout = exposure[finalBBox]
 
-            # Turn into MaskedImage object to add into a Stamp object for reading by butler
-            finalStamp = afwImage.maskedImage.MaskedImageF(
-                self.donutStampSize, self.donutStampSize
-            )
-            finalStamp.setImage(afwImage.ImageF(finalCutout))
-            finalStamp.setMask(afwImage.Mask(finalMask))
-            finalStamp.setVariance(afwImage.ImageF(finalVariance))
-            finalStamp.setXY0(lsst.geom.Point2I(xLow, yLow))
+            # Save MaskedImage to stamp
+            finalStamp = finalCutout.getMaskedImage()
             finalStamps.append(
                 DonutStamp(
                     stamp_im=finalStamp,
@@ -268,17 +266,19 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
             centroidXY = donutExtra.centroid_position
-            fieldXY = sourProc.camXYtoFieldXY(centroidXY.getX(), centroidXY.getY())
 
+            # NOTE: TS_WEP expects these images to be transposed
+            # TODO: Look into this
+            fieldXY = sourProc.camXYtoFieldXY(centroidXY.getY(), centroidXY.getX())
             wfEsti.setImg(
                 fieldXY,
                 DefocalType.Extra,
-                image=donutExtra.stamp_im.getImage().getArray(),
+                image=donutExtra.stamp_im.getImage().getArray().T,
             )
             wfEsti.setImg(
                 fieldXY,
                 DefocalType.Intra,
-                image=donutIntra.stamp_im.getImage().getArray(),
+                image=donutIntra.stamp_im.getImage().getArray().T,
             )
             wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()
