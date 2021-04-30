@@ -12,7 +12,7 @@ Version History
 1.6.4
 -------------
 
-* Add EstimateZernikesTask.py to calculate Zernike coefficients through a Gen 3 pipeline.
+* Add EstimateZernikesFamTask.py to calculate Zernike coefficients in full-array mode through a Gen 3 pipeline.
 
 .. _lsst.ts.wep-1.6.3:
 
