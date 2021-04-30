@@ -222,7 +222,7 @@ class TestUtility(unittest.TestCase):
         repoName = "testRepo"
         runName = "run2"
 
-        testCmd = self._writeCleanUpCmd
+        testCmd = self._writeCleanUpCmd(repoName, runName)
         self.assertEqual(testCmd, writeCleanUpRepoCmd(repoName, runName))
 
 
