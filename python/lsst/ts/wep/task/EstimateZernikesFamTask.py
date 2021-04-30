@@ -23,7 +23,6 @@ import os
 import typing
 import numpy as np
 import pandas as pd
-from copy import copy
 
 import lsst.geom
 import lsst.pipe.base as pipeBase
@@ -150,6 +149,7 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
 
     def shiftCenter(self, center, boundary, distance):
         """Shift the center if its distance to boundary is less than required.
+
         Parameters
         ----------
         center : float
@@ -158,6 +158,7 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
             Boundary point.
         distance : float
             Required distance.
+
         Returns
         -------
         float
@@ -241,11 +242,9 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
         finalDonutY = yCent + (newY - initialHalfWidth)
 
         # Shift stamp center if necessary but not final centroid definition
-        xStampCent = copy(finalDonutX)
-        yStampCent = copy(finalDonutY)
-        xStampCent = self.shiftCenter(xStampCent, expDim.getX(), stampHalfWidth)
+        xStampCent = self.shiftCenter(finalDonutX, expDim.getX(), stampHalfWidth)
         xStampCent = self.shiftCenter(xStampCent, 0, stampHalfWidth)
-        yStampCent = self.shiftCenter(yStampCent, expDim.getY(), stampHalfWidth)
+        yStampCent = self.shiftCenter(finalDonutY, expDim.getY(), stampHalfWidth)
         yStampCent = self.shiftCenter(yStampCent, 0, stampHalfWidth)
 
         # Define corner for final stamp BBox
@@ -296,6 +295,10 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
             xCent = int(donutRow["centroid_x"])
             yCent = int(donutRow["centroid_y"])
 
+            # Adjust the centroid coordinates from the catalog by convolving
+            # the postage stamp with the donut template and return
+            # the new centroid position as well as the corners of the
+            # postage stamp to cut out of the exposure.
             finalDonutX, finalDonutY, xCorner, yCorner = self.calculateFinalCentroid(
                 exposure, template, xCent, yCent
             )
