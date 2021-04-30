@@ -470,9 +470,9 @@ def writePipetaskCmd(
     Parameters
     ----------
     repoDir: str
-        Location of Gen 3 repository
+        Location of Gen 3 repository.
     runName: str
-        Name of collection for data produced by the task
+        Name of collection for data produced by the task.
     instrument: str
         The instrument to use for the task.
     collections: str
@@ -487,11 +487,15 @@ def writePipetaskCmd(
     Returns
     -------
     str
-        Pipetask run command
+        Pipetask run command.
+
+    Raises
+    ------
+    ValueError
+        Need to at least specify name of task or name of pipeline file.
     """
-    assertMsg = "At least one of taskName or pipelineYaml must not be None"
-    if (taskName is None) & (pipelineYaml is None):
-        raise ValueError(assertMsg)
+    if (taskName is None) and (pipelineYaml is None):
+        raise ValueError("At least one of taskName or pipelineYaml must not be None")
 
     pipetaskCmd = "pipetask run "
     pipetaskCmd += f"-b {repoDir} "  # Specify repo
@@ -513,14 +517,14 @@ def writeCleanUpRepoCmd(repoDir, runName):
     Parameters
     ----------
     repoDir: str
-        Location of Gen 3 repository
+        Location of Gen 3 repository.
     runName: str
-        Name of collection for data produced by the task
+        Name of collection for data produced by the task.
 
     Returns
     -------
     str
-        Butler prune-collection command
+        Butler prune-collection command.
     """
 
     cleanUpCmd = "butler prune-collection "

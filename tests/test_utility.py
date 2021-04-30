@@ -47,6 +47,38 @@ from lsst.ts.wep.Utility import (
 class TestUtility(unittest.TestCase):
     """Test the Utility functions."""
 
+    def _writePipetaskCmd(
+        self,
+        repoName,
+        instrument,
+        collections,
+        runName,
+        taskName=None,
+        pipelineName=None,
+    ):
+
+        # Write the part of the command that is always included
+        testCmd = f"pipetask run -b {repoName} -i {collections} "
+        testCmd += f"--instrument {instrument} "
+        testCmd += f"--register-dataset-types --output-run {runName}"
+
+        # Write with taskName
+        if taskName is not None:
+            testCmd += f" -t {taskName}"
+
+        # Write with pipeline filename
+        if pipelineName is not None:
+            testCmd += f" -p {pipelineName}"
+
+        return testCmd
+
+    def _writeCleanUpCmd(self, repoName, runName):
+
+        testCmd = f"butler prune-collection {repoName} {runName}"
+        testCmd += " --purge --unstore"
+
+        return testCmd
+
     def testMapFilterRefToG(self):
 
         mappedFilterType = mapFilterRefToG(FilterType.REF)
@@ -154,24 +186,27 @@ class TestUtility(unittest.TestCase):
     def testWritePipetaskCmd(self):
 
         repoName = "testRepo"
-        runName = "run2"
-        taskName = "lsst.ts.wep.testTask"
         instrument = "lsst.obs.lsst.LsstCam"
         collections = "refcats"
-        pipelineYamlFile = "testPipeOut.yaml"
+        runName = "run2"
 
-        testCmd = f"pipetask run -b {repoName} -i {collections} "
-        testCmd += f"--instrument {instrument} "
-        testCmd += f"--register-dataset-types --output-run {runName}"
-        testCmdTask = testCmd + f" -t {taskName}"
-        testCmdYaml = testCmd + f" -p {pipelineYamlFile}"
+        # Test writing with task name
+        taskName = "lsst.ts.wep.testTask"
+        testCmdTask = self._writePipetaskCmd(
+            repoName, instrument, collections, runName, taskName=taskName
+        )
 
         pipeOutTask = writePipetaskCmd(
             repoName, runName, instrument, collections, taskName=taskName
         )
         self.assertEqual(testCmdTask, pipeOutTask)
 
-        testCmd += f" -p {pipelineYamlFile}"
+        # Test writing with pipeline
+        pipelineYamlFile = "testPipeOut.yaml"
+        testCmdYaml = self._writePipetaskCmd(
+            repoName, instrument, collections, runName, pipelineName=pipelineYamlFile
+        )
+
         pipeOutYaml = writePipetaskCmd(
             repoName, runName, instrument, collections, pipelineYaml=pipelineYamlFile
         )
@@ -187,8 +222,7 @@ class TestUtility(unittest.TestCase):
         repoName = "testRepo"
         runName = "run2"
 
-        testCmd = f"butler prune-collection {repoName} {runName}"
-        testCmd += " --purge --unstore"
+        testCmd = self._writeCleanUpCmd
         self.assertEqual(testCmd, writeCleanUpRepoCmd(repoName, runName))
 
 
