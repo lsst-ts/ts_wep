@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.4:
+
+-------------
+1.6.4
+-------------
+
+* Add EstimateZernikesFamTask.py to calculate Zernike coefficients in full-array mode through a Gen 3 pipeline.
+
 .. _lsst.ts.wep-1.6.3:
 
 -------------

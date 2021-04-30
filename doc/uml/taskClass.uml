@@ -2,4 +2,8 @@
 GenerateDonutCatalogOnlineTaskConfig *-- GenerateDonutCatalogOnlineTaskConnections
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
 DonutStamps *-- DonutStamp
+EstimateZernikesFamTaskConfig *-- EstimateZernikesFamTaskConnections
+EstimateZernikesFamTask *-- EstimateZernikesFamTaskConfig
+EstimateZernikesFamTask ..> DonutStamps
+EstimateZernikesFamTask ..> DonutStamp
 @enduml

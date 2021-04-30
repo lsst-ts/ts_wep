@@ -29,7 +29,7 @@ from lsst.ts.wep.task.GenerateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTask,
     GenerateDonutCatalogOnlineTaskConfig,
 )
-from lsst.ts.wep.Utility import runProgram
+from lsst.ts.wep.Utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
 
 
 class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
@@ -44,18 +44,6 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
-
-    def _writePipetaskCmd(self, runName, taskName):
-
-        pipetaskCmd = "pipetask run "
-        pipetaskCmd += f"-b {self.repoDir} "  # Specify repo
-        pipetaskCmd += "-i refcats "  # Specify collections with data to use
-        # Specify task
-        pipetaskCmd += f"-t lsst.ts.wep.task.{taskName} "
-        pipetaskCmd += "--instrument lsst.obs.lsst.LsstCam "
-        pipetaskCmd += f"--register-dataset-types --output-run {runName}"
-
-        return pipetaskCmd
 
     def validateConfigs(self):
 
@@ -87,8 +75,21 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
         # Run pipeline command
         runName = "run1"
-        taskName = "GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask"
-        pipetaskCmd = self._writePipetaskCmd(runName, taskName)
+        taskName = "lsst.ts.wep.task."
+        taskName += "GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask"
+        instrument = "lsst.obs.lsst.LsstCam"
+        collection = "refcats"
+        pipetaskCmd = writePipetaskCmd(
+            self.repoDir, runName, instrument, collection, taskName=taskName
+        )
+
+        # Check that run doesn't already exist due to previous improper cleanup
+        collectionsList = list(self.registry.queryCollections())
+        if runName in collectionsList:
+            cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
+            runProgram(cleanUpCmd)
+
+        # Run pipeline task
         runProgram(pipetaskCmd)
 
         # Test instrument matches
@@ -127,8 +128,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
 
         # Clean up
-        cleanUpCmd = "butler prune-collection "
-        cleanUpCmd += f"{self.repoDir} {runName} --purge --unstore"
+        cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
         runProgram(cleanUpCmd)
 
     def testDonutCatalogGeneration(self):

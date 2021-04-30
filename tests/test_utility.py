@@ -39,11 +39,45 @@ from lsst.ts.wep.Utility import (
     getDonutTemplateType,
     DonutTemplateType,
     getAmpImagesFromDir,
+    writePipetaskCmd,
+    writeCleanUpRepoCmd,
 )
 
 
 class TestUtility(unittest.TestCase):
     """Test the Utility functions."""
+
+    def _writePipetaskCmd(
+        self,
+        repoName,
+        instrument,
+        collections,
+        runName,
+        taskName=None,
+        pipelineName=None,
+    ):
+
+        # Write the part of the command that is always included
+        testCmd = f"pipetask run -b {repoName} -i {collections} "
+        testCmd += f"--instrument {instrument} "
+        testCmd += f"--register-dataset-types --output-run {runName}"
+
+        # Write with taskName
+        if taskName is not None:
+            testCmd += f" -t {taskName}"
+
+        # Write with pipeline filename
+        if pipelineName is not None:
+            testCmd += f" -p {pipelineName}"
+
+        return testCmd
+
+    def _writeCleanUpCmd(self, repoName, runName):
+
+        testCmd = f"butler prune-collection {repoName} {runName}"
+        testCmd += " --purge --unstore"
+
+        return testCmd
 
     def testMapFilterRefToG(self):
 
@@ -148,6 +182,48 @@ class TestUtility(unittest.TestCase):
         # by checking that the length of list corresponds to
         # two files tested above
         self.assertEqual(len(ampFiles), 2)
+
+    def testWritePipetaskCmd(self):
+
+        repoName = "testRepo"
+        instrument = "lsst.obs.lsst.LsstCam"
+        collections = "refcats"
+        runName = "run2"
+
+        # Test writing with task name
+        taskName = "lsst.ts.wep.testTask"
+        testCmdTask = self._writePipetaskCmd(
+            repoName, instrument, collections, runName, taskName=taskName
+        )
+
+        pipeOutTask = writePipetaskCmd(
+            repoName, runName, instrument, collections, taskName=taskName
+        )
+        self.assertEqual(testCmdTask, pipeOutTask)
+
+        # Test writing with pipeline
+        pipelineYamlFile = "testPipeOut.yaml"
+        testCmdYaml = self._writePipetaskCmd(
+            repoName, instrument, collections, runName, pipelineName=pipelineYamlFile
+        )
+
+        pipeOutYaml = writePipetaskCmd(
+            repoName, runName, instrument, collections, pipelineYaml=pipelineYamlFile
+        )
+        self.assertEqual(testCmdYaml, pipeOutYaml)
+
+        assertMsg = "At least one of taskName or pipelineYaml must not be None"
+        with self.assertRaises(ValueError) as context:
+            writePipetaskCmd(repoName, runName, instrument, collections)
+        self.assertTrue(assertMsg in str(context.exception))
+
+    def testWriteCleanUpRepoCmd(self):
+
+        repoName = "testRepo"
+        runName = "run2"
+
+        testCmd = self._writeCleanUpCmd(repoName, runName)
+        self.assertEqual(testCmd, writeCleanUpRepoCmd(repoName, runName))
 
 
 if __name__ == "__main__":
