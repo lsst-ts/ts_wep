@@ -22,15 +22,17 @@
 import os
 import numpy as np
 from copy import copy
+from scipy.signal import correlate
 
 import lsst.utils.tests
+from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.task.EstimateZernikesTask import (
-    EstimateZernikesTask,
-    EstimateZernikesTaskConfig,
+from lsst.ts.wep.task.EstimateZernikesFamTask import (
+    EstimateZernikesFamTask,
+    EstimateZernikesFamTaskConfig,
 )
 from lsst.ts.wep.Utility import (
+    getModulePath,
     runProgram,
     DefocalType,
     writePipetaskCmd,
@@ -38,7 +40,7 @@ from lsst.ts.wep.Utility import (
 )
 
 
-class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
+class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -70,8 +72,8 @@ class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
 
     def setUp(self):
 
-        self.config = EstimateZernikesTaskConfig()
-        self.task = EstimateZernikesTask(config=self.config)
+        self.config = EstimateZernikesFamTaskConfig()
+        self.task = EstimateZernikesFamTask(config=self.config)
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -87,16 +89,59 @@ class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
             "exposure": 4021123106002,
         }
 
+    def _generateTestExposures(self):
+
+        # Generate donut template
+        template = self.task.getTemplate("R22_S11", DefocalType.Extra)
+        correlatedImage = correlate(template, template)
+        maxIdx = np.argmax(correlatedImage)
+        maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
+        templateCenter = np.array(maxLoc) - self.task.donutTemplateSize / 2
+
+        # Make donut centered in exposure
+        initCutoutSize = (
+            self.task.donutTemplateSize + self.task.initialCutoutPadding * 2
+        )
+        centeredArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
+        centeredArr[
+            self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
+            self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
+        ] += template
+        centeredImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
+        centeredImage.array = centeredArr
+        centeredExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
+        centeredExp.setImage(centeredImage)
+        centerCoord = (
+            self.task.initialCutoutPadding + templateCenter[1],
+            self.task.initialCutoutPadding + templateCenter[0],
+        )
+
+        # Make new donut that needs to be shifted by 20 pixels
+        # from the edge of the exposure
+        offCenterArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
+        offCenterArr[
+            : self.task.donutTemplateSize - 20, : self.task.donutTemplateSize - 20
+        ] = template[20:, 20:]
+        offCenterImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
+        offCenterImage.array = offCenterArr
+        offCenterExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
+        offCenterExp.setImage(offCenterImage)
+        # Center coord value 20 pixels closer than template center
+        # due to stamp overrunning the edge of the exposure.
+        offCenterCoord = templateCenter - 20
+
+        return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
+
     def validateConfigs(self):
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutSize = 290
-        self.task = EstimateZernikesTask(config=self.config)
+        self.task = EstimateZernikesFamTask(config=self.config)
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
-        self.assertEqual(self.task.initialCutoutSize, 290)
+        self.assertEqual(self.task.initialCutoutPadding, 290)
 
     def testGetTemplate(self):
 
@@ -107,9 +152,50 @@ class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
         )
 
         self.config.donutTemplateSize = 180
-        self.task = EstimateZernikesTask(config=self.config)
+        self.task = EstimateZernikesFamTask(config=self.config)
         intra_template = self.task.getTemplate("R22_S11", DefocalType.Intra)
         self.assertEqual(np.shape(intra_template), (180, 180))
+
+    def testShiftCenter(self):
+
+        centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)
+        self.assertEqual(centerUpperLimit, 180.0)
+        centerLowerLimit = self.task.shiftCenter(10.0, 0.0, 20.0)
+        self.assertEqual(centerLowerLimit, 20.0)
+        centerNoChangeUpper = self.task.shiftCenter(100.0, 200.0, 20.0)
+        self.assertEqual(centerNoChangeUpper, 100.0)
+        centerNoChangeLower = self.task.shiftCenter(100.0, 200.0, 20.0)
+        self.assertEqual(centerNoChangeLower, 100.0)
+
+    def testCalculateFinalCentroid(self):
+
+        (
+            centeredExp,
+            centerCoord,
+            template,
+            offCenterExp,
+            offCenterCoord,
+        ) = self._generateTestExposures()
+        centerX, centerY, cornerX, cornerY = self.task.calculateFinalCentroid(
+            centeredExp, template, centerCoord[0], centerCoord[1]
+        )
+        # For centered donut final center and final corner should be
+        # half stamp width apart
+        self.assertEqual(centerX, centerCoord[0])
+        self.assertEqual(centerY, centerCoord[1])
+        self.assertEqual(cornerX, centerCoord[0] - self.task.donutStampSize / 2)
+        self.assertEqual(cornerY, centerCoord[1] - self.task.donutStampSize / 2)
+
+        centerX, centerY, cornerX, cornerY = self.task.calculateFinalCentroid(
+            offCenterExp, template, centerCoord[0], centerCoord[1]
+        )
+        # For donut stamp that would go off the top corner of the exposure
+        # then the stamp should start at (0, 0) instead
+        self.assertAlmostEqual(centerX, offCenterCoord[0])
+        self.assertAlmostEqual(centerY, offCenterCoord[1])
+        # Corner of image should be 0, 0
+        self.assertEqual(cornerX, 0)
+        self.assertEqual(cornerY, 0)
 
     def testCutOutStamps(self):
 
@@ -143,6 +229,12 @@ class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
 
+    def testCombineZernikes(self):
+
+        testArr = np.zeros((2, 19))
+        testArr[1] += 2.0
+        np.testing.assert_array_equal(self.task.combineZernikes(testArr), np.ones(19))
+
     def testTaskRun(self):
 
         # Grab two exposures from the same detector at two different visits to
@@ -163,7 +255,7 @@ class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
         noSrcDonutCatalog["detector"] = "R22_S99"
         testOutNoSrc = self.task.run([exposureExtra, exposureIntra], noSrcDonutCatalog)
 
-        np.testing.assert_array_equal(testOutNoSrc.outputZernikes, np.ones(19) * -9999)
+        np.testing.assert_array_equal(testOutNoSrc.outputZernikes, np.ones(19) * np.nan)
         self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
         self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
 
@@ -187,7 +279,8 @@ class TestEstimateZernikesTask(lsst.utils.tests.TestCase):
             )
 
         testCoeffs = self.task.estimateZernikes(testExtraStamps, testIntraStamps)
-        np.testing.assert_array_equal(taskOut.outputZernikes, np.array(testCoeffs))
+        finalTestCoeffs = self.task.combineZernikes(testCoeffs)
+        np.testing.assert_array_equal(taskOut.outputZernikes, finalTestCoeffs)
 
     @classmethod
     def tearDownClass(cls):

@@ -23,6 +23,7 @@ import os
 import typing
 import numpy as np
 import pandas as pd
+from copy import copy
 
 import lsst.geom
 import lsst.pipe.base as pipeBase
@@ -41,7 +42,7 @@ from lsst.ts.wep.task.DonutStamps import DonutStamp, DonutStamps
 from lsst.pipe.base import connectionTypes
 
 
-class EstimateZernikesTaskConnections(
+class EstimateZernikesFamTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("detector", "instrument")
 ):
     exposures = connectionTypes.Input(
@@ -77,39 +78,59 @@ class EstimateZernikesTaskConnections(
     )
 
 
-class EstimateZernikesTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=EstimateZernikesTaskConnections
+class EstimateZernikesFamTaskConfig(
+    pipeBase.PipelineTaskConfig, pipelineConnections=EstimateZernikesFamTaskConnections
 ):
-    donutTemplateSize = pexConfig.Field(doc="Size of Template", dtype=int, default=160)
-    donutStampSize = pexConfig.Field(doc="Size of donut stamps", dtype=int, default=160)
-    initialCutoutSize = pexConfig.Field(
-        doc="Size of initial donut cutout used to centroid", dtype=int, default=240
+    # Config setting for pipeline task with defaults
+    donutTemplateSize = pexConfig.Field(
+        doc="Size of Template in pixels", dtype=int, default=160
+    )
+    donutStampSize = pexConfig.Field(
+        doc="Size of donut stamps in pixels", dtype=int, default=160
+    )
+    initialCutoutPadding = pexConfig.Field(
+        doc=str(
+            "Additional padding in pixels on each side of initial "
+            + "postage stamp of donutStampSize "
+            + "to make sure we have a stamp of donutStampSize after recentroiding donut"
+        ),
+        dtype=int,
+        default=40,
     )
 
 
-class EstimateZernikesTask(pipeBase.PipelineTask):
+class EstimateZernikesFamTask(pipeBase.PipelineTask):
+    """
+    Run Zernike Estimation in full-array mode (FAM)
+    """
 
-    ConfigClass = EstimateZernikesTaskConfig
-    _DefaultName = "EstimateZernikesTask"
+    ConfigClass = EstimateZernikesFamTaskConfig
+    _DefaultName = "EstimateZernikesFamTask"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Set up configs
+        # Set size (in pixels) of donut template image used for final centroiding by
+        # convolution of initial cutout with template
         self.donutTemplateSize = self.config.donutTemplateSize
+        # Set final size (in pixels) of postage stamp images returned as DonutStamp objects
         self.donutStampSize = self.config.donutStampSize
-        self.initialCutoutSize = self.config.initialCutoutSize
+        # Add this many pixels onto each side of initial cutout stamp beyond the size
+        # specified in self.donutStampSize. This makes sure that after recentroiding
+        # the donut from the catalog position by convolving a template on the initial
+        # cutout stamp we will still have a postage stamp of size self.donutStampSize.
+        self.initialCutoutPadding = self.config.initialCutoutPadding
 
     def getTemplate(self, detectorName, defocalType):
         """
-        Get the templates for the detector
+        Get the templates for the detector.
 
         Parameters
         ----------
         detectorName: str
             Name of the CCD (e.g. 'R22_S11').
         defocalType: enum 'DefocalType'
-            Defocal type of the donut image
+            Defocal type of the donut image.
 
         Returns
         -------
@@ -127,37 +148,146 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
 
         return template
 
+    def shiftCenter(self, center, boundary, distance):
+        """Shift the center if its distance to boundary is less than required.
+        Parameters
+        ----------
+        center : float
+            Center point.
+        boundary : float
+            Boundary point.
+        distance : float
+            Required distance.
+        Returns
+        -------
+        float
+            Shifted center.
+        """
+
+        # Distance between the center and boundary
+        delta = boundary - center
+
+        # Shift the center if needed
+        if abs(delta) < distance:
+            return boundary - np.sign(delta) * distance
+        else:
+            return center
+
+    def calculateFinalCentroid(self, exposure, template, xCent, yCent):
+        """
+        Recentroid donut from catalog values by convolving with template.
+        Also return the appropriate corner values for the final donutStamp
+        taking into account donut possibly being near the edges of the
+        exposure and compensating appropriately.
+
+        Parameters
+        ----------
+        exposure: lsst.afw.image.Exposure
+            Exposure with the donut image.
+        template: numpy ndarray
+            Donut template for the exposure.
+        xCent: int
+            X pixel donut center from donutCatalog.
+        yCent: int
+            Y pixel donut center from donutCatalog.
+
+        Returns
+        -------
+        int
+            Final donut x centroid pixel position on exposure.
+        int
+            Final donut y centroid pixel position on exposure.
+        int
+            Final x corner position on exposure for donutStamp BBox.
+        int
+            Final y corner position on exposure for donutStamp BBox.
+        """
+
+        expDim = exposure.getDimensions()
+        initialCutoutSize = self.donutStampSize + (2 * self.initialCutoutPadding)
+        initialHalfWidth = int(initialCutoutSize / 2)
+        stampHalfWidth = int(self.donutStampSize / 2)
+
+        # Shift stamp center if necessary
+        xCent = self.shiftCenter(xCent, expDim.getX(), initialHalfWidth)
+        xCent = self.shiftCenter(xCent, 0, initialHalfWidth)
+        yCent = self.shiftCenter(yCent, expDim.getY(), initialHalfWidth)
+        yCent = self.shiftCenter(yCent, 0, initialHalfWidth)
+
+        # Stamp BBox defined by corner pixel and extent
+        initXCorner = xCent - initialHalfWidth
+        initYCorner = yCent - initialHalfWidth
+
+        # Define BBox and get cutout from exposure
+        initCornerPoint = lsst.geom.Point2I(initXCorner, initYCorner)
+        initBBox = lsst.geom.Box2I(
+            initCornerPoint, lsst.geom.Extent2I(initialCutoutSize)
+        )
+        initialCutout = exposure[initBBox]
+
+        # Find the centroid by finding the max point in an initial
+        # cutout convolved with a template
+        correlatedImage = correlate(initialCutout.image.array, template)
+        maxIdx = np.argmax(correlatedImage)
+        maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
+
+        # The actual donut location is at the center of the template
+        # But the peak of correlation will correspond to the [0, 0]
+        # corner of the template
+        templateHalfWidth = int(self.donutTemplateSize / 2)
+        newX = maxLoc[1] - templateHalfWidth
+        newY = maxLoc[0] - templateHalfWidth
+        finalDonutX = xCent + (newX - initialHalfWidth)
+        finalDonutY = yCent + (newY - initialHalfWidth)
+
+        # Shift stamp center if necessary but not final centroid definition
+        xStampCent = copy(finalDonutX)
+        yStampCent = copy(finalDonutY)
+        xStampCent = self.shiftCenter(xStampCent, expDim.getX(), stampHalfWidth)
+        xStampCent = self.shiftCenter(xStampCent, 0, stampHalfWidth)
+        yStampCent = self.shiftCenter(yStampCent, expDim.getY(), stampHalfWidth)
+        yStampCent = self.shiftCenter(yStampCent, 0, stampHalfWidth)
+
+        # Define corner for final stamp BBox
+        xCorner = xStampCent - stampHalfWidth
+        yCorner = yStampCent - stampHalfWidth
+
+        return finalDonutX, finalDonutY, xCorner, yCorner
+
     def cutOutStamps(self, exposure, donutCatalog, defocalType):
         """
         Cut out postage stamps for sources in catalog.
 
         Parameters
         ----------
-        exposure: afwImage.Exposure
+        exposure: lsst.afw.image.Exposure
             Post-ISR image with defocal donuts sources.
         donutCatalog: pandas DataFrame
             Source catalog for the pointing.
         defocalType: enum 'DefocalType'
-            Defocal type of the donut image
+            Defocal type of the donut image.
 
         Returns
         -------
         DonutStamps
-            Collection of postage stamps as afwImage.MaskedImages
-            with additional metadata
+            Collection of postage stamps as
+            lsst.afw.image.maskedImage.MaskedImage with additional metadata.
         """
 
         detectorName = exposure.getDetector().getName()
         template = self.getTemplate(detectorName, defocalType)
         detectorCatalog = donutCatalog.query(f'detector == "{detectorName}"')
 
-        initialHalfWidth = int(self.initialCutoutSize / 2)
-        stampHalfWidth = int(self.donutStampSize / 2)
+        # Final list of DonutStamp objects
         finalStamps = []
-        finalXList = []
-        finalYList = []
-        xLowList = []
-        yLowList = []
+
+        # Final locations of donut centroids in pixels
+        finalXCentList = []
+        finalYCentList = []
+
+        # Final locations of BBox corners for DonutStamp images
+        xCornerList = []
+        yCornerList = []
 
         for donutRow in detectorCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
@@ -165,43 +295,20 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
             # on the donut
             xCent = int(donutRow["centroid_x"])
             yCent = int(donutRow["centroid_y"])
-            initCutoutHalfWidth = self.initialCutoutSize / 2
-            # BBox measured from corner of stamp not center
-            initCent = lsst.geom.Point2I(
-                donutRow["centroid_x"] - initCutoutHalfWidth,
-                donutRow["centroid_y"] - initCutoutHalfWidth,
-            )
-            initBBox = lsst.geom.Box2I(
-                initCent, lsst.geom.Extent2I(self.initialCutoutSize)
-            )
-            initialCutout = exposure[initBBox]
 
-            # Find the centroid by finding the max point in an initial
-            # cutout convolved with a template
-            correlatedImage = correlate(initialCutout.image.array, template)
-            maxIdx = np.argmax(correlatedImage)
-            maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
-
-            # The actual donut location is at the center of the template
-            # But the peak of correlation will correspond to the [0, 0]
-            # corner of the template
-            templateHalfWidth = int(self.donutTemplateSize / 2)
-            newX = maxLoc[1] - templateHalfWidth
-            newY = maxLoc[0] - templateHalfWidth
-            finalDonutX = xCent + (newX - initialHalfWidth)
-            finalDonutY = yCent + (newY - initialHalfWidth)
-            finalXList.append(finalDonutX)
-            finalYList.append(finalDonutY)
+            finalDonutX, finalDonutY, xCorner, yCorner = self.calculateFinalCentroid(
+                exposure, template, xCent, yCent
+            )
+            finalXCentList.append(finalDonutX)
+            finalYCentList.append(finalDonutY)
 
             # Get the final cutout
-            xLow = finalDonutX - stampHalfWidth
-            yLow = finalDonutY - stampHalfWidth
-            finalCent = lsst.geom.Point2I(xLow, yLow)
+            finalCorner = lsst.geom.Point2I(xCorner, yCorner)
             finalBBox = lsst.geom.Box2I(
-                finalCent, lsst.geom.Extent2I(self.donutStampSize)
+                finalCorner, lsst.geom.Extent2I(self.donutStampSize)
             )
-            xLowList.append(xLow)
-            yLowList.append(yLow)
+            xCornerList.append(xCorner)
+            yCornerList.append(yCorner)
             finalCutout = exposure[finalBBox]
 
             # Save MaskedImage to stamp
@@ -226,11 +333,11 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
             [detectorName] * len(detectorCatalog), dtype=str
         )
         # Save the centroid values
-        stampsMetadata["CENT_X"] = np.array(finalXList)
-        stampsMetadata["CENT_Y"] = np.array(finalYList)
+        stampsMetadata["CENT_X"] = np.array(finalXCentList)
+        stampsMetadata["CENT_Y"] = np.array(finalYCentList)
         # Save the corner values
-        stampsMetadata["X0"] = np.array(xLowList)
-        stampsMetadata["Y0"] = np.array(yLowList)
+        stampsMetadata["X0"] = np.array(xCornerList)
+        stampsMetadata["Y0"] = np.array(yCornerList)
 
         return DonutStamps(finalStamps, metadata=stampsMetadata)
 
@@ -241,17 +348,18 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
         Parameters
         ----------
         donutStampsExtra: DonutStamps
-            Extra-focal donut postage stamps
+            Extra-focal donut postage stamps.
         donutStampsIntra: DonutStamps
-            Intra-focal donut postage stamps
+            Intra-focal donut postage stamps.
 
         Returns
         -------
         numpy.ndarray
             Zernike coefficients for the exposure. Will return one set of
             coefficients per set of stamps, not one set of coefficients
-            per detector so this array will have shape
-            (# of stamps, # of zernike coefficients).
+            per detector so this will be a 2-D numpy array with
+            the number of rows equal to the number of donut stamps and
+            the number of columns equal to the number of Zernike coefficients.
         """
 
         zerArray = []
@@ -288,6 +396,29 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
 
         return zerArray
 
+    def combineZernikes(self, zernikeArray):
+        """
+        Combine the Zernike coefficients from stamp pairs on the
+        CCD to create one final value for the CCD.
+
+        Parameters
+        ----------
+        zernikeArray: numpy ndarray
+            The full set of zernike coefficients for each pair
+            of donuts on the CCD. Each row of the array should
+            be the set of Zernike coefficients for a single
+            donut pair.
+
+        Returns
+        -------
+        finalZernikes: numpy ndarray
+            The final combined Zernike coefficients from the CCD.
+        """
+
+        # NOTE: Currently just unweighted mean of all donuts.
+        # But may change as this is an active research topic.
+        return np.mean(zernikeArray, axis=0)
+
     def run(
         self, exposures: typing.List[afwImage.Exposure], donutCatalog: pd.DataFrame
     ) -> pipeBase.Struct:
@@ -314,22 +445,24 @@ class EstimateZernikesTask(pipeBase.PipelineTask):
             exposures[intraExpIdx], donutCatalog, DefocalType.Intra
         )
 
-        # If no sources in exposure exit with default values
+        # If no donuts are in the donutCatalog for a set of exposures
+        # then return the Zernike coefficients as nan.
         if len(donutStampsExtra) == 0:
             return pipeBase.Struct(
-                outputZernikes=np.ones(19) * -9999,
+                outputZernikes=np.ones(19) * np.nan,
                 donutStampsExtra=DonutStamps([]),
                 donutStampsIntra=DonutStamps([]),
             )
 
         # Estimate Zernikes from collection of stamps
         zernikeCoeffs = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        ccdZernikes = self.combineZernikes(zernikeCoeffs)
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and
         # Zernike coefficient numpy array as Struct that can be saved to
         # Gen 3 repository all with the same dataId.
         return pipeBase.Struct(
-            outputZernikes=np.array(zernikeCoeffs),
+            outputZernikes=np.array(ccdZernikes),
             donutStampsExtra=donutStampsExtra,
             donutStampsIntra=donutStampsIntra,
         )
