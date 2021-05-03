@@ -31,7 +31,7 @@ tasks:
   generateDonutCatalogOnlineTask:
     class: lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask
     # Here we specify the configurations for pointing that we added into the class
-    # GenerateDonutCatalongOnlineTaskConfig.
+    # GenerateDonutCatalogOnlineTaskConfig.
     config:
       boresightRa: 0.0
       boresightDec: 0.0
