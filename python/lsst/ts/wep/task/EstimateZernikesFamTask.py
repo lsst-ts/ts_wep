@@ -127,9 +127,9 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        focusZVal0: float
+        focusZVal0 : float
             The `FOCUSZ` parameter from the first exposure.
-        focusZVal1: float
+        focusZVal1 : float
             The `FOCUSZ` parameter from the second exposure.
 
         Returns
