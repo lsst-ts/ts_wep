@@ -120,6 +120,51 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
         # cutout stamp we will still have a postage stamp of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
 
+    def assignExtraIntraIdx(self, focusZVal0, focusZVal1):
+        """
+        Identify which exposure in the list is the extra-focal and which
+        is the intra-focal based upon `FOCUSZ` parameter in header.
+
+        Parameters
+        ----------
+        focusZVal0: float
+            The `FOCUSZ` parameter from the first exposure.
+        focusZVal1: float
+            The `FOCUSZ` parameter from the second exposure.
+
+        Returns
+        -------
+        int
+            Index in list which is extra-focal image.
+        int
+            Index in list which is intra-focal image.
+
+        Raises
+        ------
+        ValueError
+            Exposures must be a pair with one intra-focal
+            and one extra-focal image.
+        """
+
+        errorStr = "Must have one extra-focal and one intra-focal image."
+        if focusZVal0 < 0:
+            # Check that other image does not have same defocal direction
+            if focusZVal1 <= 0:
+                raise ValueError(errorStr)
+            extraExpIdx = 0
+            intraExpIdx = 1
+        elif focusZVal0 > 0:
+            # Check that other image does not have same defocal direction
+            if focusZVal1 >= 0:
+                raise ValueError(errorStr)
+            extraExpIdx = 1
+            intraExpIdx = 0
+        else:
+            # Need to be defocal images ('FOCUSZ != 0')
+            raise ValueError(errorStr)
+
+        return extraExpIdx, intraExpIdx
+
     def getTemplate(self, detectorName, defocalType):
         """
         Get the templates for the detector.
@@ -426,19 +471,11 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
         self, exposures: typing.List[afwImage.Exposure], donutCatalog: pd.DataFrame
     ) -> pipeBase.Struct:
 
-        # TODO: For now use dataId to sort extra and intrafocal.
-        # In closed loop currently with full array mode the lower
-        # exposure id is the extra focal image.
-        # Chris is adding new header metadata so we don't have to
-        # resort to this temporary hack in the future. (BK 4/26/21)
-        expId0 = exposures[0].getInfo().getVisitInfo().getExposureId()
-        expId1 = exposures[1].getInfo().getVisitInfo().getExposureId()
-        if expId0 < expId1:
-            extraExpIdx = 0
-            intraExpIdx = 1
-        else:
-            extraExpIdx = 1
-            intraExpIdx = 0
+        # Get exposure metadata to find which is extra and intra
+        focusZ0 = exposures[0].getMetadata()["FOCUSZ"]
+        focusZ1 = exposures[1].getMetadata()["FOCUSZ"]
+
+        extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
 
         # Get the donut stamps from extra and intra focal images
         donutStampsExtra = self.cutOutStamps(
