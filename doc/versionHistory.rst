@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.5:
+
+-------------
+1.6.5
+-------------
+
+* Use `FOCUSZ` header information in EstimateZernikesFamTask.py.
+
 .. _lsst.ts.wep-1.6.4:
 
 -------------

@@ -143,6 +143,39 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
 
+    def testAssignExtraIntraIdx(self):
+
+        focusZNegative = -1
+        focusZPositive = 1
+        focusZ0 = 0
+
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
+            focusZNegative, focusZPositive
+        )
+        self.assertEqual(extraIdx, 0)
+        self.assertEqual(intraIdx, 1)
+
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
+            focusZPositive, focusZNegative
+        )
+        self.assertEqual(extraIdx, 1)
+        self.assertEqual(intraIdx, 0)
+
+        with self.assertRaises(ValueError):
+            self.task.assignExtraIntraIdx(focusZPositive, focusZPositive)
+        with self.assertRaises(ValueError):
+            self.task.assignExtraIntraIdx(focusZPositive, focusZ0)
+        with self.assertRaises(ValueError):
+            self.task.assignExtraIntraIdx(focusZNegative, focusZNegative)
+        with self.assertRaises(ValueError):
+            self.task.assignExtraIntraIdx(focusZNegative, focusZ0)
+        with self.assertRaises(ValueError) as context:
+            self.task.assignExtraIntraIdx(focusZ0, focusZPositive)
+        self.assertEqual(
+            "Must have one extra-focal and one intra-focal image.",
+            str(context.exception),
+        )
+
     def testGetTemplate(self):
 
         extra_template = self.task.getTemplate("R22_S11", DefocalType.Extra)

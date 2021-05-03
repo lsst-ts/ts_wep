@@ -171,6 +171,8 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         # Get camera. Only 'LSSTCam' for now.
         if cameraName == "LSSTCam":
             camera = obs_lsst.LsstCam.getCamera()
+        elif cameraName == "LSSTComCam":
+            camera = obs_lsst.LsstComCam.getCamera()
         else:
             raise ValueError(f"{cameraName} is not a valid camera name.")
 
