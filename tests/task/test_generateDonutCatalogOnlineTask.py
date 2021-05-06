@@ -82,6 +82,8 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         pipetaskCmd = writePipetaskCmd(
             self.repoDir, runName, instrument, collection, taskName=taskName
         )
+        # Update task configuration to match pointing information
+        pipetaskCmd += " -c generateDonutCatalogOnlineTask:boresightRotAng=90.0"
 
         # Check that run doesn't already exist due to previous improper cleanup
         collectionsList = list(self.registry.queryCollections())
@@ -143,6 +145,8 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         ).expanded()
         for ref in datasetGenerator:
             deferredList.append(self.butler.getDeferred(ref, collections=["refcats"]))
+        # Update boresightRotAng to match pointing info
+        self.task.boresightRotAng = 90.0
         taskOutput = self.task.run("LSSTCam", deferredList)
         outputDf = taskOutput.donutCatalog
 
