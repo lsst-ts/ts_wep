@@ -41,10 +41,6 @@ class WcsSol(object):
         # Sky WCS solution that uses the functions in obs_lsst
         self.skyWcs = None
 
-        # Rotation offset between wcs from boresight and images loaded
-        # with the butler
-        self.rotOffset = 90.0
-
         if camera is None:
             self._camera = obs_lsst.lsstCamMapper.LsstCamMapper().camera
         else:
@@ -93,7 +89,7 @@ class WcsSol(object):
         self.centerCcd = centerCcd
         self.skyWcs = createInitialSkyWcsFromBoresight(
             boresightPointing,
-            (self.rotOffset - rotSkyPos) * lsst.geom.degrees,
+            rotSkyPos * lsst.geom.degrees,
             self._camera[self.centerCcd],
             flipX=False,
         )
