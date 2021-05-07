@@ -109,15 +109,19 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Set size (in pixels) of donut template image used for final centroiding by
-        # convolution of initial cutout with template
+        # Set size (in pixels) of donut template image used for
+        # final centroiding by convolution of initial cutout with template
         self.donutTemplateSize = self.config.donutTemplateSize
-        # Set final size (in pixels) of postage stamp images returned as DonutStamp objects
+        # Set final size (in pixels) of postage stamp images returned as
+        # DonutStamp objects
         self.donutStampSize = self.config.donutStampSize
-        # Add this many pixels onto each side of initial cutout stamp beyond the size
-        # specified in self.donutStampSize. This makes sure that after recentroiding
-        # the donut from the catalog position by convolving a template on the initial
-        # cutout stamp we will still have a postage stamp of size self.donutStampSize.
+        # Add this many pixels onto each side of initial
+        # cutout stamp beyond the size specified
+        # in self.donutStampSize. This makes sure that
+        # after recentroiding the donut from the catalog
+        # position by convolving a template on the initial
+        # cutout stamp we will still have a postage stamp
+        # of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
 
     def assignExtraIntraIdx(self, focusZVal0, focusZVal1):

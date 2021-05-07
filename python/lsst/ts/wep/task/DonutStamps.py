@@ -108,7 +108,8 @@ class DonutStamps(StampsBase):
         stampList.append(newStamp)
 
     def extend(self, newStampList):
-        """Extend DonutStamps instance by appending elements from another instance.
+        """Extend DonutStamps instance by appending elements
+        from another instance.
 
         Parameters
         ----------
