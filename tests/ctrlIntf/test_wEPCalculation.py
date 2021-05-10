@@ -191,6 +191,8 @@ class TestWEPCalculation(unittest.TestCase):
 
     def _calculateWavefrontErrorsAndCheck(self):
 
+        # Update to match rotation angle in headers
+        self.wepCalculation.setRotAng(90.0)
         comcamDataDir = os.path.join(self.testDataDir, "phosimOutput", "realComCam")
         rawExpData, extraRawExpData = self._prepareRawExpData(comcamDataDir)
 

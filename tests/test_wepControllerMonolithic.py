@@ -252,7 +252,7 @@ class TestWepControllerMonolithic(BaseBscTestCase, unittest.TestCase):
         # Set the observation meta data
         ra = 0.0
         dec = 0.0
-        rotSkyPos = 0.0
+        rotSkyPos = 90.0
         self.wepCntlr.getSourSelc().setObsMetaData(ra, dec, rotSkyPos)
 
         # Set the filter
