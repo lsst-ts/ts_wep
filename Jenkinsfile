@@ -15,6 +15,7 @@ pipeline {
 
     options {
       disableConcurrentBuilds()
+      skipDefaultCheckout()
     }
 
     triggers {
@@ -43,6 +44,9 @@ pipeline {
 
         stage('Cloning Repos') {
             steps {
+                dir(env.WORKSPACE + '/ts_wep') {
+                    checkout scm
+                }
                 dir(env.WORKSPACE + '/phosim_utils') {
                     git branch: 'master', url: 'https://github.com/lsst-dm/phosim_utils.git'
                 }
@@ -61,7 +65,7 @@ pipeline {
                         cd phosim_utils/
                         setup -k -r . -t ${env.STACK_VERSION}
                         scons
-                        cd ..
+                        cd ../ts_wep/
                         setup -k -r .
                         scons python
                     """
@@ -78,9 +82,9 @@ pipeline {
                         setup ctrl_mpexec -t ${env.STACK_VERSION}
                         cd phosim_utils/
                         setup -k -r . -t ${env.STACK_VERSION}
-                        cd ..
+                        cd ../ts_wep/
                         setup -k -r .
-                        pytest --cov-report html --cov=${env.MODULE_NAME} --junitxml=${env.XML_REPORT} tests/
+                        pytest --cov-report html --cov=${env.MODULE_NAME} --junitxml=${env.WORKSPACE}/${env.XML_REPORT}
                     """
                 }
             }
@@ -98,7 +102,7 @@ pipeline {
                 allowMissing: false,
                 alwaysLinkToLastBuild: false,
                 keepAll: true,
-                reportDir: 'htmlcov',
+                reportDir: 'ts_wep/htmlcov',
                 reportFiles: 'index.html',
                 reportName: "Coverage Report"
             ])
@@ -115,14 +119,14 @@ pipeline {
                   cd phosim_utils/
                   setup -k -r . -t ${env.STACK_VERSION}
 
-                  cd ..
+                  cd ../ts_wep
                   setup -k -r .
 
                   package-docs build
 
                   pip install ltd-conveyor
 
-                  ltd upload --product ${env.DOCUMENT_NAME} --git-ref ${GIT_BRANCH} --dir doc/_build/html
+                  ltd upload --product ${env.DOCUMENT_NAME} --git-ref ${env.GIT_BRANCH} --dir doc/_build/html
                     """
 
                 if ( RESULT != 0 ) {
@@ -139,6 +143,7 @@ pipeline {
             withEnv(["HOME=${env.WORKSPACE}"]) {
                 sh 'chown -R 1003:1003 ${HOME}/'
             }
+
         }
 
         cleanup {
