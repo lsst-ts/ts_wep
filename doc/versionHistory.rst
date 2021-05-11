@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.7:
+
+-------------
+1.6.7
+-------------
+
+* Fix flake error and update Jenkinsfile
+
 .. _lsst.ts.wep-1.6.6:
 
 -------------
