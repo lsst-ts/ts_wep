@@ -35,7 +35,7 @@ tasks:
     config:
       boresightRa: 0.0
       boresightDec: 0.0
-      boresightRotAng: 0.0
+      boresightRotAng: 90.0
   estimateZernikesFamTask:
     class: lsst.ts.wep.task.EstimateZernikesFamTask.EstimateZernikesFamTask
     config:

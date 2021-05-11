@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.6:
+
+-------------
+1.6.6
+-------------
+
+* Remove 90 degree offset from WcsSol.py now that phosim headers are updated.
+
 .. _lsst.ts.wep-1.6.5:
 
 -------------

@@ -136,8 +136,8 @@ class TestWcsSol(unittest.TestCase):
         # 1 arcsec = 1/3600 degree
         xInMm, yInMm = self.wcs.focalPlaneCoordsFromRaDec(20.0 / 3600, 0)
 
-        self.assertAlmostEqual(xInMm, 0.0, places=3)
-        self.assertAlmostEqual(yInMm, 1.0, places=3)
+        self.assertAlmostEqual(xInMm, -1.0, places=3)
+        self.assertAlmostEqual(yInMm, 0.0, places=3)
 
     def testFocalPlaneCoordsFromRaDecWithNonZeroRot(self):
 
