@@ -69,11 +69,17 @@ class EstimateZernikesFamTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
     )
-    outputZernikes = connectionTypes.Output(
-        doc="Zernike Coefficients",
+    outputZernikesRaw = connectionTypes.Output(
+        doc="Zernike Coefficients from all donuts",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="NumpyArray",
-        name="zernikeEstimate",
+        name="zernikeEstimateRaw",
+    )
+    outputZernikesAvg = connectionTypes.Output(
+        doc="Zernike Coefficients averaged over donuts",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="NumpyArray",
+        name="zernikeEstimateAvg",
     )
 
 
@@ -493,20 +499,22 @@ class EstimateZernikesFamTask(pipeBase.PipelineTask):
         # then return the Zernike coefficients as nan.
         if len(donutStampsExtra) == 0:
             return pipeBase.Struct(
-                outputZernikes=np.ones(19) * np.nan,
+                outputZernikesRaw=np.ones(19) * np.nan,
+                outputZernikesAvg=np.ones(19) * np.nan,
                 donutStampsExtra=DonutStamps([]),
                 donutStampsIntra=DonutStamps([]),
             )
 
         # Estimate Zernikes from collection of stamps
-        zernikeCoeffs = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
-        ccdZernikes = self.combineZernikes(zernikeCoeffs)
+        zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        zernikeCoeffsAvg = self.combineZernikes(zernikeCoeffsRaw)
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and
         # Zernike coefficient numpy array as Struct that can be saved to
         # Gen 3 repository all with the same dataId.
         return pipeBase.Struct(
-            outputZernikes=np.array(ccdZernikes),
+            outputZernikesAvg=np.array(zernikeCoeffsAvg),
+            outputZernikesRaw=np.array(zernikeCoeffsRaw),
             donutStampsExtra=donutStampsExtra,
             donutStampsIntra=donutStampsIntra,
         )
