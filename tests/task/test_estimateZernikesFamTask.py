@@ -288,7 +288,12 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         noSrcDonutCatalog["detector"] = "R22_S99"
         testOutNoSrc = self.task.run([exposureExtra, exposureIntra], noSrcDonutCatalog)
 
-        np.testing.assert_array_equal(testOutNoSrc.outputZernikes, np.ones(19) * np.nan)
+        np.testing.assert_array_equal(
+            testOutNoSrc.outputZernikesRaw, np.ones(19) * np.nan
+        )
+        np.testing.assert_array_equal(
+            testOutNoSrc.outputZernikesAvg, np.ones(19) * np.nan
+        )
         self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
         self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
 
@@ -311,9 +316,10 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
 
-        testCoeffs = self.task.estimateZernikes(testExtraStamps, testIntraStamps)
-        finalTestCoeffs = self.task.combineZernikes(testCoeffs)
-        np.testing.assert_array_equal(taskOut.outputZernikes, finalTestCoeffs)
+        testCoeffsRaw = self.task.estimateZernikes(testExtraStamps, testIntraStamps)
+        testCoeffsAvg = self.task.combineZernikes(testCoeffsRaw)
+        np.testing.assert_array_equal(taskOut.outputZernikesRaw, testCoeffsRaw)
+        np.testing.assert_array_equal(taskOut.outputZernikesAvg, testCoeffsAvg)
 
     @classmethod
     def tearDownClass(cls):
