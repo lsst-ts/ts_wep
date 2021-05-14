@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.6.9:
+
+-------------
+1.6.9
+-------------
+
+* Add focusz as an argument to repackagePhosimImages in CreatePhosimDonutTemplates.py
+
 .. _lsst.ts.wep-1.6.8:
 
 -------------

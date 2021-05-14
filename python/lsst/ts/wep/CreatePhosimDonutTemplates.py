@@ -156,16 +156,27 @@ class CreatePhosimDonutTemplates(object):
         runProgram(runPhosimCmd, argstring=runPhosimArgsExtra)
         runProgram(runPhosimCmd, argstring=runPhosimArgsIntra)
 
-    def repackagePhosimImages(self):
+    def repackagePhosimImages(self, defocalDist=1500):
         """
         Run the phosim repackager.
+
+        Parameters
+        ----------
+        defocalDist : int
+            The defocal distance in micrometers, translated
+            to the FOCUSZ in the header of repackaged images.
+            (default: 1500)
         """
 
         print("Repackaging phosim output")
 
         argString = f"--out_dir {self.tempWorkPath}/raw "
-        argStringExtra = argString + f"{self.tempWorkPath}/phosimOutput/extra"
-        argStringIntra = argString + f"{self.tempWorkPath}/phosimOutput/intra"
+        argStringExtra = (
+            argString + f"{self.tempWorkPath}/phosimOutput/extra" + f" --focusz -{defocalDist}"
+        )
+        argStringIntra = (
+            argString + f"{self.tempWorkPath}/phosimOutput/intra" + f" --focusz +{defocalDist}"
+        )
 
         # Run repackager
         runProgram("phosim_repackager.py", argstring=argStringExtra)
