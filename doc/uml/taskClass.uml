@@ -11,4 +11,9 @@ EstimateZernikesBaseConfig <|-- EstimateZernikesFamTaskConfig
 EstimateZernikesBaseTask <|-- EstimateZernikesFamTask
 EstimateZernikesFamTaskConfig *-- EstimateZernikesFamTaskConnections
 EstimateZernikesFamTask *-- EstimateZernikesFamTaskConfig
+EstimateZernikesBaseConnections <|-- EstimateZernikesCwfsTaskConnections
+EstimateZernikesBaseConfig <|-- EstimateZernikesCwfsTaskConfig
+EstimateZernikesBaseTask <|-- EstimateZernikesCwfsTask
+EstimateZernikesCwfsTaskConfig *-- EstimateZernikesCwfsTaskConnections
+EstimateZernikesCwfsTask *-- EstimateZernikesCwfsTaskConfig
 @enduml

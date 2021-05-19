@@ -167,6 +167,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         dec = []
         centroidX = []
         centroidY = []
+        sourceFlux = []
         det_names = []
 
         # Get camera. Only 'LSSTCam' for now.
@@ -200,6 +201,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
                 dec.append(donutCatalog["coord_dec"])
                 centroidX.append(donutCatalog["centroid_x"])
                 centroidY.append(donutCatalog["centroid_y"])
+                sourceFlux.append(donutCatalog[f"{self.filterName}_flux"])
                 det_names.append([detector.getName()] * len(donutCatalog))
 
             except RuntimeError:
@@ -210,6 +212,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         fieldObjects["coord_dec"] = np.hstack(dec).squeeze()
         fieldObjects["centroid_x"] = np.hstack(centroidX).squeeze()
         fieldObjects["centroid_y"] = np.hstack(centroidY).squeeze()
+        fieldObjects["source_flux"] = np.hstack(sourceFlux).squeeze()
         fieldObjects["detector"] = np.hstack(det_names).squeeze()
 
         # Return pandas DataFrame with sources in pointing

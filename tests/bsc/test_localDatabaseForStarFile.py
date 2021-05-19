@@ -80,11 +80,16 @@ class TestLocalDatabaseForStarFile(BaseBscTestCase, unittest.TestCase):
         self.assertEqual(len(idAll), 0)
 
         skyFilePath = os.path.join(
-            getModulePath(), "tests", "testData", "skyComCamInfo.txt"
+            getModulePath(),
+            "tests",
+            "testData",
+            "phosimOutput",
+            "realComCam",
+            "skyComCamInfo.txt",
         )
         idAll = self._insertDataToDbAndGetAllId(skyFilePath)
 
-        self.assertEqual(len(idAll), 4)
+        self.assertEqual(len(idAll), 8)
 
     def _insertDataToDbAndGetAllId(self, skyFilePath):
 

@@ -6,6 +6,16 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.4:
+
+-------------
+1.7.4
+-------------
+
+* Remove old e-image corner wavefront sensor files.
+* Add updated corner wavefront sensor test data.
+* Add CWFS Zernikes code and tests.
+
 .. _lsst.ts.wep-1.7.3:
 
 -------------
