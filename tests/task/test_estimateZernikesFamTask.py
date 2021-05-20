@@ -81,12 +81,12 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         self.dataIdExtra = {
             "instrument": "LSSTCam",
             "detector": 94,
-            "exposure": 4021123106001,
+            "exposure": 4021123106002,
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
-            "exposure": 4021123106002,
+            "exposure": 4021123106001,
         }
 
     def _generateTestExposures(self):
@@ -152,14 +152,14 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         extraIdx, intraIdx = self.task.assignExtraIntraIdx(
             focusZNegative, focusZPositive
         )
-        self.assertEqual(extraIdx, 0)
-        self.assertEqual(intraIdx, 1)
+        self.assertEqual(extraIdx, 1)
+        self.assertEqual(intraIdx, 0)
 
         extraIdx, intraIdx = self.task.assignExtraIntraIdx(
             focusZPositive, focusZNegative
         )
-        self.assertEqual(extraIdx, 1)
-        self.assertEqual(intraIdx, 0)
+        self.assertEqual(extraIdx, 0)
+        self.assertEqual(intraIdx, 1)
 
         with self.assertRaises(ValueError):
             self.task.assignExtraIntraIdx(focusZPositive, focusZPositive)
@@ -251,11 +251,12 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
 
     def testEstimateZernikes(self):
 
+        # Donut stamps are stored with intra id, even the donutStampsExtra
         donutStampsExtra = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutStampsExtra", dataId=self.dataIdIntra, collections=[self.runName]
         )
         donutStampsIntra = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutStampsIntra", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
         zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
