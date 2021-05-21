@@ -28,8 +28,9 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import lsst.obs.lsst as obs_lsst
+import lsst.geom
+from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.meas.algorithms import ReferenceObjectLoader, LoadReferenceObjectsConfig
-from lsst.ts.wep.bsc.WcsSol import WcsSol
 
 
 class GenerateDonutCatalogOnlineTaskConnections(
@@ -176,22 +177,22 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         else:
             raise ValueError(f"{cameraName} is not a valid camera name.")
 
-        # Create WCS holder
-        detWcs = WcsSol(camera=camera)
+        boresightPointing = lsst.geom.SpherePoint(
+            self.boresightRa, self.boresightDec, lsst.geom.degrees
+        )
 
         for detector in camera:
-            # Set WCS from boresight information
-            detWcs.setObsMetaData(
-                self.boresightRa,
-                self.boresightDec,
-                self.boresightRotAng,
-                centerCcd=detector.getName(),
+            detWcs = createInitialSkyWcsFromBoresight(
+                boresightPointing,
+                self.boresightRotAng * lsst.geom.degrees,
+                detector,
+                flipX=False,
             )
 
             try:
                 # Match detector layout to reference catalog
                 donutCatalog = refObjLoader.loadPixelBox(
-                    detector.getBBox(), detWcs.skyWcs, filterName=self.filterName
+                    detector.getBBox(), detWcs, filterName=self.filterName
                 ).refCat
 
                 # Add matched information to list
