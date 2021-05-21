@@ -103,9 +103,8 @@ class DonutStamps(StampsBase):
         """
         if not isinstance(newStamp, DonutStamp):
             raise ValueError("Objects added must be a DonutStamp object.")
-        # Utilize functionality from upstream (StampsBase) code.
-        stampList = self[:]
-        stampList.append(newStamp)
+        # Follow same procedure as Stamps subclass
+        self._stamps.append(newStamp)
 
     def extend(self, newStampList):
         """Extend DonutStamps instance by appending elements
@@ -124,9 +123,8 @@ class DonutStamps(StampsBase):
         for stamp in newStampList:
             if not isinstance(stamp, DonutStamp):
                 raise ValueError("Can only extend with DonutStamp objects.")
-        # Utilize functionality from upstream (StampsBase) code.
-        stampList = self[:]
-        stampList.extend(newStampList)
+        # Follow same procedure as Stamps subclass
+        self._stamps += newStampList
 
     @classmethod
     def readFits(cls, filename):
