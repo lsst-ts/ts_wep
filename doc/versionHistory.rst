@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.1:
+
+-------------
+1.7.1
+-------------
+
+* Update ``FOCUSZ`` parameter in test data.
+
 .. _lsst.ts.wep-1.7.0:
 
 -------------
