@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.0:
+
+-------------
+1.7.0
+-------------
+
+* Replace ``WcsSol`` by DM's wcs code in ``GenerateDonutCatalogOnlineTask``.
+* Fix intra/extra zernike selection.
+
 .. _lsst.ts.wep-1.6.9:
 
 -------------
