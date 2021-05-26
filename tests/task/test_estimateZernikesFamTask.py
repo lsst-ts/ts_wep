@@ -81,12 +81,12 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         self.dataIdExtra = {
             "instrument": "LSSTCam",
             "detector": 94,
-            "exposure": 4021123106002,
+            "exposure": 4021123106001,
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
-            "exposure": 4021123106001,
+            "exposure": 4021123106002,
         }
 
     def _generateTestExposures(self):
@@ -253,10 +253,10 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
 
         # Donut stamps are stored with intra id, even the donutStampsExtra
         donutStampsExtra = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutStampsIntra = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
         zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
