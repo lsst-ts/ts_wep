@@ -97,7 +97,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
     """
     Base class for Zernike estimation tasks.
 
-    Subclasses must implement _DefaultName
+    Subclasses must implement _DefaultName.
     """
 
     ConfigClass = EstimateZernikesBaseConfig

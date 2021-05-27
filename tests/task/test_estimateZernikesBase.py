@@ -69,6 +69,12 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         )
         runProgram(pipeCmd)
 
+    @classmethod
+    def tearDownClass(cls):
+
+        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+        runProgram(cleanUpCmd)
+
     def setUp(self):
 
         self.config = EstimateZernikesBaseConfig()
@@ -242,9 +248,3 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
         np.testing.assert_array_equal(self.task.combineZernikes(testArr), np.ones(19))
-
-    @classmethod
-    def tearDownClass(cls):
-
-        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-        runProgram(cleanUpCmd)
