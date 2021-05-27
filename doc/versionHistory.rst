@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.3:
+
+-------------
+1.7.3
+-------------
+
+* Break generic pieces of EstimateZernikesFamTask.py into EstimateZernikesBase.py
+
 .. _lsst.ts.wep-1.7.2:
 
 -------------

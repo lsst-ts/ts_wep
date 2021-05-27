@@ -145,6 +145,9 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutCatalogOnlineTask**: Gen 3 middleware task to take pointing information and create a catalog of donut sources in that pointing.
 * **DonutStamp**: Storage class for a single donut postage stamp and associated metadata.
 * **DonutStamps**: Gen 3 Butler readable storage class for a list of DonutStamp objects with helper functions to get metadata and to save DonutStamps object as FITS file.
+* **EstimateZernikesBaseTaskConnections**: Base connections class for EstimateZernikes tasks.
+* **EstimateZernikesBaseTaskConfig**: Base configuration class for EstimateZernikes tasks.
+* **EstimateZernikesBaseTask**: Base class for EstimateZernikes tasks.
 * **EstimateZernikesFamTaskConnections**: Connections setup for EstimateZernikesFamTask to run in a pipeline with Gen 3 middleware.
 * **EstimateZernikesFamTaskConfig**: Configuration setup for EstimateZernikesFamTask.
 * **EstimateZernikesFamTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running in full-array mode (FAM). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
