@@ -41,6 +41,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
+        self.centerRaft = ["R22_S10", "R22_S11"]
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -96,9 +97,11 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
         # Test instrument matches
         pipelineButler = dafButler.Butler(self.repoDir)
-        outputDf = pipelineButler.get(
+        donutCatDf = pipelineButler.get(
             "donutCatalog", dataId={"instrument": "LSSTCam"}, collections=[f"{runName}"]
         )
+        self.assertEqual(len(donutCatDf), 24)
+        outputDf = donutCatDf.query("detector in @self.centerRaft")
         self.assertEqual(len(outputDf), 8)
         self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
         self.assertEqual(len(outputDf.query('detector == "R22_S10"')), 4)
@@ -128,6 +131,10 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
             ],
             outputDf["centroid_y"],
         )
+        fluxTruth = np.ones(8)
+        fluxTruth[:6] = 3630780.5477010026
+        fluxTruth[6:] = 363078.0547701003
+        self.assertCountEqual(outputDf["source_flux"], fluxTruth)
 
         # Clean up
         cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
@@ -148,7 +155,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         # Update boresightRotAng to match pointing info
         self.task.boresightRotAng = 90.0
         taskOutput = self.task.run("LSSTCam", deferredList)
-        outputDf = taskOutput.donutCatalog
+        donutCatDf = taskOutput.donutCatalog
 
         # Compare ra, dec info to original input catalog
         inputCat = np.genfromtxt(
@@ -159,6 +166,8 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
 
         # Check that all 8 sources are present and 4 assigned to each detector
+        self.assertEqual(len(donutCatDf), 24)
+        outputDf = donutCatDf.query("detector in @self.centerRaft")
         self.assertEqual(len(outputDf), 8)
         self.assertCountEqual(np.radians(inputCat["ra"]), outputDf["coord_ra"])
         self.assertCountEqual(np.radians(inputCat["dec"]), outputDf["coord_dec"])
@@ -190,3 +199,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
             ],
             outputDf["centroid_y"],
         )
+        fluxTruth = np.ones(8)
+        fluxTruth[:6] = 3630780.5477010026
+        fluxTruth[6:] = 363078.0547701003
+        self.assertCountEqual(outputDf["source_flux"], fluxTruth)
