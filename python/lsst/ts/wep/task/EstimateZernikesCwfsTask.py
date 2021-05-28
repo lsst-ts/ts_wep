@@ -82,14 +82,15 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         ----------
         donutCatalog: pandas DataFrame
             Source catalog for the pointing.
-        expDim:
+        expDim: list
+            Dimensions of the exposures in pixels.
 
         Returns
         -------
         pandas DataFrame
-            Extra-focal donut sources for wavefront estimation
+            Extra-focal donut sources for wavefront estimation.
         pandas DataFrame
-            Intra-focal donut sources for wavefront estimation
+            Intra-focal donut sources for wavefront estimation.
         """
         dimX, dimY = expDim
 
@@ -128,7 +129,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
                 expDim = exposure.getDimensions()
                 break
         extraCatalog, intraCatalog = self.selectCwfsSources(
-            donutCatalog, (expDim.getX(), expDim.getY())
+            donutCatalog, [expDim.getX(), expDim.getY()]
         )
 
         # Get the donut stamps from extra and intra focal images
@@ -152,7 +153,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
 
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
-        if len(donutStampsExtraExp) == 0:
+        if (len(donutStampsExtra) == 0) or (len(donutStampsIntra) == 0):
             return pipeBase.Struct(
                 outputZernikesRaw=np.ones(19) * np.nan,
                 outputZernikesAvg=np.ones(19) * np.nan,
@@ -161,9 +162,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
             )
 
         # Estimate Zernikes from collection of stamps
-        zernikeCoeffsRaw = self.estimateZernikes(
-            donutStampsExtraExp, donutStampsIntraExp
-        )
+        zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
         zernikeCoeffsAvg = self.combineZernikes(zernikeCoeffsRaw)
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and
