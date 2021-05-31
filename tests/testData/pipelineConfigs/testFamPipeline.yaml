@@ -1,0 +1,46 @@
+# This yaml file is used to define the tasks and configuration of
+# a Gen 3 pipeline used for testing in ts_wep.
+description: wep basic processing test pipeline
+# Here we specify the corresponding instrument for the data we
+# will be using.
+instrument: lsst.obs.lsst.LsstCam
+# Then we can specify each task in our pipeline by a name
+# and then specify the class name corresponding to that task
+tasks:
+  isr:
+    class: lsst.ip.isr.isrTask.IsrTask
+    # Below we specify the configuration settings we want to use
+    # when running the task in this pipeline. Since our data doesn't
+    # include bias or flats we only want to use doApplyGains and
+    # doOverscan in our isr task.
+    config:
+      connections.outputExposure: 'postISRCCD'
+      doBias: False
+      doVariance: False
+      doLinearize: False
+      doCrosstalk: False
+      doDefect: False
+      doNanMasking: False
+      doInterpolate: False
+      doBrighterFatter: False
+      doDark: False
+      doFlat: False
+      doApplyGains: True
+      doFringe: False
+      doOverscan: True
+  generateDonutCatalogOnlineTask:
+    class: lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask
+    # Here we specify the configurations for pointing that we added into the class
+    # GenerateDonutCatalogOnlineTaskConfig.
+    config:
+      boresightRa: 0.0
+      boresightDec: 0.0
+      boresightRotAng: 90.0
+  estimateZernikesFamTask:
+    class: lsst.ts.wep.task.EstimateZernikesFamTask.EstimateZernikesFamTask
+    config:
+      # And here we specify the configuration settings originally defined in
+      # EstimateZernikesFamTaskConfig.
+      donutTemplateSize: 160
+      donutStampSize: 160
+      initialCutoutPadding: 40

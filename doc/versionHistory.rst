@@ -6,6 +6,33 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.4:
+
+-------------
+1.7.4
+-------------
+
+* Remove old e-image corner wavefront sensor files.
+* Add updated corner wavefront sensor test data.
+* Add CWFS Zernikes code and tests.
+
+.. _lsst.ts.wep-1.7.3:
+
+-------------
+1.7.3
+-------------
+
+* Break generic pieces of EstimateZernikesFamTask.py into EstimateZernikesBase.py
+
+.. _lsst.ts.wep-1.7.2:
+
+-------------
+1.7.2
+-------------
+
+* Fix ``append`` and ``extend`` methods in ``DonutStamps.py``.
+* Update tests in ``test_donutStamps.py`` to properly check ``append`` and ``extend`` methods.
+
 .. _lsst.ts.wep-1.7.1:
 
 -------------
@@ -41,8 +68,7 @@ Version History
 
 .. _lsst.ts.wep-1.6.7:
 
--------------
-1.6.7
+---------
 -------------
 
 * Fix flake error and update Jenkinsfile

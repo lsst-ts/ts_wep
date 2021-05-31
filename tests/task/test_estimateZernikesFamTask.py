@@ -50,6 +50,7 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
 
         moduleDir = getModulePath()
         testDataDir = os.path.join(moduleDir, "tests", "testData")
+        testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
         cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
         cls.runName = "run1"
 
@@ -63,11 +64,12 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
 
         collections = "refcats,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
-        pipelineYaml = os.path.join(testDataDir, "testTaskPipeline.yaml")
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testFamPipeline.yaml")
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
         )
+        pipeCmd += " -d 'exposure IN (4021123106001, 4021123106002)'"
         runProgram(pipeCmd)
 
     def setUp(self):
@@ -175,99 +177,6 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
             "Must have one extra-focal and one intra-focal image.",
             str(context.exception),
         )
-
-    def testGetTemplate(self):
-
-        extra_template = self.task.getTemplate("R22_S11", DefocalType.Extra)
-        self.assertEqual(
-            np.shape(extra_template),
-            (self.config.donutTemplateSize, self.config.donutTemplateSize),
-        )
-
-        self.config.donutTemplateSize = 180
-        self.task = EstimateZernikesFamTask(config=self.config)
-        intra_template = self.task.getTemplate("R22_S11", DefocalType.Intra)
-        self.assertEqual(np.shape(intra_template), (180, 180))
-
-    def testShiftCenter(self):
-
-        centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)
-        self.assertEqual(centerUpperLimit, 180.0)
-        centerLowerLimit = self.task.shiftCenter(10.0, 0.0, 20.0)
-        self.assertEqual(centerLowerLimit, 20.0)
-        centerNoChangeUpper = self.task.shiftCenter(100.0, 200.0, 20.0)
-        self.assertEqual(centerNoChangeUpper, 100.0)
-        centerNoChangeLower = self.task.shiftCenter(100.0, 200.0, 20.0)
-        self.assertEqual(centerNoChangeLower, 100.0)
-
-    def testCalculateFinalCentroid(self):
-
-        (
-            centeredExp,
-            centerCoord,
-            template,
-            offCenterExp,
-            offCenterCoord,
-        ) = self._generateTestExposures()
-        centerX, centerY, cornerX, cornerY = self.task.calculateFinalCentroid(
-            centeredExp, template, centerCoord[0], centerCoord[1]
-        )
-        # For centered donut final center and final corner should be
-        # half stamp width apart
-        self.assertEqual(centerX, centerCoord[0])
-        self.assertEqual(centerY, centerCoord[1])
-        self.assertEqual(cornerX, centerCoord[0] - self.task.donutStampSize / 2)
-        self.assertEqual(cornerY, centerCoord[1] - self.task.donutStampSize / 2)
-
-        centerX, centerY, cornerX, cornerY = self.task.calculateFinalCentroid(
-            offCenterExp, template, centerCoord[0], centerCoord[1]
-        )
-        # For donut stamp that would go off the top corner of the exposure
-        # then the stamp should start at (0, 0) instead
-        self.assertAlmostEqual(centerX, offCenterCoord[0])
-        self.assertAlmostEqual(centerY, offCenterCoord[1])
-        # Corner of image should be 0, 0
-        self.assertEqual(cornerX, 0)
-        self.assertEqual(cornerY, 0)
-
-    def testCutOutStamps(self):
-
-        exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutCatalog = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStamps = self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra)
-        self.assertTrue(len(donutStamps), 4)
-
-        stampCentroid = donutStamps[0].centroid_position
-        stampBBox = lsst.geom.Box2I(
-            lsst.geom.Point2I(stampCentroid.getX() - 80, stampCentroid.getY() - 80),
-            lsst.geom.Extent2I(160),
-        )
-        expCutOut = exposure[stampBBox].image.array
-        np.testing.assert_array_equal(donutStamps[0].stamp_im.image.array, expCutOut)
-
-    def testEstimateZernikes(self):
-
-        # Donut stamps are stored with intra id, even the donutStampsExtra
-        donutStampsExtra = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsIntra = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-
-        zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
-
-        self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
-
-    def testCombineZernikes(self):
-
-        testArr = np.zeros((2, 19))
-        testArr[1] += 2.0
-        np.testing.assert_array_equal(self.task.combineZernikes(testArr), np.ones(19))
 
     def testTaskRun(self):
 

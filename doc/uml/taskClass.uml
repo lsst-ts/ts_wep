@@ -2,8 +2,18 @@
 GenerateDonutCatalogOnlineTaskConfig *-- GenerateDonutCatalogOnlineTaskConnections
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
 DonutStamps *-- DonutStamp
+EstimateZernikesBaseTask ..> DonutStamps
+EstimateZernikesBaseTask ..> DonutStamp
+EstimateZernikesBaseConfig *-- EstimateZernikesBaseConnections
+EstimateZernikesBaseTask *-- EstimateZernikesBaseConfig
+EstimateZernikesBaseConnections <|-- EstimateZernikesFamTaskConnections
+EstimateZernikesBaseConfig <|-- EstimateZernikesFamTaskConfig
+EstimateZernikesBaseTask <|-- EstimateZernikesFamTask
 EstimateZernikesFamTaskConfig *-- EstimateZernikesFamTaskConnections
 EstimateZernikesFamTask *-- EstimateZernikesFamTaskConfig
-EstimateZernikesFamTask ..> DonutStamps
-EstimateZernikesFamTask ..> DonutStamp
+EstimateZernikesBaseConnections <|-- EstimateZernikesCwfsTaskConnections
+EstimateZernikesBaseConfig <|-- EstimateZernikesCwfsTaskConfig
+EstimateZernikesBaseTask <|-- EstimateZernikesCwfsTask
+EstimateZernikesCwfsTaskConfig *-- EstimateZernikesCwfsTaskConnections
+EstimateZernikesCwfsTask *-- EstimateZernikesCwfsTaskConfig
 @enduml

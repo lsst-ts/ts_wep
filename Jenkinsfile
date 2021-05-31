@@ -61,7 +61,6 @@ pipeline {
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
                         source ${env.LSST_STACK}/loadLSST.bash
-                        setup ctrl_mpexec -t ${env.STACK_VERSION}
                         cd phosim_utils/
                         setup -k -r . -t ${env.STACK_VERSION}
                         scons
@@ -79,7 +78,6 @@ pipeline {
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
                         source ${env.LSST_STACK}/loadLSST.bash
-                        setup ctrl_mpexec -t ${env.STACK_VERSION}
                         cd phosim_utils/
                         setup -k -r . -t ${env.STACK_VERSION}
                         cd ../ts_wep/

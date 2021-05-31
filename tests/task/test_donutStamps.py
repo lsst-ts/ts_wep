@@ -125,6 +125,9 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
     def testAppend(self):
         """Test ability to append to a Stamps object"""
         self.donutStamps.append(self.donutStamps[0])
+        # Check that the length is 1 longer
+        self.assertEqual(len(self.donutStamps), self.nStamps + 1)
+        # Test roundtrip i/o
         self._roundtrip(self.donutStamps)
         # check if appending something other than a DonutStamp raises
         with self.assertRaises(ValueError) as context:
@@ -136,6 +139,9 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
     def testExtend(self):
         donutStamps2 = copy(self.donutStamps)
         self.donutStamps.extend([stamp for stamp in donutStamps2])
+        # Check that the length is twice as long
+        self.assertEqual(len(self.donutStamps), self.nStamps * 2)
+        # Test roundtrip i/o
         self._roundtrip(self.donutStamps)
         # check if extending with something other than a DonutStamps
         # object raises
