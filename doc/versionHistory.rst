@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.5:
+
+-------------
+1.7.5
+-------------
+
+* Break generic pieces of GenerateDonutCatalogOnlineTask.py into GenerateDonutCatalogOnlineBase.py
+* Add GenerateDonutCatalogWcsTask.py to calculate donut catalogs when WCS is available
+
 .. _lsst.ts.wep-1.7.4:
 
 -------------

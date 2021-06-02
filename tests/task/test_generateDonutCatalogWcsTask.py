@@ -25,18 +25,18 @@ import numpy as np
 
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.task.GenerateDonutCatalogOnlineTask import (
-    GenerateDonutCatalogOnlineTask,
-    GenerateDonutCatalogOnlineTaskConfig,
+from lsst.ts.wep.task.GenerateDonutCatalogWcsTask import (
+    GenerateDonutCatalogWcsTask,
+    GenerateDonutCatalogWcsTaskConfig,
 )
 from lsst.ts.wep.Utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
 
 
-class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
+class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
     def setUp(self):
 
-        self.config = GenerateDonutCatalogOnlineTaskConfig()
-        self.task = GenerateDonutCatalogOnlineTask(config=self.config)
+        self.config = GenerateDonutCatalogWcsTaskConfig()
+        self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
@@ -52,7 +52,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         self.config.boresightDec = -0.02
         self.config.boresightRotAng = 90.0
         self.config.filterName = "r"
-        self.task = GenerateDonutCatalogOnlineTask(config=self.config)
+        self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         self.assertEqual(self.task.boresightRa, 0.03)
         self.assertEqual(self.task.boresightDec, -0.02)
@@ -67,15 +67,18 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
         # Run pipeline command
         runName = "run1"
-        taskName = "lsst.ts.wep.task."
-        taskName += "GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask"
         instrument = "lsst.obs.lsst.LsstCam"
-        collection = "refcats"
+        collections = "refcats,LSSTCam/raw/all"
+        exposureId = 4021123106001  # Exposure ID for test extra-focal image
+        testPipelineConfigDir = os.path.join(self.testDataDir, "pipelineConfigs")
+        pipelineYaml = os.path.join(
+            testPipelineConfigDir, "testDonutCatWcsPipeline.yaml"
+        )
         pipetaskCmd = writePipetaskCmd(
-            self.repoDir, runName, instrument, collection, taskName=taskName
+            self.repoDir, runName, instrument, collections, pipelineYaml=pipelineYaml
         )
         # Update task configuration to match pointing information
-        pipetaskCmd += " -c generateDonutCatalogOnlineTask:boresightRotAng=90.0"
+        pipetaskCmd += f" -d 'exposure IN ({exposureId})'"
 
         # Check that run doesn't already exist due to previous improper cleanup
         collectionsList = list(self.registry.queryCollections())
@@ -91,7 +94,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         donutCatDf = pipelineButler.get(
             "donutCatalog", dataId={"instrument": "LSSTCam"}, collections=[f"{runName}"]
         )
-        self.assertEqual(len(donutCatDf), 24)
+        self.assertEqual(len(donutCatDf), 8)
         outputDf = donutCatDf.query("detector in @self.centerRaft")
         self.assertEqual(len(outputDf), 8)
         self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
@@ -143,9 +146,20 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         ).expanded()
         for ref in datasetGenerator:
             deferredList.append(self.butler.getDeferred(ref, collections=["refcats"]))
-        # Update boresightRotAng to match pointing info
-        self.task.boresightRotAng = 90.0
-        taskOutput = self.task.run("LSSTCam", deferredList)
+        expGenerator = self.registry.queryDatasets(
+            datasetType="raw",
+            collections=["LSSTCam/raw/all"],
+            dimensions=["exposure", "instrument"],
+            dataId={"exposure": 4021123106001, "instrument": "LSSTCam"},
+        ).expanded()
+        expList = []
+        for expRef in expGenerator:
+            expList.append(
+                self.butler.get(
+                    "raw", dataId=expRef.dataId, collections=["LSSTCam/raw/all"]
+                )
+            )
+        taskOutput = self.task.run(deferredList, expList)
         donutCatDf = taskOutput.donutCatalog
 
         # Compare ra, dec info to original input catalog
@@ -157,7 +171,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
 
         # Check that all 8 sources are present and 4 assigned to each detector
-        self.assertEqual(len(donutCatDf), 24)
+        self.assertEqual(len(donutCatDf), 8)
         outputDf = donutCatDf.query("detector in @self.centerRaft")
         self.assertEqual(len(outputDf), 8)
         self.assertCountEqual(np.radians(inputCat["ra"]), outputDf["coord_ra"])

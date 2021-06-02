@@ -20,54 +20,28 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import typing
-import os
-import numpy as np
-import pandas as pd
 import lsst.afw.table as afwTable
 import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
-import lsst.pipe.base.connectionTypes as connectionTypes
-import lsst.obs.lsst as obs_lsst
 import lsst.geom
+import lsst.obs.lsst as obs_lsst
+import lsst.pipe.base as pipeBase
 from lsst.obs.base import createInitialSkyWcsFromBoresight
-from lsst.meas.algorithms import ReferenceObjectLoader, LoadReferenceObjectsConfig
-
-
-class GenerateDonutCatalogOnlineTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("instrument",)
-):
-    """
-    Specify the connections needed for GenerateDonutCatalogOnlineTask.
-    We need the reference catalogs and will produce donut catalogs for
-    a specified instrument.
-    """
-
-    refCatalogs = connectionTypes.PrerequisiteInput(
-        doc="Reference catalog",
-        storageClass="SimpleCatalog",
-        dimensions=("htm7",),
-        multiple=True,
-        deferLoad=True,
-        name="cal_ref_cat",
-    )
-    donutCatalog = connectionTypes.Output(
-        doc="Donut Locations",
-        dimensions=("instrument",),
-        storageClass="DataFrame",
-        name="donutCatalog",
-    )
+from lsst.ts.wep.task.GenerateDonutCatalogBase import (
+    GenerateDonutCatalogBaseConnections,
+    GenerateDonutCatalogBaseConfig,
+    GenerateDonutCatalogBaseTask,
+)
 
 
 class GenerateDonutCatalogOnlineTaskConfig(
-    pipeBase.PipelineTaskConfig,
-    pipelineConnections=GenerateDonutCatalogOnlineTaskConnections,
+    GenerateDonutCatalogBaseConfig,
+    pipelineConnections=GenerateDonutCatalogBaseConnections,
 ):
     """
     Configuration settings for GenerateDonutCatalogOnlineTask. Specifies
     pointing information, filter and camera details.
     """
 
-    filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
     boresightRa = pexConfig.Field(
         doc="Boresight RA in degrees", dtype=float, default=0.0
     )
@@ -77,10 +51,9 @@ class GenerateDonutCatalogOnlineTaskConfig(
     boresightRotAng = pexConfig.Field(
         doc="Boresight Rotation Angle in degrees", dtype=float, default=0.0
     )
-    cameraName = pexConfig.Field(doc="Camera Name", dtype=str, default="lsstCam")
 
 
-class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
+class GenerateDonutCatalogOnlineTask(GenerateDonutCatalogBaseTask):
     """
     Create a WCS from boresight info and then use this
     with a reference catalog to select sources on the detectors for AOS.
@@ -100,33 +73,9 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         self.boresightDec = self.config.boresightDec
         self.boresightRotAng = self.config.boresightRotAng
 
-        # TODO: Temporary until DM-24162 is closed at which point we
-        # can remove this
-        os.environ["NUMEXPR_MAX_THREADS"] = "1"
-
-    def filterResults(self, resultsDataFrame):
-        """
-        Run filtering on full set of sources on detector and return
-        the dataframe with only sources that are acceptable for
-        wavefront estimation.
-
-        Parameters
-        ----------
-        resultsDataFrame: pandas DataFrame
-            Full list of sources from reference catalog that appear
-            on the detector.
-
-        Returns
-        -------
-        pandas DataFrame
-            Subset of resultsDataFrame sources that pass required filtering.
-        """
-
-        # TODO: Here is where we will set up specifications for the sources
-        # we want to use (i.e., filter on magnitude, blended, etc.).
-        # For now it just returns all sources.
-
-        return resultsDataFrame
+        self.boresightPointing = lsst.geom.SpherePoint(
+            self.boresightRa, self.boresightDec, lsst.geom.degrees
+        )
 
     def runQuantum(
         self,
@@ -134,6 +83,10 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ):
+        """
+        We implement a runQuantum method to make sure our configured
+        task runs with the instrument required by the pipeline.
+        """
 
         # Get the instrument we are running the pipeline with
         cameraName = outputRefs.donutCatalog.dataId["instrument"]
@@ -151,26 +104,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         self, cameraName: str, refCatalogs: typing.List[afwTable.SimpleCatalog]
     ) -> pipeBase.Struct:
 
-        refObjLoader = ReferenceObjectLoader(
-            dataIds=[ref.dataId for ref in refCatalogs],
-            refCats=refCatalogs,
-            config=LoadReferenceObjectsConfig(),
-        )
-        # This removes the padding around the border of detector BBox when
-        # matching to reference catalog.
-        # We remove this since we only want sources within detector.
-        refObjLoader.config.pixelMargin = 0
-
-        # Set up pandas dataframe
-        fieldObjects = pd.DataFrame([])
-        ra = []
-        dec = []
-        centroidX = []
-        centroidY = []
-        sourceFlux = []
-        det_names = []
-
-        # Get camera. Only 'LSSTCam' for now.
+        # Get camera
         if cameraName == "LSSTCam":
             camera = obs_lsst.LsstCam.getCamera()
         elif cameraName == "LSSTComCam":
@@ -178,13 +112,15 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
         else:
             raise ValueError(f"{cameraName} is not a valid camera name.")
 
-        boresightPointing = lsst.geom.SpherePoint(
-            self.boresightRa, self.boresightDec, lsst.geom.degrees
-        )
+        refObjLoader = self.getRefObjLoader(refCatalogs)
+
+        detectorList = []
+        donutCatalogList = []
 
         for detector in camera:
+
             detWcs = createInitialSkyWcsFromBoresight(
-                boresightPointing,
+                self.boresightPointing,
                 self.boresightRotAng * lsst.geom.degrees,
                 detector,
                 flipX=False,
@@ -196,24 +132,13 @@ class GenerateDonutCatalogOnlineTask(pipeBase.PipelineTask):
                     detector.getBBox(), detWcs, filterName=self.filterName
                 ).refCat
 
-                # Add matched information to list
-                ra.append(donutCatalog["coord_ra"])
-                dec.append(donutCatalog["coord_dec"])
-                centroidX.append(donutCatalog["centroid_x"])
-                centroidY.append(donutCatalog["centroid_y"])
-                sourceFlux.append(donutCatalog[f"{self.filterName}_flux"])
-                det_names.append([detector.getName()] * len(donutCatalog))
+                detectorList.append(detector.getName())
+                donutCatalogList.append(donutCatalog)
 
             except RuntimeError:
                 continue
 
-        # Flatten information from all detector lists and enter into dataframe
-        fieldObjects["coord_ra"] = np.hstack(ra).squeeze()
-        fieldObjects["coord_dec"] = np.hstack(dec).squeeze()
-        fieldObjects["centroid_x"] = np.hstack(centroidX).squeeze()
-        fieldObjects["centroid_y"] = np.hstack(centroidY).squeeze()
-        fieldObjects["source_flux"] = np.hstack(sourceFlux).squeeze()
-        fieldObjects["detector"] = np.hstack(det_names).squeeze()
+        fieldObjects = self.donutCatalogListToDataFrame(donutCatalogList, detectorList)
 
         # Return pandas DataFrame with sources in pointing
         # with ra, dec, filter flux, pixel XY information and detector name
