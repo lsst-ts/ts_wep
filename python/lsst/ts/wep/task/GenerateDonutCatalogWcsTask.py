@@ -98,6 +98,8 @@ class GenerateDonutCatalogWcsTask(GenerateDonutCatalogBaseTask):
                 detectorList.append(detectorName)
                 donutCatalogList.append(donutCatalog)
 
+            # Except RuntimeError caused when no reference catalog
+            # available for the region covered by detector
             except RuntimeError:
                 continue
 

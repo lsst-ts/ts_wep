@@ -95,7 +95,7 @@ class GenerateDonutCatalogBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        resultsDataFrame: pandas DataFrame
+        resultsDataFrame : pandas DataFrame
             Full list of sources from reference catalog that appear
             on the detector.
 
@@ -118,7 +118,7 @@ class GenerateDonutCatalogBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        refCatalogList: list
+        refCatalogList : list
             List of deferred butler references for the reference catalogs.
 
         Returns
@@ -146,10 +146,10 @@ class GenerateDonutCatalogBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        donutCatalogList: list
+        donutCatalogList : list
             List of lsst.afw.table.SimpleCatalog objects returned by the
             ReferenceObjectLoader search over the detector footprint.
-        detectorList: list
+        detectorList : list
             List of the names of the detectors associated with each
             donutCatalog in the donutCatalogList.
 
