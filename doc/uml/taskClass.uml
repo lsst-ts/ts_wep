@@ -1,6 +1,16 @@
 @startuml
+GenerateDonutCatalogBaseConfig *-- GenerateDonutCatalogBaseConnections
+GenerateDonutCatalogBaseTask *-- GenerateDonutCatalogBaseConfig
+GenerateDonutCatalogBaseConnections <|-- GenerateDonutCatalogOnlineTaskConnections
+GenerateDonutCatalogBaseConfig <|-- GenerateDonutCatalogOnlineTaskConfig
+GenerateDonutCatalogBaseTask <|-- GenerateDonutCatalogOnlineTask
 GenerateDonutCatalogOnlineTaskConfig *-- GenerateDonutCatalogOnlineTaskConnections
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
+GenerateDonutCatalogBaseConnections <|-- GenerateDonutCatalogWcsTaskConnections
+GenerateDonutCatalogBaseConfig <|-- GenerateDonutCatalogWcsTaskConfig
+GenerateDonutCatalogBaseTask <|-- GenerateDonutCatalogWcsTask
+GenerateDonutCatalogWcsTaskConfig *-- GenerateDonutCatalogWcsTaskConnections
+GenerateDonutCatalogWcsTask *-- GenerateDonutCatalogWcsTaskConfig
 DonutStamps *-- DonutStamp
 EstimateZernikesBaseTask ..> DonutStamps
 EstimateZernikesBaseTask ..> DonutStamp
