@@ -60,7 +60,7 @@ class TestDonutStamp2(unittest.TestCase):
     def setUp(self):
 
         self.nStamps = 3
-        self.stampSize = 25
+        self.stampSize = 120
 
         self.testStamps, self.testMetadata = self._makeStamps(
             self.nStamps, self.stampSize
@@ -146,19 +146,16 @@ class TestDonutStamp2(unittest.TestCase):
         self.assertEqual(len(offAxisCoeff), 0)
         self.assertEqual(offAxisOffset, 0.0)
 
-    def testIsCaustic(self):
-
-        self.assertFalse(self.stamp.isCaustic())
-
     def testGetPaddedMask(self):
 
-        pMask = self.stamp.getPaddedMask()
+        pMask = self.stamp.pMask
+
         self.assertEqual(len(pMask), 0)
         self.assertEqual(pMask.dtype, int)
 
     def testGetNonPaddedMask(self):
 
-        cMask = self.stamp.getNonPaddedMask()
+        cMask = self.stamp.cMask
         self.assertEqual(len(cMask), 0)
         self.assertEqual(cMask.dtype, int)
 
@@ -171,22 +168,23 @@ class TestDonutStamp2(unittest.TestCase):
     def testSetImg(self):
 
         self._setIntraImg()
-        self.assertEqual(self.stamp.getImg().shape, (120, 120))
+        self.assertEqual(self.stamp.stamp_im.getImage().getArray().shape, (120, 120))
 
     def _setIntraImg(self):
 
+        intra_image = afwImage.ImageF(np.loadtxt(self.imgFilePathIntra, dtype=np.float32))
         self.stamp.setImg(
-            self.fieldXY, DefocalType.Intra, imageFile=self.imgFilePathIntra
+            self.field, DefocalType.Intra, image=intra_image
         )
 
     def testUpdateImage(self):
 
         self._setIntraImg()
 
-        newImg = np.random.rand(5, 5)
+        newImg = np.random.rand(120, 120).astype(np.float32)
         self.stamp.updateImage(newImg)
 
-        self.assertTrue(np.all(self.stamp.getImg() == newImg))
+        self.assertTrue(np.all(self.stamp.stamp_im.getImage().getArray() == newImg))
 
     def testUpdateImgInit(self):
 
@@ -194,18 +192,20 @@ class TestDonutStamp2(unittest.TestCase):
 
         self.stamp.updateImgInit()
 
-        delta = np.sum(np.abs(self.stamp.getImgInit() - self.stamp.getImg()))
+        delta = np.sum(np.abs(self.stamp.stamp_im0.getImage().getArray() -
+                              self.stamp.stamp_im.getImage().getArray()))
         self.assertEqual(delta, 0)
 
     def testImageCoCenter(self):
 
         self._setIntraImg()
+        xc, yc = self.stamp.getCenterAndR()[0:2]
 
         self.stamp.imageCoCenter(self.inst)
+        xc, yc = self.stamp.getCenterAndR()[0:2]
 
-        xc, yc = self.stamp.getImgObj().getCenterAndR()[0:2]
-        self.assertEqual(int(xc), 63)
-        self.assertEqual(int(yc), 63)
+        self.assertEqual(int(xc+0.5), 63)
+        self.assertEqual(int(yc+0.5), 63)
 
     def testCompensate(self):
 
@@ -219,17 +219,18 @@ class TestDonutStamp2(unittest.TestCase):
         zcCol[3:] = self.zcCol * 1e-9
 
         # read the numpy arrays for intra and extra focal images
-        intra = np.loadtxt(self.imgFilePathIntra)
-        extra = np.loadtxt(self.imgFilePathExtra)
+        # need to convert to masked image
+        intra = afwImage.ImageF(np.loadtxt(self.imgFilePathIntra, dtype=np.float32))
+        intra_mask = afwImage.MaskedImageF(intra)
 
-        wfsImgIntra = DonutStamp2.factory(intra, self.testMetadata, 1)
+        extra = afwImage.ImageF(np.loadtxt(self.imgFilePathIntra, dtype=np.float32))
+        extra_mask = afwImage.MaskedImageF(extra)
+
+        wfsImgIntra = DonutStamp2.factory(intra_mask, self.testMetadata, 1)
         wfsImgIntra.field = self.field
         wfsImgIntra.defocalType = DefocalType.Intra
 
-        print(type(wfsImgIntra))
-        print(type(wfsImgIntra.stamp_im))
-
-        wfsImgExtra = DonutStamp2.factory(extra, self.testMetadata, 1)
+        wfsImgExtra = DonutStamp2.factory(extra_mask, self.testMetadata, 1)
         wfsImgExtra.field = self.field
         wfsImgExtra.defocalType = DefocalType.Extra
 
@@ -240,8 +241,8 @@ class TestDonutStamp2(unittest.TestCase):
             wfsImg.compensate(self.inst, algo, zcCol, self.opticalModel)
 
         # Get the common region
-        intraImg = wfsImgIntra.getImg()
-        extraImg = wfsImgExtra.getImg()
+        intraImg = wfsImgIntra.stamp_im.getImage().getArray().copy()
+        extraImg = wfsImgExtra.stamp_im.getImage().getArray().copy()
 
         centroid = CentroidRandomWalk()
         binaryImgIntra = centroid.getImgBinary(intraImg)
@@ -265,7 +266,6 @@ class TestDonutStamp2(unittest.TestCase):
         np.roll(np.roll(img, dx, axis=1), dy, axis=0)
 
         self.assertGreater(np.sum(np.abs(img - template)), 29)
-        print(type(self.stamp))
 
         imgRecenter = self.stamp.centerOnProjection(img, template, window=20)
         self.assertLess(np.sum(np.abs(imgRecenter - template)), 1e-7)
@@ -331,9 +331,9 @@ class TestDonutStamp2(unittest.TestCase):
         model = "offAxis"
         self.stamp.makeMask(self.inst, model, boundaryT, maskScalingFactorLocal)
 
-        image = self.stamp.getImg()
-        pMask = self.stamp.getPaddedMask()
-        cMask = self.stamp.getNonPaddedMask()
+        image = self.stamp.stamp_im.getImage().getArray()
+        pMask = self.stamp.pMask
+        cMask = self.stamp.cMask
         self.assertEqual(pMask.shape, image.shape)
         self.assertEqual(cMask.shape, image.shape)
         self.assertEqual(np.sum(np.abs(cMask - pMask)), 3001)

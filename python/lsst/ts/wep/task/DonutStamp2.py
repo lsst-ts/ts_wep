@@ -45,7 +45,7 @@ from lsst.ts.wep.cwfs.Tool import (
 from lsst.ts.wep.cwfs import mathcwfs
 from lsst.ts.wep.Utility import DefocalType
 
-# from lsst.ts.wep.Utility import CentroidFindType
+from lsst.ts.wep.Utility import CentroidFindType
 from lsst.ts.wep.cwfs.CentroidFindFactory import CentroidFindFactory
 
 
@@ -78,6 +78,8 @@ class DonutStamp2(AbstractStamp):
     offAxisOffset: np.array
     caustic: bool
     centroidFind: CentroidFindFactory.createCentroidFind
+    centroidFindType: CentroidFindType
+    stamp_im0: afwImage.maskedImage.MaskedImageF
 
     @classmethod
     def factory(cls, stamp_im, metadata, index):
@@ -126,8 +128,10 @@ class DonutStamp2(AbstractStamp):
             offAxisOffset=0.0,
             # True if the image gets the over-compensation
             caustic=False,
-            centroidFind=None,
-
+            centroidFindType=CentroidFindType.RandomWalk,  
+            centroidFind=CentroidFindFactory.createCentroidFind(CentroidFindType.RandomWalk),
+            # Initial image before doing the compensation
+            stamp_im0=None,
         )
 
     def _interpMaskParam(self, fieldX, fieldY, maskParam):
@@ -294,10 +298,10 @@ class DonutStamp2(AbstractStamp):
         Parameters
         ----------
         fieldX : float, optional
-            Field x in degree. If the input is None, the value of self.fieldX
+            Field x in degree. If the input is None, the value of self.field.x
             will be used. (the default is None.)
         fieldY : float, optional
-            Field y in degree. If the input is None, the value of self.fieldY
+            Field y in degree. If the input is None, the value of self.field.y
             will be used. (the default is None.)
         minDist : float, optional
             Minimum distace. In some cases, the field distance will be the
@@ -324,7 +328,7 @@ class DonutStamp2(AbstractStamp):
     def _resetInternalAttributes(self):
         """Reset the internal attributes."""
 
-        self.image0 = None
+        self.stamp_im0 = None
 
         self.offAxisCoeff = np.array([])
         self.offAxisOffset = 0.0
@@ -348,6 +352,19 @@ class DonutStamp2(AbstractStamp):
 
         return self.offAxisCoeff, self.offAxisOffset
 
+    def getFieldXY(self):
+        """Get the field x, y in degree.
+
+        Returns
+        -------
+        float
+            Field x in degree.
+        float
+            Field y in degree.
+        """
+
+        return self.field.x, self.field.y
+
     def setImg(self, fieldXY, defocalType, image=None, imageFile=None):
         """Set the wavefront image.
 
@@ -363,10 +380,9 @@ class DonutStamp2(AbstractStamp):
             Path of image file. (the default is None.)
         """
 
-        self._image.setImg(image=image, imageFile=imageFile)
-        self._checkImgShape()
-
-        self.fieldX, self.fieldY = fieldXY
+        self.stamp_im.setImage(afwImage.ImageF(image))
+        self.field.x = fieldXY.x
+        self.field.y = fieldXY.y
         self.defocalType = defocalType
 
         self._resetInternalAttributes()
@@ -379,8 +395,8 @@ class DonutStamp2(AbstractStamp):
         image : numpy.ndarray
             Donut image.
         """
-
-        self._image.updateImage(image)
+        
+        self.stamp_im.setImage(afwImage.ImageF(image))
 
     def updateImgInit(self):
         """Update the backup of initial image.
@@ -390,7 +406,7 @@ class DonutStamp2(AbstractStamp):
         """
 
         # Update the initial image for future use
-        self.image0 = self.getImg().copy()
+        self.stamp_im0 = self.stamp_im.Factory(self.stamp_im, True)
 
     def imageCoCenter(self, inst, fov=3.5, debugLevel=0):
         """Shift the weighting center of donut to the center of reference
@@ -409,7 +425,6 @@ class DonutStamp2(AbstractStamp):
         """
 
         # Calculate the weighting center (x, y) and radius
-        print("center", dir(self.stamp_im))
         x1, y1 = self.getCenterAndR()[0:2]
         # return self._centroidFind.getCenterAndR(imgDonut)
 
@@ -438,10 +453,10 @@ class DonutStamp2(AbstractStamp):
             radialShift = 0
 
         # Calculate the cos(theta) for projection
-        I1c = self.fieldX / fieldDist
+        I1c = self.field.x / fieldDist
 
         # Calculate the sin(theta) for projection
-        I1s = self.fieldY / fieldDist
+        I1s = self.field.y / fieldDist
 
         # Get the projected x, y-coordinate
         stampCenterx1 = stampCenterx1 + radialShift * I1c
@@ -449,10 +464,10 @@ class DonutStamp2(AbstractStamp):
 
         # Shift the image to the projected position
         self.updateImage(
-            np.roll(self.getImg(), int(np.round(stampCentery1 - y1)), axis=0)
+            np.roll(self.stamp_im.getImage().getArray(), int(np.round(stampCentery1 - y1)), axis=0)
         )
         self.updateImage(
-            np.roll(self.getImg(), int(np.round(stampCenterx1 - x1)), axis=1)
+            np.roll(self.stamp_im.getImage().getArray(), int(np.round(stampCenterx1 - x1)), axis=1)
         )
 
     def compensate(self, inst, algo, zcCol, model):
@@ -486,7 +501,7 @@ class DonutStamp2(AbstractStamp):
             )
 
         # Dimension of image
-        sm, sn = self.getImg().shape
+        sm, sn = self.stamp_im.getImage().getArray().shape
 
         # Dimenstion of projected image on focal plane
         projSamples = sm
@@ -528,7 +543,7 @@ class DonutStamp2(AbstractStamp):
 
         # Recenter the image
         imgRecenter = self.centerOnProjection(
-            self.getImg(), show_lutxyp.astype(float), window=20
+            self.stamp_im.getImage().getArray(), show_lutxyp.astype(float), window=20
         )
         self.updateImage(imgRecenter)
 
@@ -546,7 +561,7 @@ class DonutStamp2(AbstractStamp):
         lutyp[np.isnan(lutyp)] = 0
 
         # Construct the function for interpolation
-        ip = RectBivariateSpline(yp[:, 0], xp[0, :], self.getImg(), kx=1, ky=1)
+        ip = RectBivariateSpline(yp[:, 0], xp[0, :], self.stamp_im.getImage().getArray(), kx=1, ky=1)
 
         # Construct the projected image by the interpolation
         lutIp = np.zeros(lutxp.shape[0] * lutxp.shape[1])
@@ -557,13 +572,13 @@ class DonutStamp2(AbstractStamp):
         # Calaculate the image on focal plane with compensation based on flux
         # conservation
         # I(x, y)/I'(x', y') = J = (dx'/dx)*(dy'/dy) - (dx'/dy)*(dy'/dx)
-        self.updateImage(lutIp * J)
+        self.updateImage((lutIp * J).astype(np.float32))
 
         if self.defocalType == DefocalType.Extra:
-            self.updateImage(np.rot90(self.getImg(), k=2))
+            self.updateImage(np.rot90(self.stamp_im.getImage().getArray(), k=2).astype(np.float32))
 
         # Put NaN to be 0
-        imgCompensate = self.getImg()
+        imgCompensate = self.stamp_im.getImage().getArray()
         imgCompensate[np.isnan(imgCompensate)] = 0
 
         # Check the compensated image has the problem or not.
@@ -713,14 +728,14 @@ class DonutStamp2(AbstractStamp):
             # Do the orthogonalization: x'=1/sqrt(2)*(x+y), y'=1/sqrt(2)*(x-y)
             # Calculate the rotation angle for the orthogonalization
             fieldDist = self._getFieldDistFromOrigin()
-            costheta = (self.fieldX + self.fieldY) / fieldDist / np.sqrt(2)
+            costheta = (self.field.x + self.field.y) / fieldDist / np.sqrt(2)
             if costheta > 1:
                 costheta = 1
             elif costheta < -1:
                 costheta = -1
 
             sintheta = np.sqrt(1 - costheta ** 2)
-            if self.fieldY < self.fieldX:
+            if self.field.y < self.field.x:
                 sintheta = -sintheta
 
             # Create the pupil grid in off-axis model. This gives the
@@ -729,7 +744,7 @@ class DonutStamp2(AbstractStamp):
 
             # Get the mask-related parameters
             maskCa, maskRa, maskCb, maskRb = self._interpMaskParam(
-                self.fieldX, self.fieldY, inst.getMaskOffAxisCorr()
+                self.field.x, self.field.y, inst.getMaskOffAxisCorr()
             )
 
             lutx, luty = self._createPupilGrid(
@@ -740,8 +755,8 @@ class DonutStamp2(AbstractStamp):
                 maskCb,
                 maskRa,
                 maskRb,
-                self.fieldX,
-                self.fieldY,
+                self.field.x,
+                self.field.y,
             )
 
             # Calculate the x, y-coordinate on focal plane
@@ -1222,7 +1237,7 @@ class DonutStamp2(AbstractStamp):
         if image is not None:
             imgDonut = image
         else:
-            imgDonut = self.stamp_im.getArray()
+            imgDonut = self.stamp_im.getImage().getArray()
 
         return self.centroidFind.getCenterAndR(imgDonut)
 
@@ -1257,6 +1272,78 @@ class DonutStamp2(AbstractStamp):
         snr = signal / noise
 
         return snr
+
+    def _showProjection(self, lutxp, lutyp, sensorFactor, projSamples, raytrace=False):
+        """Calculate the x, y-projection of image on pupil.
+
+        This can be used to calculate the center of projection in compensate().
+
+        Parameters
+        ----------
+        lutxp : numpy.ndarray
+            X-coordinate on pupil plane. The value of element will be NaN if
+            that point is not inside the pupil.
+        lutyp : numpy.ndarray
+            Y-coordinate on pupil plane. The value of element will be NaN if
+            that point is not inside the pupil.
+        sensorFactor : float
+            Sensor factor.
+        projSamples : int
+            Dimension of projected image. This value considers the
+            magnification ratio of donut image.
+        raytrace : bool, optional
+            Consider the ray trace or not. If the value is true, the times of
+            photon hit will aggregate. (the default is False.)
+
+        Returns
+        -------
+        numpy.ndarray
+            Projection of image. It will be a binary image if raytrace=False.
+        """
+
+        # Dimension of pupil image
+        n1, n2 = lutxp.shape
+
+        # Construct the binary matrix on pupil. It is noted that if the
+        # raytrace is true, the value of element is allowed to be greater
+        # than 1.
+        show_lutxyp = np.zeros((n1, n2))
+
+        # Get the index in pupil. If a point's value is NaN, this point is
+        # outside the pupil.
+        idx = ~np.isnan(lutxp)
+
+        # Calculate the projected x, y-coordinate in pixel
+        # x=0.5 is center of pixel#1
+        xR = np.zeros((n1, n2))
+        yR = np.zeros((n1, n2))
+
+        xR[idx] = np.round(
+            (lutxp[idx] + sensorFactor) * (projSamples / sensorFactor) / 2 + 0.5
+        )
+        yR[idx] = np.round(
+            (lutyp[idx] + sensorFactor) * (projSamples / sensorFactor) / 2 + 0.5
+        )
+
+        # Check the projected coordinate is in the range of image or not.
+        # If the check passes, the times will be recorded.
+        mask = np.bitwise_and(
+            np.bitwise_and(np.bitwise_and(xR > 0, xR < n2), yR > 0), yR < n1
+        )
+
+        # Check the projected coordinate is in the range of image or not.
+        # If the check passes, the times will be recorded.
+        if raytrace:
+            for ii, jj in zip(
+                np.array(yR - 1, dtype=int)[mask], np.array(xR - 1, dtype=int)[mask]
+            ):
+                show_lutxyp[ii, jj] += 1
+        else:
+            show_lutxyp[
+                np.array(yR - 1, dtype=int)[mask], np.array(xR - 1, dtype=int)[mask]
+            ] = 1
+
+        return show_lutxyp
 
     def makeMask(self, inst, model, boundaryT, maskScalingFactorLocal):
         """Get the binary mask which considers the obscuration and off-axis
