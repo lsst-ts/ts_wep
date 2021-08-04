@@ -19,19 +19,25 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
 import unittest
 import numpy as np
 
+import lsst.geom
 import lsst.afw.image as afwImage
+import lsst.obs.lsst as obs_lsst
 from lsst.daf.base import PropertyList
 from lsst.ts.wep.task.DonutStamp import DonutStamp
+from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
+from lsst.ts.wep.cwfs.Instrument import Instrument
+from lsst.ts.wep.Utility import getConfigDir, CamType
 
 
 class TestDonutStamp(unittest.TestCase):
     def setUp(self):
 
         self.nStamps = 3
-        self.stampSize = 25
+        self.stampSize = 32
         self.testStamps, self.testMetadata = self._makeStamps(
             self.nStamps, self.stampSize
         )
@@ -53,6 +59,9 @@ class TestDonutStamp(unittest.TestCase):
         centX = np.arange(nStamps) + 20
         centY = np.arange(nStamps) + 25
         detectorNames = ["R22_S11"] * nStamps
+        camNames = ["lsst"] * nStamps
+        dfcTypes = ["extra"] * nStamps
+        dfcTypes[: int(nStamps / 2)] = ["intra"] * int(nStamps / 2)
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -60,6 +69,8 @@ class TestDonutStamp(unittest.TestCase):
         metadata["CENT_X"] = centX
         metadata["CENT_Y"] = centY
         metadata["DET_NAME"] = detectorNames
+        metadata["CAM_NAME"] = camNames
+        metadata["DFC_TYPE"] = dfcTypes
 
         return stampList, metadata
 
@@ -87,3 +98,95 @@ class TestDonutStamp(unittest.TestCase):
             centroidPos = donutStamp.centroid_position
             self.assertEqual(centroidPos.getX(), i + 20)
             self.assertEqual(centroidPos.getY(), i + 25)
+            camName = donutStamp.cam_name
+            self.assertEqual("lsst", camName)
+            defocalType = donutStamp.defocal_type
+            if i < int(self.nStamps / 2):
+                self.assertEqual(defocalType, "intra")
+            else:
+                self.assertEqual(defocalType, "extra")
+
+            self.assertEqual(type(donutStamp.comp_im), CompensableImage)
+            self.assertEqual(type(donutStamp.cMask), afwImage.MaskX)
+            self.assertEqual(type(donutStamp.pMask), afwImage.MaskX)
+            np.testing.assert_array_equal(
+                donutStamp.comp_im.getImg(), donutStamp.stamp_im.image.array
+            )
+
+    def testGetCamera(self):
+
+        donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0)
+
+        donutStamp.cam_name = "lsst"
+        self.assertEqual(
+            donutStamp.getCamera(),
+            obs_lsst.LsstCam().getCamera(),
+        )
+        donutStamp.cam_name = "comcam"
+        self.assertEqual(
+            donutStamp.getCamera(),
+            obs_lsst.LsstComCam().getCamera(),
+        )
+        donutStamp.cam_name = "noCam"
+        errMessage = "Camera noCam is not supported."
+        with self.assertRaises(ValueError, msg=errMessage):
+            donutStamp.getCamera()
+
+    def testCalcFieldXY(self):
+
+        donutStamp = DonutStamp(
+            self.testStamps[0],
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            lsst.geom.Point2D(2047.5, 2001.5),
+            "extra",
+            "R22_S11",
+            "lsst",
+        )
+        np.testing.assert_array_almost_equal(donutStamp.calcFieldXY(), (0, 0))
+
+    def testMakeMasks(self):
+
+        donutStamp = DonutStamp(
+            self.testStamps[0],
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            lsst.geom.Point2D(2047.5, 2001.5),
+            "extra",
+            "R22_S11",
+            "lsst",
+        )
+
+        # Set up instrument
+        instDataPath = os.path.join(getConfigDir(), "cwfs", "instData")
+        inst = Instrument(instDataPath)
+        donutWidth = 126
+        inst.config(CamType.LsstCam, donutWidth)
+
+        # Check that masks are empty at start
+        np.testing.assert_array_equal(
+            np.empty(shape=(0, 0)), donutStamp.cMask.getArray()
+        )
+        np.testing.assert_array_equal(
+            np.empty(shape=(0, 0)), donutStamp.pMask.getArray()
+        )
+
+        # Check masks after creation
+        donutStamp.makeMasks(inst, "offAxis", 0, 1)
+        self.assertEqual(afwImage.MaskX, type(donutStamp.cMask))
+        self.assertEqual(afwImage.MaskX, type(donutStamp.pMask))
+        self.assertDictEqual(
+            {"BKGRD": 0, "DONUT": 1}, donutStamp.cMask.getMaskPlaneDict()
+        )
+        self.assertDictEqual(
+            {"BKGRD": 0, "DONUT": 1}, donutStamp.pMask.getMaskPlaneDict()
+        )
+        cMask = donutStamp.cMask.getArray()
+        pMask = donutStamp.pMask.getArray()
+        # Donut should match
+        self.assertEqual(np.shape(cMask), (126, 126))
+        self.assertEqual(np.shape(pMask), (126, 126))
+        # Make sure not just an empty array
+        self.assertTrue(np.sum(cMask) > 0.0)
+        self.assertTrue(np.sum(pMask) > 0.0)
+        # Donut at center of focal plane should be symmetric
+        np.testing.assert_array_equal(cMask[:63], cMask[-63:][::-1])
+        np.testing.assert_array_equal(pMask[:63], pMask[-63:][::-1])
