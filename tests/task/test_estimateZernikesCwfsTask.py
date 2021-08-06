@@ -65,7 +65,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-        collections = "refcats,LSSTCam/raw/all"
+        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testCwfsPipeline.yaml")
 

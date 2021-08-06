@@ -23,6 +23,8 @@ from dataclasses import dataclass
 
 import lsst.geom
 import lsst.afw.image as afwImage
+import lsst.afw.table as afwTable
+from typing import Optional
 from lsst.meas.algorithms.stamps import AbstractStamp
 
 
@@ -47,9 +49,10 @@ class DonutStamp(AbstractStamp):
     sky_position: lsst.geom.SpherePoint
     centroid_position: lsst.geom.Point2I
     detector_name: str
+    archive_element: Optional[afwTable.io.Persistable] = None
 
     @classmethod
-    def factory(cls, stamp_im, metadata, index):
+    def factory(cls, stamp_im, metadata, index, archive_element=None):
         """This method is needed to service the FITS reader.
         We need a standard interface to construct objects like this.
         Parameters needed to construct this object are passed in via
@@ -65,6 +68,9 @@ class DonutStamp(AbstractStamp):
             needed by the constructor.
         idx : int
             Index into the lists in ``metadata``
+        archive_element : `afwTable.io.Persistable`, optional
+            Archive element (e.g. Transform or WCS) associated with this stamp.
+            (the default is None.)
 
         Returns
         -------
@@ -73,6 +79,7 @@ class DonutStamp(AbstractStamp):
         """
         return cls(
             stamp_im=stamp_im,
+            archive_element=archive_element,
             sky_position=lsst.geom.SpherePoint(
                 lsst.geom.Angle(metadata.getArray("RA_DEG")[index], lsst.geom.degrees),
                 lsst.geom.Angle(metadata.getArray("DEC_DEG")[index], lsst.geom.degrees),
