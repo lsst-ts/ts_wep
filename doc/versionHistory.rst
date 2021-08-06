@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.6:
+
+-------------
+1.7.6
+-------------
+* Update donutStamp with archive property.
+* Add `LSSTCam/calib` to collections path in test Gen3 pipelines.
+
 .. _lsst.ts.wep-1.7.5:
 
 -------------
