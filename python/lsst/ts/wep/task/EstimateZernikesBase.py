@@ -33,6 +33,7 @@ from lsst.ts.wep.SourceProcessor import SourceProcessor
 from lsst.ts.wep.Utility import getConfigDir, DonutTemplateType, DefocalType
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from scipy.signal import correlate
+from scipy.ndimage import rotate
 
 from lsst.ts.wep.task.DonutStamps import DonutStamp, DonutStamps
 
@@ -373,24 +374,39 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         algoDir = os.path.join(configDir, "cwfs", "algo")
         wfEsti = WfEstimator(instDir, algoDir)
         wfEsti.config(sizeInPix=self.donutStampSize)
-        sourProc = SourceProcessor()
-        sourProc.config(sensorName=donutStampsExtra[0].detector_name)
+        sourProcExtra = SourceProcessor()
+        sourProcIntra = SourceProcessor()
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
-            centroidXY = donutExtra.centroid_position
+
+            sensorNameExtra = donutExtra.detector_name
+            sensorNameIntra = donutIntra.detector_name
+            sourProcExtra.config(sensorName=sensorNameExtra)
+            sourProcIntra.config(sensorName=sensorNameIntra)
+
+            centroidXYExtra = donutExtra.centroid_position
+            centroidXYIntra = donutIntra.centroid_position
 
             # NOTE: TS_WEP expects these images to be transposed
             # TODO: Look into this
-            fieldXY = sourProc.camXYtoFieldXY(centroidXY.getY(), centroidXY.getX())
+            fieldXYExtra = sourProcExtra.camXYtoFieldXY(
+                centroidXYExtra.getY(), centroidXYExtra.getX()
+            )
+            fieldXYIntra = sourProcIntra.camXYtoFieldXY(
+                centroidXYIntra.getY(), centroidXYIntra.getX()
+            )
+            eulerZExtra = sourProcExtra.getEulerZinDeg(sensorNameExtra)
+            eulerZIntra = sourProcIntra.getEulerZinDeg(sensorNameIntra)
+
             wfEsti.setImg(
-                fieldXY,
+                fieldXYExtra,
                 DefocalType.Extra,
-                image=donutExtra.stamp_im.getImage().getArray().T,
+                image=rotate(donutExtra.stamp_im.getImage().getArray().T, eulerZExtra),
             )
             wfEsti.setImg(
-                fieldXY,
+                fieldXYIntra,
                 DefocalType.Intra,
-                image=donutIntra.stamp_im.getImage().getArray().T,
+                image=rotate(donutIntra.stamp_im.getImage().getArray().T, eulerZIntra),
             )
             wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()
