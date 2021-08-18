@@ -70,7 +70,7 @@ class TestSourceProcessor(unittest.TestCase):
         wfsSensorName = "R40_SW0"
         eulerZ = self.sourProc.getEulerZinDeg(wfsSensorName)
 
-        self.assertEqual(eulerZ, 90.004585)
+        self.assertEqual(eulerZ, 270.004585)
 
     def testCamXYtoFieldXY(self):
 
@@ -98,15 +98,36 @@ class TestSourceProcessor(unittest.TestCase):
         oxR04SW1, oyR04SW1 = self._camXYtoFieldXY("R04_SW1", 0, 0)
         oxR04SW0, oyR04SW0 = self._camXYtoFieldXY("R04_SW0", 0, 0)
 
-        # Compare with the same RXX_SYY
-        self.assertLess(abs(oyR00SW1 - oyR00SW0), 1e-3)
-        self.assertLess(abs(oxR40SW1 - oxR40SW0), 1e-3)
-        self.assertLess(abs(oyR44SW1 - oyR44SW0), 1e-3)
-        self.assertLess(abs(oxR04SW1 - oxR04SW0), 1e-3)
+        # Test nearly identical values: same horizontal
+        # or vertical location  in the focal plane
 
-        # Campare with different RXX_SYY
-        self.assertEqual((oxR00SW1 + oxR44SW1, oyR00SW1 + oyR44SW1), (0, 0))
-        self.assertEqual((oxR40SW0 + oxR04SW0, oyR40SW0 + oyR04SW0), (0, 0))
+        #    R04                 R44
+        # O--x--------          ----------x-O
+        # |          |          |     |     |            /\ +y (CCS)
+        # y   SW1    |          |     |     y            |
+        # |----------|          | SW0 | SW1 |            |
+        # |   SW0    x          y     |     |            |
+        # |          |          |     |     |            |
+        # --------y--O          O-x----------            |
+        #                                            +z (.) -----> +x
+        #      R00                  R40
+        # ----------x-O          O--y--------
+        # |     |     |          |          |
+        # |     |     y          x   SW0    |
+        # | SW1 | SW0 |          |----------|
+        # y     |     |          |   SW1    x
+        # |     |     |          |          |
+        # O-x----------          --------y--O
+
+        self.assertLess(abs(oxR00SW1 - oyR40SW1), 1e-3)
+        self.assertLess(abs(oxR04SW0 - oyR00SW0), 1e-3)
+        self.assertLess(abs(oxR40SW1 - oyR44SW1), 1e-3)
+        self.assertLess(abs(oxR44SW0 - oyR04SW0), 1e-3)
+
+        # Test equal but opposite values in the opposite
+        # locations in the focal plane
+        self.assertEqual((oxR00SW1 + oyR04SW1, oyR40SW1 + oyR04SW1), (0, 0))
+        self.assertEqual((oyR00SW0 + oyR44SW0, oxR40SW0 + oxR04SW0), (0, 0))
 
     def _camXYtoFieldXY(self, sensorName, pixelX, pixelY):
 
