@@ -127,21 +127,25 @@ class SourceProcessor(object):
             pixel size (microns), number of x pixels, number of y pixels].
         """
 
-        # The layout is shown in the following:
+        # The layout is as follows:
+        # SW0 is extra-focal, low chip
+        # SW1 is intra-focal, high chip
+        # See https://sitcomtn-003.lsst.io/ for CCS explanation,
+        # and https://ls.st/LCA-13381 for details of camera layout
 
-        # R04_S20              R44_S00
-        # --------           -----------       /\ +y
-        # |  C0  |           |    |    |        |
-        # |------|           | C1 | C0 |        |
-        # |  C1  |           |    |    |        |
-        # --------           -----------        -----> +x
-
-        # R00_S22              R40_S02
-        # -----------          --------
-        # |    |    |          |  C1  |
-        # | C0 | C1 |          |------|
-        # |    |    |          |  C0  |
-        # -----------          --------
+        #    R04                 R44
+        # --------           -----------        /\ +y (CCS)
+        # |  SW1 |           |    |    |        |
+        # |------|           |SW0 | SW1|        |
+        # |  SW0 |           |    |    |        |
+        # --------           -----------        _
+        #                                   +z (.) -----> +x
+        #      R00                  R40
+        # -------------          --------
+        # |     |     |          |  SW0 |
+        # | SW1 | SW0 |          |------|
+        # |     |     |          |  SW1 |
+        # -------------          --------
 
         xInUm = float(focalPlaneData[0])
         yInUm = float(focalPlaneData[1])
@@ -152,16 +156,16 @@ class SourceProcessor(object):
         tempX = None
         tempY = None
 
-        if sensorName in ("R44_S00_C0", "R00_S22_C1"):
+        if sensorName in ("R44_SW0", "R00_SW1"):
             # Shift center to +x direction
             tempX = xInUm + sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R44_S00_C1", "R00_S22_C0"):
+        elif sensorName in ("R44_SW0", "R00_SW1"):
             # Shift center to -x direction
             tempX = xInUm - sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R04_S20_C1", "R40_S02_C0"):
+        elif sensorName in ("R04_SW1", "R40_SW0"):
             # Shift center to -y direction
             tempY = yInUm - sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R04_S20_C0", "R40_S02_C1"):
+        elif sensorName in ("R04_SW0", "R40_SW1"):
             # Shift center to +y direction
             tempY = yInUm + sizeXinPixel / 2 * pixelSizeInUm
 
@@ -229,22 +233,22 @@ class SourceProcessor(object):
             Field y in degree.
         """
 
-        # The wavefront sensors will do the counter-clockwise rotation as the
-        # following based on the euler angle:
+        # The wavefront sensors will do the rotation as
+        # following, based on the Euler angle.
 
-        # R04_S20              R44_S00
-        # O-------           -----O----O       /\ +y
-        # |  C0  |           |    |    |        |
-        # O------|           | C1 | C0 |        |
-        # |  C1  |           |    |    |        |
-        # --------           -----------        O----> +x
-
-        # R00_S22              R40_S02
-        # -----------          --------
-        # |    |    |          |  C1  |
-        # | C0 | C1 |          |------O
-        # |    |    |          |  C0  |
-        # O----O-----          -------O
+        #    R04                 R44
+        # O-------           ----------O        /\ +y (CCS)
+        # |  SW1 |           |    |    |        |
+        # |------|           |SW0 | SW1|        |
+        # |  SW0 |           |    |    |        |
+        # -------O           O----------        _
+        #                                   +z (.) -----> +x
+        #      R00                  R40
+        # ------------O          O-------
+        # |     |     |          |  SW0 |
+        # | SW1 | SW0 |          |------|
+        # |     |     |          |  SW1 |
+        # O------------          -------O
 
         # Get the field X, Y of sensor's center
         fieldXc, fieldYc = self.sensorFocaPlaneInDeg[self.sensorName]
