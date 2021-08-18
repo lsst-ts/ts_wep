@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.7:
+
+-------------
+1.7.7
+-------------
+
+* Update focalplanelayout.txt with new Euler angle for SW0 sensors.
+
 .. _lsst.ts.wep-1.7.6:
 
 -------------
