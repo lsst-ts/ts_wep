@@ -106,12 +106,6 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
             "source_flux", ascending=False
         ).reset_index(drop=True)
 
-        # Adjust for display of corner wavefront sensors
-        extraCatalog["centroid_x"] = dimX - extraCatalog["centroid_x"]
-        extraCatalog["centroid_y"] = dimY - extraCatalog["centroid_y"]
-        intraCatalog["centroid_x"] = dimX - intraCatalog["centroid_x"]
-        intraCatalog["centroid_y"] = dimY - intraCatalog["centroid_y"]
-
         # For now take as many pairs of sources as possible
         catLength = np.min([len(extraCatalog), len(intraCatalog)])
 

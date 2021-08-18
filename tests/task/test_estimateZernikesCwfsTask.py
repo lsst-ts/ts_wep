@@ -180,8 +180,6 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         testDf["centroid_y"] = np.zeros(5)
         testDf["detector"] = ["R00_SW0", "R44_SW0", "R40_SW1", "R04_SW1", "R22_S11"]
         extraCatalog, intraCatalog = self.task.selectCwfsSources(testDf, (4072, 2000))
-        testDf["centroid_x"] = 4072 - testDf["centroid_x"]
-        testDf["centroid_y"] = 2000 - testDf["centroid_y"]
 
         np.testing.assert_array_equal(extraCatalog.values, testDf.iloc[:2].values[::-1])
         np.testing.assert_array_equal(

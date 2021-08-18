@@ -6,6 +6,22 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.8:
+
+-------------
+1.7.8
+-------------
+
+* Update stamp rotations to work with CWFS.
+
+.. _lsst.ts.wep-1.7.7:
+
+-------------
+1.7.7
+-------------
+
+* Update focalplanelayout.txt with new Euler angle for SW0 sensors.
+
 .. _lsst.ts.wep-1.7.6:
 
 -------------
