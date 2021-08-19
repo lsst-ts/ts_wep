@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.9:
+
+-------------
+1.7.9
+-------------
+
+* Remove _shiftCenterWfs from Source Processor.
+
 .. _lsst.ts.wep-1.7.8:
 
 -------------
