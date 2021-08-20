@@ -46,6 +46,34 @@ class EstimateZernikesCwfsTaskConnections(
         name="postISRCCD",
         multiple=True,
     )
+    donutStampsExtra = connectionTypes.Output(
+        doc="Extra-focal Donut Postage Stamp Images",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsExtra",
+        multiple=True,
+    )
+    donutStampsIntra = connectionTypes.Output(
+        doc="Intra-focal Donut Postage Stamp Images",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsIntra",
+        multiple=True,
+    )
+    outputZernikesRaw = connectionTypes.Output(
+        doc="Zernike Coefficients from all donuts",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="NumpyArray",
+        name="zernikeEstimateRaw",
+        multiple=True,
+    )
+    outputZernikesAvg = connectionTypes.Output(
+        doc="Zernike Coefficients averaged over donuts",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="NumpyArray",
+        name="zernikeEstimateAvg",
+        multiple=True,
+    )
 
 
 class EstimateZernikesCwfsTaskConfig(
@@ -69,6 +97,8 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         # See LCA-13381 for definition
         self.extraFocalNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         self.intraFocalNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
+        self.extraFocalIds = [191, 195, 199, 203]
+        self.intraFocalIds = [192, 196, 200, 204]
 
     def selectCwfsSources(self, donutCatalog, expDim):
         """
@@ -110,6 +140,52 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         catLength = np.min([len(extraCatalog), len(intraCatalog)])
 
         return extraCatalog[:catLength], intraCatalog[:catLength]
+
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.ButlerQuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ):
+        """
+        We need to be able to take pairs of detectors from the full
+        set of detector exposures and run the task. Then we need to put
+        the outputs back into the butler repository with
+        the appropriate butler dataIds.
+
+        For the `outputZernikesRaw` and `outputZernikesAvg`
+        we only have one set of values per pair of wavefront detectors
+        so we put this in the dataId associated with the
+        extra-focal detector.
+        """
+
+        exposure = inputRefs.exposures[0].dataId["exposure"]
+        instrument = inputRefs.exposures[0].dataId["instrument"]
+        detectorIdArr = np.array(
+            [exp.dataId["detector"] for exp in inputRefs.exposures]
+        )
+        donutCat = butlerQC.get(inputRefs.donutCatalog)
+
+        for extraId, intraId in zip(self.extraFocalIds, self.intraFocalIds):
+            extraListIdx = np.where(detectorIdArr == extraId)[0][0]
+            intraListIdx = np.where(detectorIdArr == intraId)[0][0]
+            expInputs = butlerQC.get(
+                [inputRefs.exposures[extraListIdx], inputRefs.exposures[intraListIdx]]
+            )
+            outputs = self.run(expInputs, donutCat)
+
+            butlerQC.put(
+                outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraListIdx]
+            )
+            butlerQC.put(
+                outputs.donutStampsIntra, outputRefs.donutStampsIntra[intraListIdx]
+            )
+            butlerQC.put(
+                outputs.outputZernikesRaw, outputRefs.outputZernikesRaw[extraListIdx]
+            )
+            butlerQC.put(
+                outputs.outputZernikesAvg, outputRefs.outputZernikesAvg[extraListIdx]
+            )
 
     def run(
         self, exposures: typing.List[afwImage.Exposure], donutCatalog: pd.DataFrame
