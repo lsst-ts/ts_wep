@@ -25,6 +25,7 @@ import pandas as pd
 
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
+import lsst.obs.lsst as obs_lsst
 from lsst.pipe.base import connectionTypes
 
 from lsst.ts.wep.Utility import DefocalType
@@ -97,8 +98,6 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         # See LCA-13381 for definition
         self.extraFocalNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         self.intraFocalNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
-        self.extraFocalIds = [191, 195, 199, 203]
-        self.intraFocalIds = [192, 196, 200, 204]
 
     def selectCwfsSources(self, donutCatalog, expDim):
         """
@@ -159,14 +158,26 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         extra-focal detector.
         """
 
-        exposure = inputRefs.exposures[0].dataId["exposure"]
         instrument = inputRefs.exposures[0].dataId["instrument"]
+
+        # Get the detector IDs for the wavefront sensors so
+        # that we can appropriately match up pairs of detectors
+        if instrument == "LSSTCam":
+            detectorMap = (
+                obs_lsst.translators.lsstCam.LsstCamTranslator.detector_mapping()
+            )
+        else:
+            raise ValueError(f"{instrument} is not a valid camera name.")
+
+        extraFocalIds = [detectorMap[detName][0] for detName in self.extraFocalNames]
+        intraFocalIds = [detectorMap[detName][0] for detName in self.intraFocalNames]
+
         detectorIdArr = np.array(
             [exp.dataId["detector"] for exp in inputRefs.exposures]
         )
         donutCat = butlerQC.get(inputRefs.donutCatalog)
 
-        for extraId, intraId in zip(self.extraFocalIds, self.intraFocalIds):
+        for extraId, intraId in zip(extraFocalIds, intraFocalIds):
             extraListIdx = np.where(detectorIdArr == extraId)[0][0]
             intraListIdx = np.where(detectorIdArr == intraId)[0][0]
             expInputs = butlerQC.get(
