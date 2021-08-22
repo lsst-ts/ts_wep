@@ -26,6 +26,7 @@ from copy import copy
 from scipy.signal import correlate
 
 import lsst.utils.tests
+import lsst.pipe.base as pipeBase
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.EstimateZernikesCwfsTask import (
@@ -184,6 +185,35 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(extraCatalog.values, testDf.iloc[:2].values[::-1])
         np.testing.assert_array_equal(
             intraCatalog.values, testDf.iloc[2:4].values[::-1]
+        )
+
+    def testRunQuantum(self):
+
+        quantum = dafButler.Quantum()
+        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
+        inputRefs = pipeBase.InputQuantizedConnection()
+        badInstrument = "LSSTComCam"
+        inputRefs.exposures = [
+            dafButler.DatasetRef(
+                self.registry.getDatasetType("postISRCCD"),
+                {
+                    "instrument": badInstrument,
+                    "detector": 191,
+                    "exposure": 4021123106000,
+                },
+                id="3104de33-c107-4678-b07e-1fc62407a52e",
+                run="run2",
+            )
+        ]
+        outputRefs = pipeBase.OutputQuantizedConnection()
+
+        # Test that we will get an error if we try to use an
+        # unsupported instrument.
+        with self.assertRaises(ValueError) as context:
+            self.task.runQuantum(butlerQC, inputRefs, outputRefs)
+        self.assertEqual(
+            f"{badInstrument} is not a valid camera name.",
+            str(context.exception),
         )
 
     def testTaskRunNoSources(self):
