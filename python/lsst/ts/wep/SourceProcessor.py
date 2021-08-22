@@ -84,9 +84,6 @@ class SourceProcessor(object):
         sensorDimList = dict()
         for sensorName, data in ccdData.items():
 
-            # Consider the x-translation in corner wavefront sensors
-            self._shiftCenterWfs(sensorName, data)
-
             # Change the unit from um to degree
             xInUm = float(data[0])
             yInUm = float(data[1])
@@ -111,69 +108,6 @@ class SourceProcessor(object):
         self.sensorEulerRot = readPhoSimSettingData(
             folderPath, focalPlaneFileName, "eulerRot"
         )
-
-    def _shiftCenterWfs(self, sensorName, focalPlaneData):
-        """Shift the fieldXY of center of wavefront sensors.
-
-        The input data is the center of combined chips (C0+C1). The input data
-        will be updated directly.
-
-        Parameters
-        ----------
-        sensorName : str
-            Abbreviated sensor name.
-        focalPlaneData : list
-            Data of focal plane: [x position (microns), y position (microns),
-            pixel size (microns), number of x pixels, number of y pixels].
-        """
-
-        # The layout is as follows:
-        # SW0 is extra-focal, low chip
-        # SW1 is intra-focal, high chip
-        # See https://sitcomtn-003.lsst.io/ for CCS explanation,
-        # and https://ls.st/LCA-13381 for details of camera layout
-
-        #    R04                 R44
-        # --------           -----------        /\ +y (CCS)
-        # |  SW1 |           |    |    |        |
-        # |------|           |SW0 | SW1|        |
-        # |  SW0 |           |    |    |        |
-        # --------           -----------        _
-        #                                   +z (.) -----> +x
-        #      R00                  R40
-        # -------------          --------
-        # |     |     |          |  SW0 |
-        # | SW1 | SW0 |          |------|
-        # |     |     |          |  SW1 |
-        # -------------          --------
-
-        xInUm = float(focalPlaneData[0])
-        yInUm = float(focalPlaneData[1])
-        pixelSizeInUm = float(focalPlaneData[2])
-        sizeXinPixel = float(focalPlaneData[3])
-
-        # Consider the x-translation in corner wavefront sensors
-        tempX = None
-        tempY = None
-
-        if sensorName in ("R44_SW0", "R00_SW1"):
-            # Shift center to +x direction
-            tempX = xInUm + sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R44_SW0", "R00_SW1"):
-            # Shift center to -x direction
-            tempX = xInUm - sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R04_SW1", "R40_SW0"):
-            # Shift center to -y direction
-            tempY = yInUm - sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R04_SW0", "R40_SW1"):
-            # Shift center to +y direction
-            tempY = yInUm + sizeXinPixel / 2 * pixelSizeInUm
-
-        # Replace the value by the shifted one
-        if tempX is not None:
-            focalPlaneData[0] = str(tempX)
-        elif tempY is not None:
-            focalPlaneData[1] = str(tempY)
 
     def _getDeblendDonutTypeInSetting(self):
         """Get the deblend donut type in the setting.

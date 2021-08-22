@@ -25,6 +25,7 @@ import pandas as pd
 
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
+import lsst.obs.lsst as obs_lsst
 from lsst.pipe.base import connectionTypes
 
 from lsst.ts.wep.Utility import DefocalType
@@ -44,6 +45,34 @@ class EstimateZernikesCwfsTaskConnections(
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
         name="postISRCCD",
+        multiple=True,
+    )
+    donutStampsExtra = connectionTypes.Output(
+        doc="Extra-focal Donut Postage Stamp Images",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsExtra",
+        multiple=True,
+    )
+    donutStampsIntra = connectionTypes.Output(
+        doc="Intra-focal Donut Postage Stamp Images",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="StampsBase",
+        name="donutStampsIntra",
+        multiple=True,
+    )
+    outputZernikesRaw = connectionTypes.Output(
+        doc="Zernike Coefficients from all donuts",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="NumpyArray",
+        name="zernikeEstimateRaw",
+        multiple=True,
+    )
+    outputZernikesAvg = connectionTypes.Output(
+        doc="Zernike Coefficients averaged over donuts",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="NumpyArray",
+        name="zernikeEstimateAvg",
         multiple=True,
     )
 
@@ -110,6 +139,64 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         catLength = np.min([len(extraCatalog), len(intraCatalog)])
 
         return extraCatalog[:catLength], intraCatalog[:catLength]
+
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.ButlerQuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ):
+        """
+        We need to be able to take pairs of detectors from the full
+        set of detector exposures and run the task. Then we need to put
+        the outputs back into the butler repository with
+        the appropriate butler dataIds.
+
+        For the `outputZernikesRaw` and `outputZernikesAvg`
+        we only have one set of values per pair of wavefront detectors
+        so we put this in the dataId associated with the
+        extra-focal detector.
+        """
+
+        instrument = inputRefs.exposures[0].dataId["instrument"]
+
+        # Get the detector IDs for the wavefront sensors so
+        # that we can appropriately match up pairs of detectors
+        if instrument == "LSSTCam":
+            detectorMap = (
+                obs_lsst.translators.lsstCam.LsstCamTranslator.detector_mapping()
+            )
+        else:
+            raise ValueError(f"{instrument} is not a valid camera name.")
+
+        extraFocalIds = [detectorMap[detName][0] for detName in self.extraFocalNames]
+        intraFocalIds = [detectorMap[detName][0] for detName in self.intraFocalNames]
+
+        detectorIdArr = np.array(
+            [exp.dataId["detector"] for exp in inputRefs.exposures]
+        )
+        donutCat = butlerQC.get(inputRefs.donutCatalog)
+
+        for extraId, intraId in zip(extraFocalIds, intraFocalIds):
+            extraListIdx = np.where(detectorIdArr == extraId)[0][0]
+            intraListIdx = np.where(detectorIdArr == intraId)[0][0]
+            expInputs = butlerQC.get(
+                [inputRefs.exposures[extraListIdx], inputRefs.exposures[intraListIdx]]
+            )
+            outputs = self.run(expInputs, donutCat)
+
+            butlerQC.put(
+                outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraListIdx]
+            )
+            butlerQC.put(
+                outputs.donutStampsIntra, outputRefs.donutStampsIntra[intraListIdx]
+            )
+            butlerQC.put(
+                outputs.outputZernikesRaw, outputRefs.outputZernikesRaw[extraListIdx]
+            )
+            butlerQC.put(
+                outputs.outputZernikesAvg, outputRefs.outputZernikesAvg[extraListIdx]
+            )
 
     def run(
         self, exposures: typing.List[afwImage.Exposure], donutCatalog: pd.DataFrame

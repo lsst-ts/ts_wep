@@ -6,6 +6,22 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.7.10:
+
+-------------
+1.7.10
+-------------
+
+* Save outputZernikes for pairs of wavefront detectors not just a single output for all detectors.
+
+.. _lsst.ts.wep-1.7.9:
+
+-------------
+1.7.9
+-------------
+
+* Remove _shiftCenterWfs from Source Processor.
+
 .. _lsst.ts.wep-1.7.8:
 
 -------------
