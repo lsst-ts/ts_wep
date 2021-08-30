@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from .CamDataCollector import CamDataCollector
-from .CamIsrWrapper import CamIsrWrapper
 from .SourceProcessor import SourceProcessor
 from .Utility import FilterType, CamType, BscDbType
 
