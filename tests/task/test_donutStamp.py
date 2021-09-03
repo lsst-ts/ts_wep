@@ -30,7 +30,7 @@ from lsst.daf.base import PropertyList
 from lsst.ts.wep.task.DonutStamp import DonutStamp
 from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
 from lsst.ts.wep.cwfs.Instrument import Instrument
-from lsst.ts.wep.Utility import getConfigDir, CamType
+from lsst.ts.wep.Utility import getConfigDir, CamType, DefocalType
 
 
 class TestDonutStamp(unittest.TestCase):
@@ -59,9 +59,9 @@ class TestDonutStamp(unittest.TestCase):
         centX = np.arange(nStamps) + 20
         centY = np.arange(nStamps) + 25
         detectorNames = ["R22_S11"] * nStamps
-        camNames = ["lsst"] * nStamps
-        dfcTypes = ["extra"] * nStamps
-        dfcTypes[: int(nStamps / 2)] = ["intra"] * int(nStamps / 2)
+        camNames = ["LSSTCam"] * nStamps
+        dfcTypes = [DefocalType.Extra.value] * nStamps
+        dfcTypes[: int(nStamps / 2)] = [DefocalType.Intra.value] * int(nStamps / 2)
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -99,12 +99,12 @@ class TestDonutStamp(unittest.TestCase):
             self.assertEqual(centroidPos.getX(), i + 20)
             self.assertEqual(centroidPos.getY(), i + 25)
             camName = donutStamp.cam_name
-            self.assertEqual("lsst", camName)
+            self.assertEqual("LSSTCam", camName)
             defocalType = donutStamp.defocal_type
             if i < int(self.nStamps / 2):
-                self.assertEqual(defocalType, "intra")
+                self.assertEqual(defocalType, DefocalType.Intra.value)
             else:
-                self.assertEqual(defocalType, "extra")
+                self.assertEqual(defocalType, DefocalType.Extra.value)
 
             self.assertEqual(type(donutStamp.comp_im), CompensableImage)
             self.assertEqual(type(donutStamp.cMask), afwImage.MaskX)
@@ -117,12 +117,12 @@ class TestDonutStamp(unittest.TestCase):
 
         donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0)
 
-        donutStamp.cam_name = "lsst"
+        donutStamp.cam_name = "LSSTCam"
         self.assertEqual(
             donutStamp.getCamera(),
             obs_lsst.LsstCam().getCamera(),
         )
-        donutStamp.cam_name = "comcam"
+        donutStamp.cam_name = "LSSTComCam"
         self.assertEqual(
             donutStamp.getCamera(),
             obs_lsst.LsstComCam().getCamera(),
@@ -138,9 +138,9 @@ class TestDonutStamp(unittest.TestCase):
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
-            "extra",
+            DefocalType.Extra.value,
             "R22_S11",
-            "lsst",
+            "LSSTCam",
         )
         np.testing.assert_array_almost_equal(donutStamp.calcFieldXY(), (0, 0))
 
@@ -150,9 +150,9 @@ class TestDonutStamp(unittest.TestCase):
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
-            "extra",
+            DefocalType.Extra.value,
             "R22_S11",
-            "lsst",
+            "LSSTCam",
         )
 
         # Set up instrument

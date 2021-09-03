@@ -20,10 +20,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 import lsst.geom
 import numpy as np
 import lsst.afw.image as afwImage
+import lsst.afw.table as afwTable
 import lsst.obs.lsst as obs_lsst
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.stamps import AbstractStamp
@@ -44,8 +46,14 @@ class DonutStamp(AbstractStamp):
         must keep track of the coordinate system
     centroid_position : lsst.geom.Point2D
         Position of the center of the stamp in pixels
+    defocal_type : str
+        Defocal state of the stamp. "extra" or "intra" are
+        allowed values.
     detector_name : str
         CCD where the donut is found
+    cam_name : str
+        Camera name for the stamp image. "LSSTCam" or "LSSTComCam"
+        are available camera names currently.
     """
 
     stamp_im: afwImage.maskedImage.MaskedImageF
@@ -55,6 +63,7 @@ class DonutStamp(AbstractStamp):
     detector_name: str
     cam_name: str
     comp_im: CompensableImage = field(default_factory=CompensableImage)
+    archive_element: Optional[afwTable.io.Persistable] = None
 
     def __post_init__(self):
         """
@@ -64,7 +73,7 @@ class DonutStamp(AbstractStamp):
         self._setCompensableImage()
 
     @classmethod
-    def factory(cls, stamp_im, metadata, index):
+    def factory(cls, stamp_im, metadata, index, archive_element=None):
         """This method is needed to service the FITS reader.
         We need a standard interface to construct objects like this.
         Parameters needed to construct this object are passed in via
@@ -73,13 +82,16 @@ class DonutStamp(AbstractStamp):
 
         Parameters
         ----------
-        stamp : lsst.afw.image.MaskedImage
+        stamp_im : lsst.afw.image.MaskedImage
             Pixel data to pass to the constructor
         metadata : lsst.daf.base.PropertyList
             PropertyList containing the information
             needed by the constructor.
-        idx : int
+        index : int
             Index into the lists in ``metadata``
+        archive_element : `afwTable.io.Persistable`, optional
+            Archive element (e.g. Transform or WCS) associated with this stamp.
+            (the default is None.)
 
         Returns
         -------
@@ -89,6 +101,7 @@ class DonutStamp(AbstractStamp):
 
         return cls(
             stamp_im=stamp_im,
+            archive_element=archive_element,
             sky_position=lsst.geom.SpherePoint(
                 lsst.geom.Angle(metadata.getArray("RA_DEG")[index], lsst.geom.degrees),
                 lsst.geom.Angle(metadata.getArray("DEC_DEG")[index], lsst.geom.degrees),
@@ -116,9 +129,9 @@ class DonutStamp(AbstractStamp):
             Camera object for the exposures.
         """
 
-        if self.cam_name == "lsst":
+        if self.cam_name == "LSSTCam":
             cam = obs_lsst.LsstCam().getCamera()
-        elif self.cam_name == "comcam":
+        elif self.cam_name == "LSSTComCam":
             cam = obs_lsst.LsstComCam().getCamera()
         else:
             raise ValueError(f"Camera {self.cam_name} is not supported.")
@@ -142,20 +155,17 @@ class DonutStamp(AbstractStamp):
         return np.degrees(field_x), np.degrees(field_y)
 
     def _setCompensableImage(self):
-
-        if self.defocal_type == "extra":
-            defocal_type = DefocalType.Extra
-        elif self.defocal_type == "intra":
-            defocal_type = DefocalType.Intra
-        else:
-            error_str = (
-                f"Defocal type string {self.defocal_type} is not 'extra' or 'intra'."
-            )
-            raise ValueError(error_str)
+        """
+        Set up the compensable image object in the dataclass.
+        """
 
         field_xy = self.calcFieldXY()
 
-        self.comp_im.setImg(field_xy, defocal_type, self.stamp_im.getImage().getArray())
+        self.comp_im.setImg(
+            field_xy,
+            DefocalType(self.defocal_type),
+            self.stamp_im.getImage().getArray(),
+        )
         self.cMask = afwImage.MaskX()
         self.pMask = afwImage.MaskX()
 

@@ -183,7 +183,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
             expInputs = butlerQC.get(
                 [inputRefs.exposures[extraListIdx], inputRefs.exposures[intraListIdx]]
             )
-            outputs = self.run(expInputs, donutCat)
+            outputs = self.run(expInputs, donutCat, instrument)
 
             butlerQC.put(
                 outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraListIdx]
@@ -199,7 +199,10 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
             )
 
     def run(
-        self, exposures: typing.List[afwImage.Exposure], donutCatalog: pd.DataFrame
+        self,
+        exposures: typing.List[afwImage.Exposure],
+        donutCatalog: pd.DataFrame,
+        cameraName: str,
     ) -> pipeBase.Struct:
 
         # Create intra and extra focal catalogs
@@ -221,12 +224,12 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
             detectorName = exposure.getDetector().getName()
             if detectorName in self.extraFocalNames:
                 donutStampsExtraExp = self.cutOutStamps(
-                    exposure, extraCatalog, DefocalType.Extra
+                    exposure, extraCatalog, DefocalType.Extra, cameraName
                 )
                 donutStampsExtra.extend([stamp for stamp in donutStampsExtraExp])
             elif detectorName in self.intraFocalNames:
                 donutStampsIntraExp = self.cutOutStamps(
-                    exposure, intraCatalog, DefocalType.Intra
+                    exposure, intraCatalog, DefocalType.Intra, cameraName
                 )
                 donutStampsIntra.extend([stamp for stamp in donutStampsIntraExp])
             else:

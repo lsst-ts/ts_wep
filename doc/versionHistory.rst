@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.8.0:
+
+-------------
+1.8.0
+-------------
+
+* Refactored DonutStamp.py and added ability to recreate masks as afwImage.MaskX objects.
+
 .. _lsst.ts.wep-1.7.10:
 
 -------------

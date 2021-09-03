@@ -43,6 +43,10 @@ class DonutStamps(StampsBase):
         self.metadata["CENT_Y"] = [p.getY() for p in centroid_positions]
         det_names = self.getDetectorNames()
         self.metadata["DET_NAME"] = [det for det in det_names]
+        cam_names = self.getCameraNames()
+        self.metadata["CAM_NAME"] = [cam for cam in cam_names]
+        defocal_types = self.getDefocalTypes()
+        self.metadata["DFC_TYPE"] = [dfc for dfc in defocal_types]
 
     def getSkyPositions(self):
         """
@@ -87,6 +91,28 @@ class DonutStamps(StampsBase):
             Detector Names for each stamp.
         """
         return [stamp.detector_name for stamp in self]
+
+    def getCameraNames(self):
+        """
+        Get the instrument name for each stamp.
+
+        Returns
+        -------
+        list [str]
+            Camera names for each stamp.
+        """
+        return [stamp.cam_name for stamp in self]
+
+    def getDefocalTypes(self):
+        """
+        Get the defocal type for each stamp.
+
+        Returns
+        -------
+        list [int]
+            Defocal types for each stamp.
+        """
+        return [stamp.defocal_type for stamp in self]
 
     def append(self, newStamp):
         """Add an additional stamp.

@@ -255,7 +255,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         return finalDonutX, finalDonutY, xCorner, yCorner
 
-    def cutOutStamps(self, exposure, donutCatalog, defocalType):
+    def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
         """
         Cut out postage stamps for sources in catalog.
 
@@ -267,6 +267,9 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             Source catalog for the pointing.
         defocalType: enum 'DefocalType'
             Defocal type of the donut image.
+        cameraName: str
+            Name of camera for the exposure. Can accept "LSSTCam"
+            or "LSSTComCam".
 
         Returns
         -------
@@ -326,8 +329,10 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
                         donutRow["coord_dec"],
                         lsst.geom.radians,
                     ),
-                    centroid_position=lsst.geom.Point2I(finalDonutX, finalDonutY),
+                    centroid_position=lsst.geom.Point2D(finalDonutX, finalDonutY),
                     detector_name=detectorName,
+                    cam_name=cameraName,
+                    defocal_type=defocalType.value,
                 )
             )
 
@@ -336,6 +341,12 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DEC_DEG"] = np.degrees(detectorCatalog["coord_dec"].values)
         stampsMetadata["DET_NAME"] = np.array(
             [detectorName] * len(detectorCatalog), dtype=str
+        )
+        stampsMetadata["CAM_NAME"] = np.array(
+            [cameraName] * len(detectorCatalog), dtype=str
+        )
+        stampsMetadata["DFC_TYPE"] = np.array(
+            [defocalType.value] * len(detectorCatalog)
         )
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)

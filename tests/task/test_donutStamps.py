@@ -29,6 +29,7 @@ import lsst.afw.image as afwImage
 from lsst.daf.base import PropertyList
 from lsst.ts.wep.task.DonutStamp import DonutStamp
 from lsst.ts.wep.task.DonutStamps import DonutStamps
+from lsst.ts.wep.Utility import DefocalType
 
 
 class TestDonutStamps(lsst.utils.tests.TestCase):
@@ -56,6 +57,9 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         centX = np.arange(nStamps) + 20
         centY = np.arange(nStamps) + 25
         detectorNames = ["R22_S11"] * nStamps
+        camNames = ["LSSTCam"] * nStamps
+        dfcTypes = [DefocalType.Extra.value] * nStamps
+        dfcTypes[: int(nStamps / 2)] = [DefocalType.Intra.value] * int(nStamps / 2)
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -63,6 +67,8 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         metadata["CENT_X"] = centX
         metadata["CENT_Y"] = centY
         metadata["DET_NAME"] = detectorNames
+        metadata["CAM_NAME"] = camNames
+        metadata["DFC_TYPE"] = dfcTypes
 
         donutStampList = [
             DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)
@@ -122,6 +128,23 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         detNames = self.donutStamps.getDetectorNames()
         self.assertListEqual(detNames, ["R22_S11"] * self.nStamps)
 
+    def testGetCameraNames(self):
+
+        camNames = self.donutStamps.getCameraNames()
+        self.assertListEqual(camNames, ["LSSTCam"] * self.nStamps)
+
+    def testGetDefocalTypes(self):
+
+        defocalTypes = self.donutStamps.getDefocalTypes()
+        self.assertListEqual(
+            defocalTypes[: int(self.nStamps / 2)],
+            [DefocalType.Intra.value] * int(self.nStamps / 2),
+        )
+        self.assertListEqual(
+            defocalTypes[int(self.nStamps / 2) :],
+            [DefocalType.Extra.value] * int((self.nStamps - int(self.nStamps / 2))),
+        )
+
     def testAppend(self):
         """Test ability to append to a Stamps object"""
         self.donutStamps.append(self.donutStamps[0])
@@ -155,7 +178,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         """
         Test the class' write and readFits when passing on a bounding box.
         """
-        bbox = lsst.geom.Box2I(lsst.geom.Point2I(25, 25), lsst.geom.Extent2I(3, 3))
+        bbox = lsst.geom.Box2I(lsst.geom.Point2I(25, 25), lsst.geom.Extent2I(4, 4))
         with tempfile.NamedTemporaryFile() as f:
             self.donutStamps.writeFits(f.name)
             options = {"bbox": bbox}
