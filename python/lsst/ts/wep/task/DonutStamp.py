@@ -54,6 +54,18 @@ class DonutStamp(AbstractStamp):
     cam_name : str
         Camera name for the stamp image. "LSSTCam" or "LSSTComCam"
         are available camera names currently.
+    archive_element : `afwTable.io.Persistable`, optional
+        Archive element (e.g. Transform or WCS) associated with this stamp.
+        (the default is None.)
+    comp_im : CompensableImage, init=False
+        CompensableImage object to create masks for the stamp. This is
+        initialized in the __post_init__ stage of the dataclass.
+    mask_p : afwImage.Mask, init=False
+        Padded Mask for use at the offset planes. This is
+        initialized in the __post_init__ stage of the dataclass.
+    mask_c : afwImage.Mask, init=False
+        Non-padded mask corresponding to aperture. This is
+        initialized in the __post_init__ stage of the dataclass.
     """
 
     stamp_im: afwImage.maskedImage.MaskedImageF
@@ -62,8 +74,10 @@ class DonutStamp(AbstractStamp):
     defocal_type: str
     detector_name: str
     cam_name: str
-    comp_im: CompensableImage = field(default_factory=CompensableImage)
     archive_element: Optional[afwTable.io.Persistable] = None
+    comp_im: CompensableImage = field(default_factory=CompensableImage)
+    mask_p: afwImage.Mask = field(init=False)
+    mask_c: afwImage.Mask = field(init=False)
 
     def __post_init__(self):
         """
@@ -127,24 +141,30 @@ class DonutStamp(AbstractStamp):
         -------
         lsst.afw.cameraGeom.Camera
             Camera object for the exposures.
+
+        Raises
+        ------
+        ValueError
+            The camera is not supported.
         """
 
         if self.cam_name == "LSSTCam":
-            cam = obs_lsst.LsstCam().getCamera()
+            return obs_lsst.LsstCam().getCamera()
         elif self.cam_name == "LSSTComCam":
-            cam = obs_lsst.LsstComCam().getCamera()
+            return obs_lsst.LsstComCam().getCamera()
         else:
             raise ValueError(f"Camera {self.cam_name} is not supported.")
 
-        return cam
-
     def calcFieldXY(self):
         """
-        Calculate the X, Y field position of the centroid in radians.
+        Calculate the X, Y field position of the centroid in degrees.
 
         Returns
         -------
-
+        float
+            Field x position in degrees.
+        float
+            Field y position in degrees.
         """
 
         cam = self.getCamera()
@@ -166,8 +186,8 @@ class DonutStamp(AbstractStamp):
             DefocalType(self.defocal_type),
             self.stamp_im.getImage().getArray(),
         )
-        self.cMask = afwImage.MaskX()
-        self.pMask = afwImage.MaskX()
+        self.mask_c = afwImage.Mask()
+        self.mask_p = afwImage.Mask()
 
     def makeMasks(self, inst, model, boundaryT, maskScalingFactorLocal):
         """Get the binary mask which considers the obscuration and off-axis
@@ -189,10 +209,9 @@ class DonutStamp(AbstractStamp):
 
         Returns
         -------
-        cMask : afwImage.MaskX
+        cMask : afwImage.Mask
             Non-padded mask for use at the offset planes.
-
-        pMask : afwImage.MaskX
+        pMask : afwImage.Mask
             Padded mask for use at the offset planes.
         """
 
@@ -201,9 +220,10 @@ class DonutStamp(AbstractStamp):
         # 0 flag in mask is part of image that is not donut
         # 1 flag in mask means it is part of the model donut
         maskDict = {"BKGRD": 0, "DONUT": 1}
-        dimOfDonut = inst.getDimOfDonutOnSensor()
 
-        self.pMask = afwImage.MaskX(lsst.geom.Extent2I(dimOfDonut), maskDict)
-        self.cMask = afwImage.MaskX(lsst.geom.Extent2I(dimOfDonut), maskDict)
-        self.pMask.array = np.array(self.comp_im.pMask, dtype=np.int32)
-        self.cMask.array = np.array(self.comp_im.cMask, dtype=np.int32)
+        # Set masks
+        self.mask_p = afwImage.Mask(np.array(self.comp_im.pMask, dtype=np.int32))
+        self.mask_p.clearMaskPlaneDict()
+        self.mask_p.conformMaskPlanes(maskDict)
+        # Will inherit conformed MaskPlaneDict
+        self.mask_c = afwImage.Mask(np.array(self.comp_im.cMask, dtype=np.int32))

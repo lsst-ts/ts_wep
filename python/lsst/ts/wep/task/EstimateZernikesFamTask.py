@@ -89,6 +89,16 @@ class EstimateZernikesFamTask(EstimateZernikesBaseTask):
         """
         We implement a runQuantum method to make sure our configured
         task runs with the instrument required by the pipeline.
+
+        Parameters
+        ----------
+        butlerQC : pipeBase.ButlerQuantumContext
+            Butler to handle the data processing of the task
+        inputRefs : pipeBase.InputQuantizedConnection
+            The butler references for the input data for the task.
+        outputRefs : pipeBase.OutputQuantizedConnection
+            The butler references for the output data
+            created by the task.
         """
 
         # Get the instrument we are running the pipeline with

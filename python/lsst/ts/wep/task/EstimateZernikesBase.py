@@ -336,18 +336,13 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
                 )
             )
 
+        catalogLength = len(detectorCatalog)
         stampsMetadata = PropertyList()
         stampsMetadata["RA_DEG"] = np.degrees(detectorCatalog["coord_ra"].values)
         stampsMetadata["DEC_DEG"] = np.degrees(detectorCatalog["coord_dec"].values)
-        stampsMetadata["DET_NAME"] = np.array(
-            [detectorName] * len(detectorCatalog), dtype=str
-        )
-        stampsMetadata["CAM_NAME"] = np.array(
-            [cameraName] * len(detectorCatalog), dtype=str
-        )
-        stampsMetadata["DFC_TYPE"] = np.array(
-            [defocalType.value] * len(detectorCatalog)
-        )
+        stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
+        stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
+        stampsMetadata["DFC_TYPE"] = np.array([defocalType.value] * catalogLength)
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)

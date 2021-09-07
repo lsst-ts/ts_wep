@@ -59,7 +59,8 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         detectorNames = ["R22_S11"] * nStamps
         camNames = ["LSSTCam"] * nStamps
         dfcTypes = [DefocalType.Extra.value] * nStamps
-        dfcTypes[: int(nStamps / 2)] = [DefocalType.Intra.value] * int(nStamps / 2)
+        halfStampIdx = int(nStamps / 2)
+        dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -136,13 +137,14 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
     def testGetDefocalTypes(self):
 
         defocalTypes = self.donutStamps.getDefocalTypes()
+        halfStampIdx = int(self.nStamps / 2)
         self.assertListEqual(
-            defocalTypes[: int(self.nStamps / 2)],
-            [DefocalType.Intra.value] * int(self.nStamps / 2),
+            defocalTypes[:halfStampIdx],
+            [DefocalType.Intra.value] * halfStampIdx,
         )
         self.assertListEqual(
-            defocalTypes[int(self.nStamps / 2) :],
-            [DefocalType.Extra.value] * int((self.nStamps - int(self.nStamps / 2))),
+            defocalTypes[halfStampIdx:],
+            [DefocalType.Extra.value] * int((self.nStamps - halfStampIdx)),
         )
 
     def testAppend(self):
