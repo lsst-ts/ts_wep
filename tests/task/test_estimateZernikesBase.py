@@ -62,6 +62,7 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
 
         collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
+        cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testBasePipeline.yaml")
 
         pipeCmd = writePipetaskCmd(
@@ -210,7 +211,9 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         donutCatalog = self.butler.get(
             "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        donutStamps = self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra)
+        donutStamps = self.task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
         self.assertTrue(len(donutStamps), 4)
 
         stampCentroid = donutStamps[0].centroid_position
@@ -233,10 +236,10 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
             "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutStampsExtra = self.task.cutOutStamps(
-            extraExposure, donutCatalog, DefocalType.Extra
+            extraExposure, donutCatalog, DefocalType.Extra, self.cameraName
         )
         donutStampsIntra = self.task.cutOutStamps(
-            intraExposure, donutCatalog, DefocalType.Intra
+            intraExposure, donutCatalog, DefocalType.Intra, self.cameraName
         )
 
         zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)

@@ -68,6 +68,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
 
         collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
+        cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testCwfsPipeline.yaml")
 
         pipeCmd = writePipetaskCmd(
@@ -223,7 +224,9 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         # Test return values when no sources in catalog
         noSrcDonutCatalog = copy(donutCatalog)
         noSrcDonutCatalog["detector"] = "R22_S99"
-        testOutNoSrc = self.task.run([exposureExtra, exposureIntra], noSrcDonutCatalog)
+        testOutNoSrc = self.task.run(
+            [exposureExtra, exposureIntra], noSrcDonutCatalog, self.cameraName
+        )
 
         np.testing.assert_array_equal(
             testOutNoSrc.outputZernikesRaw, np.ones(19) * np.nan
@@ -238,7 +241,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         extraOnlyDonutCatalog = copy(donutCatalog)
         extraOnlyDonutCatalog["detector"] = "R00_SW0"
         testOutNoIntra = self.task.run(
-            [exposureExtra, exposureIntra], extraOnlyDonutCatalog
+            [exposureExtra, exposureIntra], extraOnlyDonutCatalog, self.cameraName
         )
 
         np.testing.assert_array_equal(
@@ -254,7 +257,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         intraOnlyDonutCatalog = copy(donutCatalog)
         intraOnlyDonutCatalog["detector"] = "R00_SW1"
         testOutNoExtra = self.task.run(
-            [exposureExtra, exposureIntra], intraOnlyDonutCatalog
+            [exposureExtra, exposureIntra], intraOnlyDonutCatalog, self.cameraName
         )
 
         np.testing.assert_array_equal(
@@ -271,16 +274,18 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         exposureExtra, exposureIntra, donutCatalog = self._getDataFromButler()
 
         # Test normal behavior
-        taskOut = self.task.run([exposureIntra, exposureExtra], donutCatalog)
+        taskOut = self.task.run(
+            [exposureIntra, exposureExtra], donutCatalog, self.cameraName
+        )
 
         extraCatalog, intraCatalog = self.task.selectCwfsSources(
             donutCatalog, (4072, 2000)
         )
         testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, extraCatalog, DefocalType.Extra
+            exposureExtra, extraCatalog, DefocalType.Extra, self.cameraName
         )
         testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, intraCatalog, DefocalType.Intra
+            exposureIntra, intraCatalog, DefocalType.Intra, self.cameraName
         )
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
