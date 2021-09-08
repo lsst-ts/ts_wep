@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.8.1:
+
+-------------
+1.8.1
+-------------
+
+* Get sensor orientation and field position directly from camera through new DonutStamp objects instead of using SourceProcessor.
+* Fix rotation of postage stamps sent to WFEsti.
+
 .. _lsst.ts.wep-1.8.0:
 
 -------------
