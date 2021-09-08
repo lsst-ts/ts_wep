@@ -64,6 +64,7 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
 
         collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
+        cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testFamPipeline.yaml")
 
         pipeCmd = writePipetaskCmd(
@@ -196,7 +197,9 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         # Test return values when no sources in catalog
         noSrcDonutCatalog = copy(donutCatalog)
         noSrcDonutCatalog["detector"] = "R22_S99"
-        testOutNoSrc = self.task.run([exposureExtra, exposureIntra], noSrcDonutCatalog)
+        testOutNoSrc = self.task.run(
+            [exposureExtra, exposureIntra], noSrcDonutCatalog, self.cameraName
+        )
 
         np.testing.assert_array_equal(
             testOutNoSrc.outputZernikesRaw, np.ones(19) * np.nan
@@ -208,13 +211,15 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
 
         # Test normal behavior
-        taskOut = self.task.run([exposureIntra, exposureExtra], donutCatalog)
+        taskOut = self.task.run(
+            [exposureIntra, exposureExtra], donutCatalog, self.cameraName
+        )
 
         testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, donutCatalog, DefocalType.Extra
+            exposureExtra, donutCatalog, DefocalType.Extra, self.cameraName
         )
         testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, donutCatalog, DefocalType.Intra
+            exposureIntra, donutCatalog, DefocalType.Intra, self.cameraName
         )
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):

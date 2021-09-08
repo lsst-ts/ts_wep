@@ -80,6 +80,40 @@ class EstimateZernikesFamTask(EstimateZernikesBaseTask):
         # of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
 
+    def runQuantum(
+        self,
+        butlerQC: pipeBase.ButlerQuantumContext,
+        inputRefs: pipeBase.InputQuantizedConnection,
+        outputRefs: pipeBase.OutputQuantizedConnection,
+    ):
+        """
+        We implement a runQuantum method to make sure our configured
+        task runs with the instrument required by the pipeline.
+
+        Parameters
+        ----------
+        butlerQC : pipeBase.ButlerQuantumContext
+            Butler to handle the data processing of the task
+        inputRefs : pipeBase.InputQuantizedConnection
+            The butler references for the input data for the task.
+        outputRefs : pipeBase.OutputQuantizedConnection
+            The butler references for the output data
+            created by the task.
+        """
+
+        # Get the instrument we are running the pipeline with
+        cameraName = inputRefs.exposures[0].dataId["instrument"]
+
+        # Get the input reference objects for the task
+        exposures = butlerQC.get(inputRefs.exposures)
+        donutCat = butlerQC.get(inputRefs.donutCatalog)
+
+        # Run task on specified instrument
+        outputs = self.run(exposures, donutCat, cameraName)
+
+        # Use butler to store output in repository
+        butlerQC.put(outputs, outputRefs)
+
     def assignExtraIntraIdx(self, focusZVal0, focusZVal1):
         """
         Identify which exposure in the list is the extra-focal and which
@@ -126,7 +160,10 @@ class EstimateZernikesFamTask(EstimateZernikesBaseTask):
         return extraExpIdx, intraExpIdx
 
     def run(
-        self, exposures: typing.List[afwImage.Exposure], donutCatalog: pd.DataFrame
+        self,
+        exposures: typing.List[afwImage.Exposure],
+        donutCatalog: pd.DataFrame,
+        cameraName: str,
     ) -> pipeBase.Struct:
 
         # Get exposure metadata to find which is extra and intra
@@ -137,10 +174,10 @@ class EstimateZernikesFamTask(EstimateZernikesBaseTask):
 
         # Get the donut stamps from extra and intra focal images
         donutStampsExtra = self.cutOutStamps(
-            exposures[extraExpIdx], donutCatalog, DefocalType.Extra
+            exposures[extraExpIdx], donutCatalog, DefocalType.Extra, cameraName
         )
         donutStampsIntra = self.cutOutStamps(
-            exposures[intraExpIdx], donutCatalog, DefocalType.Intra
+            exposures[intraExpIdx], donutCatalog, DefocalType.Intra, cameraName
         )
 
         # If no donuts are in the donutCatalog for a set of exposures
