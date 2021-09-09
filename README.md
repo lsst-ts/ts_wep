@@ -140,6 +140,14 @@ This requires the configuration file `tests/testData/gen3TestRepo/convertRefCat.
 
 Inside the Gen 3 repository there are files for the Gen 3 Butler configuration (`butler.yaml`) and the repository database (`gen3.sqlite3`).
 
+## Difference in Corner Wavefront Sensors Euler angles to Phosim values
+
+The Euler angles used for the corner wavefront sensors in `ts_wep` come from the [`obs_lsst`](https://github.com/lsst/obs_lsst) package maintained by the Rubin DM team.
+The rotations for the R04 and R40 wavefront sensors given by the `obs_lsst` package differ by 180 degrees from those used in `phosim_syseng4` and defined in that repository in the
+file [`data/lsst/focalPlaneLayout.txt`](https://github.com/lsst-ts/phosim_syseng4/blob/aos/data/lsst/focalplanelayout.txt). This is due to a difference in the rotation direction
+when phosim creates images and the 180 degree difference offsets that and creates the correct orientation with the rest of the focal plane.
+This is shown in the notebook [here](https://github.com/suberlak/AOS/blob/main/AOS_DM-30367_summary.ipynb).
+
 ## Build the Document
 
 To build project documentation, run `package-docs build` to build the documentation.
