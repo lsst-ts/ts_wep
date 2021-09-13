@@ -528,6 +528,6 @@ def writeCleanUpRepoCmd(repoDir, runName):
     """
 
     cleanUpCmd = "butler prune-collection "
-    cleanUpCmd += f"{repoDir} {runName} --purge --unstore"
+    cleanUpCmd += f"{repoDir} {runName} --purge --unstore --no-confirm"
 
     return cleanUpCmd

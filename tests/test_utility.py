@@ -75,7 +75,7 @@ class TestUtility(unittest.TestCase):
     def _writeCleanUpCmd(self, repoName, runName):
 
         testCmd = f"butler prune-collection {repoName} {runName}"
-        testCmd += " --purge --unstore"
+        testCmd += " --purge --unstore --no-confirm"
 
         return testCmd
 

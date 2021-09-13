@@ -26,6 +26,7 @@ from scipy.signal import correlate
 import lsst.utils.tests
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
+from lsst.ts.wep.task.DonutStamps import DonutStamps
 from lsst.ts.wep.task.EstimateZernikesBase import (
     EstimateZernikesBaseTask,
     EstimateZernikesBaseConfig,
@@ -47,9 +48,9 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         """
 
         moduleDir = getModulePath()
-        testDataDir = os.path.join(moduleDir, "tests", "testData")
-        testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
-        cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
+        cls.testDataDir = os.path.join(moduleDir, "tests", "testData")
+        testPipelineConfigDir = os.path.join(cls.testDataDir, "pipelineConfigs")
+        cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
         cls.runName = "run1"
 
         # Check that run doesn't already exist due to previous improper cleanup
@@ -245,6 +246,90 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
+
+    def testEstimateCornerZernikes(self):
+        """
+        Test the rotated corner sensors (R04 and R40) and make sure no changes
+        upstream in obs_lsst have created issues in Zernike estimation.
+        """
+
+        donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
+
+        # Test R04
+        donutStampsExtra = DonutStamps.readFits(
+            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
+        )
+        donutStampsIntra = DonutStamps.readFits(
+            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
+        )
+        zernCoeffAllR04 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        zernCoeffAvgR04 = self.task.combineZernikes(zernCoeffAllR04)
+        trueZernCoeffR04 = np.array(
+            [
+                -0.71201408,
+                1.12248525,
+                0.77794367,
+                -0.04085477,
+                -0.05272933,
+                0.16054277,
+                0.081405,
+                -0.04382461,
+                -0.04830676,
+                -0.06218882,
+                0.10246469,
+                0.0197683,
+                0.007953,
+                0.00668697,
+                -0.03570788,
+                -0.03020376,
+                0.0039522,
+                0.04793133,
+                -0.00804605,
+            ]
+        )
+        # Make sure the total rms error is less than 0.5 microns off
+        # from the OPD truth as a sanity check
+        self.assertLess(
+            np.sqrt(np.sum(np.square(zernCoeffAvgR04 - trueZernCoeffR04))), 0.5
+        )
+
+        # Test R40
+        donutStampsExtra = DonutStamps.readFits(
+            os.path.join(donutStampDir, "R40_SW0_donutStamps.fits")
+        )
+        donutStampsIntra = DonutStamps.readFits(
+            os.path.join(donutStampDir, "R40_SW1_donutStamps.fits")
+        )
+        zernCoeffAllR40 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        zernCoeffAvgR40 = self.task.combineZernikes(zernCoeffAllR40)
+        trueZernCoeffR40 = np.array(
+            [
+                -0.6535694,
+                1.00838499,
+                0.55968811,
+                -0.08899825,
+                0.00173607,
+                0.04133107,
+                -0.10913093,
+                -0.04363778,
+                -0.03149601,
+                -0.04941225,
+                0.09980538,
+                0.03704486,
+                -0.00210766,
+                0.01737253,
+                0.01727539,
+                0.01278011,
+                0.01212878,
+                0.03876888,
+                -0.00559142,
+            ]
+        )
+        # Make sure the total rms error is less than 0.5 microns off
+        # from the OPD truth as a sanity check
+        self.assertLess(
+            np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.5
+        )
 
     def testCombineZernikes(self):
 
