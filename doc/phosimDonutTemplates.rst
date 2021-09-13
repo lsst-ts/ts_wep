@@ -12,9 +12,8 @@ required by :py:class:`DonutTemplatePhosim`.
 Creating the templates
 ======================
 
-The code to generate phosim donut templates is located in the `ts_phosim`
-package. `ts_phosim` has documentation on how to create the phosim donut templates
-using `runCreatePhosimDonutTemplates.py` in the bin.src directory of `ts_phosim`.
+The code to generate phosim donut templates is located in the `ts_phosim` package.
+`ts_phosim` has documentation on how to create the phosim donut templates using `runCreatePhosimDonutTemplates.py` in the bin.src directory of `ts_phosim`.
 
 Location of files
 =================
