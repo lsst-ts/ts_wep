@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-1.8.2:
+
+-------------
+1.8.2
+-------------
+
+* Removed CreatePhosimDonutTemplates.py and moved to `ts_phosim`.
+
 .. _lsst.ts.wep-1.8.1:
 
 -------------
