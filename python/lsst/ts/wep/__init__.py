@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from .SourceProcessor import SourceProcessor
 from .Utility import FilterType, CamType, BscDbType
 
 # This class needs the scons to build the cython code. In the Jenkins test,
