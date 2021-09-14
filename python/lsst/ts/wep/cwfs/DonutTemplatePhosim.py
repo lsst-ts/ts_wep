@@ -35,10 +35,12 @@ class DonutTemplatePhosim(DonutTemplateDefault):
         """
         Make the donut template image from phosim templates.
         The templates should have been created using
-        `bin.src/runCreatePhosimDonutTemplates.py` and exist
+        code located in the `ts_phosim` repository under
+        `bin.src/runCreatePhosimDonutTemplates.py`. The template
+        files should then be stored here in `ts_wep`
         in `policy/cwfs/donutTemplateData/phosimTemplates`.
-        See the `ts_wep` docs for more information on
-        how to generate the templates.
+        See the `ts_wep` docs for more information or see
+        `ts_phosim` docs for instructions on creating templates.
 
         Parameters
         ----------
