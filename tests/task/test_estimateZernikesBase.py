@@ -88,11 +88,13 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         self.dataIdExtra = {
             "instrument": "LSSTCam",
             "detector": 94,
+            "visit": 4021123106001,
             "exposure": 4021123106001,
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
+            "visit": 4021123106002,
             "exposure": 4021123106002,
         }
 
@@ -139,12 +141,12 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
 
         return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
-    def validateConfigs(self):
+    def testValidateConfigs(self):
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
-        self.config.initialCutoutSize = 290
-        self.task = EstimateZernikesBaseTask(config=self.config)
+        self.config.initialCutoutPadding = 290
+        self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)

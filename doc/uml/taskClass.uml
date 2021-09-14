@@ -1,16 +1,9 @@
 @startuml
 class RefCatalogInterface
 DonutSourceSelectorTask *-- DonutSourceSelectorTaskConfig
-GenerateDonutCatalogBaseConfig *-- GenerateDonutCatalogBaseConnections
-GenerateDonutCatalogBaseTask *-- GenerateDonutCatalogBaseConfig
-GenerateDonutCatalogBaseConnections <|-- GenerateDonutCatalogOnlineTaskConnections
-GenerateDonutCatalogBaseConfig <|-- GenerateDonutCatalogOnlineTaskConfig
-GenerateDonutCatalogBaseTask <|-- GenerateDonutCatalogOnlineTask
-GenerateDonutCatalogOnlineTaskConfig *-- GenerateDonutCatalogOnlineTaskConnections
+GenerateDonutCatalogOnlineTaskConfig *-- DonutSourceSelectorTask
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
-GenerateDonutCatalogBaseConnections <|-- GenerateDonutCatalogWcsTaskConnections
-GenerateDonutCatalogBaseConfig <|-- GenerateDonutCatalogWcsTaskConfig
-GenerateDonutCatalogBaseTask <|-- GenerateDonutCatalogWcsTask
+GenerateDonutCatalogWcsTaskConfig *-- DonutSourceSelectorTask
 GenerateDonutCatalogWcsTaskConfig *-- GenerateDonutCatalogWcsTaskConnections
 GenerateDonutCatalogWcsTask *-- GenerateDonutCatalogWcsTaskConfig
 DonutStamps *-- DonutStamp
@@ -23,9 +16,11 @@ EstimateZernikesBaseConfig <|-- EstimateZernikesScienceSensorTaskConfig
 EstimateZernikesBaseTask <|-- EstimateZernikesScienceSensorTask
 EstimateZernikesScienceSensorTaskConfig *-- EstimateZernikesScienceSensorTaskConnections
 EstimateZernikesScienceSensorTask *-- EstimateZernikesScienceSensorTaskConfig
+EstimateZernikesScienceSensorTask ..> DonutStamps
 EstimateZernikesBaseConnections <|-- EstimateZernikesCwfsTaskConnections
 EstimateZernikesBaseConfig <|-- EstimateZernikesCwfsTaskConfig
 EstimateZernikesBaseTask <|-- EstimateZernikesCwfsTask
 EstimateZernikesCwfsTaskConfig *-- EstimateZernikesCwfsTaskConnections
 EstimateZernikesCwfsTask *-- EstimateZernikesCwfsTaskConfig
+EstimateZernikesCwfsTask ..> DonutStamps
 @enduml

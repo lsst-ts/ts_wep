@@ -19,132 +19,194 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import typing
-import lsst.afw.table as afwTable
+import numpy as np
+import pandas as pd
+from astropy import units
+
 import lsst.pex.config as pexConfig
-import lsst.geom
-import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
-from lsst.obs.base import createInitialSkyWcsFromBoresight
-from lsst.ts.wep.task.GenerateDonutCatalogBase import (
-    GenerateDonutCatalogBaseConnections,
-    GenerateDonutCatalogBaseConfig,
-    GenerateDonutCatalogBaseTask,
+from lsst.afw.image import abMagErrFromFluxErr
+from lsst.meas.algorithms import (
+    LoadIndexedReferenceObjectsTask,
+    ReferenceSourceSelectorTask,
+    ReferenceObjectLoader,
 )
 
+from lsst.ts.wep.task.DonutSourceSelectorTask import DonutSourceSelectorTask
 
-class GenerateDonutCatalogOnlineTaskConfig(
-    GenerateDonutCatalogBaseConfig,
-    pipelineConnections=GenerateDonutCatalogBaseConnections,
-):
-    """
-    Configuration settings for GenerateDonutCatalogOnlineTask. Specifies
-    pointing information, filter and camera details.
-    """
 
-    boresightRa = pexConfig.Field(
-        doc="Boresight RA in degrees", dtype=float, default=0.0
+class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
+    """Configuration for GenerateDonutCatalogOnlineTask."""
+
+    refObjLoader = pexConfig.ConfigurableField(
+        target=LoadIndexedReferenceObjectsTask,
+        doc="Reference object loader for photometry",
     )
-    boresightDec = pexConfig.Field(
-        doc="Boresight Dec in degrees", dtype=float, default=0.0
+    referenceSelector = pexConfig.ConfigurableField(
+        target=ReferenceSourceSelectorTask,
+        doc="Selection of reference sources",
     )
-    boresightRotAng = pexConfig.Field(
-        doc="Boresight Rotation Angle in degrees", dtype=float, default=0.0
+    doReferenceSelection = pexConfig.Field(
+        doc="Run the reference selector on the reference catalog?",
+        dtype=bool,
+        default=True,
+    )
+    filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
+    donutSelector = pexConfig.ConfigurableField(
+        target=DonutSourceSelectorTask, doc="How to select donut targets."
+    )
+    doDonutSelection = pexConfig.Field(
+        doc="Whether or not to run donut selector.", dtype=bool, default=False
     )
 
 
-class GenerateDonutCatalogOnlineTask(GenerateDonutCatalogBaseTask):
-    """
-    Create a WCS from boresight info and then use this
-    with a reference catalog to select sources on the detectors for AOS.
-    """
+class GenerateDonutCatalogOnlineTask(pipeBase.Task):
 
     ConfigClass = GenerateDonutCatalogOnlineTaskConfig
     _DefaultName = "generateDonutCatalogOnlineTask"
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, dataIds, refCats, **kwargs):
+        """
+        Construct a source catalog from reference catalogs
+        and pointing information.
 
-        # The filter in the reference catalog we want to use to find sources.
-        self.filterName = self.config.filterName
+        Parameters
+        ----------
+        dataIds : list
+            List of the deferred dataset references pointing to the pieces
+            of the reference catalog we want in the butler.
+        refCats : list
+            List of the dataIds for the reference catalog shards.
+        """
 
-        # Pointing information to construct the WCS. All values in degrees.
-        self.boresightRa = self.config.boresightRa
-        self.boresightDec = self.config.boresightDec
-        self.boresightRotAng = self.config.boresightRotAng
-
-        self.boresightPointing = lsst.geom.SpherePoint(
-            self.boresightRa, self.boresightDec, lsst.geom.degrees
+        pipeBase.Task.__init__(self, **kwargs)
+        refConfig = self.config.refObjLoader
+        self.refObjLoader = ReferenceObjectLoader(
+            dataIds=dataIds, refCats=refCats, config=refConfig, log=self.log
         )
 
-    def runQuantum(
-        self,
-        butlerQC: pipeBase.ButlerQuantumContext,
-        inputRefs: pipeBase.InputQuantizedConnection,
-        outputRefs: pipeBase.OutputQuantizedConnection,
-    ):
+        if self.config.doReferenceSelection:
+            self.makeSubtask("referenceSelector")
+
+        self.filterName = self.config.filterName
+        self.config.refObjLoader.pixelMargin = 0
+        self.config.refObjLoader.anyFilterMapsToThis = self.filterName
+        self.config.referenceSelector.magLimit.fluxField = f"{self.filterName}_flux"
+        self.config.referenceSelector.signalToNoise.fluxField = (
+            f"{self.filterName}_flux"
+        )
+        self.config.donutSelector.fluxField = f"{self.filterName}_flux"
+        if self.config.doDonutSelection:
+            self.makeSubtask("donutSelector")
+
+    @pipeBase.timeMethod
+    def run(self, bbox, wcs):
+        """Get the data from the reference catalog only from the
+        shards of the reference catalogs that overlap our pointing.
+
+        Parameters
+        ----------
+        bbox : `lsst.geom.Box2I` or `lsst.geom.Box2D`
+            Box which bounds a region in pixel space.
+        wcs : `lsst.afw.geom.SkyWcs`
+            Wcs object defining the pixel to sky (and inverse) transform for
+            the supplied ``bbox``.
+
+        Returns
+        -------
+        struct : `lsst.pipe.base.Struct`
+            The struct contains the following data:
+            - DonutCatalog: `pandas.DataFrame`
+                The final donut source catalog for the region.
         """
-        We implement a runQuantum method to make sure our configured
-        task runs with the instrument required by the pipeline.
-        """
+        # Get the refcatalog shard
+        skyBox = self.refObjLoader.loadPixelBox(
+            bbox, wcs, filterName=self.filterName, bboxToSpherePadding=0
+        )
 
-        # Get the instrument we are running the pipeline with
-        cameraName = outputRefs.donutCatalog.dataId["instrument"]
-
-        # Get the input reference catalogs for the task
-        inputs = butlerQC.get(inputRefs)
-
-        # Run task on specified instrument
-        outputs = self.run(cameraName, **inputs)
-
-        # Use butler to store output in repository
-        butlerQC.put(outputs, outputRefs)
-
-    def run(
-        self, cameraName: str, refCatalogs: typing.List[afwTable.SimpleCatalog]
-    ) -> pipeBase.Struct:
-
-        # Get camera
-        if cameraName == "LSSTCam":
-            camera = obs_lsst.LsstCam.getCamera()
-        elif cameraName == "LSSTComCam":
-            camera = obs_lsst.LsstComCam.getCamera()
+        if not skyBox.refCat.isContiguous():
+            refCat = skyBox.refCat.copy(deep=True)
         else:
-            raise ValueError(f"{cameraName} is not a valid camera name.")
+            refCat = skyBox.refCat
 
-        refObjLoader = self.getRefObjLoader(refCatalogs)
+        donutCatalog = self._formatCatalog(refCat, bbox)
 
-        detectorList = []
-        donutCatalogList = []
+        return pipeBase.Struct(donutCatalog=donutCatalog)
 
-        for detector in camera:
+    def _formatCatalog(self, refCat, bbox):
 
-            detWcs = createInitialSkyWcsFromBoresight(
-                self.boresightPointing,
-                self.boresightRotAng * lsst.geom.degrees,
-                detector,
-                flipX=False,
-            )
+        """Format a reference afw table into the final format.
 
-            try:
-                # Match detector layout to reference catalog
-                donutCatalog = refObjLoader.loadPixelBox(
-                    detector.getBBox(), detWcs, filterName=self.filterName
-                ).refCat
+        Parameters
+        ----------
+        refCat : `lsst.afw.table.SourceCatalog`
+            Reference catalog in afw format.
+        bbox : `lsst.geom.Box2I` or `lsst.geom.Box2D`
+            Box which bounds a region in pixel space.
 
-                detectorList.append(detector.getName())
-                donutCatalogList.append(donutCatalog)
+        Returns
+        -------
+        refCat : `pandas.DataFrame`
+            Reference catalog.
+        """
 
-            # Except RuntimeError caused when no reference catalog
-            # available for the region covered by detector
-            except RuntimeError:
-                continue
+        if self.config.doReferenceSelection:
+            goodSources = self.referenceSelector.selectSources(refCat)
+            refSelected = goodSources.selected
+        else:
+            refSelected = np.ones(len(refCat), dtype=bool)
 
-        fieldObjects = self.donutCatalogListToDataFrame(donutCatalogList, detectorList)
+        if self.config.doDonutSelection:
+            print("Running Donut Selector")
+            donutSelection = self.donutSelector.run(refCat, bbox)
+            donutSelected = donutSelection.selected
+        else:
+            donutSelected = np.ones(len(refCat), dtype=bool)
 
-        # Return pandas DataFrame with sources in pointing
-        # with ra, dec, filter flux, pixel XY information and detector name
-        # for each source
-        finalSources = self.filterResults(fieldObjects)
+        selected = refSelected & donutSelected
 
-        return pipeBase.Struct(donutCatalog=finalSources)
+        npRefCat = np.zeros(
+            np.sum(selected),
+            dtype=[
+                ("coord_ra", "f8"),
+                ("coord_dec", "f8"),
+                ("centroid_x", "f8"),
+                ("centroid_y", "f8"),
+                ("refMag", "f8"),
+                ("refMagErr", "f8"),
+            ],
+        )
+
+        if npRefCat.size == 0:
+            # Return an empty catalog if we don't have any selected sources.
+            return npRefCat
+
+        # Natively "coord_ra" and "coord_dec" are stored in radians.
+        # Doing this as an array rather than by row with the coord access is
+        # approximately 600x faster.
+        npRefCat["coord_ra"] = refCat["coord_ra"][selected]
+        npRefCat["coord_dec"] = refCat["coord_dec"][selected]
+
+        npRefCat["centroid_x"] = refCat["centroid_x"][selected]
+        npRefCat["centroid_y"] = refCat["centroid_y"][selected]
+
+        # Default (unset) values are 99.0
+        npRefCat["refMag"] = 99.0
+        npRefCat["refMagErr"] = 99.0
+
+        fluxField = f"{self.filterName}_flux"
+
+        # nan_to_num replaces nans with zeros, and this ensures that
+        # we select fluxes that both filter out nans and are positive.
+        (good,) = np.where(
+            (np.nan_to_num(refCat[fluxField][selected]) > 0.0)
+            & (np.nan_to_num(refCat[fluxField + "Err"][selected]) > 0.0)
+        )
+        refMag = (refCat[fluxField][selected][good] * units.nJy).to_value(units.ABmag)
+        refMagErr = abMagErrFromFluxErr(
+            refCat[fluxField + "Err"][selected][good], refCat[fluxField][selected][good]
+        )
+        npRefCat["refMag"][good] = refMag
+        npRefCat["refMagErr"][good] = refMagErr
+
+        return pd.DataFrame.from_records(npRefCat)

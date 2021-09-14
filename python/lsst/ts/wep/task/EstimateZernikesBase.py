@@ -42,34 +42,46 @@ class EstimateZernikesBaseConnections(
 ):
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
-        dimensions=("instrument",),
+        dimensions=(
+            "visit",
+            "detector",
+            "instrument",
+        ),
         storageClass="DataFrame",
         name="donutCatalog",
+        multiple=True,
+    )
+    camera = connectionTypes.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
     )
     donutStampsExtra = connectionTypes.Output(
         doc="Extra-focal Donut Postage Stamp Images",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtra",
         multiple=True,
     )
     donutStampsIntra = connectionTypes.Output(
         doc="Intra-focal Donut Postage Stamp Images",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
         multiple=True,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="NumpyArray",
         name="zernikeEstimateRaw",
         multiple=True,
     )
     outputZernikesAvg = connectionTypes.Output(
         doc="Zernike Coefficients averaged over donuts",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="NumpyArray",
         name="zernikeEstimateAvg",
         multiple=True,
@@ -355,6 +367,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         return DonutStamps(finalStamps, metadata=stampsMetadata)
 
+    @pipeBase.timeMethod
     def estimateZernikes(self, donutStampsExtra, donutStampsIntra):
         """
         Take the donut postage stamps and estimate the Zernike coefficients.

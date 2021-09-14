@@ -25,6 +25,7 @@ import pandas as pd
 
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
+import lsst.afw.cameraGeom
 from lsst.pipe.base import connectionTypes
 
 from lsst.ts.wep.Utility import DefocalType
@@ -101,16 +102,13 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
             The butler references for the output data
             created by the task.
         """
-
-        # Get the instrument we are running the pipeline with
-        cameraName = inputRefs.exposures[0].dataId["instrument"]
-
         # Get the input reference objects for the task
         exposures = butlerQC.get(inputRefs.exposures)
-        donutCat = butlerQC.get(inputRefs.donutCatalog)
+        donutCats = butlerQC.get(inputRefs.donutCatalog)
+        camera = butlerQC.get(inputRefs.camera)
 
         # Run task on specified instrument
-        outputs = self.run(exposures, donutCat, cameraName)
+        outputs = self.run(exposures, donutCats, camera)
 
         # Use butler to store output in repository
         butlerQC.put(outputs, outputRefs)
@@ -163,10 +161,13 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
-        donutCatalog: pd.DataFrame,
-        cameraName: str,
+        donutCatalogs: typing.List[pd.DataFrame],
+        camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
+        # The donut catalogs for each exposure should be the same
+        # Just pick the one for the first exposure
+        donutCatalog = donutCatalogs[0]
         # Get exposure metadata to find which is extra and intra
         focusZ0 = exposures[0].getMetadata()["FOCUSZ"]
         focusZ1 = exposures[1].getMetadata()["FOCUSZ"]
@@ -174,6 +175,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
 
         # Get the donut stamps from extra and intra focal images
+        cameraName = camera.getName()
         donutStampsExtra = self.cutOutStamps(
             exposures[extraExpIdx], donutCatalog, DefocalType.Extra, cameraName
         )

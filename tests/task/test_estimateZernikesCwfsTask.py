@@ -95,11 +95,13 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             "instrument": "LSSTCam",
             "detector": 191,
             "exposure": self.visitNum,
+            "visit": self.visitNum,
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 192,
             "exposure": self.visitNum,
+            "visit": self.visitNum,
         }
 
     def _generateTestExposures(self):
@@ -155,38 +157,36 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
-        donutCatalog = self.butler.get(
+        donutCatalogExtra = self.butler.get(
             "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
         )
+        donutCatalogIntra = self.butler.get(
+            "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
+        )
+        camera = self.butler.get(
+            "camera",
+            dataId={"instrument": "LSSTCam"},
+            collections="LSSTCam/calib/unbounded",
+        )
 
-        return exposureExtra, exposureIntra, donutCatalog
+        return (
+            exposureExtra,
+            exposureIntra,
+            donutCatalogExtra,
+            donutCatalogIntra,
+            camera,
+        )
 
-    def validateConfigs(self):
+    def testValidateConfigs(self):
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
-        self.config.initialCutoutSize = 290
+        self.config.initialCutoutPadding = 290
         self.task = EstimateZernikesCwfsTask(config=self.config)
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
-
-    def testSelectCwfsSources(self):
-
-        testDf = pd.DataFrame()
-        testDf["coord_ra"] = np.zeros(5)
-        testDf["coord_dec"] = np.zeros(5)
-        testDf["source_flux"] = np.arange(5)
-        testDf["centroid_x"] = np.zeros(5)
-        testDf["centroid_y"] = np.zeros(5)
-        testDf["detector"] = ["R00_SW0", "R44_SW0", "R40_SW1", "R04_SW1", "R22_S11"]
-        extraCatalog, intraCatalog = self.task.selectCwfsSources(testDf, (4072, 2000))
-
-        np.testing.assert_array_equal(extraCatalog.values, testDf.iloc[:2].values[::-1])
-        np.testing.assert_array_equal(
-            intraCatalog.values, testDf.iloc[2:4].values[::-1]
-        )
 
     def testRunQuantum(self):
 
@@ -206,26 +206,37 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
                 run="run2",
             )
         ]
+        inputRefs.camera = [
+            dafButler.DatasetRef(
+                self.registry.getDatasetType("camera"),
+                {"instrument": badInstrument},
+                id=21,
+                run=f"{badInstrument}/calib/unbounded",
+            )
+        ]
         outputRefs = pipeBase.OutputQuantizedConnection()
 
         # Test that we will get an error if we try to use an
         # unsupported instrument.
-        with self.assertRaises(ValueError) as context:
+        errMsg = f"{badInstrument} is not a valid camera name."
+        with self.assertRaises(ValueError, msg=errMsg):
             self.task.runQuantum(butlerQC, inputRefs, outputRefs)
-        self.assertEqual(
-            f"{badInstrument} is not a valid camera name.",
-            str(context.exception),
-        )
 
     def testTaskRunNoSources(self):
 
-        exposureExtra, exposureIntra, donutCatalog = self._getDataFromButler()
+        (
+            exposureExtra,
+            exposureIntra,
+            donutCatalogExtra,
+            donutCatalogIntra,
+            camera,
+        ) = self._getDataFromButler()
 
         # Test return values when no sources in catalog
-        noSrcDonutCatalog = copy(donutCatalog)
+        noSrcDonutCatalog = copy(donutCatalogExtra)
         noSrcDonutCatalog["detector"] = "R22_S99"
         testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], noSrcDonutCatalog, self.cameraName
+            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
 
         np.testing.assert_array_equal(
@@ -238,10 +249,13 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
 
         # Test no intra sources in catalog
-        extraOnlyDonutCatalog = copy(donutCatalog)
-        extraOnlyDonutCatalog["detector"] = "R00_SW0"
         testOutNoIntra = self.task.run(
-            [exposureExtra, exposureIntra], extraOnlyDonutCatalog, self.cameraName
+            [exposureExtra, exposureIntra],
+            [
+                donutCatalogExtra,
+                pd.DataFrame(columns=donutCatalogExtra.columns),
+            ],
+            camera,
         )
 
         np.testing.assert_array_equal(
@@ -254,10 +268,13 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         self.assertEqual(len(testOutNoIntra.donutStampsIntra), 0)
 
         # Test no extra sources in catalog
-        intraOnlyDonutCatalog = copy(donutCatalog)
-        intraOnlyDonutCatalog["detector"] = "R00_SW1"
         testOutNoExtra = self.task.run(
-            [exposureExtra, exposureIntra], intraOnlyDonutCatalog, self.cameraName
+            [exposureExtra, exposureIntra],
+            [
+                pd.DataFrame(columns=donutCatalogIntra.columns),
+                donutCatalogIntra,
+            ],
+            camera,
         )
 
         np.testing.assert_array_equal(
@@ -271,21 +288,26 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
 
     def testTaskRunNormal(self):
 
-        exposureExtra, exposureIntra, donutCatalog = self._getDataFromButler()
+        (
+            exposureExtra,
+            exposureIntra,
+            donutCatalogExtra,
+            donutCatalogIntra,
+            camera,
+        ) = self._getDataFromButler()
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra], donutCatalog, self.cameraName
+            [exposureIntra, exposureExtra],
+            [donutCatalogExtra, donutCatalogIntra],
+            camera,
         )
 
-        extraCatalog, intraCatalog = self.task.selectCwfsSources(
-            donutCatalog, (4072, 2000)
-        )
         testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, extraCatalog, DefocalType.Extra, self.cameraName
+            exposureExtra, donutCatalogExtra, DefocalType.Extra, self.cameraName
         )
         testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, intraCatalog, DefocalType.Intra, self.cameraName
+            exposureIntra, donutCatalogIntra, DefocalType.Intra, self.cameraName
         )
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
