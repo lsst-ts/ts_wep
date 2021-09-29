@@ -48,49 +48,6 @@ To enable this with a git pre-commit hook:
 - Install the `clang-format` C++ package.
 - Run `git config core.hooksPath .githooks` once in this repository.
 
-## DM Command Line Task (obs_lsst and phosim_utils)
-
-1. Make the faked flat images. Flats only need to be made once. They can then be shared between repos. The flats can be faked with (1) all sensors, (2) corner wavefront sensors, or (3) user-specified sensor list.
-
-```bash
-cd $work_dir
-mkdir fake_flats
-cd fake_flats/
-makeGainImages.py
-cd ..
-```
-
-2. Repackage the PhoSim output amplifiers. The data needs to be put in single 16 extension MEFs (Multi-Extension FITS) for processing.
-
-```bash
-phosim_repackager.py $phosim_amp_dir --out_dir=repackaged_files
-```
-
-3. Make the repository for butler to use, ingest the images, and ingest the calibration products.
-
-```bash
-mkdir input
-echo lsst.obs.lsst.phosim.PhosimMapper > input/_mapper
-ingestImages.py input repackaged_files/*.fits
-ingestCalibs.py input fake_flats/* --validity 99999 --output input
-```
-
-4. Make the config override file to turn only flat field on.
-
-```bash
-echo "config.isr.doBias=False
-config.isr.doDark=False
-config.isr.doFlat=True
-config.isr.doFringe=False
-config.isr.doDefect=False" >isr_config.py
-```
-
-5. Run the instrument signature removal (ISR).
-
-```bash
-runIsr.py input --id --rerun=run1 --configfile isr_config.py
-```
-
 ## Use of Module
 
 1. Setup the DM environment.
@@ -108,21 +65,6 @@ cd $path_of_ts_wep
 setup -k -r .
 ```
 
-## Example Script
-
-- **mapSensorAndFieldIdx.py**: Map the sensor name to the field point index for LSST.
-- **mapSensorAndFieldIdxLsstFam.py**: Map the sensor name to the field point for LSST full-array mode (FAM).
-
-## Verify the Calculated Wavefront Error
-
-1. The user can use the `Algorithm.getWavefrontMapEsti()` and `Algorithm.getWavefrontMapResidual()` in `cwfs` module to judge the estimated wavefront error after the solve of transport of intensity equation (TIE). The residual of wavefront map should be low compared with the calculated wavefront map if most of low-order Zernike terms (z4 - z22) have been captured and compensated.
-2. The idea of TIE is to compensate the defocal images back to the focal one (image on pupil). Therefore, in the ideal case, the compensated defocal images should be similar. After the solve of TIE, the user can use the `CompensableImage.getImg()` in `cwfs` module to compare the compensated defocal images.
-
-## Note of Auxiliary Telescope Images
-
-1. While testing with the sky images obtained with the auxiliary telescope (localed in `tests/testData/testImages/auxTel`), this package and [cwfs](https://github.com/bxin/cwfs) show the similar result in "onAxis" optical model. However, for the "paraxial" optical model, the results of two packages are different.
-2. The main difference comes from the stratege of compensation in the initial loop of solving the TIE. However, it is hard to have a conclusion at this moment because of the low singal-to-noise ratio in test images.
-
 ## Test Gen 3 Repository
 
 In the folder `tests/testData/` there is a test repository for tasks that run with the Gen 3 DM middleware.
@@ -139,6 +81,49 @@ This requires the configuration file `tests/testData/gen3TestRepo/convertRefCat.
 4. Clean up the original Gen 2 repository.
 
 Inside the Gen 3 repository there are files for the Gen 3 Butler configuration (`butler.yaml`) and the repository database (`gen3.sqlite3`).
+
+## Example Running with Gen3 Middleware (Pipeline Task Framework)
+
+To run the pipeline with the Gen3 DM Middleware you can use the test repository in `tests/testData/gen3TestRepo`.
+Here we show how to run the pipeline on the LSSTCam corner wavefront sensors.
+
+1. The order of the tasks and the configuration overrides for the tasks are set in the pipeline definition `yaml` file.
+In this case that is found in `tests/testData/pipelineConfigs/testCwfsPipeline.yaml`.
+Looking at this file we see that the three tasks we will run are:
+  - `lsst.ip.isr.isrTask.IsrTask`
+  - `lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask`
+  - `lsst.ts.wep.task.EstimateZernikesCwfsTask.EstimateZernikesCwfsTask`
+
+2. Run the `pipetask` from the command line:
+
+```bash
+pipetask run -b $path_of_ts_wep/tests/testData/gen3TestRepo -i refcats/gen2,LSSTCam/raw/all,LSSTCam/calib --instrument lsst.obs.lsst.LsstCam --register-dataset-types --output-run run1 -p $path_of_ts_wep/tests/testData/pipelineConfigs/testCwfsPipeline.yaml -d "exposure IN (4021123106000)"
+```
+
+The options used above are as follows:
+  - `-b`: Specifies the location of the butler repository.
+  - `-i`: The `collections` (data) needed for the tasks.
+  - `--instrument`: Defines which camera we are using.
+  - `--register-dataset-types`: Add the specific datasets types for our tasks to the registry.
+  - `--output-run`: Define the name of the new collection that will hold the output from the tasks.
+  - `-p`: Specifies the location of the pipeline configuration file.
+  - `-d`: Define a query to further specify which data in the `collections` we should use.
+
+3. If the pipeline ran successfully you can run the following command to see that the name of the new output run is present in the list:
+
+```bash
+butler query-collections $path_of_ts_wep/tests/testData/gen3TestRepo/
+```
+
+## Verify the Calculated Wavefront Error
+
+1. The user can use the `Algorithm.getWavefrontMapEsti()` and `Algorithm.getWavefrontMapResidual()` in `cwfs` module to judge the estimated wavefront error after the solve of transport of intensity equation (TIE). The residual of wavefront map should be low compared with the calculated wavefront map if most of low-order Zernike terms (z4 - z22) have been captured and compensated.
+2. The idea of TIE is to compensate the defocal images back to the focal one (image on pupil). Therefore, in the ideal case, the compensated defocal images should be similar. After the solve of TIE, the user can use the `CompensableImage.getImg()` in `cwfs` module to compare the compensated defocal images.
+
+## Note of Auxiliary Telescope Images
+
+1. While testing with the sky images obtained with the auxiliary telescope (localed in `tests/testData/testImages/auxTel`), this package and [cwfs](https://github.com/bxin/cwfs) show the similar result in "onAxis" optical model. However, for the "paraxial" optical model, the results of two packages are different.
+2. The main difference comes from the stratege of compensation in the initial loop of solving the TIE. However, it is hard to have a conclusion at this moment because of the low singal-to-noise ratio in test images.
 
 ## Difference in Corner Wavefront Sensors Euler angles to Phosim values
 

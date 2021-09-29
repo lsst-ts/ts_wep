@@ -18,13 +18,11 @@ Using lsst.ts.wep
 
 Important classes:
 
-* `ButlerWrapper` is a wrapper of DM butler class to get the raw and post-ISR CCD image.
-* `CamDataCollector` ingests the amplifier images and calibration products based on the DM command line task.
-* `CamIsrWrapper` does the ISR and assemble the CCD images based on the DM command line task.
-* `SourceSelector` queries the bright star catalog (BSC) to select the available target to calculate the wavefront error.
-* `SourceProcessor` processes the post-ISR images to get the clean star images with measured optical field position. The deblending algorithm is used to get the single target bright star image if the neighboring star exists.
 * `WfEstimator` calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the defocal donut images.
-* `WepController` is a high level class to use the WEP package.
+
+Important Pipeline Tasks:
+
+* `EstimateZernikesCwfsTask` calculates the Zernike polynomials on corner wavefront sensors when provided input exposures and source catalog.
 
 Important enums:
 
