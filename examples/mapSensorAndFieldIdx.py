@@ -21,7 +21,58 @@
 
 import numpy as np
 
-from lsst.ts.wep.SourceProcessor import SourceProcessor
+import lsst.obs.lsst as obs_lsst
+from lsst.afw.cameraGeom import FIELD_ANGLE
+
+
+def getMappingFromFieldXY(fieldXY):
+    """Map the sensor and field index based on the distance between the
+    positions of sensor and field.
+    Parameters
+    ----------
+    fieldXY : numpy.ndarray
+        Field (x, y) in degree. This is a nx2 matrix that the first column
+        is the x position and the second column is the y position.
+    Returns
+    -------
+    dict
+        Mapping data. The key is the sensor name and the value is the field
+        index.
+    """
+
+    camera = obs_lsst.LsstCam().getCamera()
+
+    # Get detector information
+    nameList = []
+    xList = []
+    yList = []
+    for det in camera:
+        nameList.append(det.getName())
+        centerPt = det.getCenter(FIELD_ANGLE)
+        # Transposed to match output to original output
+        xList.append(np.degrees(centerPt[1]))
+        yList.append(np.degrees(centerPt[0]))
+    sensorXY = np.array([xList, yList]).T
+
+    # Calculate the distance matrix (sensor by field)
+    fieldX = fieldXY[:, 0]
+    disM = np.zeros((len(xList), len(fieldX)))
+    for ii in range(len(fieldX)):
+        vector = sensorXY - fieldXY[ii, :]
+        dis = np.linalg.norm(vector, axis=1)
+        disM[:, ii] = dis
+
+    # Find the minimun distance for each sensor and assign the field index
+    idxList = np.zeros(len(nameList), dtype="int")
+    for ii in range(len(idxList)):
+        idxList[ii] = np.argmin(disM[ii, :])
+
+    # Collect the information
+    mapping = dict()
+    for ii in range(len(idxList)):
+        mapping[nameList[ii]] = idxList[ii]
+
+    return mapping
 
 
 if __name__ == "__main__":
@@ -42,8 +93,7 @@ if __name__ == "__main__":
     fieldXY = np.array([fieldX, fieldY]).T
 
     # Do the mapping
-    sourPro = SourceProcessor()
-    mapping = sourPro.mapSensorAndFieldIdx(fieldXY)
+    mapping = getMappingFromFieldXY(fieldXY)
 
     # Print the mapping
     for sensorName, idxField in mapping.items():
