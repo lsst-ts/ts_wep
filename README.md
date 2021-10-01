@@ -65,6 +65,11 @@ cd $path_of_ts_wep
 setup -k -r .
 ```
 
+## Example Script
+
+- **mapSensorAndFieldIdx.py**: Map the sensor name to the field point index for LSST.
+- **mapSensorAndFieldIdxLsstFam.py**: Map the sensor name to the field point for LSST full-array mode (FAM).
+
 ## Test Gen 3 Repository
 
 In the folder `tests/testData/` there is a test repository for tasks that run with the Gen 3 DM middleware.
@@ -105,9 +110,11 @@ The options used above are as follows:
   - `-i`: The `collections` (data) needed for the tasks.
   - `--instrument`: Defines which camera we are using.
   - `--register-dataset-types`: Add the specific datasets types for our tasks to the registry.
+    - Dataset Types that are original to this repository are the `donutCatalog`, `donutStampsExtra`, `donutStampsIntra`, `outputZernikesRaw` and `outputZernikesAvg`. These are defined in the tasks that create them in `python/lsst/ts/wep/task`.
   - `--output-run`: Define the name of the new collection that will hold the output from the tasks.
   - `-p`: Specifies the location of the pipeline configuration file.
   - `-d`: Define a query to further specify which data in the `collections` we should use.
+    - The query in the example above defines the exposure ID we want to use. Since we have a specific exposure in the gen3 test data that includes the wavefront sensors we specify that number `4021123106000` here in our query.
 
 3. If the pipeline ran successfully you can run the following command to see that the name of the new output run is present in the list:
 
