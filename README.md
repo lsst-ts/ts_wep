@@ -122,6 +122,26 @@ The options used above are as follows:
 butler query-collections $path_of_ts_wep/tests/testData/gen3TestRepo/
 ```
 
+## Diagram of the Corner Wavefront Sensor Geometry
+
+    # The wavefront sensors will do the rotation as
+    # following, based on the Euler angle.
+
+    #    R04                 R44
+    # O-------           ----------O        /\ +y (CCS)
+    # |  SW1 |           |    |    |        |
+    # |------|           |SW0 | SW1|        |
+    # |  SW0 |           |    |    |        |
+    # -------O           O----------        _
+    #                                   +z (.) -----> +x
+    #      R00                  R40
+    # ------------O          O-------
+    # |     |     |          |  SW0 |
+    # | SW1 | SW0 |          |------|
+    # |     |     |          |  SW1 |
+    # O------------          -------O
+
+
 ## Verify the Calculated Wavefront Error
 
 1. The user can use the `Algorithm.getWavefrontMapEsti()` and `Algorithm.getWavefrontMapResidual()` in `cwfs` module to judge the estimated wavefront error after the solve of transport of intensity equation (TIE). The residual of wavefront map should be low compared with the calculated wavefront map if most of low-order Zernike terms (z4 - z22) have been captured and compensated.
