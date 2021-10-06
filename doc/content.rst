@@ -94,9 +94,9 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **EstimateZernikesBaseTaskConnections**: Base connections class for EstimateZernikes tasks.
 * **EstimateZernikesBaseTaskConfig**: Base configuration class for EstimateZernikes tasks.
 * **EstimateZernikesBaseTask**: Base class for EstimateZernikes tasks.
-* **EstimateZernikesFamTaskConnections**: Connections setup for EstimateZernikesFamTask to run in a pipeline with Gen 3 middleware.
-* **EstimateZernikesFamTaskConfig**: Configuration setup for EstimateZernikesFamTask.
-* **EstimateZernikesFamTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running in full-array mode (FAM). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
+* **EstimateZernikesScienceSensorTaskConnections**: Connections setup for EstimateZernikesScienceSensorTask to run in a pipeline with Gen 3 middleware.
+* **EstimateZernikesScienceSensorTaskConfig**: Configuration setup for EstimateZernikesScienceSensorTask.
+* **EstimateZernikesScienceSensorTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running LSSTCam in full-array mode (FAM) or LSSTComCam. Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
 * **EstimateZernikesCwfsTaskConnections**: Connections setup for EstimateZernikesCwfsTask to run in a pipeline with Gen 3 middleware.
 * **EstimateZernikesCwfsTaskConfig**: Configuration setup for EstimateZernikesCwfsTask.
 * **EstimateZernikesCwfsTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running on corner wave front sensors (CWFS). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.

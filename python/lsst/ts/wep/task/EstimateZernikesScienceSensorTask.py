@@ -36,7 +36,7 @@ from lsst.ts.wep.task.EstimateZernikesBase import (
 )
 
 
-class EstimateZernikesFamTaskConnections(
+class EstimateZernikesScienceSensorTaskConnections(
     EstimateZernikesBaseConnections, dimensions=("detector", "instrument")
 ):
     exposures = connectionTypes.Input(
@@ -48,19 +48,20 @@ class EstimateZernikesFamTaskConnections(
     )
 
 
-class EstimateZernikesFamTaskConfig(
-    EstimateZernikesBaseConfig, pipelineConnections=EstimateZernikesFamTaskConnections
+class EstimateZernikesScienceSensorTaskConfig(
+    EstimateZernikesBaseConfig,
+    pipelineConnections=EstimateZernikesScienceSensorTaskConnections,
 ):
     pass
 
 
-class EstimateZernikesFamTask(EstimateZernikesBaseTask):
+class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
     """
     Run Zernike Estimation in full-array mode (FAM)
     """
 
-    ConfigClass = EstimateZernikesFamTaskConfig
-    _DefaultName = "EstimateZernikesFamTask"
+    ConfigClass = EstimateZernikesScienceSensorTaskConfig
+    _DefaultName = "EstimateZernikesScienceSensorTask"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

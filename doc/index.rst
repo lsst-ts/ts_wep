@@ -22,7 +22,7 @@ Important classes:
 
 Important Pipeline Tasks:
 
-* `EstimateZernikesFamTask` calculates the Zernike polynomials for LSSTFam or ComCam sensors when provided input exposures and source catalog.
+* `EstimateZernikesScienceSensorTask` calculates the Zernike polynomials for LSSTFam or ComCam sensors when provided input exposures and source catalog.
 * `EstimateZernikesCwfsTask` calculates the Zernike polynomials on corner wavefront sensors when provided input exposures and source catalog.
 
 Important enums:

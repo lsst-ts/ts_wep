@@ -124,8 +124,7 @@ butler query-collections $path_of_ts_wep/tests/testData/gen3TestRepo/
 
 ## Diagram of the Corner Wavefront Sensor Geometry
 
-    # The wavefront sensors will do the rotation as
-    # following, based on the Euler angle.
+    # The wavefront sensors will do the rotation as following, based on the Euler angle.
 
     #    R04                 R44
     # O-------           ----------O        /\ +y (CCS)

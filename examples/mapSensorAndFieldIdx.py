@@ -28,11 +28,13 @@ from lsst.afw.cameraGeom import FIELD_ANGLE
 def getMappingFromFieldXY(fieldXY):
     """Map the sensor and field index based on the distance between the
     positions of sensor and field.
+
     Parameters
     ----------
     fieldXY : numpy.ndarray
         Field (x, y) in degree. This is a nx2 matrix that the first column
         is the x position and the second column is the y position.
+
     Returns
     -------
     dict
