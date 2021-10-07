@@ -27,9 +27,9 @@ from scipy.signal import correlate
 import lsst.utils.tests
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.EstimateZernikesFamTask import (
-    EstimateZernikesFamTask,
-    EstimateZernikesFamTaskConfig,
+from lsst.ts.wep.task.EstimateZernikesScienceSensorTask import (
+    EstimateZernikesScienceSensorTask,
+    EstimateZernikesScienceSensorTaskConfig,
 )
 from lsst.ts.wep.Utility import (
     getModulePath,
@@ -40,7 +40,7 @@ from lsst.ts.wep.Utility import (
 )
 
 
-class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
+class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -75,8 +75,8 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
 
     def setUp(self):
 
-        self.config = EstimateZernikesFamTaskConfig()
-        self.task = EstimateZernikesFamTask(config=self.config)
+        self.config = EstimateZernikesScienceSensorTaskConfig()
+        self.task = EstimateZernikesScienceSensorTask(config=self.config)
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -140,7 +140,7 @@ class TestEstimateZernikesFamTask(lsst.utils.tests.TestCase):
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutSize = 290
-        self.task = EstimateZernikesFamTask(config=self.config)
+        self.task = EstimateZernikesScienceSensorTask(config=self.config)
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)

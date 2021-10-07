@@ -23,7 +23,7 @@ import os
 import numpy as np
 
 from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.SourceProcessor import SourceProcessor
+from mapSensorAndFieldIdx import getMappingFromFieldXY
 
 
 if __name__ == "__main__":
@@ -33,8 +33,7 @@ if __name__ == "__main__":
     fieldXY = np.loadtxt(fieldPosFilePath)
 
     # Do the mapping
-    sourPro = SourceProcessor()
-    mapping = sourPro.mapSensorAndFieldIdx(fieldXY)
+    mapping = getMappingFromFieldXY(fieldXY)
 
     # Print the mapping
     for sensorName, idxField in mapping.items():

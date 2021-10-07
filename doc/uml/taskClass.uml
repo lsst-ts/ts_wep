@@ -16,11 +16,11 @@ EstimateZernikesBaseTask ..> DonutStamps
 EstimateZernikesBaseTask ..> DonutStamp
 EstimateZernikesBaseConfig *-- EstimateZernikesBaseConnections
 EstimateZernikesBaseTask *-- EstimateZernikesBaseConfig
-EstimateZernikesBaseConnections <|-- EstimateZernikesFamTaskConnections
-EstimateZernikesBaseConfig <|-- EstimateZernikesFamTaskConfig
-EstimateZernikesBaseTask <|-- EstimateZernikesFamTask
-EstimateZernikesFamTaskConfig *-- EstimateZernikesFamTaskConnections
-EstimateZernikesFamTask *-- EstimateZernikesFamTaskConfig
+EstimateZernikesBaseConnections <|-- EstimateZernikesScienceSensorTaskConnections
+EstimateZernikesBaseConfig <|-- EstimateZernikesScienceSensorTaskConfig
+EstimateZernikesBaseTask <|-- EstimateZernikesScienceSensorTask
+EstimateZernikesScienceSensorTaskConfig *-- EstimateZernikesScienceSensorTaskConnections
+EstimateZernikesScienceSensorTask *-- EstimateZernikesScienceSensorTaskConfig
 EstimateZernikesBaseConnections <|-- EstimateZernikesCwfsTaskConnections
 EstimateZernikesBaseConfig <|-- EstimateZernikesCwfsTaskConfig
 EstimateZernikesBaseTask <|-- EstimateZernikesCwfsTask
