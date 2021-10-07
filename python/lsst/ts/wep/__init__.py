@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-from .ButlerWrapper import ButlerWrapper
-from .CamDataCollector import CamDataCollector
-from .CamIsrWrapper import CamIsrWrapper
-from .SourceSelector import SourceSelector
-from .SourceProcessor import SourceProcessor
-from .WepController import WepController
 from .Utility import FilterType, CamType, BscDbType
 
 # This class needs the scons to build the cython code. In the Jenkins test,

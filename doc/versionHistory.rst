@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.0.0:
+
+-------------
+2.0.0
+-------------
+
+* Removed code not used in Gen3 Pipelines.
+
 .. _lsst.ts.wep-1.8.2:
 
 -------------
