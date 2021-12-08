@@ -19,7 +19,7 @@ pipeline {
     }
 
     triggers {
-        pollSCM('H H(0-7) * * 1')
+        cron(env.BRANCH_NAME == 'develop' ? '0 4 * * *' : '')
     }
 
     environment {
@@ -32,7 +32,7 @@ pipeline {
         // Module name used in the pytest coverage analysis
         MODULE_NAME = "lsst.ts.wep"
         // PlantUML url
-        PLANTUML_URL = "https://managedway.dl.sourceforge.net/project/plantuml/plantuml.jar"
+        PLANTUML_URL = "http://sourceforge.net/projects/plantuml/files/plantuml.jar"
         // Authority to publish the document online
         user_ci = credentials('lsst-io')
         LTD_USERNAME = "${user_ci_USR}"
@@ -47,8 +47,10 @@ pipeline {
                 dir(env.WORKSPACE + '/ts_wep') {
                     checkout scm
                 }
-                dir(env.WORKSPACE + '/phosim_utils') {
-                    git branch: 'master', url: 'https://github.com/lsst-dm/phosim_utils.git'
+                withEnv(["HOME=${env.WORKSPACE}"]) {
+                    sh """
+                        git clone https://github.com/lsst-dm/phosim_utils.git
+                    """
                 }
             }
         }
@@ -143,7 +145,17 @@ pipeline {
             }
 
         }
+        regression {
+            script {
+                slackSend(color: "danger", message: "${JOB_NAME} has suffered a regression ${BUILD_URL}", channel: "#aos-builds")
+            }
 
+        }
+        fixed {
+            script {
+                slackSend(color: "good", message: "${JOB_NAME} has been fixed ${BUILD_URL}", channel: "#aos-builds")
+            }
+        }
         cleanup {
             // clean up the workspace
             deleteDir()

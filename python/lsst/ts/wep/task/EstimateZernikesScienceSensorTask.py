@@ -185,10 +185,10 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         # then return the Zernike coefficients as nan.
         if len(donutStampsExtra) == 0:
             return pipeBase.Struct(
-                outputZernikesRaw=np.ones(19) * np.nan,
-                outputZernikesAvg=np.ones(19) * np.nan,
-                donutStampsExtra=DonutStamps([]),
-                donutStampsIntra=DonutStamps([]),
+                outputZernikesRaw=[np.ones(19) * np.nan] * 2,
+                outputZernikesAvg=[np.ones(19) * np.nan] * 2,
+                donutStampsExtra=[DonutStamps([])] * 2,
+                donutStampsIntra=[DonutStamps([])] * 2,
             )
 
         # Estimate Zernikes from collection of stamps
@@ -199,8 +199,8 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         # Zernike coefficient numpy array as Struct that can be saved to
         # Gen 3 repository all with the same dataId.
         return pipeBase.Struct(
-            outputZernikesAvg=np.array(zernikeCoeffsAvg),
-            outputZernikesRaw=np.array(zernikeCoeffsRaw),
-            donutStampsExtra=donutStampsExtra,
-            donutStampsIntra=donutStampsIntra,
+            outputZernikesAvg=[np.array(zernikeCoeffsAvg)] * 2,
+            outputZernikesRaw=[np.array(zernikeCoeffsRaw)] * 2,
+            donutStampsExtra=[donutStampsExtra] * 2,
+            donutStampsIntra=[donutStampsIntra] * 2,
         )
