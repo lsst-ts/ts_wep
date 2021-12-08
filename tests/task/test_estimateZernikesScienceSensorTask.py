@@ -202,13 +202,13 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
         )
 
         np.testing.assert_array_equal(
-            testOutNoSrc.outputZernikesRaw, np.ones(19) * np.nan
+            testOutNoSrc.outputZernikesRaw, [np.ones(19) * np.nan] * 2
         )
         np.testing.assert_array_equal(
-            testOutNoSrc.outputZernikesAvg, np.ones(19) * np.nan
+            testOutNoSrc.outputZernikesAvg, [np.ones(19) * np.nan] * 2
         )
-        self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
-        self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
+        self.assertEqual(len(testOutNoSrc.donutStampsExtra[0]), 0)
+        self.assertEqual(len(testOutNoSrc.donutStampsIntra[1]), 0)
 
         # Test normal behavior
         taskOut = self.task.run(
@@ -222,19 +222,19 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
             exposureIntra, donutCatalog, DefocalType.Intra, self.cameraName
         )
 
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
+        for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra[0], testExtraStamps):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
+        for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra[1], testIntraStamps):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
 
         testCoeffsRaw = self.task.estimateZernikes(testExtraStamps, testIntraStamps)
         testCoeffsAvg = self.task.combineZernikes(testCoeffsRaw)
-        np.testing.assert_array_equal(taskOut.outputZernikesRaw, testCoeffsRaw)
-        np.testing.assert_array_equal(taskOut.outputZernikesAvg, testCoeffsAvg)
+        np.testing.assert_array_equal(taskOut.outputZernikesRaw[0], testCoeffsRaw)
+        np.testing.assert_array_equal(taskOut.outputZernikesAvg[0], testCoeffsAvg)
 
     @classmethod
     def tearDownClass(cls):

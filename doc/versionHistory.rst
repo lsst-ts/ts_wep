@@ -6,6 +6,17 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.0.1:
+
+-------------
+2.0.1
+-------------
+
+* Patch to work with latest weekly.
+* Update Jenkinsfile for CI job:
+    * git command is no longer working after the latest update on our Jenkins server.
+    * update path to plantuml.
+
 .. _lsst.ts.wep-2.0.0:
 
 -------------
