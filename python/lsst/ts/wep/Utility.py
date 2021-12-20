@@ -43,6 +43,7 @@ class CamType(IntEnum):
     LsstFamCam = auto()
     ComCam = auto()
     AuxTel = auto()
+    AuxTelZWO = auto()
 
 
 class BscDbType(IntEnum):
