@@ -2,25 +2,23 @@
 # Use images:
 # 1579925613-16Pup_intra-0-1.fits and 1579925662-16Pup_extra-0-1.fits
 # From z4 - z22 in nm
-# The result here is by Bo's cwfs code with paraxial model
-# The result here uses the compenstation in the iteration 0
-# The original cwfs code did not do this in the iteration 0
-12.2093
-8.3116
-118.3281
-40.4647
-40.1297
--48.0883
-1.5693
-1.7856
--3.1903
--3.6973
--0.0088
--5.2365
-0.3996
-1.1340
-3.8237
--1.2722
-2.6760
--15.7213
--2.8974
+# The result here is from ts_wep commit cda2184
+ 25.2248
+ 12.2336
+116.0978
+ 38.9961
+ 40.0440
+-45.0337
+  0.6424
+  6.3148
+ -2.3137
+ -3.5055
+  2.7041
+ -6.6465
+ -0.6979
+  0.7759
+  3.7501
+ -1.8977
+  4.3569
+-14.6607
+ -2.7279

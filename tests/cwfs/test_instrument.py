@@ -178,8 +178,8 @@ class TestInstrument(unittest.TestCase):
         self.assertEqual(inst.getFocalLength(), 21.6)
         self.assertEqual(inst.getApertureDiameter(), 1.2)
         self.assertEqual(inst.getDefocalDisOffset(), 0.0205)
-        self.assertEqual(inst.getCamPixelSize(), 14.4e-6)
-        self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 79.08950617, places=7)
+        self.assertEqual(inst.getCamPixelSize(), 15.2e-6)
+        self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 74.92690058, places=7)
 
 
 if __name__ == "__main__":
