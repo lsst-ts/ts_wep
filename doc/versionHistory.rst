@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.2.1:
+
+-------------
+2.2.1
+-------------
+
+* Distinguish AuxTel ZWO camera from LATISS
+
 .. _lsst.ts.wep-2.2.0:
 
 -------------
