@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.0.3:
+
+-------------
+2.0.3
+-------------
+
+* Add RefCatalogInterface to task module.
+
 .. _lsst.ts.wep-2.0.2:
 
 -------------
