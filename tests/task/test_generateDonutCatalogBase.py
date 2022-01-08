@@ -107,16 +107,24 @@ class TestGenerateDonutCatalogBase(unittest.TestCase):
         refObjLoader = self.task.getRefObjLoader(refCatList)
 
         # Check that our refObjLoader loads the available objects
-        # within a given search radius
-        donutCatSmall = refObjLoader.loadSkyCircle(
-            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
-            lsst.geom.Angle(0.5, lsst.geom.degrees),
-            filterName="g",
+        # within a given footprint from a sample exposure
+        testDataId = {
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106001,
+        }
+        testExposure = self.butler.get(
+            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
+        )
+        donutCatSmall = refObjLoader.loadPixelBox(
+            testExposure.getBBox(),
+            testExposure.getWcs(),
+            testExposure.getFilter().getName(),
         )
         fieldObjects = self.task.donutCatalogListToDataFrame(
             [donutCatSmall.refCat, donutCatSmall.refCat], ["R22_S99", "R22_S99"]
         )
-        self.assertEqual(len(fieldObjects), 16)
+        self.assertEqual(len(fieldObjects), 8)
         self.assertCountEqual(
             fieldObjects.columns,
             [
