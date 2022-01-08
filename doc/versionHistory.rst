@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.0.2:
+
+-------------
+2.0.2
+-------------
+
+* Patch to work with weekly `w_2022_2`:
+    * `loadSkyCircle` no longer returns centroid column, use `loadPixelBox` instead.
+
 .. _lsst.ts.wep-2.0.1:
 
 -------------
