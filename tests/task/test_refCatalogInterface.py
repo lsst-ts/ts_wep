@@ -42,24 +42,24 @@ class TestRefCatalogInterface(unittest.TestCase):
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
         self.butler = dafButler.Butler(self.repoDir)
 
-    def testGetShardIds(self):
+    def testGetHtmIds(self):
         """Test that the correct htmIds are returned."""
 
         # Test default radius
-        self.assertEqual(len(self.refCatInterface.getShardIds()), 56)
+        self.assertEqual(len(self.refCatInterface.getHtmIds()), 56)
 
         # Test smaller radius
         smallRadIds = [131072, 188416, 196608, 253952]
-        self.assertCountEqual(self.refCatInterface.getShardIds(radius=0.2), smallRadIds)
+        self.assertCountEqual(self.refCatInterface.getHtmIds(radius=0.2), smallRadIds)
 
     def testGetDataRefs(self):
         """Test that the dataRefs are gathered correctly."""
 
-        shardIds = self.refCatInterface.getShardIds()
+        htmIds = self.refCatInterface.getHtmIds()
         catalogName = "cal_ref_cat"
         collectionName = "refcats/gen2"
         dataRefs, dataIds = self.refCatInterface.getDataRefs(
-            shardIds, self.butler, catalogName, collectionName
+            htmIds, self.butler, catalogName, collectionName
         )
 
         self.assertEqual(len(dataRefs), 7)

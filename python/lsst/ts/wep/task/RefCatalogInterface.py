@@ -26,21 +26,40 @@ from lsst.meas.algorithms.htmIndexer import HtmIndexer
 
 class RefCatalogInterface(object):
     def __init__(self, boresightRa, boresightDec, boresightRotAng):
+        """
+        Class to provide tools to interact with reference catalog
+        in Butler repository and select pieces of the catalog
+        that cover the sky area of a pointing.
 
+        Parameters
+        ----------
+        boresightRa : float
+            Boresight RA in degrees.
+        boresightDec : float
+            Boresight Dec in degrees.
+        boresightRotAng : float
+            Boresight rotation angle in degreees.
+        """
+
+        # Set the pointing information
         self.boresightRa = boresightRa
         self.boresightDec = boresightDec
         self.boresightRotAng = boresightRotAng
 
-    def getShardIds(self, radius=1.8):
+    def getHtmIds(self, radius=1.8):
         """
-        Get the HtmIds for the pieces of the reference catalog
-        that fall within radius (in degrees) of the boresight
-        pointing.
+        Get the htmIds for the pieces of the reference catalog
+        that overlap the circular area within `radius` (in degrees)
+        of the boresight pointing. HtmIds are the spatial indices
+        identifying hierarchical triangular mesh (HTM) shards that
+        are used to store the reference catalogs in gen3 butler
+        repositories in more easily accessible pieces.
 
         Parameters
         ----------
-        radius : float
+        radius : float, optional
             Radius in degrees of the pointing footprint.
+            (the default is 1.8 degrees, enough to cover one LSST pointing.)
 
         Returns
         -------
@@ -48,31 +67,33 @@ class RefCatalogInterface(object):
             Array of htmIds in the butler for the pieces of the
             reference catalog that overlap the pointing.
         """
+        # HTM depth specifies the resolution of HTM grid that covers the sky.
+        # DM Gen3 ingests refernce catalogs with an HTM depth of 7.
         htmIdx = HtmIndexer(depth=7)
         centerPt = lsst.geom.SpherePoint(
             self.boresightRa, self.boresightDec, lsst.geom.degrees
         )
-        shardIds = htmIdx.getShardIds(
+        htmIds = htmIdx.getShardIds(
             centerPt, lsst.geom.Angle(radius, lsst.geom.degrees)
         )
 
-        return shardIds[0]
+        return htmIds[0]
 
-    def getDataRefs(self, shardIds, butler, catalogName, collections):
+    def getDataRefs(self, htmIds, butler, catalogName, collections):
         """
         Get the butler references and dataIds
         for the reference catalog shards specified.
 
         Parameters
         ----------
-        shardIds : array
+        htmIds : array
             HtmIds for the shards of the reference catalog we need.
         butler : lsst.daf.butler.Butler
             Butler instance pointing at the repo with the reference catalog.
         catalogName : str
             Name of the reference catalog in the repository.
         collections : str or list of str
-            Collection in the repository with the reference catalog.
+            Collections in the repository with the reference catalog.
 
         Returns
         -------
@@ -86,11 +107,13 @@ class RefCatalogInterface(object):
         registry = butler.registry
         deferredList = []
         dataIds = []
-        for shardId in shardIds:
-            shardDataId = {"htm7": shardId}
+        for htmId in htmIds:
+            # Shards of the reference catalog in the Gen3 butler
+            # are identified with a dataId with the key labelled "htm7".
+            htmDataId = {"htm7": htmId}
             dataRef = list(
                 registry.queryDatasets(
-                    catalogName, dataId=shardDataId, collections=collections
+                    catalogName, dataId=htmDataId, collections=collections
                 ).expanded()
             )
             if len(dataRef) == 0:
@@ -119,10 +142,9 @@ class RefCatalogInterface(object):
         boresightPointing = lsst.geom.SpherePoint(
             self.boresightRa, self.boresightDec, lsst.geom.degrees
         )
-        detWcs = createInitialSkyWcsFromBoresight(
+        return createInitialSkyWcsFromBoresight(
             boresightPointing,
             self.boresightRotAng * lsst.geom.degrees,
             detector,
             flipX=False,
         )
-        return detWcs
