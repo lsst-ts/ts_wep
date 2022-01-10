@@ -100,3 +100,4 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **EstimateZernikesCwfsTaskConnections**: Connections setup for EstimateZernikesCwfsTask to run in a pipeline with Gen 3 middleware.
 * **EstimateZernikesCwfsTaskConfig**: Configuration setup for EstimateZernikesCwfsTask.
 * **EstimateZernikesCwfsTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running on corner wave front sensors (CWFS). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
+* **RefCatalogInterface**: Tools to pick out the pieces of a reference catalog in the Gen3 Butler that cover the sky area of a pointing.
