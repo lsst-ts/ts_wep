@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.0.4:
+
+-------------
+2.0.4
+-------------
+
+* Add DonutSourceSelectorTask to task module.
+
 .. _lsst.ts.wep-2.0.3:
 
 -------------

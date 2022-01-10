@@ -1,4 +1,5 @@
 @startuml
+class DonutSourceSelectorTask
 class RefCatalogInterface
 GenerateDonutCatalogBaseConfig *-- GenerateDonutCatalogBaseConnections
 GenerateDonutCatalogBaseTask *-- GenerateDonutCatalogBaseConfig
