@@ -25,6 +25,7 @@ import pandas as pd
 
 from lsst.daf import butler as dafButler
 from lsst.geom import Box2I, Point2I
+from lsst.pex.config import FieldValidationError
 from lsst.ts.wep.Utility import getModulePath
 from lsst.ts.wep.task.DonutSourceSelectorTask import (
     DonutSourceSelectorTask,
@@ -56,11 +57,23 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
 
     def testValidateConfigs(self):
 
-        self.config.xCoordField = "center_x"
-        self.task = DonutSourceSelectorTask(config=self.config, name="New Task")
+        # Check default configuration
+        self.OrigTask = DonutSourceSelectorTask(config=self.config, name="Orig Task")
+        self.assertEqual(self.OrigTask.config.xCoordField, "centroid_x")
+        self.assertEqual(self.OrigTask.config.yCoordField, "centroid_y")
+        self.assertFalse(self.OrigTask.config.xCoordField == "center_x")
 
-        self.assertEqual(self.task.config.xCoordField, "center_x")
-        self.assertEqual(self.task.config.yCoordField, "centroid_y")
+        # Check configuration changes are passed through
+        self.config.xCoordField = "center_x"
+        self.ModifiedTask = DonutSourceSelectorTask(config=self.config, name="Mod Task")
+        self.assertEqual(self.ModifiedTask.config.xCoordField, "center_x")
+        self.assertEqual(self.ModifiedTask.config.yCoordField, "centroid_y")
+        self.assertFalse(self.ModifiedTask.config.xCoordField == "centroid_x")
+
+        # Check that error is raised if configuration type is incorrect.
+        with self.assertRaises(FieldValidationError):
+            # sourceLimit defined to be integer. Float should raise error.
+            self.config.sourceLimit = 2.1
 
     def testSelectSources(self):
 
@@ -127,7 +140,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
 
         # Test that only the brightest blended on the end that only
         # blends with one other donut is accepted even though
-        # it does not meet is isoMagDiff criterion we allow it because
+        # it does not meet the isoMagDiff criterion we allow it because
         # we now allow maxBlended up to 1.
         self.config.isoMagDiff = 2.0
         self.config.donutRadius = 35.0
