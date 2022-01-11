@@ -85,11 +85,13 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106001,
+            "visit": 4021123106001,
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106002,
+            "visit": 4021123106002,
         }
 
     def _generateTestExposures(self):
@@ -135,11 +137,11 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
 
         return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
-    def validateConfigs(self):
+    def testValidateConfigs(self):
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
-        self.config.initialCutoutSize = 290
+        self.config.initialCutoutPadding = 290
         self.task = EstimateZernikesScienceSensorTask(config=self.config)
 
         self.assertEqual(self.task.donutTemplateSize, 120)
@@ -190,15 +192,18 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
             "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
-        donutCatalog = self.butler.get(
+        donutCatalogExtra = self.butler.get(
             "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutCatalogIntra = self.butler.get(
+            "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
         # Test return values when no sources in catalog
-        noSrcDonutCatalog = copy(donutCatalog)
+        noSrcDonutCatalog = copy(donutCatalogExtra)
         noSrcDonutCatalog["detector"] = "R22_S99"
         testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], noSrcDonutCatalog, self.cameraName
+            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, self.cameraName
         )
 
         np.testing.assert_array_equal(
@@ -212,21 +217,27 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra], donutCatalog, self.cameraName
+            [exposureIntra, exposureExtra],
+            [donutCatalogExtra, donutCatalogIntra],
+            self.cameraName,
         )
 
         testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, donutCatalog, DefocalType.Extra, self.cameraName
+            exposureExtra, donutCatalogExtra, DefocalType.Extra, self.cameraName
         )
         testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, donutCatalog, DefocalType.Intra, self.cameraName
+            exposureIntra, donutCatalogIntra, DefocalType.Intra, self.cameraName
         )
 
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra[0], testExtraStamps):
+        for donutStamp, cutOutStamp in zip(
+            taskOut.donutStampsExtra[0], testExtraStamps
+        ):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra[1], testIntraStamps):
+        for donutStamp, cutOutStamp in zip(
+            taskOut.donutStampsIntra[1], testIntraStamps
+        ):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )

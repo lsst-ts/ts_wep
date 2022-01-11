@@ -28,14 +28,8 @@ tasks:
       doApplyGains: True
       doFringe: False
       doOverscan: True
-  generateDonutCatalogOnlineTask:
-    class: lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask
-    # Here we specify the configurations for pointing that we added into the class
-    # GenerateDonutCatalogOnlineTaskConfig.
-    config:
-      boresightRa: 0.0
-      boresightDec: 0.0
-      boresightRotAng: 90.0
+  generateDonutCatalogWcsTask:
+    class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
   estimateZernikesScienceSensorTask:
     class: lsst.ts.wep.task.EstimateZernikesScienceSensorTask.EstimateZernikesScienceSensorTask
     config:

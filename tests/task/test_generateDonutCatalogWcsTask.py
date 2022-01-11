@@ -22,8 +22,12 @@
 import os
 import unittest
 import numpy as np
+import pandas as pd
 
+import lsst.geom
+import lsst.obs.lsst as obs_lsst
 from lsst.daf import butler as dafButler
+from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.ts.wep.Utility import getModulePath
 from lsst.ts.wep.task.GenerateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
@@ -46,18 +50,112 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
-    def validateConfigs(self):
+    def _getRefCat(self):
 
-        self.config.boresightRa = 0.03
-        self.config.boresightDec = -0.02
-        self.config.boresightRotAng = 90.0
+        refCatList = []
+        datasetGenerator = self.registry.queryDatasets(
+            datasetType="cal_ref_cat", collections=["refcats"]
+        ).expanded()
+        for ref in datasetGenerator:
+            refCatList.append(self.butler.getDeferred(ref, collections=["refcats"]))
+
+        return refCatList
+
+    def testValidateConfigs(self):
+
         self.config.filterName = "r"
+        self.config.doDonutSelection = True
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
-        self.assertEqual(self.task.boresightRa, 0.03)
-        self.assertEqual(self.task.boresightDec, -0.02)
-        self.assertEqual(self.task.boresightRotAng, 90.0)
-        self.assertEqual(self.task.filterName, "r")
+        self.assertEqual(self.task.config.filterName, "r")
+        self.assertEqual(self.task.config.doDonutSelection, True)
+
+    def testGetRefObjLoader(self):
+
+        refCatList = self._getRefCat()
+        refObjLoader = self.task.getRefObjLoader(refCatList)
+
+        # Check that our refObjLoader loads the available objects
+        # within a given search radius
+        donutCatSmall = refObjLoader.loadSkyCircle(
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            lsst.geom.Angle(0.5, lsst.geom.degrees),
+            filterName="g",
+        )
+        self.assertEqual(len(donutCatSmall.refCat), 8)
+
+        donutCatFull = refObjLoader.loadSkyCircle(
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            lsst.geom.Angle(2.5, lsst.geom.degrees),
+            filterName="g",
+        )
+        self.assertEqual(len(donutCatFull.refCat), 24)
+
+    def testRunSelection(self):
+
+        refCatList = self._getRefCat()
+
+        self.config.referenceSelector.magLimit.maximum = 17.0
+        self.config.referenceSelector.magLimit.fluxField = "g_flux"
+        self.config.referenceSelector.doMagLimit = True
+
+        self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
+        refObjLoader = self.task.getRefObjLoader(refCatList)
+        bbox = lsst.geom.Box2I(lsst.geom.Point2I(0, 0), lsst.geom.Extent2I(4000, 4000))
+        wcs = createInitialSkyWcsFromBoresight(
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            90.0 * lsst.geom.degrees,
+            obs_lsst.LsstCam().getCamera()["R22_S11"],
+            flipX=False,
+        )
+        # If we have a magLimit at 17 we should cut out
+        # the one source at 17.5.
+        donutCatBrighterThan17 = self.task.runSelection(refObjLoader, bbox, wcs, "g")
+        self.assertEqual(len(donutCatBrighterThan17), 3)
+
+        # If we increase the mag limit to 18 we should
+        # get all the sources in the catalog.
+        self.config.referenceSelector.magLimit.maximum = 18.0
+        self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
+        refObjLoader = self.task.getRefObjLoader(refCatList)
+        donutCatFull = self.task.runSelection(refObjLoader, bbox, wcs, "g")
+        self.assertEqual(len(donutCatFull), 4)
+
+    def testDonutCatalogToDataFrame(self):
+
+        refCatList = self._getRefCat()
+        refObjLoader = self.task.getRefObjLoader(refCatList)
+
+        # Check that our refObjLoader loads the available objects
+        # within a given footprint from a sample exposure
+        testDataId = {
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106001,
+        }
+        testExposure = self.butler.get(
+            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
+        )
+        donutCatSmall = refObjLoader.loadPixelBox(
+            testExposure.getBBox(),
+            testExposure.getWcs(),
+            testExposure.getFilter().getName(),
+        )
+        fieldObjects = self.task.donutCatalogToDataFrame(
+            donutCatSmall.refCat, "R22_S99"
+        )
+        self.assertEqual(len(fieldObjects), 4)
+        self.assertCountEqual(
+            fieldObjects.columns,
+            [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "source_flux",
+                "detector",
+            ],
+        )
 
     def testPipeline(self):
         """
@@ -91,9 +189,17 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
         # Test instrument matches
         pipelineButler = dafButler.Butler(self.repoDir)
-        donutCatDf = pipelineButler.get(
-            "donutCatalog", dataId={"instrument": "LSSTCam"}, collections=[f"{runName}"]
+        donutCatDf_S11 = pipelineButler.get(
+            "donutCatalog",
+            dataId={"instrument": "LSSTCam", "detector": 94, "visit": exposureId},
+            collections=[f"{runName}"],
         )
+        donutCatDf_S10 = pipelineButler.get(
+            "donutCatalog",
+            dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
+            collections=[f"{runName}"],
+        )
+        donutCatDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
         self.assertEqual(len(donutCatDf), 8)
         outputDf = donutCatDf.query("detector in @self.centerRaft")
         self.assertEqual(len(outputDf), 8)
@@ -159,8 +265,18 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
                     "raw", dataId=expRef.dataId, collections=["LSSTCam/raw/all"]
                 )
             )
-        taskOutput = self.task.run(deferredList, expList)
-        donutCatDf = taskOutput.donutCatalog
+
+        # run task on all exposures
+        donutCatDfList = []
+        for exposure in expList:
+            taskOutput = self.task.run(deferredList, exposure)
+            donutCatDfList.append(taskOutput.donutCatalog)
+
+        # concatenate catalogs from each exposure into a single catalog
+        # to compare against the test input reference catalog
+        donutCatDf = donutCatDfList[0]
+        for donutCat in donutCatDfList[1:]:
+            donutCatDf = pd.concat([donutCatDf, donutCat])
 
         # Compare ra, dec info to original input catalog
         inputCat = np.genfromtxt(
