@@ -79,7 +79,6 @@ class DonutSourceSelectorTask(pipeBase.Task):
         pipeBase.Task.__init__(self, **kwargs)
 
     def run(self, sourceCat, bbox):
-
         """Select sources and return them.
 
         Parameters
@@ -98,7 +97,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                           or `astropy.table.Table`
                 The catalog of sources that were selected.
                 (may not be memory-contiguous)
-            - selected : `numpy.ndarray` of `bool``
+            - selected : `numpy.ndarray` of `bool`
                 Boolean array of sources that were selected, same length as
                 sourceCat.
         Raises
@@ -144,7 +143,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         Raises
         ------
         ValueError
-            sourceLimit in config for task must be -1 or a positive integer
+            sourceLimit in config for task must be -1 or a positive integer.
         """
 
         donutRadius = self.config.donutRadius
@@ -174,19 +173,18 @@ class DonutSourceSelectorTask(pipeBase.Task):
         radDist, radIdx = xyNeigh.radius_neighbors(
             magSortedDf[["x", "y"]], sort_results=True
         )
-        if self.config.sourceLimit > 0:
-            doSourceLimit = True
-        elif self.config.sourceLimit == -1:
-            doSourceLimit = False
-        else:
-            errMsg = str(
-                "config.sourceLimit must be a positive integer "
-                + "or turned off by setting it to '-1'"
-            )
+
+        errMsg = str(
+            "config.sourceLimit must be a positive integer "
+            + "or turned off by setting it to '-1'"
+        )
+        if not ((self.config.sourceLimit == -1) or (self.config.sourceLimit > 0)):
             raise ValueError(errMsg)
 
         maxBlended = self.config.maxBlended
         sourcesKept = 0
+        # Go through catalog with nearest neighbor information
+        # and keep sources that match our configuration settings
         for srcOn, idxList in list(enumerate(radIdx)):
             # Move on if source is within donutRadius
             # of the edge of a given exposure
@@ -204,20 +202,31 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # In this case there is at least one overlapping source
                 srcMag = magSortedDf["mag"].iloc[srcOn]
                 magDiff = magSortedDf["mag"].iloc[idxList[1:]] - srcMag
+                # If this is the fainter source of the overlaps move on
                 if np.min(magDiff) < 0.0:
                     continue
+                # If this source overlaps but is brighter than all its
+                # overlapping sources by minMagDiff then keep it
                 elif (maxBlended == 0) and (np.min(magDiff) >= minMagDiff):
                     index.append(groupIndices[srcOn])
                     sourcesKept += 1
+                # If the number of overlapping sources is less than or equal to
+                # maxBlended then keep this source
                 elif len(magDiff) <= maxBlended:
                     index.append(groupIndices[srcOn])
                     sourcesKept += 1
+                # Keep the source if it overlaps with more than maxBlended
+                # sources but is at least minMagDiff brighter than all sources
+                # dimmer than the maxBlended-th source.
+                elif np.partition(magDiff, maxBlended)[maxBlended - 1] > minMagDiff:
+                    index.append(groupIndices[srcOn])
+                    sourcesKept += 1
                 else:
-                    if np.partition(magDiff, maxBlended)[maxBlended - 1] > minMagDiff:
-                        index.append(groupIndices[srcOn])
-                        sourcesKept += 1
+                    continue
 
-            if doSourceLimit and (sourcesKept == self.config.sourceLimit):
+            if (self.config.sourceLimit > 0) and (
+                sourcesKept == self.config.sourceLimit
+            ):
                 break
 
         selected[index] = True
