@@ -49,28 +49,28 @@ class EstimateZernikesCwfsTaskConnections(
     )
     donutStampsExtra = connectionTypes.Output(
         doc="Extra-focal Donut Postage Stamp Images",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtra",
         multiple=True,
     )
     donutStampsIntra = connectionTypes.Output(
         doc="Intra-focal Donut Postage Stamp Images",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
         multiple=True,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="NumpyArray",
         name="zernikeEstimateRaw",
         multiple=True,
     )
     outputZernikesAvg = connectionTypes.Output(
         doc="Zernike Coefficients averaged over donuts",
-        dimensions=("exposure", "detector", "instrument"),
+        dimensions=("visit", "detector", "instrument"),
         storageClass="NumpyArray",
         name="zernikeEstimateAvg",
         multiple=True,
@@ -98,47 +98,6 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         # See LCA-13381 for definition
         self.extraFocalNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         self.intraFocalNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
-
-    def selectCwfsSources(self, donutCatalog, expDim):
-        """
-        Select the sources from the corner wavefront sensors to use. This
-        includes arranging the intra and extra catalogs to create donut pairs
-        when looking at the same index in each catalog (e.g., row 0 in
-        intraCatalog and row 0 in extraCatalog will be paired together in
-        wavefront estimation).
-
-        Parameters
-        ----------
-        donutCatalog: pandas DataFrame
-            Source catalog for the pointing.
-        expDim: list
-            Dimensions of the exposures in pixels.
-
-        Returns
-        -------
-        pandas DataFrame
-            Extra-focal donut sources for wavefront estimation.
-        pandas DataFrame
-            Intra-focal donut sources for wavefront estimation.
-        """
-        dimX, dimY = expDim
-
-        # Get sources on corner wavefront sensors
-        extraCatalog = donutCatalog.query("detector in @self.extraFocalNames")
-        intraCatalog = donutCatalog.query("detector in @self.intraFocalNames")
-
-        # For now we will just sort by flux to pair donuts
-        extraCatalog = extraCatalog.sort_values(
-            "source_flux", ascending=False
-        ).reset_index(drop=True)
-        intraCatalog = intraCatalog.sort_values(
-            "source_flux", ascending=False
-        ).reset_index(drop=True)
-
-        # For now take as many pairs of sources as possible
-        catLength = np.min([len(extraCatalog), len(intraCatalog)])
-
-        return extraCatalog[:catLength], intraCatalog[:catLength]
 
     def runQuantum(
         self,
@@ -175,15 +134,25 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         detectorIdArr = np.array(
             [exp.dataId["detector"] for exp in inputRefs.exposures]
         )
-        donutCat = butlerQC.get(inputRefs.donutCatalog)
+        donutCatIdArr = np.array(
+            [dCat.dataId["detector"] for dCat in inputRefs.donutCatalog]
+        )
 
         for extraId, intraId in zip(extraFocalIds, intraFocalIds):
             extraListIdx = np.where(detectorIdArr == extraId)[0][0]
             intraListIdx = np.where(detectorIdArr == intraId)[0][0]
+            dCatExtraIdx = np.where(donutCatIdArr == extraId)[0][0]
+            dCatIntraIdx = np.where(donutCatIdArr == intraId)[0][0]
             expInputs = butlerQC.get(
                 [inputRefs.exposures[extraListIdx], inputRefs.exposures[intraListIdx]]
             )
-            outputs = self.run(expInputs, donutCat, instrument)
+            dCatInputs = butlerQC.get(
+                [
+                    inputRefs.donutCatalog[dCatExtraIdx],
+                    inputRefs.donutCatalog[dCatIntraIdx],
+                ]
+            )
+            outputs = self.run(expInputs, dCatInputs, instrument)
 
             butlerQC.put(
                 outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraListIdx]
@@ -201,20 +170,11 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
-        donutCatalog: pd.DataFrame,
+        donutCatalogs: typing.List[pd.DataFrame],
         cameraName: str,
     ) -> pipeBase.Struct:
 
-        # Create intra and extra focal catalogs
-        expDim = None
-        for exposure in exposures:
-            detectorName = exposure.getDetector().getName()
-            if detectorName in self.extraFocalNames:
-                expDim = exposure.getDimensions()
-                break
-        extraCatalog, intraCatalog = self.selectCwfsSources(
-            donutCatalog, [expDim.getX(), expDim.getY()]
-        )
+        extraCatalog, intraCatalog = donutCatalogs
 
         # Get the donut stamps from extra and intra focal images
         donutStampsExtra = DonutStamps([])

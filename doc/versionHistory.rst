@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.1.0:
+
+-------------
+2.1.0
+-------------
+
+* Refactor GenerateDonutCatalog*.py tasks.
+* Update EstimateZernikes...Tasks after DonutCatalog refactor.
+
 .. _lsst.ts.wep-2.0.4:
 
 -------------
