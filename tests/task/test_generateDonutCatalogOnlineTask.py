@@ -25,172 +25,114 @@ import numpy as np
 
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.task.RefCatalogInterface import RefCatalogInterface
 from lsst.ts.wep.task.GenerateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTask,
     GenerateDonutCatalogOnlineTaskConfig,
 )
-from lsst.ts.wep.Utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
 
 
 class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
     def setUp(self):
 
-        self.config = GenerateDonutCatalogOnlineTaskConfig()
-        self.task = GenerateDonutCatalogOnlineTask(config=self.config)
+        boresightRa = 0.0
+        boresightDec = 0.0
+        boresightRotAng = 0.0
+        self.refCatInterface = RefCatalogInterface(
+            boresightRa, boresightDec, boresightRotAng
+        )
 
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
-        self.centerRaft = ["R22_S10", "R22_S11"]
-
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
-    def validateConfigs(self):
+        shardIds = self.refCatInterface.getHtmIds()
+        self.catalogName = "cal_ref_cat"
+        self.collections = ["refcats/gen2"]
+        dataRefs, dataIds = self.refCatInterface.getDataRefs(
+            shardIds, self.butler, self.catalogName, self.collections
+        )
+        self.dataRefs = dataRefs
+        self.dataIds = dataIds
 
-        self.config.boresightRa = 0.03
-        self.config.boresightDec = -0.02
-        self.config.boresightRotAng = 90.0
+        self.config = GenerateDonutCatalogOnlineTaskConfig()
+
+        self.camera = self.butler.get(
+            "camera", instrument="LSSTCam", collections=["LSSTCam/calib/unbounded"]
+        )
+
+    def testValidateConfigs(self):
+
         self.config.filterName = "r"
-        self.task = GenerateDonutCatalogOnlineTask(config=self.config)
-
-        self.assertEqual(self.task.boresightRa, 0.03)
-        self.assertEqual(self.task.boresightDec, -0.02)
-        self.assertEqual(self.task.boresightRotAng, 90.0)
-        self.assertEqual(self.task.filterName, "r")
-
-    def testPipeline(self):
-        """
-        Test that the task runs in a pipeline. Also functions as a test of
-        runQuantum function.
-        """
-
-        # Run pipeline command
-        runName = "run1"
-        taskName = "lsst.ts.wep.task."
-        taskName += "GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask"
-        instrument = "lsst.obs.lsst.LsstCam"
-        collection = "refcats"
-        pipetaskCmd = writePipetaskCmd(
-            self.repoDir, runName, instrument, collection, taskName=taskName
+        self.config.doReferenceSelection = False
+        self.config.doDonutSelection = False
+        task = GenerateDonutCatalogOnlineTask(
+            self.dataIds[0], self.dataRefs[0], config=self.config
         )
-        # Update task configuration to match pointing information
-        pipetaskCmd += " -c generateDonutCatalogOnlineTask:boresightRotAng=90.0"
 
-        # Check that run doesn't already exist due to previous improper cleanup
-        collectionsList = list(self.registry.queryCollections())
-        if runName in collectionsList:
-            cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
-            runProgram(cleanUpCmd)
+        self.assertEqual(task.filterName, "r")
+        self.assertEqual(task.config.doReferenceSelection, False)
+        self.assertEqual(task.config.doDonutSelection, False)
 
-        # Run pipeline task
-        runProgram(pipetaskCmd)
+    def testFormatCatalog(self):
 
-        # Test instrument matches
-        pipelineButler = dafButler.Butler(self.repoDir)
-        donutCatDf = pipelineButler.get(
-            "donutCatalog", dataId={"instrument": "LSSTCam"}, collections=[f"{runName}"]
+        detectorName = "R22_S01"
+        detWcs = self.refCatInterface.getDetectorWcs(self.camera[detectorName])
+        dataRefs, dataIds = self.refCatInterface.getDataRefs(
+            [131072], self.butler, self.catalogName, self.collections
         )
-        self.assertEqual(len(donutCatDf), 24)
-        outputDf = donutCatDf.query("detector in @self.centerRaft")
-        self.assertEqual(len(outputDf), 8)
-        self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
-        self.assertEqual(len(outputDf.query('detector == "R22_S10"')), 4)
+        task = GenerateDonutCatalogOnlineTask(
+            dataIds=dataIds, refCats=dataRefs, config=self.config
+        )
+        cat = task.refObjLoader.loadPixelBox(
+            self.camera[detectorName].getBBox(), detWcs, filterName=task.filterName
+        )
+        pandasRefCat = task._formatCatalog(
+            cat.refCat, self.camera[detectorName].getBBox()
+        )
+
+        self.assertEqual(len(cat.refCat), 2)
+        self.assertEqual(len(pandasRefCat), 2)
+        self.assertEqual(len(pandasRefCat.columns), 6)
+        self.assertCountEqual(pandasRefCat["coord_ra"], cat.refCat["coord_ra"])
+        self.assertCountEqual(pandasRefCat["coord_dec"], cat.refCat["coord_dec"])
+        self.assertCountEqual(pandasRefCat["centroid_x"], cat.refCat["centroid_x"])
+        self.assertCountEqual(pandasRefCat["centroid_y"], cat.refCat["centroid_y"])
+        np.testing.assert_almost_equal(pandasRefCat["refMag"], [15.0, 15.0], decimal=5)
+        np.testing.assert_almost_equal(pandasRefCat["refMagErr"], [0.1, 0.1], decimal=5)
+
+    def testTaskRun(self):
+
+        self.config.doDonutSelection = False
+        task = GenerateDonutCatalogOnlineTask(
+            self.dataIds, self.dataRefs, config=self.config
+        )
+
+        detectorName = "R22_S01"
+        detWcs = self.refCatInterface.getDetectorWcs(self.camera[detectorName])
+        dataIds = [131072, 188416]
+        cat0 = self.butler.get(
+            self.catalogName, dataId={"htm7": dataIds[0]}, collections=self.collections
+        )
+        cat1 = self.butler.get(
+            self.catalogName, dataId={"htm7": dataIds[1]}, collections=self.collections
+        )[2:]
+        taskCat = task.run(self.camera[detectorName].getBBox(), detWcs)
+        donutCatalog = taskCat.donutCatalog
+
+        self.assertEqual(len(donutCatalog), 4)
+        self.assertEqual(len(donutCatalog.columns), 6)
         self.assertCountEqual(
-            [
-                3806.7636478057957,
-                2806.982895217227,
-                607.3861483168994,
-                707.3972344551466,
-                614.607342274194,
-                714.6336433247832,
-                3815.2649173460436,
-                2815.0561553920156,
-            ],
-            outputDf["centroid_x"],
-        )
-        self.assertCountEqual(
-            [
-                3196.070534224157,
-                2195.666002294077,
-                394.8907003737886,
-                394.9087004171349,
-                396.2407036464963,
-                396.22270360324296,
-                3196.1965343932648,
-                2196.188002312585,
-            ],
-            outputDf["centroid_y"],
-        )
-        fluxTruth = np.ones(8)
-        fluxTruth[:6] = 3630780.5477010026
-        fluxTruth[6:] = 363078.0547701003
-        self.assertCountEqual(outputDf["source_flux"], fluxTruth)
-
-        # Clean up
-        cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
-        runProgram(cleanUpCmd)
-
-    def testDonutCatalogGeneration(self):
-        """
-        Test that task creates a dataframe with detector information.
-        """
-
-        # Create list of deferred loaders for the ref cat
-        deferredList = []
-        datasetGenerator = self.registry.queryDatasets(
-            datasetType="cal_ref_cat", collections=["refcats"]
-        ).expanded()
-        for ref in datasetGenerator:
-            deferredList.append(self.butler.getDeferred(ref, collections=["refcats"]))
-        # Update boresightRotAng to match pointing info
-        self.task.boresightRotAng = 90.0
-        taskOutput = self.task.run("LSSTCam", deferredList)
-        donutCatDf = taskOutput.donutCatalog
-
-        # Compare ra, dec info to original input catalog
-        inputCat = np.genfromtxt(
-            os.path.join(
-                self.testDataDir, "phosimOutput", "realComCam", "skyComCamInfo.txt"
-            ),
-            names=["id", "ra", "dec", "mag"],
-        )
-
-        # Check that all 8 sources are present and 4 assigned to each detector
-        self.assertEqual(len(donutCatDf), 24)
-        outputDf = donutCatDf.query("detector in @self.centerRaft")
-        self.assertEqual(len(outputDf), 8)
-        self.assertCountEqual(np.radians(inputCat["ra"]), outputDf["coord_ra"])
-        self.assertCountEqual(np.radians(inputCat["dec"]), outputDf["coord_dec"])
-        self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
-        self.assertEqual(len(outputDf.query('detector == "R22_S10"')), 4)
-        self.assertCountEqual(
-            [
-                3806.7636478057957,
-                2806.982895217227,
-                607.3861483168994,
-                707.3972344551466,
-                614.607342274194,
-                714.6336433247832,
-                3815.2649173460436,
-                2815.0561553920156,
-            ],
-            outputDf["centroid_x"],
+            donutCatalog["coord_ra"], np.ravel([cat0["coord_ra"], cat1["coord_ra"]])
         )
         self.assertCountEqual(
-            [
-                3196.070534224157,
-                2195.666002294077,
-                394.8907003737886,
-                394.9087004171349,
-                396.2407036464963,
-                396.22270360324296,
-                3196.1965343932648,
-                2196.188002312585,
-            ],
-            outputDf["centroid_y"],
+            donutCatalog["coord_dec"], np.ravel([cat0["coord_dec"], cat1["coord_dec"]])
         )
-        fluxTruth = np.ones(8)
-        fluxTruth[:6] = 3630780.5477010026
-        fluxTruth[6:] = 363078.0547701003
-        self.assertCountEqual(outputDf["source_flux"], fluxTruth)
+        np.testing.assert_almost_equal(
+            donutCatalog["refMag"], [15.0, 15.0, 15.0, 17.5], decimal=5
+        )
+        np.testing.assert_almost_equal(
+            donutCatalog["refMagErr"], [0.1, 0.1, 0.1, 0.1], decimal=5
+        )

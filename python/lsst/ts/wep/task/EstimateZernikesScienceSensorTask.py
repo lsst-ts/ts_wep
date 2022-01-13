@@ -107,10 +107,10 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
 
         # Get the input reference objects for the task
         exposures = butlerQC.get(inputRefs.exposures)
-        donutCat = butlerQC.get(inputRefs.donutCatalog)
+        donutCats = butlerQC.get(inputRefs.donutCatalog)
 
         # Run task on specified instrument
-        outputs = self.run(exposures, donutCat, cameraName)
+        outputs = self.run(exposures, donutCats, cameraName)
 
         # Use butler to store output in repository
         butlerQC.put(outputs, outputRefs)
@@ -163,7 +163,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
-        donutCatalog: pd.DataFrame,
+        donutCatalogs: typing.List[pd.DataFrame],
         cameraName: str,
     ) -> pipeBase.Struct:
 
@@ -172,6 +172,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         focusZ1 = exposures[1].getMetadata()["FOCUSZ"]
 
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
+        donutCatalog = donutCatalogs[0]
 
         # Get the donut stamps from extra and intra focal images
         donutStampsExtra = self.cutOutStamps(

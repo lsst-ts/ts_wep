@@ -80,7 +80,7 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
     def setUp(self):
 
         self.config = EstimateZernikesBaseConfig()
-        self.task = EstimateZernikesBaseTask(config=self.config, name="BaseTask")
+        self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -89,11 +89,13 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106001,
+            "visit": 4021123106001,
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106002,
+            "visit": 4021123106002,
         }
 
     def _generateTestExposures(self):
@@ -139,12 +141,12 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
 
         return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
-    def validateConfigs(self):
+    def testValidateConfigs(self):
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
-        self.config.initialCutoutSize = 290
-        self.task = EstimateZernikesBaseTask(config=self.config)
+        self.config.initialCutoutPadding = 290
+        self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
@@ -159,7 +161,7 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         )
 
         self.config.donutTemplateSize = 180
-        self.task = EstimateZernikesBaseTask(config=self.config, name="BaseTask")
+        self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
         intra_template = self.task.getTemplate("R22_S11", DefocalType.Intra)
         self.assertEqual(np.shape(intra_template), (180, 180))
 

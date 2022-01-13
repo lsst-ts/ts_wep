@@ -80,12 +80,8 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 .. uml:: uml/taskClass.uml
     :caption: Class diagram of wep.task
 
-* **GenerateDonutCatalogBaseConnections**: Base connections class for GenerateDonutCatalog tasks.
-* **GenerateDonutCatalogBaseConfig**: Base configuration class for GenerateDonutCatalog tasks.
-* **GenerateDonutCatalogBaseTask**: Base class for GenerateDonutCatalog tasks.
-* **GenerateDonutCatalogOnlineTaskConnections**: Connections setup for GenerateDonutCatalogOnlineTask to run in a pipeline with Gen 3 middleware.
 * **GenerateDonutCatalogOnlineTaskConfig**: Configuration setup for GenerateDonutCatalogOnlineTask.
-* **GenerateDonutCatalogOnlineTask**: Gen 3 middleware task to take pointing information and create a catalog of donut sources in that pointing.
+* **GenerateDonutCatalogOnlineTask**: Task to take pointing information and create a catalog of donut sources in that pointing. Not a pipeline task.
 * **GenerateDonutCatalogWcsTaskConnections**: Connections setup for GenerateDonutCatalogWcsTask to run in a pipeline with Gen 3 middleware.
 * **GenerateDonutCatalogWcsTaskConfig**: Configuration setup for GenerateDonutCatalogWcsTask.
 * **GenerateDonutCatalogWcsTask**: Gen 3 middleware task to take the WCS from each detector in a postISRCCD exposure and create a catalog of donut sources for that exposure.
