@@ -40,6 +40,8 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
     def setUp(self):
 
         self.config = GenerateDonutCatalogWcsTaskConfig()
+        self.config.donutSelector.fluxField = "g_flux"
+        self.config.donutSelector.donutRadius = 0.0
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         moduleDir = getModulePath()
@@ -64,11 +66,11 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
     def testValidateConfigs(self):
 
         self.config.filterName = "r"
-        self.config.doDonutSelection = True
+        self.config.doDonutSelection = False
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         self.assertEqual(self.task.config.filterName, "r")
-        self.assertEqual(self.task.config.doDonutSelection, True)
+        self.assertEqual(self.task.config.doDonutSelection, False)
 
     def testGetRefObjLoader(self):
 
@@ -98,6 +100,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         self.config.referenceSelector.magLimit.maximum = 17.0
         self.config.referenceSelector.magLimit.fluxField = "g_flux"
         self.config.referenceSelector.doMagLimit = True
+        self.config.doDonutSelection = False
 
         self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
         refObjLoader = self.task.getRefObjLoader(refCatList)
@@ -142,9 +145,24 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             testExposure.getFilter().getName(),
         )
         fieldObjects = self.task.donutCatalogToDataFrame(
-            donutCatSmall.refCat, "R22_S99"
+            "R22_S99", donutCatSmall.refCat
         )
         self.assertEqual(len(fieldObjects), 4)
+        self.assertCountEqual(
+            fieldObjects.columns,
+            [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "source_flux",
+                "detector",
+            ],
+        )
+
+        # Test that None returns an empty dataframe
+        fieldObjectsNone = self.task.donutCatalogToDataFrame("R22_S99")
+        self.assertEqual(len(fieldObjectsNone), 0)
         self.assertCountEqual(
             fieldObjects.columns,
             [

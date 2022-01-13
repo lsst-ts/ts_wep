@@ -56,7 +56,7 @@ class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
         target=DonutSourceSelectorTask, doc="How to select donut targets."
     )
     doDonutSelection = pexConfig.Field(
-        doc="Whether or not to run donut selector.", dtype=bool, default=False
+        doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
 
 
@@ -72,15 +72,19 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
 
         Parameters
         ----------
-        dataIds : list
+        dataIds : `list`
+            List of the dataIds for the reference catalog shards.
+        refCats : `list`
             List of the deferred dataset references pointing to the pieces
             of the reference catalog we want in the butler.
-        refCats : list
-            List of the dataIds for the reference catalog shards.
+        **kwargs : dict[str, any]
+            Dictionary of input argument: new value for that input argument.
         """
 
-        pipeBase.Task.__init__(self, **kwargs)
+        super().__init__(**kwargs)
         refConfig = self.config.refObjLoader
+        # refObjLoader handles the interaction with the butler repository
+        # needed to get the pieces of the reference catalogs we need.
         self.refObjLoader = ReferenceObjectLoader(
             dataIds=dataIds, refCats=refCats, config=refConfig, log=self.log
         )
@@ -157,7 +161,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
             refSelected = np.ones(len(refCat), dtype=bool)
 
         if self.config.doDonutSelection:
-            print("Running Donut Selector")
+            self.log.info("Running Donut Selector")
             donutSelection = self.donutSelector.run(refCat, bbox)
             donutSelected = donutSelection.selected
         else:

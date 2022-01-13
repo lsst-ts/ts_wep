@@ -87,7 +87,7 @@ class GenerateDonutCatalogWcsTaskConfig(
         target=DonutSourceSelectorTask, doc="How to select donut targets."
     )
     doDonutSelection = pexConfig.Field(
-        doc="Whether or not to run donut selector.", dtype=bool, default=False
+        doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
 
 
@@ -120,12 +120,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        refCatalogList : list
+        refCatalogList : `list`
             List of deferred butler references for the reference catalogs.
 
         Returns
         -------
-        lsst.meas.algorithms.ReferenceObjectsLoader
+        `lsst.meas.algorithms.ReferenceObjectsLoader`
             Object to conduct spatial searches through the reference catalogs
         """
 
@@ -157,8 +157,8 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         wcs : `lsst.afw.geom.SkyWcs`
             Wcs object defining the pixel to sky (and inverse) transform for
             the supplied ``bbox``.
-        filterName : `str` or `None`, optional
-            Name of camera filter, or `None` or blank for the default filter.
+        filterName : `str`
+            Name of camera filter.
 
         Returns
         -------
@@ -168,35 +168,36 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             `referenceSelector`.
         """
 
-        donutCatalog = refObjLoader.loadPixelBox(
-            bbox, wcs, filterName=filterName
-        ).refCat
+        donutCatalog = refObjLoader.loadPixelBox(bbox, wcs, filterName).refCat
 
         refSelection = self.referenceSelector.run(donutCatalog)
 
         if self.config.doDonutSelection:
+            self.log.info("Running Donut Selector")
             donutSelection = self.donutSelector.run(donutCatalog, bbox)
             finalSelection = refSelection.selected & donutSelection.selected
             return donutCatalog[finalSelection]
         else:
             return refSelection.sourceCat
 
-    def donutCatalogToDataFrame(self, donutCatalog, detectorName):
+    def donutCatalogToDataFrame(self, detectorName, donutCatalog=None):
         """
         Reformat afwCatalog into a pandas dataframe sorted by flux with
         the brightest objects at the top.
 
         Parameters
         ----------
-        donutCatalog : lsst.afw.table.SimpleCatalog
+        detectorName : `str`
+            Name of the detectors associated with donutCatalog.
+        donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`, optional
             lsst.afw.table.SimpleCatalog object returned by the
             ReferenceObjectLoader search over the detector footprint.
-        detectorName : str
-            Name of the detectors associated with donutCatalog.
+            If None then it will return an empty dataframe.
+            (the default is None.)
 
         Returns
         -------
-        pandas DataFrame
+        `pandas.DataFrame`
             Complete catalog of reference sources in the pointing.
         """
 
@@ -256,6 +257,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             )
             refSelection = None
 
-        fieldObjects = self.donutCatalogToDataFrame(refSelection, detectorName)
+        fieldObjects = self.donutCatalogToDataFrame(detectorName, refSelection)
 
         return pipeBase.Struct(donutCatalog=fieldObjects)

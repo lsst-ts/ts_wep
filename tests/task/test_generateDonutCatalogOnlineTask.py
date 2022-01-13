@@ -89,7 +89,9 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         cat = task.refObjLoader.loadPixelBox(
             self.camera[detectorName].getBBox(), detWcs, filterName=task.filterName
         )
-        pandasRefCat = task._formatCatalog(cat.refCat, detWcs)
+        pandasRefCat = task._formatCatalog(
+            cat.refCat, self.camera[detectorName].getBBox()
+        )
 
         self.assertEqual(len(cat.refCat), 2)
         self.assertEqual(len(pandasRefCat), 2)
@@ -103,6 +105,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
     def testTaskRun(self):
 
+        self.config.doDonutSelection = False
         task = GenerateDonutCatalogOnlineTask(
             self.dataIds, self.dataRefs, config=self.config
         )
