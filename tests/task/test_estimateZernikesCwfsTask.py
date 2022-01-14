@@ -66,6 +66,9 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
+        # Point to the collections for the reference catalogs,
+        # the raw images and the camera model in
+        # calib/unbounded that comes from `butler write-curated-calibrations`
         collections = "refcats,LSSTCam/calib/unbounded,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
