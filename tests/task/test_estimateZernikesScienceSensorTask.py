@@ -62,7 +62,7 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats,LSSTCam/calib/unbounded,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testFamPipeline.yaml")
@@ -198,12 +198,17 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
         donutCatalogIntra = self.butler.get(
             "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
         )
+        camera = self.butler.get(
+            "camera",
+            dataId={"instrument": "LSSTCam"},
+            collections="LSSTCam/calib/unbounded",
+        )
 
         # Test return values when no sources in catalog
         noSrcDonutCatalog = copy(donutCatalogExtra)
         noSrcDonutCatalog["detector"] = "R22_S99"
         testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, self.cameraName
+            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
 
         np.testing.assert_array_equal(
@@ -219,14 +224,14 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
         taskOut = self.task.run(
             [exposureIntra, exposureExtra],
             [donutCatalogExtra, donutCatalogIntra],
-            self.cameraName,
+            camera,
         )
 
         testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, donutCatalogExtra, DefocalType.Extra, self.cameraName
+            exposureExtra, donutCatalogExtra, DefocalType.Extra, camera.getName()
         )
         testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, donutCatalogIntra, DefocalType.Intra, self.cameraName
+            exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
         )
 
         for donutStamp, cutOutStamp in zip(

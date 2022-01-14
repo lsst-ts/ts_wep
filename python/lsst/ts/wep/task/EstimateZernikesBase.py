@@ -51,6 +51,13 @@ class EstimateZernikesBaseConnections(
         name="donutCatalog",
         multiple=True,
     )
+    camera = connectionTypes.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
+    )
     donutStampsExtra = connectionTypes.Output(
         doc="Extra-focal Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),

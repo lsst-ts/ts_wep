@@ -66,7 +66,10 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        # Point to the collections for the reference catalogs,
+        # the raw images and the camera model in
+        # calib/unbounded that comes from `butler write-curated-calibrations`
+        collections = "refcats,LSSTCam/calib/unbounded,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testCwfsPipeline.yaml")
@@ -156,15 +159,27 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         exposureIntra = self.butler.get(
             "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
         )
-
+        # Get the donut catalogs for each detector
         donutCatalogExtra = self.butler.get(
             "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutCatalogIntra = self.butler.get(
             "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
         )
+        # Get the camera from the butler
+        camera = self.butler.get(
+            "camera",
+            dataId={"instrument": "LSSTCam"},
+            collections="LSSTCam/calib/unbounded",
+        )
 
-        return exposureExtra, exposureIntra, donutCatalogExtra, donutCatalogIntra
+        return (
+            exposureExtra,
+            exposureIntra,
+            donutCatalogExtra,
+            donutCatalogIntra,
+            camera,
+        )
 
     def testValidateConfigs(self):
 
@@ -178,9 +193,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.initialCutoutPadding, 290)
 
     def testRunQuantum(self):
-
-        quantum = dafButler.Quantum()
-        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
+        # Set up test quantum from butler data
         inputRefs = pipeBase.InputQuantizedConnection()
         badInstrument = "LSSTComCam"
         inputRefs.exposures = [
@@ -195,11 +208,22 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
                 run="run2",
             )
         ]
+        inputRefs.camera = self.butler.getDeferred(
+            "camera", instrument="LSSTComCam", collections="LSSTComCam/calib/unbounded"
+        ).ref
         outputRefs = pipeBase.OutputQuantizedConnection()
+        quantum = dafButler.Quantum(
+            inputs={
+                inputRefs.exposures[0].datasetType: inputRefs.exposures,
+                inputRefs.camera.datasetType: [inputRefs.camera],
+            }
+        )
+        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
 
         # Test that we will get an error if we try to use an
         # unsupported instrument.
-        with self.assertRaises(ValueError) as context:
+        errMsg = f"{badInstrument} is not a valid camera name."
+        with self.assertRaises(ValueError, msg=errMsg) as context:
             self.task.runQuantum(butlerQC, inputRefs, outputRefs)
         self.assertEqual(
             f"{badInstrument} is not a valid camera name.",
@@ -213,13 +237,14 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             exposureIntra,
             donutCatalogExtra,
             donutCatalogIntra,
+            camera,
         ) = self._getDataFromButler()
 
         # Test return values when no sources in catalog
         noSrcDonutCatalog = copy(donutCatalogExtra)
         noSrcDonutCatalog["detector"] = "R22_S99"
         testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, self.cameraName
+            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
 
         np.testing.assert_array_equal(
@@ -238,7 +263,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
                 donutCatalogExtra,
                 pd.DataFrame(columns=donutCatalogExtra.columns),
             ],
-            self.cameraName,
+            camera,
         )
 
         np.testing.assert_array_equal(
@@ -257,7 +282,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
                 pd.DataFrame(columns=donutCatalogIntra.columns),
                 donutCatalogIntra,
             ],
-            self.cameraName,
+            camera,
         )
 
         np.testing.assert_array_equal(
@@ -276,20 +301,21 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             exposureIntra,
             donutCatalogExtra,
             donutCatalogIntra,
+            camera,
         ) = self._getDataFromButler()
 
         # Test normal behavior
         taskOut = self.task.run(
             [exposureIntra, exposureExtra],
             [donutCatalogExtra, donutCatalogIntra],
-            self.cameraName,
+            camera,
         )
 
         testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, donutCatalogExtra, DefocalType.Extra, self.cameraName
+            exposureExtra, donutCatalogExtra, DefocalType.Extra, camera.getName()
         )
         testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, donutCatalogIntra, DefocalType.Intra, self.cameraName
+            exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
         )
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
