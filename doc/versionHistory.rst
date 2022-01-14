@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.1.1:
+
+-------------
+2.1.1
+-------------
+
+* Get camera from the butler when running pipeline tasks.
+
 .. _lsst.ts.wep-2.1.0:
 
 -------------

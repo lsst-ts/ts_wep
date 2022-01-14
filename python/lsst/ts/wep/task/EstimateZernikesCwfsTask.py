@@ -23,6 +23,7 @@ import typing
 import numpy as np
 import pandas as pd
 
+import lsst.afw.cameraGeom
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
 import lsst.obs.lsst as obs_lsst
@@ -117,16 +118,16 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         extra-focal detector.
         """
 
-        instrument = inputRefs.exposures[0].dataId["instrument"]
+        camera = butlerQC.get(inputRefs.camera)
 
         # Get the detector IDs for the wavefront sensors so
         # that we can appropriately match up pairs of detectors
-        if instrument == "LSSTCam":
+        if camera.getName() == "LSSTCam":
             detectorMap = (
                 obs_lsst.translators.lsstCam.LsstCamTranslator.detector_mapping()
             )
         else:
-            raise ValueError(f"{instrument} is not a valid camera name.")
+            raise ValueError(f"{camera.getName()} is not a valid camera name.")
 
         extraFocalIds = [detectorMap[detName][0] for detName in self.extraFocalNames]
         intraFocalIds = [detectorMap[detName][0] for detName in self.intraFocalNames]
@@ -152,7 +153,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
                     inputRefs.donutCatalog[dCatIntraIdx],
                 ]
             )
-            outputs = self.run(expInputs, dCatInputs, instrument)
+            outputs = self.run(expInputs, dCatInputs, camera)
 
             butlerQC.put(
                 outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraListIdx]
@@ -171,9 +172,10 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         self,
         exposures: typing.List[afwImage.Exposure],
         donutCatalogs: typing.List[pd.DataFrame],
-        cameraName: str,
+        camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
+        cameraName = camera.getName()
         extraCatalog, intraCatalog = donutCatalogs
 
         # Get the donut stamps from extra and intra focal images

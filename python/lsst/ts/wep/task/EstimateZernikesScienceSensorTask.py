@@ -23,6 +23,7 @@ import typing
 import numpy as np
 import pandas as pd
 
+import lsst.afw.cameraGeom
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
 from lsst.pipe.base import connectionTypes
@@ -103,14 +104,14 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         """
 
         # Get the instrument we are running the pipeline with
-        cameraName = inputRefs.exposures[0].dataId["instrument"]
+        camera = butlerQC.get(inputRefs.camera)
 
         # Get the input reference objects for the task
         exposures = butlerQC.get(inputRefs.exposures)
         donutCats = butlerQC.get(inputRefs.donutCatalog)
 
         # Run task on specified instrument
-        outputs = self.run(exposures, donutCats, cameraName)
+        outputs = self.run(exposures, donutCats, camera)
 
         # Use butler to store output in repository
         butlerQC.put(outputs, outputRefs)
@@ -164,7 +165,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         self,
         exposures: typing.List[afwImage.Exposure],
         donutCatalogs: typing.List[pd.DataFrame],
-        cameraName: str,
+        camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
         # Get exposure metadata to find which is extra and intra
@@ -172,9 +173,12 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         focusZ1 = exposures[1].getMetadata()["FOCUSZ"]
 
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
+        # The donut catalogs for each exposure should be the same
+        # Just pick the one for the first exposure
         donutCatalog = donutCatalogs[0]
 
         # Get the donut stamps from extra and intra focal images
+        cameraName = camera.getName()
         donutStampsExtra = self.cutOutStamps(
             exposures[extraExpIdx], donutCatalog, DefocalType.Extra, cameraName
         )
