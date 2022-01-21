@@ -295,7 +295,6 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         detectorName = exposure.getDetector().getName()
         template = self.getTemplate(detectorName, defocalType)
-        detectorCatalog = donutCatalog.query(f'detector == "{detectorName}"')
 
         # Final list of DonutStamp objects
         finalStamps = []
@@ -308,7 +307,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         xCornerList = []
         yCornerList = []
 
-        for donutRow in detectorCatalog.to_records():
+        for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
             # on the donut
@@ -351,10 +350,10 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
                 )
             )
 
-        catalogLength = len(detectorCatalog)
+        catalogLength = len(donutCatalog)
         stampsMetadata = PropertyList()
-        stampsMetadata["RA_DEG"] = np.degrees(detectorCatalog["coord_ra"].values)
-        stampsMetadata["DEC_DEG"] = np.degrees(detectorCatalog["coord_dec"].values)
+        stampsMetadata["RA_DEG"] = np.degrees(donutCatalog["coord_ra"].values)
+        stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"].values)
         stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
         stampsMetadata["DFC_TYPE"] = np.array([defocalType.value] * catalogLength)

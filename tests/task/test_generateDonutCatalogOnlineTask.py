@@ -22,6 +22,7 @@
 import os
 import unittest
 import numpy as np
+from astropy import units
 
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.Utility import getModulePath
@@ -95,13 +96,18 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
         self.assertEqual(len(cat.refCat), 2)
         self.assertEqual(len(pandasRefCat), 2)
-        self.assertEqual(len(pandasRefCat.columns), 6)
+        self.assertCountEqual(
+            pandasRefCat.columns,
+            ["coord_ra", "coord_dec", "centroid_x", "centroid_y", "source_flux"],
+        )
         self.assertCountEqual(pandasRefCat["coord_ra"], cat.refCat["coord_ra"])
         self.assertCountEqual(pandasRefCat["coord_dec"], cat.refCat["coord_dec"])
         self.assertCountEqual(pandasRefCat["centroid_x"], cat.refCat["centroid_x"])
         self.assertCountEqual(pandasRefCat["centroid_y"], cat.refCat["centroid_y"])
-        np.testing.assert_almost_equal(pandasRefCat["refMag"], [15.0, 15.0], decimal=5)
-        np.testing.assert_almost_equal(pandasRefCat["refMagErr"], [0.1, 0.1], decimal=5)
+        refFluxes = 15.0 * units.ABmag
+        np.testing.assert_almost_equal(
+            pandasRefCat["source_flux"], [refFluxes.to_value(units.nJy)] * 2
+        )
 
     def testTaskRun(self):
 
@@ -123,16 +129,19 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         donutCatalog = taskCat.donutCatalog
 
         self.assertEqual(len(donutCatalog), 4)
-        self.assertEqual(len(donutCatalog.columns), 6)
+        self.assertCountEqual(
+            donutCatalog.columns,
+            ["coord_ra", "coord_dec", "centroid_x", "centroid_y", "source_flux"],
+        )
         self.assertCountEqual(
             donutCatalog["coord_ra"], np.ravel([cat0["coord_ra"], cat1["coord_ra"]])
         )
         self.assertCountEqual(
             donutCatalog["coord_dec"], np.ravel([cat0["coord_dec"], cat1["coord_dec"]])
         )
-        np.testing.assert_almost_equal(
-            donutCatalog["refMag"], [15.0, 15.0, 15.0, 17.5], decimal=5
+        refFluxes = (np.array([15.0, 15.0, 15.0, 17.5]) * units.ABmag).to_value(
+            units.nJy
         )
         np.testing.assert_almost_equal(
-            donutCatalog["refMagErr"], [0.1, 0.1, 0.1, 0.1], decimal=5
+            donutCatalog["source_flux"], refFluxes, decimal=5
         )

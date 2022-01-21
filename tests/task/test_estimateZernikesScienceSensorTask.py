@@ -21,7 +21,7 @@
 
 import os
 import numpy as np
-from copy import copy
+import pandas as pd
 from scipy.signal import correlate
 
 import lsst.utils.tests
@@ -205,8 +205,7 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
         )
 
         # Test return values when no sources in catalog
-        noSrcDonutCatalog = copy(donutCatalogExtra)
-        noSrcDonutCatalog["detector"] = "R22_S99"
+        noSrcDonutCatalog = pd.DataFrame(columns=donutCatalogExtra.columns)
         testOutNoSrc = self.task.run(
             [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
