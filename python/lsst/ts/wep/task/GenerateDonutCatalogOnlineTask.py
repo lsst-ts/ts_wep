@@ -21,11 +21,9 @@
 
 import numpy as np
 import pandas as pd
-from astropy import units
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-from lsst.afw.image import abMagErrFromFluxErr
 from lsst.meas.algorithms import (
     LoadIndexedReferenceObjectsTask,
     ReferenceSourceSelectorTask,
@@ -176,8 +174,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
                 ("coord_dec", "f8"),
                 ("centroid_x", "f8"),
                 ("centroid_y", "f8"),
-                ("refMag", "f8"),
-                ("refMagErr", "f8"),
+                ("source_flux", "f8"),
             ],
         )
 
@@ -194,10 +191,6 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         npRefCat["centroid_x"] = refCat["centroid_x"][selected]
         npRefCat["centroid_y"] = refCat["centroid_y"][selected]
 
-        # Default (unset) values are 99.0
-        npRefCat["refMag"] = 99.0
-        npRefCat["refMagErr"] = 99.0
-
         fluxField = f"{self.filterName}_flux"
 
         # nan_to_num replaces nans with zeros, and this ensures that
@@ -206,11 +199,6 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
             (np.nan_to_num(refCat[fluxField][selected]) > 0.0)
             & (np.nan_to_num(refCat[fluxField + "Err"][selected]) > 0.0)
         )
-        refMag = (refCat[fluxField][selected][good] * units.nJy).to_value(units.ABmag)
-        refMagErr = abMagErrFromFluxErr(
-            refCat[fluxField + "Err"][selected][good], refCat[fluxField][selected][good]
-        )
-        npRefCat["refMag"][good] = refMag
-        npRefCat["refMagErr"][good] = refMagErr
+        npRefCat["source_flux"][good] = refCat[fluxField][selected][good]
 
         return pd.DataFrame.from_records(npRefCat)

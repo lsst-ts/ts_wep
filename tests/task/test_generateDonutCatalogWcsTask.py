@@ -144,9 +144,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             testExposure.getWcs(),
             testExposure.getFilter().getName(),
         )
-        fieldObjects = self.task.donutCatalogToDataFrame(
-            "R22_S99", donutCatSmall.refCat
-        )
+        fieldObjects = self.task.donutCatalogToDataFrame(donutCatSmall.refCat)
         self.assertEqual(len(fieldObjects), 4)
         self.assertCountEqual(
             fieldObjects.columns,
@@ -156,12 +154,11 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
-                "detector",
             ],
         )
 
         # Test that None returns an empty dataframe
-        fieldObjectsNone = self.task.donutCatalogToDataFrame("R22_S99")
+        fieldObjectsNone = self.task.donutCatalogToDataFrame()
         self.assertEqual(len(fieldObjectsNone), 0)
         self.assertCountEqual(
             fieldObjects.columns,
@@ -171,7 +168,6 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
-                "detector",
             ],
         )
 
@@ -217,12 +213,24 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
             collections=[f"{runName}"],
         )
-        donutCatDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
-        self.assertEqual(len(donutCatDf), 8)
-        outputDf = donutCatDf.query("detector in @self.centerRaft")
+
+        # Check 4 sources in each detector
+        self.assertEqual(len(donutCatDf_S11), 4)
+        self.assertEqual(len(donutCatDf_S10), 4)
+
+        # Check outputs are correct
+        outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
         self.assertEqual(len(outputDf), 8)
-        self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
-        self.assertEqual(len(outputDf.query('detector == "R22_S10"')), 4)
+        self.assertCountEqual(
+            outputDf.columns,
+            [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "source_flux",
+            ],
+        )
         self.assertCountEqual(
             [
                 3806.7636478057957,
@@ -288,13 +296,14 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         donutCatDfList = []
         for exposure in expList:
             taskOutput = self.task.run(deferredList, exposure)
+            self.assertEqual(len(taskOutput.donutCatalog), 4)
             donutCatDfList.append(taskOutput.donutCatalog)
 
         # concatenate catalogs from each exposure into a single catalog
         # to compare against the test input reference catalog
-        donutCatDf = donutCatDfList[0]
+        outputDf = donutCatDfList[0]
         for donutCat in donutCatDfList[1:]:
-            donutCatDf = pd.concat([donutCatDf, donutCat])
+            outputDf = pd.concat([outputDf, donutCat])
 
         # Compare ra, dec info to original input catalog
         inputCat = np.genfromtxt(
@@ -304,14 +313,9 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             names=["id", "ra", "dec", "mag"],
         )
 
-        # Check that all 8 sources are present and 4 assigned to each detector
-        self.assertEqual(len(donutCatDf), 8)
-        outputDf = donutCatDf.query("detector in @self.centerRaft")
         self.assertEqual(len(outputDf), 8)
         self.assertCountEqual(np.radians(inputCat["ra"]), outputDf["coord_ra"])
         self.assertCountEqual(np.radians(inputCat["dec"]), outputDf["coord_dec"])
-        self.assertEqual(len(outputDf.query('detector == "R22_S11"')), 4)
-        self.assertEqual(len(outputDf.query('detector == "R22_S10"')), 4)
         self.assertCountEqual(
             [
                 3806.7636478057957,

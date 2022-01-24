@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.1.2:
+
+-------------
+2.1.2
+-------------
+
+* Make sure catalogs from GenerateDonutCatalog...Tasks have same columns.
+
 .. _lsst.ts.wep-2.1.1:
 
 -------------
