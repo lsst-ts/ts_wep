@@ -180,15 +180,13 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         else:
             return refSelection.sourceCat
 
-    def donutCatalogToDataFrame(self, detectorName, donutCatalog=None):
+    def donutCatalogToDataFrame(self, donutCatalog=None):
         """
         Reformat afwCatalog into a pandas dataframe sorted by flux with
         the brightest objects at the top.
 
         Parameters
         ----------
-        detectorName : `str`
-            Name of the detectors associated with donutCatalog.
         donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`, optional
             lsst.afw.table.SimpleCatalog object returned by the
             ReferenceObjectLoader search over the detector footprint.
@@ -206,7 +204,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         centroidX = []
         centroidY = []
         sourceFlux = []
-        detNames = []
 
         if donutCatalog is not None:
             ra = donutCatalog["coord_ra"]
@@ -214,7 +211,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             centroidX = donutCatalog["centroid_x"]
             centroidY = donutCatalog["centroid_y"]
             sourceFlux = donutCatalog[f"{self.filterName}_flux"]
-            detNames = [detectorName] * len(donutCatalog)
 
         fieldObjects = pd.DataFrame([])
         fieldObjects["coord_ra"] = ra
@@ -222,7 +218,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         fieldObjects["centroid_x"] = centroidX
         fieldObjects["centroid_y"] = centroidY
         fieldObjects["source_flux"] = sourceFlux
-        fieldObjects["detector"] = detNames
 
         fieldObjects = fieldObjects.sort_values(
             "source_flux", ascending=False
@@ -238,7 +233,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         refObjLoader = self.getRefObjLoader(refCatalogs)
 
-        detectorName = exposure.getDetector().getName()
         detectorBBox = exposure.getBBox()
         detectorWcs = exposure.getWcs()
 
@@ -257,6 +251,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             )
             refSelection = None
 
-        fieldObjects = self.donutCatalogToDataFrame(detectorName, refSelection)
+        fieldObjects = self.donutCatalogToDataFrame(refSelection)
 
         return pipeBase.Struct(donutCatalog=fieldObjects)
