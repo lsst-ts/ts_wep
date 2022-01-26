@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.1.3:
+
+-------------
+2.1.3
+-------------
+
+* Fix maxBlended parameter in DonutSourceSelectorTask and improve tests to check this configuration setting.
+
 .. _lsst.ts.wep-2.1.2:
 
 -------------
