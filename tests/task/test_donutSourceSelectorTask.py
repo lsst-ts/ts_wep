@@ -139,6 +139,18 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertEqual(sum(testCatSelected), 2)
 
         # Test that only the brightest blended on the end that only
+        # blends with one other donut is not accepted if maxBlended
+        # is still set to 0.
+        self.config.isoMagDiff = 2.0
+        self.config.donutRadius = 35.0
+        self.config.maxBlended = 0
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatSelected = testCatStruct.selected
+        self.assertEqual(len(testCatSelected), 4)
+        self.assertEqual(sum(testCatSelected), 1)
+
+        # Test that only the brightest blended on the end that only
         # blends with one other donut is accepted even though
         # it does not meet the isoMagDiff criterion we allow it because
         # we now allow maxBlended up to 1.
@@ -150,6 +162,39 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         self.assertEqual(len(testCatSelected), 4)
         self.assertEqual(sum(testCatSelected), 2)
+        # Make sure the one that gets through selection is
+        # the brightest one.
+        self.assertEqual(testCatSelected[0], False)
+        self.assertEqual(testCatSelected[1], False)
+        self.assertEqual(testCatSelected[2], True)
+
+        # If we increase donutRadius back to 50 then our group of
+        # 3 donuts should all be overlapping and blended. Therefore,
+        # maxBlended set to one should not allow the brightest donut
+        # through since it is blended with two objects.
+        self.config.isoMagDiff = 2.0
+        self.config.donutRadius = 50.0
+        self.config.maxBlended = 1
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatSelected = testCatStruct.selected
+        self.assertEqual(len(testCatSelected), 4)
+        self.assertEqual(sum(testCatSelected), 1)
+
+        # If we increase donutRadius back to 50 then our group of
+        # 3 donuts should all be overlapping and blended. Therefore,
+        # maxBlended set to one should not allow the brightest donut
+        # through since it is blended with two objects.
+        self.config.isoMagDiff = 2.0
+        self.config.donutRadius = 50.0
+        self.config.maxBlended = 2
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatSelected = testCatStruct.selected
+        self.assertEqual(len(testCatSelected), 4)
+        self.assertEqual(sum(testCatSelected), 2)
+        # Make sure the one that gets through selection is
+        # the brightest one.
         self.assertEqual(testCatSelected[0], False)
         self.assertEqual(testCatSelected[1], False)
         self.assertEqual(testCatSelected[2], True)
