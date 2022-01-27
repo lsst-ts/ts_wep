@@ -215,10 +215,13 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 elif len(magDiff) <= maxBlended:
                     index.append(groupIndices[srcOn])
                     sourcesKept += 1
-                # Keep the source if it overlaps with more than maxBlended
-                # sources but is at least minMagDiff brighter than all sources
-                # dimmer than the maxBlended-th source.
-                elif np.partition(magDiff, maxBlended)[maxBlended - 1] > minMagDiff:
+                # Keep the source if it is blended with up to maxBlended
+                # number of sources. To check this we look at the maxBlended+1
+                # source in the magDiff list and check that the object
+                # is at least minMagDiff brighter than this. Satisfying this
+                # criterion means it is blended with maxBlended
+                # or fewer sources.
+                elif np.partition(magDiff, maxBlended)[maxBlended] > minMagDiff:
                     index.append(groupIndices[srcOn])
                     sourcesKept += 1
                 else:
