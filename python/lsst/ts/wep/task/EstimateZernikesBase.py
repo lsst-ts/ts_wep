@@ -27,6 +27,7 @@ import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
 from lsst.daf.base import PropertyList
 from lsst.pipe.base import connectionTypes
+from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 
 from lsst.ts.wep.WfEstimator import WfEstimator
 from lsst.ts.wep.Utility import getConfigDir, DonutTemplateType, DefocalType
@@ -57,6 +58,7 @@ class EstimateZernikesBaseConnections(
         doc="Input camera to construct complete exposures.",
         dimensions=["instrument"],
         isCalibration=True,
+        lookupFunction=lookupStaticCalibration,
     )
     donutStampsExtra = connectionTypes.Output(
         doc="Extra-focal Donut Postage Stamp Images",

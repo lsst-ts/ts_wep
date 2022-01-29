@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.1.4:
+
+-------------
+2.1.4
+-------------
+
+* Remove `timeMethod` deprecation warnings and use static calibration camera.
+
 .. _lsst.ts.wep-2.1.3:
 
 -------------

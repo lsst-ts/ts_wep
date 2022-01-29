@@ -26,6 +26,7 @@ import pandas as pd
 import lsst.afw.cameraGeom
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
+from lsst.utils.timer import timeMethod
 from lsst.pipe.base import connectionTypes
 
 from lsst.ts.wep.Utility import DefocalType
@@ -161,6 +162,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
 
         return extraExpIdx, intraExpIdx
 
+    @timeMethod
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
