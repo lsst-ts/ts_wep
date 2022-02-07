@@ -23,11 +23,13 @@ import os
 import typing
 import warnings
 import pandas as pd
+
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
 import lsst.pipe.base.connectionTypes as connectionTypes
+from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms import ReferenceObjectLoader, LoadReferenceObjectsConfig
 from lsst.meas.algorithms.sourceSelector import ReferenceSourceSelectorTask
 from lsst.ts.wep.task.DonutSourceSelectorTask import DonutSourceSelectorTask
@@ -225,6 +227,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         return fieldObjects
 
+    @timeMethod
     def run(
         self,
         refCatalogs: typing.List[afwTable.SimpleCatalog],

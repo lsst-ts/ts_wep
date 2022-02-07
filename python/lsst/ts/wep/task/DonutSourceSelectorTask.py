@@ -26,6 +26,7 @@ from sklearn.neighbors import NearestNeighbors
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
+from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms.sourceSelector import (
     _getFieldFromCatalog,
 )
@@ -118,7 +119,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
             sourceCat=sourceCat[result.selected], selected=result.selected
         )
 
-    @pipeBase.timeMethod
+    @timeMethod
     def selectSources(self, sourceCat, bbox):
         """
         Run the source selection algorithm and return the indices to keep
