@@ -24,6 +24,7 @@ import pandas as pd
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
+from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms import (
     LoadIndexedReferenceObjectsTask,
     ReferenceSourceSelectorTask,
@@ -101,7 +102,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
-    @pipeBase.timeMethod
+    @timeMethod
     def run(self, bbox, wcs):
         """Get the data from the reference catalog only from the
         shards of the reference catalogs that overlap our pointing.

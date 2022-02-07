@@ -27,6 +27,7 @@ import lsst.afw.cameraGeom
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
 import lsst.obs.lsst as obs_lsst
+from lsst.utils.timer import timeMethod
 from lsst.pipe.base import connectionTypes
 
 from lsst.ts.wep.Utility import DefocalType
@@ -168,6 +169,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
                 outputs.outputZernikesAvg, outputRefs.outputZernikesAvg[extraListIdx]
             )
 
+    @timeMethod
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],

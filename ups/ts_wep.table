@@ -9,6 +9,7 @@ setupRequired(daf_persistence)
 setupRequired(afw)
 setupRequired(phosim_utils)
 setupRequired(ctrl_mpexec)
+setupRequired(cp_pipe)
 
 # The following is boilerplate for all packages.
 # See https://dmtn-001.lsst.io for details on LSST_LIBRARY_PATH.
