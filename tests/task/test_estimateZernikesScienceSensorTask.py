@@ -250,9 +250,11 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
             )
 
         testCoeffsRaw = self.task.estimateZernikes(testExtraStamps, testIntraStamps)
-        testCoeffsAvg = self.task.combineZernikes(testCoeffsRaw)
+        testCoeffsAvg = self.task.combineZernikes.run(testCoeffsRaw)
         np.testing.assert_array_equal(taskOut.outputZernikesRaw[0], testCoeffsRaw)
-        np.testing.assert_array_equal(taskOut.outputZernikesAvg[0], testCoeffsAvg)
+        np.testing.assert_array_equal(
+            taskOut.outputZernikesAvg[0], testCoeffsAvg.combinedZernikes
+        )
 
     @classmethod
     def tearDownClass(cls):

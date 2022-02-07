@@ -1,5 +1,10 @@
 @startuml
 class RefCatalogInterface
+CombineZernikesBaseTask <|-- CombineZernikesMeanTask
+CombineZernikesBaseTask <|-- CombineZernikesSigmaClipTask
+CombineZernikesBaseTask *-- CombineZernikesBaseConfig
+CombineZernikesBaseConfig <|-- CombineZernikesSigmaClipTaskConfig
+CombineZernikesSigmaClipTask *-- CombineZernikesSigmaClipTaskConfig
 DonutSourceSelectorTask *-- DonutSourceSelectorTaskConfig
 GenerateDonutCatalogOnlineTaskConfig *-- DonutSourceSelectorTask
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
@@ -14,6 +19,7 @@ EstimateZernikesBaseTask *-- EstimateZernikesBaseConfig
 EstimateZernikesBaseConnections <|-- EstimateZernikesScienceSensorTaskConnections
 EstimateZernikesBaseConfig <|-- EstimateZernikesScienceSensorTaskConfig
 EstimateZernikesBaseTask <|-- EstimateZernikesScienceSensorTask
+EstimateZernikesBaseConfig *-- CombineZernikesSigmaClipTask
 EstimateZernikesScienceSensorTaskConfig *-- EstimateZernikesScienceSensorTaskConnections
 EstimateZernikesScienceSensorTask *-- EstimateZernikesScienceSensorTaskConfig
 EstimateZernikesScienceSensorTask ..> DonutStamps

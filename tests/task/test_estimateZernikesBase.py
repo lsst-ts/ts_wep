@@ -31,6 +31,8 @@ from lsst.ts.wep.task.EstimateZernikesBase import (
     EstimateZernikesBaseTask,
     EstimateZernikesBaseConfig,
 )
+from lsst.ts.wep.task.CombineZernikesMeanTask import CombineZernikesMeanTask
+from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.Utility import (
     getModulePath,
     runProgram,
@@ -143,14 +145,21 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
 
     def testValidateConfigs(self):
 
+        self.assertEqual(self.task.donutTemplateSize, 160)
+        self.assertEqual(self.task.donutStampSize, 160)
+        self.assertEqual(self.task.initialCutoutPadding, 40)
+        self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
+
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
+        self.config.combineZernikes.retarget(CombineZernikesMeanTask)
         self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
+        self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
     def testGetTemplate(self):
 
@@ -265,7 +274,9 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
             os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
         )
         zernCoeffAllR04 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
-        zernCoeffAvgR04 = self.task.combineZernikes(zernCoeffAllR04)
+        zernCoeffAvgR04 = self.task.combineZernikes.run(
+            zernCoeffAllR04
+        ).combinedZernikes
         trueZernCoeffR04 = np.array(
             [
                 -0.71201408,
@@ -303,7 +314,9 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
             os.path.join(donutStampDir, "R40_SW1_donutStamps.fits")
         )
         zernCoeffAllR40 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
-        zernCoeffAvgR40 = self.task.combineZernikes(zernCoeffAllR40)
+        zernCoeffAvgR40 = self.task.combineZernikes.run(
+            zernCoeffAllR40
+        ).combinedZernikes
         trueZernCoeffR40 = np.array(
             [
                 -0.6535694,
@@ -333,8 +346,14 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
             np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.5
         )
 
-    def testCombineZernikes(self):
+    def testGetCombinedZernikes(self):
 
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
-        np.testing.assert_array_equal(self.task.combineZernikes(testArr), np.ones(19))
+        combinedZernikesStruct = self.task.getCombinedZernikes(testArr)
+        np.testing.assert_array_equal(
+            combinedZernikesStruct.combinedZernikes, np.ones(19)
+        )
+        np.testing.assert_array_equal(
+            combinedZernikesStruct.flags, np.zeros(len(testArr))
+        )

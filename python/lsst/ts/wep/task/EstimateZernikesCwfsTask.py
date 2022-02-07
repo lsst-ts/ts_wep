@@ -211,7 +211,8 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
 
         # Estimate Zernikes from collection of stamps
         zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
-        zernikeCoeffsAvg = self.combineZernikes(zernikeCoeffsRaw)
+        zernikeCoeffsCombined = self.getCombinedZernikes(zernikeCoeffsRaw)
+        zernikeCoeffsAvg = zernikeCoeffsCombined.combinedZernikes
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and
         # Zernike coefficient numpy array as Struct that can be saved to

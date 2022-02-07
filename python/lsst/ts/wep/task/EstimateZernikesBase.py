@@ -32,6 +32,7 @@ from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 from lsst.ts.wep.WfEstimator import WfEstimator
 from lsst.ts.wep.Utility import getConfigDir, DonutTemplateType, DefocalType
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from scipy.signal import correlate
 from scipy.ndimage import rotate
 
@@ -109,6 +110,14 @@ class EstimateZernikesBaseConfig(
         dtype=int,
         default=40,
     )
+    combineZernikes = pexConfig.ConfigurableField(
+        target=CombineZernikesSigmaClipTask,
+        doc=str(
+            "Choice of task to combine the Zernikes from pairs of "
+            + "donuts into a single value for the detector. (The default "
+            + "is CombineZernikesSigmaClipTask.)"
+        ),
+    )
 
 
 class EstimateZernikesBaseTask(pipeBase.PipelineTask):
@@ -138,6 +147,11 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         # cutout stamp we will still have a postage stamp
         # of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
+        # Choice of task to combine the Zernike coefficients
+        # from individual pairs of donuts into a single array
+        # for the detector.
+        self.combineZernikes = self.config.combineZernikes
+        self.makeSubtask("combineZernikes")
 
     def getTemplate(self, detectorName, defocalType):
         """
@@ -427,9 +441,9 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
             zerArray.append(zer4UpMicrons)
 
-        return zerArray
+        return np.array(zerArray)
 
-    def combineZernikes(self, zernikeArray):
+    def getCombinedZernikes(self, zernikeArray):
         """
         Combine the Zernike coefficients from stamp pairs on the
         CCD to create one final value for the CCD.
@@ -444,10 +458,16 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        finalZernikes: numpy ndarray
-            The final combined Zernike coefficients from the CCD.
+        struct: `lsst.pipe.base.Struct`
+            The struct contains the following data:
+
+            - combinedZernikes: numpy ndarray
+                The final combined Zernike coefficients from the CCD.
+            - combineFlags: numpy ndarray
+                Flag indicating a particular set of Zernike
+                coefficients was not used in the final estimate.
+                A value of 1 means the coefficients from that row
+                in the input `zernikeArray` were not used.
         """
 
-        # NOTE: Currently just unweighted mean of all donuts.
-        # But may change as this is an active research topic.
-        return np.mean(zernikeArray, axis=0)
+        return self.combineZernikes.run(zernikeArray)
