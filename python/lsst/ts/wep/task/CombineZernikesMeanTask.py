@@ -31,26 +31,5 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
     """
 
     def combineZernikes(self, zernikeArray):
-        """
-        Combine the Zernike coefficients with an
-        unweighted mean.
-
-        Parameters
-        ----------
-        zernikeArray: numpy ndarray
-            The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the array should
-            be the set of Zernike coefficients for a single
-            donut pair.
-
-        Returns
-        -------
-        numpy ndarray
-            The final combined Zernike coefficients from the CCD.
-        numpy ndarray
-            A binary array where a value of 1 in any index indicates
-            that the row in the zernikeArray was not used
-            in the final combination.
-        """
 
         return np.mean(zernikeArray, axis=0), np.zeros(len(zernikeArray))

@@ -21,6 +21,7 @@
 
 import abc
 import logging
+import numpy as np
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -52,7 +53,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         Parameters
         ----------
-        zernikeArray: numpy ndarray
+        zernikeArray : numpy.ndarray
             The full set of zernike coefficients for each pair
             of donuts on the CCD. Each row of the array should
             be the set of Zernike coefficients for a single
@@ -60,19 +61,30 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         Returns
         -------
-        struct: `lsst.pipe.base.Struct`
+        struct : `lsst.pipe.base.Struct`
             The struct contains the following data:
 
-            - combinedZernikes: numpy ndarray
+            - combinedZernikes : numpy.ndarray
                 The final combined Zernike coefficients from the CCD.
-            - combineFlags: numpy ndarray
+            - combineFlags : numpy.ndarray
                 Flag indicating a particular set of Zernike
                 coefficients was not used in the final estimate.
+                If the values in a row in the `zernikeArray`
+                were used then its index is 0.
                 A value of 1 means the coefficients from that row
                 in the input `zernikeArray` were not used.
         """
 
         combinedZernikes, flags = self.combineZernikes(zernikeArray)
+        self.log.info(
+            f"Using {len(flags)-np.sum(flags)} pairs out of {len(zernikeArray)} "
+            "in final Zernike estimate."
+        )
+        # Save flags and summary values in task metadata
+        self.metadata["numDonutsTotal"] = len(flags)
+        self.metadata["numDonutsUsed"] = len(flags) - np.sum(flags)
+        self.metadata["numDonutsRejected"] = np.sum(flags)
+        self.metadata["combineZernikesFlags"] = list(flags)
         return pipeBase.Struct(combinedZernikes=combinedZernikes, flags=flags)
 
     @abc.abstractmethod
@@ -84,7 +96,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         Parameters
         ----------
-        zernikeArray: numpy ndarray
+        zernikeArray : numpy.ndarray
             The full set of zernike coefficients for each pair
             of donuts on the CCD. Each row of the array should
             be the set of Zernike coefficients for a single
@@ -92,11 +104,12 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         Returns
         -------
-        numpy ndarray
+        numpy.ndarray
             The final combined Zernike coefficients from the CCD.
-        numpy ndarray
-            A binary array where a value of 1 in any index indicates
-            that the row in the zernikeArray was not used
-            in the final combination.
+        numpy.ndarray
+            A binary array where a value of 0 in any index indicates
+            that the row in the `zernikeArray` was used
+            in the final combination and a value of 1 indicates it
+            was not included in the final combination.
         """
         raise NotImplementedError("CombineZernikesBaseTask is abstract.")

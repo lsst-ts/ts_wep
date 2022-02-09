@@ -55,27 +55,6 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.sigma = self.config.sigma
 
     def combineZernikes(self, zernikeArray):
-        """
-        Combine the Zernike coefficients with a sigma
-        clipping algorithm. The sigma used for clipping
-        is set in the configuration class for this task.
-
-        Parameters
-        ----------
-        zernikeArray: numpy ndarray
-            The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the array should
-            be the set of Zernike coefficients for a single
-            donut pair.
-
-        Returns
-        -------
-        numpy ndarray
-            The final combined Zernike coefficients from the CCD.
-        numpy ndarray
-            The indices of the rows in the zernikeArray that were used
-            in the final combination.
-        """
 
         sigArray = sigma_clip(zernikeArray, sigma=self.sigma, axis=0)
         # Find which donuts have outlier values from the mask
@@ -86,9 +65,5 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         binaryFlagArray[np.where(flagArray > 0.5)] = 1.0
         # Identify which rows to use when calculating final mean
         keepIdx = np.where(binaryFlagArray == 0)
-        self.log.info(
-            f"Using {len(keepIdx)} pairs out of {len(zernikeArray)} "
-            "in final Zernike estimate."
-        )
 
         return np.mean(zernikeArray[keepIdx], axis=0), binaryFlagArray

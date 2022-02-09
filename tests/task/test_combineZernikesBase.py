@@ -45,3 +45,11 @@ class TestCombineZernikesBaseTask(unittest.TestCase):
         self.assertEqual(type(taskOutput), pipeBase.Struct)
         np.testing.assert_array_equal(taskOutput.combinedZernikes, np.arange(10))
         np.testing.assert_array_equal(taskOutput.flags, np.ones(10))
+
+        # Test Metadata stored
+        self.assertEqual(task.metadata["numDonutsTotal"], 10)
+        self.assertEqual(task.metadata["numDonutsUsed"], 0)
+        self.assertEqual(task.metadata["numDonutsRejected"], 10)
+        self.assertListEqual(
+            task.metadata.arrays["combineZernikesFlags"], list(np.ones(10))
+        )

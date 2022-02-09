@@ -458,14 +458,16 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        struct: `lsst.pipe.base.Struct`
+        struct : `lsst.pipe.base.Struct`
             The struct contains the following data:
 
-            - combinedZernikes: numpy ndarray
+            - combinedZernikes : numpy.ndarray
                 The final combined Zernike coefficients from the CCD.
-            - combineFlags: numpy ndarray
+            - combineFlags : numpy.ndarray
                 Flag indicating a particular set of Zernike
                 coefficients was not used in the final estimate.
+                If the values in a row in the `zernikeArray`
+                were used then its index is 0.
                 A value of 1 means the coefficients from that row
                 in the input `zernikeArray` were not used.
         """

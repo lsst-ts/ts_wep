@@ -201,13 +201,12 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         # Estimate Zernikes from collection of stamps
         zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
         zernikeCoeffsCombined = self.getCombinedZernikes(zernikeCoeffsRaw)
-        zernikeCoeffsAvg = zernikeCoeffsCombined.combinedZernikes
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and
         # Zernike coefficient numpy array as Struct that can be saved to
         # Gen 3 repository all with the same dataId.
         return pipeBase.Struct(
-            outputZernikesAvg=[np.array(zernikeCoeffsAvg)] * 2,
+            outputZernikesAvg=[np.array(zernikeCoeffsCombined.combinedZernikes)] * 2,
             outputZernikesRaw=[np.array(zernikeCoeffsRaw)] * 2,
             donutStampsExtra=[donutStampsExtra] * 2,
             donutStampsIntra=[donutStampsIntra] * 2,
