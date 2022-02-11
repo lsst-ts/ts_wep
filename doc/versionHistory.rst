@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.2.0:
+
+-------------
+2.2.0
+-------------
+
+* Add CombineZernikes...Tasks that combine the Zernike coefficients from multiple donut pairs into a single set of coefficients.
+
 .. _lsst.ts.wep-2.1.4:
 
 -------------

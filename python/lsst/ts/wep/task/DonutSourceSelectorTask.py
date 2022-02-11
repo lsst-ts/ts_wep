@@ -163,9 +163,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
         xyNeigh = NearestNeighbors(radius=2 * donutRadius)
         minMagDiff = self.config.isoMagDiff
 
-        # Remove area too close to edge with new bounding box
-        # that allows only area at least one donut radius from edges
-        trimmedBBox = bbox.erodedBy(int(np.ceil(donutRadius)))
+        # Remove area too close to edge with new bounding box that allows
+        # only area at least one donut width (2*donutRadius) from edges
+        trimmedBBox = bbox.erodedBy(2 * int(np.ceil(donutRadius)))
 
         index = []
         magSortedDf = df.sort_values("mag")
