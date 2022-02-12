@@ -148,8 +148,8 @@ butler query-collections $path_of_ts_wep/tests/testData/gen3TestRepo/
 
 ## Note of Auxiliary Telescope Images
 
-1. While testing with the sky images obtained with the auxiliary telescope (localed in `tests/testData/testImages/auxTel`), this package and [cwfs](https://github.com/bxin/cwfs) show the similar result in "onAxis" optical model. However, for the "paraxial" optical model, the results of two packages are different.
-2. The main difference comes from the stratege of compensation in the initial loop of solving the TIE. However, it is hard to have a conclusion at this moment because of the low singal-to-noise ratio in test images.
+1. While testing with the sky images obtained with the auxiliary telescope ZWO high speed camera (located in `tests/testData/testImages/auxTelZWO`), this package and [cwfs](https://github.com/bxin/cwfs) show the similar result in "onAxis" optical model. However, for the "paraxial" optical model, the results of two packages are different.
+2. The main difference comes from the strategy of compensation in the initial loop of solving the TIE. However, it is hard to have a conclusion at this moment because of the low singal-to-noise ratio in test images.
 
 ## Difference in Corner Wavefront Sensors Euler angles to Phosim values
 
