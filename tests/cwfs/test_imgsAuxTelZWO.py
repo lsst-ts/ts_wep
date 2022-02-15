@@ -28,16 +28,16 @@ from lsst.ts.wep.cwfs.BaseCwfsTestCase import BaseCwfsTestCase
 from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType
 
 
-class TestImgsAuxTel(BaseCwfsTestCase, unittest.TestCase):
-    """Test the images of auxiliary telescope"""
+class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
+    """Test the images of auxiliary telescope ZWO camera"""
 
     def setUp(self):
 
         testImageDataDir = os.path.join(
             getModulePath(), "tests", "testData", "testImages"
         )
-        self.testImgDir = os.path.join(testImageDataDir, "auxTel")
-        self.validationDir = os.path.join(testImageDataDir, "validation", "auxTel")
+        self.testImgDir = os.path.join(testImageDataDir, "auxTelZWO")
+        self.validationDir = os.path.join(testImageDataDir, "validation", "auxTelZWO")
 
         self.offset = 80
         self.tolMax = 6
@@ -46,11 +46,11 @@ class TestImgsAuxTel(BaseCwfsTestCase, unittest.TestCase):
     def testCase1paraxial(self):
 
         imgIntraName, imgExtraName = self._getImgsCase1()
-        zer4UpNm = self._calcWfErrAuxTel(
+        zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "paraxial"
         )
 
-        ans = self._getDataVerify("case1_auxTel_paraxial.txt")
+        ans = self._getDataVerify("case1_auxTelZWO_paraxial.txt")
         self.compareDiffWithTol(zer4UpNm, ans, self.tolMax, self.tolRms)
 
     def _getImgsCase1(self):
@@ -60,7 +60,7 @@ class TestImgsAuxTel(BaseCwfsTestCase, unittest.TestCase):
 
         return imgIntraName, imgExtraName
 
-    def _calcWfErrAuxTel(self, imgIntraName, imgExtraName, offset, model):
+    def _calcWfErrAuxTelZWO(self, imgIntraName, imgExtraName, offset, model):
 
         # Cut the donut image from input files
         centroidFindType = CentroidFindType.Otsu
@@ -90,9 +90,9 @@ class TestImgsAuxTel(BaseCwfsTestCase, unittest.TestCase):
         wfErr = self.calcWfErr(
             centroidFindType,
             fieldXY,
-            CamType.AuxTel,
+            CamType.AuxTelZWO,
             "exp",
-            0.8,
+            0.5,
             model,
             imageIntra=imgIntraArray,
             imageExtra=imgExtraArray,
@@ -109,21 +109,21 @@ class TestImgsAuxTel(BaseCwfsTestCase, unittest.TestCase):
     def testCase1onaxis(self):
 
         imgIntraName, imgExtraName = self._getImgsCase1()
-        zer4UpNm = self._calcWfErrAuxTel(
+        zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "onAxis"
         )
 
-        ans = self._getDataVerify("case1_auxTel_onaxis.txt")
+        ans = self._getDataVerify("case1_auxTelZWO_onaxis.txt")
         self.compareDiffWithTol(zer4UpNm, ans, self.tolMax, self.tolRms)
 
     def testCase2paraxial(self):
 
         imgIntraName, imgExtraName = self._getImgsCase2()
-        zer4UpNm = self._calcWfErrAuxTel(
+        zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "paraxial"
         )
 
-        ans = self._getDataVerify("case2_auxTel_paraxial.txt")
+        ans = self._getDataVerify("case2_auxTelZWO_paraxial.txt")
         self.compareDiffWithTol(zer4UpNm, ans, self.tolMax, self.tolRms)
 
     def _getImgsCase2(self):
@@ -136,11 +136,11 @@ class TestImgsAuxTel(BaseCwfsTestCase, unittest.TestCase):
     def testCase2onaxis(self):
 
         imgIntraName, imgExtraName = self._getImgsCase2()
-        zer4UpNm = self._calcWfErrAuxTel(
+        zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "onAxis"
         )
 
-        ans = self._getDataVerify("case2_auxTel_onaxis.txt")
+        ans = self._getDataVerify("case2_auxTelZWO_onaxis.txt")
         self.compareDiffWithTol(zer4UpNm, ans, self.tolMax, self.tolRms)
 
 

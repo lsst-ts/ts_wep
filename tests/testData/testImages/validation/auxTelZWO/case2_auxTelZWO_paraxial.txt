@@ -1,0 +1,24 @@
+# Case 2 of test images of auxiliary telescope
+# Use images:
+# 1579925833-16Pup_intra-0-1.fits and 1579925882-16Pup_extra-0-1.fits
+# From z4 - z22 in nm
+# The result here is from ts_wep commit cda2184
+ -6.8345
+ 17.9587
+ 35.8991
+ 28.2008
+ -5.6689
+-33.5023
+-19.9790
+ -4.4295
+ -2.1663
+  4.9518
+-11.9792
+ -4.0271
+  6.0270
+  1.7410
+  5.2538
+  3.3910
+ -5.1536
+  1.7233
+ -0.6620

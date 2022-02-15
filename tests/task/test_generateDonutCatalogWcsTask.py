@@ -142,7 +142,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         donutCatSmall = refObjLoader.loadPixelBox(
             testExposure.getBBox(),
             testExposure.getWcs(),
-            testExposure.getFilter().getName(),
+            testExposure.getFilterLabel().bandLabel,
         )
         fieldObjects = self.task.donutCatalogToDataFrame(donutCatSmall.refCat)
         self.assertEqual(len(fieldObjects), 4)
