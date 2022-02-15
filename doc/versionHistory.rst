@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.2.2:
+
+-------------
+2.2.2
+-------------
+
+* Update functions marked deprecated as of stack version `w_2022_06`.
+
 .. _lsst.ts.wep-2.2.1:
 
 -------------
