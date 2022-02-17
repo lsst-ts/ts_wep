@@ -83,40 +83,6 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         # of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
 
-    def runQuantum(
-        self,
-        butlerQC: pipeBase.ButlerQuantumContext,
-        inputRefs: pipeBase.InputQuantizedConnection,
-        outputRefs: pipeBase.OutputQuantizedConnection,
-    ):
-        """
-        We implement a runQuantum method to make sure our configured
-        task runs with the instrument required by the pipeline.
-
-        Parameters
-        ----------
-        butlerQC : pipeBase.ButlerQuantumContext
-            Butler to handle the data processing of the task
-        inputRefs : pipeBase.InputQuantizedConnection
-            The butler references for the input data for the task.
-        outputRefs : pipeBase.OutputQuantizedConnection
-            The butler references for the output data
-            created by the task.
-        """
-
-        # Get the instrument we are running the pipeline with
-        camera = butlerQC.get(inputRefs.camera)
-
-        # Get the input reference objects for the task
-        exposures = butlerQC.get(inputRefs.exposures)
-        donutCats = butlerQC.get(inputRefs.donutCatalog)
-
-        # Run task on specified instrument
-        outputs = self.run(exposures, donutCats, camera)
-
-        # Use butler to store output in repository
-        butlerQC.put(outputs, outputRefs)
-
     def assignExtraIntraIdx(self, focusZVal0, focusZVal1):
         """
         Identify which exposure in the list is the extra-focal and which
@@ -166,7 +132,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
-        donutCatalogs: typing.List[pd.DataFrame],
+        donutCatalog: typing.List[pd.DataFrame],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
@@ -175,17 +141,16 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         focusZ1 = exposures[1].getMetadata()["FOCUSZ"]
 
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
-        # The donut catalogs for each exposure should be the same
-        # Just pick the one for the first exposure
-        donutCatalog = donutCatalogs[0]
 
         # Get the donut stamps from extra and intra focal images
+        # The donut catalogs for each exposure should be the same
+        # so we just pick the one for the first exposure
         cameraName = camera.getName()
         donutStampsExtra = self.cutOutStamps(
-            exposures[extraExpIdx], donutCatalog, DefocalType.Extra, cameraName
+            exposures[extraExpIdx], donutCatalog[0], DefocalType.Extra, cameraName
         )
         donutStampsIntra = self.cutOutStamps(
-            exposures[intraExpIdx], donutCatalog, DefocalType.Intra, cameraName
+            exposures[intraExpIdx], donutCatalog[0], DefocalType.Intra, cameraName
         )
 
         # If no donuts are in the donutCatalog for a set of exposures
