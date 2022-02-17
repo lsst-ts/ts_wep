@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.2.3:
+
+-------------
+2.2.3
+-------------
+
+* Change `EstimateZernikesCwfsTask` to be able to accept only a single pair of wavefront sensors.
+* Remove `runQuantum` function from `EstimateZernikesScienceSensorTask` since it does not add any functionality now that the task gets the camera from the butler.
+
 .. _lsst.ts.wep-2.2.2:
 
 -------------
