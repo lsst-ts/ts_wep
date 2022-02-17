@@ -22,6 +22,7 @@
 import os
 import numpy as np
 import pandas as pd
+from copy import copy
 from scipy.signal import correlate
 
 import lsst.utils.tests
@@ -68,13 +69,17 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         # Point to the collections for the reference catalogs,
         # the raw images and the camera model in the calib directory
         # that comes from `butler write-curated-calibrations`.
-        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
-        instrument = "lsst.obs.lsst.LsstCam"
+        cls.collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        cls.instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
-        pipelineYaml = os.path.join(testPipelineConfigDir, "testCwfsPipeline.yaml")
+        cls.pipelineYaml = os.path.join(testPipelineConfigDir, "testCwfsPipeline.yaml")
 
         pipeCmd = writePipetaskCmd(
-            cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+            cls.repoDir,
+            cls.runName,
+            cls.instrument,
+            cls.collections,
+            pipelineYaml=cls.pipelineYaml,
         )
         pipeCmd += f" -d 'exposure IN ({cls.visitNum})'"
         runProgram(pipeCmd)
@@ -105,6 +110,23 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             "exposure": self.visitNum,
             "visit": self.visitNum,
         }
+
+        self.testRunName = "testTaskRun"
+        self.collectionsList = list(self.registry.queryCollections())
+        if self.testRunName in self.collectionsList:
+            cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, self.testRunName)
+            runProgram(cleanUpCmd)
+
+    def tearDown(self):
+
+        # Get Butler with updated registry
+        self.butler = dafButler.Butler(self.repoDir)
+        self.registry = self.butler.registry
+
+        self.collectionsList = list(self.registry.queryCollections())
+        if self.testRunName in self.collectionsList:
+            cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, self.testRunName)
+            runProgram(cleanUpCmd)
 
     def _generateTestExposures(self):
 
@@ -229,6 +251,54 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             str(context.exception),
         )
 
+        # Test error raised when list sizes are unequal
+        inputRefs.exposures = [
+            self.butler.getDeferred(
+                "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+            ).ref,
+        ]
+        inputRefs.camera = self.butler.getDeferred(
+            "camera", instrument="LSSTCam", collections="LSSTCam/calib/unbounded"
+        ).ref
+        inputRefs.donutCatalog = [
+            self.butler.getDeferred(
+                "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+            ).ref,
+            self.butler.getDeferred(
+                "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
+            ).ref,
+        ]
+        outputRefs = pipeBase.OutputQuantizedConnection()
+        quantum = dafButler.Quantum(
+            inputs={
+                inputRefs.exposures[0].datasetType: inputRefs.exposures,
+                inputRefs.donutCatalog[0].datasetType: inputRefs.donutCatalog,
+                inputRefs.camera.datasetType: [inputRefs.camera],
+            }
+        )
+        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
+        unequalMsg = "Unequal number of intra and extra focal detectors."
+        with self.assertRaises(ValueError) as context:
+            self.task.runQuantum(butlerQC, inputRefs, outputRefs)
+        self.assertEqual(str(context.exception), unequalMsg)
+
+        # Test error raised when extra and intra focal do not
+        # have correct partner
+        self.mismatchDataId = copy(self.dataIdIntra)
+        self.mismatchDataId["detector"] = 196
+
+        # Test errors raised
+        inputRefs.exposures.append(
+            self.butler.getDeferred(
+                "postISRCCD", dataId=self.mismatchDataId, collections=[self.runName]
+            ).ref
+        )
+        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
+        mismatchMsg = "Intra and extra focal detectors not adjacent."
+        with self.assertRaises(ValueError) as context:
+            self.task.runQuantum(butlerQC, inputRefs, outputRefs)
+        self.assertEqual(str(context.exception), mismatchMsg)
+
     def testTaskRunNoSources(self):
 
         (
@@ -331,3 +401,49 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(
             taskOut.outputZernikesAvg, testCoeffsAvg.combinedZernikes
         )
+
+    def testPipelineOnePairOnly(self):
+
+        pipeCmd = writePipetaskCmd(
+            self.repoDir,
+            self.testRunName,
+            self.instrument,
+            self.collections,
+            pipelineYaml=self.pipelineYaml,
+        )
+        pipeCmd += f" -d 'exposure IN ({self.visitNum}) and detector IN (191, 192)'"
+        runProgram(pipeCmd)
+
+        # Get Butler with updated registry
+        self.butler = dafButler.Butler(self.repoDir)
+
+        donutExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.testRunName]
+        )
+        donutIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdIntra, collections=[self.testRunName]
+        )
+        zernAvg = self.butler.get(
+            "zernikeEstimateAvg",
+            dataId=self.dataIdExtra,
+            collections=[self.testRunName],
+        )
+        zernRaw = self.butler.get(
+            "zernikeEstimateRaw",
+            dataId=self.dataIdExtra,
+            collections=[self.testRunName],
+        )
+
+        self.assertEqual(len(donutExtra), 2)
+        self.assertEqual(len(donutExtra), len(donutIntra))
+        self.assertEqual(np.shape(zernAvg), (19,))
+        self.assertEqual(np.shape(zernRaw), (2, 19))
+
+        self.badDataId = copy(self.dataIdExtra)
+        self.badDataId["detector"] = 195
+        with self.assertRaises(LookupError):
+            self.butler.get(
+                "donutStampsExtra",
+                dataId=self.badDataId,
+                collections=[self.testRunName],
+            )

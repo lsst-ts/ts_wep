@@ -140,7 +140,17 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
             [dCat.dataId["detector"] for dCat in inputRefs.donutCatalog]
         )
 
-        for extraId, intraId in zip(extraFocalIds, intraFocalIds):
+        # Find cwfs detectors in the list of detectors being processed
+        runExtraIds = list(set(detectorIdArr).intersection(extraFocalIds))
+        runExtraIds.sort()
+        runIntraIds = list(set(detectorIdArr).intersection(intraFocalIds))
+        runIntraIds.sort()
+        if len(runExtraIds) != len(runIntraIds):
+            raise ValueError("Unequal number of intra and extra focal detectors.")
+
+        for extraId, intraId in zip(runExtraIds, runIntraIds):
+            if abs(extraId - intraId) != 1:
+                raise ValueError("Intra and extra focal detectors not adjacent.")
             extraListIdx = np.where(detectorIdArr == extraId)[0][0]
             intraListIdx = np.where(detectorIdArr == intraId)[0][0]
             dCatExtraIdx = np.where(donutCatIdArr == extraId)[0][0]
