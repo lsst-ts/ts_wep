@@ -35,9 +35,9 @@ from lsst.ts.wep.cwfs.Tool import (
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
 )
-from lsst.ts.wep.cwfs import mathcwfs
 from lsst.ts.wep.cwfs.Image import Image
 from lsst.ts.wep.Utility import DefocalType, CentroidFindType
+from galsim.utilities import horner2d
 
 
 class CompensableImage(object):
@@ -831,7 +831,13 @@ class CompensableImage(object):
             x = data
 
         # Correct the off-axis distortion
-        return mathcwfs.poly10_2D(c, x.flatten(), y.flatten()).reshape(x.shape)
+
+        # Need to reorder the coefficients for use with GalSim:
+        carr = np.zeros((11, 11))
+        carr[np.tril_indices(11)] = c
+        for i in range(0, 11):
+            carr[:, i] = np.roll(carr[:, i], -i)
+        return horner2d(x, y, carr)
 
     def _poly10Grad(self, c, x, y, atype):
         """Correct the off-axis distortion by fitting with a 10 order
@@ -853,8 +859,24 @@ class CompensableImage(object):
         numpy.ndarray
             Corrected parameters for off-axis distortion.
         """
+        if atype not in ["dx", "dy"]:
+            raise ValueError(f"Unknown atype: {atype}")
 
-        return mathcwfs.poly10Grad(c, x.flatten(), y.flatten(), atype).reshape(x.shape)
+        carr = np.zeros((11, 11))
+        carr[np.tril_indices(11)] = c
+        for i in range(0, 11):
+            carr[:, i] = np.roll(carr[:, i], -i)
+        grad = np.zeros(carr.shape, dtype=np.float64)
+
+        if atype == "dx":
+            for (i, j) in zip(*np.nonzero(carr)):
+                if i > 0:
+                    grad[i-1, j] = carr[i, j]*i
+        elif atype == "dy":
+            for (i, j) in zip(*np.nonzero(carr)):
+                if j > 0:
+                    grad[i, j-1] = carr[i, j]*j
+        return horner2d(x, y, grad)
 
     def _createPupilGrid(self, lutx, luty, onepixel, ca, cb, ra, rb, fieldX, fieldY):
         """Create the pupil grid in off-axis model.
