@@ -35,9 +35,10 @@ from lsst.ts.wep.cwfs.Tool import (
     extractArray,
 )
 from lsst.ts.wep.Utility import getModulePath
+from lsst.utils.tests import TestCase
 
 
-class TestTool(unittest.TestCase):
+class TestTool(TestCase):
     """Test the fuctions in Tool."""
 
     def setUp(self):
@@ -74,13 +75,12 @@ class TestTool(unittest.TestCase):
 
         self._checkAnsWithFile(surface, "annularZernikeEval.txt")
 
-    def _checkAnsWithFile(self, value, ansFileName):
+    def _checkAnsWithFile(self, value, ansFileName, rtol=1e-10, atol=1e-10):
 
         ansFilePath = os.path.join(self.testDataDir, ansFileName)
         ans = np.loadtxt(ansFilePath)
 
-        delta = np.sum(np.abs(value - ans))
-        self.assertLess(delta, 1e-10)
+        self.assertFloatsAlmostEqual(value, ans, rtol=rtol, atol=atol)
 
     def testZernikeAnnularNormality(self):
 

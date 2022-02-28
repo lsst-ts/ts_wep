@@ -21,7 +21,7 @@
 
 import numpy as np
 
-from lsst.ts.wep.cwfs import mathcwfs
+from galsim.zernike import Zernike as GSZernike
 
 
 def ZernikeAnnularEval(z, x, y, e, nMax=28):
@@ -47,11 +47,7 @@ def ZernikeAnnularEval(z, x, y, e, nMax=28):
         Wavefront surface.
     """
 
-    # Check the preconditions
-    z = _checkPrecondition(z, x, y, int(nMax))
-
-    # Calculate the wavefront
-    return mathcwfs.zernikeAnnularEval(z, x.flatten(), y.flatten(), e).reshape(x.shape)
+    return GSZernike(np.concatenate([[0], z]), R_inner=e)(x, y)
 
 
 def _checkPrecondition(z, x, y, nMax):
@@ -116,20 +112,30 @@ def ZernikeAnnularGrad(z, x, y, e, axis, nMax=22):
     Returns
     -------
     numpy.ndarray
-        Integration elements of gradient part in pupul x and y directions.
+        Integration elements of gradient part in pupil x and y directions.
     """
 
-    # Check the preconditions
-    z = _checkPrecondition(z, x, y, int(nMax))
-
-    # Calculate the integration elements
-    return mathcwfs.zernikeAnnularGrad(z, x.flatten(), y.flatten(), e, axis).reshape(
-        x.shape
-    )
+    gszk = GSZernike(np.concatenate([[0], z]), R_inner=e)
+    if axis == "dx":
+        return gszk.gradX(x, y)
+    elif axis == "dy":
+        return gszk.gradY(x, y)
+    elif axis == "dx2":
+        return gszk.gradX.gradX(x, y)
+    elif axis == "dy2":
+        return gszk.gradY.gradY(x, y)
+    elif axis == "dxy":
+        return gszk.gradX.gradY(x, y)
+    else:
+        raise ValueError(f"Unsupported axis: {axis}")
 
 
 def ZernikeAnnularJacobian(z, x, y, e, order, nMax=22):
     """Evaluate the Jacobian of annular Zernike polynomials in a certain order.
+
+    This function uses the terminology "1st order" to mean the Laplacian
+    of the Zernike polynomial, and "2nd order" to mean the determinant of the
+    Hessian matrix of the Zernike polynomial.
 
     Parameters
     ----------
@@ -149,16 +155,16 @@ def ZernikeAnnularJacobian(z, x, y, e, order, nMax=22):
     Returns
     -------
     numpy.ndarray
-        Jacobian elements in pupul x and y directions in a certain order.
+        Jacobian elements in pupil x and y directions in a certain order.
     """
 
-    # Check the preconditions
-    z = _checkPrecondition(z, x, y, int(nMax))
-
-    # Calculate the Jacobian
-    return mathcwfs.zernikeAnnularJacobian(
-        z, x.flatten(), y.flatten(), e, order
-    ).reshape(x.shape)
+    gszk = GSZernike(np.concatenate([[0], z]), R_inner=e)
+    if order == "1st":
+        return gszk.laplacian(x, y)
+    elif order == "2nd":
+        return gszk.hessian(x, y)
+    else:
+        raise ValueError(f"Unsupported order: {order}")
 
 
 def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=28):
@@ -234,7 +240,7 @@ def ZernikeGrad(z, x, y, axis, nMax=22):
     Returns
     -------
     numpy.ndarray
-        Integration elements of gradient part in pupul x and y directions.
+        Integration elements of gradient part in pupil x and y directions.
     """
 
     # Calculate the integration elements
@@ -261,7 +267,7 @@ def ZernikeJacobian(z, x, y, order, nMax=22):
     Returns
     -------
     numpy.ndarray
-        Jacobian elements in pupul x and y directions in a certain order.
+        Jacobian elements in pupil x and y directions in a certain order.
     """
 
     # Calculate the Jacobian elements
