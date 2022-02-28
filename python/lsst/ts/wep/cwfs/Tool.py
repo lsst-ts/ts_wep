@@ -20,11 +20,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
+import warnings
 
-from lsst.ts.wep.cwfs import mathcwfs
+from galsim.zernike import Zernike as GSZernike
 
 
-def ZernikeAnnularEval(z, x, y, e, nMax=28):
+def ZernikeAnnularEval(z, x, y, e, nMax=None):
     """Calculate the wavefront surface in the basis of annular Zernike
     polynomial.
 
@@ -38,64 +39,24 @@ def ZernikeAnnularEval(z, x, y, e, nMax=28):
         Y coordinate on pupil plane.
     e : float
         Obscuration value. It is 0.61 in LSST.
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 28.)
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
         Wavefront surface.
     """
-
-    # Check the preconditions
-    z = _checkPrecondition(z, x, y, int(nMax))
-
-    # Calculate the wavefront
-    return mathcwfs.zernikeAnnularEval(z, x.flatten(), y.flatten(), e).reshape(x.shape)
-
-
-def _checkPrecondition(z, x, y, nMax):
-    """Check the preconditions before the evaluation related to Zernike
-    polynomials.
-
-    Parameters
-    ----------
-    z : numpy.ndarray
-        Coefficient of Zernike polynomials.
-    x : numpy.ndarray
-        X coordinate on pupil plane.
-    y : numpy.ndarray
-        Y coordinate on pupil plane.
-    nMax : int
-        Maximum number of Zernike terms.
-
-    Returns
-    -------
-    numpy.ndarray
-        Coefficient of Zernike polynomials.
-    """
-
-    # Check the dimensions of x and y are the same or not
-    if x.shape != y.shape:
-        print("x & y are not the same size")
-        exit()
-
-    # Check the number of terms of annular Zernike polynomials
-    if len(z) > nMax:
-        print(
-            "Some Zernike related functions are not implemented with >%d terms." % nMax
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
         )
-        return
-    elif len(z) < nMax:
-        # Put the higher order terms as zero to make sure nMax terms of
-        # polynomials
-        z = np.hstack((z, np.zeros(nMax - len(z))))
-
-    return z
+    return GSZernike(np.concatenate([[0], z]), R_inner=e)(x, y)
 
 
-def ZernikeAnnularGrad(z, x, y, e, axis, nMax=22):
-    """Evaluate the gradident of annular Zernike polynomials in a certain
+def ZernikeAnnularGrad(z, x, y, e, axis, nMax=None):
+    """Evaluate the gradient of annular Zernike polynomials in a certain
     direction.
 
     Parameters
@@ -110,26 +71,46 @@ def ZernikeAnnularGrad(z, x, y, e, axis, nMax=22):
         Obscuration value. It is 0.61 in LSST.
     axis : str
         It can be "dx", "dy", "dx2", "dy2", or "dxy".
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 22.)
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
-        Integration elements of gradient part in pupul x and y directions.
+        Integration elements of gradient part in pupil x and y directions.
+
+    Raises
+    ------
+    ValueError
+        Raise error for invalid axis argument
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
-    # Check the preconditions
-    z = _checkPrecondition(z, x, y, int(nMax))
+    gszk = GSZernike(np.concatenate([[0], z]), R_inner=e)
+    if axis == "dx":
+        return gszk.gradX(x, y)
+    elif axis == "dy":
+        return gszk.gradY(x, y)
+    elif axis == "dx2":
+        return gszk.gradX.gradX(x, y)
+    elif axis == "dy2":
+        return gszk.gradY.gradY(x, y)
+    elif axis == "dxy":
+        return gszk.gradX.gradY(x, y)
+    else:
+        raise ValueError(f"Unsupported axis: {axis}")
 
-    # Calculate the integration elements
-    return mathcwfs.zernikeAnnularGrad(z, x.flatten(), y.flatten(), e, axis).reshape(
-        x.shape
-    )
 
-
-def ZernikeAnnularJacobian(z, x, y, e, order, nMax=22):
+def ZernikeAnnularJacobian(z, x, y, e, order, nMax=None):
     """Evaluate the Jacobian of annular Zernike polynomials in a certain order.
+
+    This function uses the terminology "1st order" to mean the Laplacian
+    of the Zernike polynomial, and "2nd order" to mean the determinant of the
+    Hessian matrix of the Zernike polynomial.
 
     Parameters
     ----------
@@ -142,26 +123,36 @@ def ZernikeAnnularJacobian(z, x, y, e, order, nMax=22):
     e : float
         Obscuration value. It is 0.61 in LSST.
     order : str
-        Order of Jocobian Matrix. It can be "1st" or "2nd".
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 22.)
+        Order of Jacobian Matrix. It can be "1st" or "2nd".
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
-        Jacobian elements in pupul x and y directions in a certain order.
+        Jacobian elements in pupil x and y directions in a certain order.
+
+    Raises
+    ------
+    ValueError
+        Raise error for invalid order argument
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
-    # Check the preconditions
-    z = _checkPrecondition(z, x, y, int(nMax))
+    gszk = GSZernike(np.concatenate([[0], z]), R_inner=e)
+    if order == "1st":
+        return gszk.laplacian(x, y)
+    elif order == "2nd":
+        return gszk.hessian(x, y)
+    else:
+        raise ValueError(f"Unsupported order: {order}")
 
-    # Calculate the Jacobian
-    return mathcwfs.zernikeAnnularJacobian(
-        z, x.flatten(), y.flatten(), e, order
-    ).reshape(x.shape)
 
-
-def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=28):
+def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=None):
     """Get the coefficients of annular Zernike polynomials by fitting the
     wavefront surface.
 
@@ -177,14 +168,19 @@ def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=28):
         Number of annular Zernike terms used in the fit.
     e : float
         Obscuration ratio of annular Zernikes.
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 28.)
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
         Coefficients of annular Zernike polynomials by the fitting.
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
     # Check the dimensions of x and y are the same or not
     if x.shape != y.shape:
@@ -207,7 +203,7 @@ def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=28):
     for ii in range(numTerms):
         z = np.zeros(numTerms)
         z[ii] = 1
-        h[:, ii] = ZernikeAnnularEval(z, xFinite, yFinite, e, nMax=nMax)
+        h[:, ii] = ZernikeAnnularEval(z, xFinite, yFinite, e)
 
     # Solve the equation: H*Z = S => Z = H^(-1)S
     z = np.linalg.lstsq(h, sFinite, rcond=None)[0]
@@ -215,8 +211,8 @@ def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=28):
     return z
 
 
-def ZernikeGrad(z, x, y, axis, nMax=22):
-    """Evaluate the gradident of Zernike polynomials in a certain axis.
+def ZernikeGrad(z, x, y, axis, nMax=None):
+    """Evaluate the gradient of Zernike polynomials in a certain axis.
 
     Parameters
     ----------
@@ -228,21 +224,26 @@ def ZernikeGrad(z, x, y, axis, nMax=22):
         Y coordinate on pupil plane.
     axis : str
         Integration direction. It can be "dx" or "dy".
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 22.)
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
-        Integration elements of gradient part in pupul x and y directions.
+        Integration elements of gradient part in pupil x and y directions.
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
     # Calculate the integration elements
     # Use obscuration (e) = 0 for standard Zernike polynomials
-    return ZernikeAnnularGrad(z, x, y, 0, axis, nMax=nMax)
+    return ZernikeAnnularGrad(z, x, y, 0, axis)
 
 
-def ZernikeJacobian(z, x, y, order, nMax=22):
+def ZernikeJacobian(z, x, y, order, nMax=None):
     """Evaluate the Jacobian of Zernike polynomials in a certain order.
 
     Parameters
@@ -254,22 +255,27 @@ def ZernikeJacobian(z, x, y, order, nMax=22):
     y : numpy.ndarray
         Y coordinate on pupil plane.
     order : str
-        Order of Jocobian Matrix. It can be "1st" or "2nd".
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 22.)
+        Order of Jacobian Matrix. It can be "1st" or "2nd".
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
-        Jacobian elements in pupul x and y directions in a certain order.
+        Jacobian elements in pupil x and y directions in a certain order.
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
     # Calculate the Jacobian elements
     # Use obscuration (e) = 0 for standard Zernike polynomials
-    return ZernikeAnnularJacobian(z, x, y, 0, order, nMax=nMax)
+    return ZernikeAnnularJacobian(z, x, y, 0, order)
 
 
-def ZernikeEval(z, x, y, nMax=28):
+def ZernikeEval(z, x, y, nMax=None):
     """Calculate the wavefront surface in the basis of Zernike polynomial.
 
     Parameters
@@ -280,21 +286,26 @@ def ZernikeEval(z, x, y, nMax=28):
         X coordinate on pupil plane.
     y : numpy.ndarray
         Y coordinate on pupil plane.
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 28.)
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
         Wavefront surface.
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
     # Calculate the wavefront surface
     # Use obscuration (e) = 0 for standard Zernike polynomials
-    return ZernikeAnnularEval(z, x, y, 0, nMax=nMax)
+    return ZernikeAnnularEval(z, x, y, 0)
 
 
-def ZernikeFit(s, x, y, numTerms, nMax=28):
+def ZernikeFit(s, x, y, numTerms, nMax=None):
     """Get the coefficients of Zernike polynomials by fitting the wavefront
     surface.
 
@@ -308,21 +319,26 @@ def ZernikeFit(s, x, y, numTerms, nMax=28):
         Normalized y coordinate between -1 and 1 (pupil coordinate).
     numTerms : int
         Number of Zernike terms used in the fit.
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 28.)
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
         Coefficients of Zernike polynomials by the fitting.
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
     # Do the fitting to get coefficients of Zernike polynomials
     # Use obscuration (e) = 0 for standard Zernike polynomials
-    return ZernikeAnnularFit(s, x, y, numTerms, 0, nMax=nMax)
+    return ZernikeAnnularFit(s, x, y, numTerms, 0)
 
 
-def ZernikeMaskedFit(s, x, y, numTerms, mask, e, nMax=28):
+def ZernikeMaskedFit(s, x, y, numTerms, mask, e, nMax=None):
     """Fit the wavefront surface on pupil (e.g. under the mask) to a linear
     combination of normal/ annular Zernike polynomials.
 
@@ -340,14 +356,19 @@ def ZernikeMaskedFit(s, x, y, numTerms, mask, e, nMax=28):
         Mask used.
     e : float
          Obscuration ratio of annular Zernikes.
-    nMax : int, optional
-        Maximum number of Zernike terms. (the default is 28.)
+    nMax : int, deprecated
+        Maximum number of Zernike terms.  Unused.
 
     Returns
     -------
     numpy.ndarray
         Coefficients of normal/ annular Zernike polynomials by the fitting.
     """
+    if nMax is not None:
+        warnings.warn(
+            "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
+            DeprecationWarning
+        )
 
     # Get S, x, y elements in mask
     j, i = np.nonzero(mask[:])
@@ -356,7 +377,7 @@ def ZernikeMaskedFit(s, x, y, numTerms, mask, e, nMax=28):
     y = y[i, j]
 
     # Calculate coefficients of normal/ spherical Zernike polynomials
-    return ZernikeAnnularFit(s, x, y, numTerms, e, nMax=nMax)
+    return ZernikeAnnularFit(s, x, y, numTerms, e)
 
 
 def padArray(inArray, dim):
@@ -444,7 +465,7 @@ def extractArray(inArray, dim):
     # Calculate the begining index to extract the central image
     ii = int(np.floor((m - dim) / 2))
 
-    # Extract the cetral image
+    # Extract the central image
     out = inArray[ii : ii + dim, ii : ii + dim]
 
     return out
