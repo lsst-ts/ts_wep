@@ -76,10 +76,14 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         """
 
         combinedZernikes, flags = self.combineZernikes(zernikeArray)
+
+        # Make sure that flags contains only integers
+        flags = np.array(flags, dtype=int)
         self.log.info(
             f"Using {len(flags)-np.sum(flags)} pairs out of {len(zernikeArray)} "
             "in final Zernike estimate."
         )
+
         # Save flags and summary values in task metadata
         self.metadata["numDonutsTotal"] = len(flags)
         self.metadata["numDonutsUsed"] = len(flags) - np.sum(flags)

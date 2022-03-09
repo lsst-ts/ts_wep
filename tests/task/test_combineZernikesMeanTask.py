@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
+import numbers
 import numpy as np
 
 import lsst.pipe.base as pipeBase
@@ -45,6 +46,7 @@ class TestCombineZernikesMeanTask(unittest.TestCase):
         combinedZernikes, flags = self.task.combineZernikes(zernikeArray)
         np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
         np.testing.assert_array_equal(np.zeros(2), flags)
+        self.assertTrue(isinstance(flags[0], numbers.Integral))
 
     def testTaskRun(self):
 
@@ -55,3 +57,4 @@ class TestCombineZernikesMeanTask(unittest.TestCase):
             np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes
         )
         np.testing.assert_array_equal(np.zeros(2), combinedZernikesStruct.flags)
+        self.assertTrue(isinstance(combinedZernikesStruct.flags[0], numbers.Integral))

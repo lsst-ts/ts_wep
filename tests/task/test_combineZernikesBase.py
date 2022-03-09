@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
+import numbers
 import numpy as np
 
 import lsst.pipe.base as pipeBase
@@ -45,6 +46,7 @@ class TestCombineZernikesBaseTask(unittest.TestCase):
         self.assertEqual(type(taskOutput), pipeBase.Struct)
         np.testing.assert_array_equal(taskOutput.combinedZernikes, np.arange(10))
         np.testing.assert_array_equal(taskOutput.flags, np.ones(10))
+        self.assertTrue(isinstance(taskOutput.flags[0], numbers.Integral))
 
         # Test Metadata stored
         self.assertEqual(task.metadata["numDonutsTotal"], 10)

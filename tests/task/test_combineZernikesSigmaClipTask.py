@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
+import numbers
 import numpy as np
 
 import lsst.pipe.base as pipeBase
@@ -40,16 +41,19 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         inputArray = np.ones((101, 10))
         inputArray[50:100] += 2.0
         inputArray[100] += 100.0
-        outputFlags = np.zeros(101)
-        outputFlags[100] = 1.0
+        outputFlags = np.zeros(101, dtype=int)
+        outputFlags[100] = 1
         return inputArray, outputFlags
 
     def testValidateConfigs(self):
 
         self.assertEqual(3.0, self.task.sigma)
+        self.assertEqual(3, self.task.maxZernClip)
         self.config.sigma = 2.0
+        self.config.maxZernClip = 5
         self.task = CombineZernikesSigmaClipTask(config=self.config)
         self.assertEqual(2.0, self.task.sigma)
+        self.assertEqual(5, self.task.maxZernClip)
 
     def testCombineZernikes(self):
 
@@ -57,6 +61,27 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
         np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
         np.testing.assert_array_equal(trueFlags, testFlags)
+        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
+
+        # Test that zernikes higher than maxZernClip don't remove
+        # a row from the final averaging
+        zernikeArray[0, 3:] += 100.0
+        zernikeArray[51, 3:] -= 100.0
+        combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
+        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
+        np.testing.assert_array_equal(trueFlags, testFlags)
+        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
+
+        # Test that changing the maxZernClip parameter does change
+        # if a row is removed from the final result
+        self.config.maxZernClip = 5
+        self.task = CombineZernikesSigmaClipTask(config=self.config)
+        combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
+        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
+        trueFlags[0] = 1
+        trueFlags[51] = 1
+        np.testing.assert_array_equal(trueFlags, testFlags)
+        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
 
     def testTaskRun(self):
 
@@ -67,3 +92,4 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
             np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes
         )
         np.testing.assert_array_equal(trueFlags, combinedZernikesStruct.flags)
+        self.assertTrue(isinstance(combinedZernikesStruct.flags[0], numbers.Integral))
