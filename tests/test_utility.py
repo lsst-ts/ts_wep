@@ -41,6 +41,9 @@ from lsst.ts.wep.Utility import (
     getAmpImagesFromDir,
     writePipetaskCmd,
     writeCleanUpRepoCmd,
+    CamType,
+    getCamType,
+    getDefocalDisInMm
 )
 
 
@@ -224,6 +227,18 @@ class TestUtility(unittest.TestCase):
 
         testCmd = self._writeCleanUpCmd(repoName, runName)
         self.assertEqual(testCmd, writeCleanUpRepoCmd(repoName, runName))
+
+    def testGetDefocalDisInMm(self):
+        self.assertEqual(getDefocalDisInMm('lsst'), 1.5)
+        self.assertEqual(getDefocalDisInMm('lsstfam'), 1.5)
+        self.assertEqual(getDefocalDisInMm('comcam'), 1.5)
+        self.assertEqual(getDefocalDisInMm('auxTel'), 0.8)
+
+    def testGetCamType(self):
+        self.assertEqual(getCamType('lsst'), CamType.LsstCam)
+        self.assertEqual(getCamType('lsstfam'), CamType.LsstFamCam)
+        self.assertEqual(getCamType('comcam'), CamType.ComCam)
+        self.assertEqual(getCamType('auxTel'), CamType.AuxTel)
 
 
 if __name__ == "__main__":
