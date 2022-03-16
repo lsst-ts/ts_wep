@@ -25,6 +25,8 @@ from lsst.ts.wep.Utility import getConfigDir, readPhoSimSettingData, CamType
 from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
 from lsst.ts.wep.cwfs.Instrument import Instrument
 from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
+import lsst.obs.lsst as obs_lsst
+import lsst.afw.cameraGeom as cameraGeom
 
 
 class DonutTemplateModel(DonutTemplateDefault):
@@ -37,7 +39,7 @@ class DonutTemplateModel(DonutTemplateDefault):
         imageSize,
         camType=CamType.LsstCam,
         opticalModel="offAxis",
-        pixelScale=0.2,
+        pixelScale=0.2
     ):
         """Make the donut template image.
 
@@ -51,8 +53,8 @@ class DonutTemplateModel(DonutTemplateDefault):
         imageSize : int
             Size of template in pixels. The template will be a square.
         camType : enum 'CamType', optional
-            Camera type. (Default is CamType.LsstCam)
-        model : str, optional
+            Camera type. (The default is CamType.LsstCam)
+        opticalModel : str, optional
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
             (The default is "offAxis")
         pixelScale : float, optional
@@ -65,34 +67,44 @@ class DonutTemplateModel(DonutTemplateDefault):
         """
 
         configDir = getConfigDir()
-        focalPlaneLayout = readPhoSimSettingData(
-            configDir, "focalplanelayout.txt", "fieldCenter"
-        )
-
-        pixelSizeInUm = float(focalPlaneLayout[sensorName][2])
-        sizeXinPixel = int(focalPlaneLayout[sensorName][3])
-
-        sensorXMicron, sensorYMicron = np.array(
-            focalPlaneLayout[sensorName][:2], dtype=float
-        )
-        # Correction for wavefront sensors
-        if sensorName in ("R44_S00_C0", "R00_S22_C1"):
-            # Shift center to +x direction
-            sensorXMicron = sensorXMicron + sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R44_S00_C1", "R00_S22_C0"):
-            # Shift center to -x direction
-            sensorXMicron = sensorXMicron - sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R04_S20_C1", "R40_S02_C0"):
-            # Shift center to -y direction
-            sensorYMicron = sensorYMicron - sizeXinPixel / 2 * pixelSizeInUm
-        elif sensorName in ("R04_S20_C0", "R40_S02_C1"):
-            # Shift center to +y direction
-            sensorYMicron = sensorYMicron + sizeXinPixel / 2 * pixelSizeInUm
 
         # Load Instrument parameters
         instDir = os.path.join(configDir, "cwfs", "instData")
         inst = Instrument(instDir)
-        inst.config(camType, imageSize)
+
+        if camType == CamType.LsstCam:
+            inst.config(camType, imageSize)
+            focalPlaneLayout = readPhoSimSettingData(
+                configDir, "focalplanelayout.txt", "fieldCenter"
+            )
+
+            pixelSizeInUm = float(focalPlaneLayout[sensorName][2])
+
+            sensorXMicron, sensorYMicron = np.array(
+                focalPlaneLayout[sensorName][:2], dtype=float
+            )
+
+        elif camType == CamType.AuxTel:
+            # Defocal distance for Latiss in mm
+            # for LsstCam can use the default
+            # hence only need to set here
+            announcedDefocalDisInMm = 0.8
+            inst.config(camType, imageSize, announcedDefocalDisInMm)
+            # load the info for auxTel
+            pixelSizeInMeters = inst.getCamPixelSize()  # pixel size in meters.
+            pixelSizeInUm = pixelSizeInMeters * 1e6
+
+            camera = obs_lsst.Latiss.getCamera()
+            sensorName = list(camera.getNameIter())[0]  # only one detector in latiss
+            detector = camera.get(sensorName)
+            xp, yp = detector.getCenter(cameraGeom.FOCAL_PLANE)  # center of CCD in mm
+
+            # multiply by 1000 to for mm --> microns conversion
+            sensorXMicron = yp * 1000
+            sensorYMicron = xp * 1000
+
+        else:
+            raise ValueError("Camera type (%s) is not supported." % camType)
 
         # Create image for mask
         img = CompensableImage()
