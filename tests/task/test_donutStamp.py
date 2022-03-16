@@ -129,6 +129,11 @@ class TestDonutStamp(unittest.TestCase):
             donutStamp.getCamera(),
             obs_lsst.LsstComCam().getCamera(),
         )
+        donutStamp.cam_name = "LATISS"
+        self.assertEqual(
+            donutStamp.getCamera(),
+            obs_lsst.Latiss.getCamera(),
+        )
         donutStamp.cam_name = "noCam"
         errMessage = "Camera noCam is not supported."
         with self.assertRaises(ValueError, msg=errMessage):
