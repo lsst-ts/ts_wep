@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 
 from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
-from lsst.ts.wep.Utility import DefocalType
+from lsst.ts.wep.Utility import DefocalType, CamType
 
 
 class TestTemplateModel(unittest.TestCase):
@@ -69,6 +69,42 @@ class TestTemplateModel(unittest.TestCase):
         self.assertEqual(np.shape(templateArray), (imageSize, imageSize))
         self.assertEqual(np.shape(smallTemplate), (imageSize - 20, imageSize - 20))
         np.testing.assert_array_equal(templateArray[10:-10, 10:-10], smallTemplate)
+
+    def testMakeTemplateAuxTel(self):
+
+        # Generate a test template for auxTel
+        imageSize = 200
+        pixelScale = 0.0956949999339899
+        opticalModel = 'onAxis'
+
+        templateArray = self.templateMaker.makeTemplate(
+            "RXX_S00", DefocalType.Extra, imageSize,
+            CamType.AuxTel, opticalModel, pixelScale
+        )
+
+        self.assertTrue(isinstance(templateArray, np.ndarray))
+        self.assertEqual(templateArray.dtype, int)
+        self.assertEqual(np.max(templateArray), 1)
+
+        # Center of donut should have hole in it
+        self.assertEqual(templateArray[int(imageSize / 2), int(imageSize / 2)], 0)
+
+        # Donut at center of focal plane should be symmetrical
+        np.testing.assert_array_equal(
+            templateArray[: int(imageSize / 2)],
+            templateArray[-1 : -1 * (int(imageSize / 2) + 1) : -1],
+        )
+        # Test that the donut size is correct - same donut
+        # for LsstCam would be smaller
+
+        # for auxTel the donut stretches within 20 px from
+        # edge of a 200 px template
+        self.assertEqual(np.max(templateArray[0:20, :]), 1)
+
+        # but for LsstCam it would not given that image size,
+        # as it is smaller
+        templateArrayLsst = self.templateMaker.makeTemplate("R22_S11", DefocalType.Extra, imageSize)
+        self.assertEqual(np.max(templateArrayLsst[0:20, :]), 0)
 
 
 if __name__ == "__main__":
