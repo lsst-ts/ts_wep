@@ -6,6 +6,18 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.0:
+
+-------------
+2.3.0
+-------------
+
+* Add `EstimateZernikesLatissTask` to process auxTel data 
+* Add `GenerateDonutDirectDetectTask` to find donuts with template fitting
+* Add choices for binary image creation in `DonutDetector`
+* Add `getCamType` and `getDefocalDisInMm` to `Utility` 
+* Add donut template for auxTel in  `DonutTemplateModel`
+
 .. _lsst.ts.wep-2.2.4:
 
 -------------
