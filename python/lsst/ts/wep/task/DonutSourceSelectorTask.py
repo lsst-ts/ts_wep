@@ -24,12 +24,14 @@ import pandas as pd
 import astropy.units as u
 from sklearn.neighbors import NearestNeighbors
 
+import lsst.geom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms.sourceSelector import (
     _getFieldFromCatalog,
 )
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 
 
 class DonutSourceSelectorTaskConfig(pexConfig.Config):
@@ -42,6 +44,11 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     )
     fluxField = pexConfig.Field(
         dtype=str, default="flux", doc="Name of the source flux field to use."
+    )
+    maxFieldDist = pexConfig.Field(
+        dtype=float,
+        default=1.85,
+        doc="Maximum distance from center of focal plane (in degrees).",
     )
     donutRadius = pexConfig.Field(
         dtype=float, default=63, doc="Radius of the defocal donuts in pixels."
@@ -79,7 +86,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
     def __init__(self, **kwargs):
         pipeBase.Task.__init__(self, **kwargs)
 
-    def run(self, sourceCat, bbox):
+    def run(self, sourceCat, detector):
         """Select sources and return them.
 
         Parameters
@@ -87,8 +94,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
         sourceCat : `lsst.afw.table.SourceCatalog` or `pandas.DataFrame`
                     or `astropy.table.Table`
             Catalog of sources to select from.
-        bbox : `lsst.geom.Box2I` or `lsst.geom.Box2D`
-            Box which bounds a region in pixel space.
+        detector : `lsst.afw.cameraGeom.Detector`
+            Detector object from the camera.
 
         Returns
         -------
@@ -113,14 +120,14 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     "Input catalogs for source selection must be contiguous."
                 )
 
-        result = self.selectSources(sourceCat, bbox)
+        result = self.selectSources(sourceCat, detector)
 
         return pipeBase.Struct(
             sourceCat=sourceCat[result.selected], selected=result.selected
         )
 
     @timeMethod
-    def selectSources(self, sourceCat, bbox):
+    def selectSources(self, sourceCat, detector):
         """
         Run the source selection algorithm and return the indices to keep
         in the original catalog.
@@ -130,8 +137,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
         sourceCat : `lsst.afw.table.SourceCatalog` or `pandas.DataFrame`
                     or `astropy.table.Table`
             Catalog of sources to select from.
-        bbox : `lsst.geom.Box2I` or `lsst.geom.Box2D`
-            Box which bounds a region in pixel space.
+        detector : `lsst.afw.cameraGeom.Detector`
+            Detector object from the camera.
 
         Returns
         -------
@@ -148,6 +155,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         """
 
         donutRadius = self.config.donutRadius
+        bbox = detector.getBBox()
 
         selected = np.zeros(len(sourceCat), dtype=bool)
 
@@ -162,6 +170,18 @@ class DonutSourceSelectorTask(pipeBase.Task):
         # Grab any donut centers within 2 times the donut radius.
         xyNeigh = NearestNeighbors(radius=2 * donutRadius)
         minMagDiff = self.config.isoMagDiff
+
+        # Get distance to center of field
+        fieldXY = detector.transform(
+            [lsst.geom.Point2D(xPix, yPix) for xPix, yPix in zip(xCoord, yCoord)],
+            PIXELS,
+            FIELD_ANGLE,
+        )
+        fieldDist = [
+            np.degrees(np.sqrt(fieldLoc[0] ** 2 + fieldLoc[1] ** 2))
+            for fieldLoc in fieldXY
+        ]
+        df["fieldDist"] = fieldDist
 
         # Remove area too close to edge with new bounding box that allows
         # only area at least one donut width (2*donutRadius) from edges
@@ -192,6 +212,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
             srcX = magSortedDf["x"].iloc[srcOn]
             srcY = magSortedDf["y"].iloc[srcOn]
             if trimmedBBox.contains(srcX, srcY) is False:
+                continue
+
+            # If distance from field center is greater than
+            # maxFieldDist discard the source and move on
+            if magSortedDf["fieldDist"].iloc[srcOn] > self.config.maxFieldDist:
                 continue
 
             # If there is no overlapping source keep

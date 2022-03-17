@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.3:
+
+-------------
+2.3.3
+-------------
+
+* Add donut location configuration setting to `DonutSourceSelectorTask`.
+
 .. _lsst.ts.wep-2.3.2:
 
 -------------
