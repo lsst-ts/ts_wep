@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.2.4:
+
+-------------
+2.2.4
+-------------
+
+* Update Jenkinsfile to always pull the image before new builds and improve cleanup stages to make build more robust.
+
 .. _lsst.ts.wep-2.2.3:
 
 -------------
