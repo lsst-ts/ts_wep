@@ -79,7 +79,9 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 
 .. uml:: uml/taskClass.uml
     :caption: Class diagram of wep.task
-
+* **GenerateDonutDirectDetectTaskConnections**: Connections setup for GenerateDonutDirectDetectTask to run in a pipeline with Gen 3 middleware.
+* **GenerateDonutDirectDetectTaskConfig**: Configuration setup for GenerateDonutDirectDetectTask.
+* **GenerateDonutDirectDetectTask**: Gen 3 middleware task to convolve the defocal postISRCCD exposure with a donut template and and create a catalog of donut sources for that exposure.
 * **GenerateDonutCatalogOnlineTaskConfig**: Configuration setup for GenerateDonutCatalogOnlineTask.
 * **GenerateDonutCatalogOnlineTask**: Task to take pointing information and create a catalog of donut sources in that pointing. Not a pipeline task.
 * **GenerateDonutCatalogWcsTaskConnections**: Connections setup for GenerateDonutCatalogWcsTask to run in a pipeline with Gen 3 middleware.
@@ -95,6 +97,9 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **EstimateZernikesScienceSensorTaskConnections**: Connections setup for EstimateZernikesScienceSensorTask to run in a pipeline with Gen 3 middleware.
 * **EstimateZernikesScienceSensorTaskConfig**: Configuration setup for EstimateZernikesScienceSensorTask.
 * **EstimateZernikesScienceSensorTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running LSSTCam in full-array mode (FAM) or LSSTComCam. Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
+* **EstimateZernikesLatissTaskConnections**: Connections setup for EstimateZernikesLatissTask to run in a pipeline with Gen 3 middleware.
+* **EstimateZernikesLatissTaskConfig**: Configuration setup for EstimateZernikesLatissTask.
+* **EstimateZernikesLatissTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running LATISS (auxiliary telescope). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
 * **EstimateZernikesCwfsTaskConnections**: Connections setup for EstimateZernikesCwfsTask to run in a pipeline with Gen 3 middleware.
 * **EstimateZernikesCwfsTaskConfig**: Configuration setup for EstimateZernikesCwfsTask.
 * **EstimateZernikesCwfsTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running on corner wave front sensors (CWFS). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.

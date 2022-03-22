@@ -8,6 +8,9 @@ CombineZernikesSigmaClipTask *-- CombineZernikesSigmaClipTaskConfig
 DonutSourceSelectorTask *-- DonutSourceSelectorTaskConfig
 GenerateDonutCatalogOnlineTaskConfig *-- DonutSourceSelectorTask
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
+GenerateDonutDirectDetectTaskConfig *-- GenerateDonutDirectDetectTaskConnections
+GenerateDonutDirectDetectTask *-- GenerateDonutDirectDetectTaskConfig
+GenerateDonutDirectDetectTask ..> DonutTemplateFactory
 GenerateDonutCatalogWcsTaskConfig *-- DonutSourceSelectorTask
 GenerateDonutCatalogWcsTaskConfig *-- GenerateDonutCatalogWcsTaskConnections
 GenerateDonutCatalogWcsTask *-- GenerateDonutCatalogWcsTaskConfig
@@ -23,6 +26,12 @@ EstimateZernikesBaseConfig *-- CombineZernikesSigmaClipTask
 EstimateZernikesScienceSensorTaskConfig *-- EstimateZernikesScienceSensorTaskConnections
 EstimateZernikesScienceSensorTask *-- EstimateZernikesScienceSensorTaskConfig
 EstimateZernikesScienceSensorTask ..> DonutStamps
+EstimateZernikesLatissTaskConnections --|> EstimateZernikesBaseConnections
+EstimateZernikesLatissTaskConfig *-- EstimateZernikesLatissTaskConnections
+EstimateZernikesLatissTaskConfig --|> EstimateZernikesBaseConfig
+EstimateZernikesLatissTask *-- EstimateZernikesLatissTaskConfig
+EstimateZernikesLatissTask --|> EstimateZernikesBaseTask
+EstimateZernikesLatissTask ..> DonutStamps
 EstimateZernikesBaseConnections <|-- EstimateZernikesCwfsTaskConnections
 EstimateZernikesBaseConfig <|-- EstimateZernikesCwfsTaskConfig
 EstimateZernikesBaseTask <|-- EstimateZernikesCwfsTask
