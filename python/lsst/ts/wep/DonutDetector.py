@@ -75,6 +75,11 @@ class DonutDetector(object):
             Dataframe identifying donut positions and if they
             are blended with other donuts. If blended also identfies
             which donuts are blended with which.
+
+        Raises
+        ------
+        ValueError
+            binaryChoice is not supported.
         """
 
         centroidFinder = CentroidFindFactory.createCentroidFind(

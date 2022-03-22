@@ -118,7 +118,6 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
             and one extra-focal image.
         """
 
-        errorStr = "Must have two images with different FOCUSZ parameter."
         if focusZVal0 != focusZVal1:
             # the exposure with smallest focusZVal is extra-focal
             # just find the smallest value...
@@ -131,7 +130,7 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
             extraExpIdx = expDicIdx[extraExp]
         else:
             # Need two different focusz values
-            raise ValueError(errorStr)
+            raise ValueError("Must have two images with different FOCUSZ parameter.")
 
         return extraExpIdx, intraExpIdx
 

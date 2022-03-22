@@ -35,3 +35,4 @@ tasks:
       initialCutoutPadding: 40
       instName: 'auxTel'
       opticalModel: 'onAxis'
+      

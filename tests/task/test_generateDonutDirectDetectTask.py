@@ -57,7 +57,7 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
 
         # setup a test donut catalog DataFrame
         x_center = np.arange(15)
-        y_center = 0.5*np.arange(15)
+        y_center = 0.5 * np.arange(15)
         donutCat = pd.DataFrame(data=list(zip(x_center, y_center)),
                                 columns=['x_center', 'y_center'])
         # update the donut catalog

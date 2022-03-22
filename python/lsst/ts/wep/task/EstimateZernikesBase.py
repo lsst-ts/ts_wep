@@ -175,11 +175,11 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        detectorName: str
+        detectorName : str
             Name of the CCD (e.g. 'R22_S11').
-        defocalType: enum 'DefocalType'
+        defocalType : enum 'DefocalType'
             Defocal type of the donut image.
-        donutTemplateSize: int
+        donutTemplateSize : int
             Size of Template in pixels
         camType : enum 'CamType', optional
             Camera type. (The default is CamType.LsstCam)

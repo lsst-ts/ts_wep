@@ -33,3 +33,4 @@ tasks:
     config:
       donutTemplateSize: 160
       removeBlends: True
+      

@@ -539,7 +539,7 @@ def getCamType(instName):
 
     Parameters
     ----------
-    instName: str
+    instName : str
          Instrument name.
 
     Returns
@@ -561,7 +561,7 @@ def getCamType(instName):
     elif instName == "auxTel":
         return CamType.AuxTel
     else:
-        raise ValueError("Instrument name (%s) is not supported." % instName)
+        raise ValueError(f"Instrument name ({instName}) is not supported.")
 
 
 def getDefocalDisInMm(instName):
@@ -570,15 +570,15 @@ def getDefocalDisInMm(instName):
 
     Parameters
     ----------
-    instName: str
+    instName : str
         Instrument name, one of
         'lsst', 'lsstfam', 'comcam',
         'auxTel'
 
     Returns
     -------
-    defocalDisInMm: float
-        Defocal distance in mm
+    defocalDisInMm : float
+        Defocal distance in mm.
 
     Raises
     ------
@@ -590,4 +590,4 @@ def getDefocalDisInMm(instName):
     elif instName == "auxTel":
         return 0.8
     else:
-        raise ValueError("Instrument name (%s) is not supported." % instName)
+        raise ValueError(f"Instrument name ({instName}) is not supported.")

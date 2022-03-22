@@ -151,10 +151,10 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        donutCat: pandas.DataFrame
+        donutCat : pandas.DataFrame
             Donut catalog with reorganized content.
         """
-        # EstimateZernikes  expects the following column names:
+        # EstimateZernikes expects the following column names:
         # coord_ra; coord_dec; centroid_x; centroid_y;
         # source_flux; detector; mags
 
@@ -203,7 +203,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             camType, self.opticalModel, pixelScale
         )
 
-        # given this template, detect donuts  in one of the defocal images
+        # given this template, detect donuts in one of the defocal images
         detector = DonutDetector()
         expArray = copy(exposure.getImage().getArray())
         donutDf = detector.detectDonuts(expArray, template, blendRadius=self.blendRadius,

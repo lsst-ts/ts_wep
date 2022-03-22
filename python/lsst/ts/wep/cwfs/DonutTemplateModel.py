@@ -21,7 +21,8 @@
 
 import os
 import numpy as np
-from lsst.ts.wep.Utility import getConfigDir, readPhoSimSettingData, CamType
+from lsst.ts.wep.Utility import (getConfigDir, readPhoSimSettingData, CamType,
+                                 getDefocalDisInMm)
 from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
 from lsst.ts.wep.cwfs.Instrument import Instrument
 from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
@@ -64,6 +65,11 @@ class DonutTemplateModel(DonutTemplateDefault):
         -------
         numpy.ndarray [int]
             The donut template as a binary image.
+
+        Raises
+        ------
+        ValueError
+            Camera type is not supported.
         """
 
         configDir = getConfigDir()
@@ -88,7 +94,7 @@ class DonutTemplateModel(DonutTemplateDefault):
             # Defocal distance for Latiss in mm
             # for LsstCam can use the default
             # hence only need to set here
-            announcedDefocalDisInMm = 0.8
+            announcedDefocalDisInMm = getDefocalDisInMm('auxTel')
             inst.config(camType, imageSize, announcedDefocalDisInMm)
             # load the info for auxTel
             pixelSizeInMeters = inst.getCamPixelSize()  # pixel size in meters.
