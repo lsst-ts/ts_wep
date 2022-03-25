@@ -1,6 +1,6 @@
 # Wavefront Estimation Pipeline (WEP)
 
-This module calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the intra- and extra-focal donut images in the large synoptic survey telescope (LSST).
+This module calculates the wavefront error in annular Zernike polynomials based on the intra- and extra-focal donut images in the large synoptic survey telescope (LSST).
 
 ## Platform
 
@@ -12,7 +12,7 @@ This module calculates the wavefront error in annular Zernike polynomials up to 
 
 - lsst_distrib (tag: `w_latest`)
 - [phosim_utils](https://github.com/lsst-dm/phosim_utils)
-- clang-format (optional)
+- [galsim](https://github.com/GalSim-developers/GalSim) (version >= 2.3; should be available from science pipelines v2.0.0 and up)
 - [black](https://github.com/psf/black) (optional)
 - [documenteer](https://github.com/lsst-sqre/documenteer) (optional)
 - [plantuml](http://plantuml.com) (optional)
@@ -40,12 +40,10 @@ For the details of scientic pipeline, please follow the [Index of /stack/src/tag
 ## Code Format
 
 1. The Python code is automatically formatted by `black`.
-2. The C++ code is automatically formatted by `clang-format`.
 
 To enable this with a git pre-commit hook:
 
 - Install the `black` Python package.
-- Install the `clang-format` C++ package.
 - Run `git config core.hooksPath .githooks` once in this repository.
 
 ## Use of Module

@@ -35,9 +35,9 @@ from lsst.ts.wep.cwfs.Tool import (
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
 )
-from lsst.ts.wep.cwfs import mathcwfs
 from lsst.ts.wep.cwfs.Image import Image
 from lsst.ts.wep.Utility import DefocalType, CentroidFindType
+from galsim.utilities import horner2d
 
 
 class CompensableImage(object):
@@ -67,7 +67,7 @@ class CompensableImage(object):
         # Defocused offset in files of off-axis correction
         self.offAxisOffset = 0.0
 
-        # Ture if the image gets the over-compensation
+        # True if the image gets the over-compensation
         self.caustic = False
 
         # Padded mask for use at the offset planes
@@ -93,7 +93,7 @@ class CompensableImage(object):
         Returns
         -------
         Image
-            Imgae object.
+            Image object.
         """
 
         return self._image
@@ -394,7 +394,7 @@ class CompensableImage(object):
         # Dimension of image
         sm, sn = self.getImg().shape
 
-        # Dimenstion of projected image on focal plane
+        # Dimension of projected image on focal plane
         projSamples = sm
 
         # Let us create a look-up table for x -> xp first.
@@ -460,7 +460,7 @@ class CompensableImage(object):
             lutIp[ii] = ip(yy, xx)
         lutIp = lutIp.reshape(lutxp.shape)
 
-        # Calaculate the image on focal plane with compensation based on flux
+        # Calculate the image on focal plane with compensation based on flux
         # conservation
         # I(x, y)/I'(x', y') = J = (dx'/dx)*(dy'/dy) - (dx'/dy)*(dy'/dx)
         self.updateImage(lutIp * J)
@@ -774,7 +774,7 @@ class CompensableImage(object):
 
         This is to correct the off-axis distortion. A numerical solution with
         2-dimensions 10 order polynomials to map between the telescope
-        aperature and defocused image plane is used.
+        aperture and defocused image plane is used.
 
         Parameters
         ----------
@@ -792,7 +792,7 @@ class CompensableImage(object):
             Raise error if the function name does not exist.
         """
 
-        # Construnct the dictionary table for calling function.
+        # Construct the dictionary table for calling function.
         # The reason to use the dictionary is for the future's extension.
         funcTable = dict(poly10_2D=self._poly10_2D, poly10Grad=self._poly10Grad)
 
@@ -812,10 +812,10 @@ class CompensableImage(object):
         c : numpy.ndarray
             Parameters of off-axis distrotion.
         data : numpy.ndarray
-            X, y-coordinate on aperature. If y is provided this will be just
+            X, y-coordinate on aperture. If y is provided this will be just
             the x-coordinate.
         y : numpy.ndarray, optional
-            Y-coordinate at aperature. (the default is None.)
+            Y-coordinate at aperture. (the default is None.)
 
         Returns
         -------
@@ -823,7 +823,7 @@ class CompensableImage(object):
             Corrected parameters for off-axis distortion.
         """
 
-        # Decide the x, y-coordinate data on aperature
+        # Decide the x, y-coordinate data on aperture
         if y is None:
             x = data[0, :]
             y = data[1, :]
@@ -831,20 +831,26 @@ class CompensableImage(object):
             x = data
 
         # Correct the off-axis distortion
-        return mathcwfs.poly10_2D(c, x.flatten(), y.flatten()).reshape(x.shape)
+
+        # Need to reorder the coefficients for use with GalSim:
+        carr = np.zeros((11, 11))
+        carr[np.tril_indices(11)] = c
+        for i in range(0, 11):
+            carr[:, i] = np.roll(carr[:, i], -i)
+        return horner2d(x, y, carr)
 
     def _poly10Grad(self, c, x, y, atype):
         """Correct the off-axis distortion by fitting with a 10 order
-        polynomial equation in the gradident part.
+        polynomial equation in the gradient part.
 
         Parameters
         ----------
         c : numpy.ndarray
             Parameters of off-axis distrotion.
         x : numpy.ndarray
-            X-coordinate at aperature.
+            X-coordinate at aperture.
         y : numpy.ndarray
-            Y-coordinate at aperature.
+            Y-coordinate at aperture.
         atype : str
             Direction of gradient. It can be "dx" or "dy".
 
@@ -852,9 +858,30 @@ class CompensableImage(object):
         -------
         numpy.ndarray
             Corrected parameters for off-axis distortion.
-        """
 
-        return mathcwfs.poly10Grad(c, x.flatten(), y.flatten(), atype).reshape(x.shape)
+        Raises
+        ------
+        ValueError
+            If atype is not 'dx' or 'dy'.
+        """
+        if atype not in ["dx", "dy"]:
+            raise ValueError(f"Unknown atype: {atype}")
+
+        carr = np.zeros((11, 11))
+        carr[np.tril_indices(11)] = c
+        for i in range(0, 11):
+            carr[:, i] = np.roll(carr[:, i], -i)
+        grad = np.zeros(carr.shape, dtype=np.float64)
+
+        if atype == "dx":
+            for (i, j) in zip(*np.nonzero(carr)):
+                if i > 0:
+                    grad[i-1, j] = carr[i, j]*i
+        elif atype == "dy":
+            for (i, j) in zip(*np.nonzero(carr)):
+                if j > 0:
+                    grad[i, j-1] = carr[i, j]*j
+        return horner2d(x, y, grad)
 
     def _createPupilGrid(self, lutx, luty, onepixel, ca, cb, ra, rb, fieldX, fieldY):
         """Create the pupil grid in off-axis model.
@@ -1187,7 +1214,7 @@ class CompensableImage(object):
             correction based on the linear response.
         """
 
-        # Calculate the distance from donut to origin (aperature)
+        # Calculate the distance from donut to origin (aperture)
         filedDist = np.sqrt(fieldX ** 2 + fieldY ** 2)
 
         # Get the ruler, which is the distance to center
@@ -1213,7 +1240,7 @@ class CompensableImage(object):
         Parameters
         ----------
         fieldDist : float
-            Field distance from donut to origin (aperature).
+            Field distance from donut to origin (aperture).
         ruler : numpy.ndarray
             A series of distance with available parameters for the fitting.
         parameters : numpy.ndarray
@@ -1230,7 +1257,7 @@ class CompensableImage(object):
         ruler = ruler[sortIndex]
         parameters = parameters[sortIndex, :]
 
-        # Compare the distance to center (aperature) between donut and standard
+        # Compare the distance to center (aperture) between donut and standard
         compDis = ruler >= fieldDist
 
         # fieldDist is too big and out of range
@@ -1429,7 +1456,7 @@ class CompensableImage(object):
             # Find the indices that correspond to the mask element, set them to
             # the pass/ block boolean
 
-            # Get the index inside the aperature
+            # Get the index inside the aperture
             idx = r <= masklist[ii, 2]
 
             # Get the higher and lower boundary beyond the pupil mask by
