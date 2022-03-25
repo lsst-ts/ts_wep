@@ -12,6 +12,7 @@ This module calculates the wavefront error in annular Zernike polynomials based 
 
 - lsst_distrib (tag: `w_latest`)
 - [phosim_utils](https://github.com/lsst-dm/phosim_utils)
+- [galsim](https://github.com/GalSim-developers/GalSim) (version >= 2.3; should be available from science pipelines v2.0.0 and up)
 - [black](https://github.com/psf/black) (optional)
 - [documenteer](https://github.com/lsst-sqre/documenteer) (optional)
 - [plantuml](http://plantuml.com) (optional)
