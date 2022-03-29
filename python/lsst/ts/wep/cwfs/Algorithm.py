@@ -940,19 +940,9 @@ class Algorithm(object):
                 # other Zk's calculation
                 zcCol[ii] = 0
 
-            # Calculate Mij matrix, need to check the stability of integration
-            # and symmetry later
-            Mij = np.zeros([numTerms, numTerms])
-            for ii in range(numTerms):
-                for jj in range(numTerms):
-                    Mij[ii, jj] = np.sum(
-                        I0
-                        * (
-                            dZidx[ii, :, :].squeeze() * dZidx[jj, :, :].squeeze()
-                            + dZidy[ii, :, :].squeeze() * dZidy[jj, :, :].squeeze()
-                        )
-                    )
-            Mij = dOmega / (apertureDiameter / 2.0) ** 2 * Mij
+            Mij = np.einsum("ab,iab,jab->ij", I0, dZidx, dZidx)
+            Mij += np.einsum("ab,iab,jab->ij", I0, dZidy, dZidy)
+            Mij *= dOmega / (apertureDiameter / 2.0) ** 2
 
             # Calculate dz
             focalLength = self._inst.getFocalLength()
