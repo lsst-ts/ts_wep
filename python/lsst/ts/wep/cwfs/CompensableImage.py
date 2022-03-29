@@ -455,10 +455,7 @@ class CompensableImage(object):
         ip = RectBivariateSpline(yp[:, 0], xp[0, :], self.getImg(), kx=1, ky=1)
 
         # Construct the projected image by the interpolation
-        lutIp = np.zeros(lutxp.shape[0] * lutxp.shape[1])
-        for ii, (xx, yy) in enumerate(zip(lutxp.ravel(), lutyp.ravel())):
-            lutIp[ii] = ip(yy, xx)
-        lutIp = lutIp.reshape(lutxp.shape)
+        lutIp = ip(lutyp, lutxp, grid=False)
 
         # Calculate the image on focal plane with compensation based on flux
         # conservation
