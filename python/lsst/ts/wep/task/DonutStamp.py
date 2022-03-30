@@ -152,6 +152,8 @@ class DonutStamp(AbstractStamp):
             return obs_lsst.LsstCam().getCamera()
         elif self.cam_name == "LSSTComCam":
             return obs_lsst.LsstComCam().getCamera()
+        elif self.cam_name == "LATISS":
+            return obs_lsst.Latiss.getCamera()
         else:
             raise ValueError(f"Camera {self.cam_name} is not supported.")
 

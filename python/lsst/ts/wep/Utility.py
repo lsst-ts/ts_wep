@@ -532,3 +532,62 @@ def writeCleanUpRepoCmd(repoDir, runName):
     cleanUpCmd += f"{repoDir} {runName} --no-confirm"
 
     return cleanUpCmd
+
+
+def getCamType(instName):
+    """ Get the camera type from instrument name.
+
+    Parameters
+    ----------
+    instName : str
+         Instrument name.
+
+    Returns
+    -------
+    camType : enum 'CamType'
+        Camera type.
+
+    Raises
+    ------
+    ValueError
+        Instrument name is not supported.
+    """
+    if instName == 'lsst':
+        return CamType.LsstCam
+    elif instName == 'lsstfam':
+        return CamType.LsstFamCam
+    elif instName == "comcam":
+        return CamType.ComCam
+    elif instName == "auxTel":
+        return CamType.AuxTel
+    else:
+        raise ValueError(f"Instrument name ({instName}) is not supported.")
+
+
+def getDefocalDisInMm(instName):
+    """
+    Get the defocal distance for the instrument
+
+    Parameters
+    ----------
+    instName : str
+        Instrument name, one of
+        'lsst', 'lsstfam', 'comcam',
+        'auxTel'
+
+    Returns
+    -------
+    defocalDisInMm : float
+        Defocal distance in mm.
+
+    Raises
+    ------
+    ValueError
+        Instrument name is not supported.
+    """
+    if instName in ['lsst', 'lsstfam', 'comcam']:
+        return 1.5
+    elif instName == "auxTel":
+        return 0.8
+    else:
+        raise ValueError(f"Instrument name ({instName}) is not supported.")

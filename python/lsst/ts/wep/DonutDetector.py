@@ -27,6 +27,8 @@ from lsst.ts.wep.Utility import CentroidFindType
 from lsst.ts.wep.cwfs.CentroidFindFactory import CentroidFindFactory
 from scipy.spatial.distance import cdist
 
+from lsst.ts.wep.deblend.DeblendAdapt import DeblendAdapt
+
 
 class DonutDetector(object):
     """
@@ -35,7 +37,8 @@ class DonutDetector(object):
     """
 
     def detectDonuts(
-        self, expArray, template, blendRadius, peakThreshold=0.95, dbscanEps=5
+        self, expArray, template, blendRadius, peakThreshold=0.95, dbscanEps=5,
+        binaryChoice='centroid'
     ):
         """
         Detect and categorize donut sources as blended/unblended
@@ -59,6 +62,12 @@ class DonutDetector(object):
             Maximum distance scikit-learn DBSCAN algorithm allows "between two
             samples for one to considered in the neighborhood of the other".
             (The default is 5.0)
+        binaryChoice: str, optional
+            Indicates choice of how to arrive at the binary image passed to
+            centroidFinder. Select 'centroid' to use getImgBinary method from
+            centroidFinder, use 'deblend' for adaptative image thresholding,
+            use 'exposure' to pass an unchanged copy of the exposure array.
+            (The default is 'centroid')
 
         Returns
         -------
@@ -66,12 +75,29 @@ class DonutDetector(object):
             Dataframe identifying donut positions and if they
             are blended with other donuts. If blended also identfies
             which donuts are blended with which.
+
+        Raises
+        ------
+        ValueError
+            binaryChoice is not supported.
         """
 
         centroidFinder = CentroidFindFactory.createCentroidFind(
             CentroidFindType.ConvolveTemplate
         )
-        binaryExp = centroidFinder.getImgBinary(copy(expArray))
+        if binaryChoice == 'centroid':
+            binaryExp = centroidFinder.getImgBinary(copy(expArray))
+
+        elif binaryChoice == 'deblend':
+            deblend = DeblendAdapt()
+            binaryExp = deblend._getImgBinaryAdapt(copy(expArray))
+
+        elif binaryChoice == 'exposure':
+            binaryExp = copy(expArray)
+
+        else:
+            raise ValueError(f"binaryChoice {binaryChoice} is not supported.")
+
         centroidX, centroidY, donutRad = centroidFinder.getCenterAndRfromTemplateConv(
             binaryExp,
             templateImgBinary=template,

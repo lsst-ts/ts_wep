@@ -1,0 +1,38 @@
+description: ISR basic processing pipeline
+instrument: lsst.obs.lsst.Latiss
+tasks:
+  isr:
+    class: lsst.ip.isr.isrTask.IsrTask
+    config:
+      connections.outputExposure: postISRCCD
+      doApplyGains: false
+      doBias: true
+      doBrighterFatter: false
+      doCrosstalk: false
+      doDark: true
+      doDefect: false
+      doFlat: true
+      doFringe: true
+      doInterpolate: true
+      doLinearize: false
+      doNanMasking: false
+      doOverscan: true
+      doVariance: false
+      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN_PER_ROW'
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.GenerateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutTemplateSize: 200
+      removeBlends: True
+      instName: 'auxTel'
+      opticalModel: 'onAxis'
+  estimateZernikesLatissTask:
+    class: lsst.ts.wep.task.EstimateZernikesLatissTask.EstimateZernikesLatissTask
+    config:
+      # And here we specify the configuration settings
+      donutTemplateSize: 200
+      donutStampSize: 200
+      initialCutoutPadding: 40
+      instName: 'auxTel'
+      opticalModel: 'onAxis'
+      
