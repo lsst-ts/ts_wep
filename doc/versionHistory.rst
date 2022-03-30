@@ -6,6 +6,16 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.2:
+
+-------------
+2.3.2
+-------------
+
+* Change `CombineZernikesSigmaClip` to use the more robust `mad_std` standard deviation algorithm.
+* Add `maxZernClip` configuration parameter to `CombineZernikesSigmaClip`.
+* Change `CombineZernikes` metadata to use integer flags.
+
 .. _lsst.ts.wep-2.3.1:
 
 -------------
