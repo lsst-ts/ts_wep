@@ -85,6 +85,12 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         pipeCmd += " -d 'exposure IN (2021090800487, 2021090800488) AND visit_system=0'"
         runProgram(pipeCmd)
 
+    @classmethod
+    def tearDownClass(cls):
+
+        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+        runProgram(cleanUpCmd)
+
     def setUp(self):
 
         self.config = EstimateZernikesLatissTaskConfig()
