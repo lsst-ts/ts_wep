@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.4:
+
+-------------
+2.3.4
+-------------
+
+* Fix test for `EstimateZernikesLatissTask`, to run for any user with /repo/main/ access.
+
 .. _lsst.ts.wep-2.3.3:
 
 -------------
