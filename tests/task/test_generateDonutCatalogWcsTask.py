@@ -25,7 +25,6 @@ import numpy as np
 import pandas as pd
 
 import lsst.geom
-import lsst.obs.lsst as obs_lsst
 from lsst.daf import butler as dafButler
 from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.ts.wep.Utility import getModulePath
@@ -96,6 +95,12 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
     def testRunSelection(self):
 
         refCatList = self._getRefCat()
+        camera = self.butler.get(
+            "camera",
+            dataId={"instrument": "LSSTCam"},
+            collections=["LSSTCam/calib/unbounded"],
+        )
+        detector = camera["R22_S11"]
 
         self.config.referenceSelector.magLimit.maximum = 17.0
         self.config.referenceSelector.magLimit.fluxField = "g_flux"
@@ -104,16 +109,17 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
         self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
         refObjLoader = self.task.getRefObjLoader(refCatList)
-        bbox = lsst.geom.Box2I(lsst.geom.Point2I(0, 0), lsst.geom.Extent2I(4000, 4000))
         wcs = createInitialSkyWcsFromBoresight(
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             90.0 * lsst.geom.degrees,
-            obs_lsst.LsstCam().getCamera()["R22_S11"],
+            detector,
             flipX=False,
         )
         # If we have a magLimit at 17 we should cut out
         # the one source at 17.5.
-        donutCatBrighterThan17 = self.task.runSelection(refObjLoader, bbox, wcs, "g")
+        donutCatBrighterThan17 = self.task.runSelection(
+            refObjLoader, detector, wcs, "g"
+        )
         self.assertEqual(len(donutCatBrighterThan17), 3)
 
         # If we increase the mag limit to 18 we should
@@ -121,7 +127,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         self.config.referenceSelector.magLimit.maximum = 18.0
         self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
         refObjLoader = self.task.getRefObjLoader(refCatList)
-        donutCatFull = self.task.runSelection(refObjLoader, bbox, wcs, "g")
+        donutCatFull = self.task.runSelection(refObjLoader, detector, wcs, "g")
         self.assertEqual(len(donutCatFull), 4)
 
     def testDonutCatalogToDataFrame(self):

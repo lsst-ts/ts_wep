@@ -80,7 +80,8 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
     def testFormatCatalog(self):
 
         detectorName = "R22_S01"
-        detWcs = self.refCatInterface.getDetectorWcs(self.camera[detectorName])
+        detector = self.camera[detectorName]
+        detWcs = self.refCatInterface.getDetectorWcs(detector)
         dataRefs, dataIds = self.refCatInterface.getDataRefs(
             [131072], self.butler, self.catalogName, self.collections
         )
@@ -88,11 +89,9 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
             dataIds=dataIds, refCats=dataRefs, config=self.config
         )
         cat = task.refObjLoader.loadPixelBox(
-            self.camera[detectorName].getBBox(), detWcs, filterName=task.filterName
+            detector.getBBox(), detWcs, filterName=task.filterName
         )
-        pandasRefCat = task._formatCatalog(
-            cat.refCat, self.camera[detectorName].getBBox()
-        )
+        pandasRefCat = task._formatCatalog(cat.refCat, detector)
 
         self.assertEqual(len(cat.refCat), 2)
         self.assertEqual(len(pandasRefCat), 2)
@@ -117,7 +116,8 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
 
         detectorName = "R22_S01"
-        detWcs = self.refCatInterface.getDetectorWcs(self.camera[detectorName])
+        detector = self.camera[detectorName]
+        detWcs = self.refCatInterface.getDetectorWcs(detector)
         dataIds = [131072, 188416]
         cat0 = self.butler.get(
             self.catalogName, dataId={"htm7": dataIds[0]}, collections=self.collections
@@ -125,7 +125,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         cat1 = self.butler.get(
             self.catalogName, dataId={"htm7": dataIds[1]}, collections=self.collections
         )[2:]
-        taskCat = task.run(self.camera[detectorName].getBBox(), detWcs)
+        taskCat = task.run(detector, detWcs)
         donutCatalog = taskCat.donutCatalog
 
         self.assertEqual(len(donutCatalog), 4)
