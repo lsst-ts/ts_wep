@@ -24,7 +24,6 @@ import unittest
 import pandas as pd
 
 from lsst.daf import butler as dafButler
-from lsst.geom import Box2I, Point2I
 from lsst.pex.config import FieldValidationError
 from lsst.ts.wep.Utility import getModulePath
 from lsst.ts.wep.task.DonutSourceSelectorTask import (
@@ -52,8 +51,13 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         minimalCat["flux"] = [30000.0, 30010.0, 30020.0, 30005.0]
         minimalCat["centroid_x"] = [100.0, 140.0, 190.0, 400.0]
         minimalCat["centroid_y"] = [100.0, 100.0, 100.0, 100.0]
-        bbox = Box2I(Point2I(0, 0), Point2I(500, 500))
-        return minimalCat, bbox
+        camera = self.butler.get(
+            "camera",
+            dataId={"instrument": "LSSTCam"},
+            collections=["LSSTCam/calib/unbounded"],
+        )
+        detector = camera["R22_S11"]
+        return minimalCat, detector
 
     def testValidateConfigs(self):
 
@@ -77,45 +81,40 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
 
     def testSelectSources(self):
 
-        minimalCat, bbox = self._createTestCat()
+        minimalCat, detector = self._createTestCat()
 
         # All donuts chosen since none overlap in this instance
         self.config.donutRadius = 15.0
         self.config.isoMagDiff = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 4)
+        self.assertListEqual(list(testCatSelected), [True, True, True, True])
 
         # The first three donuts overlap but none are more than
         # isoMagDiff brigher than the rest so none are chosen
         self.config.donutRadius = 50.0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 1)
+        self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
         # Will now take the brightest of the three donuts
         # for a total of 2 selected donuts
         self.config.isoMagDiff = 0.0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 2)
-        self.assertEqual(testCatSelected[0], False)
-        self.assertEqual(testCatSelected[1], False)
-        self.assertEqual(testCatSelected[2], True)
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
         # Test that number of sources in catalog limited by sourceLimit
+        # and that the brightest of the allowed donuts is chosen
+        # as the only result
         self.config.sourceLimit = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 1)
+        self.assertListEqual(list(testCatSelected), [False, False, True, False])
 
         # Test that sourceLimit can only be positive integer or -1
         self.config.sourceLimit = 0
@@ -125,18 +124,14 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             + "or turned off by setting it to '-1'"
         )
         with self.assertRaises(ValueError, msg=errMsg):
-            testCatStruct = self.task.selectSources(minimalCat, bbox)
-        testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 1)
+            testCatStruct = self.task.selectSources(minimalCat, detector)
 
         # Test that setting sourceLimit returns all selected sources
         self.config.sourceLimit = -1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 2)
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
         # Test that only the brightest blended on the end that only
         # blends with one other donut is not accepted if maxBlended
@@ -145,10 +140,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.config.donutRadius = 35.0
         self.config.maxBlended = 0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 1)
+        self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
         # Test that only the brightest blended on the end that only
         # blends with one other donut is accepted even though
@@ -158,15 +152,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.config.donutRadius = 35.0
         self.config.maxBlended = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 2)
         # Make sure the one that gets through selection is
         # the brightest one.
-        self.assertEqual(testCatSelected[0], False)
-        self.assertEqual(testCatSelected[1], False)
-        self.assertEqual(testCatSelected[2], True)
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
         # If we increase donutRadius back to 50 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
@@ -176,10 +166,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.config.donutRadius = 50.0
         self.config.maxBlended = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 1)
+        self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
         # If we increase donutRadius back to 50 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
@@ -189,12 +178,18 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.config.donutRadius = 50.0
         self.config.maxBlended = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, bbox)
+        testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
-        self.assertEqual(len(testCatSelected), 4)
-        self.assertEqual(sum(testCatSelected), 2)
         # Make sure the one that gets through selection is
         # the brightest one.
-        self.assertEqual(testCatSelected[0], False)
-        self.assertEqual(testCatSelected[1], False)
-        self.assertEqual(testCatSelected[2], True)
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
+
+        # Donut furthest from center is over 0.15 degrees from field center
+        # and should get cut out when setting maxFieldDist to 0.15
+        self.config.donutRadius = 15.0
+        self.config.isoMagDiff = 2
+        self.config.maxFieldDist = 0.15
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, True, True, True])

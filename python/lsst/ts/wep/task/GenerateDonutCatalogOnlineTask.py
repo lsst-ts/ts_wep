@@ -103,14 +103,14 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
             self.makeSubtask("donutSelector")
 
     @timeMethod
-    def run(self, bbox, wcs):
+    def run(self, detector, wcs):
         """Get the data from the reference catalog only from the
         shards of the reference catalogs that overlap our pointing.
 
         Parameters
         ----------
-        bbox : `lsst.geom.Box2I` or `lsst.geom.Box2D`
-            Box which bounds a region in pixel space.
+        detector : `lsst.afw.cameraGeom.Detector`
+            Detector object from the camera.
         wcs : `lsst.afw.geom.SkyWcs`
             Wcs object defining the pixel to sky (and inverse) transform for
             the supplied ``bbox``.
@@ -122,6 +122,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
             - DonutCatalog: `pandas.DataFrame`
                 The final donut source catalog for the region.
         """
+        bbox = detector.getBBox()
         # Get the refcatalog shard
         skyBox = self.refObjLoader.loadPixelBox(
             bbox, wcs, filterName=self.filterName, bboxToSpherePadding=0
@@ -132,20 +133,19 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         else:
             refCat = skyBox.refCat
 
-        donutCatalog = self._formatCatalog(refCat, bbox)
+        donutCatalog = self._formatCatalog(refCat, detector)
 
         return pipeBase.Struct(donutCatalog=donutCatalog)
 
-    def _formatCatalog(self, refCat, bbox):
-
+    def _formatCatalog(self, refCat, detector):
         """Format a reference afw table into the final format.
 
         Parameters
         ----------
         refCat : `lsst.afw.table.SourceCatalog`
             Reference catalog in afw format.
-        bbox : `lsst.geom.Box2I` or `lsst.geom.Box2D`
-            Box which bounds a region in pixel space.
+        detector : `lsst.afw.cameraGeom.Detector`
+            Detector object from the camera.
 
         Returns
         -------
@@ -161,7 +161,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
 
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(refCat, bbox)
+            donutSelection = self.donutSelector.run(refCat, detector)
             donutSelected = donutSelection.selected
         else:
             donutSelected = np.ones(len(refCat), dtype=bool)

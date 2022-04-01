@@ -143,7 +143,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         return refObjLoader
 
-    def runSelection(self, refObjLoader, bbox, wcs, filterName):
+    def runSelection(self, refObjLoader, detector, wcs, filterName):
         """
         Match the detector area to the reference catalog
         and then run the LSST DM reference selection task.
@@ -154,8 +154,8 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         ----------
         refObjLoader : `meas.algorithms.ReferenceObjectLoader`
             Reference object loader to use in getting reference objects.
-        bbox : `lsst.geom.Box2I` or `lsst.geom.Box2D`
-            Box which bounds a region in pixel space.
+        detector : `lsst.afw.cameraGeom.Detector`
+            Detector object from the camera.
         wcs : `lsst.afw.geom.SkyWcs`
             Wcs object defining the pixel to sky (and inverse) transform for
             the supplied ``bbox``.
@@ -170,13 +170,14 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             `referenceSelector`.
         """
 
+        bbox = detector.getBBox()
         donutCatalog = refObjLoader.loadPixelBox(bbox, wcs, filterName).refCat
 
         refSelection = self.referenceSelector.run(donutCatalog)
 
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(donutCatalog, bbox)
+            donutSelection = self.donutSelector.run(donutCatalog, detector)
             finalSelection = refSelection.selected & donutSelection.selected
             return donutCatalog[finalSelection]
         else:
@@ -236,13 +237,13 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         refObjLoader = self.getRefObjLoader(refCatalogs)
 
-        detectorBBox = exposure.getBBox()
+        detector = exposure.getDetector()
         detectorWcs = exposure.getWcs()
 
         try:
             # Match detector layout to reference catalog
             refSelection = self.runSelection(
-                refObjLoader, detectorBBox, detectorWcs, self.filterName
+                refObjLoader, detector, detectorWcs, self.filterName
             )
 
         # Except RuntimeError caused when no reference catalog
