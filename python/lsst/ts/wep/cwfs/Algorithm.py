@@ -346,7 +346,7 @@ class Algorithm(object):
         return compSequence
 
     def _extend1dArray(self, origArray, targetLength):
-        """Extend the 1D original array to the taget length.
+        """Extend the 1D original array to the target length.
 
         The extended value will be the final element of original array. Nothing
         will be done if the input array is not 1D or its length is less than
@@ -378,7 +378,7 @@ class Algorithm(object):
         the pupil mask.
 
         It is noted that in Fast Fourier transform (FFT) algorithm, it is also
-        the width of Neuman boundary where the derivative of the wavefront is
+        the width of Neumann boundary where the derivative of the wavefront is
         set to zero
 
         Returns
@@ -397,7 +397,7 @@ class Algorithm(object):
         Returns
         -------
         int
-            FFT pad dimention.
+            FFT pad dimension.
         """
 
         fftDim = int(self.algoParamFile.getSetting("fftDimension"))
@@ -548,7 +548,7 @@ class Algorithm(object):
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
             Tolerance of difference of coefficients of Zk polynomials compared
-            with the previours iteration. (the default is 1e-3.)
+            with the previous iteration. (the default is 1e-3.)
         """
 
         # To have the iteration time initiated from global variable is to
@@ -658,7 +658,7 @@ class Algorithm(object):
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
             Tolerance of difference of coefficients of Zk polynomials compared
-            with the previours iteration. (the default is 1e-3.)
+            with the previous iteration. (the default is 1e-3.)
 
         Returns
         -------
@@ -774,7 +774,7 @@ class Algorithm(object):
         else:
             # Once we run into caustic, stop here, results may be close to real
             # aberration.
-            # Continuation may lead to disatrous results.
+            # Continuation may lead to disastrous results.
             self.converge[:, jj] = self.converge[:, jj - 1]
 
         # Record the coefficients of normal/ annular Zernike polynomials after
@@ -829,7 +829,7 @@ class Algorithm(object):
             Estimated wavefront.
         """
 
-        # Calculate the aperature pixel size
+        # Calculate the aperture pixel size
         apertureDiameter = self._inst.getApertureDiameter()
         sensorFactor = self._inst.getSensorFactor()
         dimOfDonut = self._inst.getDimOfDonutOnSensor()
@@ -1093,7 +1093,7 @@ class Algorithm(object):
         # Check the condition of images
         I1image, I2image = self._checkImageDim(I1, I2)
 
-        # Calculate the central image and differential iamge
+        # Calculate the central image and differential image
         I0 = (I1image + I2image) / 2
         dI = I2image - I1image
 
@@ -1162,7 +1162,7 @@ class Algorithm(object):
         """
 
         # Get the overlap region of mask for intra- and extra-focal images.
-        # This is to avoid the anormalous signal due to difference in
+        # This is to avoid the anomalous signal due to difference in
         # vignetting.
         self.pMask = I1.getPaddedMask() * I2.getPaddedMask()
         self.cMask = I1.getNonPaddedMask() * I2.getNonPaddedMask()
