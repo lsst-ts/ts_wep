@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.7:
+
+-------------
+2.3.7
+-------------
+
+* Optimize CWFS algorithms.
+
 .. _lsst.ts.wep-2.3.6:
 
 -------------
