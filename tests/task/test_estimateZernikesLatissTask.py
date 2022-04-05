@@ -59,10 +59,10 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         # under /repo/main/u/$USER
         # to ensure write access is granted
         user = os.getlogin()
-        tempDir = os.path.join(cls.repoDir, 'u', user)
+        tempDir = os.path.join(cls.repoDir, "u", user)
         cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
         testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
-        cls.runName = os.path.join('u', user, testDirName)
+        cls.runName = os.path.join("u", user, testDirName)
 
         # Check that run doesn't already exist due to previous improper cleanup
         butler = dafButler.Butler(cls.repoDir)
@@ -176,8 +176,7 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         # Test return values when no sources in catalog
         noSrcDonutCatalog = pd.DataFrame(columns=donutCatalogExtra.columns)
         testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2,
-            camera
+            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
 
         np.testing.assert_array_equal(
@@ -191,8 +190,9 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra], [donutCatalogExtra, donutCatalogIntra],
-            camera
+            [exposureIntra, exposureExtra],
+            [donutCatalogExtra, donutCatalogIntra],
+            camera,
         )
 
         zkList = np.array(

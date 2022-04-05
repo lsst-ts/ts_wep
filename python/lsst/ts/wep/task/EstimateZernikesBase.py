@@ -30,8 +30,14 @@ from lsst.pipe.base import connectionTypes
 from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 
 from lsst.ts.wep.WfEstimator import WfEstimator
-from lsst.ts.wep.Utility import (getConfigDir, DonutTemplateType, DefocalType, CamType, getCamType,
-                                 getDefocalDisInMm)
+from lsst.ts.wep.Utility import (
+    getConfigDir,
+    DonutTemplateType,
+    DefocalType,
+    CamType,
+    getCamType,
+    getDefocalDisInMm,
+)
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from scipy.signal import correlate
@@ -121,11 +127,13 @@ class EstimateZernikesBaseConfig(
     )
     instName = pexConfig.Field(
         doc="Specify the instrument name (lsst, lsstfam, comcam, auxTel).",
-        dtype=str, default="lsst"
+        dtype=str,
+        default="lsst",
     )
     opticalModel = pexConfig.Field(
         doc="Specify the optical model (offAxis, paraxial, onAxis).",
-        dtype=str, default="offAxis"
+        dtype=str,
+        default="offAxis",
     )
 
 
@@ -168,8 +176,15 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         # specify optical model
         self.opticalModel = self.config.opticalModel
 
-    def getTemplate(self, detectorName, defocalType, donutTemplateSize,
-                    camType=CamType.LsstCam, opticalModel='offAxis', pixelScale=0.2):
+    def getTemplate(
+        self,
+        detectorName,
+        defocalType,
+        donutTemplateSize,
+        camType=CamType.LsstCam,
+        opticalModel="offAxis",
+        pixelScale=0.2,
+    ):
         """
         Get the templates for the detector.
 
@@ -200,8 +215,12 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         )
 
         template = templateMaker.makeTemplate(
-            detectorName, defocalType, donutTemplateSize,
-            camType, opticalModel, pixelScale
+            detectorName,
+            defocalType,
+            donutTemplateSize,
+            camType,
+            opticalModel,
+            pixelScale,
         )
 
         return template
@@ -338,8 +357,14 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         detectorName = exposure.getDetector().getName()
         pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
         camType = getCamType(self.instName)
-        template = self.getTemplate(detectorName, defocalType, self.donutTemplateSize,
-                                    camType, self.opticalModel, pixelScale)
+        template = self.getTemplate(
+            detectorName,
+            defocalType,
+            self.donutTemplateSize,
+            camType,
+            self.opticalModel,
+            pixelScale,
+        )
 
         # Final list of DonutStamp objects
         finalStamps = []
@@ -441,8 +466,12 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         camType = getCamType(self.instName)
         defocalDisInMm = getDefocalDisInMm(self.instName)
 
-        wfEsti.config(sizeInPix=self.donutStampSize, camType=camType,
-                      opticalModel=self.opticalModel, defocalDisInMm=defocalDisInMm)
+        wfEsti.config(
+            sizeInPix=self.donutStampSize,
+            camType=camType,
+            opticalModel=self.opticalModel,
+            defocalDisInMm=defocalDisInMm,
+        )
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
 

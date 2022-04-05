@@ -75,11 +75,15 @@ class TestTemplateModel(unittest.TestCase):
         # Generate a test template for auxTel
         imageSize = 200
         pixelScale = 0.0956949999339899
-        opticalModel = 'onAxis'
+        opticalModel = "onAxis"
 
         templateArray = self.templateMaker.makeTemplate(
-            "RXX_S00", DefocalType.Extra, imageSize,
-            CamType.AuxTel, opticalModel, pixelScale
+            "RXX_S00",
+            DefocalType.Extra,
+            imageSize,
+            CamType.AuxTel,
+            opticalModel,
+            pixelScale,
         )
 
         self.assertTrue(isinstance(templateArray, np.ndarray))
@@ -103,7 +107,9 @@ class TestTemplateModel(unittest.TestCase):
 
         # but for LsstCam it would not given that image size,
         # as it is smaller
-        templateArrayLsst = self.templateMaker.makeTemplate("R22_S11", DefocalType.Extra, imageSize)
+        templateArrayLsst = self.templateMaker.makeTemplate(
+            "R22_S11", DefocalType.Extra, imageSize
+        )
         self.assertEqual(np.max(templateArrayLsst[0:20, :]), 0)
 
 

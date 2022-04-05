@@ -29,7 +29,7 @@ class TestNelderMeadModify(unittest.TestCase):
     """Test the nelderMeadModify function."""
 
     def setUp(self):
-        self.func = lambda x, y, c: abs(x ** 2 + y ** 2 - c)
+        self.func = lambda x, y, c: abs(x**2 + y**2 - c)
 
     def testFunc(self):
         vars = (1, 2, 1)

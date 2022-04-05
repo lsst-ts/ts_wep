@@ -24,7 +24,7 @@ import re
 import numpy as np
 
 from scipy.ndimage import generate_binary_structure, iterate_structure
-from scipy.ndimage.morphology import binary_dilation, binary_erosion
+from scipy.ndimage import binary_dilation, binary_erosion
 from scipy.interpolate import RectBivariateSpline
 from scipy.signal import correlate
 
@@ -530,7 +530,7 @@ class CompensableImage(object):
             l = -defocalDisOffset
 
         focalLength = inst.getFocalLength()
-        myC = -focalLength * (focalLength - l) / l / R ** 2
+        myC = -focalLength * (focalLength - l) / l / R**2
 
         # Get the functions to do the off-axis correction by numerical fitting
         # Order to do the off-axis correction. The order is 10 now.
@@ -539,7 +539,7 @@ class CompensableImage(object):
         polyGradFunc = self._getFunction("poly%dGrad" % offAxisPolyOrder)
 
         # Calculate the distance to center
-        lutr = np.sqrt(lutx ** 2 + luty ** 2)
+        lutr = np.sqrt(lutx**2 + luty**2)
 
         # Calculated the extended ring radius (delta r), which is to extended
         # the available pupil area.
@@ -582,7 +582,7 @@ class CompensableImage(object):
 
             # Calculate F(x, y) = m * sqrt(f^2-R^2) / sqrt(f^2-(x^2+y^2)*R^2)
             # m is the mask scaling factor
-            myA2 = (focalLength ** 2 - R ** 2) / (focalLength ** 2 - lutr ** 2 * R ** 2)
+            myA2 = (focalLength**2 - R**2) / (focalLength**2 - lutr**2 * R**2)
 
             # Put the unphysical value as NaN
             myA = myA2.copy()
@@ -625,7 +625,7 @@ class CompensableImage(object):
             elif costheta < -1:
                 costheta = -1
 
-            sintheta = np.sqrt(1 - costheta ** 2)
+            sintheta = np.sqrt(1 - costheta**2)
             if self.fieldY < self.fieldX:
                 sintheta = -sintheta
 
@@ -700,20 +700,20 @@ class CompensableImage(object):
                 J = (
                     1
                     + myC * ZernikeAnnularJacobian(zcCol, lutx, luty, zobsR, "1st")
-                    + myC ** 2 * ZernikeAnnularJacobian(zcCol, lutx, luty, zobsR, "2nd")
+                    + myC**2 * ZernikeAnnularJacobian(zcCol, lutx, luty, zobsR, "2nd")
                 )
 
             elif model == "onAxis":
                 xpox = maskScalingFactor * myA * (
-                    1 + lutx ** 2 * R ** 2.0 / (focalLength ** 2 - R ** 2 * lutr ** 2)
+                    1 + lutx**2 * R**2.0 / (focalLength**2 - R**2 * lutr**2)
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dx2")
 
                 ypoy = maskScalingFactor * myA * (
-                    1 + luty ** 2 * R ** 2.0 / (focalLength ** 2 - R ** 2 * lutr ** 2)
+                    1 + luty**2 * R**2.0 / (focalLength**2 - R**2 * lutr**2)
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dy2")
 
-                xpoy = maskScalingFactor * myA * lutx * luty * R ** 2 / (
-                    focalLength ** 2 - R ** 2 * lutr ** 2
+                xpoy = maskScalingFactor * myA * lutx * luty * R**2 / (
+                    focalLength**2 - R**2 * lutr**2
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dxy")
 
                 ypox = xpoy
@@ -876,11 +876,11 @@ class CompensableImage(object):
         if atype == "dx":
             for (i, j) in zip(*np.nonzero(carr)):
                 if i > 0:
-                    grad[i-1, j] = carr[i, j]*i
+                    grad[i - 1, j] = carr[i, j] * i
         elif atype == "dy":
             for (i, j) in zip(*np.nonzero(carr)):
                 if j > 0:
-                    grad[i, j-1] = carr[i, j]*j
+                    grad[i, j - 1] = carr[i, j] * j
         return horner2d(x, y, grad)
 
     def _createPupilGrid(self, lutx, luty, onepixel, ca, cb, ra, rb, fieldX, fieldY):
@@ -1215,7 +1215,7 @@ class CompensableImage(object):
         """
 
         # Calculate the distance from donut to origin (aperture)
-        filedDist = np.sqrt(fieldX ** 2 + fieldY ** 2)
+        filedDist = np.sqrt(fieldX**2 + fieldY**2)
 
         # Get the ruler, which is the distance to center
         # ruler is between 1.51 and 1.84 degree here

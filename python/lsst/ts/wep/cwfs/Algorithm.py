@@ -23,9 +23,13 @@ import os
 import sys
 import numpy as np
 
-from scipy.ndimage import generate_binary_structure, iterate_structure
-from scipy.ndimage.filters import laplace
-from scipy.ndimage.morphology import binary_dilation, binary_erosion
+from scipy.ndimage import (
+    binary_dilation,
+    binary_erosion,
+    generate_binary_structure,
+    iterate_structure,
+    laplace,
+)
 
 from lsst.ts.wep.ParamReader import ParamReader
 from lsst.ts.wep.cwfs.Instrument import Instrument
@@ -767,7 +771,7 @@ class Algorithm(object):
         aperturePixelSize = apertureDiameter * sensorFactor / dimOfDonut
 
         # Calculate the differential Omega
-        dOmega = aperturePixelSize ** 2
+        dOmega = aperturePixelSize**2
 
         # Solve the Poisson's equation based on the type of algorithm
         numTerms = self.getNumOfZernikes()
@@ -804,7 +808,7 @@ class Algorithm(object):
 
             # Calculate the const of fft:
             # FT{Delta W} = -4*pi^2*(u^2+v^2) * FT{W}
-            u2v2 = -4 * (np.pi ** 2) * (u * u + v * v)
+            u2v2 = -4 * (np.pi**2) * (u * u + v * v)
 
             # Set origin to Inf to result in 0 at origin after filtering
             ctrIdx = int(np.floor(padDim / 2.0))

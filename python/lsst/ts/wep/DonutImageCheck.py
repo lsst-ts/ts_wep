@@ -60,7 +60,7 @@ class DonutImageCheck(object):
         hist = np.histogram(array1d, bins=self.numOfBins)[0]
 
         # Square the distribution to magnify the difference in entropy
-        imgEntropy = entropy(hist ** 2)
+        imgEntropy = entropy(hist**2)
         if (imgEntropy < self.entroThres) and (imgEntropy != 0):
             return True
         else:
