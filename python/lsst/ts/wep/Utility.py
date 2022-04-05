@@ -22,7 +22,7 @@
 import os
 import subprocess
 import re
-from scipy.ndimage.measurements import center_of_mass
+from scipy.ndimage import center_of_mass
 from enum import IntEnum, auto
 
 from lsst.utils import getPackageDir
@@ -535,7 +535,7 @@ def writeCleanUpRepoCmd(repoDir, runName):
 
 
 def getCamType(instName):
-    """ Get the camera type from instrument name.
+    """Get the camera type from instrument name.
 
     Parameters
     ----------
@@ -552,9 +552,9 @@ def getCamType(instName):
     ValueError
         Instrument name is not supported.
     """
-    if instName == 'lsst':
+    if instName == "lsst":
         return CamType.LsstCam
-    elif instName == 'lsstfam':
+    elif instName == "lsstfam":
         return CamType.LsstFamCam
     elif instName == "comcam":
         return CamType.ComCam
@@ -585,7 +585,7 @@ def getDefocalDisInMm(instName):
     ValueError
         Instrument name is not supported.
     """
-    if instName in ['lsst', 'lsstfam', 'comcam']:
+    if instName in ["lsst", "lsstfam", "comcam"]:
         return 1.5
     elif instName == "auxTel":
         return 0.8

@@ -131,7 +131,9 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
     def _generateTestExposures(self):
 
         # Generate donut template
-        template = self.task.getTemplate("R00_SW0", DefocalType.Extra, self.task.donutTemplateSize)
+        template = self.task.getTemplate(
+            "R00_SW0", DefocalType.Extra, self.task.donutTemplateSize
+        )
         correlatedImage = correlate(template, template)
         maxIdx = np.argmax(correlatedImage)
         maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))

@@ -103,7 +103,9 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
     def _generateTestExposures(self):
 
         # Generate donut template
-        template = self.task.getTemplate("R22_S11", DefocalType.Extra, self.task.donutTemplateSize)
+        template = self.task.getTemplate(
+            "R22_S11", DefocalType.Extra, self.task.donutTemplateSize
+        )
         correlatedImage = correlate(template, template)
         maxIdx = np.argmax(correlatedImage)
         maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
@@ -154,29 +156,31 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
-        self.config.instName = 'lsst'
-        self.config.opticalModel = 'onAxis'
+        self.config.instName = "lsst"
+        self.config.opticalModel = "onAxis"
         self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
-        self.assertEqual(self.task.instName, 'lsst')
-        self.assertEqual(self.task.opticalModel, 'onAxis')
+        self.assertEqual(self.task.instName, "lsst")
+        self.assertEqual(self.task.opticalModel, "onAxis")
 
     def testGetTemplate(self):
 
-        extra_template = self.task.getTemplate("R22_S11", DefocalType.Extra,
-                                               self.task.donutTemplateSize)
+        extra_template = self.task.getTemplate(
+            "R22_S11", DefocalType.Extra, self.task.donutTemplateSize
+        )
         self.assertEqual(
             np.shape(extra_template),
             (self.config.donutTemplateSize, self.config.donutTemplateSize),
         )
         self.config.donutTemplateSize = 180
         self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
-        intra_template = self.task.getTemplate("R22_S11", DefocalType.Intra,
-                                               self.task.donutTemplateSize)
+        intra_template = self.task.getTemplate(
+            "R22_S11", DefocalType.Intra, self.task.donutTemplateSize
+        )
         self.assertEqual(np.shape(intra_template), (180, 180))
 
     def testShiftCenter(self):

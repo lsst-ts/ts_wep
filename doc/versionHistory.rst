@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.5:
+
+-------------
+2.3.5
+-------------
+
+* Update scipy.ndimage namespace to fix deprecation warnings.
+* Run black v22.3.
+
 .. _lsst.ts.wep-2.3.4:
 
 -------------

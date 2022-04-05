@@ -58,18 +58,19 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         # setup a test donut catalog DataFrame
         x_center = np.arange(15)
         y_center = 0.5 * np.arange(15)
-        donutCat = pd.DataFrame(data=list(zip(x_center, y_center)),
-                                columns=['x_center', 'y_center'])
+        donutCat = pd.DataFrame(
+            data=list(zip(x_center, y_center)), columns=["x_center", "y_center"]
+        )
         # update the donut catalog
         donutCatUpd = self.task.updateDonutCatalog(donutCat, testExposure)
 
         # check that all these new columns are present
-        newColumns = ['centroid_y', 'centroid_x', 'detector', 'coord_ra', 'coord_dec']
+        newColumns = ["centroid_y", "centroid_x", "detector", "coord_ra", "coord_dec"]
         self.assertEqual(np.sum(np.in1d(newColumns, list(donutCatUpd.columns))), 5)
 
         # check that columns got transposed
-        np.testing.assert_array_equal(donutCatUpd['centroid_x'].values, y_center)
-        np.testing.assert_array_equal(donutCatUpd['centroid_y'].values, x_center)
+        np.testing.assert_array_equal(donutCatUpd["centroid_x"].values, y_center)
+        np.testing.assert_array_equal(donutCatUpd["centroid_y"].values, x_center)
 
     def testPipeline(self):
         """
@@ -130,25 +131,15 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
                 "blended",
                 "blended_with",
                 "num_blended_neighbors",
-                "detector"
+                "detector",
             ],
         )
         self.assertCountEqual(
-            [
-                3196,
-                2198,
-                2190,
-                3194
-            ],
+            [3196, 2198, 2190, 3194],
             outputDf["centroid_y"],
         )
         self.assertCountEqual(
-            [
-                3815,
-                2814,
-                2813,
-                3812
-            ],
+            [3815, 2814, 2813, 3812],
             outputDf["centroid_x"],
         )
 

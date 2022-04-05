@@ -41,6 +41,7 @@ class GenerateDonutDirectDetectTaskConnections(
     need the defocal exposure, and will produce donut catalogs
     for a specified instrument.
     """
+
     exposure = connectionTypes.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
@@ -68,34 +69,41 @@ class GenerateDonutDirectDetectTaskConfig(
     Specifies filter and camera details as well as subtasks
     that run to do the source selection.
     """
+
     # Config setting for pipeline task with defaults
     donutTemplateSize = pexConfig.Field(
         doc="Size of Template in pixels", dtype=int, default=160
     )
     instName = pexConfig.Field(
         doc="Specify the instrument name (lsst, lsstfam, comcam, auxTel).",
-        dtype=str, default="lsst"
+        dtype=str,
+        default="lsst",
     )
     opticalModel = pexConfig.Field(
         doc="Specify the optical model (offAxis, paraxial, onAxis).",
-        dtype=str, default="offAxis"
+        dtype=str,
+        default="offAxis",
     )
     removeBlends = pexConfig.Field(
         doc="Decide whether to remove blended objects from the donut catalog.",
-        dtype=bool, default=True
+        dtype=bool,
+        default=True,
     )
     blendRadius = pexConfig.Field(
         doc="Specify the pixel radius within which an object is considered as blended.",
-        dtype=int, default=200
+        dtype=int,
+        default=200,
     )
     peakThreshold = pexConfig.Field(
         doc="Specify the fraction (between 0 and 1) of the highest pixel value in the convolved image.",
-        dtype=float, default=0.99
+        dtype=float,
+        default=0.99,
     )
     binaryChoice = pexConfig.Field(
         doc="Choose how donut detector should arrive at the binary image ('centroid' for centroidFinder,\
         'deblend' for adaptative image thresholding, 'exposure' to use the exposure image directly).",
-        dtype=str, default='deblend'
+        dtype=str,
+        default="deblend",
     )
 
 
@@ -159,26 +167,26 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # source_flux; detector; mags
 
         # add a detector column
-        donutCat['detector'] = exposure.getDetector().getName()
+        donutCat["detector"] = exposure.getDetector().getName()
 
         # rename columns: transpose y --> x
-        donutCat = donutCat.rename(columns={"y_center": "centroid_x",
-                                            "x_center": "centroid_y"}
-                                   )
+        donutCat = donutCat.rename(
+            columns={"y_center": "centroid_x", "x_center": "centroid_y"}
+        )
 
         # pass the boresight ra, dec
         wcs = exposure.getWcs()
-        x = np.array(donutCat['centroid_x'].values)
-        y = np.array(donutCat['centroid_y'].values)
+        x = np.array(donutCat["centroid_x"].values)
+        y = np.array(donutCat["centroid_y"].values)
 
         x = np.zeros(0)
-        for row in donutCat['centroid_x']:
+        for row in donutCat["centroid_x"]:
             x = np.append(x, row)
 
         ra, dec = wcs.pixelToSkyArray(x, y, degrees=False)
 
-        donutCat['coord_ra'] = ra
-        donutCat['coord_dec'] = dec
+        donutCat["coord_ra"] = ra
+        donutCat["coord_dec"] = dec
         return donutCat
 
     @timeMethod
@@ -199,21 +207,29 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         )
 
         template = templateMaker.makeTemplate(
-            detectorName, defocalType, self.donutTemplateSize,
-            camType, self.opticalModel, pixelScale
+            detectorName,
+            defocalType,
+            self.donutTemplateSize,
+            camType,
+            self.opticalModel,
+            pixelScale,
         )
 
         # given this template, detect donuts in one of the defocal images
         detector = DonutDetector()
         expArray = copy(exposure.getImage().getArray())
-        donutDf = detector.detectDonuts(expArray, template, blendRadius=self.blendRadius,
-                                        peakThreshold=self.peakThreshold,
-                                        binaryChoice=self.binaryChoice)
+        donutDf = detector.detectDonuts(
+            expArray,
+            template,
+            blendRadius=self.blendRadius,
+            peakThreshold=self.peakThreshold,
+            binaryChoice=self.binaryChoice,
+        )
 
         # make a donut catalog :
         # 1) remove the blends in donut catalog
-        if self.config.removeBlends :
-            donutDfCopy = donutDf[~donutDf['blended']].copy()
+        if self.config.removeBlends:
+            donutDfCopy = donutDf[~donutDf["blended"]].copy()
         else:
             donutDfCopy = donutDf
 
