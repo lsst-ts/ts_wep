@@ -51,7 +51,8 @@ class EstimateZernikesLatissTaskConnections(
 
 
 class EstimateZernikesLatissTaskConfig(
-    EstimateZernikesBaseConfig, pipelineConnections=EstimateZernikesLatissTaskConnections
+    EstimateZernikesBaseConfig,
+    pipelineConnections=EstimateZernikesLatissTaskConnections,
 ):
     pass
 
@@ -82,7 +83,7 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
         # of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
         # Set the instrument name - this task only handles auxTel
-        self.instName = 'auxTel'
+        self.instName = "auxTel"
 
     def assignExtraIntraIdx(self, focusZVal0, focusZVal1):
         """

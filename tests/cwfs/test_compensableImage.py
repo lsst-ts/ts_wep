@@ -263,8 +263,8 @@ class TestCompensableImage(unittest.TestCase):
 
         return (
             1
-            / (2 * np.pi * sigma ** 2)
-            * np.exp(-(xx ** 2 / (2 * sigma ** 2) + yy ** 2 / (2 * sigma ** 2)))
+            / (2 * np.pi * sigma**2)
+            * np.exp(-(xx**2 / (2 * sigma**2) + yy**2 / (2 * sigma**2)))
         )
 
     def testSetOffAxisCorr(self):

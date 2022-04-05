@@ -161,8 +161,8 @@ class Instrument(object):
 
         # Get the position index that is out of annular aperature range
         obscuration = self.getObscuration()
-        r2Sensor = self.xSensor ** 2 + self.ySensor ** 2
-        idx = (r2Sensor > 1) | (r2Sensor < obscuration ** 2)
+        r2Sensor = self.xSensor**2 + self.ySensor**2
+        idx = (r2Sensor > 1) | (r2Sensor < obscuration**2)
 
         # Define the value to be NaN if it is not in pupul
         self.xoSensor[idx] = np.nan
@@ -298,7 +298,7 @@ class Instrument(object):
 
         focalLength = self.getFocalLength()
         apertureDiameter = self.getApertureDiameter()
-        marginalFL = np.sqrt(focalLength ** 2 - (apertureDiameter / 2) ** 2)
+        marginalFL = np.sqrt(focalLength**2 - (apertureDiameter / 2) ** 2)
 
         return marginalFL
 

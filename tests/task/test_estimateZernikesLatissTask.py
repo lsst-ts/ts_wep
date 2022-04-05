@@ -23,6 +23,7 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+import tempfile
 import lsst.utils.tests
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.EstimateZernikesLatissTask import (
@@ -53,7 +54,15 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         testDataDir = os.path.join(moduleDir, "tests", "testData")
         testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
         cls.repoDir = "/repo/main"
-        cls.runName = "u/scichris/Latiss/testWep"
+
+        # Create a temporary test directory
+        # under /repo/main/u/$USER
+        # to ensure write access is granted
+        user = os.getlogin()
+        tempDir = os.path.join(cls.repoDir, "u", user)
+        cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
+        testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
+        cls.runName = os.path.join("u", user, testDirName)
 
         # Check that run doesn't already exist due to previous improper cleanup
         butler = dafButler.Butler(cls.repoDir)
@@ -76,6 +85,12 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         pipeCmd += " -d 'exposure IN (2021090800487, 2021090800488) AND visit_system=0'"
         runProgram(pipeCmd)
 
+    @classmethod
+    def tearDownClass(cls):
+
+        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+        runProgram(cleanUpCmd)
+
     def setUp(self):
 
         self.config = EstimateZernikesLatissTaskConfig()
@@ -83,7 +98,6 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         self.config.donutTemplateSize = 200
         self.config.opticalModel = "onAxis"
         self.task = EstimateZernikesLatissTask(config=self.config)
-
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
@@ -162,8 +176,7 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         # Test return values when no sources in catalog
         noSrcDonutCatalog = pd.DataFrame(columns=donutCatalogExtra.columns)
         testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2,
-            camera
+            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
 
         np.testing.assert_array_equal(
@@ -177,8 +190,9 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra], [donutCatalogExtra, donutCatalogIntra],
-            camera
+            [exposureIntra, exposureExtra],
+            [donutCatalogExtra, donutCatalogIntra],
+            camera,
         )
 
         zkList = np.array(

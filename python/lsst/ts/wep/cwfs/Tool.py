@@ -50,7 +50,7 @@ def ZernikeAnnularEval(z, x, y, e, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
     return GSZernike(np.concatenate([[0], z]), R_inner=e)(x, y)
 
@@ -87,7 +87,7 @@ def ZernikeAnnularGrad(z, x, y, e, axis, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     gszk = GSZernike(np.concatenate([[0], z]), R_inner=e)
@@ -140,7 +140,7 @@ def ZernikeAnnularJacobian(z, x, y, e, order, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     gszk = GSZernike(np.concatenate([[0], z]), R_inner=e)
@@ -179,7 +179,7 @@ def ZernikeAnnularFit(s, x, y, numTerms, e, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     # Check the dimensions of x and y are the same or not
@@ -235,7 +235,7 @@ def ZernikeGrad(z, x, y, axis, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     # Calculate the integration elements
@@ -267,7 +267,7 @@ def ZernikeJacobian(z, x, y, order, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     # Calculate the Jacobian elements
@@ -297,7 +297,7 @@ def ZernikeEval(z, x, y, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     # Calculate the wavefront surface
@@ -330,7 +330,7 @@ def ZernikeFit(s, x, y, numTerms, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     # Do the fitting to get coefficients of Zernike polynomials
@@ -367,7 +367,7 @@ def ZernikeMaskedFit(s, x, y, numTerms, mask, e, nMax=None):
     if nMax is not None:
         warnings.warn(
             "Ignoring deprecated nMax kwarg.  Will be removed after June 2022.",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
     # Get S, x, y elements in mask

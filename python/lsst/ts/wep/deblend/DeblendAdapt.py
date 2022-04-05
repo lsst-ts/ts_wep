@@ -21,10 +21,14 @@
 
 import numpy as np
 
-from scipy.ndimage.morphology import binary_opening, binary_closing, binary_erosion
-from scipy.ndimage.interpolation import shift
+from scipy.ndimage import (
+    binary_opening,
+    binary_closing,
+    binary_erosion,
+    center_of_mass,
+    shift,
+)
 from scipy.optimize import minimize_scalar
-from scipy.ndimage.measurements import center_of_mass
 from skimage.filters import threshold_local
 
 from lsst.ts.wep.Utility import CentroidFindType

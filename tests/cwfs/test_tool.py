@@ -84,7 +84,7 @@ class TestTool(TestCase):
 
     def testZernikeAnnularNormality(self):
 
-        ansValue = np.pi * (1 - self.obscuration ** 2)
+        ansValue = np.pi * (1 - self.obscuration**2)
         for ii in range(28):
             z = np.zeros(28)
             z[ii] = 1
@@ -227,7 +227,7 @@ class TestTool(TestCase):
 
         # mask data
         cut = -0.9
-        r = np.sqrt(self.xx ** 2 + self.yy ** 2)
+        r = np.sqrt(self.xx**2 + self.yy**2)
         idx = (r > 1) | (r < e) | (self.xx < cut)
 
         xx = self.xx[:].copy()

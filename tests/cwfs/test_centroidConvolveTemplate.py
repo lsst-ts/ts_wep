@@ -89,7 +89,7 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
             singleDonut += randState.normal(scale=0.01, size=np.shape(singleDonut))
             doubleDonut += randState.normal(scale=0.01, size=np.shape(doubleDonut))
 
-        eff_radius = np.sqrt(radiusOuter ** 2 - radiusInner ** 2)
+        eff_radius = np.sqrt(radiusOuter**2 - radiusInner**2)
 
         return singleDonut, doubleDonut, eff_radius
 

@@ -37,8 +37,13 @@ class DonutDetector(object):
     """
 
     def detectDonuts(
-        self, expArray, template, blendRadius, peakThreshold=0.95, dbscanEps=5,
-        binaryChoice='centroid'
+        self,
+        expArray,
+        template,
+        blendRadius,
+        peakThreshold=0.95,
+        dbscanEps=5,
+        binaryChoice="centroid",
     ):
         """
         Detect and categorize donut sources as blended/unblended
@@ -85,14 +90,14 @@ class DonutDetector(object):
         centroidFinder = CentroidFindFactory.createCentroidFind(
             CentroidFindType.ConvolveTemplate
         )
-        if binaryChoice == 'centroid':
+        if binaryChoice == "centroid":
             binaryExp = centroidFinder.getImgBinary(copy(expArray))
 
-        elif binaryChoice == 'deblend':
+        elif binaryChoice == "deblend":
             deblend = DeblendAdapt()
             binaryExp = deblend._getImgBinaryAdapt(copy(expArray))
 
-        elif binaryChoice == 'exposure':
+        elif binaryChoice == "exposure":
             binaryExp = copy(expArray)
 
         else:
