@@ -974,8 +974,19 @@ class Algorithm(object):
             ySensor = ySensor * self.cMask
 
             # Create the F matrix and Zernike-related matrixes
+
+            # Get Zernike and gradient bases from cache.  These are each
+            # (nzk, npix, npix) arrays, with the first dimension indicating
+            # the Noll index.
             zk, dzkdx, dzkdy = self._zernikeBasisCache()
+
+            # Eqn. (19) from Xin et al., Appl. Opt. 54, 9045-9054 (2015).
+            # F_j = \int (d_z I) Z_j d_Omega
             F = np.tensordot(dI, zk, axes=((0, 1), (1, 2))) * dOmega
+            # Eqn. (20) from Xin et al., Appl. Opt. 54, 9045-9054 (2015).
+            # M_ij = \int I (grad Z_j) . (grad Z_i) d_Omega
+            #      =   \int I (dZ_i/dx) (dZ_j/dx) d_Omega
+            #        + \int I (dZ_i/dy) (dZ_j/dy) d_Omega
             Mij = np.einsum("ab,iab,jab->ij", I0, dzkdx, dzkdx)
             Mij += np.einsum("ab,iab,jab->ij", I0, dzkdy, dzkdy)
             Mij *= dOmega / (apertureDiameter / 2.0) ** 2
