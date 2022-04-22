@@ -26,6 +26,7 @@ from scipy.ndimage import center_of_mass
 from enum import IntEnum, auto
 
 from lsst.utils import getPackageDir
+from lsst.afw.cameraGeom import DetectorType
 
 
 class FilterType(IntEnum):
@@ -559,6 +560,36 @@ def getCamType(instName):
     elif instName == "comcam":
         return CamType.ComCam
     elif instName == "auxTel":
+        return CamType.AuxTel
+    else:
+        raise ValueError(f"Instrument name ({instName}) is not supported.")
+
+
+def getCamTypeFromButlerName(instName, detectorType):
+    """Get the camera type from instrument name used by the Gen 3 middleware
+    for each instrument.
+    Parameters
+    ----------
+    instName : str
+        Instrument name.
+    detectorType : lsst.afw.cameraGeom.DetectorType
+        Type of CCD. "SCIENCE" or "WAVEFRONT".
+    Returns
+    -------
+    camType : enum 'CamType'
+        Camera type.
+    Raises
+    ------
+    ValueError
+        Instrument name is not supported.
+    """
+    if instName == "LSSTCam" and detectorType == DetectorType.WAVEFRONT:
+        return CamType.LsstCam
+    elif instName == "LSSTCam" and detectorType == DetectorType.SCIENCE:
+        return CamType.LsstFamCam
+    elif instName == "LSSTComCam":
+        return CamType.ComCam
+    elif instName == "LATISS":
         return CamType.AuxTel
     else:
         raise ValueError(f"Instrument name ({instName}) is not supported.")

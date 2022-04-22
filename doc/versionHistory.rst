@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.4.0:
+
+-------------
+2.4.0
+-------------
+
+* Add CutOutDonuts tasks and CalcZernikesTask to separate cutting out donut stamps and calculating Zernikes from donut stamps as separate tasks.
+
 .. _lsst.ts.wep-2.3.8:
 
 -------------
