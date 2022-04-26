@@ -482,8 +482,8 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             detectorExtra = camera.get(donutExtra.detector_name)
             detectorIntra = camera.get(donutIntra.detector_name)
 
-            eulerZExtra = detectorExtra.getOrientation().getYaw().asDegrees()
-            eulerZIntra = detectorIntra.getOrientation().getYaw().asDegrees()
+            eulerZExtra = -1.0 * detectorExtra.getOrientation().getYaw().asDegrees()
+            eulerZIntra = -1.0 * detectorIntra.getOrientation().getYaw().asDegrees()
 
             # NOTE: TS_WEP expects these images to be transposed
             # TODO: Look into this
