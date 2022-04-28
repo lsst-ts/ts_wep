@@ -30,6 +30,7 @@ from scipy.ndimage import (
     iterate_structure,
     laplace,
 )
+from scipy.signal import convolve2d
 
 from lsst.ts.wep.ParamReader import ParamReader
 from lsst.ts.wep.cwfs.Instrument import Instrument
@@ -861,21 +862,16 @@ class Algorithm(object):
                 WestdWdn0 = West.copy()
 
                 # Do a 3x3 average around each border pixel, including only
-                # those pixels inside the aperture
-                for ii in range(len(borderx)):
-                    reg = West[
-                        borderx[ii] - boundaryT : borderx[ii] + boundaryT + 1,
-                        bordery[ii] - boundaryT : bordery[ii] + boundaryT + 1,
-                    ]
+                # those pixels inside the aperture. This averaging can be
+                # efficiently computed using 1 numpy/scipy vectorized
+                # convolve2d instruction to first sum the values in the 3x3
+                # region, and dividing by a second convolve2d which counts
+                # the non-zero pixels in each 3x3 region.
 
-                    intersectIdx = ApringIn[
-                        borderx[ii] - boundaryT : borderx[ii] + boundaryT + 1,
-                        bordery[ii] - boundaryT : bordery[ii] + boundaryT + 1,
-                    ]
-
-                    WestdWdn0[borderx[ii], bordery[ii]] = reg[
-                        np.nonzero(intersectIdx)
-                    ].mean()
+                kernel = np.ones((1 + 2 * boundaryT, 1 + 2 * boundaryT))
+                tmp = convolve2d(West * ApringIn, kernel, mode="same")
+                tmp /= convolve2d(ApringIn, kernel, mode="same")
+                WestdWdn0[borderx, bordery] = tmp[borderx, bordery]
 
                 # Take Laplacian to find sensor signal estimate (Delta W = S)
                 del2W = laplace(WestdWdn0) / dOmega
