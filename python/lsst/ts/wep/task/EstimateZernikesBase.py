@@ -482,8 +482,12 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             detectorExtra = camera.get(donutExtra.detector_name)
             detectorIntra = camera.get(donutIntra.detector_name)
 
-            eulerZExtra = detectorExtra.getOrientation().getYaw().asDegrees()
-            eulerZIntra = detectorIntra.getOrientation().getYaw().asDegrees()
+            # Rotate any sensors that are not lined up with the focal plane.
+            # Mostly just for the corner wavefront sensors. The negative sign
+            # creates the correct rotation based upon closed loop tests
+            # with R04 and R40 corner sensors.
+            eulerZExtra = -detectorExtra.getOrientation().getYaw().asDegrees()
+            eulerZIntra = -detectorIntra.getOrientation().getYaw().asDegrees()
 
             # NOTE: TS_WEP expects these images to be transposed
             # TODO: Look into this

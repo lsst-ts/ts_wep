@@ -309,10 +309,10 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
                 -0.00804605,
             ]
         )
-        # Make sure the total rms error is less than 0.5 microns off
+        # Make sure the total rms error is less than 0.35 microns off
         # from the OPD truth as a sanity check
         self.assertLess(
-            np.sqrt(np.sum(np.square(zernCoeffAvgR04 - trueZernCoeffR04))), 0.5
+            np.sqrt(np.sum(np.square(zernCoeffAvgR04 - trueZernCoeffR04))), 0.35
         )
 
         # Test R40
@@ -349,10 +349,10 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
                 -0.00559142,
             ]
         )
-        # Make sure the total rms error is less than 0.5 microns off
+        # Make sure the total rms error is less than 0.35 microns off
         # from the OPD truth as a sanity check
         self.assertLess(
-            np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.5
+            np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.35
         )
 
     def testGetCombinedZernikes(self):
