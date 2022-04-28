@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.6:
+
+-------------
+2.3.6
+-------------
+
+* Fix rotation of sensors in EstimateZernikesBase.
+
 .. _lsst.ts.wep-2.3.5:
 
 -------------
