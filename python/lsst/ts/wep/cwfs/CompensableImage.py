@@ -455,10 +455,7 @@ class CompensableImage(object):
         ip = RectBivariateSpline(yp[:, 0], xp[0, :], self.getImg(), kx=1, ky=1)
 
         # Construct the projected image by the interpolation
-        lutIp = np.zeros(lutxp.shape[0] * lutxp.shape[1])
-        for ii, (xx, yy) in enumerate(zip(lutxp.ravel(), lutyp.ravel())):
-            lutIp[ii] = ip(yy, xx)
-        lutIp = lutIp.reshape(lutxp.shape)
+        lutIp = ip(lutyp, lutxp, grid=False)
 
         # Calculate the image on focal plane with compensation based on flux
         # conservation
@@ -896,7 +893,7 @@ class CompensableImage(object):
         luty : numpy.ndarray
             Y-coordinate on pupil plane.
         onepixel : float
-            Exteneded delta radius.
+            Extended delta radius.
         ca : float
             Center of outer ring on the pupil plane.
         cb : float
@@ -937,8 +934,8 @@ class CompensableImage(object):
         return lutx, luty
 
     def _approximateExtendedXY(self, lutx, luty, cenX, cenY, innerR, outerR, config):
-        """Calculate the x, y-cooridnate on puil plane in the extended ring
-        area by the linear approxination, which is used in the off-axis
+        """Calculate the x, y-coordinate on pupil plane in the extended ring
+        area by the linear approximation, which is used in the off-axis
         correction.
 
         Parameters
@@ -967,7 +964,7 @@ class CompensableImage(object):
             Y-coordinate of extended ring area on pupil plane.
         """
 
-        # Catculate the distance to rotated center of boundary ring
+        # Calculate the distance to rotated center of boundary ring
         lutr = np.sqrt((lutx - cenX) ** 2 + (luty - cenY) ** 2)
 
         # Define NaN to be 999 for the comparison in the following step
@@ -988,7 +985,7 @@ class CompensableImage(object):
             # Get the index that the related distance is smaller than innerR
             idxout = tmp < innerR
 
-        # Put the x, y-coordiate to be NaN if it is inside/ outside the pupil
+        # Put the x, y-coordinate to be NaN if it is inside/ outside the pupil
         # that is after the off-axis correction.
         lutx[idxout] = np.nan
         luty[idxout] = np.nan
@@ -1057,7 +1054,7 @@ class CompensableImage(object):
             Image to be centered with the template. The input image needs to
             be a n-by-n matrix.
         template : numpy.array
-            Template image to have the same dimention as the input image
+            Template image to have the same dimension as the input image
             ('img'). The center of template is the position of input image
             tries to align with.
         window : int, optional
@@ -1076,7 +1073,7 @@ class CompensableImage(object):
 
         # Calculate the shifts of center
 
-        # Only consider the shifts in a cetrain window (range)
+        # Only consider the shifts in a certain window (range)
         # Align the input image to the center of template
         length = template.shape[0]
         center = length // 2
@@ -1088,7 +1085,7 @@ class CompensableImage(object):
         idx = np.argmax(corr * mask)
 
         # The above 'idx' is an interger. Need to rematch it to the
-        # two-dimention position (x and y)
+        # two-dimension position (x and y)
         xmatch = idx % length
         ymatch = idx // length
 
@@ -1102,7 +1099,7 @@ class CompensableImage(object):
         """Set the coefficients of off-axis correction for x, y-projection of
         intra- and extra-image.
 
-        This is for the mapping of coordinate from the telescope apearature to
+        This is for the mapping of coordinate from the telescope aperture to
         defocal image plane.
 
         Parameters
@@ -1142,7 +1139,7 @@ class CompensableImage(object):
         self.offAxisOffset = offset
 
     def _getOffAxisCorrSingle(self, confFile):
-        """Get the image-related pamameters for the off-axis distortion by the
+        """Get the image-related parameters for the off-axis distortion by the
         linear approximation with a series of fitted parameters with LSST
         ZEMAX model.
 
@@ -1184,7 +1181,7 @@ class CompensableImage(object):
         return corr_coeff, offset
 
     def _interpMaskParam(self, fieldX, fieldY, maskParam):
-        """Get the mask-related pamameters for the off-axis distortion and
+        """Get the mask-related parameters for the off-axis distortion and
         vignetting correction by the linear approximation with a series of
         fitted parameters with LSST ZEMAX model.
 
