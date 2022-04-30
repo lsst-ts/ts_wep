@@ -11,20 +11,18 @@ This module calculates the wavefront error in annular Zernike polynomials based 
 ## Needed Package
 
 - lsst_distrib (tag: `w_latest`)
-- [phosim_utils](https://github.com/lsst-dm/phosim_utils)
 - [galsim](https://github.com/GalSim-developers/GalSim) (version >= 2.3; should be available from science pipelines v2.0.0 and up)
 - [black](https://github.com/psf/black) (optional)
 - [documenteer](https://github.com/lsst-sqre/documenteer) (optional)
 - [plantuml](http://plantuml.com) (optional)
 - [sphinxcontrib-plantuml](https://pypi.org/project/sphinxcontrib-plantuml/) (optional)
 
-## Install the LSST Packages, phosim_utils, and ts_wep
+## Install the LSST Packages and ts_wep
 
 1. Setup the LSST environment by `source $LSST_DIR/loadLSST.bash`. The `LSST_DIR` is the directory of scientific pipeline.
 2. Install the `lsst_distrib` by `eups distrib install lsst_distrib -t $TAG`. The `TAG` is the weekly built version such as `w_2020_52`.
 3. Fix the path by `curl -sSL https://raw.githubusercontent.com/lsst/shebangtron/master/shebangtron | python`. The [shebangtron repo](https://github.com/lsst/shebangtron) has the further discussion of this.
-4. Clone the repository of `phosim_utils` to some other directory. Under the `phosim_utils/` directory, use `setup -k -r . -t current` to setup the package in `eups` and use `scons` to build the module. The tag of `current` means the current weekly built version. It is noted that the build process is only needed for the first time.
-5. Under the directory of `ts_wep`, do:
+4. Under the directory of `ts_wep`, do:
 
 ```bash
 setup -k -r .
@@ -52,8 +50,6 @@ To enable this with a git pre-commit hook:
 
 ```bash
 source $path_of_lsst_scientific_pipeline/loadLSST.bash
-cd $path_of_phosim_utils
-setup -k -r . -t current
 ```
 
 2. Setup the WEP environment.

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.3.8:
+
+-------------
+2.3.8
+-------------
+
+* Remove phosim_utils dependency.
+
 .. _lsst.ts.wep-2.3.7:
 
 -------------
