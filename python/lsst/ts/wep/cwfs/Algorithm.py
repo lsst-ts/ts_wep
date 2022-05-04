@@ -22,6 +22,7 @@
 import os
 import sys
 import numpy as np
+import galsim
 
 from scipy.ndimage import (
     binary_dilation,
@@ -30,6 +31,7 @@ from scipy.ndimage import (
     iterate_structure,
     laplace,
 )
+from scipy.signal import convolve2d
 
 from lsst.ts.wep.ParamReader import ParamReader
 from lsst.ts.wep.cwfs.Instrument import Instrument
@@ -38,7 +40,6 @@ from lsst.ts.wep.cwfs.Tool import (
     extractArray,
     ZernikeAnnularEval,
     ZernikeMaskedFit,
-    ZernikeAnnularGrad,
 )
 from lsst.ts.wep.PlotUtil import plotZernike
 
@@ -100,6 +101,13 @@ class Algorithm(object):
         # Change the dimension of mask for fft to use
         self.pMaskPad = None
         self.cMaskPad = None
+
+        # Cache annular Zernike evaluations
+        self._zk = None
+
+        # Cache evaluations of X and Y annular Zernike gradients
+        self._dzkdx = None
+        self._dzkdy = None
 
     def reset(self):
         """Reset the calculation for the new input images with the same
@@ -338,7 +346,7 @@ class Algorithm(object):
         return compSequence
 
     def _extend1dArray(self, origArray, targetLength):
-        """Extend the 1D original array to the taget length.
+        """Extend the 1D original array to the target length.
 
         The extended value will be the final element of original array. Nothing
         will be done if the input array is not 1D or its length is less than
@@ -370,7 +378,7 @@ class Algorithm(object):
         the pupil mask.
 
         It is noted that in Fast Fourier transform (FFT) algorithm, it is also
-        the width of Neuman boundary where the derivative of the wavefront is
+        the width of Neumann boundary where the derivative of the wavefront is
         set to zero
 
         Returns
@@ -389,7 +397,7 @@ class Algorithm(object):
         Returns
         -------
         int
-            FFT pad dimention.
+            FFT pad dimension.
         """
 
         fftDim = int(self.algoParamFile.getSetting("fftDimension"))
@@ -540,7 +548,7 @@ class Algorithm(object):
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
             Tolerance of difference of coefficients of Zk polynomials compared
-            with the previours iteration. (the default is 1e-3.)
+            with the previous iteration. (the default is 1e-3.)
         """
 
         # To have the iteration time initiated from global variable is to
@@ -576,6 +584,63 @@ class Algorithm(object):
             self._singleItr(I1, I2, model)
             ii += 1
 
+    def _zernikeBasisCache(self):
+        """Evaluate and cache annular Zernike polynomials and their gradients.
+
+        Produces 3 different basis sets from which inner products may be
+        rapidly computed. The first dimension of each basis set indexes which
+        Zernike term is evaluated. The second and third dimension index the x
+        and y coordinates at which the polynomials are evaluated.
+
+        Returns
+        -------
+        zk : ndarray of shape (nZk, nx, ny)
+            Annular Zernike basis set.
+        dzkdx, dzkdy : ndarray of shape (nZk, nx, ny)
+            Gradient of annular Zernike basis set.
+
+        Notes
+        -----
+        The cache assumes that
+            self._inst.getSensorCoor()
+            self.getNumOfZernikes()
+            self.getObsOfZernikes()
+        are all immutable during the lifetime of self.
+        """
+        if self._zk is None:
+            # I'm assuming here that self._inst is immutable.
+            xSensor, ySensor = self._inst.getSensorCoor()
+
+            # Here's the GalSim public interface for a basis of annular
+            # Zernikes.
+            jmax = self.getNumOfZernikes()
+            eps = self.getObsOfZernikes()
+            self._zk = galsim.zernike.zernikeBasis(jmax, xSensor, ySensor, R_inner=eps)
+
+            # There isn't currently a public interface for a gradient basis.
+            # Here's what one would look like though if it existed. Relying a
+            # bit on GalSim implementation details here, but should be okay in
+            # practice.
+            noll_coef_x = galsim.zernike._noll_coef_array_xy_gradx(jmax, eps)
+            self._dzkdx = np.zeros(tuple((jmax + 1,) + xSensor.shape), dtype=float)
+            self._dzkdx[1:] = np.array(
+                [
+                    galsim.utilities.horner2d(xSensor, ySensor, nc, dtype=float)
+                    for nc in noll_coef_x.transpose(2, 0, 1)
+                ]
+            )
+
+            noll_coef_y = galsim.zernike._noll_coef_array_xy_grady(jmax, eps)
+            self._dzkdy = np.zeros(tuple((jmax + 1,) + xSensor.shape), dtype=float)
+            self._dzkdy[1:] = np.array(
+                [
+                    galsim.utilities.horner2d(xSensor, ySensor, nc, dtype=float)
+                    for nc in noll_coef_y.transpose(2, 0, 1)
+                ]
+            )
+
+        return self._zk[1:], self._dzkdx[1:], self._dzkdy[1:]
+
     def _singleItr(self, I1, I2, model, tol=1e-3):
         """Run the outer-loop with single iteration to solve the transport of
         intensity equation (TIE).
@@ -593,7 +658,7 @@ class Algorithm(object):
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
             Tolerance of difference of coefficients of Zk polynomials compared
-            with the previours iteration. (the default is 1e-3.)
+            with the previous iteration. (the default is 1e-3.)
 
         Returns
         -------
@@ -709,7 +774,7 @@ class Algorithm(object):
         else:
             # Once we run into caustic, stop here, results may be close to real
             # aberration.
-            # Continuation may lead to disatrous results.
+            # Continuation may lead to disastrous results.
             self.converge[:, jj] = self.converge[:, jj - 1]
 
         # Record the coefficients of normal/ annular Zernike polynomials after
@@ -764,7 +829,7 @@ class Algorithm(object):
             Estimated wavefront.
         """
 
-        # Calculate the aperature pixel size
+        # Calculate the aperture pixel size
         apertureDiameter = self._inst.getApertureDiameter()
         sensorFactor = self._inst.getSensorFactor()
         dimOfDonut = self._inst.getDimOfDonutOnSensor()
@@ -861,21 +926,16 @@ class Algorithm(object):
                 WestdWdn0 = West.copy()
 
                 # Do a 3x3 average around each border pixel, including only
-                # those pixels inside the aperture
-                for ii in range(len(borderx)):
-                    reg = West[
-                        borderx[ii] - boundaryT : borderx[ii] + boundaryT + 1,
-                        bordery[ii] - boundaryT : bordery[ii] + boundaryT + 1,
-                    ]
+                # those pixels inside the aperture. This averaging can be
+                # efficiently computed using 1 numpy/scipy vectorized
+                # convolve2d instruction to first sum the values in the 3x3
+                # region, and dividing by a second convolve2d which counts
+                # the non-zero pixels in each 3x3 region.
 
-                    intersectIdx = ApringIn[
-                        borderx[ii] - boundaryT : borderx[ii] + boundaryT + 1,
-                        bordery[ii] - boundaryT : bordery[ii] + boundaryT + 1,
-                    ]
-
-                    WestdWdn0[borderx[ii], bordery[ii]] = reg[
-                        np.nonzero(intersectIdx)
-                    ].mean()
+                kernel = np.ones((1 + 2 * boundaryT, 1 + 2 * boundaryT))
+                tmp = convolve2d(West * ApringIn, kernel, mode="same")
+                tmp /= convolve2d(ApringIn, kernel, mode="same")
+                WestdWdn0[borderx, bordery] = tmp[borderx, bordery]
 
                 # Take Laplacian to find sensor signal estimate (Delta W = S)
                 del2W = laplace(WestdWdn0) / dOmega
@@ -914,45 +974,22 @@ class Algorithm(object):
             ySensor = ySensor * self.cMask
 
             # Create the F matrix and Zernike-related matrixes
-            F = np.zeros(numTerms)
-            dZidx = np.zeros((numTerms, dimOfDonut, dimOfDonut))
-            dZidy = dZidx.copy()
 
-            zcCol = np.zeros(numTerms)
-            for ii in range(int(numTerms)):
+            # Get Zernike and gradient bases from cache.  These are each
+            # (nzk, npix, npix) arrays, with the first dimension indicating
+            # the Noll index.
+            zk, dzkdx, dzkdy = self._zernikeBasisCache()
 
-                # Calculate the matrix for each Zk related component
-                # Set the specific Zk cofficient to be 1 for the calculation
-                zcCol[ii] = 1
-
-                F[ii] = (
-                    np.sum(dI * ZernikeAnnularEval(zcCol, xSensor, ySensor, zobsR))
-                    * dOmega
-                )
-                dZidx[ii, :, :] = ZernikeAnnularGrad(
-                    zcCol, xSensor, ySensor, zobsR, "dx"
-                )
-                dZidy[ii, :, :] = ZernikeAnnularGrad(
-                    zcCol, xSensor, ySensor, zobsR, "dy"
-                )
-
-                # Set the specific Zk cofficient back to 0 to avoid interfering
-                # other Zk's calculation
-                zcCol[ii] = 0
-
-            # Calculate Mij matrix, need to check the stability of integration
-            # and symmetry later
-            Mij = np.zeros([numTerms, numTerms])
-            for ii in range(numTerms):
-                for jj in range(numTerms):
-                    Mij[ii, jj] = np.sum(
-                        I0
-                        * (
-                            dZidx[ii, :, :].squeeze() * dZidx[jj, :, :].squeeze()
-                            + dZidy[ii, :, :].squeeze() * dZidy[jj, :, :].squeeze()
-                        )
-                    )
-            Mij = dOmega / (apertureDiameter / 2.0) ** 2 * Mij
+            # Eqn. (19) from Xin et al., Appl. Opt. 54, 9045-9054 (2015).
+            # F_j = \int (d_z I) Z_j d_Omega
+            F = np.tensordot(dI, zk, axes=((0, 1), (1, 2))) * dOmega
+            # Eqn. (20) from Xin et al., Appl. Opt. 54, 9045-9054 (2015).
+            # M_ij = \int I (grad Z_j) . (grad Z_i) d_Omega
+            #      =   \int I (dZ_i/dx) (dZ_j/dx) d_Omega
+            #        + \int I (dZ_i/dy) (dZ_j/dy) d_Omega
+            Mij = np.einsum("ab,iab,jab->ij", I0, dzkdx, dzkdx)
+            Mij += np.einsum("ab,iab,jab->ij", I0, dzkdy, dzkdy)
+            Mij *= dOmega / (apertureDiameter / 2.0) ** 2
 
             # Calculate dz
             focalLength = self._inst.getFocalLength()
@@ -1067,7 +1104,7 @@ class Algorithm(object):
         # Check the condition of images
         I1image, I2image = self._checkImageDim(I1, I2)
 
-        # Calculate the central image and differential iamge
+        # Calculate the central image and differential image
         I0 = (I1image + I2image) / 2
         dI = I2image - I1image
 
@@ -1136,7 +1173,7 @@ class Algorithm(object):
         """
 
         # Get the overlap region of mask for intra- and extra-focal images.
-        # This is to avoid the anormalous signal due to difference in
+        # This is to avoid the anomalous signal due to difference in
         # vignetting.
         self.pMask = I1.getPaddedMask() * I2.getPaddedMask()
         self.cMask = I1.getNonPaddedMask() * I2.getNonPaddedMask()
