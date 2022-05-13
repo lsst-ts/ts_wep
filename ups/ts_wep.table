@@ -7,7 +7,6 @@ setupRequired(utils)
 setupRequired(obs_lsst)
 setupRequired(daf_persistence)
 setupRequired(afw)
-setupRequired(phosim_utils)
 setupRequired(ctrl_mpexec)
 setupRequired(cp_pipe)
 
