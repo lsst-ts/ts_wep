@@ -26,7 +26,6 @@ import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
 from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
-from lsst.afw.cameraGeom import DetectorType
 
 from lsst.ts.wep.task.DonutStamps import DonutStamps
 from lsst.ts.wep.WfEstimator import WfEstimator
@@ -101,9 +100,9 @@ class CalcZernikesTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        donutStampsExtra: DonutStamps
+        donutStampsExtra : DonutStamps
             Extra-focal donut postage stamps.
-        donutStampsIntra: DonutStamps
+        donutStampsIntra : DonutStamps
             Intra-focal donut postage stamps.
 
         Returns
@@ -123,14 +122,10 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         algoDir = os.path.join(configDir, "cwfs", "algo")
         wfEsti = WfEstimator(instDir, algoDir)
         detectorNames = donutStampsExtra.getDetectorNames()
-        if "SW" in detectorNames[0]:
-            detectorType = DetectorType.WAVEFRONT
-        else:
-            detectorType = DetectorType.SCIENCE
+        camera = donutStampsExtra[0].getCamera()
+        detectorType = camera[detectorNames[0]].getType()
 
-        camType = getCamTypeFromButlerName(
-            donutStampsExtra.getCameraNames()[0], detectorType
-        )
+        camType = getCamTypeFromButlerName(camera.getName(), detectorType)
         donutStampSize = np.shape(donutStampsExtra[0].stamp_im.getImage().getArray())[0]
 
         wfEsti.config(
@@ -181,7 +176,7 @@ class CalcZernikesTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        zernikeArray: numpy ndarray
+        zernikeArray : numpy.ndarray
             The full set of zernike coefficients for each pair
             of donuts on the CCD. Each row of the array should
             be the set of Zernike coefficients for a single
