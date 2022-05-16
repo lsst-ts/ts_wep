@@ -566,33 +566,48 @@ def getCamType(instName):
 
 
 def getCamTypeFromButlerName(instName, detectorType):
-    """Get the camera type from instrument name used by the Gen 3 middleware
-    for each instrument.
+    """Get the camera type from instrument name used by the LSST DM
+    middleware for each instrument.
+
     Parameters
     ----------
     instName : str
         Instrument name.
     detectorType : lsst.afw.cameraGeom.DetectorType
         Type of CCD. "SCIENCE" or "WAVEFRONT".
+
     Returns
     -------
     camType : enum 'CamType'
         Camera type.
+
     Raises
     ------
     ValueError
-        Instrument name is not supported.
+        Combination of instrument name and detector type is not supported.
+    ValueError
+        Detector type is not supported.
     """
-    if instName == "LSSTCam" and detectorType == DetectorType.WAVEFRONT:
-        return CamType.LsstCam
-    elif instName == "LSSTCam" and detectorType == DetectorType.SCIENCE:
-        return CamType.LsstFamCam
-    elif instName == "LSSTComCam":
-        return CamType.ComCam
-    elif instName == "LATISS":
-        return CamType.AuxTel
+    if detectorType == DetectorType.WAVEFRONT:
+        if instName == "LSSTCam":
+            return CamType.LsstCam
+        else:
+            raise ValueError(
+                f"Wavefront sensors for instrument name ({instName}) are not supported."
+            )
+    elif detectorType == DetectorType.SCIENCE:
+        if instName == "LSSTCam":
+            return CamType.LsstFamCam
+        elif instName == "LSSTComCam":
+            return CamType.ComCam
+        elif instName == "LATISS":
+            return CamType.AuxTel
+        else:
+            raise ValueError(
+                f"Science sensors for instrument name ({instName}) are not supported."
+            )
     else:
-        raise ValueError(f"Instrument name ({instName}) is not supported.")
+        raise ValueError(f"Detector Type ({detectorType.name}) is not supported.")
 
 
 def getDefocalDisInMm(instName):

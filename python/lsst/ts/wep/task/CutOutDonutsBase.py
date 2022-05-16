@@ -220,13 +220,13 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        exposure: lsst.afw.image.Exposure
+        exposure : lsst.afw.image.Exposure
             Exposure with the donut image.
-        template: numpy ndarray
+        template : numpy.ndarray
             Donut template for the exposure.
-        xCent: int
+        xCent : int
             X pixel donut center from donutCatalog.
-        yCent: int
+        yCent : int
             Y pixel donut center from donutCatalog.
 
         Returns
@@ -296,13 +296,13 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        exposure: lsst.afw.image.Exposure
+        exposure : lsst.afw.image.Exposure
             Post-ISR image with defocal donuts sources.
-        donutCatalog: pandas DataFrame
+        donutCatalog : pandas.DataFrame
             Source catalog for the pointing.
-        defocalType: enum 'DefocalType'
+        defocalType : enum 'DefocalType'
             Defocal type of the donut image.
-        cameraName: str
+        cameraName : str
             Name of camera for the exposure. Can accept "LSSTCam",
             "LSSTComCam", "LATISS".
 
