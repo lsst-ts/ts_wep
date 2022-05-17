@@ -109,3 +109,14 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **CombineZernikesMeanTask**: Gen 3 middleware task to combine the Zernike coefficients using an unweighted mean of coefficients from all donut pairs.
 * **CombineZernikesSigmaClipTask**: Gen 3 middleware task to combine the Zernike coefficients with a sigma clipping method that will remove donuts with outlier Zernike values from the final averaging of donut pairs.
 * **CombineZernikesSigmaClipTaskConfig**: Configuration setup for CombineZernikesSigmaClipTask.
+* **CalcZernikesTask**: Gen 3 middleware task to calculate the zernikes from donut stamps that already exist in the butler. This is different from EstimateZernikesTasks that create the donut stamps and calculate the Zernikes as part of the same task.
+* **CalcZernikesTaskConnections**: Connections setup for CalcZernikesTask.
+* **CalcZernikesTaskConfig**: Configuration setup for CalcZernikesTask.
+* **CutOutDonutsBaseTask**: Base class for CutOutDonuts tasks.
+* **CutOutDonutsBaseTaskConnections**: Base connections class for CutOutDonuts tasks.
+* **CutOutDonutsBaseTaskConfig**: Base configuration class for CutOutDonuts tasks.
+* **CutOutDonutsCwfsTask**: Gen 3 middleware task to cut out donut stamps on LSST Corner Wavefront Sensors from donut catalogs produced by GenerateDonutCatalogs tasks.
+* **CutOutDonutsCwfsTaskConfig**: Configuration setup for CutOutDonutsCwfsTask.
+* **CutOutDonutsScienceSensorTask**: Gen 3 middleware task to cut out donut stamps on science sensors from donut catalogs produced by GenerateDonutCatalogs tasks.
+* **CutOutDonutsScienceSensorTaskConnections**: Connections setup for CutOutDonutsScienceSensorTask.
+* **CutOutDonutsScienceSensorTaskConfig**: Configuration setup for CutOutDonutsScienceSensorTask.
