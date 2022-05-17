@@ -38,4 +38,24 @@ EstimateZernikesBaseTask <|-- EstimateZernikesCwfsTask
 EstimateZernikesCwfsTaskConfig *-- EstimateZernikesCwfsTaskConnections
 EstimateZernikesCwfsTask *-- EstimateZernikesCwfsTaskConfig
 EstimateZernikesCwfsTask ..> DonutStamps
+CutOutDonutsBaseTaskConfig <|-- CutOutDonutsCwfsTaskConfig
+CutOutDonutsBaseTask <|-- CutOutDonutsCwfsTask
+CutOutDonutsCwfsTaskConfig *-- CutOutDonutsBaseTaskConnections
+CutOutDonutsCwfsTask *-- CutOutDonutsCwfsTaskConfig
+CutOutDonutsCwfsTask ..> DonutStamps
+CutOutDonutsBaseTaskConfig <|-- CutOutDonutsScienceSensorTaskConfig
+CutOutDonutsBaseTask <|-- CutOutDonutsScienceSensorTask
+CutOutDonutsScienceSensorTaskConfig *-- CutOutDonutsBaseTaskConnections
+CutOutDonutsScienceSensorTask *-- CutOutDonutsScienceSensorTaskConfig
+CutOutDonutsBaseTaskConnections <|-- CutOutDonutsScienceSensorTaskConnections
+CutOutDonutsScienceSensorTaskConfig *-- CutOutDonutsScienceSensorTaskConnections
+CutOutDonutsScienceSensorTask ..> DonutStamps
+CutOutDonutsBaseTaskConfig *-- CutOutDonutsBaseTaskConnections
+CutOutDonutsBaseTask *-- CutOutDonutsBaseTaskConfig
+CutOutDonutsBaseTask ..> DonutStamps
+CutOutDonutsBaseTask ..> DonutStamp
+CalcZernikesTaskConfig *-- CombineZernikesSigmaClipTask
+CalcZernikesTaskConfig *-- CalcZernikesTaskConnections
+CalcZernikesTask *-- CalcZernikesTaskConfig
+CalcZernikesTask ..> DonutStamps
 @enduml

@@ -44,7 +44,9 @@ from lsst.ts.wep.Utility import (
     CamType,
     getCamType,
     getDefocalDisInMm,
+    getCamTypeFromButlerName,
 )
+from lsst.afw.cameraGeom import DetectorType
 
 
 class TestUtility(unittest.TestCase):
@@ -249,6 +251,43 @@ class TestUtility(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             getCamType(instName)
         self.assertTrue(assertMsg in str(context.exception))
+
+    def testGetCamTypeFromButlerName(self):
+
+        self.assertEqual(
+            getCamTypeFromButlerName("LSSTCam", DetectorType.WAVEFRONT), CamType.LsstCam
+        )
+        instName = "LSSTComCam"
+        wfAssertMsg = (
+            f"Wavefront sensors for instrument name ({instName}) are not supported."
+        )
+        with self.assertRaises(ValueError) as context:
+            getCamTypeFromButlerName(instName, DetectorType.WAVEFRONT)
+        self.assertTrue(wfAssertMsg in str(context.exception))
+
+        self.assertEqual(
+            getCamTypeFromButlerName("LSSTCam", DetectorType.SCIENCE),
+            CamType.LsstFamCam,
+        )
+        self.assertEqual(
+            getCamTypeFromButlerName("LSSTComCam", DetectorType.SCIENCE), CamType.ComCam
+        )
+        self.assertEqual(
+            getCamTypeFromButlerName("LATISS", DetectorType.SCIENCE), CamType.AuxTel
+        )
+        instName = "telescope"
+        sciAssertMsg = (
+            f"Science sensors for instrument name ({instName}) are not supported."
+        )
+        with self.assertRaises(ValueError) as context:
+            getCamTypeFromButlerName(instName, DetectorType.SCIENCE)
+        self.assertTrue(sciAssertMsg in str(context.exception))
+
+        detType = DetectorType.GUIDER
+        detAssertMsg = f"Detector Type ({detType.name}) is not supported."
+        with self.assertRaises(ValueError) as context:
+            getCamTypeFromButlerName(instName, detType)
+        self.assertTrue(detAssertMsg in str(context.exception))
 
 
 if __name__ == "__main__":

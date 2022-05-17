@@ -48,11 +48,6 @@ pipeline {
                 dir(env.WORKSPACE + '/ts_wep') {
                     checkout scm
                 }
-                withEnv(["HOME=${env.WORKSPACE}"]) {
-                    sh """
-                        git clone https://github.com/lsst-dm/phosim_utils.git
-                    """
-                }
             }
         }
 
@@ -64,10 +59,7 @@ pipeline {
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
                         source ${env.LSST_STACK}/loadLSST.bash
-                        cd phosim_utils/
-                        setup -k -r . -t ${env.STACK_VERSION}
-                        scons
-                        cd ../ts_wep/
+                        cd ts_wep/
                         setup -k -r .
                         scons python
                     """
@@ -81,9 +73,7 @@ pipeline {
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
                         source ${env.LSST_STACK}/loadLSST.bash
-                        cd phosim_utils/
-                        setup -k -r . -t ${env.STACK_VERSION}
-                        cd ../ts_wep/
+                        cd ts_wep/
                         setup -k -r .
                         pytest --cov-report html --cov=${env.MODULE_NAME} --junitxml=${env.WORKSPACE}/${env.XML_REPORT}
                     """
@@ -117,10 +107,7 @@ pipeline {
 
                   pip install sphinxcontrib-plantuml
 
-                  cd phosim_utils/
-                  setup -k -r . -t ${env.STACK_VERSION}
-
-                  cd ../ts_wep
+                  cd ts_wep
                   setup -k -r .
 
                   package-docs build
