@@ -21,8 +21,6 @@
 
 import matplotlib.pyplot as plt
 
-plt.switch_backend("Agg")
-
 
 def plotZernike(zkIdx, zk, unit, saveFilePath=None):
     """Plot the Zernike polynomials (zk).

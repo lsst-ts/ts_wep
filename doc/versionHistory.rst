@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.4.2:
+
+-------------
+2.4.2
+-------------
+
+* Remove matplotlib backend switching in PlotUtil.py
+
 .. _lsst.ts.wep-2.4.1:
 
 -------------
