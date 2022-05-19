@@ -64,6 +64,10 @@ setup -k -r .
 - **mapSensorAndFieldIdx.py**: Map the sensor name to the field point index for LSST.
 - **mapSensorAndFieldIdxLsstFam.py**: Map the sensor name to the field point for LSST full-array mode (FAM).
 
+## Example Jupyter Notebooks
+
+To learn more about how to run the pipeline tasks associated with WEP we have a series of Jupyter Notebooks available in the AOS section of the `ts_analysis_notebooks` [repository](https://github.com/lsst-ts/ts_analysis_notebooks).
+
 ## Test Gen 3 Repository
 
 In the folder `tests/testData/` there is a test repository for tasks that run with the Gen 3 DM middleware.

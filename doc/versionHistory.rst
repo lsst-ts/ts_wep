@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.4.1:
+
+-------------
+2.4.1
+-------------
+
+* Add information on Jupyter Notebooks in ts_analysis_notebooks to README.
+
 .. _lsst.ts.wep-2.4.0:
 
 -------------
