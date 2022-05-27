@@ -62,10 +62,10 @@ class DonutStamp(AbstractStamp):
     comp_im : `CompensableImage`, init=False
         CompensableImage object to create masks for the stamp. This is
         initialized in the __post_init__ stage of the dataclass.
-    mask_p : `afwImage.Mask`, init=False
+    mask_comp : `afwImage.Mask`, init=False
         Padded Mask for use at the offset planes. This is
         initialized in the __post_init__ stage of the dataclass.
-    mask_c : `afwImage.Mask`, init=False
+    mask_pupil : `afwImage.Mask`, init=False
         Non-padded mask corresponding to aperture. This is
         initialized in the __post_init__ stage of the dataclass.
     """
@@ -78,8 +78,8 @@ class DonutStamp(AbstractStamp):
     cam_name: str
     archive_element: Optional[afwTable.io.Persistable] = None
     comp_im: CompensableImage = field(default_factory=CompensableImage)
-    mask_p: afwImage.Mask = field(init=False)
-    mask_c: afwImage.Mask = field(init=False)
+    mask_comp: afwImage.Mask = field(init=False)
+    mask_pupil: afwImage.Mask = field(init=False)
 
     def __post_init__(self):
         """
@@ -190,8 +190,8 @@ class DonutStamp(AbstractStamp):
             DefocalType(self.defocal_type),
             self.stamp_im.getImage().getArray(),
         )
-        self.mask_c = afwImage.Mask()
-        self.mask_p = afwImage.Mask()
+        self.mask_pupil = afwImage.Mask()
+        self.mask_comp = afwImage.Mask()
 
     def makeMasks(self, inst, model, boundaryT, maskScalingFactorLocal):
         """Get the binary mask which considers the obscuration and off-axis
@@ -213,9 +213,9 @@ class DonutStamp(AbstractStamp):
 
         Returns
         -------
-        cMask : `afwImage.Mask`
+        mask_pupil : `afwImage.Mask`
             Non-padded mask for use at the offset planes.
-        pMask : `afwImage.Mask`
+        mask_comp : `afwImage.Mask`
             Padded mask for use at the offset planes.
         """
 
@@ -226,8 +226,8 @@ class DonutStamp(AbstractStamp):
         maskDict = {"BKGRD": 0, "DONUT": 1}
 
         # Set masks
-        self.mask_p = afwImage.Mask(np.array(self.comp_im.pMask, dtype=np.int32))
-        self.mask_p.clearMaskPlaneDict()
-        self.mask_p.conformMaskPlanes(maskDict)
+        self.mask_comp = afwImage.Mask(np.array(self.comp_im.mask_comp, dtype=np.int32))
+        self.mask_comp.clearMaskPlaneDict()
+        self.mask_comp.conformMaskPlanes(maskDict)
         # Will inherit conformed MaskPlaneDict
-        self.mask_c = afwImage.Mask(np.array(self.comp_im.cMask, dtype=np.int32))
+        self.mask_pupil = afwImage.Mask(np.array(self.comp_im.mask_pupil, dtype=np.int32))
