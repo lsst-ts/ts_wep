@@ -109,8 +109,8 @@ class TestDonutStamp(unittest.TestCase):
                 self.assertEqual(defocalType, DefocalType.Extra.value)
 
             self.assertEqual(type(donutStamp.comp_im), CompensableImage)
-            self.assertEqual(type(donutStamp.mask_c), afwImage.MaskX)
-            self.assertEqual(type(donutStamp.mask_p), afwImage.MaskX)
+            self.assertEqual(type(donutStamp.mask_comp), afwImage.MaskX)
+            self.assertEqual(type(donutStamp.mask_pupil), afwImage.MaskX)
             np.testing.assert_array_equal(
                 donutStamp.comp_im.getImg(), donutStamp.stamp_im.image.array
             )
@@ -194,24 +194,24 @@ class TestDonutStamp(unittest.TestCase):
 
         # Check that masks are empty at start
         np.testing.assert_array_equal(
-            np.empty(shape=(0, 0)), donutStamp.mask_c.getArray()
+            np.empty(shape=(0, 0)), donutStamp.mask_comp.getArray()
         )
         np.testing.assert_array_equal(
-            np.empty(shape=(0, 0)), donutStamp.mask_p.getArray()
+            np.empty(shape=(0, 0)), donutStamp.mask_pupil.getArray()
         )
 
         # Check masks after creation
         donutStamp.makeMasks(inst, "offAxis", 0, 1)
-        self.assertEqual(afwImage.MaskX, type(donutStamp.mask_c))
-        self.assertEqual(afwImage.MaskX, type(donutStamp.mask_p))
+        self.assertEqual(afwImage.MaskX, type(donutStamp.mask_comp))
+        self.assertEqual(afwImage.MaskX, type(donutStamp.mask_pupil))
         self.assertDictEqual(
-            {"BKGRD": 0, "DONUT": 1}, donutStamp.mask_c.getMaskPlaneDict()
+            {"BKGRD": 0, "DONUT": 1}, donutStamp.mask_comp.getMaskPlaneDict()
         )
         self.assertDictEqual(
-            {"BKGRD": 0, "DONUT": 1}, donutStamp.mask_p.getMaskPlaneDict()
+            {"BKGRD": 0, "DONUT": 1}, donutStamp.mask_pupil.getMaskPlaneDict()
         )
-        maskC = donutStamp.mask_c.getArray()
-        maskP = donutStamp.mask_p.getArray()
+        maskC = donutStamp.mask_comp.getArray()
+        maskP = donutStamp.mask_pupil.getArray()
         # Donut should match
         self.assertEqual(np.shape(maskC), (126, 126))
         self.assertEqual(np.shape(maskP), (126, 126))
