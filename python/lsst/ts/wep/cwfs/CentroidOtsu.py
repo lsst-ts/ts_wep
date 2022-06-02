@@ -19,15 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["CentroidOtsu"]
+
 from skimage.filters import threshold_otsu
 
 from lsst.ts.wep.cwfs.CentroidDefault import CentroidDefault
 
 
 class CentroidOtsu(CentroidDefault):
+    """CentroidDefault child class to get the centroid of donut by the
+    Otsu's method."""
+
     def __init__(self):
-        """CentroidDefault child class to get the centroid of donut by the
-        Otsu's method."""
 
         # Number of bins in the histogram
         self.numOfBins = 256

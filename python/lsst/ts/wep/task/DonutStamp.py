@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["DonutStamp"]
+
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -39,31 +41,31 @@ class DonutStamp(AbstractStamp):
 
     Parameters
     ----------
-    stamp_im : lsst.afw.image.MaskedImageF
+    stamp_im : `lsst.afw.image.MaskedImageF`
         The actual pixel values for the postage stamp
-    sky_position : lsst.geom.SpherePoint
+    sky_position : `lsst.geom.SpherePoint`
         Position of the center of the stamp. Note the user
         must keep track of the coordinate system
-    centroid_position : lsst.geom.Point2D
+    centroid_position : `lsst.geom.Point2D`
         Position of the center of the stamp in pixels
-    defocal_type : str
+    defocal_type : `str`
         Defocal state of the stamp. "extra" or "intra" are
         allowed values.
-    detector_name : str
+    detector_name : `str`
         CCD where the donut is found
-    cam_name : str
+    cam_name : `str`
         Camera name for the stamp image. "LSSTCam" or "LSSTComCam"
         are available camera names currently.
     archive_element : `afwTable.io.Persistable`, optional
         Archive element (e.g. Transform or WCS) associated with this stamp.
         (the default is None.)
-    comp_im : CompensableImage, init=False
+    comp_im : `CompensableImage`, init=False
         CompensableImage object to create masks for the stamp. This is
         initialized in the __post_init__ stage of the dataclass.
-    mask_p : afwImage.Mask, init=False
+    mask_p : `afwImage.Mask`, init=False
         Padded Mask for use at the offset planes. This is
         initialized in the __post_init__ stage of the dataclass.
-    mask_c : afwImage.Mask, init=False
+    mask_c : `afwImage.Mask`, init=False
         Non-padded mask corresponding to aperture. This is
         initialized in the __post_init__ stage of the dataclass.
     """
@@ -96,12 +98,12 @@ class DonutStamp(AbstractStamp):
 
         Parameters
         ----------
-        stamp_im : lsst.afw.image.MaskedImage
+        stamp_im : `lsst.afw.image.MaskedImage`
             Pixel data to pass to the constructor
-        metadata : lsst.daf.base.PropertyList
+        metadata : `lsst.daf.base.PropertyList`
             PropertyList containing the information
             needed by the constructor.
-        index : int
+        index : `int`
             Index into the lists in ``metadata``
         archive_element : `afwTable.io.Persistable`, optional
             Archive element (e.g. Transform or WCS) associated with this stamp.
@@ -139,12 +141,12 @@ class DonutStamp(AbstractStamp):
 
         Returns
         -------
-        lsst.afw.cameraGeom.Camera
+        `lsst.afw.cameraGeom.Camera`
             Camera object for the exposures.
 
         Raises
         ------
-        ValueError
+        `ValueError`
             The camera is not supported.
         """
 
@@ -163,9 +165,9 @@ class DonutStamp(AbstractStamp):
 
         Returns
         -------
-        float
+        `float`
             Field x position in degrees.
-        float
+        `float`
             Field y position in degrees.
         """
 
@@ -197,23 +199,23 @@ class DonutStamp(AbstractStamp):
 
         Parameters
         ----------
-        inst : Instrument
+        inst : `Instrument`
             Instrument to use.
-        model : str
+        model : `str`
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
-        boundaryT : int
+        boundaryT : `int`
             Extended boundary in pixel. It defines how far the computation mask
             extends beyond the pupil mask. And, in fft, it is also the width of
             Neuman boundary where the derivative of the wavefront is set to
             zero.
-        maskScalingFactorLocal : float
+        maskScalingFactorLocal : `float`
             Mask scaling factor (for fast beam) for local correction.
 
         Returns
         -------
-        cMask : afwImage.Mask
+        cMask : `afwImage.Mask`
             Non-padded mask for use at the offset planes.
-        pMask : afwImage.Mask
+        pMask : `afwImage.Mask`
             Padded mask for use at the offset planes.
         """
 

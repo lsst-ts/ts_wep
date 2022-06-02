@@ -19,6 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = [
+    "GenerateDonutDirectDetectTaskConnections",
+    "GenerateDonutDirectDetectTaskConfig",
+    "GenerateDonutDirectDetectTask",
+]
+
 import os
 import numpy as np
 from copy import copy

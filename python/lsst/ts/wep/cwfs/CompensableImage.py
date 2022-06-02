@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["CompensableImage"]
+
 import os
 import re
 import numpy as np
@@ -41,15 +43,16 @@ from galsim.utilities import horner2d
 
 
 class CompensableImage(object):
-    def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
-        """Instantiate the class of CompensableImage.
+    """Instantiate the class of CompensableImage.
 
-        Parameters
-        ----------
-        centroidFindType : enum 'CentroidFindType', optional
-            Algorithm to find the centroid of donut. (the default is
-            CentroidFindType.RandomWalk.)
-        """
+    Parameters
+    ----------
+    centroidFindType : enum 'CentroidFindType', optional
+        Algorithm to find the centroid of donut. (the default is
+        CentroidFindType.RandomWalk.)
+    """
+
+    def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
 
         self._image = Image(centroidFindType=centroidFindType)
         self.defocalType = DefocalType.Intra

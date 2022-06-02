@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["CentroidFindFactory"]
+
 from lsst.ts.wep.Utility import CentroidFindType
 from lsst.ts.wep.cwfs.CentroidRandomWalk import CentroidRandomWalk
 from lsst.ts.wep.cwfs.CentroidOtsu import CentroidOtsu

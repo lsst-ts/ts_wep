@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.4.3:
+
+-------------
+2.4.3
+-------------
+
+* Fix online documentation build errors.
+
 .. _lsst.ts.wep-2.4.2:
 
 -------------

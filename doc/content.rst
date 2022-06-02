@@ -79,6 +79,7 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 
 .. uml:: uml/taskClass.uml
     :caption: Class diagram of wep.task
+
 * **GenerateDonutDirectDetectTaskConnections**: Connections setup for GenerateDonutDirectDetectTask to run in a pipeline with Gen 3 middleware.
 * **GenerateDonutDirectDetectTaskConfig**: Configuration setup for GenerateDonutDirectDetectTask.
 * **GenerateDonutDirectDetectTask**: Gen 3 middleware task to convolve the defocal postISRCCD exposure with a donut template and and create a catalog of donut sources for that exposure.

@@ -19,27 +19,30 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["RefCatalogInterface"]
+
 import lsst.geom
 from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.meas.algorithms.htmIndexer import HtmIndexer
 
 
 class RefCatalogInterface(object):
-    def __init__(self, boresightRa, boresightDec, boresightRotAng):
-        """
-        Class to provide tools to interact with reference catalog
-        in Butler repository and select pieces of the catalog
-        that cover the sky area of a pointing.
+    """
+    Class to provide tools to interact with reference catalog
+    in Butler repository and select pieces of the catalog
+    that cover the sky area of a pointing.
 
-        Parameters
-        ----------
-        boresightRa : float
-            Boresight RA in degrees.
-        boresightDec : float
-            Boresight Dec in degrees.
-        boresightRotAng : float
-            Boresight rotation angle in degreees.
-        """
+    Parameters
+    ----------
+    boresightRa : float
+        Boresight RA in degrees.
+    boresightDec : float
+        Boresight Dec in degrees.
+    boresightRotAng : float
+        Boresight rotation angle in degreees.
+    """
+
+    def __init__(self, boresightRa, boresightDec, boresightRotAng):
 
         # Set the pointing information
         self.boresightRa = boresightRa

@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["DonutDetector"]
+
 import numpy as np
 import pandas as pd
 from copy import copy
@@ -49,7 +51,7 @@ class DonutDetector(object):
         Detect and categorize donut sources as blended/unblended
 
         Parameters
-        -------
+        ----------
         expArray: numpy.ndarray
             The input image data.
         template: numpy.ndarray

@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["DeblendAdapt"]
+
 import numpy as np
 
 from scipy.ndimage import (
@@ -38,9 +40,10 @@ from lsst.ts.wep.deblend.nelderMeadModify import nelderMeadModify
 
 
 class DeblendAdapt(DeblendDefault):
+    """DeblendDefault child class to do the deblending by the adaptive
+    threshold method."""
+
     def __init__(self):
-        """DeblendDefault child class to do the deblending by the adaptive
-        threshold method."""
         super(DeblendAdapt, self).__init__()
 
         # Method to find the centroid of donut

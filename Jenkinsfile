@@ -33,7 +33,7 @@ pipeline {
         // Module name used in the pytest coverage analysis
         MODULE_NAME = "lsst.ts.wep"
         // PlantUML url
-        PLANTUML_URL = "http://sourceforge.net/projects/plantuml/files/plantuml.jar"
+        PLANTUML_URL = "https://github.com/plantuml/plantuml/releases/download/v1.2021.13/plantuml-1.2021.13.jar"
         // Authority to publish the document online
         user_ci = credentials('lsst-io')
         LTD_USERNAME = "${user_ci_USR}"
@@ -103,7 +103,7 @@ pipeline {
                 def RESULT = sh returnStatus: true, script: """
                   source ${env.LSST_STACK}/loadLSST.bash
 
-                  curl -O ${env.PLANTUML_URL}
+                  curl -L ${env.PLANTUML_URL} -o plantuml.jar
 
                   pip install sphinxcontrib-plantuml
 
@@ -114,7 +114,7 @@ pipeline {
 
                   pip install ltd-conveyor
 
-                  ltd upload --product ${env.DOCUMENT_NAME} --git-ref ${env.GIT_BRANCH} --dir doc/_build/html
+                  ltd upload --product ${env.DOCUMENT_NAME} --git-ref ${env.BRANCH_NAME} --dir doc/_build/html
                     """
 
                 if ( RESULT != 0 ) {

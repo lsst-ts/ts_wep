@@ -19,6 +19,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = [
+    "ZernikeAnnularEval",
+    "ZernikeAnnularGrad",
+    "ZernikeAnnularJacobian",
+    "ZernikeAnnularFit",
+    "ZernikeGrad",
+    "ZernikeJacobian",
+    "ZernikeEval",
+    "ZernikeFit",
+    "ZernikeMaskedFit",
+    "padArray",
+    "extractArray",
+]
+
 import numpy as np
 import warnings
 

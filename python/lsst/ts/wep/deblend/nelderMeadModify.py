@@ -27,6 +27,8 @@
     Modify this script to fit the interger step for need.
 """
 
+__all__ = ["feval", "nelderMeadModify"]
+
 import copy
 
 

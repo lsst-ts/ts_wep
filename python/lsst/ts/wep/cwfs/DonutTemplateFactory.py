@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["DonutTemplateFactory"]
+
 from lsst.ts.wep.Utility import DonutTemplateType
 from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
 from lsst.ts.wep.cwfs.DonutTemplatePhosim import DonutTemplatePhosim
