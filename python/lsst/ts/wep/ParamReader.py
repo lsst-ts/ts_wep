@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["ParamReader"]
+
 import os
 import numpy as np
 import yaml
@@ -26,14 +28,15 @@ import warnings
 
 
 class ParamReader(object):
-    def __init__(self, filePath=None):
-        """Initialization of parameter reader of yaml format class.
+    """Initialization of parameter reader of yaml format class.
 
-        Parameters
-        ----------
-        filePath : str, optional
-            File path. (the default is None.)
-        """
+    Parameters
+    ----------
+    filePath : str, optional
+        File path. (the default is None.)
+    """
+
+    def __init__(self, filePath=None):
 
         if filePath is None:
             self.filePath = ""

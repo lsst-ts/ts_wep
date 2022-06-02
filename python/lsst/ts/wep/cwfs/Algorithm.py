@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["Algorithm"]
+
 import os
 import sys
 import numpy as np
@@ -45,17 +47,18 @@ from lsst.ts.wep.PlotUtil import plotZernike
 
 
 class Algorithm(object):
+    """Initialize the Algorithm class.
+
+    Algorithm used to solve the transport of intensity equation to get
+    normal/ annular Zernike polynomials.
+
+    Parameters
+    ----------
+    algoDir : str
+        Algorithm configuration directory.
+    """
+
     def __init__(self, algoDir):
-        """Initialize the Algorithm class.
-
-        Algorithm used to solve the transport of intensity equation to get
-        normal/ annular Zernike polynomials.
-
-        Parameters
-        ----------
-        algoDir : str
-            Algorithm configuration directory.
-        """
 
         self.algoDir = algoDir
         self.algoParamFile = ParamReader()

@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["Instrument"]
+
 import os
 import numpy as np
 
@@ -27,14 +29,15 @@ from lsst.ts.wep.Utility import CamType
 
 
 class Instrument(object):
-    def __init__(self, instDir):
-        """Instrument class for wavefront estimation.
+    """Instrument class for wavefront estimation.
 
-        Parameters
-        ----------
-        instDir : str
-            Instrument configuration directory.
-        """
+    Parameters
+    ----------
+    instDir : str
+        Instrument configuration directory.
+    """
+
+    def __init__(self, instDir):
 
         self.instDir = instDir
         self.instName = ""

@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["DonutSourceSelectorTaskConfig", "DonutSourceSelectorTask"]
+
 import numpy as np
 import pandas as pd
 import astropy.units as u
@@ -92,7 +94,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         Parameters
         ----------
         sourceCat : `lsst.afw.table.SourceCatalog` or `pandas.DataFrame`
-                    or `astropy.table.Table`
+        or `astropy.table.Table`
             Catalog of sources to select from.
         detector : `lsst.afw.cameraGeom.Detector`
             Detector object from the camera.
@@ -101,16 +103,17 @@ class DonutSourceSelectorTask(pipeBase.Task):
         -------
         struct : `lsst.pipe.base.Struct`
             The struct contains the following data:
-            - sourceCat : `lsst.afw.table.SourceCatalog` or `pandas.DataFrame`
-                          or `astropy.table.Table`
-                The catalog of sources that were selected.
-                (may not be memory-contiguous)
-            - selected : `numpy.ndarray` of `bool`
-                Boolean array of sources that were selected, same length as
-                sourceCat.
+                - sourceCat : `lsst.afw.table.SourceCatalog`
+                or `pandas.DataFrame` or `astropy.table.Table`
+                    The catalog of sources that were selected.
+                    (may not be memory-contiguous)
+                - selected : `numpy.ndarray` of `bool`
+                    Boolean array of sources that were selected, same length as
+                    sourceCat.
+
         Raises
         ------
-        RuntimeError
+        `RuntimeError`
             Raised if ``sourceCat`` is not contiguous.
         """
         if hasattr(sourceCat, "isContiguous"):
@@ -135,7 +138,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         Parameters
         ----------
         sourceCat : `lsst.afw.table.SourceCatalog` or `pandas.DataFrame`
-                    or `astropy.table.Table`
+        or `astropy.table.Table`
             Catalog of sources to select from.
         detector : `lsst.afw.cameraGeom.Detector`
             Detector object from the camera.
@@ -144,13 +147,13 @@ class DonutSourceSelectorTask(pipeBase.Task):
         -------
         struct : `lsst.pipe.base.Struct`
             The struct contains the following data:
-            - selected : `numpy.ndarray` of `bool``
-                Boolean array of sources that were selected, same length as
-                sourceCat.
+                - selected : `numpy.ndarray` of `bool`
+                    Boolean array of sources that were selected, same length as
+                    sourceCat.
 
         Raises
         ------
-        ValueError
+        `ValueError`
             sourceLimit in config for task must be -1 or a positive integer.
         """
 

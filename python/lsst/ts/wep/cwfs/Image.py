@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["Image"]
+
 import os
 import numpy as np
 from astropy.io import fits
@@ -29,15 +31,16 @@ from lsst.ts.wep.cwfs.CentroidFindFactory import CentroidFindFactory
 
 
 class Image(object):
-    def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
-        """Image class for wavefront estimation.
+    """Image class for wavefront estimation.
 
-        Parameters
-        ----------
-        centroidFindType : enum 'CentroidFindType', optional
-            Algorithm to find the centroid of donut. (the default is
-            CentroidFindType.RandomWalk.)
-        """
+    Parameters
+    ----------
+    centroidFindType : enum 'CentroidFindType', optional
+        Algorithm to find the centroid of donut. (the default is
+        CentroidFindType.RandomWalk.)
+    """
+
+    def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
 
         self.image = np.array([])
         self.imageFilePath = ""

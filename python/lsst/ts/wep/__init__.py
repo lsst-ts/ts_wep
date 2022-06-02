@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-from .Utility import FilterType, CamType, BscDbType
+from .Utility import *
 
 # This class needs the scons to build the cython code. In the Jenkins test,
 # this will be a problem to import.
 try:
     from .WfEstimator import WfEstimator
+    from .ParamReader import ParamReader
+    from .DonutDetector import DonutDetector
 except ImportError:
     pass
 
