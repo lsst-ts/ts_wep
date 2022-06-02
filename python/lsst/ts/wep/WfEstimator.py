@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["WfEstimator"]
+
 from lsst.ts.wep.cwfs.Instrument import Instrument
 from lsst.ts.wep.cwfs.Algorithm import Algorithm
 from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
@@ -26,16 +28,17 @@ from lsst.ts.wep.Utility import DefocalType, CamType, CentroidFindType
 
 
 class WfEstimator(object):
-    def __init__(self, instDir, algoDir):
-        """Initialize the wavefront estimator class.
+    """Initialize the wavefront estimator class.
 
-        Parameters
-        ----------
-        instDir : str
-            Path to instrument directory.
-        algoDir : str
-            Path to algorithm directory.
-        """
+    Parameters
+    ----------
+    instDir : str
+        Path to instrument directory.
+    algoDir : str
+        Path to algorithm directory.
+    """
+
+    def __init__(self, instDir, algoDir):
 
         self.inst = Instrument(instDir)
         self.algo = Algorithm(algoDir)

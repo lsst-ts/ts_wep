@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["CentroidConvolveTemplate"]
+
 import numpy as np
 from copy import copy
 from lsst.ts.wep.cwfs.CentroidDefault import CentroidDefault
@@ -28,9 +30,10 @@ from sklearn.cluster import KMeans, DBSCAN
 
 
 class CentroidConvolveTemplate(CentroidDefault):
+    """CentroidDefault child class to get the centroid of donut by
+    convolution with a template donut image."""
+
     def __init__(self):
-        """CentroidDefault child class to get the centroid of donut by
-        convolution with a template donut image."""
 
         super(CentroidConvolveTemplate, self).__init__()
         self._centRandomWalk = CentroidRandomWalk()

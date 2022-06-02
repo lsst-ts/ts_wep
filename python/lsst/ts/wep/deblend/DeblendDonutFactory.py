@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["DeblendDonutFactory"]
+
 from lsst.ts.wep.Utility import DeblendDonutType
 from lsst.ts.wep.deblend.DeblendAdapt import DeblendAdapt
 

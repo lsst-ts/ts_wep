@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["GenerateDonutCatalogOnlineTaskConfig", "GenerateDonutCatalogOnlineTask"]
+
 import numpy as np
 import pandas as pd
 
@@ -60,25 +62,25 @@ class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
 
 
 class GenerateDonutCatalogOnlineTask(pipeBase.Task):
+    """
+    Construct a source catalog from reference catalogs
+    and pointing information.
+
+    Parameters
+    ----------
+    dataIds : `list`
+        List of the dataIds for the reference catalog shards.
+    refCats : `list`
+        List of the deferred dataset references pointing to the pieces
+        of the reference catalog we want in the butler.
+    **kwargs : dict[str, any]
+        Dictionary of input argument: new value for that input argument.
+    """
 
     ConfigClass = GenerateDonutCatalogOnlineTaskConfig
     _DefaultName = "generateDonutCatalogOnlineTask"
 
     def __init__(self, dataIds, refCats, **kwargs):
-        """
-        Construct a source catalog from reference catalogs
-        and pointing information.
-
-        Parameters
-        ----------
-        dataIds : `list`
-            List of the dataIds for the reference catalog shards.
-        refCats : `list`
-            List of the deferred dataset references pointing to the pieces
-            of the reference catalog we want in the butler.
-        **kwargs : dict[str, any]
-            Dictionary of input argument: new value for that input argument.
-        """
 
         super().__init__(**kwargs)
         refConfig = self.config.refObjLoader
@@ -119,8 +121,8 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         -------
         struct : `lsst.pipe.base.Struct`
             The struct contains the following data:
-            - DonutCatalog: `pandas.DataFrame`
-                The final donut source catalog for the region.
+                - DonutCatalog: `pandas.DataFrame`
+                    The final donut source catalog for the region.
         """
         bbox = detector.getBBox()
         # Get the refcatalog shard

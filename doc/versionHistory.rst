@@ -6,6 +6,30 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.4.3:
+
+-------------
+2.4.3
+-------------
+
+* Fix online documentation build errors.
+
+.. _lsst.ts.wep-2.4.2:
+
+-------------
+2.4.2
+-------------
+
+* Remove matplotlib backend switching in PlotUtil.py
+
+.. _lsst.ts.wep-2.4.1:
+
+-------------
+2.4.1
+-------------
+
+* Add information on Jupyter Notebooks in ts_analysis_notebooks to README.
+
 .. _lsst.ts.wep-2.4.0:
 
 -------------

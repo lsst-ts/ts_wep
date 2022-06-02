@@ -19,15 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["CentroidRandomWalk"]
+
 import numpy as np
 
 from lsst.ts.wep.cwfs.CentroidDefault import CentroidDefault
 
 
 class CentroidRandomWalk(CentroidDefault):
+    """CentroidDefault child class to get the centroid of donut by the
+    random walk model."""
+
     def __init__(self):
-        """CentroidDefault child class to get the centroid of donut by the
-        random walk model."""
 
         # Minimum effective signal
         self.minEffSignal = 1e-8

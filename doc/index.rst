@@ -22,11 +22,11 @@ Important classes:
 
 Important Pipeline Tasks:
 
-* `EstimateZernikesScienceSensorTask` calculates the Zernike polynomials for LSSTFam or ComCam sensors when provided input exposures and source catalog.
-* `EstimateZernikesCwfsTask` calculates the Zernike polynomials on corner wavefront sensors when provided input exposures and source catalog.
-* `CutOutDonutsScienceSensorTask` cuts out donuts stamps in image from LSSTFam or ComCam sensors when provided input exposures and source catalog.
-* `CutOutDonutsCwfsTask` cuts out donuts stamps in image from LSSTCam corner wavefront sensors when provided input exposures and source catalog.
-* `CalcZernikesTask` calculates the Zernikes polynomials from donut stamps already stored in a butler repository.
+* `task.EstimateZernikesScienceSensorTask` calculates the Zernike polynomials for LSSTFam or ComCam sensors when provided input exposures and source catalog.
+* `task.EstimateZernikesCwfsTask` calculates the Zernike polynomials on corner wavefront sensors when provided input exposures and source catalog.
+* `task.CutOutDonutsScienceSensorTask` cuts out donuts stamps in image from LSSTFam or ComCam sensors when provided input exposures and source catalog.
+* `task.CutOutDonutsCwfsTask` cuts out donuts stamps in image from LSSTCam corner wavefront sensors when provided input exposures and source catalog.
+* `task.CalcZernikesTask` calculates the Zernikes polynomials from donut stamps already stored in a butler repository.
 
 Important enums:
 
@@ -40,6 +40,15 @@ Python API reference
 ====================
 
 .. automodapi:: lsst.ts.wep
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.cwfs
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.deblend
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.task
     :no-inheritance-diagram:
 
 .. _lsst.ts.wep-content:

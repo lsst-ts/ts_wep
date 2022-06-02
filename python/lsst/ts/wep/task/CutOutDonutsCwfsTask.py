@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = ["CutOutDonutsCwfsTaskConfig", "CutOutDonutsCwfsTask"]
+
 import typing
 import numpy as np
 import pandas as pd
