@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.4.4:
+
+-------------
+2.4.4
+-------------
+
+* Added documentation link to the README.
+
 .. _lsst.ts.wep-2.4.3:
 
 -------------
