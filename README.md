@@ -1,6 +1,10 @@
+[![docs](https://img.shields.io/badge/docs-ts--wep.lsst.io-brightgreen)](https://ts-wep.lsst.io/)
+
 # Wavefront Estimation Pipeline (WEP)
 
 This module calculates the wavefront error in annular Zernike polynomials based on the intra- and extra-focal donut images in the large synoptic survey telescope (LSST).
+
+See the docs: https://ts-wep.lsst.io/
 
 ## Platform
 
