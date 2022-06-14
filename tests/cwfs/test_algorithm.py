@@ -200,7 +200,7 @@ class TestAlgorithm(unittest.TestCase):
 
         wavefrontMapResidual = self.algoExp.getWavefrontMapResidual()
         wavefrontMapResidual[np.isnan(wavefrontMapResidual)] = 0
-        self.assertLess(np.sum(np.abs(wavefrontMapResidual)), 2.5e-6)
+        self.assertLess(np.sum(np.abs(wavefrontMapResidual)), 2.6e-6)
 
     def testItr0(self):
 
@@ -310,7 +310,7 @@ class TestAlgorithm(unittest.TestCase):
         self.algoFft.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
 
         zk = self.algoFft.getZer4UpInNm()
-        self.assertEqual(int(zk[7]), -192)
+        self.assertEqual(int(zk[7]), -191)
 
 
 if __name__ == "__main__":
