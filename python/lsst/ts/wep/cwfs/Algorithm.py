@@ -556,8 +556,20 @@ class Algorithm(object):
 
         # To have the iteration time initiated from global variable is to
         # distinguish the manually and automatically iteration processes.
+        self.png_itr = 0
         itr = self.currentItr
         while itr <= self.getNumOfOuterItr():
+
+            # import matplotlib.pyplot as plt
+            # fig, axes = plt.subplots(ncols=2, figsize=(10, 5))
+            # axes[0].imshow(I1.getImg())
+            # axes[1].imshow(I2.getImg())
+            # axes[0].set_title("intra")
+            # axes[1].set_title("extra")
+            # fig.suptitle(f"itr {itr:02d}")
+            # fig.tight_layout()
+            # plt.savefig(f"/Users/josh/sandbox/ts_wep_demo/itr_{itr:02d}.png")
+
             stopItr = self._singleItr(I1, I2, model, tol)
 
             # Stop the iteration of outer loop if converged
@@ -904,7 +916,25 @@ class Algorithm(object):
             # Put the signal in boundary (since there's no existing Sestimate,
             # S just equals self.S as the initial condition of SCF
             S = Sini.copy()
+
+            import matplotlib.pyplot as plt
+            # smin, smax = np.quantile(S.ravel(), [0.01, 0.99])
+            smin, smax = -1e-5, 1e-5
+            wmin, wmax = -5e-6, 5e-6
+            fig, axes = plt.subplots(ncols=2, figsize=(10, 5))
+            ims0 = axes[0].imshow(np.zeros((256, 256)), vmin=smin, vmax=smax)
+            ims1 = axes[1].imshow(np.zeros((256, 256)), vmin=wmin, vmax=wmax, cmap='seismic')
+            axes[0].set_title("S")
+            axes[1].set_title("W")
+            suptitle = fig.suptitle("bleh", horizontalalignment='left', x=0.4)
+
             for jj in range(self.getNumOfInnerItr()):
+                itrstr = f"itr_{self.currentItr:02d},{jj:02d}"
+
+                ims0.set_array(S)
+                suptitle.set_text(f"{itrstr} step3 set S")
+                plt.savefig(f"/Users/josh/sandbox/ts_wep_demo/fft_{self.png_itr:03d}.png")
+                self.png_itr += 1
 
                 # Calculate FT{S}
                 SFFT = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(S)))
@@ -913,6 +943,11 @@ class Algorithm(object):
                 W = np.fft.fftshift(
                     np.fft.irfft2(np.fft.fftshift(SFFT / u2v2), s=S.shape)
                 )
+
+                ims1.set_array(W)
+                suptitle.set_text(f"{itrstr} step4 S->W")
+                plt.savefig(f"/Users/josh/sandbox/ts_wep_demo/fft_{self.png_itr:03d}.png")
+                self.png_itr += 1
 
                 # Estimate the wavefront (includes zeroing offset & masking to
                 # the aperture size)
@@ -924,6 +959,11 @@ class Algorithm(object):
                 offset = West[self.mask_pupil == 1].mean()
                 West = West - offset
                 West[self.mask_pupil == 0] = 0
+
+                ims1.set_array(West)
+                suptitle.set_text(f"{itrstr} step5 mask W")
+                plt.savefig(f"/Users/josh/sandbox/ts_wep_demo/fft_{self.png_itr:03d}.png")
+                self.png_itr += 1
 
                 # Set dWestimate/dn = 0 around boundary
                 WestdWdn0 = West.copy()
@@ -940,12 +980,22 @@ class Algorithm(object):
                 tmp /= convolve2d(ApringIn, kernel, mode="same")
                 WestdWdn0[borderx, bordery] = tmp[borderx, bordery]
 
+                ims1.set_array(WestdWdn0)
+                suptitle.set_text(f"{itrstr} step6 W boundary")
+                plt.savefig(f"/Users/josh/sandbox/ts_wep_demo/fft_{self.png_itr:03d}.png")
+                self.png_itr += 1
+
                 # Take Laplacian to find sensor signal estimate (Delta W = S)
                 del2W = laplace(WestdWdn0) / dOmega
 
                 # Extend the dimension of signal to the order of 2 for "fft" to
                 # use
                 Sest = padArray(del2W, padDim)
+
+                ims0.set_array(Sest)
+                suptitle.set_text(f"{itrstr} step7 W->S")
+                plt.savefig(f"/Users/josh/sandbox/ts_wep_demo/fft_{self.png_itr:03d}.png")
+                self.png_itr += 1
 
                 # Put signal back inside boundary, leaving the rest of
                 # Sestimate
