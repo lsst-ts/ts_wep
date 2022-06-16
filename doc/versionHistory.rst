@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.0:
+
+-------------
+2.5.0
+-------------
+
+* Update cMask, pMask to mask_pupil, mask_comp.
+
 .. _lsst.ts.wep-2.4.4:
 
 -------------

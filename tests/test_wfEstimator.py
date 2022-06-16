@@ -27,7 +27,7 @@ from lsst.ts.wep.WfEstimator import WfEstimator
 from lsst.ts.wep.Utility import getModulePath, getConfigDir, DefocalType, CamType
 
 
-class TestWfEsitmator(unittest.TestCase):
+class TestWfEstimator(unittest.TestCase):
     """Test the wavefront estimator class."""
 
     def setUp(self):
@@ -141,7 +141,7 @@ class TestWfEsitmator(unittest.TestCase):
         ]
         zer4UpNm = self.wfsEst.calWfsErr()
         self.assertAlmostEqual(
-            np.sum(np.abs(zer4UpNm - np.array(wfsError))), 6.95092306, places=7
+            np.sum(np.abs(zer4UpNm - np.array(wfsError))), 28.38981929, places=7
         )
 
         # Test to reset the data

@@ -74,10 +74,10 @@ class CompensableImage(object):
         self.caustic = False
 
         # Padded mask for use at the offset planes
-        self.pMask = np.array([], dtype=int)
+        self.mask_comp = np.array([], dtype=int)
 
         # Non-padded mask corresponding to aperture
-        self.cMask = np.array([], dtype=int)
+        self.mask_pupil = np.array([], dtype=int)
 
     def getDefocalType(self):
         """Get the defocal type.
@@ -169,7 +169,7 @@ class CompensableImage(object):
             Padded mask.
         """
 
-        return self.pMask
+        return self.mask_comp
 
     def getNonPaddedMask(self):
         """Get the non-padded mask corresponding to aperture.
@@ -180,7 +180,7 @@ class CompensableImage(object):
             Non-padded mask
         """
 
-        return self.cMask
+        return self.mask_pupil
 
     def getFieldXY(self):
         """Get the field x, y in degree.
@@ -246,8 +246,8 @@ class CompensableImage(object):
         self.caustic = False
 
         # Reset all mask related parameters
-        self.pMask = np.array([], dtype=int)
-        self.cMask = np.array([], dtype=int)
+        self.mask_pupil = np.array([], dtype=int)
+        self.mask_comp = np.array([], dtype=int)
 
     def updateImage(self, image):
         """Update the image of donut.
@@ -1415,8 +1415,10 @@ class CompensableImage(object):
         correction.
 
         There will be two mask parameters to be calculated:
-        pMask: padded mask for use at the offset planes
-        cMask: non-padded mask corresponding to aperture
+        mask_comp: computation mask, i.e. padded mask,
+            for use at the offset planes
+        mask_pupil: pupil mask, i.e. non-padded mask,
+            corresponding to aperture
 
         Parameters
         ----------
@@ -1434,8 +1436,8 @@ class CompensableImage(object):
         """
 
         dimOfDonut = inst.getDimOfDonutOnSensor()
-        self.pMask = np.ones(dimOfDonut, dtype=int)
-        self.cMask = self.pMask.copy()
+        self.mask_pupil = np.ones(dimOfDonut, dtype=int)
+        self.mask_comp = self.mask_pupil.copy()
 
         apertureDiameter = inst.getApertureDiameter()
         focalLength = inst.getFocalLength()
@@ -1475,19 +1477,20 @@ class CompensableImage(object):
 
             # Initialize both mask elements to the opposite of the pass/ block
             # boolean
-            pMaskii = (1 - int(masklist[ii, 3])) * np.ones(
+            mask_pupil_ii = (1 - int(masklist[ii, 3])) * np.ones(
                 [dimOfDonut, dimOfDonut], dtype=int
             )
-            cMaskii = pMaskii.copy()
+            mask_comp_ii = mask_pupil_ii.copy()
 
-            pMaskii[idx] = int(masklist[ii, 3])
-            cMaskii[aidx] = int(masklist[ii, 3])
+            mask_pupil_ii[idx] = int(masklist[ii, 3])
+            mask_comp_ii[aidx] = int(masklist[ii, 3])
 
             # Multiplicatively add the current mask elements to the model
             # masks.
             # This is try to find the common mask region.
 
-            # padded mask for use at the offset planes
-            self.pMask = self.pMask * pMaskii
             # non-padded mask corresponding to aperture
-            self.cMask = self.cMask * cMaskii
+            self.mask_pupil = self.mask_pupil * mask_pupil_ii
+
+            # padded mask for use at the offset planes
+            self.mask_comp = self.mask_comp * mask_comp_ii
