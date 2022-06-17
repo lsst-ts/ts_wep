@@ -141,7 +141,7 @@ class TestWfEstimator(unittest.TestCase):
         ]
         zer4UpNm = self.wfsEst.calWfsErr()
         self.assertAlmostEqual(
-            np.sum(np.abs(zer4UpNm - np.array(wfsError))), 28.38981929, places=7
+            np.sum(np.abs(zer4UpNm - np.array(wfsError))), 6.95092306, places=7
         )
 
         # Test to reset the data
