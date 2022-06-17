@@ -12,7 +12,8 @@ Version History
 2.5.0
 -------------
 
-* Update cMask, pMask to mask_pupil, mask_comp.
+* Update names of cMask to mask_comp (padded), pMask to mask_pupil (non-padded)
+* Correct output of getPaddedMask to mask_comp, getNonPaddedMask to mask_pupil
 
 .. _lsst.ts.wep-2.4.4:
 
