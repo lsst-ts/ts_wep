@@ -43,8 +43,8 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
         )
 
         # Set the tolerance
-        self.tolMax = 8.5
-        self.tolRms = 3
+        self.tolMax = 4
+        self.tolRms = 1
 
         # Record the start time
         self.startTime = time.perf_counter()

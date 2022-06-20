@@ -493,7 +493,7 @@ class Algorithm(object):
         self._checkNotItr0()
 
         wfMapWithMask = wfMap.copy()
-        wfMapWithMask[self.mask_comp == 0] = np.nan
+        wfMapWithMask[self.mask_pupil == 0] = np.nan
 
         return wfMapWithMask
 
@@ -757,7 +757,7 @@ class Algorithm(object):
 
             # Correct the defocal images if I1 and I2 are belong to different
             # sources, which is determined by the (fieldX, field Y)
-            I1, I2 = self._applyI1I2mask_comp(I1, I2)
+            I1, I2 = self._applyI1I2mask_pupil(I1, I2)
 
             # Solve the Poisson's equation
             self.zc, self.West = self._solvePoissonEq(I1, I2, jj)
@@ -893,10 +893,10 @@ class Algorithm(object):
             struct = iterate_structure(struct, boundaryT)
 
             ApringOut = np.logical_xor(
-                binary_dilation(self.mask_comp, structure=struct), self.mask_comp
+                binary_dilation(self.mask_pupil, structure=struct), self.mask_pupil
             ).astype(int)
             ApringIn = np.logical_xor(
-                binary_erosion(self.mask_comp, structure=struct), self.mask_comp
+                binary_erosion(self.mask_pupil, structure=struct), self.mask_pupil
             ).astype(int)
 
             bordery, borderx = np.nonzero(ApringOut)
@@ -921,9 +921,9 @@ class Algorithm(object):
                 West = extractArray(W, dimOfDonut)
 
                 # Calculate the offset
-                offset = West[self.mask_comp == 1].mean()
+                offset = West[self.mask_pupil == 1].mean()
                 West = West - offset
-                West[self.mask_comp == 0] = 0
+                West[self.mask_pupil == 0] = 0
 
                 # Set dWestimate/dn = 0 around boundary
                 WestdWdn0 = West.copy()
@@ -949,7 +949,7 @@ class Algorithm(object):
 
                 # Put signal back inside boundary, leaving the rest of
                 # Sestimate
-                Sest[self.mask_comp_pad == 1] = Sini[self.mask_comp_pad == 1]
+                Sest[self.mask_pupil_pad == 1] = Sini[self.mask_pupil_pad == 1]
 
                 # Need to recheck this condition
                 S = Sest
@@ -958,7 +958,7 @@ class Algorithm(object):
             if self.getCompensatorMode() == "zer":
                 xSensor, ySensor = self._inst.getSensorCoor()
                 zc = ZernikeMaskedFit(
-                    West, xSensor, ySensor, numTerms, self.mask_comp, zobsR
+                    West, xSensor, ySensor, numTerms, self.mask_pupil, zobsR
                 )
             else:
                 zc = np.zeros(numTerms)
@@ -973,8 +973,8 @@ class Algorithm(object):
 
             # Get the x, y coordinate in mask. The element outside mask is 0.
             xSensor, ySensor = self._inst.getSensorCoor()
-            xSensor = xSensor * self.mask_pupil
-            ySensor = ySensor * self.mask_pupil
+            xSensor = xSensor * self.mask_comp
+            ySensor = ySensor * self.mask_comp
 
             # Create the F matrix and Zernike-related matrixes
 
@@ -1052,7 +1052,7 @@ class Algorithm(object):
         # ( I0=(I1+I2)/2 )
 
         # Calculate the threshold
-        pixelList = den * self.mask_pupil
+        pixelList = den * self.mask_comp
         pixelList = pixelList[pixelList != 0]
 
         low = pixelList.min()
@@ -1077,7 +1077,7 @@ class Algorithm(object):
 
         # Extend the dimension of signal to the order of 2 for "fft" to use
         padDim = self.getFftDimension()
-        Sout = padArray(S, padDim) * self.mask_pupil_pad
+        Sout = padArray(S, padDim) * self.mask_comp_pad
 
         return Sout
 
@@ -1187,7 +1187,7 @@ class Algorithm(object):
             self.mask_comp_pad = padArray(self.mask_comp, padDim)
             self.mask_pupil_pad = padArray(self.mask_pupil, padDim)
 
-    def _applyI1I2mask_comp(self, I1, I2):
+    def _applyI1I2mask_pupil(self, I1, I2):
         """Correct the defocal images if I1 and I2 are belong to different
         sources.
 
@@ -1215,11 +1215,11 @@ class Algorithm(object):
         if I1.getFieldXY() != I2.getFieldXY():
 
             # Get the overlap region of image
-            I1.updateImage(I1.getImg() * self.mask_comp)
+            I1.updateImage(I1.getImg() * self.mask_pupil)
 
-            # Rotate mask_comp by 180 degree through rotating two times of 90
+            # Rotate mask_pupil by 180 degree through rotating two times of 90
             # degree because I2 has been rotated by 180 degree already.
-            I2.updateImage(I2.getImg() * np.rot90(self.mask_comp, 2))
+            I2.updateImage(I2.getImg() * np.rot90(self.mask_pupil, 2))
 
             # Do the normalization of image.
             I1.updateImage(I1.getImg() / np.sum(I1.getImg()))
