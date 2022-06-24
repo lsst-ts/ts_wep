@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.1:
+
+-------------
+2.5.1
+-------------
+
+* Fix docstrings in Algorithm.py to indicate that I1 must be intrafocal and I2 must be extrafocal.
+
 .. _lsst.ts.wep-2.5.0:
 
 -------------

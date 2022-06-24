@@ -518,9 +518,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         model : str
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         """
@@ -544,9 +544,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         model : str
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
@@ -572,9 +572,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         model : str
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         nItr : int, optional
@@ -654,9 +654,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         model : str
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
@@ -817,9 +817,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         iOutItr : int, optional
             ith number of outer loop iteration which is important in "fft"
             algorithm. (the default is 0.)
@@ -1028,9 +1028,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         cliplevel : float
             Parameter to determine the threshold of calculating I0.
 
@@ -1092,9 +1092,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
 
         Returns
         -------
@@ -1121,9 +1121,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
 
         Returns
         -------
@@ -1166,9 +1166,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         poissonSolver : str, optional
             Algorithm to solve the Poisson's equation. If the "fft" is used,
             the mask dimension will be extended to the order of 2 for the "fft"
@@ -1199,9 +1199,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
 
         Returns
         -------
@@ -1236,9 +1236,9 @@ class Algorithm(object):
         Parameters
         ----------
         I1 : CompensableImage
-            Intra- or extra-focal image.
+            Intra-focal image.
         I2 : CompensableImage
-            Intra- or extra-focal image.
+            Extra-focal image.
         """
 
         # Reset the current iteration time to 0
