@@ -481,8 +481,10 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
 
-            fieldXYExtra = donutExtra.calcFieldXY()
-            fieldXYIntra = donutIntra.calcFieldXY()
+            # Transpose field XY because CompensableImages below are transposed
+            # so this gets the correct mask orientation in Algorithm.py
+            fieldXYExtra = donutExtra.calcFieldXY()[::-1]
+            fieldXYIntra = donutIntra.calcFieldXY()[::-1]
 
             camera = donutExtra.getCamera()
             detectorExtra = camera.get(donutExtra.detector_name)
