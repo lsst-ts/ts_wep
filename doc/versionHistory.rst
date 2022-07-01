@@ -6,6 +6,31 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.1:
+
+-------------
+2.5.1
+-------------
+
+* Correct orientation of masks in pipeline tasks.
+
+.. _lsst.ts.wep-2.5.0:
+
+-------------
+2.5.0
+-------------
+
+* Update names of cMask to mask_comp (padded), pMask to mask_pupil (non-padded)
+* Correct output of getPaddedMask to mask_comp, getNonPaddedMask to mask_pupil
+
+.. _lsst.ts.wep-2.4.4:
+
+-------------
+2.4.4
+-------------
+
+* Added documentation link to the README.
+
 .. _lsst.ts.wep-2.4.3:
 
 -------------

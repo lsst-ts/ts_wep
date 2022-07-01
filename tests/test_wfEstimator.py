@@ -27,7 +27,7 @@ from lsst.ts.wep.WfEstimator import WfEstimator
 from lsst.ts.wep.Utility import getModulePath, getConfigDir, DefocalType, CamType
 
 
-class TestWfEsitmator(unittest.TestCase):
+class TestWfEstimator(unittest.TestCase):
     """Test the wavefront estimator class."""
 
     def setUp(self):

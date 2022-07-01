@@ -141,15 +141,15 @@ class TestCompensableImage(unittest.TestCase):
 
     def testGetPaddedMask(self):
 
-        pMask = self.wfsImg.getPaddedMask()
-        self.assertEqual(len(pMask), 0)
-        self.assertEqual(pMask.dtype, int)
+        mask_comp = self.wfsImg.getPaddedMask()
+        self.assertEqual(len(mask_comp), 0)
+        self.assertEqual(mask_comp.dtype, int)
 
     def testGetNonPaddedMask(self):
 
-        cMask = self.wfsImg.getNonPaddedMask()
-        self.assertEqual(len(cMask), 0)
-        self.assertEqual(cMask.dtype, int)
+        mask_pupil = self.wfsImg.getNonPaddedMask()
+        self.assertEqual(len(mask_pupil), 0)
+        self.assertEqual(mask_pupil.dtype, int)
 
     def testGetFieldXY(self):
 
@@ -316,11 +316,11 @@ class TestCompensableImage(unittest.TestCase):
         self.wfsImg.makeMask(self.inst, model, boundaryT, maskScalingFactorLocal)
 
         image = self.wfsImg.getImg()
-        pMask = self.wfsImg.getPaddedMask()
-        cMask = self.wfsImg.getNonPaddedMask()
-        self.assertEqual(pMask.shape, image.shape)
-        self.assertEqual(cMask.shape, image.shape)
-        self.assertEqual(np.sum(np.abs(cMask - pMask)), 3001)
+        mask_comp = self.wfsImg.getPaddedMask()
+        mask_pupil = self.wfsImg.getNonPaddedMask()
+        self.assertEqual(mask_comp.shape, image.shape)
+        self.assertEqual(mask_pupil.shape, image.shape)
+        self.assertEqual(np.sum(np.abs(mask_pupil - mask_comp)), 3001)
 
 
 if __name__ == "__main__":
