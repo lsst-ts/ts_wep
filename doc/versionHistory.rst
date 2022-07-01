@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.1:
+
+-------------
+2.5.1
+-------------
+
+* Correct orientation of masks in pipeline tasks.
+
 .. _lsst.ts.wep-2.5.0:
 
 -------------
