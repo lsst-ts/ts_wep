@@ -84,7 +84,7 @@ class DonutTemplateModel(DonutTemplateDefault):
         instDir = os.path.join(configDir, "cwfs", "instData")
         inst = Instrument(instDir)
 
-        if camType in (CamType.LsstCam, CamType.LsstFamCam):
+        if camType in (CamType.LsstCam, CamType.LsstFamCam, CamType.ComCam):
             inst.config(camType, imageSize)
             focalPlaneLayout = readPhoSimSettingData(
                 configDir, "focalplanelayout.txt", "fieldCenter"
