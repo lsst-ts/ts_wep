@@ -54,6 +54,36 @@ class TestTemplateModel(unittest.TestCase):
             templateArray[-1 : -1 * (int(imageSize / 2) + 1) : -1],
         )
 
+    def testMakeTemplateCheckCamTypes(self):
+
+        # Generate a test template on the center chip
+        imageSize = 160
+        for camType in [CamType.LsstCam, CamType.LsstFamCam, CamType.ComCam]:
+            print(camType)
+            templateArray = self.templateMaker.makeTemplate(
+                "R22_S11", DefocalType.Extra, imageSize, camType=camType
+            )
+            self.assertTrue(isinstance(templateArray, np.ndarray))
+
+        for camType in [CamType.AuxTel]:
+            templateArray = self.templateMaker.makeTemplate(
+                "R22_S11",
+                DefocalType.Extra,
+                imageSize,
+                camType=camType,
+                opticalModel="onAxis",
+            )
+            self.assertTrue(isinstance(templateArray, np.ndarray))
+
+        with self.assertRaises(ValueError) as context:
+            errCamType = 99999
+            self.templateMaker.makeTemplate(
+                "R22_S11", DefocalType.Extra, imageSize, camType=errCamType
+            )
+        self.assertEqual(
+            f"Camera type ({errCamType}) is not supported.", str(context.exception)
+        )
+
     def testTemplateSize(self):
 
         # Generate a test template on the center chip
@@ -69,6 +99,48 @@ class TestTemplateModel(unittest.TestCase):
         self.assertEqual(np.shape(templateArray), (imageSize, imageSize))
         self.assertEqual(np.shape(smallTemplate), (imageSize - 20, imageSize - 20))
         np.testing.assert_array_equal(templateArray[10:-10, 10:-10], smallTemplate)
+
+    def testMakeTemplateAuxTelOnlyWorksOnAxis(self):
+
+        # Generate a test template for auxTel
+        imageSize = 200
+        pixelScale = 0.0956949999339899
+
+        opticalModel = "offAxis"
+        with self.assertRaises(ValueError) as context:
+            self.templateMaker.makeTemplate(
+                "RXX_S00",
+                DefocalType.Extra,
+                imageSize,
+                CamType.AuxTel,
+                opticalModel,
+                pixelScale,
+            )
+        self.assertEqual(
+            str(
+                f"Optical Model {opticalModel} not supported with AuxTel. "
+                + "Must use 'onAxis'."
+            ),
+            str(context.exception),
+        )
+
+        opticalModel = "paraxial"
+        with self.assertRaises(ValueError) as context:
+            self.templateMaker.makeTemplate(
+                "RXX_S00",
+                DefocalType.Extra,
+                imageSize,
+                CamType.AuxTel,
+                opticalModel,
+                pixelScale,
+            )
+        self.assertEqual(
+            str(
+                f"Optical Model {opticalModel} not supported with AuxTel. "
+                + "Must use 'onAxis'."
+            ),
+            str(context.exception),
+        )
 
     def testMakeTemplateAuxTel(self):
 

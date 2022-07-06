@@ -97,6 +97,14 @@ class DonutTemplateModel(DonutTemplateDefault):
             )
 
         elif camType == CamType.AuxTel:
+            # AuxTel only works with onAxis sources
+            if opticalModel != "onAxis":
+                raise ValueError(
+                    str(
+                        f"Optical Model {opticalModel} not supported with AuxTel. "
+                        + "Must use 'onAxis'."
+                    )
+                )
             # Defocal distance for Latiss in mm
             # for LsstCam can use the default
             # hence only need to set here

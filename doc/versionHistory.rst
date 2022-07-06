@@ -13,6 +13,7 @@ Version History
 -------------
 
 * Add ComCam to donutTemplateModel.
+* Add error message to donutTemplateModel for AuxTel if not run with 'onAxis' optical model.
 
 .. _lsst.ts.wep-2.5.1:
 
