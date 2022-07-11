@@ -61,7 +61,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testBasePipeline.yaml")
