@@ -65,7 +65,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         # Point to the collections for the reference catalogs,
         # the raw images and the camera model in the calib directory
         # that comes from `butler write-curated-calibrations`.
-        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(

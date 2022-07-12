@@ -55,10 +55,10 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
         refCatList = []
         datasetGenerator = self.registry.queryDatasets(
-            datasetType="cal_ref_cat", collections=["refcats"]
+            datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            refCatList.append(self.butler.getDeferred(ref, collections=["refcats"]))
+            refCatList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
 
         return refCatList
 
@@ -186,7 +186,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         # Run pipeline command
         runName = "run1"
         instrument = "lsst.obs.lsst.LsstCam"
-        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         exposureId = 4021123106001  # Exposure ID for test extra-focal image
         testPipelineConfigDir = os.path.join(self.testDataDir, "pipelineConfigs")
         pipelineYaml = os.path.join(
@@ -280,10 +280,10 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         # Create list of deferred loaders for the ref cat
         deferredList = []
         datasetGenerator = self.registry.queryDatasets(
-            datasetType="cal_ref_cat", collections=["refcats"]
+            datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            deferredList.append(self.butler.getDeferred(ref, collections=["refcats"]))
+            deferredList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
         expGenerator = self.registry.queryDatasets(
             datasetType="raw",
             collections=["LSSTCam/raw/all"],

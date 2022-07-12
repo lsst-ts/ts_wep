@@ -69,7 +69,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
         # Point to the collections for the reference catalogs,
         # the raw images and the camera model in the calib directory
         # that comes from `butler write-curated-calibrations`.
-        cls.collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        cls.collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         cls.instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         cls.pipelineYaml = os.path.join(testPipelineConfigDir, "testCwfsPipeline.yaml")

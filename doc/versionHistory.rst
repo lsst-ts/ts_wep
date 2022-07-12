@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.3:
+
+-------------
+2.5.3
+-------------
+
+* Update tests and gen3TestRepo to work with latest version of the stack (w_2022_28).
+
 .. _lsst.ts.wep-2.5.2:
 
 -------------
