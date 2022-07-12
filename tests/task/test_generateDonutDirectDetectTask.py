@@ -80,7 +80,7 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         # Run pipeline command
         runName = "run1"
         instrument = "lsst.obs.lsst.LsstCam"
-        collections = "refcats,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         exposureId = 4021123106001  # Exposure ID for test extra-focal image
         testPipelineConfigDir = os.path.join(self.testDataDir, "pipelineConfigs")
         pipelineYaml = os.path.join(
