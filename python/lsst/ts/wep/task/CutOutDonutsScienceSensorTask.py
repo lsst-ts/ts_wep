@@ -89,7 +89,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         """
 
         exposures = butlerQC.get(inputRefs.exposures)
-        focusZVals = [exp.getMetadata()["FOCUSZ"] for exp in exposures]
+        focusZVals = [exp.getInfo().getVisitInfo().focusZ for exp in exposures]
         extraIdx, intraIdx = self.assignExtraIntraIdx(focusZVals[0], focusZVals[1])
 
         donutCats = butlerQC.get(inputRefs.donutCatalog)
@@ -153,9 +153,11 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
-        # Get exposure metadata to find which is extra and intra
-        focusZ0 = exposures[0].getMetadata()["FOCUSZ"]
-        focusZ1 = exposures[1].getMetadata()["FOCUSZ"]
+        # Get exposure visitInfo to find which is extra and intra
+        visitInfo_0 = exposures[0].getInfo().getVisitInfo()
+        visitInfo_1 = exposures[1].getInfo().getVisitInfo()
+        focusZ0 = visitInfo_0.focusZ
+        focusZ1 = visitInfo_1.focusZ
 
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
 
