@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.4:
+
+-------------
+2.5.4
+-------------
+
+* Update science sensor and LATISS tasks to get focusZ from exposure visitInfo instead of metadata after update in DM-35186.
+
 .. _lsst.ts.wep-2.5.3:
 
 -------------

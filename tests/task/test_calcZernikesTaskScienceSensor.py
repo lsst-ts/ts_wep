@@ -72,7 +72,9 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
         )
-        pipeCmd += ' -d "detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
+        # Make sure we are using the right exposure+detector combinations
+        pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
+        pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
         runProgram(pipeCmd)
 
     @classmethod
