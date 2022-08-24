@@ -100,8 +100,8 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
-            "exposure": 4021123106001,
-            "visit": 4021123106001,
+            "exposure": 4021123106002,
+            "visit": 4021123106002,
         }
 
     def _generateTestExposures(self):

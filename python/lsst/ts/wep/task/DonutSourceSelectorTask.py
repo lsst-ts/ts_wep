@@ -47,9 +47,11 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     fluxField = pexConfig.Field(
         dtype=str, default="flux", doc="Name of the source flux field to use."
     )
+    # For information on where this default maxFieldDist comes from see details
+    # in ts_analysis_notebooks/aos/vignetting.
     maxFieldDist = pexConfig.Field(
         dtype=float,
-        default=1.85,
+        default=1.813,
         doc="Maximum distance from center of focal plane (in degrees).",
     )
     donutRadius = pexConfig.Field(
