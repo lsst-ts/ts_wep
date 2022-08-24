@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.5:
+
+-------------
+2.5.5
+-------------
+
+* Change default maxFieldDistance in DonutSourceSelectorTask.py to 1.813 degrees based upon results from DM-33180.
+* Fix test in test_calcZernikesTaskScienceSensor to use correct intraFocal dataId.
+
 .. _lsst.ts.wep-2.5.4:
 
 -------------
