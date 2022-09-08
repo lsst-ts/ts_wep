@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.6:
+
+-------------
+2.5.6
+-------------
+
+* Fix task input order in test_estimateZernikes... tests.
+
 .. _lsst.ts.wep-2.5.5:
 
 -------------
