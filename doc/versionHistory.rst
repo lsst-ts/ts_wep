@@ -5,6 +5,17 @@
 ##################
 Version History
 ##################
+  
+.. _lsst.ts.wep-3.1.0:
+
+-------------
+3.1.0
+-------------
+
+* Added a history to the Algorithm class that stores intermediate products of the algorithm (see `Algorithm.getHistory()`).
+* Fixed the algorithm so that it is once again symmetric with respect to I1 and I2.
+  This involved simplifying the way that mask and image orientation are handled for the extrafocal image (see below).
+* Added the option to create masks in the orientation of the original images by setting `compensated=False` in `CompensableImage.makeMask()`.
 
 .. _lsst.ts.wep-3.0.1:
 
@@ -13,7 +24,7 @@ Version History
 -------------
 
 * Fix ``test_generateDonutCatalogWcsTask.py`` to work with more recent versions of the DM stack.
-
+  
 .. _lsst.ts.wep-3.0.0:
 
 -------------
