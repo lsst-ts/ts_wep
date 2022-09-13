@@ -376,7 +376,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra],
+            [exposureExtra, exposureIntra],
             [donutCatalogExtra, donutCatalogIntra],
             camera,
         )
