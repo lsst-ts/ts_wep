@@ -51,6 +51,8 @@ class DonutStamp(AbstractStamp):
     defocal_type : `str`
         Defocal state of the stamp. "extra" or "intra" are
         allowed values.
+    defocal_distance : `float`
+        Defocal offset of the instrument in mm.
     detector_name : `str`
         CCD where the donut is found
     cam_name : `str`
@@ -74,6 +76,7 @@ class DonutStamp(AbstractStamp):
     sky_position: lsst.geom.SpherePoint
     centroid_position: lsst.geom.Point2D
     defocal_type: str
+    defocal_distance: float
     detector_name: str
     cam_name: str
     archive_element: Optional[afwTable.io.Persistable] = None
@@ -133,6 +136,8 @@ class DonutStamp(AbstractStamp):
             # "DFC_TYPE" stands for defocal type in string form.
             # Need to convert to DefocalType
             defocal_type=metadata.getArray("DFC_TYPE")[index],
+            # "DFC_DIST" stands for defocal distance
+            defocal_distance=metadata.getArray("DFC_DIST")[index],
         )
 
     def getCamera(self):
@@ -230,4 +235,6 @@ class DonutStamp(AbstractStamp):
         self.mask_comp.clearMaskPlaneDict()
         self.mask_comp.conformMaskPlanes(maskDict)
         # Will inherit conformed MaskPlaneDict
-        self.mask_pupil = afwImage.Mask(np.array(self.comp_im.mask_pupil, dtype=np.int32))
+        self.mask_pupil = afwImage.Mask(
+            np.array(self.comp_im.mask_pupil, dtype=np.int32)
+        )
