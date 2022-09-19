@@ -61,6 +61,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         dfcTypes = [DefocalType.Extra.value] * nStamps
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
+        dfcDists = np.ones(nStamps) * 1.5e-3
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -70,6 +71,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         metadata["DET_NAME"] = detectorNames
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
+        metadata["DFC_DIST"] = dfcDists
 
         donutStampList = [
             DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)
@@ -146,6 +148,12 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
             defocalTypes[halfStampIdx:],
             [DefocalType.Extra.value] * int((self.nStamps - halfStampIdx)),
         )
+
+    def testGetDefocalDistances(self):
+
+        defocalDistances = self.donutStamps.getDefocalDistances()
+        for idx in range(self.nStamps):
+            self.assertEqual(defocalDistances[idx], 1.5e-3)
 
     def testAppend(self):
         """Test ability to append to a Stamps object"""

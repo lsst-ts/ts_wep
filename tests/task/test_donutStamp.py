@@ -64,6 +64,7 @@ class TestDonutStamp(unittest.TestCase):
         dfcTypes = [DefocalType.Extra.value] * nStamps
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
+        dfcDists = np.ones(nStamps) * 1.5e-3
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -73,6 +74,7 @@ class TestDonutStamp(unittest.TestCase):
         metadata["DET_NAME"] = detectorNames
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
+        metadata["DFC_DIST"] = dfcDists
 
         return stampList, metadata
 
@@ -146,6 +148,7 @@ class TestDonutStamp(unittest.TestCase):
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
             DefocalType.Extra.value,
+            1.5e-3,
             "R22_S11",
             "LSSTCam",
         )
@@ -169,6 +172,7 @@ class TestDonutStamp(unittest.TestCase):
                     lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
                     refPt,
                     DefocalType.Extra.value,
+                    0.0,
                     detName,
                     "LSSTCam",
                 )
@@ -182,6 +186,7 @@ class TestDonutStamp(unittest.TestCase):
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
             DefocalType.Extra.value,
+            1.5e-3,
             "R22_S11",
             "LSSTCam",
         )

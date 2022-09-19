@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.7:
+
+-------------
+2.5.7
+-------------
+
+* Add defocal distance into DonutStamp.
+
 .. _lsst.ts.wep-2.5.6:
 
 -------------
