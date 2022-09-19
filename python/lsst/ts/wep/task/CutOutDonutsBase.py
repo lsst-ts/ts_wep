@@ -332,6 +332,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             self.opticalModel,
             pixelScale,
         )
+        defocalDist = exposure.visitInfo.focusZ
 
         # Final list of DonutStamp objects
         finalStamps = []
@@ -384,6 +385,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                     detector_name=detectorName,
                     cam_name=cameraName,
                     defocal_type=defocalType.value,
+                    # Save defocal offset in mm.
+                    defocal_distance=defocalDist,
                 )
             )
 
@@ -394,6 +397,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
         stampsMetadata["DFC_TYPE"] = np.array([defocalType.value] * catalogLength)
+        stampsMetadata["DFC_DIST"] = np.array([defocalDist] * catalogLength)
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)
