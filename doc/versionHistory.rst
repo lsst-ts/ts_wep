@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.5.8:
+
+-------------
+2.5.8
+-------------
+
+* Change focusZ in headers of repackaged phosim data to be in mm instead of microns after phosim_utils update.
+
 .. _lsst.ts.wep-2.5.7:
 
 -------------
