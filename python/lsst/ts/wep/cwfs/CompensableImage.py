@@ -295,14 +295,14 @@ class CompensableImage(object):
 
         # Calculate the center position on image
         # 0.5 is the half of 1 pixel
-        dimOfDonut = inst.getDimOfDonutOnSensor()
+        dimOfDonut = inst.dimOfDonutImg
         stampCenterx1 = dimOfDonut / 2 + 0.5
         stampCentery1 = dimOfDonut / 2 + 0.5
 
         # Shift in the radial direction
         # The field of view (FOV) of LSST camera is 3.5 degree
-        offset = inst.getDefocalDisOffset()
-        pixelSize = inst.getCamPixelSize()
+        offset = inst.defocalDisOffset
+        pixelSize = inst.pixelSize
         radialShift = fov * (offset / 1e-3) * (10e-6 / pixelSize)
 
         # Calculate the projection of distance of donut to center
@@ -519,17 +519,17 @@ class CompensableImage(object):
         """
 
         # Get the radius: R = D/2
-        R = inst.getApertureDiameter() / 2
+        R = inst.apertureDiameter / 2
 
         # Calculate C = -f(f-l)/l/R^2. This is for the calculation of reduced
         # coordinate.
-        defocalDisOffset = inst.getDefocalDisOffset()
+        defocalDisOffset = inst.defocalDisOffset
         if self.defocalType == DefocalType.Intra:
             l = defocalDisOffset
         elif self.defocalType == DefocalType.Extra:
             l = -defocalDisOffset
 
-        focalLength = inst.getFocalLength()
+        focalLength = inst.focalLength
         myC = -focalLength * (focalLength - l) / l / R**2
 
         # Get the functions to do the off-axis correction by numerical fitting
@@ -549,7 +549,7 @@ class CompensableImage(object):
         onepixel = 1 / (projSamples / 2 / sensorFactor)
 
         # Get the index that the point is out of the range of extended pupil
-        obscuration = inst.getObscuration()
+        obscuration = inst.obscuration
         idxout = (lutr > 1 + onepixel) | (lutr < obscuration - onepixel)
 
         # Define the element to be NaN if it is out of range
@@ -635,7 +635,7 @@ class CompensableImage(object):
 
             # Get the mask-related parameters
             maskCa, maskRa, maskCb, maskRb = self._interpMaskParam(
-                self.fieldX, self.fieldY, inst.getMaskOffAxisCorr()
+                self.fieldX, self.fieldY, inst.maskOffAxisCorr
             )
 
             lutx, luty = self._createPupilGrid(
@@ -665,8 +665,8 @@ class CompensableImage(object):
             lutyp = lutxp0 * sintheta + lutyp0 * costheta
 
             # Zemax data are in mm, therefore 1000
-            dimOfDonut = inst.getDimOfDonutOnSensor()
-            pixelSize = inst.getCamPixelSize()
+            dimOfDonut = inst.dimOfDonutImg
+            pixelSize = inst.pixelSize
             reduced_coordi_factor = 1e-3 / (dimOfDonut / 2 * pixelSize / sensorFactor)
 
             # Reduced coordinates, so that this can be added with the dW/dz
@@ -1310,7 +1310,7 @@ class CompensableImage(object):
 
         # Masklist = [center_x, center_y, radius_of_boundary,
         #             1/ 0 for outer/ inner boundary]
-        obscuration = inst.getObscuration()
+        obscuration = inst.obscuration
         if model in ("paraxial", "onAxis"):
 
             if obscuration == 0:
@@ -1320,7 +1320,7 @@ class CompensableImage(object):
         else:
             # Get the mask-related parameters
             maskCa, maskRa, maskCb, maskRb = self._interpMaskParam(
-                self.fieldX, self.fieldY, inst.getMaskOffAxisCorr()
+                self.fieldX, self.fieldY, inst.maskOffAxisCorr
             )
 
             # Rotate the mask-related parameters of center
@@ -1435,17 +1435,17 @@ class CompensableImage(object):
             Mask scaling factor (for fast beam) for local correction.
         """
 
-        dimOfDonut = inst.getDimOfDonutOnSensor()
+        dimOfDonut = inst.dimOfDonutImg
         self.mask_pupil = np.ones(dimOfDonut, dtype=int)
         self.mask_comp = self.mask_pupil.copy()
 
-        apertureDiameter = inst.getApertureDiameter()
-        focalLength = inst.getFocalLength()
-        offset = inst.getDefocalDisOffset()
+        apertureDiameter = inst.apertureDiameter
+        focalLength = inst.focalLength
+        offset = inst.defocalDisOffset
         rMask = apertureDiameter / (2 * focalLength / offset) * maskScalingFactorLocal
 
         # Get the mask list
-        pixelSize = inst.getCamPixelSize()
+        pixelSize = inst.pixelSize
         xSensor, ySensor = inst.getSensorCoor()
         masklist = self.makeMaskList(inst, model)
         for ii in range(masklist.shape[0]):

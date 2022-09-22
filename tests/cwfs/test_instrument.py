@@ -72,41 +72,40 @@ class TestInstrument(unittest.TestCase):
 
     def testGetMaskOffAxisCorr(self):
 
-        maskOffAxisCorr = self.inst.getMaskOffAxisCorr()
-        self.assertEqual(maskOffAxisCorr.shape, (9, 5))
-        self.assertEqual(maskOffAxisCorr[0, 0], 1.07)
-        self.assertEqual(maskOffAxisCorr[2, 3], -0.090100858)
+        self.assertEqual(self.inst.maskOffAxisCorr.shape, (9, 5))
+        self.assertEqual(self.inst.maskOffAxisCorr[0, 0], 1.07)
+        self.assertEqual(self.inst.maskOffAxisCorr[2, 3], -0.090100858)
 
-    def testGetDimOfDonutOnSensor(self):
+    def testGetDimOfDonutImg(self):
 
-        dimOfDonutOnSensor = self.inst.getDimOfDonutOnSensor()
+        dimOfDonutOnSensor = self.inst.dimOfDonutImg
         self.assertEqual(dimOfDonutOnSensor, self.dimOfDonutOnSensor)
 
     def testGetObscuration(self):
 
-        obscuration = self.inst.getObscuration()
+        obscuration = self.inst.obscuration
         self.assertEqual(obscuration, 0.61)
 
     def testGetFocalLength(self):
 
-        focalLength = self.inst.getFocalLength()
+        focalLength = self.inst.focalLength
         self.assertEqual(focalLength, 10.312)
 
     def testGetApertureDiameter(self):
 
-        apertureDiameter = self.inst.getApertureDiameter()
+        apertureDiameter = self.inst.apertureDiameter
         self.assertEqual(apertureDiameter, 8.36)
 
     def testGetDefocalDisOffset(self):
 
-        defocalDisInM = self.inst.getDefocalDisOffset()
+        defocalDisInM = self.inst.defocalDisOffset
 
         # The answer is 1.5 mm
         self.assertEqual(defocalDisInM * 1e3, 1.5)
 
-    def testGetCamPixelSize(self):
+    def testGetPixelSize(self):
 
-        camPixelSizeInM = self.inst.getCamPixelSize()
+        camPixelSizeInM = self.inst.pixelSize
 
         # The answer is 10 um
         self.assertEqual(camPixelSizeInM * 1e6, 10)
@@ -162,11 +161,11 @@ class TestInstrument(unittest.TestCase):
         inst = Instrument(self.instDir)
         inst.config(CamType.AuxTel, 160, announcedDefocalDisInMm=0.8)
 
-        self.assertEqual(inst.getObscuration(), 0.3525)
-        self.assertEqual(inst.getFocalLength(), 21.6)
-        self.assertEqual(inst.getApertureDiameter(), 1.2)
-        self.assertEqual(inst.getDefocalDisOffset(), 0.041 * 0.8)
-        self.assertEqual(inst.getCamPixelSize(), 10.0e-6)
+        self.assertEqual(inst.obscuration, 0.3525)
+        self.assertEqual(inst.focalLength, 21.6)
+        self.assertEqual(inst.apertureDiameter, 1.2)
+        self.assertEqual(inst.defocalDisOffset, 0.041 * 0.8)
+        self.assertEqual(inst.pixelSize, 10.0e-6)
         self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 182.2222222, places=7)
 
     def testDataAuxTelZWO(self):
@@ -174,11 +173,11 @@ class TestInstrument(unittest.TestCase):
         inst = Instrument(self.instDir)
         inst.config(CamType.AuxTelZWO, 160, announcedDefocalDisInMm=0.5)
 
-        self.assertEqual(inst.getObscuration(), 0.3525)
-        self.assertEqual(inst.getFocalLength(), 21.6)
-        self.assertEqual(inst.getApertureDiameter(), 1.2)
-        self.assertEqual(inst.getDefocalDisOffset(), 0.0205)
-        self.assertEqual(inst.getCamPixelSize(), 15.2e-6)
+        self.assertEqual(inst.obscuration, 0.3525)
+        self.assertEqual(inst.focalLength, 21.6)
+        self.assertEqual(inst.apertureDiameter, 1.2)
+        self.assertEqual(inst.defocalDisOffset, 0.0205)
+        self.assertEqual(inst.pixelSize, 15.2e-6)
         self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 74.92690058, places=7)
 
 
