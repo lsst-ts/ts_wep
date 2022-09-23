@@ -209,36 +209,44 @@ class Instrument(object):
 
     @property
     def instParams(self):
+        """Dictionary of the instrument configuration parameters."""
         return self._instParams
 
     @property
     def obscuration(self):
+        """Obscuration (inner_radius / outer_radius of primary mirror)."""
         return self.instParams["obscuration"]
 
     @property
     def focalLength(self):
+        """The focal length of telescope in meters."""
         return self.instParams["focalLength"]
 
     @property
     def apertureDiameter(self):
+        """The aperture diameter in meters."""
         return self.instParams["apertureDiameter"]
 
     @property
     def defocalDisOffset(self):
+        """The defocal distance offset in meters."""
         offsetKey = "%.1fmm" % self.announcedDefocalDisInMm
         return self.instParams["offset"][offsetKey]
 
     @property
     def pixelSize(self):
+        """The camera pixel size in meters."""
         return self.instParams["pixelSize"]
 
     @property
     def maskOffAxisCorr(self):
+        """The mask off-axis correction."""
         self._maskOffAxisCorr = self.maskParamFile.getMatContent()
         return self._maskOffAxisCorr
 
     @property
     def dimOfDonutImg(self):
+        """The dimension of the donut image size on the sensor in pixels."""
         return self._dimOfDonutImg
 
     def getMarginalFocalLength(self):
