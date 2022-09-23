@@ -295,15 +295,12 @@ class CompensableImage(object):
 
         # Calculate the center position on image
         # 0.5 is the half of 1 pixel
-        dimOfDonut = inst.dimOfDonutImg
-        stampCenterx1 = dimOfDonut / 2 + 0.5
-        stampCentery1 = dimOfDonut / 2 + 0.5
+        stampCenterx1 = inst.dimOfDonutImg / 2 + 0.5
+        stampCentery1 = inst.dimOfDonutImg / 2 + 0.5
 
         # Shift in the radial direction
         # The field of view (FOV) of LSST camera is 3.5 degree
-        offset = inst.defocalDisOffset
-        pixelSize = inst.pixelSize
-        radialShift = fov * (offset / 1e-3) * (10e-6 / pixelSize)
+        radialShift = fov * (inst.defocalDisOffset / 1e-3) * (10e-6 / inst.pixelSize)
 
         # Calculate the projection of distance of donut to center
         fieldDist = self._getFieldDistFromOrigin()
@@ -523,14 +520,12 @@ class CompensableImage(object):
 
         # Calculate C = -f(f-l)/l/R^2. This is for the calculation of reduced
         # coordinate.
-        defocalDisOffset = inst.defocalDisOffset
         if self.defocalType == DefocalType.Intra:
-            l = defocalDisOffset
+            l = inst.defocalDisOffset
         elif self.defocalType == DefocalType.Extra:
-            l = -defocalDisOffset
+            l = -inst.defocalDisOffset
 
-        focalLength = inst.focalLength
-        myC = -focalLength * (focalLength - l) / l / R**2
+        myC = -inst.focalLength * (inst.focalLength - l) / l / R**2
 
         # Get the functions to do the off-axis correction by numerical fitting
         # Order to do the off-axis correction. The order is 10 now.
@@ -549,8 +544,7 @@ class CompensableImage(object):
         onepixel = 1 / (projSamples / 2 / sensorFactor)
 
         # Get the index that the point is out of the range of extended pupil
-        obscuration = inst.obscuration
-        idxout = (lutr > 1 + onepixel) | (lutr < obscuration - onepixel)
+        idxout = (lutr > 1 + onepixel) | (lutr < inst.obscuration - onepixel)
 
         # Define the element to be NaN if it is out of range
         lutx[idxout] = np.nan
@@ -566,11 +560,11 @@ class CompensableImage(object):
 
         # Get the index in the extended area of inner boundary with the width
         # of onepixel
-        idxinbd = (lutr < obscuration) & (lutr > obscuration - onepixel)
+        idxinbd = (lutr < inst.obscuration) & (lutr > inst.obscuration - onepixel)
 
         # Calculate the extended x, y-coordinate (x' = x/r*r', r'=obscuration)
-        lutx[idxinbd] = lutx[idxinbd] / lutr[idxinbd] * obscuration
-        luty[idxinbd] = luty[idxinbd] / lutr[idxinbd] * obscuration
+        lutx[idxinbd] = lutx[idxinbd] / lutr[idxinbd] * inst.obscuration
+        luty[idxinbd] = luty[idxinbd] / lutr[idxinbd] * inst.obscuration
 
         # Get the corrected x, y-coordinate on focal plane (lutxp, lutyp)
         if model == "paraxial":
@@ -582,7 +576,9 @@ class CompensableImage(object):
 
             # Calculate F(x, y) = m * sqrt(f^2-R^2) / sqrt(f^2-(x^2+y^2)*R^2)
             # m is the mask scaling factor
-            myA2 = (focalLength**2 - R**2) / (focalLength**2 - lutr**2 * R**2)
+            myA2 = (inst.focalLength**2 - R**2) / (
+                inst.focalLength**2 - lutr**2 * R**2
+            )
 
             # Put the unphysical value as NaN
             myA = myA2.copy()
@@ -665,9 +661,9 @@ class CompensableImage(object):
             lutyp = lutxp0 * sintheta + lutyp0 * costheta
 
             # Zemax data are in mm, therefore 1000
-            dimOfDonut = inst.dimOfDonutImg
-            pixelSize = inst.pixelSize
-            reduced_coordi_factor = 1e-3 / (dimOfDonut / 2 * pixelSize / sensorFactor)
+            reduced_coordi_factor = 1e-3 / (
+                inst.dimOfDonutImg / 2 * inst.pixelSize / sensorFactor
+            )
 
             # Reduced coordinates, so that this can be added with the dW/dz
             lutxp = lutxp * reduced_coordi_factor
@@ -705,15 +701,21 @@ class CompensableImage(object):
 
             elif model == "onAxis":
                 xpox = maskScalingFactor * myA * (
-                    1 + lutx**2 * R**2.0 / (focalLength**2 - R**2 * lutr**2)
+                    1
+                    + lutx**2
+                    * R**2.0
+                    / (inst.focalLength**2 - R**2 * lutr**2)
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dx2")
 
                 ypoy = maskScalingFactor * myA * (
-                    1 + luty**2 * R**2.0 / (focalLength**2 - R**2 * lutr**2)
+                    1
+                    + luty**2
+                    * R**2.0
+                    / (inst.focalLength**2 - R**2 * lutr**2)
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dy2")
 
                 xpoy = maskScalingFactor * myA * lutx * luty * R**2 / (
-                    focalLength**2 - R**2 * lutr**2
+                    inst.focalLength**2 - R**2 * lutr**2
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dxy")
 
                 ypox = xpoy
@@ -1310,13 +1312,12 @@ class CompensableImage(object):
 
         # Masklist = [center_x, center_y, radius_of_boundary,
         #             1/ 0 for outer/ inner boundary]
-        obscuration = inst.obscuration
         if model in ("paraxial", "onAxis"):
 
-            if obscuration == 0:
+            if inst.obscuration == 0:
                 masklist = np.array([[0, 0, 1, 1]])
             else:
-                masklist = np.array([[0, 0, 1, 1], [0, 0, obscuration, 0]])
+                masklist = np.array([[0, 0, 1, 1], [0, 0, inst.obscuration, 0]])
         else:
             # Get the mask-related parameters
             maskCa, maskRa, maskCb, maskRb = self._interpMaskParam(
@@ -1330,7 +1331,7 @@ class CompensableImage(object):
             masklist = np.array(
                 [
                     [0, 0, 1, 1],
-                    [0, 0, obscuration, 0],
+                    [0, 0, inst.obscuration, 0],
                     [cax, cay, maskRa, 1],
                     [cbx, cby, maskRb, 0],
                 ]
@@ -1435,17 +1436,16 @@ class CompensableImage(object):
             Mask scaling factor (for fast beam) for local correction.
         """
 
-        dimOfDonut = inst.dimOfDonutImg
-        self.mask_pupil = np.ones(dimOfDonut, dtype=int)
+        self.mask_pupil = np.ones(inst.dimOfDonutImg, dtype=int)
         self.mask_comp = self.mask_pupil.copy()
 
-        apertureDiameter = inst.apertureDiameter
-        focalLength = inst.focalLength
-        offset = inst.defocalDisOffset
-        rMask = apertureDiameter / (2 * focalLength / offset) * maskScalingFactorLocal
+        rMask = (
+            inst.apertureDiameter
+            / (2 * inst.focalLength / inst.defocalDisOffset)
+            * maskScalingFactorLocal
+        )
 
         # Get the mask list
-        pixelSize = inst.pixelSize
         xSensor, ySensor = inst.getSensorCoor()
         masklist = self.makeMaskList(inst, model)
         for ii in range(masklist.shape[0]):
@@ -1468,17 +1468,17 @@ class CompensableImage(object):
             # the wavefront is set to zero.
             if masklist[ii, 3] >= 1:
                 aidx = np.nonzero(
-                    r <= masklist[ii, 2] * (1 + boundaryT * pixelSize / rMask)
+                    r <= masklist[ii, 2] * (1 + boundaryT * inst.pixelSize / rMask)
                 )
             else:
                 aidx = np.nonzero(
-                    r <= masklist[ii, 2] * (1 - boundaryT * pixelSize / rMask)
+                    r <= masklist[ii, 2] * (1 - boundaryT * inst.pixelSize / rMask)
                 )
 
             # Initialize both mask elements to the opposite of the pass/ block
             # boolean
             mask_pupil_ii = (1 - int(masklist[ii, 3])) * np.ones(
-                [dimOfDonut, dimOfDonut], dtype=int
+                [inst.dimOfDonutImg, inst.dimOfDonutImg], dtype=int
             )
             mask_comp_ii = mask_pupil_ii.copy()
 

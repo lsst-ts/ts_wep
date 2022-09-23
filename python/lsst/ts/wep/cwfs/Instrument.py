@@ -167,9 +167,8 @@ class Instrument(object):
         self.yoSensor = self.ySensor.copy()
 
         # Get the position index that is out of annular aperature range
-        obscuration = self.obscuration
         r2Sensor = self.xSensor**2 + self.ySensor**2
-        idx = (r2Sensor > 1) | (r2Sensor < obscuration**2)
+        idx = (r2Sensor > 1) | (r2Sensor < self.obscuration**2)
 
         # Define the value to be NaN if it is not in pupul
         self.xoSensor[idx] = np.nan
@@ -177,6 +176,7 @@ class Instrument(object):
 
     def setAnnDefocalDisInMm(self, annDefocalDisInMm):
         """Set the announced defocal distance in mm.
+
         Parameters
         ----------
         annDefocalDisInMm : float
@@ -187,6 +187,7 @@ class Instrument(object):
 
     def getAnnDefocalDisInMm(self):
         """Get the announced defocal distance in mm.
+
         Returns
         -------
         float
@@ -242,39 +243,40 @@ class Instrument(object):
 
     def getMarginalFocalLength(self):
         """Get the marginal focal length in meter.
+
         Marginal_focal_length = sqrt(f^2 - (D/2)^2)
+
         Returns
         -------
         float
             Marginal focal length in meter.
         """
 
-        focalLength = self.focalLength
-        apertureDiameter = self.apertureDiameter
-        marginalFL = np.sqrt(focalLength**2 - (apertureDiameter / 2) ** 2)
+        marginalFL = np.sqrt(self.focalLength**2 - (self.apertureDiameter / 2) ** 2)
 
         return marginalFL
 
     def getSensorFactor(self):
         """Get the sensor factor.
+
         Returns
         -------
         float
             Sensor factor.
         """
 
-        offset = self.defocalDisOffset
-        apertureDiameter = self.apertureDiameter
-        focalLength = self.focalLength
-        pixelSize = self.pixelSize
         sensorFactor = self.dimOfDonutImg / (
-            offset * apertureDiameter / focalLength / pixelSize
+            self.defocalDisOffset
+            * self.apertureDiameter
+            / self.focalLength
+            / self.pixelSize
         )
 
         return sensorFactor
 
     def getSensorCoor(self):
         """Get the sensor coordinate.
+
         Returns
         -------
         numpy.ndarray
@@ -282,12 +284,14 @@ class Instrument(object):
         numpy.ndarray
             Y coordinate.
         """
+
         # Set each time with current instParams
         self._setSensorCoor()
         return self.xSensor, self.ySensor
 
     def getSensorCoorAnnular(self):
         """Get the sensor coordinate with the annular aperature.
+
         Returns
         -------
         numpy.ndarray
@@ -295,20 +299,20 @@ class Instrument(object):
         numpy.ndarray
             Y coordinate.
         """
+
         # Set each time with current instParams
         self._setSensorCoorAnnular()
         return self.xoSensor, self.yoSensor
 
     def calcSizeOfDonutExpected(self):
         """Calculate the size of expected donut (diameter).
+
         Returns
         -------
         float
             Size of expected donut (diameter) in pixel.
         """
 
-        offset = self.defocalDisOffset
         fNumber = self.focalLength / self.apertureDiameter
-        pixelSize = self.pixelSize
 
-        return offset / fNumber / pixelSize
+        return self.defocalDisOffset / fNumber / self.pixelSize
