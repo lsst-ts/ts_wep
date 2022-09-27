@@ -125,8 +125,8 @@ class TestAlgorithm(unittest.TestCase):
 
     def testGetObsOfZernikes(self):
 
-        self.assertEqual(self.algoExp.getObsOfZernikes(), self.inst.getObscuration())
-        self.assertEqual(self.algoFft.getObsOfZernikes(), self.inst.getObscuration())
+        self.assertEqual(self.algoExp.getObsOfZernikes(), self.inst.obscuration)
+        self.assertEqual(self.algoFft.getObsOfZernikes(), self.inst.obscuration)
 
     def testGetNumOfOuterItr(self):
 
