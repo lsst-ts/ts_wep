@@ -111,7 +111,7 @@ class DonutTemplateModel(DonutTemplateDefault):
             announcedDefocalDisInMm = getDefocalDisInMm("auxTel")
             inst.config(camType, imageSize, announcedDefocalDisInMm)
             # load the info for auxTel
-            pixelSizeInMeters = inst.getCamPixelSize()  # pixel size in meters.
+            pixelSizeInMeters = inst.pixelSize  # pixel size in meters.
             pixelSizeInUm = pixelSizeInMeters * 1e6
 
             camera = obs_lsst.Latiss.getCamera()

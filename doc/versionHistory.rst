@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.6.0:
+
+-------------
+2.6.0
+-------------
+
+* Replace getters and setters in Instrument.py with properties to make more pythonic.
+* Update Algorithm, CompensableImage and DonutTemplateModel with new Instrument.py design.
+
 .. _lsst.ts.wep-2.5.8:
 
 -------------

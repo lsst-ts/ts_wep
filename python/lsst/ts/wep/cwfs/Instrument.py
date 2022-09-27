@@ -41,9 +41,10 @@ class Instrument(object):
 
         self.instDir = instDir
         self.instName = ""
-        self.dimOfDonutImg = 0
+        self._dimOfDonutImg = 0
         self.announcedDefocalDisInMm = 0.0
 
+        self._instParams = dict()
         self.instParamFile = ParamReader()
         self.maskParamFile = ParamReader()
 
@@ -81,13 +82,16 @@ class Instrument(object):
         """
 
         self.instName = self._getInstName(camType)
-        self.dimOfDonutImg = int(dimOfDonutImgOnSensor)
+        self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
         self.announcedDefocalDisInMm = announcedDefocalDisInMm
 
         # Path of instrument param file
         instFileDir = self.getInstFileDir()
         instParamFilePath = os.path.join(instFileDir, instParamFileName)
         self.instParamFile.setFilePath(instParamFilePath)
+
+        # Load instrument parameters
+        self._instParams = self.instParamFile.getContent()
 
         # Path of mask off-axis correction file
         # There is no such file for auxiliary telescope
@@ -163,9 +167,8 @@ class Instrument(object):
         self.yoSensor = self.ySensor.copy()
 
         # Get the position index that is out of annular aperature range
-        obscuration = self.getObscuration()
         r2Sensor = self.xSensor**2 + self.ySensor**2
-        idx = (r2Sensor > 1) | (r2Sensor < obscuration**2)
+        idx = (r2Sensor > 1) | (r2Sensor < self.obscuration**2)
 
         # Define the value to be NaN if it is not in pupul
         self.xoSensor[idx] = np.nan
@@ -204,89 +207,47 @@ class Instrument(object):
 
         return self.instParamFile.getFilePath()
 
-    def getMaskOffAxisCorr(self):
-        """Get the mask off-axis correction.
+    @property
+    def instParams(self):
+        """Dictionary of the instrument configuration parameters."""
+        return self._instParams
 
-        Returns
-        -------
-        numpy.ndarray
-            Mask off-axis correction.
-        """
+    @property
+    def obscuration(self):
+        """Obscuration (inner_radius / outer_radius of primary mirror)."""
+        return self.instParams["obscuration"]
 
-        return self.maskParamFile.getMatContent()
+    @property
+    def focalLength(self):
+        """The focal length of telescope in meters."""
+        return self.instParams["focalLength"]
 
-    def getDimOfDonutOnSensor(self):
-        """Get the dimension of donut image size on sensor in pixel.
+    @property
+    def apertureDiameter(self):
+        """The aperture diameter in meters."""
+        return self.instParams["apertureDiameter"]
 
-        Returns
-        -------
-        int
-            Dimension of donut's size on sensor in pixel.
-        """
+    @property
+    def defocalDisOffset(self):
+        """The defocal distance offset in meters."""
+        offsetKey = "%.1fmm" % self.announcedDefocalDisInMm
+        return self.instParams["offset"][offsetKey]
 
-        return self.dimOfDonutImg
+    @property
+    def pixelSize(self):
+        """The camera pixel size in meters."""
+        return self.instParams["pixelSize"]
 
-    def getObscuration(self):
-        """Get the obscuration.
+    @property
+    def maskOffAxisCorr(self):
+        """The mask off-axis correction."""
+        self._maskOffAxisCorr = self.maskParamFile.getMatContent()
+        return self._maskOffAxisCorr
 
-        Returns
-        -------
-        float
-            Obscuration.
-        """
-
-        return self.instParamFile.getSetting("obscuration")
-
-    def getFocalLength(self):
-        """Get the focal length of telescope in meter.
-
-        Returns
-        -------
-        float
-            Focal length of telescope in meter.
-        """
-
-        return self.instParamFile.getSetting("focalLength")
-
-    def getApertureDiameter(self):
-        """Get the aperture diameter in meter.
-
-        Returns
-        -------
-        float
-            Aperture diameter in meter.
-        """
-
-        return self.instParamFile.getSetting("apertureDiameter")
-
-    def getDefocalDisOffset(self):
-        """Get the defocal distance offset in meter.
-
-        Returns
-        -------
-        float
-            Defocal distance offset in meter.
-        """
-
-        # Use this way to differentiate the announced defocal distance
-        # and the used defocal distance in the fitting of parameters by ZEMAX
-        # For example, in the ComCam's instParam.yaml file, they are a little
-        # different
-        offset = self.instParamFile.getSetting("offset")
-        defocalDisInMm = "%.1fmm" % self.announcedDefocalDisInMm
-
-        return offset[defocalDisInMm]
-
-    def getCamPixelSize(self):
-        """Get the camera pixel size in meter.
-
-        Returns
-        -------
-        float
-            Camera pixel size in meter.
-        """
-
-        return self.instParamFile.getSetting("pixelSize")
+    @property
+    def dimOfDonutImg(self):
+        """The dimension of the donut image size on the sensor in pixels."""
+        return self._dimOfDonutImg
 
     def getMarginalFocalLength(self):
         """Get the marginal focal length in meter.
@@ -299,9 +260,7 @@ class Instrument(object):
             Marginal focal length in meter.
         """
 
-        focalLength = self.getFocalLength()
-        apertureDiameter = self.getApertureDiameter()
-        marginalFL = np.sqrt(focalLength**2 - (apertureDiameter / 2) ** 2)
+        marginalFL = np.sqrt(self.focalLength**2 - (self.apertureDiameter / 2) ** 2)
 
         return marginalFL
 
@@ -314,12 +273,11 @@ class Instrument(object):
             Sensor factor.
         """
 
-        offset = self.getDefocalDisOffset()
-        apertureDiameter = self.getApertureDiameter()
-        focalLength = self.getFocalLength()
-        pixelSize = self.getCamPixelSize()
         sensorFactor = self.dimOfDonutImg / (
-            offset * apertureDiameter / focalLength / pixelSize
+            self.defocalDisOffset
+            * self.apertureDiameter
+            / self.focalLength
+            / self.pixelSize
         )
 
         return sensorFactor
@@ -335,6 +293,8 @@ class Instrument(object):
             Y coordinate.
         """
 
+        # Set each time with current instParams
+        self._setSensorCoor()
         return self.xSensor, self.ySensor
 
     def getSensorCoorAnnular(self):
@@ -348,6 +308,8 @@ class Instrument(object):
             Y coordinate.
         """
 
+        # Set each time with current instParams
+        self._setSensorCoorAnnular()
         return self.xoSensor, self.yoSensor
 
     def calcSizeOfDonutExpected(self):
@@ -359,8 +321,6 @@ class Instrument(object):
             Size of expected donut (diameter) in pixel.
         """
 
-        offset = self.getDefocalDisOffset()
-        fNumber = self.getFocalLength() / self.getApertureDiameter()
-        pixelSize = self.getCamPixelSize()
+        fNumber = self.focalLength / self.apertureDiameter
 
-        return offset / fNumber / pixelSize
+        return self.defocalDisOffset / fNumber / self.pixelSize
