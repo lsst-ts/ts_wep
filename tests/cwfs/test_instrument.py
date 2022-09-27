@@ -32,43 +32,88 @@ class TestInstrument(unittest.TestCase):
 
     def setUp(self):
 
-        self.instDir = os.path.join(getConfigDir(), "cwfs", "instData")
-
-        self.inst = Instrument(self.instDir)
-        self.dimOfDonutOnSensor = 120
-
-        self.inst.config(
-            CamType.LsstCam, self.dimOfDonutOnSensor, announcedDefocalDisInMm=1.5
+        self.instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
+        self.instConfigFile = os.path.join(self.instConfigDir, "lsst", "instParam.yaml")
+        self.maskConfigFile = os.path.join(
+            self.instConfigDir, "lsst", "maskMigrate.yaml"
         )
 
-    def testConfigWithUnsupportedCamType(self):
+        self.dimOfDonutOnSensor = 120
+        self.inst = Instrument()
+        self.inst.configFromFile(
+            self.dimOfDonutOnSensor,
+            CamType.LsstCam,
+            self.instConfigFile,
+            self.maskConfigFile,
+        )
 
-        self.assertRaises(ValueError, self.inst.config, "NoThisCamType", 120)
+    def testConfigFromFileDefault(self):
 
-    def testGetInstFileDir(self):
+        newInst = Instrument()
+        newInst.configFromFile(self.dimOfDonutOnSensor, CamType.LsstCam)
+        self.assertDictEqual(self.inst.instParams, newInst.instParams)
 
-        instFileDir = self.inst.getInstFileDir()
+    def testConfigFromDict(self):
 
-        ansInstFileDir = os.path.join(self.instDir, "lsst")
-        self.assertEqual(instFileDir, ansInstFileDir)
+        newInst = Instrument()
+        newInst.configFromDict(
+            self.inst.instParams, self.dimOfDonutOnSensor, CamType.LsstCam
+        )
+        self.assertDictEqual(self.inst.instParams, newInst.instParams)
 
-    def testGetAnnDefocalDisInMm(self):
+    def testConfigFromFileWithIncorrectInstConfigFilePath(self):
 
-        annDefocalDisInMm = self.inst.getAnnDefocalDisInMm()
-        self.assertEqual(annDefocalDisInMm, 1.5)
+        badFilePath = "NoFile"
+        with self.assertRaises(ValueError) as context:
+            self.inst.configFromFile(120, CamType.LsstCam, badFilePath)
+        self.assertEqual(
+            str(context.exception),
+            f"Instrument configuration file at {badFilePath} does not exist.",
+        )
 
-    def testSetAnnDefocalDisInMm(self):
+    def testConfigFromFileWithIncorrectMaskConfigFilePath(self):
 
-        annDefocalDisInMm = 2.0
-        self.inst.setAnnDefocalDisInMm(annDefocalDisInMm)
+        badMaskFilePath = "NoMaskFile"
+        with self.assertRaises(ValueError) as context:
+            self.inst.configFromFile(
+                120, CamType.LsstCam, maskConfigFile=badMaskFilePath
+            )
+        self.assertEqual(
+            str(context.exception),
+            f"Mask migrate file at {badMaskFilePath} does not exist.",
+        )
 
-        self.assertEqual(self.inst.getAnnDefocalDisInMm(), annDefocalDisInMm)
+    def testConfigFromDictWithIncorrectMaskConfigFilePath(self):
 
-    def testGetInstFilePath(self):
+        badMaskFilePath = "NoMaskFile"
+        with self.assertRaises(ValueError) as context:
+            self.inst.configFromDict(
+                self.inst.instParams,
+                self.dimOfDonutOnSensor,
+                CamType.LsstCam,
+                maskConfigFile=badMaskFilePath,
+            )
+        self.assertEqual(
+            str(context.exception),
+            f"Mask migrate file at {badMaskFilePath} does not exist.",
+        )
 
-        instFilePath = self.inst.getInstFilePath()
-        self.assertTrue(os.path.exists(instFilePath))
-        self.assertEqual(os.path.basename(instFilePath), "instParam.yaml")
+    def testSetDefaultMaskParams(self):
+
+        newInst = Instrument()
+        self.assertEqual(newInst.maskOffAxisCorr, [])
+
+        # AuxTel has no default parameters available
+        newInst.setDefaultMaskParams(CamType.AuxTel)
+        self.assertEqual(newInst.maskOffAxisCorr, [])
+        newInst.setDefaultMaskParams(CamType.AuxTelZWO)
+        self.assertEqual(newInst.maskOffAxisCorr, [])
+
+        # Test set correctly with valid camera
+        newInst.setDefaultMaskParams(CamType.LsstCam)
+        self.assertEqual(newInst.maskOffAxisCorr.shape, (9, 5))
+        self.assertEqual(newInst.maskOffAxisCorr[0, 0], 1.07)
+        self.assertEqual(newInst.maskOffAxisCorr[2, 3], -0.090100858)
 
     def testGetMaskOffAxisCorr(self):
 
@@ -158,8 +203,9 @@ class TestInstrument(unittest.TestCase):
 
     def testDataAuxTel(self):
 
-        inst = Instrument(self.instDir)
-        inst.config(CamType.AuxTel, 160, announcedDefocalDisInMm=0.8)
+        auxTelConfigFile = os.path.join(self.instConfigDir, "auxTel", "instParam.yaml")
+        inst = Instrument()
+        inst.configFromFile(160, CamType.AuxTel, auxTelConfigFile)
 
         self.assertEqual(inst.obscuration, 0.3525)
         self.assertEqual(inst.focalLength, 21.6)
@@ -170,8 +216,11 @@ class TestInstrument(unittest.TestCase):
 
     def testDataAuxTelZWO(self):
 
-        inst = Instrument(self.instDir)
-        inst.config(CamType.AuxTelZWO, 160, announcedDefocalDisInMm=0.5)
+        auxTelZWOConfigFile = os.path.join(
+            self.instConfigDir, "auxTelZWO", "instParam.yaml"
+        )
+        inst = Instrument()
+        inst.configFromFile(160, CamType.AuxTelZWO, auxTelZWOConfigFile)
 
         self.assertEqual(inst.obscuration, 0.3525)
         self.assertEqual(inst.focalLength, 21.6)

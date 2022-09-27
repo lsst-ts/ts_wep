@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-2.7.0:
+
+-------------
+2.7.0
+-------------
+
+* Remove dictionary defining allowable offsets in Instrument.py and replace with settable parameter.
+* Allow Instrument.py to be configured directly from dictionary of instrument parameters in addition to policy file.
+
 .. _lsst.ts.wep-2.6.0:
 
 -------------

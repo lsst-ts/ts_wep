@@ -120,9 +120,8 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         zerArray = []
 
         configDir = getConfigDir()
-        instDir = os.path.join(configDir, "cwfs", "instData")
         algoDir = os.path.join(configDir, "cwfs", "algo")
-        wfEsti = WfEstimator(instDir, algoDir)
+        wfEsti = WfEstimator(algoDir)
         detectorNames = donutStampsExtra.getDetectorNames()
         camera = donutStampsExtra[0].getCamera()
         detectorType = camera[detectorNames[0]].getType()

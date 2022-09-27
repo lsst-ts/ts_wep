@@ -12,12 +12,7 @@ focalLength: 10.312
 apertureDiameter: 8.36
 
 # Defocal distance offset in m
-offset:
-  0.5mm: 0.5e-3
-  1.0mm: 1.0e-3
-  1.5mm: 1.5e-3
-  2.0mm: 2.0e-3
-  2.5mm: 2.50e-3
+offset: 1.5e-3
 
 # Camera pixel size in m
 pixelSize: 10.0e-6

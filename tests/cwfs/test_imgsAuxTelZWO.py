@@ -20,12 +20,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+import yaml
 import numpy as np
 import unittest
 
 from lsst.ts.wep.cwfs.Image import Image
 from lsst.ts.wep.cwfs.BaseCwfsTestCase import BaseCwfsTestCase
-from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType
+from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType, getConfigDir
 
 
 class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
@@ -39,6 +40,12 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         self.testImgDir = os.path.join(testImageDataDir, "auxTelZWO")
         self.validationDir = os.path.join(testImageDataDir, "validation", "auxTelZWO")
 
+        # Get inst information
+        instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
+        instConfigFile = os.path.join(instConfigDir, "auxTelZWO", "instParam.yaml")
+        with open(instConfigFile, "r") as stream:
+            self.instParams = yaml.load(stream, Loader=yaml.CLoader)
+
         self.offset = 80
         self.tolMax = 6
         self.tolRms = 2
@@ -47,7 +54,7 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
 
         imgIntraName, imgExtraName = self._getImgsCase1()
         zer4UpNm = self._calcWfErrAuxTelZWO(
-            imgIntraName, imgExtraName, self.offset, "paraxial"
+            imgIntraName, imgExtraName, self.offset, "paraxial", self.instParams
         )
 
         ans = self._getDataVerify("case1_auxTelZWO_paraxial.txt")
@@ -60,7 +67,9 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
 
         return imgIntraName, imgExtraName
 
-    def _calcWfErrAuxTelZWO(self, imgIntraName, imgExtraName, offset, model):
+    def _calcWfErrAuxTelZWO(
+        self, imgIntraName, imgExtraName, offset, model, instParams
+    ):
 
         # Cut the donut image from input files
         centroidFindType = CentroidFindType.Otsu
@@ -92,8 +101,8 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
             fieldXY,
             CamType.AuxTelZWO,
             "exp",
-            0.5,
             model,
+            instParams,
             imageIntra=imgIntraArray,
             imageExtra=imgExtraArray,
         )
@@ -110,7 +119,7 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
 
         imgIntraName, imgExtraName = self._getImgsCase1()
         zer4UpNm = self._calcWfErrAuxTelZWO(
-            imgIntraName, imgExtraName, self.offset, "onAxis"
+            imgIntraName, imgExtraName, self.offset, "onAxis", self.instParams
         )
 
         ans = self._getDataVerify("case1_auxTelZWO_onaxis.txt")
@@ -120,7 +129,7 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
 
         imgIntraName, imgExtraName = self._getImgsCase2()
         zer4UpNm = self._calcWfErrAuxTelZWO(
-            imgIntraName, imgExtraName, self.offset, "paraxial"
+            imgIntraName, imgExtraName, self.offset, "paraxial", self.instParams
         )
 
         ans = self._getDataVerify("case2_auxTelZWO_paraxial.txt")
@@ -137,7 +146,7 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
 
         imgIntraName, imgExtraName = self._getImgsCase2()
         zer4UpNm = self._calcWfErrAuxTelZWO(
-            imgIntraName, imgExtraName, self.offset, "onAxis"
+            imgIntraName, imgExtraName, self.offset, "onAxis", self.instParams
         )
 
         ans = self._getDataVerify("case2_auxTelZWO_onaxis.txt")

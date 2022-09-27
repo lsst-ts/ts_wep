@@ -595,6 +595,34 @@ def getCamType(instName):
         raise ValueError(f"Instrument name ({instName}) is not supported.")
 
 
+def getCamNameFromCamType(camType):
+    """Get the camera name for policy files from CamType.
+
+    Parameters
+    ----------
+    camType : enum 'CamType'
+        Camera Type.
+
+    Returns
+    -------
+    str
+        Instrument Name.
+    """
+
+    if camType == CamType.LsstCam:
+        return "lsst"
+    elif camType == CamType.LsstFamCam:
+        return "lsstfam"
+    elif camType == CamType.ComCam:
+        return "comcam"
+    elif camType == CamType.AuxTel:
+        return "auxTel"
+    elif camType == CamType.AuxTelZWO:
+        return "auxTelZWO"
+    else:
+        raise ValueError(f"CamType ({camType}) is not supported.")
+
+
 def getCamTypeFromButlerName(instName, detectorType):
     """Get the camera type from instrument name used by the LSST DM
     middleware for each instrument.

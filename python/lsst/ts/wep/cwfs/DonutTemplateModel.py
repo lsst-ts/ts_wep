@@ -21,14 +21,8 @@
 
 __all__ = ["DonutTemplateModel"]
 
-import os
 import numpy as np
-from lsst.ts.wep.Utility import (
-    getConfigDir,
-    readPhoSimSettingData,
-    CamType,
-    getDefocalDisInMm,
-)
+from lsst.ts.wep.Utility import getConfigDir, readPhoSimSettingData, CamType
 from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
 from lsst.ts.wep.cwfs.Instrument import Instrument
 from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
@@ -47,6 +41,7 @@ class DonutTemplateModel(DonutTemplateDefault):
         camType=CamType.LsstCam,
         opticalModel="offAxis",
         pixelScale=0.2,
+        instParams=None,
     ):
         """Make the donut template image.
 
@@ -66,6 +61,12 @@ class DonutTemplateModel(DonutTemplateDefault):
             (The default is "offAxis")
         pixelScale : float, optional
             The pixels to arcseconds conversion factor. (The default is 0.2)
+        instParams : dict or None, optional
+            Instrument parameter configuration dictionary. Keys needed are:
+            "obscuration", "focalLength", "apertureDiameter",
+            "offset", "pixelSize". If None, then it will default to configure
+            the instrument from the default policy file for the camType.
+            (The default is None)
 
         Returns
         -------
@@ -81,16 +82,17 @@ class DonutTemplateModel(DonutTemplateDefault):
         configDir = getConfigDir()
 
         # Load Instrument parameters
-        instDir = os.path.join(configDir, "cwfs", "instData")
-        inst = Instrument(instDir)
+        inst = Instrument()
+        if instParams is None:
+            inst.configFromFile(imageSize, camType)
+        else:
+            inst.configFromDict(instParams, imageSize, camType)
+        pixelSizeInUm = inst.pixelSize * 1e6
 
         if camType in (CamType.LsstCam, CamType.LsstFamCam, CamType.ComCam):
-            inst.config(camType, imageSize)
             focalPlaneLayout = readPhoSimSettingData(
                 configDir, "focalplanelayout.txt", "fieldCenter"
             )
-
-            pixelSizeInUm = float(focalPlaneLayout[sensorName][2])
 
             sensorXMicron, sensorYMicron = np.array(
                 focalPlaneLayout[sensorName][:2], dtype=float
@@ -108,8 +110,6 @@ class DonutTemplateModel(DonutTemplateDefault):
             # Defocal distance for Latiss in mm
             # for LsstCam can use the default
             # hence only need to set here
-            announcedDefocalDisInMm = getDefocalDisInMm("auxTel")
-            inst.config(camType, imageSize, announcedDefocalDisInMm)
             # load the info for auxTel
             pixelSizeInMeters = inst.pixelSize  # pixel size in meters.
             pixelSizeInUm = pixelSizeInMeters * 1e6

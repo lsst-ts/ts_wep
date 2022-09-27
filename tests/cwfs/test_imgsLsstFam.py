@@ -20,11 +20,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+import yaml
 import numpy as np
 import unittest
 
 from lsst.ts.wep.cwfs.BaseCwfsTestCase import BaseCwfsTestCase
-from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType
+from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType, getConfigDir
 
 
 class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
@@ -38,6 +39,12 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
         self.testImgDir = os.path.join(testImageDataDir, "lsstfam")
         self.validationDir = os.path.join(testImageDataDir, "validation", "lsstfam")
 
+        # Get inst information
+        instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
+        instConfigFile = os.path.join(instConfigDir, "lsstfam", "instParam.yaml")
+        with open(instConfigFile, "r") as stream:
+            self.instParams = yaml.load(stream, Loader=yaml.CLoader)
+
     def testImages(self):
 
         sensorNames, fieldXYs = self._getSensorNameAndFieldXY()
@@ -49,8 +56,8 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
                 fieldXYs[idx, :],
                 CamType.LsstFamCam,
                 "exp",
-                1.5,
                 "offAxis",
+                self.instParams,
                 imageFileIntra=imgFileIntra,
                 imageFileExtra=imgFileExtra,
             )

@@ -193,9 +193,11 @@ class TestDonutStamp(unittest.TestCase):
 
         # Set up instrument
         instDataPath = os.path.join(getConfigDir(), "cwfs", "instData")
-        inst = Instrument(instDataPath)
+        instConfigFile = os.path.join(instDataPath, "lsst", "instParam.yaml")
+        maskConfigFile = os.path.join(instDataPath, "lsst", "maskMigrate.yaml")
+        inst = Instrument()
         donutWidth = 126
-        inst.config(CamType.LsstCam, donutWidth)
+        inst.configFromFile(donutWidth, CamType.LsstCam, instConfigFile, maskConfigFile)
 
         # Check that masks are empty at start
         np.testing.assert_array_equal(

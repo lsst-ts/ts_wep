@@ -24,7 +24,11 @@ __all__ = ["WfEstimator"]
 from lsst.ts.wep.cwfs.Instrument import Instrument
 from lsst.ts.wep.cwfs.Algorithm import Algorithm
 from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
-from lsst.ts.wep.Utility import DefocalType, CamType, CentroidFindType
+from lsst.ts.wep.Utility import (
+    DefocalType,
+    CamType,
+    CentroidFindType,
+)
 
 
 class WfEstimator(object):
@@ -38,9 +42,9 @@ class WfEstimator(object):
         Path to algorithm directory.
     """
 
-    def __init__(self, instDir, algoDir):
+    def __init__(self, algoDir):
 
-        self.inst = Instrument(instDir)
+        self.inst = Instrument()
         self.algo = Algorithm(algoDir)
 
         self.imgIntra = CompensableImage()
@@ -126,10 +130,10 @@ class WfEstimator(object):
 
     def config(
         self,
+        instParams=None,
         solver="exp",
         camType=CamType.LsstCam,
         opticalModel="offAxis",
-        defocalDisInMm=1.5,
         sizeInPix=120,
         centroidFindType=CentroidFindType.RandomWalk,
         debugLevel=0,
@@ -138,6 +142,9 @@ class WfEstimator(object):
 
         Parameters
         ----------
+        instParams : dict or None, optional
+            Instrument Configuration Parameters to use. If None will default to
+            files in policy/cwfs directory.
         solver : str, optional
             Algorithm to solve the Poisson's equation in the transport of
             intensity equation (TIE). It can be "fft" or "exp" here. (the
@@ -177,9 +184,11 @@ class WfEstimator(object):
 
         # Update the instrument name
         self.sizeInPix = int(sizeInPix)
-        self.inst.config(
-            camType, self.sizeInPix, announcedDefocalDisInMm=defocalDisInMm
-        )
+
+        if instParams is None:
+            self.inst.configFromFile(sizeInPix, camType)
+        else:
+            self.inst.configFromDict(instParams, sizeInPix, camType)
 
         self.algo.config(solver, self.inst, debugLevel=debugLevel)
 
