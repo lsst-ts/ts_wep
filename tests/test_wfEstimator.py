@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+import yaml
 import numpy as np
 import unittest
 
@@ -34,8 +35,13 @@ class TestWfEstimator(unittest.TestCase):
 
         cwfsConfigDir = os.path.join(getConfigDir(), "cwfs")
         instDir = os.path.join(cwfsConfigDir, "instData")
+        instConfigFile = os.path.join(instDir, "lsst", "instParam.yaml")
+        with open(instConfigFile, "r") as stream:
+            self.instParams = yaml.safe_load(stream)
+        self.instParams["offset"] = 1.0e-3
+
         algoDir = os.path.join(cwfsConfigDir, "algo")
-        self.wfsEst = WfEstimator(instDir, algoDir)
+        self.wfsEst = WfEstimator(algoDir)
 
         # Define the image folder and image names
         # It is noted that image.readFile inuts is based on the txt file.
@@ -58,10 +64,10 @@ class TestWfEstimator(unittest.TestCase):
         # Setup the configuration
         # If the configuration is reset, the images are needed to be set again.
         self.wfsEst.config(
+            self.instParams,
             solver="exp",
             camType=CamType.LsstCam,
             opticalModel="offAxis",
-            defocalDisInMm=1.0,
             sizeInPix=120,
             debugLevel=0,
         )
@@ -105,10 +111,10 @@ class TestWfEstimator(unittest.TestCase):
 
         # Change the algorithm to fft
         self.wfsEst.config(
+            self.instParams,
             solver="fft",
             camType=CamType.LsstCam,
             opticalModel="offAxis",
-            defocalDisInMm=1.0,
             sizeInPix=120,
             debugLevel=0,
         )

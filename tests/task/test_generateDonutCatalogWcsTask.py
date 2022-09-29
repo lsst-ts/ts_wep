@@ -58,7 +58,9 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            refCatList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
+            refCatList.append(
+                self.butler.getDeferred(ref, collections=["refcats/gen2"])
+            )
 
         return refCatList
 
@@ -283,7 +285,9 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            deferredList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
+            deferredList.append(
+                self.butler.getDeferred(ref, collections=["refcats/gen2"])
+            )
         expGenerator = self.registry.queryDatasets(
             datasetType="raw",
             collections=["LSSTCam/raw/all"],

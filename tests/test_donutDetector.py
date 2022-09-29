@@ -19,13 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
 import unittest
+import yaml
 import numpy as np
 import pandas as pd
 
 from lsst.ts.wep.DonutDetector import DonutDetector
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.Utility import DonutTemplateType, DefocalType
+from lsst.ts.wep.Utility import DonutTemplateType, DefocalType, getConfigDir
 
 
 class TestDonutDetector(unittest.TestCase):
@@ -40,8 +42,15 @@ class TestDonutDetector(unittest.TestCase):
         templateMaker = DonutTemplateFactory.createDonutTemplate(
             DonutTemplateType.Model
         )
+
+        # Get inst information
+        instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
+        instConfigFile = os.path.join(instConfigDir, "lsst", "instParam.yaml")
+        with open(instConfigFile, "r") as stream:
+            instParams = yaml.safe_load(stream)
+
         template = templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, templateSize
+            "R22_S11", DefocalType.Extra, templateSize, instParams=instParams
         )
         templateHalfWidth = int(templateSize / 2)
 

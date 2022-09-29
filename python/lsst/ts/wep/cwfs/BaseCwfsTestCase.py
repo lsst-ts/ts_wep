@@ -39,8 +39,8 @@ class BaseCwfsTestCase(object):
         fieldXY,
         camType,
         algoName,
-        announcedDefocalDisInMm,
         opticalModel,
+        instParams,
         imageIntra=None,
         imageExtra=None,
         imageFileIntra=None,
@@ -60,12 +60,10 @@ class BaseCwfsTestCase(object):
             Algorithm configuration file to solve the Poisson's equation in the
             transport of intensity equation (TIE). It can be "fft" or "exp"
             here.
-        announcedDefocalDisInMm : float
-            Announced defocal distance in mm. It is noted that the defocal
-            distance offset used in calculation might be different from this
-            value.
         opticalModel : str
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
+        instParams : dict
+            Instrument Configuration Parameters to use.
         imageIntra : numpy.ndarray, optional
             Array of intra-focal image. (the default is None.)
         imageExtra : numpy.ndarray, optional
@@ -93,12 +91,11 @@ class BaseCwfsTestCase(object):
         )
 
         # Set the instrument
-        instDir = os.path.join(getConfigDir(), "cwfs", "instData")
-        inst = Instrument(instDir)
-        inst.config(
-            camType,
+        inst = Instrument()
+        inst.configFromDict(
+            instParams,
             imgIntra.getImgSizeInPix(),
-            announcedDefocalDisInMm=announcedDefocalDisInMm,
+            camType,
         )
 
         # Define the algorithm to be used.
