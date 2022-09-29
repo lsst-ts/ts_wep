@@ -47,7 +47,7 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
         instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
         instConfigFile = os.path.join(instConfigDir, "lsst", "instParam.yaml")
         with open(instConfigFile, "r") as stream:
-            self.instParams = yaml.load(stream, Loader=yaml.CLoader)
+            self.instParams = yaml.safe_load(stream)
         self.instParams["offset"] = 1.0e-3
 
         # Set the tolerance

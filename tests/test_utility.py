@@ -21,6 +21,7 @@
 
 import os
 import unittest
+from enum import IntEnum
 
 from lsst.ts.wep.Utility import (
     mapFilterRefToG,
@@ -45,6 +46,7 @@ from lsst.ts.wep.Utility import (
     getCamType,
     getDefocalDisInMm,
     getCamTypeFromButlerName,
+    getCamNameFromCamType,
 )
 from lsst.afw.cameraGeom import DetectorType
 
@@ -288,6 +290,26 @@ class TestUtility(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             getCamTypeFromButlerName(instName, detType)
         self.assertTrue(detAssertMsg in str(context.exception))
+
+    def testGetCamNameFromCamType(self):
+
+        # Test allowable CamType values
+        self.assertEqual(getCamNameFromCamType(CamType.LsstCam), "lsst")
+        self.assertEqual(getCamNameFromCamType(CamType.LsstFamCam), "lsstfam")
+        self.assertEqual(getCamNameFromCamType(CamType.ComCam), "comcam")
+        self.assertEqual(getCamNameFromCamType(CamType.AuxTel), "auxTel")
+        self.assertEqual(getCamNameFromCamType(CamType.AuxTelZWO), "auxTelZWO")
+
+        # Create a TestCamType that has a value greater than the last CamType
+        class TestCamType(IntEnum):
+            BadInst = len(CamType) + 1
+
+        # Test the error is raised correctly with an incorrect CamType.
+        badCamType = TestCamType.BadInst
+        errMsg = f"CamType ({badCamType}) is not supported."
+        with self.assertRaises(ValueError) as context:
+            getCamNameFromCamType(badCamType)
+        self.assertEqual(str(context.exception), errMsg)
 
 
 if __name__ == "__main__":

@@ -61,6 +61,20 @@ class TestInstrument(unittest.TestCase):
         )
         self.assertDictEqual(self.inst.instParams, newInst.instParams)
 
+    def testConfigFromDictWithIncorrectDictKeys(self):
+
+        # Check that error is raised when configDict keys are incorrect
+        newInst = Instrument()
+        instParamsList = list(self.inst.instParams.items())
+        badInstParams = {key: value for key, value in instParamsList[:4]}
+        with self.assertRaises(AssertionError) as context:
+            newInst.configFromDict(
+                badInstParams, self.dimOfDonutOnSensor, CamType.LsstCam
+            )
+        errMsg = f"Config Dict Keys: {badInstParams.keys()} do not match required \
+            instParamKeys: {self.inst.instParams.keys()}"
+        self.assertEqual(str(context.exception), errMsg)
+
     def testConfigFromFileWithIncorrectInstConfigFilePath(self):
 
         badFilePath = "NoFile"

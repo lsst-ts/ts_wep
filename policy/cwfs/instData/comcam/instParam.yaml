@@ -12,7 +12,7 @@ focalLength: 10.3034
 apertureDiameter: 8.36
 
 # Defocal distance offset in m
-offset: 1.5225e-3 # (1.5 mm)
+offset: 1.5225e-3 #  Bo Xin used the offset of 1.5225 mm to get the parameters used for 1.5 mm in ZEMAX
 
 # Camera pixel size in m
 pixelSize: 10.0e-6

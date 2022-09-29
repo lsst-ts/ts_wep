@@ -607,6 +607,11 @@ def getCamNameFromCamType(camType):
     -------
     str
         Instrument Name.
+
+    Raises
+    ------
+    ValueError
+        Camera Type is not supported.
     """
 
     if camType == CamType.LsstCam:

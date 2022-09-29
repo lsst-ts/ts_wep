@@ -36,8 +36,6 @@ class WfEstimator(object):
 
     Parameters
     ----------
-    instDir : str
-        Path to instrument directory.
     algoDir : str
         Path to algorithm directory.
     """
@@ -154,8 +152,6 @@ class WfEstimator(object):
         opticalModel : str, optional
             Optical model. It can be "paraxial", "onAxis", or "offAxis". (the
             default is "offAxis".)
-        defocalDisInMm : float, optional
-            Defocal distance in mm. (the default is 1.5.)
         sizeInPix : int, optional
             Wavefront image pixel size. (the default is 120.)
         centroidFindType : enum 'CentroidFindType', optional

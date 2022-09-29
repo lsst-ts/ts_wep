@@ -78,9 +78,22 @@ class Instrument(object):
             Mask migration (off-axis correction) file path.
             If None will load the default from policy/cwfs folder.
             (The default is None.)
+
+        Raises
+        ------
+        AssertionError
+            ConfigDict keys do not match required keys in self._instParams.
+        ValueError
+            Mask migrate file does not exist.
         """
 
         self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
+
+        # Check that dictionary keys match
+        assert (
+            self._instParams.keys() == configDict.keys()
+        ), f"Config Dict Keys: {configDict.keys()} do not match required \
+            instParamKeys: {self._instParams.keys()}"
 
         # Set configuration parameters
         for key in configDict.keys():
@@ -119,6 +132,13 @@ class Instrument(object):
             Mask migration (off-axis correction) file path.
             If None will load the default from policy/cwfs folder.
             (The default is None.)
+
+        Raises
+        ------
+        ValueError
+            Instrument configuration file does not exist.
+        ValueError
+            Mask migrate file does not exist.
         """
 
         self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
@@ -164,6 +184,9 @@ class Instrument(object):
         ----------
         camType : enum 'CamType'
             Camera type.
+        maskParamFileName : str, optional
+            Mask parameter file name in the policy/cwfs/instData/`instName`
+            directory. (The default is "maskMigrate.yaml".)
         """
 
         # Path of mask off-axis correction file
@@ -208,6 +231,7 @@ class Instrument(object):
 
     def getInstFileDir(self):
         """Get the instrument parameter file directory.
+
         Returns
         -------
         str

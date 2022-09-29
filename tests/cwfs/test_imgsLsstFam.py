@@ -43,7 +43,7 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
         instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
         instConfigFile = os.path.join(instConfigDir, "lsstfam", "instParam.yaml")
         with open(instConfigFile, "r") as stream:
-            self.instParams = yaml.load(stream, Loader=yaml.CLoader)
+            self.instParams = yaml.safe_load(stream)
 
     def testImages(self):
 

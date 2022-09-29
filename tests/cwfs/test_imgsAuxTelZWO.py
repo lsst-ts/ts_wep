@@ -44,7 +44,7 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
         instConfigFile = os.path.join(instConfigDir, "auxTelZWO", "instParam.yaml")
         with open(instConfigFile, "r") as stream:
-            self.instParams = yaml.load(stream, Loader=yaml.CLoader)
+            self.instParams = yaml.safe_load(stream)
 
         self.offset = 80
         self.tolMax = 6

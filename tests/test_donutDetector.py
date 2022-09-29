@@ -47,7 +47,7 @@ class TestDonutDetector(unittest.TestCase):
         instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
         instConfigFile = os.path.join(instConfigDir, "lsst", "instParam.yaml")
         with open(instConfigFile, "r") as stream:
-            instParams = yaml.load(stream, Loader=yaml.CLoader)
+            instParams = yaml.safe_load(stream)
 
         template = templateMaker.makeTemplate(
             "R22_S11", DefocalType.Extra, templateSize, instParams=instParams

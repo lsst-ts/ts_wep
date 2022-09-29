@@ -37,10 +37,10 @@ class TestTemplateModel(unittest.TestCase):
         self.instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
         lsstConfigFile = os.path.join(self.instConfigDir, "lsst", "instParam.yaml")
         with open(lsstConfigFile, "r") as stream:
-            self.lsstInstParams = yaml.load(stream, Loader=yaml.CLoader)
+            self.lsstInstParams = yaml.safe_load(stream)
         auxTelConfigFile = os.path.join(self.instConfigDir, "auxTel", "instParam.yaml")
         with open(auxTelConfigFile, "r") as stream:
-            self.auxTelInstParams = yaml.load(stream, Loader=yaml.CLoader)
+            self.auxTelInstParams = yaml.safe_load(stream)
 
     def testMakeTemplateWithDict(self):
 
