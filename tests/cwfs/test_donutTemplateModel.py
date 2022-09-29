@@ -19,11 +19,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
+import yaml
 import unittest
 import numpy as np
 
 from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
-from lsst.ts.wep.Utility import DefocalType, CamType
+from lsst.ts.wep.Utility import DefocalType, CamType, getConfigDir
 
 
 class TestTemplateModel(unittest.TestCase):
@@ -32,10 +34,39 @@ class TestTemplateModel(unittest.TestCase):
     def setUp(self):
 
         self.templateMaker = DonutTemplateModel()
+        self.instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
+        lsstConfigFile = os.path.join(self.instConfigDir, "lsst", "instParam.yaml")
+        with open(lsstConfigFile, "r") as stream:
+            self.lsstInstParams = yaml.safe_load(stream)
+        auxTelConfigFile = os.path.join(self.instConfigDir, "auxTel", "instParam.yaml")
+        with open(auxTelConfigFile, "r") as stream:
+            self.auxTelInstParams = yaml.safe_load(stream)
 
-    def testMakeTemplate(self):
+    def testMakeTemplateWithDict(self):
 
-        # Generate a test template on the center chip
+        # Generate a test template on the center chip and specify instParams
+        imageSize = 160
+        templateArray = self.templateMaker.makeTemplate(
+            "R22_S11", DefocalType.Extra, imageSize, instParams=self.lsstInstParams
+        )
+
+        self.assertTrue(isinstance(templateArray, np.ndarray))
+        self.assertEqual(templateArray.dtype, int)
+        self.assertEqual(np.max(templateArray), 1)
+
+        # Center of donut should have hole in it
+        self.assertEqual(templateArray[int(imageSize / 2), int(imageSize / 2)], 0)
+
+        # Donut at center of focal plane should be symmetrical
+        np.testing.assert_array_equal(
+            templateArray[: int(imageSize / 2)],
+            templateArray[-1 : -1 * (int(imageSize / 2) + 1) : -1],
+        )
+
+    def testMakeTemplateWithFile(self):
+
+        # Generate a test template on the center chip w/o specifying instParams
+        # This should load default instParams from file.
         imageSize = 160
         templateArray = self.templateMaker.makeTemplate(
             "R22_S11", DefocalType.Extra, imageSize
@@ -61,7 +92,11 @@ class TestTemplateModel(unittest.TestCase):
         for camType in [CamType.LsstCam, CamType.LsstFamCam, CamType.ComCam]:
             print(camType)
             templateArray = self.templateMaker.makeTemplate(
-                "R22_S11", DefocalType.Extra, imageSize, camType=camType
+                "R22_S11",
+                DefocalType.Extra,
+                imageSize,
+                camType=camType,
+                instParams=self.lsstInstParams,
             )
             self.assertTrue(isinstance(templateArray, np.ndarray))
 
@@ -72,13 +107,18 @@ class TestTemplateModel(unittest.TestCase):
                 imageSize,
                 camType=camType,
                 opticalModel="onAxis",
+                instParams=self.lsstInstParams,
             )
             self.assertTrue(isinstance(templateArray, np.ndarray))
 
         with self.assertRaises(ValueError) as context:
             errCamType = 99999
             self.templateMaker.makeTemplate(
-                "R22_S11", DefocalType.Extra, imageSize, camType=errCamType
+                "R22_S11",
+                DefocalType.Extra,
+                imageSize,
+                camType=errCamType,
+                instParams=self.lsstInstParams,
             )
         self.assertEqual(
             f"Camera type ({errCamType}) is not supported.", str(context.exception)
@@ -89,11 +129,11 @@ class TestTemplateModel(unittest.TestCase):
         # Generate a test template on the center chip
         imageSize = 160
         templateArray = self.templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, imageSize
+            "R22_S11", DefocalType.Extra, imageSize, instParams=self.lsstInstParams
         )
 
         smallTemplate = self.templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, imageSize - 20
+            "R22_S11", DefocalType.Extra, imageSize - 20, instParams=self.lsstInstParams
         )
 
         self.assertEqual(np.shape(templateArray), (imageSize, imageSize))
@@ -115,6 +155,7 @@ class TestTemplateModel(unittest.TestCase):
                 CamType.AuxTel,
                 opticalModel,
                 pixelScale,
+                self.auxTelInstParams,
             )
         self.assertEqual(
             str(
@@ -133,6 +174,7 @@ class TestTemplateModel(unittest.TestCase):
                 CamType.AuxTel,
                 opticalModel,
                 pixelScale,
+                self.auxTelInstParams,
             )
         self.assertEqual(
             str(
@@ -156,6 +198,7 @@ class TestTemplateModel(unittest.TestCase):
             CamType.AuxTel,
             opticalModel,
             pixelScale,
+            self.auxTelInstParams,
         )
 
         self.assertTrue(isinstance(templateArray, np.ndarray))
@@ -180,7 +223,7 @@ class TestTemplateModel(unittest.TestCase):
         # but for LsstCam it would not given that image size,
         # as it is smaller
         templateArrayLsst = self.templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, imageSize
+            "R22_S11", DefocalType.Extra, imageSize, instParams=self.lsstInstParams
         )
         self.assertEqual(np.max(templateArrayLsst[0:20, :]), 0)
 

@@ -216,9 +216,9 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             detectorName,
             defocalType,
             self.donutTemplateSize,
-            camType,
-            self.opticalModel,
-            pixelScale,
+            camType=camType,
+            opticalModel=self.opticalModel,
+            pixelScale=pixelScale,
         )
 
         # given this template, detect donuts in one of the defocal images

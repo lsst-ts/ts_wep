@@ -63,7 +63,7 @@ class Algorithm(object):
         self.algoDir = algoDir
         self.algoParamFile = ParamReader()
 
-        self._inst = Instrument("")
+        self._inst = Instrument()
 
         # Show the calculation message based on this value
         # 0 means no message will be showed
@@ -167,8 +167,7 @@ class Algorithm(object):
         self.zer4UpNm = np.zeros(numTerms - 3)
 
         # Wavefront related parameters
-        dimOfDonut = self._inst.dimOfDonutImg
-        self.wcomp = np.zeros((dimOfDonut, dimOfDonut))
+        self.wcomp = np.zeros((self._inst.dimOfDonutImg, self._inst.dimOfDonutImg))
         self.West = self.wcomp.copy()
 
         # Used in model basis ("zer").
@@ -448,10 +447,7 @@ class Algorithm(object):
         """
 
         # m = R'*f/(l*R), R': radius of the no-aberration image
-        focalLength = self._inst.focalLength
-        marginalFL = self._inst.getMarginalFocalLength()
-        maskScalingFactor = focalLength / marginalFL
-
+        maskScalingFactor = self._inst.focalLength / self._inst.getMarginalFocalLength()
         return maskScalingFactor
 
     def getWavefrontMapEsti(self):
@@ -714,8 +710,7 @@ class Algorithm(object):
             self.zcomp = np.zeros(self.getNumOfZernikes())
             self.zc = self.zcomp.copy()
 
-            dimOfDonut = self._inst.dimOfDonutImg
-            self.wcomp = np.zeros((dimOfDonut, dimOfDonut))
+            self.wcomp = np.zeros((self._inst.dimOfDonutImg, self._inst.dimOfDonutImg))
             self.West = self.wcomp.copy()
 
             self.caustic = False
@@ -833,10 +828,10 @@ class Algorithm(object):
         """
 
         # Calculate the aperture pixel size
-        apertureDiameter = self._inst.apertureDiameter
         sensorFactor = self._inst.getSensorFactor()
-        dimOfDonut = self._inst.dimOfDonutImg
-        aperturePixelSize = apertureDiameter * sensorFactor / dimOfDonut
+        aperturePixelSize = (
+            self._inst.apertureDiameter * sensorFactor / self._inst.dimOfDonutImg
+        )
 
         # Calculate the differential Omega
         dOmega = aperturePixelSize**2
@@ -918,7 +913,7 @@ class Algorithm(object):
                 # the aperture size)
 
                 # Take the estimated wavefront
-                West = extractArray(W, dimOfDonut)
+                West = extractArray(W, self._inst.dimOfDonutImg)
 
                 # Calculate the offset
                 offset = West[self.mask_pupil == 1].mean()
@@ -992,12 +987,15 @@ class Algorithm(object):
             #        + \int I (dZ_i/dy) (dZ_j/dy) d_Omega
             Mij = np.einsum("ab,iab,jab->ij", I0, dzkdx, dzkdx)
             Mij += np.einsum("ab,iab,jab->ij", I0, dzkdy, dzkdy)
-            Mij *= dOmega / (apertureDiameter / 2.0) ** 2
+            Mij *= dOmega / (self._inst.apertureDiameter / 2.0) ** 2
 
             # Calculate dz
-            focalLength = self._inst.focalLength
-            offset = self._inst.defocalDisOffset
-            dz = 2 * focalLength * (focalLength - offset) / offset
+            dz = (
+                2
+                * self._inst.focalLength
+                * (self._inst.focalLength - self._inst.defocalDisOffset)
+                / self._inst.defocalDisOffset
+            )
 
             # Define zc
             zc = np.zeros(numTerms)
@@ -1064,9 +1062,11 @@ class Algorithm(object):
 
         # Calculate delta z = f(f-l)/l, f: focal length, l: defocus distance of
         # the image planes
-        focalLength = self._inst.focalLength
-        offset = self._inst.defocalDisOffset
-        deltaZ = focalLength * (focalLength - offset) / offset
+        deltaZ = (
+            self._inst.focalLength
+            * (self._inst.focalLength - self._inst.defocalDisOffset)
+            / self._inst.defocalDisOffset
+        )
 
         # Calculate the wavefront signal. Enforce the element outside the mask
         # to be 0.

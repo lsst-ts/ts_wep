@@ -42,7 +42,6 @@ from lsst.ts.wep.Utility import (
     DefocalType,
     CamType,
     getCamType,
-    getDefocalDisInMm,
 )
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
@@ -470,17 +469,14 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         zerArray = []
 
         configDir = getConfigDir()
-        instDir = os.path.join(configDir, "cwfs", "instData")
         algoDir = os.path.join(configDir, "cwfs", "algo")
-        wfEsti = WfEstimator(instDir, algoDir)
+        wfEsti = WfEstimator(algoDir)
         camType = getCamType(self.instName)
-        defocalDisInMm = getDefocalDisInMm(self.instName)
 
         wfEsti.config(
             sizeInPix=self.donutStampSize,
             camType=camType,
             opticalModel=self.opticalModel,
-            defocalDisInMm=defocalDisInMm,
         )
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):

@@ -25,28 +25,33 @@ import os
 import numpy as np
 
 from lsst.ts.wep.ParamReader import ParamReader
-from lsst.ts.wep.Utility import CamType
+from lsst.ts.wep.Utility import CamType, getConfigDir, getCamNameFromCamType
 
 
 class Instrument(object):
-    """Instrument class for wavefront estimation.
-
-    Parameters
-    ----------
-    instDir : str
-        Instrument configuration directory.
+    """
+    Instrument class to have the instrument information
+    used in the Algorithm class to solve the TIE.
     """
 
-    def __init__(self, instDir):
+    def __init__(self):
 
-        self.instDir = instDir
-        self.instName = ""
+        # Set initial parameters
         self._dimOfDonutImg = 0
-        self.announcedDefocalDisInMm = 0.0
 
-        self._instParams = dict()
-        self.instParamFile = ParamReader()
-        self.maskParamFile = ParamReader()
+        # Keys that should be set in configuration file
+        paramKeys = [
+            "obscuration",
+            "focalLength",
+            "apertureDiameter",
+            "offset",
+            "pixelSize",
+        ]
+        self._instParams = {key: "" for key in paramKeys}
+        self._instName = None
+
+        self.maskParamReader = ParamReader()
+        self._maskOffAxisCorr = []
 
         self.xSensor = np.array([])
         self.ySensor = np.array([])
@@ -54,53 +59,143 @@ class Instrument(object):
         self.xoSensor = np.array([])
         self.yoSensor = np.array([])
 
-    def config(
-        self,
-        camType,
-        dimOfDonutImgOnSensor,
-        announcedDefocalDisInMm=1.5,
-        instParamFileName="instParam.yaml",
-        maskMigrateFileName="maskMigrate.yaml",
+    def configFromDict(
+        self, configDict, dimOfDonutImgOnSensor, camType, maskConfigFile=None
     ):
-        """Do the configuration of Instrument.
+        """Configure the instrument class from a dictionary.
+
+        Parameters
+        ----------
+        configDict : dict
+            Instrument parameter configuration dictionary. Keys needed are:
+            "obscuration", "focalLength", "apertureDiameter",
+            "offset", "pixelSize".
+        dimOfDonutImgOnSensor : int
+            Dimension of donut image on sensor in pixel.
+        camType : enum 'CamType'
+            Camera type.
+        maskConfigFile : str or None, optional
+            Mask migration (off-axis correction) file path.
+            If None will load the default from policy/cwfs folder.
+            (The default is None.)
+
+        Raises
+        ------
+        AssertionError
+            ConfigDict keys do not match required keys in self._instParams.
+        ValueError
+            Mask migrate file does not exist.
+        """
+
+        self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
+
+        # Check that dictionary keys match
+        assert (
+            self._instParams.keys() == configDict.keys()
+        ), f"Config Dict Keys: {configDict.keys()} do not match required \
+            instParamKeys: {self._instParams.keys()}"
+
+        # Set configuration parameters
+        for key in configDict.keys():
+            self._instParams[key] = configDict[key]
+
+        # Load mask configuration file for instrument
+        if maskConfigFile is not None:
+            if not os.path.exists(maskConfigFile):
+                raise ValueError(
+                    f"Mask migrate file at {maskConfigFile} does not exist."
+                )
+            self.maskParamReader.setFilePath(maskConfigFile)
+            self._maskOffAxisCorr = self.maskParamReader.getMatContent()
+        else:
+            # Load default
+            self.setDefaultMaskParams(camType)
+
+        self._setSensorCoor()
+        self._setSensorCoorAnnular()
+
+    def configFromFile(
+        self, dimOfDonutImgOnSensor, camType, instConfigFile=None, maskConfigFile=None
+    ):
+        """Configure the instrument class from a configuration file.
+
+        Parameters
+        ----------
+        dimOfDonutImgOnSensor : int
+            Dimension of donut image on sensor in pixel.
+        camType : enum 'CamType'
+            Camera type.
+        instConfigFile : str or None, optional
+            Instrument parameter configuration file path. If None will
+            load the default from policy/cwfs folder. (The default is None.)
+        maskConfigFile : str or None, optional
+            Mask migration (off-axis correction) file path.
+            If None will load the default from policy/cwfs folder.
+            (The default is None.)
+
+        Raises
+        ------
+        ValueError
+            Instrument configuration file does not exist.
+        ValueError
+            Mask migrate file does not exist.
+        """
+
+        self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
+        self._instName = self._getInstName(camType)
+
+        # Load instrument configuration file
+        if instConfigFile is None:
+            camName = getCamNameFromCamType(camType)
+            instFileDir = os.path.join(getConfigDir(), "cwfs", "instData", camName)
+            instParamFileName = "instParam.yaml"
+            instConfigFilePath = os.path.join(instFileDir, instParamFileName)
+        else:
+            instConfigFilePath = instConfigFile
+
+        if not os.path.exists(instConfigFilePath):
+            raise ValueError(
+                f"Instrument configuration file at {instConfigFilePath} does not exist."
+            )
+        instParamReader = ParamReader()
+        instParamReader.setFilePath(instConfigFilePath)
+        self._instParams = instParamReader.getContent()
+
+        # Load mask configuration file
+        if maskConfigFile is not None:
+            if not os.path.exists(maskConfigFile):
+                raise ValueError(
+                    f"Mask migrate file at {maskConfigFile} does not exist."
+                )
+            self.maskParamReader.setFilePath(maskConfigFile)
+            self._maskOffAxisCorr = self.maskParamReader.getMatContent()
+        else:
+            # Load default
+            self.setDefaultMaskParams(camType)
+
+        self._setSensorCoor()
+        self._setSensorCoorAnnular()
+
+    def setDefaultMaskParams(self, camType, maskParamFileName="maskMigrate.yaml"):
+        """Load the default mask off-axis corrections. Note that there
+        is no such file for auxiliary telescope.
 
         Parameters
         ----------
         camType : enum 'CamType'
             Camera type.
-        dimOfDonutImgOnSensor : int
-            Dimension of donut image on sensor in pixel.
-        announcedDefocalDisInMm : float
-            Announced defocal distance in mm. It is noted that the defocal
-            distance offset used in calculation might be different from this
-            value. (the default is 1.5.)
-        instParamFileName : str, optional
-            Instrument parameter file name. (the default is "instParam.yaml".)
-        maskMigrateFileName : str, optional
-            Mask migration (off-axis correction) file name. (the default is
-            "maskMigrate.yaml".)
+        maskParamFileName : str, optional
+            Mask parameter file name in the policy/cwfs/instData/`instName`
+            directory. (The default is "maskMigrate.yaml".)
         """
 
-        self.instName = self._getInstName(camType)
-        self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
-        self.announcedDefocalDisInMm = announcedDefocalDisInMm
-
-        # Path of instrument param file
-        instFileDir = self.getInstFileDir()
-        instParamFilePath = os.path.join(instFileDir, instParamFileName)
-        self.instParamFile.setFilePath(instParamFilePath)
-
-        # Load instrument parameters
-        self._instParams = self.instParamFile.getContent()
-
         # Path of mask off-axis correction file
-        # There is no such file for auxiliary telescope
-        maskParamFilePath = os.path.join(instFileDir, maskMigrateFileName)
-        if os.path.exists(maskParamFilePath):
-            self.maskParamFile.setFilePath(maskParamFilePath)
-
-        self._setSensorCoor()
-        self._setSensorCoorAnnular()
+        if camType not in [CamType.AuxTel, CamType.AuxTelZWO]:
+            self._instName = self._getInstName(camType)
+            instFileDir = self.getInstFileDir()
+            maskParamFilePath = os.path.join(instFileDir, maskParamFileName)
+            self.maskParamReader.setFilePath(maskParamFilePath)
+            self._maskOffAxisCorr = self.maskParamReader.getMatContent()
 
     def _getInstName(self, camType):
         """Get the instrument name.
@@ -143,7 +238,7 @@ class Instrument(object):
             Instrument parameter file directory.
         """
 
-        return os.path.join(self.instDir, self.instName)
+        return os.path.join(getConfigDir(), "cwfs", "instData", self._instName)
 
     def _setSensorCoor(self):
         """Set the sensor coordinate."""
@@ -174,39 +269,6 @@ class Instrument(object):
         self.xoSensor[idx] = np.nan
         self.yoSensor[idx] = np.nan
 
-    def setAnnDefocalDisInMm(self, annDefocalDisInMm):
-        """Set the announced defocal distance in mm.
-
-        Parameters
-        ----------
-        annDefocalDisInMm : float
-            Announced defocal distance in mm.
-        """
-
-        self.announcedDefocalDisInMm = annDefocalDisInMm
-
-    def getAnnDefocalDisInMm(self):
-        """Get the announced defocal distance in mm.
-
-        Returns
-        -------
-        float
-            Announced defocal distance in mm.
-        """
-
-        return self.announcedDefocalDisInMm
-
-    def getInstFilePath(self):
-        """Get the instrument parameter file path.
-
-        Returns
-        -------
-        str
-            Instrument parameter file path.
-        """
-
-        return self.instParamFile.getFilePath()
-
     @property
     def instParams(self):
         """Dictionary of the instrument configuration parameters."""
@@ -230,8 +292,7 @@ class Instrument(object):
     @property
     def defocalDisOffset(self):
         """The defocal distance offset in meters."""
-        offsetKey = "%.1fmm" % self.announcedDefocalDisInMm
-        return self.instParams["offset"][offsetKey]
+        return self.instParams["offset"]
 
     @property
     def pixelSize(self):
@@ -241,7 +302,6 @@ class Instrument(object):
     @property
     def maskOffAxisCorr(self):
         """The mask off-axis correction."""
-        self._maskOffAxisCorr = self.maskParamFile.getMatContent()
         return self._maskOffAxisCorr
 
     @property
@@ -292,7 +352,6 @@ class Instrument(object):
         numpy.ndarray
             Y coordinate.
         """
-
         # Set each time with current instParams
         self._setSensorCoor()
         return self.xSensor, self.ySensor
@@ -307,7 +366,6 @@ class Instrument(object):
         numpy.ndarray
             Y coordinate.
         """
-
         # Set each time with current instParams
         self._setSensorCoorAnnular()
         return self.xoSensor, self.yoSensor

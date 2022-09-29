@@ -16,8 +16,7 @@ apertureDiameter: 1.2
 # Move the M2 to fake the move of focal plane dz
 # Move the M2 by 0.8 mm = move the focal plane by 0.0328 m  (magnification of 41)
 # Defocal distance offset in m
-offset:
-  0.8mm: 3.28e-2
+offset: 3.28e-2
 
 # Camera pixel size in m
 pixelSize: 10.0e-6
