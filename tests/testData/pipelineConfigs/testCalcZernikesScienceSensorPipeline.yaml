@@ -38,8 +38,14 @@ tasks:
     config:
       # And here we specify the configuration settings originally defined in
       # EstimateZernikesCwfsTaskConfig.
+      # Test Science Sensor pipeline works when specifying instrument configuration
       donutTemplateSize: 160
       donutStampSize: 160
       initialCutoutPadding: 40
+      instObscuration: 0.61
+      instFocalLength: 10.312
+      instApertureDiameter: 8.36
+      instDefocalOffset: 1.5e-3
+      instPixelSize: 10.0e-6
   calcZernikesTask:
     class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask

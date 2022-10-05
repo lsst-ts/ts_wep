@@ -28,7 +28,6 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
     def testValidateConfigs(self):
 
         self.config.donutTemplateSize = 123
-        self.config.instName = "telescope"
         self.config.opticalModel = "another"
         self.config.removeBlends = False
         self.config.blendRadius = 456
@@ -37,12 +36,30 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.task = GenerateDonutDirectDetectTask(config=self.config)
 
         self.assertEqual(self.task.config.donutTemplateSize, 123)
-        self.assertEqual(self.task.config.instName, "telescope")
         self.assertEqual(self.task.config.opticalModel, "another")
         self.assertEqual(self.task.config.removeBlends, False)
         self.assertEqual(self.task.config.blendRadius, 456)
         self.assertEqual(self.task.config.peakThreshold, 0.56)
         self.assertEqual(self.task.config.binaryChoice, "centroid")
+
+    def testCreateInstDictFromConfig(self):
+
+        self.config.instObscuration = 0.1
+        self.config.instFocalLength = 10.0
+        self.config.instApertureDiameter = 10.0
+        self.config.instDefocalOffset = 0.01
+        self.config.instPixelSize = 0.1
+        task = GenerateDonutDirectDetectTask(config=self.config)
+
+        testDict = {
+            "obscuration": 0.1,
+            "focalLength": 10.0,
+            "apertureDiameter": 10.0,
+            "offset": 0.01,
+            "pixelSize": 0.1,
+        }
+
+        self.assertDictEqual(testDict, task.instParams)
 
     def testUpdateDonutCatalog(self):
 
@@ -135,11 +152,11 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
             ],
         )
         self.assertCountEqual(
-            [3196, 2198, 2190, 3194],
+            [3196, 2198, 2196, 3197],
             outputDf["centroid_y"],
         )
         self.assertCountEqual(
-            [3815, 2814, 2813, 3812],
+            [3815, 2814, 2811, 3812],
             outputDf["centroid_x"],
         )
 

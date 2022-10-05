@@ -116,18 +116,33 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
 
     def testValidateConfigs(self):
 
+        # Test defaults
+        self.assertEqual(self.task.instParams["obscuration"], 0.3525)
+        self.assertEqual(self.task.instParams["focalLength"], 21.6)
+        self.assertEqual(self.task.instParams["apertureDiameter"], 1.2)
+        self.assertEqual(self.task.instParams["offset"], 3.28e-2)
+        self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
+
         self.config.donutTemplateSize = 200
         self.config.donutStampSize = 200
         self.config.initialCutoutPadding = 40
         self.config.opticalModel = "onAxis"
-        self.config.instName = "auxTel"
+        self.config.instObscuration = 1.0
+        self.config.instFocalLength = 1.0
+        self.config.instApertureDiameter = 1.0
+        self.config.instDefocalOffset = 1.0
+        self.config.instPixelSize = 1.0
         self.task = EstimateZernikesLatissTask(config=self.config)
 
         self.assertEqual(self.task.donutTemplateSize, 200)
         self.assertEqual(self.task.donutStampSize, 200)
         self.assertEqual(self.task.initialCutoutPadding, 40)
         self.assertEqual(self.task.opticalModel, "onAxis")
-        self.assertEqual(self.task.instName, "auxTel")
+        self.assertEqual(self.task.instParams["obscuration"], 1.0)
+        self.assertEqual(self.task.instParams["focalLength"], 1.0)
+        self.assertEqual(self.task.instParams["apertureDiameter"], 1.0)
+        self.assertEqual(self.task.instParams["offset"], 1.0)
+        self.assertEqual(self.task.instParams["pixelSize"], 1.0)
 
     def testAssignExtraIntraIdx(self):
 

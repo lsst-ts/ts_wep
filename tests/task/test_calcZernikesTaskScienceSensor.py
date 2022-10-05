@@ -163,6 +163,9 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
+        # Use dataIdExtra here too because both sets of donutStamps
+        # get saved to extraFocal dataId so we can run this task
+        # in parallel across detector pairs of the same visit.
         donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )

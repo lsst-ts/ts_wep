@@ -1,5 +1,8 @@
 description: ISR basic processing pipeline
 instrument: lsst.obs.lsst.Latiss
+# Use imported instrument configuration
+imports:
+  - location: $TS_WEP_DIR/policy/cwfs/instData/auxTel/instParamPipeConfig.yaml
 tasks:
   isr:
     class: lsst.ip.isr.isrTask.IsrTask
@@ -24,7 +27,6 @@ tasks:
     config:
       donutTemplateSize: 200
       removeBlends: True
-      instName: 'auxTel'
       opticalModel: 'onAxis'
   estimateZernikesLatissTask:
     class: lsst.ts.wep.task.EstimateZernikesLatissTask.EstimateZernikesLatissTask
@@ -33,6 +35,4 @@ tasks:
       donutTemplateSize: 200
       donutStampSize: 200
       initialCutoutPadding: 40
-      instName: 'auxTel'
       opticalModel: 'onAxis'
-      
