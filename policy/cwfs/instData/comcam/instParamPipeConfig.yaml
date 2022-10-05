@@ -1,0 +1,12 @@
+description: LSST Telescope Parameters
+instrument: lsst.obs.lsst.LsstComCam
+
+tasks:
+  estimateZernikesScienceSensorTask:
+    class: lsst.ts.wep.task.EstimateZernikesScienceSensorTask.EstimateZernikesScienceSensorTask
+    config:
+      instObscuration: 0.61
+      instFocalLength: 10.3034
+      instApertureDiameter: 8.36
+      instDefocalOffset: 1.5225e-3
+      instPixelSize: 10.0e-6

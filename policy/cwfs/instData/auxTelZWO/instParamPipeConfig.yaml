@@ -1,0 +1,12 @@
+description: LSST Telescope Parameters
+instrument: lsst.obs.lsst.Latiss
+
+tasks:
+  estimateZernikeLatissTask:
+    class: lsst.ts.wep.task.EstimateZernikesLatissTask.EstimateZernikesLatissTask
+    config:
+      instObscuration: 0.3525
+      instFocalLength: 21.6
+      instApertureDiameter: 1.2
+      instDefocalOffset: 2.05e-2
+      instPixelSize: 15.2e-6
