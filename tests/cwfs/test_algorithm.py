@@ -69,13 +69,13 @@ class TestAlgorithm(unittest.TestCase):
         cwfsConfigDir = os.path.join(getConfigDir(), "cwfs")
         instDir = os.path.join(cwfsConfigDir, "instData")
         self.inst = Instrument()
-        instConfigFile = os.path.join(instDir, "lsst", "instParam.yaml")
+        instConfigFile = os.path.join(instDir, "lsst", "instParamPipeConfig.yaml")
         maskConfigFile = os.path.join(instDir, "lsst", "maskMigrate.yaml")
 
         self.inst.configFromFile(
             self.I1.getImgSizeInPix(), CamType.LsstCam, instConfigFile, maskConfigFile
         )
-        self.inst.instParams["offset"] = 1.0e-3
+        self.inst.instParams["offset"] = 1.0
 
         # Set up the algorithm
         algoDir = os.path.join(cwfsConfigDir, "algo")
