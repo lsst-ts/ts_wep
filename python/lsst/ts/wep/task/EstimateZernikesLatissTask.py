@@ -29,9 +29,10 @@ import typing
 import numpy as np
 import pandas as pd
 
+import lsst.afw.cameraGeom
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
-import lsst.afw.cameraGeom
+import lsst.pex.config as pexConfig
 from lsst.utils.timer import timeMethod
 from lsst.pipe.base import connectionTypes
 
@@ -60,7 +61,24 @@ class EstimateZernikesLatissTaskConfig(
     EstimateZernikesBaseConfig,
     pipelineConnections=EstimateZernikesLatissTaskConnections,
 ):
-    pass
+    # Change to use Latiss defaults
+    instObscuration = pexConfig.Field(
+        doc="Obscuration (inner_radius / outer_radius of M1M3)",
+        dtype=float,
+        default=0.3525,
+    )
+    instFocalLength = pexConfig.Field(
+        doc="Instrument Focal Length in m", dtype=float, default=21.6
+    )
+    instApertureDiameter = pexConfig.Field(
+        doc="Instrument Aperture Diameter in m", dtype=float, default=1.2
+    )
+    instDefocalOffset = pexConfig.Field(
+        doc="Instrument defocal offset in m", dtype=float, default=3.28e-2
+    )
+    instPixelSize = pexConfig.Field(
+        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
+    )
 
 
 class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
@@ -88,8 +106,8 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
         # cutout stamp we will still have a postage stamp
         # of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
-        # Set the instrument name - this task only handles auxTel
-        self.instName = "auxTel"
+        # Specify detector type
+        self.detectorType = lsst.afw.cameraGeom.DetectorType.SCIENCE
 
     def assignExtraIntraIdx(self, focusZVal0, focusZVal1):
         """
@@ -155,6 +173,10 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
         focusZ0 = visitInfo_0.focusZ
         focusZ1 = visitInfo_1.focusZ
 
+        # Get defocal distance from visitInfo and convert from mm to m.
+        if self.instParams["offset"] is None:
+            self.instParams["offset"] = np.abs(focusZ0)
+
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
 
         # Get the donut stamps from extra and intra focal images
@@ -177,7 +199,9 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
             )
 
         # Estimate Zernikes from collection of stamps
-        zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        zernikeCoeffsRaw = self.estimateZernikes(
+            donutStampsExtra, donutStampsIntra, camera.getName(), self.detectorType
+        )
         zernikeCoeffsCombined = self.getCombinedZernikes(zernikeCoeffsRaw)
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and

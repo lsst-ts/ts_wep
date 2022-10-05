@@ -102,12 +102,34 @@ class CutOutDonutsBaseTaskConfig(
             + "to make sure we have a stamp of donutStampSize after recentroiding donut"
         ),
         dtype=int,
-        default=40,
+        default=5,
     )
     opticalModel = pexConfig.Field(
         doc="Specify the optical model (offAxis, paraxial, onAxis).",
         dtype=str,
         default="offAxis",
+    )
+    instObscuration = pexConfig.Field(
+        doc="Obscuration (inner_radius / outer_radius of M1M3)",
+        dtype=float,
+        default=0.61,
+    )
+    instFocalLength = pexConfig.Field(
+        doc="Instrument Focal Length in m", dtype=float, default=10.312
+    )
+    instApertureDiameter = pexConfig.Field(
+        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
+    )
+    instDefocalOffset = pexConfig.Field(
+        doc="Instrument defocal offset in m. \
+        If None then will get this from the focusZ value in exposure visitInfo. \
+        (The default is None.)",
+        dtype=float,
+        default=None,
+        optional=True,
+    )
+    instPixelSize = pexConfig.Field(
+        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
 
 
@@ -140,6 +162,27 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.initialCutoutPadding = self.config.initialCutoutPadding
         # Specify optical model
         self.opticalModel = self.config.opticalModel
+        # Set up instrument configuration dict
+        self.instParams = self._createInstDictFromConfig()
+
+    def _createInstDictFromConfig(self):
+
+        """Create configuration dictionary for the instrument.
+
+        Returns
+        -------
+        dict
+            Instrument configuration parameters
+        """
+
+        instParams = {}
+        instParams["obscuration"] = self.config.instObscuration
+        instParams["focalLength"] = self.config.instFocalLength
+        instParams["apertureDiameter"] = self.config.instApertureDiameter
+        instParams["offset"] = self.config.instDefocalOffset
+        instParams["pixelSize"] = self.config.instPixelSize
+
+        return instParams
 
     def getTemplate(
         self,
@@ -183,9 +226,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             detectorName,
             defocalType,
             donutTemplateSize,
-            camType,
-            opticalModel,
-            pixelScale,
+            camType=camType,
+            opticalModel=opticalModel,
+            pixelScale=pixelScale,
+            instParams=self.instParams,
         )
 
         return template
@@ -332,7 +376,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             self.opticalModel,
             pixelScale,
         )
-        defocalDist = exposure.visitInfo.focusZ
+
+        # If offset not yet set then use exposure value.
+        if self.instParams["offset"] is None:
+            self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ)
 
         # Final list of DonutStamp objects
         finalStamps = []
@@ -386,7 +433,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                     cam_name=cameraName,
                     defocal_type=defocalType.value,
                     # Save defocal offset in mm.
-                    defocal_distance=defocalDist,
+                    defocal_distance=self.instParams["offset"] * 1e3,
                 )
             )
 
@@ -397,7 +444,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
         stampsMetadata["DFC_TYPE"] = np.array([defocalType.value] * catalogLength)
-        stampsMetadata["DFC_DIST"] = np.array([defocalDist] * catalogLength)
+        stampsMetadata["DFC_DIST"] = np.array(
+            [self.instParams["offset"] * 1e3] * catalogLength
+        )
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)

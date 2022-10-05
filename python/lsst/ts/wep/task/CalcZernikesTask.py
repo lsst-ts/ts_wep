@@ -77,6 +77,33 @@ class CalcZernikesTaskConfig(
             + "is CombineZernikesSigmaClipTask.)"
         ),
     )
+    opticalModel = pexConfig.Field(
+        doc="Specify the optical model (offAxis, paraxial, onAxis).",
+        dtype=str,
+        default="offAxis",
+    )
+    instObscuration = pexConfig.Field(
+        doc="Obscuration (inner_radius / outer_radius of M1M3)",
+        dtype=float,
+        default=0.61,
+    )
+    instFocalLength = pexConfig.Field(
+        doc="Instrument Focal Length in m", dtype=float, default=10.312
+    )
+    instApertureDiameter = pexConfig.Field(
+        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
+    )
+    instDefocalOffset = pexConfig.Field(
+        doc="Instrument defocal offset in m. \
+        If None then will get this from the focusZ value in exposure visitInfo. \
+        (The default is None.)",
+        dtype=float,
+        default=None,
+        optional=True,
+    )
+    instPixelSize = pexConfig.Field(
+        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
+    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask):
@@ -95,6 +122,30 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         # for the detector.
         self.combineZernikes = self.config.combineZernikes
         self.makeSubtask("combineZernikes")
+
+        # Specify optical model
+        self.opticalModel = self.config.opticalModel
+        # Set up instrument configuration dict
+        self.instParams = self._createInstDictFromConfig()
+
+    def _createInstDictFromConfig(self):
+
+        """Create configuration dictionary for the instrument.
+
+        Returns
+        -------
+        dict
+            Instrument configuration parameters
+        """
+
+        instParams = {}
+        instParams["obscuration"] = self.config.instObscuration
+        instParams["focalLength"] = self.config.instFocalLength
+        instParams["apertureDiameter"] = self.config.instApertureDiameter
+        instParams["offset"] = self.config.instDefocalOffset
+        instParams["pixelSize"] = self.config.instPixelSize
+
+        return instParams
 
     def estimateZernikes(self, donutStampsExtra, donutStampsIntra):
         """
@@ -125,13 +176,18 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         detectorNames = donutStampsExtra.getDetectorNames()
         camera = donutStampsExtra[0].getCamera()
         detectorType = camera[detectorNames[0]].getType()
+        defocalDistances = donutStampsExtra.getDefocalDistances()
+        defocalDist = defocalDistances[0]
+        self.instParams["offset"] = defocalDist
 
         camType = getCamTypeFromButlerName(camera.getName(), detectorType)
         donutStampSize = np.shape(donutStampsExtra[0].stamp_im.getImage().getArray())[0]
 
         wfEsti.config(
+            self.instParams,
             sizeInPix=donutStampSize,
             camType=camType,
+            opticalModel=self.opticalModel,
         )
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
@@ -215,6 +271,10 @@ class CalcZernikesTask(pipeBase.PipelineTask):
                 outputZernikesRaw=np.ones(19) * np.nan,
                 outputZernikesAvg=np.ones(19) * np.nan,
             )
+
+        # Get defocal distance from stamps and convert from mm to m.
+        if self.instParams["offset"] is None:
+            self.instParams["offset"] = donutStampsExtra[0].defocal_distance / 1e3
 
         # Estimate Zernikes from collection of stamps
         zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
