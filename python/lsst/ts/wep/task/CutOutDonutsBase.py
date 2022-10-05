@@ -34,7 +34,11 @@ from lsst.daf.base import PropertyList
 from lsst.pipe.base import connectionTypes
 from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 
-from lsst.ts.wep.Utility import getCamTypeFromButlerName, DonutTemplateType
+from lsst.ts.wep.Utility import (
+    getCamTypeFromButlerName,
+    DonutTemplateType,
+    createInstDictFromConfig,
+)
 from lsst.ts.wep.task.DonutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from scipy.signal import correlate
@@ -163,26 +167,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Specify optical model
         self.opticalModel = self.config.opticalModel
         # Set up instrument configuration dict
-        self.instParams = self._createInstDictFromConfig()
-
-    def _createInstDictFromConfig(self):
-
-        """Create configuration dictionary for the instrument.
-
-        Returns
-        -------
-        dict
-            Instrument configuration parameters
-        """
-
-        instParams = {}
-        instParams["obscuration"] = self.config.instObscuration
-        instParams["focalLength"] = self.config.instFocalLength
-        instParams["apertureDiameter"] = self.config.instApertureDiameter
-        instParams["offset"] = self.config.instDefocalOffset
-        instParams["pixelSize"] = self.config.instPixelSize
-
-        return instParams
+        self.instParams = createInstDictFromConfig(self.config)
 
     def getTemplate(
         self,

@@ -40,6 +40,7 @@ from lsst.ts.wep.Utility import (
     DefocalType,
     DonutTemplateType,
     getCamTypeFromButlerName,
+    createInstDictFromConfig,
 )
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 
@@ -174,26 +175,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # choose how to calculate binary image
         self.binaryChoice = self.config.binaryChoice
         # Set up instrument configuration dict
-        self.instParams = self._createInstDictFromConfig()
-
-    def _createInstDictFromConfig(self):
-
-        """Create configuration dictionary for the instrument.
-
-        Returns
-        -------
-        dict
-            Instrument configuration parameters
-        """
-
-        instParams = {}
-        instParams["obscuration"] = self.config.instObscuration
-        instParams["focalLength"] = self.config.instFocalLength
-        instParams["apertureDiameter"] = self.config.instApertureDiameter
-        instParams["offset"] = self.config.instDefocalOffset
-        instParams["pixelSize"] = self.config.instPixelSize
-
-        return instParams
+        self.instParams = createInstDictFromConfig(self.config)
 
     def updateDonutCatalog(self, donutCat, exposure):
         """

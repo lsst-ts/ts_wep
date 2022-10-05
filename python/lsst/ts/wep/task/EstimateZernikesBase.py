@@ -42,6 +42,7 @@ from lsst.ts.wep.Utility import (
     DonutTemplateType,
     DefocalType,
     CamType,
+    createInstDictFromConfig,
 )
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
@@ -197,26 +198,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         self.opticalModel = self.config.opticalModel
 
         # Set up instrument configuration dict
-        self.instParams = self._createInstDictFromConfig()
-
-    def _createInstDictFromConfig(self):
-
-        """Create configuration dictionary for the instrument.
-
-        Returns
-        -------
-        dict
-            Instrument configuration parameters
-        """
-
-        instParams = {}
-        instParams["obscuration"] = self.config.instObscuration
-        instParams["focalLength"] = self.config.instFocalLength
-        instParams["apertureDiameter"] = self.config.instApertureDiameter
-        instParams["offset"] = self.config.instDefocalOffset
-        instParams["pixelSize"] = self.config.instPixelSize
-
-        return instParams
+        self.instParams = createInstDictFromConfig(self.config)
 
     def getTemplate(
         self,
