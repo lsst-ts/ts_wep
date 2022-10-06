@@ -20,13 +20,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import yaml
 import numpy as np
 import unittest
 
 from lsst.ts.wep.cwfs.Image import Image
 from lsst.ts.wep.cwfs.BaseCwfsTestCase import BaseCwfsTestCase
-from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType, getConfigDir
+from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType
 
 
 class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
@@ -40,11 +39,13 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         self.testImgDir = os.path.join(testImageDataDir, "auxTelZWO")
         self.validationDir = os.path.join(testImageDataDir, "validation", "auxTelZWO")
 
-        # Get inst information
-        instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
-        instConfigFile = os.path.join(instConfigDir, "auxTelZWO", "instParam.yaml")
-        with open(instConfigFile, "r") as stream:
-            self.instParams = yaml.safe_load(stream)
+        # Set inst information
+        self.instParams = dict()
+        self.instParams["obscuration"] = 0.3525
+        self.instParams["focalLength"] = 21.6
+        self.instParams["apertureDiameter"] = 1.2
+        self.instParams["offset"] = 20.5
+        self.instParams["pixelSize"] = 15.2e-6
 
         self.offset = 80
         self.tolMax = 6

@@ -20,12 +20,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import yaml
 import numpy as np
 import unittest
 
 from lsst.ts.wep.cwfs.BaseCwfsTestCase import BaseCwfsTestCase
-from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType, getConfigDir
+from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType
 
 
 class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
@@ -39,11 +38,13 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
         self.testImgDir = os.path.join(testImageDataDir, "lsstfam")
         self.validationDir = os.path.join(testImageDataDir, "validation", "lsstfam")
 
-        # Get inst information
-        instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
-        instConfigFile = os.path.join(instConfigDir, "lsstfam", "instParam.yaml")
-        with open(instConfigFile, "r") as stream:
-            self.instParams = yaml.safe_load(stream)
+        # Set inst information
+        self.instParams = dict()
+        self.instParams["obscuration"] = 0.61
+        self.instParams["focalLength"] = 10.312
+        self.instParams["apertureDiameter"] = 8.36
+        self.instParams["offset"] = 1.5
+        self.instParams["pixelSize"] = 10.0e-6
 
     def testImages(self):
 

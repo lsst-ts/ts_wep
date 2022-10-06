@@ -195,7 +195,7 @@ class TestDonutStamp(unittest.TestCase):
 
         # Set up instrument
         instDataPath = os.path.join(getConfigDir(), "cwfs", "instData")
-        instConfigFile = os.path.join(instDataPath, "lsst", "instParam.yaml")
+        instConfigFile = os.path.join(instDataPath, "lsst", "instParamPipeConfig.yaml")
         maskConfigFile = os.path.join(instDataPath, "lsst", "maskMigrate.yaml")
         inst = Instrument()
         donutWidth = 126

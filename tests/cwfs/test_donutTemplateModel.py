@@ -19,13 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
-import yaml
 import unittest
 import numpy as np
 
 from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
-from lsst.ts.wep.Utility import DefocalType, CamType, getConfigDir
+from lsst.ts.wep.Utility import DefocalType, CamType
 
 
 class TestTemplateModel(unittest.TestCase):
@@ -34,13 +32,21 @@ class TestTemplateModel(unittest.TestCase):
     def setUp(self):
 
         self.templateMaker = DonutTemplateModel()
-        self.instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
-        lsstConfigFile = os.path.join(self.instConfigDir, "lsst", "instParam.yaml")
-        with open(lsstConfigFile, "r") as stream:
-            self.lsstInstParams = yaml.safe_load(stream)
-        auxTelConfigFile = os.path.join(self.instConfigDir, "auxTel", "instParam.yaml")
-        with open(auxTelConfigFile, "r") as stream:
-            self.auxTelInstParams = yaml.safe_load(stream)
+
+        # Set LSST instParams
+        self.lsstInstParams = dict()
+        self.lsstInstParams["obscuration"] = 0.61
+        self.lsstInstParams["focalLength"] = 10.312
+        self.lsstInstParams["apertureDiameter"] = 8.36
+        self.lsstInstParams["offset"] = 1.0
+        self.lsstInstParams["pixelSize"] = 10.0e-6
+
+        self.auxTelInstParams = dict()
+        self.auxTelInstParams["obscuration"] = 0.3525
+        self.auxTelInstParams["focalLength"] = 21.6
+        self.auxTelInstParams["apertureDiameter"] = 1.2
+        self.auxTelInstParams["offset"] = 32.8
+        self.auxTelInstParams["pixelSize"] = 10.0e-6
 
     def testMakeTemplateWithDict(self):
 
