@@ -169,6 +169,20 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Set up instrument configuration dict
         self.instParams = createInstDictFromConfig(self.config)
 
+    def _checkAndSetOffset(self, dataOffsetValue):
+        """Check offset in instParams dictionary and if it
+        is not yet defined set to data defined value.
+
+        Parameters
+        ----------
+        dataOffsetValue : float
+            The defocal offset amount defined in the
+            data. (An exposure or donutStamp).
+        """
+
+        if self.instParams["offset"] is None:
+            self.instParams["offset"] = dataOffsetValue
+
     def getTemplate(
         self,
         detectorName,
@@ -363,8 +377,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         )
 
         # If offset not yet set then use exposure value.
-        if self.instParams["offset"] is None:
-            self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ)
+        self._checkAndSetOffset(np.abs(exposure.visitInfo.focusZ))
 
         # Final list of DonutStamp objects
         finalStamps = []

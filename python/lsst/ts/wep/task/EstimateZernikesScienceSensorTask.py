@@ -148,8 +148,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         focusZ1 = exposures[1].visitInfo.focusZ
 
         # Get defocal distance from focusZ.
-        if self.instParams["offset"] is None:
-            self.instParams["offset"] = np.abs(focusZ0)
+        self._checkAndSetOffset(np.abs(focusZ0))
 
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
 

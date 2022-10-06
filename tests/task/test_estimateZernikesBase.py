@@ -201,6 +201,18 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
 
         self.assertDictEqual(testDict, task.instParams)
 
+    def testCheckAndSetOffset(self):
+
+        # If offset is already set then no change
+        self.assertEqual(self.task.instParams["offset"], 1.5)
+        self.task._checkAndSetOffset(30.0)
+        self.assertEqual(self.task.instParams["offset"], 1.5)
+
+        # If offset is None then change to incoming value
+        self.task.instParams["offset"] = None
+        self.task._checkAndSetOffset(30.0)
+        self.assertEqual(self.task.instParams["offset"], 30.0)
+
     def testGetTemplate(self):
 
         extra_template = self.task.getTemplate(

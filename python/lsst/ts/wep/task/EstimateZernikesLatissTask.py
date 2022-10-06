@@ -174,8 +174,7 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
         focusZ1 = visitInfo_1.focusZ
 
         # Get defocal distance from visitInfo.
-        if self.instParams["offset"] is None:
-            self.instParams["offset"] = np.abs(focusZ0)
+        self._checkAndSetOffset(np.abs(focusZ0))
 
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
 
