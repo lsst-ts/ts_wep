@@ -125,7 +125,7 @@ class CutOutDonutsBaseTaskConfig(
         doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
     )
     instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in m. \
+        doc="Instrument defocal offset in mm. \
         If None then will get this from the focusZ value in exposure visitInfo. \
         (The default is None.)",
         dtype=float,
@@ -418,7 +418,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                     cam_name=cameraName,
                     defocal_type=defocalType.value,
                     # Save defocal offset in mm.
-                    defocal_distance=self.instParams["offset"] * 1e3,
+                    defocal_distance=self.instParams["offset"],
                 )
             )
 
@@ -430,7 +430,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
         stampsMetadata["DFC_TYPE"] = np.array([defocalType.value] * catalogLength)
         stampsMetadata["DFC_DIST"] = np.array(
-            [self.instParams["offset"] * 1e3] * catalogLength
+            [self.instParams["offset"]] * catalogLength
         )
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)

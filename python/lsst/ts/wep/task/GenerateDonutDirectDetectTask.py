@@ -133,7 +133,7 @@ class GenerateDonutDirectDetectTaskConfig(
         doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
     )
     instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in m. \
+        doc="Instrument defocal offset in mm. \
         If None then will get this from the focusZ value in exposure visitInfo. \
         (The default is None.)",
         dtype=float,
@@ -241,15 +241,15 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         camType = getCamTypeFromButlerName(camera.getName(), detectorType)
         pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
 
-        # Get defocal distance from focusZ and convert from mm to m.
+        # Get defocal distance from focusZ.
         if self.instParams["offset"] is None:
-            self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ) / 1e3
+            self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ)
         # LSST CWFS are offset +/- 1.5 mm when LSST camera defocus is at 0.
         if detectorType.name == "WAVEFRONT":
             if defocalType == DefocalType.Extra:
-                self.instParams["offset"] = np.abs(self.instParams["offset"] - 1.5e-3)
+                self.instParams["offset"] = np.abs(self.instParams["offset"] - 1.5)
             elif defocalType == DefocalType.Intra:
-                self.instParams["offset"] = np.abs(self.instParams["offset"] + 1.5e-3)
+                self.instParams["offset"] = np.abs(self.instParams["offset"] + 1.5)
             else:
                 raise ValueError(f"Defocal Type {defocalType} not valid.")
 

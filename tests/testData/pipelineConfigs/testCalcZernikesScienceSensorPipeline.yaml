@@ -45,7 +45,7 @@ tasks:
       instObscuration: 0.61
       instFocalLength: 10.312
       instApertureDiameter: 8.36
-      instDefocalOffset: 1.5e-3
+      instDefocalOffset: 1.5
       instPixelSize: 10.0e-6
   calcZernikesTask:
     class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask

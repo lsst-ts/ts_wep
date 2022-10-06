@@ -99,7 +99,7 @@ class CalcZernikesTaskConfig(
         doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
     )
     instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in m. \
+        doc="Instrument defocal offset in mm. \
         If None then will get this from the focusZ value in exposure visitInfo. \
         (The default is None.)",
         dtype=float,
@@ -162,9 +162,7 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         detectorNames = donutStampsExtra.getDetectorNames()
         camera = donutStampsExtra[0].getCamera()
         detectorType = camera[detectorNames[0]].getType()
-        defocalDistances = donutStampsExtra.getDefocalDistances()
-        defocalDist = defocalDistances[0]
-        self.instParams["offset"] = defocalDist
+        self.instParams["offset"] = donutStampsExtra.getDefocalDistances()[0]
 
         camType = getCamTypeFromButlerName(camera.getName(), detectorType)
         donutStampSize = np.shape(donutStampsExtra[0].stamp_im.getImage().getArray())[0]
@@ -257,10 +255,6 @@ class CalcZernikesTask(pipeBase.PipelineTask):
                 outputZernikesRaw=np.ones(19) * np.nan,
                 outputZernikesAvg=np.ones(19) * np.nan,
             )
-
-        # Get defocal distance from stamps and convert from mm to m.
-        if self.instParams["offset"] is None:
-            self.instParams["offset"] = donutStampsExtra[0].defocal_distance / 1e3
 
         # Estimate Zernikes from collection of stamps
         zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)

@@ -120,7 +120,7 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.instParams["obscuration"], 0.3525)
         self.assertEqual(self.task.instParams["focalLength"], 21.6)
         self.assertEqual(self.task.instParams["apertureDiameter"], 1.2)
-        self.assertEqual(self.task.instParams["offset"], 3.28e-2)
+        self.assertEqual(self.task.instParams["offset"], 32.8)
         self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
 
         self.config.donutTemplateSize = 200

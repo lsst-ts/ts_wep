@@ -74,7 +74,7 @@ class EstimateZernikesLatissTaskConfig(
         doc="Instrument Aperture Diameter in m", dtype=float, default=1.2
     )
     instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in m", dtype=float, default=3.28e-2
+        doc="Instrument defocal offset in mm", dtype=float, default=32.8
     )
     instPixelSize = pexConfig.Field(
         doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
@@ -173,7 +173,7 @@ class EstimateZernikesLatissTask(EstimateZernikesBaseTask):
         focusZ0 = visitInfo_0.focusZ
         focusZ1 = visitInfo_1.focusZ
 
-        # Get defocal distance from visitInfo and convert from mm to m.
+        # Get defocal distance from visitInfo.
         if self.instParams["offset"] is None:
             self.instParams["offset"] = np.abs(focusZ0)
 

@@ -79,7 +79,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def setUp(self):
 
-        self.config = CutOutDonutsBaseTaskConfig(instDefocalOffset=0.0015)
+        self.config = CutOutDonutsBaseTaskConfig(instDefocalOffset=1.5)
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -148,6 +148,12 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.donutTemplateSize, 160)
         self.assertEqual(self.task.donutStampSize, 160)
         self.assertEqual(self.task.initialCutoutPadding, 5)
+        self.assertEqual(self.task.opticalModel, "offAxis")
+        self.assertEqual(self.task.instParams["obscuration"], 0.61)
+        self.assertEqual(self.task.instParams["focalLength"], 10.312)
+        self.assertEqual(self.task.instParams["apertureDiameter"], 8.36)
+        self.assertEqual(self.task.instParams["offset"], 1.5)
+        self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120

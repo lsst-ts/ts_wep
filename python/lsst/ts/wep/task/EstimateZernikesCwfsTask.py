@@ -90,10 +90,10 @@ class EstimateZernikesCwfsTaskConfig(
     EstimateZernikesBaseConfig, pipelineConnections=EstimateZernikesCwfsTaskConnections
 ):
     instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in m. \
+        doc="Instrument defocal offset in mm. \
         For the CWFS we set these by default to the fixed value of 1.5mm.",
         dtype=float,
-        default=1.5e-3,
+        default=1.5,
     )
 
 
@@ -218,10 +218,8 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
                 if getOffsetFromExp:
                     # LSST extrafocal chips are offset -1.5 mm
                     # when LSST camera defocus is at 0.
-                    self.instParams["offset"] = exposure.visitInfo.focusZ / 1e-3
-                    self.instParams["offset"] = np.abs(
-                        self.instParams["offset"] - 1.5e-3
-                    )
+                    self.instParams["offset"] = exposure.visitInfo.focusZ
+                    self.instParams["offset"] = np.abs(self.instParams["offset"] - 1.5)
                 donutStampsExtraExp = self.cutOutStamps(
                     exposure, extraCatalog, DefocalType.Extra, cameraName
                 )
@@ -230,10 +228,8 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
                 if getOffsetFromExp:
                     # LSST intrafocal chips are offset +1.5 mm
                     # when LSST camera defocus is at 0.
-                    self.instParams["offset"] = exposure.visitInfo.focusZ / 1e-3
-                    self.instParams["offset"] = np.abs(
-                        self.instParams["offset"] + 1.5e-3
-                    )
+                    self.instParams["offset"] = exposure.visitInfo.focusZ
+                    self.instParams["offset"] = np.abs(self.instParams["offset"] + 1.5)
                 donutStampsIntraExp = self.cutOutStamps(
                     exposure, intraCatalog, DefocalType.Intra, cameraName
                 )

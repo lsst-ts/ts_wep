@@ -158,7 +158,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         focusZ0 = exposures[0].visitInfo.focusZ
         focusZ1 = exposures[1].visitInfo.focusZ
 
-        # Get defocal distance from focusZ and convert from mm to m.
+        # Get defocal distance from focusZ.
         if self.instParams["offset"] is None:
             self.instParams["offset"] = np.abs(focusZ0)
 
