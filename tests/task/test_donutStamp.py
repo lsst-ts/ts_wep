@@ -64,7 +64,7 @@ class TestDonutStamp(unittest.TestCase):
         dfcTypes = [DefocalType.Extra.value] * nStamps
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
-        dfcDists = np.ones(nStamps) * 1.5e-3
+        dfcDists = np.ones(nStamps) * 1.5
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -109,6 +109,8 @@ class TestDonutStamp(unittest.TestCase):
                 self.assertEqual(defocalType, DefocalType.Intra.value)
             else:
                 self.assertEqual(defocalType, DefocalType.Extra.value)
+            defocalDist = donutStamp.defocal_distance
+            self.assertEqual(defocalDist, 1.5)
 
             self.assertEqual(type(donutStamp.comp_im), CompensableImage)
             self.assertEqual(type(donutStamp.mask_comp), afwImage.MaskX)
