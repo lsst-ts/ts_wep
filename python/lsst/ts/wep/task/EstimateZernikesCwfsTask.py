@@ -204,9 +204,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
         extraCatalog, intraCatalog = donutCatalogs
 
         # Get defocal distance from exposure if offset is None.
-        getOffsetFromExp = False
-        if self.instParams["offset"] is None:
-            getOffsetFromExp = True
+        getOffsetFromExp = True if self.instParams is None else False
 
         # Get the donut stamps from extra and intra focal images
         donutStampsExtra = DonutStamps([])
@@ -218,8 +216,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
                 if getOffsetFromExp:
                     # LSST extrafocal chips are offset -1.5 mm
                     # when LSST camera defocus is at 0.
-                    self.instParams["offset"] = exposure.visitInfo.focusZ
-                    self.instParams["offset"] = np.abs(self.instParams["offset"] - 1.5)
+                    self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ - 1.5)
                 donutStampsExtraExp = self.cutOutStamps(
                     exposure, extraCatalog, DefocalType.Extra, cameraName
                 )
@@ -228,8 +225,7 @@ class EstimateZernikesCwfsTask(EstimateZernikesBaseTask):
                 if getOffsetFromExp:
                     # LSST intrafocal chips are offset +1.5 mm
                     # when LSST camera defocus is at 0.
-                    self.instParams["offset"] = exposure.visitInfo.focusZ
-                    self.instParams["offset"] = np.abs(self.instParams["offset"] + 1.5)
+                    self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ + 1.5)
                 donutStampsIntraExp = self.cutOutStamps(
                     exposure, intraCatalog, DefocalType.Intra, cameraName
                 )

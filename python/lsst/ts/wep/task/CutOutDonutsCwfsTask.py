@@ -171,10 +171,11 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         donutStampsIntra = DonutStamps([])
 
         for exposure in exposures:
-            if self.config.instDefocalOffset is None:
-                self.instParams["offset"] = exposure.visitInfo.focusZ
-            else:
-                self.instParams["offset"] = self.config.instDefocalOffset
+            self.instParams["offset"] = (
+                exposure.visitInfo.focusZ
+                if self.config.instDefocalOffset is None
+                else self.config.instDefocalOffset
+            )
             detectorName = exposure.getDetector().getName()
             if detectorName in self.extraFocalNames:
                 # LSST extrafocal chips are offset -1.5 mm

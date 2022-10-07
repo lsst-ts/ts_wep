@@ -165,18 +165,10 @@ class Instrument(object):
             )
         instParamReader = ParamReader()
         instParamReader.setFilePath(instConfigFilePath)
-        instConfigDict = None
-        # Translate between task configuration parameter names
-        # and cwfs expected parameter names
-        taskConfigTranslator = {
-            "instObscuration": "obscuration",
-            "instFocalLength": "focalLength",
-            "instApertureDiameter": "apertureDiameter",
-            "instDefocalOffset": "offset",
-            "instPixelSize": "pixelSize",
-        }
+
         # Expect instrument configurations to be found
         # in one of the task configurations
+        instConfigDict = None
         for taskDict in instParamReader.getContent()["tasks"].values():
             if "instObscuration" in list(taskDict["config"].keys()):
                 instConfigDict = taskDict["config"]
@@ -186,6 +178,16 @@ class Instrument(object):
                 "Instrument configuration file does not have expected format. "
                 + "See examples in policy/cwfs/instData."
             )
+
+        # Translate between task configuration parameter names
+        # and cwfs expected parameter names
+        taskConfigTranslator = {
+            "instObscuration": "obscuration",
+            "instFocalLength": "focalLength",
+            "instApertureDiameter": "apertureDiameter",
+            "instDefocalOffset": "offset",
+            "instPixelSize": "pixelSize",
+        }
 
         # Assign configurations to instParams dictionary
         for key, val in taskConfigTranslator.items():

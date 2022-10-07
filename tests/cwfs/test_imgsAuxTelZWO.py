@@ -40,12 +40,14 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         self.validationDir = os.path.join(testImageDataDir, "validation", "auxTelZWO")
 
         # Set inst information
-        self.instParams = dict()
-        self.instParams["obscuration"] = 0.3525
-        self.instParams["focalLength"] = 21.6
-        self.instParams["apertureDiameter"] = 1.2
-        self.instParams["offset"] = 20.5
-        self.instParams["pixelSize"] = 15.2e-6
+        # Set AuxTel instParams
+        self.instParams = {
+            "obscuration": 0.3525,
+            "focalLength": 21.6,
+            "apertureDiameter": 1.2,
+            "offset": 20.5,
+            "pixelSize": 15.2e-6,
+        }
 
         self.offset = 80
         self.tolMax = 6

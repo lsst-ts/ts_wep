@@ -34,19 +34,22 @@ class TestTemplateModel(unittest.TestCase):
         self.templateMaker = DonutTemplateModel()
 
         # Set LSST instParams
-        self.lsstInstParams = dict()
-        self.lsstInstParams["obscuration"] = 0.61
-        self.lsstInstParams["focalLength"] = 10.312
-        self.lsstInstParams["apertureDiameter"] = 8.36
-        self.lsstInstParams["offset"] = 1.0
-        self.lsstInstParams["pixelSize"] = 10.0e-6
+        self.lsstInstParams = {
+            "obscuration": 0.61,
+            "focalLength": 10.312,
+            "apertureDiameter": 8.36,
+            "offset": 1.0,
+            "pixelSize": 10.0e-6,
+        }
 
-        self.auxTelInstParams = dict()
-        self.auxTelInstParams["obscuration"] = 0.3525
-        self.auxTelInstParams["focalLength"] = 21.6
-        self.auxTelInstParams["apertureDiameter"] = 1.2
-        self.auxTelInstParams["offset"] = 32.8
-        self.auxTelInstParams["pixelSize"] = 10.0e-6
+        # Set AuxTel instParams
+        self.auxTelInstParams = {
+            "obscuration": 0.3525,
+            "focalLength": 21.6,
+            "apertureDiameter": 1.2,
+            "offset": 32.8,
+            "pixelSize": 10.0e-6,
+        }
 
     def testMakeTemplateWithDict(self):
 

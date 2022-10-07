@@ -43,12 +43,13 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
         )
 
         # Get inst information
-        self.instParams = dict()
-        self.instParams["obscuration"] = 0.61
-        self.instParams["focalLength"] = 10.312
-        self.instParams["apertureDiameter"] = 8.36
-        self.instParams["offset"] = 1.0
-        self.instParams["pixelSize"] = 10.0e-6
+        self.instParams = {
+            "obscuration": 0.61,
+            "focalLength": 10.312,
+            "apertureDiameter": 8.36,
+            "offset": 1.0,
+            "pixelSize": 10.0e-6,
+        }
 
         # Set the tolerance
         self.tolMax = 4

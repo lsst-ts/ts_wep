@@ -300,13 +300,13 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        exposure: lsst.afw.image.Exposure
+        exposure : lsst.afw.image.Exposure
             Exposure with the donut image.
-        template: numpy ndarray
+        template : numpy ndarray
             Donut template for the exposure.
-        xCent: int
+        xCent : int
             X pixel donut center from donutCatalog.
-        yCent: int
+        yCent : int
             Y pixel donut center from donutCatalog.
 
         Returns
@@ -376,13 +376,13 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        exposure: lsst.afw.image.Exposure
+        exposure : lsst.afw.image.Exposure
             Post-ISR image with defocal donuts sources.
-        donutCatalog: pandas DataFrame
+        donutCatalog : pandas DataFrame
             Source catalog for the pointing.
-        defocalType: enum 'DefocalType'
+        defocalType : enum 'DefocalType'
             Defocal type of the donut image.
-        cameraName: str
+        cameraName : str
             Name of camera for the exposure. Can accept "LSSTCam",
             "LSSTComCam", "LATISS".
 
@@ -493,11 +493,11 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        donutStampsExtra: DonutStamps
+        donutStampsExtra : DonutStamps
             Extra-focal donut postage stamps.
-        donutStampsIntra: DonutStamps
+        donutStampsIntra : DonutStamps
             Intra-focal donut postage stamps.
-        cameraName: str
+        cameraName : str
             Name of camera for the exposure. Can accept "LSSTCam",
             "LSSTComCam", "LATISS".
         detectorType : lsst.afw.cameraGeom.DetectorType
@@ -572,7 +572,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        zernikeArray: numpy ndarray
+        zernikeArray : numpy ndarray
             The full set of zernike coefficients for each pair
             of donuts on the CCD. Each row of the array should
             be the set of Zernike coefficients for a single
