@@ -21,12 +21,11 @@
 
 import os
 import time
-import yaml
 import numpy as np
 import unittest
 
 from lsst.ts.wep.cwfs.BaseCwfsTestCase import BaseCwfsTestCase
-from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType, getConfigDir
+from lsst.ts.wep.Utility import getModulePath, CamType, CentroidFindType
 
 
 class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
@@ -44,11 +43,13 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
         )
 
         # Get inst information
-        instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
-        instConfigFile = os.path.join(instConfigDir, "lsst", "instParam.yaml")
-        with open(instConfigFile, "r") as stream:
-            self.instParams = yaml.safe_load(stream)
-        self.instParams["offset"] = 1.0e-3
+        self.instParams = {
+            "obscuration": 0.61,
+            "focalLength": 10.312,
+            "apertureDiameter": 8.36,
+            "offset": 1.0,
+            "pixelSize": 10.0e-6,
+        }
 
         # Set the tolerance
         self.tolMax = 4

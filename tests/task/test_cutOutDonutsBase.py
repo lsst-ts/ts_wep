@@ -79,7 +79,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def setUp(self):
 
-        self.config = CutOutDonutsBaseTaskConfig()
+        self.config = CutOutDonutsBaseTaskConfig(instDefocalOffset=1.5)
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -147,7 +147,13 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
         self.assertEqual(self.task.donutTemplateSize, 160)
         self.assertEqual(self.task.donutStampSize, 160)
-        self.assertEqual(self.task.initialCutoutPadding, 40)
+        self.assertEqual(self.task.initialCutoutPadding, 5)
+        self.assertEqual(self.task.opticalModel, "offAxis")
+        self.assertEqual(self.task.instParams["obscuration"], 0.61)
+        self.assertEqual(self.task.instParams["focalLength"], 10.312)
+        self.assertEqual(self.task.instParams["apertureDiameter"], 8.36)
+        self.assertEqual(self.task.instParams["offset"], 1.5)
+        self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
@@ -159,6 +165,37 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
         self.assertEqual(self.task.opticalModel, "onAxis")
+
+    def testCreateInstDictFromConfig(self):
+
+        self.config.instObscuration = 0.1
+        self.config.instFocalLength = 10.0
+        self.config.instApertureDiameter = 10.0
+        self.config.instDefocalOffset = 0.01
+        self.config.instPixelSize = 0.1
+        task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
+
+        testDict = {
+            "obscuration": 0.1,
+            "focalLength": 10.0,
+            "apertureDiameter": 10.0,
+            "offset": 0.01,
+            "pixelSize": 0.1,
+        }
+
+        self.assertDictEqual(testDict, task.instParams)
+
+    def testCheckAndSetOffset(self):
+
+        # If offset is already set then no change
+        self.assertEqual(self.task.instParams["offset"], 1.5)
+        self.task._checkAndSetOffset(30.0)
+        self.assertEqual(self.task.instParams["offset"], 1.5)
+
+        # If offset is None then change to incoming value
+        self.task.instParams["offset"] = None
+        self.task._checkAndSetOffset(30.0)
+        self.assertEqual(self.task.instParams["offset"], 30.0)
 
     def testGetTemplate(self):
 

@@ -38,6 +38,12 @@ tasks:
     config:
       # And here we specify the configuration settings originally defined in
       # EstimateZernikesCwfsTaskConfig.
+      # Test CWFS pipeline works when specifying instrument parameters.
       donutTemplateSize: 160
       donutStampSize: 160
       initialCutoutPadding: 40
+      instObscuration: 0.61
+      instFocalLength: 10.312
+      instApertureDiameter: 8.36
+      instDefocalOffset: 0.0
+      instPixelSize: 10.0e-6

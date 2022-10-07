@@ -28,13 +28,20 @@ __all__ = [
 import os
 import numpy as np
 from copy import copy
+import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
 import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.utils.timer import timeMethod
+from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 from lsst.ts.wep.DonutDetector import DonutDetector
-from lsst.ts.wep.Utility import getCamType, DefocalType, DonutTemplateType
+from lsst.ts.wep.Utility import (
+    DefocalType,
+    DonutTemplateType,
+    getCamTypeFromButlerName,
+    createInstDictFromConfig,
+)
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 
 
@@ -64,6 +71,14 @@ class GenerateDonutDirectDetectTaskConnections(
         storageClass="DataFrame",
         name="donutCatalog",
     )
+    camera = connectionTypes.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
+        lookupFunction=lookupStaticCalibration,
+    )
 
 
 class GenerateDonutDirectDetectTaskConfig(
@@ -79,11 +94,6 @@ class GenerateDonutDirectDetectTaskConfig(
     # Config setting for pipeline task with defaults
     donutTemplateSize = pexConfig.Field(
         doc="Size of Template in pixels", dtype=int, default=160
-    )
-    instName = pexConfig.Field(
-        doc="Specify the instrument name (lsst, lsstfam, comcam, auxTel).",
-        dtype=str,
-        default="lsst",
     )
     opticalModel = pexConfig.Field(
         doc="Specify the optical model (offAxis, paraxial, onAxis).",
@@ -111,6 +121,28 @@ class GenerateDonutDirectDetectTaskConfig(
         dtype=str,
         default="deblend",
     )
+    instObscuration = pexConfig.Field(
+        doc="Obscuration (inner_radius / outer_radius of M1M3)",
+        dtype=float,
+        default=0.61,
+    )
+    instFocalLength = pexConfig.Field(
+        doc="Instrument Focal Length in m", dtype=float, default=10.312
+    )
+    instApertureDiameter = pexConfig.Field(
+        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
+    )
+    instDefocalOffset = pexConfig.Field(
+        doc="Instrument defocal offset in mm. \
+        If None then will get this from the focusZ value in exposure visitInfo. \
+        (The default is None.)",
+        dtype=float,
+        default=None,
+        optional=True,
+    )
+    instPixelSize = pexConfig.Field(
+        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
+    )
 
 
 class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
@@ -132,8 +164,6 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # Set size (in pixels) of donut template image used for
         # convolution with template
         self.donutTemplateSize = self.config.donutTemplateSize
-        # specify instrument name
-        self.instName = self.config.instName
         # specify optical model
         self.opticalModel = self.config.opticalModel
         # decide whether to remove blends from catalog
@@ -144,6 +174,8 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         self.peakThreshold = self.config.peakThreshold
         # choose how to calculate binary image
         self.binaryChoice = self.config.binaryChoice
+        # Set up instrument configuration dict
+        self.instParams = createInstDictFromConfig(self.config)
 
     def updateDonutCatalog(self, donutCat, exposure):
         """
@@ -199,13 +231,27 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
     def run(
         self,
         exposure: afwImage.Exposure,
+        camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
         detectorName = exposure.getDetector().getName()
+        detectorType = exposure.getDetector().getType()
         defocalType = DefocalType.Extra  # we use one of the DefocalTypes,
         # TODO: perhaps could make that as another configurable
-        camType = getCamType(self.instName)
+        camType = getCamTypeFromButlerName(camera.getName(), detectorType)
         pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
+
+        # Get defocal distance from focusZ.
+        if self.instParams["offset"] is None:
+            self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ)
+        # LSST CWFS are offset +/- 1.5 mm when LSST camera defocus is at 0.
+        if detectorType.name == "WAVEFRONT":
+            if defocalType == DefocalType.Extra:
+                self.instParams["offset"] = np.abs(self.instParams["offset"] - 1.5)
+            elif defocalType == DefocalType.Intra:
+                self.instParams["offset"] = np.abs(self.instParams["offset"] + 1.5)
+            else:
+                raise ValueError(f"Defocal Type {defocalType} not valid.")
 
         # create a donut template
         templateMaker = DonutTemplateFactory.createDonutTemplate(
@@ -219,6 +265,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             camType=camType,
             opticalModel=self.opticalModel,
             pixelScale=pixelScale,
+            instParams=self.instParams,
         )
 
         # given this template, detect donuts in one of the defocal images

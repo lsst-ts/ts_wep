@@ -47,8 +47,10 @@ from lsst.ts.wep.Utility import (
     getDefocalDisInMm,
     getCamTypeFromButlerName,
     getCamNameFromCamType,
+    createInstDictFromConfig,
 )
 from lsst.afw.cameraGeom import DetectorType
+from lsst.ts.wep.task.CalcZernikesTask import CalcZernikesTaskConfig
 
 
 class TestUtility(unittest.TestCase):
@@ -310,6 +312,21 @@ class TestUtility(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             getCamNameFromCamType(badCamType)
         self.assertEqual(str(context.exception), errMsg)
+
+    def testCreateInstDictFromConfig(self):
+
+        # Test instDict creation in tasks
+        testConfig = CalcZernikesTaskConfig()
+        testInstDict = createInstDictFromConfig(testConfig)
+        truthInstDict = {
+            "obscuration": 0.61,
+            "focalLength": 10.312,
+            "apertureDiameter": 8.36,
+            "offset": None,
+            "pixelSize": 10.0e-6,
+        }
+
+        self.assertDictEqual(truthInstDict, testInstDict)
 
 
 if __name__ == "__main__":

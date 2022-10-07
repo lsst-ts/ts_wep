@@ -38,6 +38,7 @@ tasks:
     config:
       # And here we specify the configuration settings originally defined in
       # EstimateZernikesCwfsTaskConfig.
+      # Test with default instrument configuration parameters
       donutTemplateSize: 160
       donutStampSize: 160
       initialCutoutPadding: 40

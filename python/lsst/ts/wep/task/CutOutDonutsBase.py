@@ -34,7 +34,11 @@ from lsst.daf.base import PropertyList
 from lsst.pipe.base import connectionTypes
 from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 
-from lsst.ts.wep.Utility import getCamTypeFromButlerName, DonutTemplateType
+from lsst.ts.wep.Utility import (
+    getCamTypeFromButlerName,
+    DonutTemplateType,
+    createInstDictFromConfig,
+)
 from lsst.ts.wep.task.DonutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from scipy.signal import correlate
@@ -102,12 +106,34 @@ class CutOutDonutsBaseTaskConfig(
             + "to make sure we have a stamp of donutStampSize after recentroiding donut"
         ),
         dtype=int,
-        default=40,
+        default=5,
     )
     opticalModel = pexConfig.Field(
         doc="Specify the optical model (offAxis, paraxial, onAxis).",
         dtype=str,
         default="offAxis",
+    )
+    instObscuration = pexConfig.Field(
+        doc="Obscuration (inner_radius / outer_radius of M1M3)",
+        dtype=float,
+        default=0.61,
+    )
+    instFocalLength = pexConfig.Field(
+        doc="Instrument Focal Length in m", dtype=float, default=10.312
+    )
+    instApertureDiameter = pexConfig.Field(
+        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
+    )
+    instDefocalOffset = pexConfig.Field(
+        doc="Instrument defocal offset in mm. \
+        If None then will get this from the focusZ value in exposure visitInfo. \
+        (The default is None.)",
+        dtype=float,
+        default=None,
+        optional=True,
+    )
+    instPixelSize = pexConfig.Field(
+        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
 
 
@@ -140,6 +166,22 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.initialCutoutPadding = self.config.initialCutoutPadding
         # Specify optical model
         self.opticalModel = self.config.opticalModel
+        # Set up instrument configuration dict
+        self.instParams = createInstDictFromConfig(self.config)
+
+    def _checkAndSetOffset(self, dataOffsetValue):
+        """Check offset in instParams dictionary and if it
+        is not yet defined set to data defined value.
+
+        Parameters
+        ----------
+        dataOffsetValue : float
+            The defocal offset amount defined in the
+            data. (An exposure or donutStamp).
+        """
+
+        if self.instParams["offset"] is None:
+            self.instParams["offset"] = dataOffsetValue
 
     def getTemplate(
         self,
@@ -183,9 +225,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             detectorName,
             defocalType,
             donutTemplateSize,
-            camType,
-            opticalModel,
-            pixelScale,
+            camType=camType,
+            opticalModel=opticalModel,
+            pixelScale=pixelScale,
+            instParams=self.instParams,
         )
 
         return template
@@ -332,7 +375,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             self.opticalModel,
             pixelScale,
         )
-        defocalDist = exposure.visitInfo.focusZ
+
+        # If offset not yet set then use exposure value.
+        self._checkAndSetOffset(np.abs(exposure.visitInfo.focusZ))
 
         # Final list of DonutStamp objects
         finalStamps = []
@@ -386,7 +431,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                     cam_name=cameraName,
                     defocal_type=defocalType.value,
                     # Save defocal offset in mm.
-                    defocal_distance=defocalDist,
+                    defocal_distance=self.instParams["offset"],
                 )
             )
 
@@ -397,7 +442,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
         stampsMetadata["DFC_TYPE"] = np.array([defocalType.value] * catalogLength)
-        stampsMetadata["DFC_DIST"] = np.array([defocalDist] * catalogLength)
+        stampsMetadata["DFC_DIST"] = np.array(
+            [self.instParams["offset"]] * catalogLength
+        )
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)

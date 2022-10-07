@@ -88,6 +88,7 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         # cutout stamp we will still have a postage stamp
         # of size self.donutStampSize.
         self.initialCutoutPadding = self.config.initialCutoutPadding
+        self.detectorType = lsst.afw.cameraGeom.DetectorType.SCIENCE
 
     def assignExtraIntraIdx(self, focusZVal0, focusZVal1):
         """
@@ -142,11 +143,12 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
-        # Get exposure visitInfo to find which is extra and intra
-        visitInfo_0 = exposures[0].getInfo().getVisitInfo()
-        visitInfo_1 = exposures[1].getInfo().getVisitInfo()
-        focusZ0 = visitInfo_0.focusZ
-        focusZ1 = visitInfo_1.focusZ
+        # Get exposure focusZ to find which is extra and intra
+        focusZ0 = exposures[0].visitInfo.focusZ
+        focusZ1 = exposures[1].visitInfo.focusZ
+
+        # Get defocal distance from focusZ.
+        self._checkAndSetOffset(np.abs(focusZ0))
 
         extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
 
@@ -172,7 +174,9 @@ class EstimateZernikesScienceSensorTask(EstimateZernikesBaseTask):
             )
 
         # Estimate Zernikes from collection of stamps
-        zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        zernikeCoeffsRaw = self.estimateZernikes(
+            donutStampsExtra, donutStampsIntra, cameraName, self.detectorType
+        )
         zernikeCoeffsCombined = self.getCombinedZernikes(zernikeCoeffsRaw)
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and
