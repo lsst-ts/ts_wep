@@ -251,7 +251,12 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
 
-        testCoeffsRaw = self.task.estimateZernikes(testExtraStamps, testIntraStamps)
+        testCoeffsRaw = self.task.estimateZernikes(
+            testExtraStamps,
+            testIntraStamps,
+            camera.getName(),
+            exposureExtra.getDetector().getType(),
+        )
         testCoeffsAvg = self.task.combineZernikes.run(testCoeffsRaw)
         np.testing.assert_array_equal(taskOut.outputZernikesRaw[0], testCoeffsRaw)
         np.testing.assert_array_equal(

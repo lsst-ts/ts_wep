@@ -993,8 +993,8 @@ class Algorithm(object):
             dz = (
                 2
                 * self._inst.focalLength
-                * (self._inst.focalLength - self._inst.defocalDisOffset)
-                / self._inst.defocalDisOffset
+                * (self._inst.focalLength - self._inst.defocalDisOffsetInM)
+                / self._inst.defocalDisOffsetInM
             )
 
             # Define zc
@@ -1064,8 +1064,8 @@ class Algorithm(object):
         # the image planes
         deltaZ = (
             self._inst.focalLength
-            * (self._inst.focalLength - self._inst.defocalDisOffset)
-            / self._inst.defocalDisOffset
+            * (self._inst.focalLength - self._inst.defocalDisOffsetInM)
+            / self._inst.defocalDisOffsetInM
         )
 
         # Calculate the wavefront signal. Enforce the element outside the mask

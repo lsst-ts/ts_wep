@@ -24,7 +24,7 @@ import numpy as np
 import unittest
 
 from lsst.ts.wep.cwfs.Instrument import Instrument
-from lsst.ts.wep.Utility import getConfigDir, CamType
+from lsst.ts.wep.Utility import getConfigDir, CamType, getModulePath
 
 
 class TestInstrument(unittest.TestCase):
@@ -33,7 +33,9 @@ class TestInstrument(unittest.TestCase):
     def setUp(self):
 
         self.instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
-        self.instConfigFile = os.path.join(self.instConfigDir, "lsst", "instParam.yaml")
+        self.instConfigFile = os.path.join(
+            self.instConfigDir, "lsst", "instParamPipeConfig.yaml"
+        )
         self.maskConfigFile = os.path.join(
             self.instConfigDir, "lsst", "maskMigrate.yaml"
         )
@@ -84,6 +86,21 @@ class TestInstrument(unittest.TestCase):
             str(context.exception),
             f"Instrument configuration file at {badFilePath} does not exist.",
         )
+
+    def testConfigFromFileWithIncorrectInstConfigFormat(self):
+
+        badFilePath = os.path.join(
+            getModulePath(),
+            "tests",
+            "testData",
+            "pipelineConfigs",
+            "testCwfsPipeline.yaml",
+        )
+        with self.assertRaises(ValueError) as context:
+            self.inst.configFromFile(120, CamType.LsstCam, badFilePath)
+        errMsg = "Instrument configuration file does not have expected format. "
+        errMsg += "See examples in policy/cwfs/instData."
+        self.assertEqual(str(context.exception), errMsg)
 
     def testConfigFromFileWithIncorrectMaskConfigFilePath(self):
 
@@ -155,9 +172,9 @@ class TestInstrument(unittest.TestCase):
         apertureDiameter = self.inst.apertureDiameter
         self.assertEqual(apertureDiameter, 8.36)
 
-    def testGetDefocalDisOffset(self):
+    def testGetDefocalDisOffseInM(self):
 
-        defocalDisInM = self.inst.defocalDisOffset
+        defocalDisInM = self.inst.defocalDisOffsetInM
 
         # The answer is 1.5 mm
         self.assertEqual(defocalDisInM * 1e3, 1.5)
@@ -217,21 +234,23 @@ class TestInstrument(unittest.TestCase):
 
     def testDataAuxTel(self):
 
-        auxTelConfigFile = os.path.join(self.instConfigDir, "auxTel", "instParam.yaml")
+        auxTelConfigFile = os.path.join(
+            self.instConfigDir, "auxTel", "instParamPipeConfig.yaml"
+        )
         inst = Instrument()
         inst.configFromFile(160, CamType.AuxTel, auxTelConfigFile)
 
         self.assertEqual(inst.obscuration, 0.3525)
         self.assertEqual(inst.focalLength, 21.6)
         self.assertEqual(inst.apertureDiameter, 1.2)
-        self.assertEqual(inst.defocalDisOffset, 0.041 * 0.8)
+        self.assertAlmostEqual(inst.defocalDisOffsetInM, 0.041 * 0.8)
         self.assertEqual(inst.pixelSize, 10.0e-6)
         self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 182.2222222, places=7)
 
     def testDataAuxTelZWO(self):
 
         auxTelZWOConfigFile = os.path.join(
-            self.instConfigDir, "auxTelZWO", "instParam.yaml"
+            self.instConfigDir, "auxTelZWO", "instParamPipeConfig.yaml"
         )
         inst = Instrument()
         inst.configFromFile(160, CamType.AuxTelZWO, auxTelZWOConfigFile)
@@ -239,7 +258,7 @@ class TestInstrument(unittest.TestCase):
         self.assertEqual(inst.obscuration, 0.3525)
         self.assertEqual(inst.focalLength, 21.6)
         self.assertEqual(inst.apertureDiameter, 1.2)
-        self.assertEqual(inst.defocalDisOffset, 0.0205)
+        self.assertEqual(inst.defocalDisOffsetInM, 0.0205)
         self.assertEqual(inst.pixelSize, 15.2e-6)
         self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 74.92690058, places=7)
 

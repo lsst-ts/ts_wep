@@ -700,3 +700,26 @@ def getDefocalDisInMm(instName):
         return 0.8
     else:
         raise ValueError(f"Instrument name ({instName}) is not supported.")
+
+
+def createInstDictFromConfig(config):
+    """Create configuration dictionary for the instrument.
+
+    Parameters
+    ----------
+    config : lsst.pipe.base.PipelineTaskConfig
+        Task configuration.
+
+    Returns
+    -------
+    dict
+        Instrument configuration parameters
+    """
+
+    return {
+        "obscuration": config.instObscuration,
+        "focalLength": config.instFocalLength,
+        "apertureDiameter": config.instApertureDiameter,
+        "offset": config.instDefocalOffset,
+        "pixelSize": config.instPixelSize,
+    }

@@ -69,7 +69,8 @@ class Instrument(object):
         configDict : dict
             Instrument parameter configuration dictionary. Keys needed are:
             "obscuration", "focalLength", "apertureDiameter",
-            "offset", "pixelSize".
+            "offset", "pixelSize". Dimensions for "offset" are mm, the
+            rest use meters.
         dimOfDonutImgOnSensor : int
             Dimension of donut image on sensor in pixel.
         camType : enum 'CamType'
@@ -126,8 +127,11 @@ class Instrument(object):
         camType : enum 'CamType'
             Camera type.
         instConfigFile : str or None, optional
-            Instrument parameter configuration file path. If None will
-            load the default from policy/cwfs folder. (The default is None.)
+            Instrument parameter configuration file path. This should be an
+            LSST Science Pipelines pipeline task configuration file for
+            one of the WEP pipeline tasks (see defaults in
+            policy/cwfs/instData folder). If set to None will load the
+            default from policy/cwfs folder. (The default is None.)
         maskConfigFile : str or None, optional
             Mask migration (off-axis correction) file path.
             If None will load the default from policy/cwfs folder.
@@ -137,6 +141,8 @@ class Instrument(object):
         ------
         ValueError
             Instrument configuration file does not exist.
+        ValueError
+            Instrument configuration file does not have expected format.
         ValueError
             Mask migrate file does not exist.
         """
@@ -148,7 +154,7 @@ class Instrument(object):
         if instConfigFile is None:
             camName = getCamNameFromCamType(camType)
             instFileDir = os.path.join(getConfigDir(), "cwfs", "instData", camName)
-            instParamFileName = "instParam.yaml"
+            instParamFileName = "instParamPipeConfig.yaml"
             instConfigFilePath = os.path.join(instFileDir, instParamFileName)
         else:
             instConfigFilePath = instConfigFile
@@ -159,7 +165,33 @@ class Instrument(object):
             )
         instParamReader = ParamReader()
         instParamReader.setFilePath(instConfigFilePath)
-        self._instParams = instParamReader.getContent()
+
+        # Expect instrument configurations to be found
+        # in one of the task configurations
+        instConfigDict = None
+        for taskDict in instParamReader.getContent()["tasks"].values():
+            if "instObscuration" in list(taskDict["config"].keys()):
+                instConfigDict = taskDict["config"]
+
+        if instConfigDict is None:
+            raise ValueError(
+                "Instrument configuration file does not have expected format. "
+                + "See examples in policy/cwfs/instData."
+            )
+
+        # Translate between task configuration parameter names
+        # and cwfs expected parameter names
+        taskConfigTranslator = {
+            "instObscuration": "obscuration",
+            "instFocalLength": "focalLength",
+            "instApertureDiameter": "apertureDiameter",
+            "instDefocalOffset": "offset",
+            "instPixelSize": "pixelSize",
+        }
+
+        # Assign configurations to instParams dictionary
+        for key, val in taskConfigTranslator.items():
+            self._instParams[val] = instConfigDict[key]
 
         # Load mask configuration file
         if maskConfigFile is not None:
@@ -290,9 +322,9 @@ class Instrument(object):
         return self.instParams["apertureDiameter"]
 
     @property
-    def defocalDisOffset(self):
+    def defocalDisOffsetInM(self):
         """The defocal distance offset in meters."""
-        return self.instParams["offset"]
+        return self.instParams["offset"] * 1e-3
 
     @property
     def pixelSize(self):
@@ -334,7 +366,7 @@ class Instrument(object):
         """
 
         sensorFactor = self.dimOfDonutImg / (
-            self.defocalDisOffset
+            self.defocalDisOffsetInM
             * self.apertureDiameter
             / self.focalLength
             / self.pixelSize
@@ -381,4 +413,4 @@ class Instrument(object):
 
         fNumber = self.focalLength / self.apertureDiameter
 
-        return self.defocalDisOffset / fNumber / self.pixelSize
+        return self.defocalDisOffsetInM / fNumber / self.pixelSize

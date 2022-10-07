@@ -300,7 +300,7 @@ class CompensableImage(object):
 
         # Shift in the radial direction
         # The field of view (FOV) of LSST camera is 3.5 degree
-        radialShift = fov * (inst.defocalDisOffset / 1e-3) * (10e-6 / inst.pixelSize)
+        radialShift = fov * (inst.defocalDisOffsetInM / 1e-3) * (10e-6 / inst.pixelSize)
 
         # Calculate the projection of distance of donut to center
         fieldDist = self._getFieldDistFromOrigin()
@@ -521,9 +521,9 @@ class CompensableImage(object):
         # Calculate C = -f(f-l)/l/R^2. This is for the calculation of reduced
         # coordinate.
         if self.defocalType == DefocalType.Intra:
-            l = inst.defocalDisOffset
+            l = inst.defocalDisOffsetInM
         elif self.defocalType == DefocalType.Extra:
-            l = -inst.defocalDisOffset
+            l = -inst.defocalDisOffsetInM
 
         myC = -inst.focalLength * (inst.focalLength - l) / l / R**2
 
@@ -1441,7 +1441,7 @@ class CompensableImage(object):
 
         rMask = (
             inst.apertureDiameter
-            / (2 * inst.focalLength / inst.defocalDisOffset)
+            / (2 * inst.focalLength / inst.defocalDisOffsetInM)
             * maskScalingFactorLocal
         )
 

@@ -31,7 +31,12 @@ from lsst.utils.timer import timeMethod
 
 from lsst.ts.wep.task.DonutStamps import DonutStamps
 from lsst.ts.wep.WfEstimator import WfEstimator
-from lsst.ts.wep.Utility import getConfigDir, DefocalType, getCamTypeFromButlerName
+from lsst.ts.wep.Utility import (
+    getConfigDir,
+    DefocalType,
+    getCamTypeFromButlerName,
+    createInstDictFromConfig,
+)
 from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from scipy.ndimage import rotate
 
@@ -77,6 +82,33 @@ class CalcZernikesTaskConfig(
             + "is CombineZernikesSigmaClipTask.)"
         ),
     )
+    opticalModel = pexConfig.Field(
+        doc="Specify the optical model (offAxis, paraxial, onAxis).",
+        dtype=str,
+        default="offAxis",
+    )
+    instObscuration = pexConfig.Field(
+        doc="Obscuration (inner_radius / outer_radius of M1M3)",
+        dtype=float,
+        default=0.61,
+    )
+    instFocalLength = pexConfig.Field(
+        doc="Instrument Focal Length in m", dtype=float, default=10.312
+    )
+    instApertureDiameter = pexConfig.Field(
+        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
+    )
+    instDefocalOffset = pexConfig.Field(
+        doc="Instrument defocal offset in mm. \
+        If None then will get this from the focusZ value in exposure visitInfo. \
+        (The default is None.)",
+        dtype=float,
+        default=None,
+        optional=True,
+    )
+    instPixelSize = pexConfig.Field(
+        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
+    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask):
@@ -95,6 +127,11 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         # for the detector.
         self.combineZernikes = self.config.combineZernikes
         self.makeSubtask("combineZernikes")
+
+        # Specify optical model
+        self.opticalModel = self.config.opticalModel
+        # Set up instrument configuration dict
+        self.instParams = createInstDictFromConfig(self.config)
 
     def estimateZernikes(self, donutStampsExtra, donutStampsIntra):
         """
@@ -125,13 +162,16 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         detectorNames = donutStampsExtra.getDetectorNames()
         camera = donutStampsExtra[0].getCamera()
         detectorType = camera[detectorNames[0]].getType()
+        self.instParams["offset"] = donutStampsExtra.getDefocalDistances()[0]
 
         camType = getCamTypeFromButlerName(camera.getName(), detectorType)
         donutStampSize = np.shape(donutStampsExtra[0].stamp_im.getImage().getArray())[0]
 
         wfEsti.config(
+            self.instParams,
             sizeInPix=donutStampSize,
             camType=camType,
+            opticalModel=self.opticalModel,
         )
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.0.0:
+
+-------------
+3.0.0
+-------------
+
+* Refactor tasks to directly accept instrument parameters in their configuration.
+
 .. _lsst.ts.wep-2.7.0:
 
 -------------

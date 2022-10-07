@@ -63,7 +63,7 @@ class TestCompensableImage(unittest.TestCase):
         # Define the instrument folder
         cwfsConfigDir = os.path.join(getConfigDir(), "cwfs")
         instDir = os.path.join(cwfsConfigDir, "instData")
-        instConfigFile = os.path.join(instDir, "lsst", "instParam.yaml")
+        instConfigFile = os.path.join(instDir, "lsst", "instParamPipeConfig.yaml")
         maskConfigFile = os.path.join(instDir, "lsst", "maskMigrate.yaml")
 
         # Define the instrument name
@@ -73,7 +73,7 @@ class TestCompensableImage(unittest.TestCase):
         self.inst.configFromFile(
             dimOfDonutOnSensor, CamType.LsstCam, instConfigFile, maskConfigFile
         )
-        self.inst.instParams["offset"] = 1.0e-3
+        self.inst.instParams["offset"] = 1.0
 
         # Define the image folder and image names
         # Image data -- Don't know the final image format.

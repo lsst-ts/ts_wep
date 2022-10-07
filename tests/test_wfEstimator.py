@@ -20,7 +20,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import yaml
 import numpy as np
 import unittest
 
@@ -33,13 +32,15 @@ class TestWfEstimator(unittest.TestCase):
 
     def setUp(self):
 
-        cwfsConfigDir = os.path.join(getConfigDir(), "cwfs")
-        instDir = os.path.join(cwfsConfigDir, "instData")
-        instConfigFile = os.path.join(instDir, "lsst", "instParam.yaml")
-        with open(instConfigFile, "r") as stream:
-            self.instParams = yaml.safe_load(stream)
-        self.instParams["offset"] = 1.0e-3
+        self.instParams = {
+            "obscuration": 0.61,
+            "focalLength": 10.312,
+            "apertureDiameter": 8.36,
+            "offset": 1.0,
+            "pixelSize": 10.0e-6,
+        }
 
+        cwfsConfigDir = os.path.join(getConfigDir(), "cwfs")
         algoDir = os.path.join(cwfsConfigDir, "algo")
         self.wfsEst = WfEstimator(algoDir)
 
