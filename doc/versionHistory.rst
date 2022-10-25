@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.0.1:
+
+-------------
+3.0.1
+-------------
+
+* Fix ``test_generateDonutCatalogWcsTask.py`` to work with more recent versions of the DM stack.
+
 .. _lsst.ts.wep-3.0.0:
 
 -------------
