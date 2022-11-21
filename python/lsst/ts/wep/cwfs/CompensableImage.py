@@ -462,9 +462,6 @@ class CompensableImage(object):
         # I(x, y)/I'(x', y') = J = (dx'/dx)*(dy'/dy) - (dx'/dy)*(dy'/dx)
         self.updateImage(lutIp * J)
 
-        if self.defocalType == DefocalType.Extra:
-            self.updateImage(np.rot90(self.getImg(), k=2))
-
         # Put NaN to be 0
         imgCompensate = self.getImg()
         imgCompensate[np.isnan(imgCompensate)] = 0
@@ -1411,7 +1408,9 @@ class CompensableImage(object):
 
         return show_lutxyp
 
-    def makeMask(self, inst, model, boundaryT, maskScalingFactorLocal):
+    def makeMask(
+        self, inst, model, boundaryT, maskScalingFactorLocal, compensated=True
+    ):
         """Get the binary mask which considers the obscuration and off-axis
         correction.
 
@@ -1434,6 +1433,12 @@ class CompensableImage(object):
             zero.
         maskScalingFactorLocal : float
             Mask scaling factor (for fast beam) for local correction.
+        compensated: bool, optional
+            Whether to calculate masks for the compensated or original image.
+            If True, mask will be in orientation of the compensated image.
+            If False, mask will be in orientation of the original image.
+            Note this is only relevant for extrafocal images.
+            (the default is True.)
         """
 
         self.mask_pupil = np.ones(inst.dimOfDonutImg, dtype=int)
@@ -1494,3 +1499,9 @@ class CompensableImage(object):
 
             # padded mask for use at the offset planes
             self.mask_comp = self.mask_comp * mask_comp_ii
+
+        # If we do not want compensated masks, rotate the extrafocal mask,
+        # so that it is in the orientation of the original image
+        if not compensated and self.defocalType == DefocalType.Extra:
+            self.mask_pupil = np.rot90(self.mask_pupil, 2)
+            self.mask_comp = np.rot90(self.mask_comp, 2)

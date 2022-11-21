@@ -86,6 +86,26 @@ class TestAlgorithm(unittest.TestCase):
         self.algoFft = Algorithm(algoDir)
         self.algoFft.config("fft", self.inst)
 
+    def resetAlgorithmsAndImages(self):
+        # Reset the algorithms and images to their initial state
+
+        # Reset algorithms
+        self.algoExp.reset()
+        self.algoFft.reset()
+
+        # Reset images
+        fieldXY = [self.I1.fieldX, self.I1.fieldY]
+        self.I1.setImg(
+            fieldXY,
+            self.I1.getDefocalType(),
+            image=self.I1.getImgInit(),
+        )
+        self.I2.setImg(
+            fieldXY,
+            self.I2.getDefocalType(),
+            image=self.I2.getImgInit(),
+        )
+
     def testGetDebugLevel(self):
 
         self.assertEqual(self.algoExp.getDebugLevel(), 0)
@@ -297,10 +317,7 @@ class TestAlgorithm(unittest.TestCase):
         self.algoExp.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
 
         # Reset and check the calculation again
-        fieldXY = [self.I1.fieldX, self.I1.fieldY]
-        self.I1.setImg(fieldXY, self.I1.getDefocalType(), image=self.I1.getImgInit())
-        self.I2.setImg(fieldXY, self.I2.getDefocalType(), image=self.I2.getImgInit())
-        self.algoExp.reset()
+        self.resetAlgorithmsAndImages()
 
         self.algoExp.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
 
@@ -313,6 +330,97 @@ class TestAlgorithm(unittest.TestCase):
 
         zk = self.algoFft.getZer4UpInNm()
         self.assertEqual(int(zk[7]), -192)
+
+    def checkSymmetryI1I2(self, algo):
+        # This function checks that the algorithm is symmetric with respect
+        # to I1 and I2. It is used by testSymmetryI1I2() below.
+
+        # Calculate Zernikes with I1,I2
+        self.resetAlgorithmsAndImages()
+        algo.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
+        zkI1I2 = algo.getZer4UpInNm()
+
+        # Calculate Zernikes with I2,I1
+        self.resetAlgorithmsAndImages()
+        algo.runIt(self.I2, self.I1, self.opticalModel, tol=1e-3)
+        zkI2I1 = algo.getZer4UpInNm()
+
+        # Check that the zernikes are the same, regardless of the order
+        # of I1 and I2
+        self.assertTrue(np.array_equal(zkI1I2, zkI2I1))
+
+    def testSymmetryI1I2(self):
+        # Test that the algorithm gives same results when you swap I1 <-> I2.
+
+        # Run test for exp and fft algorithms
+        for algo in [self.algoExp, self.algoFft]:
+            with self.subTest(algo=algo):
+                self.checkSymmetryI1I2(algo)
+
+    def checkAlgHistory(self, algo):
+        # This function checks the algorithm history.
+        # It is used by testAlgHistory() below.
+
+        # Reset everything
+        self.resetAlgorithmsAndImages()
+
+        # Check that history is empty before running the algorithm
+        self.assertTrue(len(algo.getHistory()) == 0)
+
+        # Check that history is not created when debugLevel==0
+        algo.setDebugLevel(0)
+        algo.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
+        self.assertTrue(len(algo.getHistory()) == 0)
+
+        # Reset everything
+        self.resetAlgorithmsAndImages()
+
+        # Check that everything is recorded when debugLevel==3
+        algo.setDebugLevel(3)
+        algo.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
+        self.assertIsInstance(algo.getHistory(), dict)
+
+        # Check all outer loop items are present
+        outerItems = [
+            "initI1",
+            "initI2",
+            "compZk",
+            "compI1",
+            "compI2",
+            "pupilMask",
+            "maskedI1",
+            "maskedI2",
+            "residZk",
+            "residWf",
+            "totZk",
+            "totWf",
+            "caustic",
+            "converged",
+        ]
+        if algo.getPoissonSolverName() == "fft":
+            outerItems += ["innerLoop"]
+        for outerItr in algo.getHistory().values():
+            self.assertEqual(set(outerItems), set(outerItr.keys()))
+
+        # If fft, check the inner loops
+        innerItems = [
+            "initS",
+            "FFT",
+            "estWf",
+            "estS",
+        ]
+        if algo.getPoissonSolverName() == "fft":
+            for outerItr in algo.getHistory().values():
+                for innerItr in outerItr["innerLoop"].values():
+                    self.assertEqual(set(innerItems), set(innerItr.keys()))
+
+    def testAlgHistory(self):
+        # Test that the algorithm history contains all expected entries
+
+        # Run test for exp and fft algorithms
+        for algo in [self.algoExp, self.algoFft]:
+            with self.subTest(algo=algo):
+                self.checkAlgHistory(algo)
 
 
 if __name__ == "__main__":

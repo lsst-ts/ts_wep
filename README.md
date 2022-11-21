@@ -4,7 +4,7 @@
 
 This module calculates the wavefront error in annular Zernike polynomials based on the intra- and extra-focal donut images in the large synoptic survey telescope (LSST).
 
-See the docs: https://ts-wep.lsst.io/
+See the docs: <https://ts-wep.lsst.io/>
 
 ## Platform
 
@@ -97,9 +97,10 @@ Here we show how to run the pipeline on the LSSTCam corner wavefront sensors.
 1. The order of the tasks and the configuration overrides for the tasks are set in the pipeline definition `yaml` file.
 In this case that is found in `tests/testData/pipelineConfigs/testCwfsPipeline.yaml`.
 Looking at this file we see that the three tasks we will run are:
-  - `lsst.ip.isr.isrTask.IsrTask`
-  - `lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask`
-  - `lsst.ts.wep.task.EstimateZernikesCwfsTask.EstimateZernikesCwfsTask`
+
+- `lsst.ip.isr.isrTask.IsrTask`
+- `lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask`
+- `lsst.ts.wep.task.EstimateZernikesCwfsTask.EstimateZernikesCwfsTask`
 
 2. Run the `pipetask` from the command line:
 
@@ -108,15 +109,16 @@ pipetask run -b $path_of_ts_wep/tests/testData/gen3TestRepo -i refcats/gen2,LSST
 ```
 
 The options used above are as follows:
-  - `-b`: Specifies the location of the butler repository.
-  - `-i`: The `collections` (data) needed for the tasks.
-  - `--instrument`: Defines which camera we are using.
-  - `--register-dataset-types`: Add the specific datasets types for our tasks to the registry.
-    - Dataset Types that are original to this repository are the `donutCatalog`, `donutStampsExtra`, `donutStampsIntra`, `outputZernikesRaw` and `outputZernikesAvg`. These are defined in the tasks that create them in `python/lsst/ts/wep/task`.
-  - `--output-run`: Define the name of the new collection that will hold the output from the tasks.
-  - `-p`: Specifies the location of the pipeline configuration file.
-  - `-d`: Define a query to further specify which data in the `collections` we should use.
-    - The query in the example above defines the exposure ID we want to use. Since we have a specific exposure in the gen3 test data that includes the wavefront sensors we specify that number `4021123106000` here in our query.
+
+- `-b`: Specifies the location of the butler repository.
+- `-i`: The `collections` (data) needed for the tasks.
+- `--instrument`: Defines which camera we are using.
+- `--register-dataset-types`: Add the specific datasets types for our tasks to the registry.
+  - Dataset Types that are original to this repository are the `donutCatalog`, `donutStampsExtra`, `donutStampsIntra`, `outputZernikesRaw` and `outputZernikesAvg`. These are defined in the tasks that create them in `python/lsst/ts/wep/task`.
+- `--output-run`: Define the name of the new collection that will hold the output from the tasks.
+- `-p`: Specifies the location of the pipeline configuration file.
+- `-d`: Define a query to further specify which data in the `collections` we should use.
+  - The query in the example above defines the exposure ID we want to use. Since we have a specific exposure in the gen3 test data that includes the wavefront sensors we specify that number `4021123106000` here in our query.
 
 3. If the pipeline ran successfully you can run the following command to see that the name of the new output run is present in the list:
 
@@ -142,7 +144,6 @@ butler query-collections $path_of_ts_wep/tests/testData/gen3TestRepo/
     # |     |     |          |  SW1 |
     # O------------          -------O
 
-
 ## Verify the Calculated Wavefront Error
 
 1. The user can use the `Algorithm.getWavefrontMapEsti()` and `Algorithm.getWavefrontMapResidual()` in `cwfs` module to judge the estimated wavefront error after the solve of transport of intensity equation (TIE). The residual of wavefront map should be low compared with the calculated wavefront map if most of low-order Zernike terms (z4 - z22) have been captured and compensated.
@@ -160,6 +161,25 @@ The rotations for the R04 and R40 wavefront sensors given by the `obs_lsst` pack
 file [`data/lsst/focalPlaneLayout.txt`](https://github.com/lsst-ts/phosim_syseng4/blob/aos/data/lsst/focalplanelayout.txt). This is due to a difference in the rotation direction
 when phosim creates images and the 180 degree difference offsets that and creates the correct orientation with the rest of the focal plane.
 This is shown in the notebook [here](https://github.com/suberlak/AOS/blob/main/AOS_DM-30367_summary.ipynb).
+
+## Note on the orientation of images and masks
+
+***Summary:***
+***Image compensation puts both images into the same orientation.***
+***Pupil masks are generated in the same orientation.***
+***Therefore, we do not need to explicitly rotate images or masks inside the algorithm.***
+
+The Zernike estimation algorithm uses donut images and masks to solve the transport of intensity equation (TIE; see [Xin 2015](https://ui.adsabs.harvard.edu/abs/2015ApOpt..54.9045X)).
+A pair of intra- and extra-focal donuts is used to approximate the gradient of the donut intensity with respect to the focal direction (i.e. the left-hand side of [Xin 2015](https://ui.adsabs.harvard.edu/abs/2015ApOpt..54.9045X), Equation 1), while the average of the pair is used to approximate the in-focus image (i.e. $I$ on the right-hand side of [Xin 2015](https://ui.adsabs.harvard.edu/abs/2015ApOpt..54.9045X), Equation 1).
+
+In order to do this, we must ensure that the donuts are in the same orientation, and apply a mask that corrects for potential vignetting of the intrafocal donut.
+Since the two donuts in the pair are on opposite sides of focus, their orientations are initially rotated by 180 degrees with respect to each other.
+However, before calculating the mean and difference intensities, the donuts are mapped to the pupil plane and "compensated" for the current best-guess of the optical aberrations ([Xin 2015](https://ui.adsabs.harvard.edu/abs/2015ApOpt..54.9045X), Equations 9-11).
+This mapping to the pupil plane automatically corrects for the orientation difference.
+Therefore, we do not need to explicitly rotate either image in the algorithm.
+
+In addition, the pupil mask that is applied to both donut images is calculated in the same orientation.
+Therefore, we do not need to rotate the masks either.
 
 ## Build the Document
 
