@@ -21,10 +21,8 @@
 
 import os
 import numpy as np
-from scipy.signal import correlate
 
 import lsst.utils.tests
-from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.DonutStamps import DonutStamps
 from lsst.ts.wep.task.CalcZernikesTask import (
@@ -36,7 +34,6 @@ from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaCl
 from lsst.ts.wep.Utility import (
     getModulePath,
     runProgram,
-    DefocalType,
     writePipetaskCmd,
     writeCleanUpRepoCmd,
 )
@@ -102,51 +99,6 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
             "exposure": 4021123106000,
             "visit": 4021123106000,
         }
-
-    def _generateTestExposures(self):
-
-        # Generate donut template
-        template = self.task.getTemplate(
-            "R22_S11", DefocalType.Extra, self.task.donutTemplateSize
-        )
-        correlatedImage = correlate(template, template)
-        maxIdx = np.argmax(correlatedImage)
-        maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
-        templateCenter = np.array(maxLoc) - self.task.donutTemplateSize / 2
-
-        # Make donut centered in exposure
-        initCutoutSize = (
-            self.task.donutTemplateSize + self.task.initialCutoutPadding * 2
-        )
-        centeredArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
-        centeredArr[
-            self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
-            self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
-        ] += template
-        centeredImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
-        centeredImage.array = centeredArr
-        centeredExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
-        centeredExp.setImage(centeredImage)
-        centerCoord = (
-            self.task.initialCutoutPadding + templateCenter[1],
-            self.task.initialCutoutPadding + templateCenter[0],
-        )
-
-        # Make new donut that needs to be shifted by 20 pixels
-        # from the edge of the exposure
-        offCenterArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
-        offCenterArr[
-            : self.task.donutTemplateSize - 20, : self.task.donutTemplateSize - 20
-        ] = template[20:, 20:]
-        offCenterImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
-        offCenterImage.array = offCenterArr
-        offCenterExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
-        offCenterExp.setImage(offCenterImage)
-        # Center coord value 20 pixels closer than template center
-        # due to stamp overrunning the edge of the exposure.
-        offCenterCoord = templateCenter - 20
-
-        return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
     def testValidateConfigs(self):
 

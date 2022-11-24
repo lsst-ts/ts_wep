@@ -5,6 +5,16 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-3.1.1:
+
+-------------
+3.1.1
+-------------
+
+* Fix tests pipeline yaml files updating the ISR setting to use 'MEDIAN' for overscan fit type.
+* Remove obsolete _generateTestExposures.
+* Fix `test_generateDonutDirectDetectTask.py`
   
 .. _lsst.ts.wep-3.1.0:
 
