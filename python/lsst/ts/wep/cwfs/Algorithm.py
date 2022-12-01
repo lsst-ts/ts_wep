@@ -43,6 +43,7 @@ from lsst.ts.wep.cwfs.Tool import (
     ZernikeAnnularEval,
     ZernikeMaskedFit,
 )
+from lsst.ts.wep.Utility import DefocalType
 from lsst.ts.wep.PlotUtil import plotZernike
 
 
@@ -112,6 +113,9 @@ class Algorithm(object):
         self._dzkdx = None
         self._dzkdy = None
 
+        # Create an attribute to store the algorithm history
+        self._history = dict()
+
     def reset(self):
         """Reset the calculation for the new input images with the same
         algorithm settings."""
@@ -132,6 +136,8 @@ class Algorithm(object):
 
         self.mask_comp_pad = None
         self.mask_pupil_pad = None
+
+        self._history = dict()
 
     def config(self, algoName, inst, debugLevel=0):
         """Configure the algorithm to solve TIE.
@@ -179,6 +185,9 @@ class Algorithm(object):
         self.mask_pupil = None
         self.mask_comp_pad = None
         self.mask_pupil_pad = None
+
+        # Reset the history
+        self._history = dict()
 
     def setDebugLevel(self, debugLevel):
         """Set the debug level.
@@ -493,6 +502,100 @@ class Algorithm(object):
 
         return wfMapWithMask
 
+    def _recordItem(self, item, itemName, outerItr, innerItr=None, debugLevel=0):
+        """Record the item in the algorithm history.
+
+        If you use this method to store new items in the algorithm history, you
+        should update the docstring of the getHistory() method below, which
+        describes the (potential) contents of the algorithm history.
+
+        Parameters
+        ----------
+        item : Any
+            The item to record in the history.
+        itemName : str
+            The name of the item in the history.
+        outerItr : int
+            The iteration of the outer-loop under which to store the item.
+        innerItr : int, optional
+            The iteration of the inner-loop under which to store the item.
+            Inner-loop iterations are stored in another dictionary, which
+            is stored under the key "innerLoop".
+        debugLevel : int, optional
+            The debugLevel at which this item should be recorded.
+            (the default is 0.)
+        """
+        # if debug level too low, do nothing
+        if self.debugLevel < debugLevel:
+            return
+
+        # create the outerItr dictionary if it doesn't exist
+        if outerItr not in self._history:
+            self._history[outerItr] = dict()
+
+        # decide whether to record at the level of the outer- or inner-loop
+        if innerItr is None:
+            self._history[outerItr][itemName] = item
+        else:
+            # create the inner-loop dictionary if it doesn't exist
+            if "innerLoop" not in self._history[outerItr]:
+                self._history[outerItr]["innerLoop"] = dict()
+
+            # create the innerItr dictionary if it doesn't exist
+            if innerItr not in self._history[outerItr]["innerLoop"]:
+                self._history[outerItr]["innerLoop"][innerItr] = dict()
+
+            # record the item
+            self._history[outerItr]["innerLoop"][innerItr][itemName] = item
+
+    def getHistory(self):
+        """Get the algorithm history.
+
+        Returns
+        -------
+        dict
+            Algorithm history.
+
+        Notes
+        -----
+        The algorithm history is a dictionary that contains an entry for each
+        iteration of the outer-loop, beginning with history[0].
+
+        The entry for each outer-loop iteration is itself a dictionary,
+        containing the following keys:
+            - initI1 - the initial I1 image
+            - initI2 - the initial I2 image
+            - compZk - the zernikes used for image compensation (units: nm)
+            - compI1 - the compensated I1 image
+            - compI2 - the compensated I2 image
+            - pupilMask - pupil mask that is applied before zernike calculation
+            - maskedI1 - the masked version of the compensated I1
+            - maskedI2 - the masked version of the compensated I2
+            - residZk - the estimated residual zernikes (units: nm)
+            - residWf - the estimated residual wavefront (units: nm)
+            - totZk - the current best estimate of the zernikes (units: nm)
+            - totWf - the current best estimate of the wavefront (units: nm)
+            - caustic - whether this iteration encountered a caustic
+            - converged - whether the zernikes have converged
+
+        Further, if you are running the FFT algorithm, there is an inner-loop
+        history saved under the key "innerLoop". The inner-loop history is
+        itself a dictionary that contains an entry for every iteration of
+        the inner-loop. The entry for each iteration of the inner-loop is
+        another dictionary, containing the following keys:
+            - initS - the initial "signal"
+            - FFT - the Fast Fourier transform of initS
+            - estWf - the estimated wavefront
+            - estS - the estimated signal
+
+        So for example, if you want to get the estimated signal from the 3rd
+        step of the innerloop during the 2nd step of the outer loop, you
+        would do the following:
+        history = algorithm.getHistory()
+        signal = history[1]["innerLoop"][2]["estS"]
+        """
+        return self._history
+
     def _checkNotItr0(self):
         """Check not in the iteration 0.
 
@@ -547,8 +650,18 @@ class Algorithm(object):
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
             Tolerance of difference of coefficients of Zk polynomials compared
-            with the previous iteration. (the default is 1e-3.)
+            with the previous iteration of outer loop. (the default is 1e-3.)
+
+        Raises
+        ------
+        ValueError
+            Check the that we have an intra- and extra-focal image.
         """
+        if I1.defocalType == I2.defocalType:
+            raise ValueError(
+                f"I1 and I2 are both {I1.defocalType.name}focal. "
+                "Please pass an intra- and extra-focal image."
+            )
 
         # To have the iteration time initiated from global variable is to
         # distinguish the manually and automatically iteration processes.
@@ -657,7 +770,7 @@ class Algorithm(object):
             Optical model. It can be "paraxial", "onAxis", or "offAxis".
         tol : float, optional
             Tolerance of difference of coefficients of Zk polynomials compared
-            with the previous iteration. (the default is 1e-3.)
+            with the previous iteration of outer loop. (the default is 1e-3.)
 
         Returns
         -------
@@ -684,11 +797,12 @@ class Algorithm(object):
                     )
                     sys.exit()
 
-                # Calculate the pupil mask (binary matrix) and related
-                # parameters
+                # Create the pupil masks
+                # These will be applied to compensated images, so we will
+                # create the masks with compensated=True
                 boundaryT = self.getBoundaryThickness()
-                I1.makeMask(self._inst, model, boundaryT, 1)
-                I2.makeMask(self._inst, model, boundaryT, 1)
+                I1.makeMask(self._inst, model, boundaryT, 1, compensated=True)
+                I2.makeMask(self._inst, model, boundaryT, 1, compensated=True)
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
                 # Load the offAxis correction coefficients
@@ -725,6 +839,10 @@ class Algorithm(object):
             I1.updateImage(I1.getImgInit().copy())
             I2.updateImage(I2.getImgInit().copy())
 
+            # Record the initial images for this iteration
+            self._recordItem(I1.getImg().copy(), "initI1", jj, debugLevel=1)
+            self._recordItem(I2.getImg().copy(), "initI2", jj, debugLevel=1)
+
             if compMode == "zer":
 
                 # Zk coefficient from the previous iteration
@@ -739,23 +857,42 @@ class Algorithm(object):
                 # Add partial feedback of residual estimated wavefront in Zk
                 self.zcomp = self.zcomp + ztmp * feedbackGain
 
+                # Record the zernikes (in nm) used to compensate the images
+                self._recordItem(self.zcomp * 1e9, "compZk", jj, debugLevel=1)
+
                 # Remove the image distortion by forwarding the image to pupil
                 I1.compensate(self._inst, self, self.zcomp, model)
                 I2.compensate(self._inst, self, self.zcomp, model)
 
-            # Check the image condition. If there is the problem, done with
+                # Record the compensated images for this iteration
+                self._recordItem(I1.getImg().copy(), "compI1", jj, debugLevel=1)
+                self._recordItem(I2.getImg().copy(), "compI2", jj, debugLevel=1)
+
+            # Check the image condition. If there is a problem, done with
             # this _singleItr().
             if (I1.isCaustic() is True) or (I2.isCaustic() is True):
                 self.converge[:, jj] = self.converge[:, jj - 1]
                 self.caustic = True
+                self._recordItem(True, "caustic", jj, debugLevel=1)
+                self._recordItem(False, "converged", jj, debugLevel=1)
                 return
 
-            # Correct the defocal images if I1 and I2 are belong to different
-            # sources, which is determined by the (fieldX, field Y)
-            I1, I2 = self._applyI1I2mask_pupil(I1, I2)
+            # Correct the defocal images if I1 and I2 belong to different
+            # sources, which is determined by the (fieldX, fieldY)
+            self._applyI1I2mask_pupil(I1, I2)
+
+            # Record the pupil mask that was used in the previous function,
+            # plus the newly masked images
+            self._recordItem(self.mask_pupil.copy(), "pupilMask", jj, debugLevel=1)
+            self._recordItem(I1.getImg().copy(), "maskedI1", jj, debugLevel=1)
+            self._recordItem(I2.getImg().copy(), "maskedI2", jj, debugLevel=1)
 
             # Solve the Poisson's equation
             self.zc, self.West = self._solvePoissonEq(I1, I2, jj)
+
+            # Record the residual Zernike coefficients (in nm) and wavefront
+            self._recordItem(self.zc.copy() * 1e9, "residZk", jj, debugLevel=1)
+            self._recordItem(self.West.copy(), "residWf", jj, debugLevel=1)
 
             # Record/ calculate the Zk coefficient and wavefront
             if compMode == "zer":
@@ -768,6 +905,12 @@ class Algorithm(object):
                     yoSensor,
                     self.getObsOfZernikes(),
                 )
+
+                # Record the total Zernike coefficients (in nm) and wavefront
+                self._recordItem(
+                    self.converge[:, jj].copy() * 1e9, "totZk", jj, debugLevel=1
+                )
+                self._recordItem(self.wcomp.copy(), "totWf", jj, debugLevel=1)
 
         else:
             # Once we run into caustic, stop here, results may be close to real
@@ -792,10 +935,15 @@ class Algorithm(object):
             if diffZk < tol:
                 stopItr = True
 
+        # Record the convergence
+        if not self.caustic:
+            self._recordItem(False, "caustic", jj, debugLevel=1)
+            self._recordItem(stopItr, "converged", jj, debugLevel=1)
+
         # Update the current iteration time
         self.currentItr += 1
 
-        # Show the Zk coefficients in interger in each iteration
+        # Show the Zk coefficients in integer in each iteration
         if self.debugLevel >= 2:
             print("itr = %d, z4-z%d" % (jj, self.getNumOfZernikes()))
             print(np.rint(self.zer4UpNm))
@@ -901,8 +1049,14 @@ class Algorithm(object):
             S = Sini.copy()
             for jj in range(self.getNumOfInnerItr()):
 
-                # Calculate FT{S}
+                # Record the initial image
+                self._recordItem(S.copy(), "initS", iOutItr, jj, debugLevel=1)
+
+                # Calculate FFT{S}
                 SFFT = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(S)))
+
+                # Record FFT{S}
+                self._recordItem(SFFT.copy(), "FFT", iOutItr, jj, debugLevel=1)
 
                 # Calculate W by W=IFT{ FT{S}/(-4*pi^2*(u^2+v^2)) }
                 W = np.fft.fftshift(
@@ -920,6 +1074,9 @@ class Algorithm(object):
                 West = West - offset
                 West[self.mask_pupil == 0] = 0
 
+                # Record the estimated wavefront
+                self._recordItem(West.copy(), "estWf", iOutItr, jj, debugLevel=1)
+
                 # Set dWestimate/dn = 0 around boundary
                 WestdWdn0 = West.copy()
 
@@ -932,8 +1089,10 @@ class Algorithm(object):
 
                 kernel = np.ones((1 + 2 * boundaryT, 1 + 2 * boundaryT))
                 tmp = convolve2d(West * ApringIn, kernel, mode="same")
-                tmp /= convolve2d(ApringIn, kernel, mode="same")
-                WestdWdn0[borderx, bordery] = tmp[borderx, bordery]
+                tmp_norm = convolve2d(ApringIn, kernel, mode="same")
+                WestdWdn0[borderx, bordery] = (
+                    tmp[borderx, bordery] / tmp_norm[borderx, bordery]
+                )
 
                 # Take Laplacian to find sensor signal estimate (Delta W = S)
                 del2W = laplace(WestdWdn0) / dOmega
@@ -941,6 +1100,9 @@ class Algorithm(object):
                 # Extend the dimension of signal to the order of 2 for "fft" to
                 # use
                 Sest = padArray(del2W, padDim)
+
+                # Record the estimated signal
+                self._recordItem(Sest.copy(), "estS", iOutItr, jj, debugLevel=1)
 
                 # Put signal back inside boundary, leaving the rest of
                 # Sestimate
@@ -963,8 +1125,8 @@ class Algorithm(object):
             # Use the integration method by serial expansion to solve the
             # Poisson's equation
 
-            # Calculate I0 and dI
-            I0, dI = self._getdIandI(I1, I2)
+            # Calculate dI and I0
+            dI, I0 = self._getdIandI0(I1, I2)
 
             # Get the x, y coordinate in mask. The element outside mask is 0.
             xSensor, ySensor = self._inst.getSensorCoor()
@@ -1038,13 +1200,14 @@ class Algorithm(object):
             Approximated wavefront signal.
         """
 
-        # Check the condition of images
-        I1image, I2image = self._checkImageDim(I1, I2)
+        # Calculate I0 and dI
+        dI, I0 = self._getdIandI0(I1, I2)
 
         # Wavefront signal S=-(1/I0)*(dI/dz) is approximated to be
-        # -(1/delta z)*(I1-I2)/(I1+I2)
-        num = I1image - I2image
-        den = I1image + I2image
+        # -(1/I0) * dI/(2 * delta z) = (-dI)/(2 * I0) * (1/delta z)
+        # we will ignore the (1/delta z) until later in this method
+        num = -dI
+        den = 2 * I0
 
         # Define the effective minimum central signal element by the threshold
         # ( I0=(I1+I2)/2 )
@@ -1081,13 +1244,12 @@ class Algorithm(object):
 
         return Sout
 
-    def _getdIandI(self, I1, I2):
-        """Calculate the central image and differential image to be used in the
-        serial expansion method.
+    def _getdIandI0(self, I1, I2):
+        """Calculate the differential image and central image.
 
-        It is noted that the images are assumed to be co-center already. And
-        the intra-/ extra-focal image can overlap with one another after the
-        rotation of 180 degree.
+        It is noted that the images are assumed to be co-center already, and
+        that the images have already been compensated, so that the orientation
+        of the extrafocal matches that of the intrafocal image.
 
         Parameters
         ----------
@@ -1099,25 +1261,27 @@ class Algorithm(object):
         Returns
         -------
         numpy.ndarray
-            Image data of I0.
+            Differential image, dI = Extra - Intra
         numpy.ndarray
-            Differential image (dI) of I0.
+            I0 = (Extra + Intra) / 2
         """
 
-        # Check the condition of images
-        I1image, I2image = self._checkImageDim(I1, I2)
+        # Check the image dimensions
+        self._checkImageDim(I1, I2)
 
         # Calculate the central image and differential image
-        I0 = (I1image + I2image) / 2
-        dI = I2image - I1image
+        dI = I1.getImg() - I2.getImg()
+        I0 = (I1.getImg() + I2.getImg()) / 2
 
-        return I0, dI
+        # if I2 is extrafocal, flip the sign of dI
+        if I2.defocalType == DefocalType.Extra:
+            dI = -dI
+
+        return dI, I0
 
     def _checkImageDim(self, I1, I2):
         """Check the dimension of images.
 
-        It is noted that the I2 image is rotated by 180 degree.
-
         Parameters
         ----------
         I1 : CompensableImage
@@ -1125,19 +1289,11 @@ class Algorithm(object):
         I2 : CompensableImage
             Intra- or extra-focal image.
 
-        Returns
-        -------
-        numpy.ndarray
-            I1 defocal image.
-        numpy.ndarray
-            I2 defocal image. It is noted that the I2 image is rotated by 180
-            degree.
-
         Raises
         ------
-        Exception
+        ValueError
             Check the dimension of images is n by n or not.
-        Exception
+        ValueError
             Check two defocal images have the same size or not.
         """
 
@@ -1146,19 +1302,10 @@ class Algorithm(object):
         m2, n2 = I2.getImg().shape
 
         if m1 != n1 or m2 != n2:
-            raise Exception("Image is not square.")
+            raise ValueError("Image is not square.")
 
         if m1 != m2 or n1 != n2:
-            raise Exception("Images do not have the same size.")
-
-        # Define I1
-        I1image = I1.getImg()
-
-        # Rotate the image by 180 degree through rotating two times of 90
-        # degree
-        I2image = np.rot90(I2.getImg(), k=2)
-
-        return I1image, I2image
+            raise ValueError("Images do not have the same size.")
 
     def _makeMasterMask(self, I1, I2, poissonSolver=None):
         """Calculate the common mask of defocal images.
@@ -1188,8 +1335,9 @@ class Algorithm(object):
             self.mask_pupil_pad = padArray(self.mask_pupil, padDim)
 
     def _applyI1I2mask_pupil(self, I1, I2):
-        """Correct the defocal images if I1 and I2 are belong to different
-        sources.
+        """Mask the images if I1 and I2 belong to different sources.
+
+        Note I1 and I2 are mutated in-place.
 
         (There is a problem for this actually. If I1 and I2 come from different
         sources, what should the correction of TIE be? At this moment, the
@@ -1202,13 +1350,6 @@ class Algorithm(object):
             Intra- or extra-focal image.
         I2 : CompensableImage
             Intra- or extra-focal image.
-
-        Returns
-        -------
-        numpy.ndarray
-            Corrected I1 image.
-        numpy.ndarray
-            Corrected I2 image.
         """
 
         # Get the overlap region of images and do the normalization.
@@ -1216,19 +1357,11 @@ class Algorithm(object):
 
             # Get the overlap region of image
             I1.updateImage(I1.getImg() * self.mask_pupil)
-
-            # Rotate mask_pupil by 180 degree through rotating two times of 90
-            # degree because I2 has been rotated by 180 degree already.
-            I2.updateImage(I2.getImg() * np.rot90(self.mask_pupil, 2))
+            I2.updateImage(I2.getImg() * self.mask_pupil)
 
             # Do the normalization of image.
             I1.updateImage(I1.getImg() / np.sum(I1.getImg()))
             I2.updateImage(I2.getImg() / np.sum(I2.getImg()))
-
-        # Return the correct images. It is noted that there is no need of
-        # vignetting correction.
-        # This is after masking already in _singleItr() or itr0().
-        return I1, I2
 
     def _reset(self, I1, I2):
         """Reset the iteration time of outer loop and defocal images.
@@ -1269,7 +1402,7 @@ class Algorithm(object):
 
     def outZer4Up(self, unit="nm", filename=None, showPlot=False):
         """Put the coefficients of normal/ annular Zernike polynomials on
-        terminal or file ande show the image if it is needed.
+        terminal or file and show the image if it is needed.
 
         Parameters
         ----------

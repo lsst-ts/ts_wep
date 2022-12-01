@@ -137,7 +137,11 @@ class DonutStamp(AbstractStamp):
             # Need to convert to DefocalType
             defocal_type=metadata.getArray("DFC_TYPE")[index],
             # "DFC_DIST" stands for defocal distance
-            defocal_distance=metadata.getArray("DFC_DIST")[index],
+            # If this is an old version of the stamps without a defocal
+            # distance set this to default value of 1.5 mm.
+            defocal_distance=metadata.getArray("DFC_DIST")[index]
+            if metadata.get("DFC_DIST") is not None
+            else 1.5,
         )
 
     def getCamera(self):

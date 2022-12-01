@@ -6,6 +6,43 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.1.3:
+
+-------------
+3.1.3
+-------------
+
+* Added default value to DonutStamp for DFC_DIST to allow the butler to read DonutStamp from repositories created with older versions of ts_wep.
+
+.. _lsst.ts.wep-3.1.2:
+
+-------------
+3.1.2
+-------------
+
+* Update phosimOutput corner sensors test files.
+
+.. _lsst.ts.wep-3.1.1:
+
+-------------
+3.1.1
+-------------
+
+* Fix tests pipeline yaml files updating the ISR setting to use 'MEDIAN' for overscan fit type.
+* Remove obsolete _generateTestExposures.
+* Fix `test_generateDonutDirectDetectTask.py`
+
+.. _lsst.ts.wep-3.1.0:
+
+-------------
+3.1.0
+-------------
+
+* Added a history to the Algorithm class that stores intermediate products of the algorithm (see `Algorithm.getHistory()`).
+* Fixed the algorithm so that it is once again symmetric with respect to I1 and I2.
+  This involved simplifying the way that mask and image orientation are handled for the extrafocal image (see below).
+* Added the option to create masks in the orientation of the original images by setting `compensated=False` in `CompensableImage.makeMask()`.
+
 .. _lsst.ts.wep-3.0.1:
 
 -------------
