@@ -42,8 +42,11 @@ class TestDonutStamp(unittest.TestCase):
         self.testStamps, self.testMetadata = self._makeStamps(
             self.nStamps, self.stampSize
         )
+        self.testDefaultStamps, self.testDefaultMetadata = self._makeStamps(
+            self.nStamps, self.stampSize, testDefaults=True
+        )
 
-    def _makeStamps(self, nStamps, stampSize):
+    def _makeStamps(self, nStamps, stampSize, testDefaults=False):
 
         randState = np.random.RandomState(42)
         stampList = []
@@ -64,7 +67,7 @@ class TestDonutStamp(unittest.TestCase):
         dfcTypes = [DefocalType.Extra.value] * nStamps
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
-        dfcDists = np.ones(nStamps) * 1.5
+        dfcDists = np.ones(nStamps) * 1.25
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -74,7 +77,8 @@ class TestDonutStamp(unittest.TestCase):
         metadata["DET_NAME"] = detectorNames
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
-        metadata["DFC_DIST"] = dfcDists
+        if testDefaults is False:
+            metadata["DFC_DIST"] = dfcDists
 
         return stampList, metadata
 
@@ -110,7 +114,7 @@ class TestDonutStamp(unittest.TestCase):
             else:
                 self.assertEqual(defocalType, DefocalType.Extra.value)
             defocalDist = donutStamp.defocal_distance
-            self.assertEqual(defocalDist, 1.5)
+            self.assertEqual(defocalDist, 1.25)
 
             self.assertEqual(type(donutStamp.comp_im), CompensableImage)
             self.assertEqual(type(donutStamp.mask_comp), afwImage.MaskX)
@@ -118,6 +122,23 @@ class TestDonutStamp(unittest.TestCase):
             np.testing.assert_array_equal(
                 donutStamp.comp_im.getImg(), donutStamp.stamp_im.image.array
             )
+
+    def testFactoryMetadataDefaults(self):
+        """
+        Some metadata values have been added since the original
+        version of DonutStamp was created. When this occurs
+        we need to set a default value to fill in the metadata
+        to allow the butler to read old repositories.
+        Here we test those values.
+        """
+
+        for i in range(self.nStamps):
+            donutStamp = DonutStamp.factory(
+                self.testDefaultStamps[i], self.testDefaultMetadata, i
+            )
+            defocalDist = donutStamp.defocal_distance
+            # Test default metadata distance of 1.5 mm
+            self.assertEqual(defocalDist, 1.5)
 
     def testGetCamera(self):
 

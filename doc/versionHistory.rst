@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.1.3:
+
+-------------
+3.1.3
+-------------
+
+* Added default value to DonutStamp for DFC_DIST to allow the butler to read DonutStamp from repositories created with older versions of ts_wep.
+
 .. _lsst.ts.wep-3.1.2:
 
 -------------
@@ -23,7 +31,7 @@ Version History
 * Fix tests pipeline yaml files updating the ISR setting to use 'MEDIAN' for overscan fit type.
 * Remove obsolete _generateTestExposures.
 * Fix `test_generateDonutDirectDetectTask.py`
-  
+
 .. _lsst.ts.wep-3.1.0:
 
 -------------
@@ -42,7 +50,7 @@ Version History
 -------------
 
 * Fix ``test_generateDonutCatalogWcsTask.py`` to work with more recent versions of the DM stack.
-  
+
 .. _lsst.ts.wep-3.0.0:
 
 -------------
