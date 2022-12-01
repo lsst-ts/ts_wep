@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.1.2:
+
+-------------
+3.1.2
+-------------
+
+* Update phosimOutput corner sensors test files.
+
 .. _lsst.ts.wep-3.1.1:
 
 -------------
