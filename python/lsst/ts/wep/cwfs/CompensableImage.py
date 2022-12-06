@@ -23,6 +23,7 @@ __all__ = ["CompensableImage"]
 
 import os
 import re
+import warnings
 import numpy as np
 
 from scipy.ndimage import generate_binary_structure, iterate_structure
@@ -273,7 +274,6 @@ class CompensableImage(object):
     def imageCoCenter(self, inst, fov=3.5, debugLevel=0):
         """Shift the weighting center of donut to the center of reference
         image with the correction of projection of fieldX and fieldY.
-
         Parameters
         ----------
         inst : Instrument
@@ -285,6 +285,11 @@ class CompensableImage(object):
             information shows more. It can be 0, 1, 2, or 3. (the default is
             0.)
         """
+
+        warnings.warn(
+            "This function is deprecated.  Will be removed after January 2023.",
+            DeprecationWarning,
+        )
 
         # Calculate the weighting center (x, y) and radius
         x1, y1 = self._image.getCenterAndR()[0:2]

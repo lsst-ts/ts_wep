@@ -811,11 +811,6 @@ class Algorithm(object):
                     I1.setOffAxisCorr(self._inst, offAxisPolyOrder)
                     I2.setOffAxisCorr(self._inst, offAxisPolyOrder)
 
-                # Cocenter the images to the center referenced to fieldX and
-                # fieldY. Need to check the availability of this.
-                I1.imageCoCenter(self._inst, debugLevel=self.debugLevel)
-                I2.imageCoCenter(self._inst, debugLevel=self.debugLevel)
-
                 # Update the self-initial image
                 I1.updateImgInit()
                 I2.updateImgInit()

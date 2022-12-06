@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.1.4:
+
+-------------
+3.1.4
+-------------
+
+* Remove imageCoCenter step from Algorithm.
+* Add DeprecationWarning that imageCoCenter function in CompensableImage will be removed after January 2023.
+
 .. _lsst.ts.wep-3.1.3:
 
 -------------

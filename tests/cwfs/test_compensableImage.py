@@ -200,6 +200,9 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(int(xc), 63)
         self.assertEqual(int(yc), 63)
 
+        with self.assertWarns(DeprecationWarning):
+            self.wfsImg.imageCoCenter(self.inst)
+
     def testCompensate(self):
 
         # Generate a fake algorithm class
@@ -225,7 +228,6 @@ class TestCompensableImage(unittest.TestCase):
         for wfsImg in [wfsImgIntra, wfsImgExtra]:
             wfsImg.makeMask(self.inst, self.opticalModel, boundaryT, 1)
             wfsImg.setOffAxisCorr(self.inst, offAxisCorrOrder)
-            wfsImg.imageCoCenter(self.inst)
             wfsImg.compensate(self.inst, algo, zcCol, self.opticalModel)
 
         # Get the common region
