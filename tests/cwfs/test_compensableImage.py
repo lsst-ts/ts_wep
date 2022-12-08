@@ -176,11 +176,20 @@ class TestCompensableImage(unittest.TestCase):
         self._setIntraImg()
         self.assertEqual(self.wfsImg.getImg().shape, (120, 120))
 
-    def _setIntraImg(self):
+    def _setIntraImg(self, blendOffsets=[[], []]):
 
         self.wfsImg.setImg(
-            self.fieldXY, DefocalType.Intra, imageFile=self.imgFilePathIntra
+            self.fieldXY,
+            DefocalType.Intra,
+            blendOffsets=blendOffsets,
+            imageFile=self.imgFilePathIntra,
         )
+
+    def testSetImgBlendCenterError(self):
+        errMsg = "Length of blend x-coord list must equal length of y-coord list."
+        with self.assertRaises(ValueError) as context:
+            self._setIntraImg(blendOffsets=[[1.0], []])
+        self.assertEqual(str(context.exception), errMsg)
 
     def testUpdateImage(self):
 
@@ -337,6 +346,57 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(mask_comp.shape, image.shape)
         self.assertEqual(mask_pupil.shape, image.shape)
         self.assertEqual(np.sum(np.abs(mask_pupil - mask_comp)), 3001)
+
+    def testMakeBlendedMask(self):
+
+        self._setIntraImg()
+
+        boundaryT = 8
+        maskScalingFactorLocal = 1
+        model = "offAxis"
+
+        # Test that results when blendOffsetX and blendOffsetY
+        # are empty are the same as above
+        self.wfsImg.makeBlendedMask(self.inst, model, boundaryT, maskScalingFactorLocal)
+
+        image = self.wfsImg.getImg()
+        mask_comp = self.wfsImg.getPaddedMask()
+        mask_pupil = self.wfsImg.getNonPaddedMask()
+        self.assertEqual(mask_comp.shape, image.shape)
+        self.assertEqual(mask_pupil.shape, image.shape)
+        self.assertEqual(np.sum(np.abs(mask_pupil - mask_comp)), 3001)
+
+        blendOffsetX, blendOffsetY = [0, 0]
+        self.wfsImg.blendOffsetX = [blendOffsetX]
+        self.wfsImg.blendOffsetY = [blendOffsetY]
+        self.wfsImg.makeBlendedMask(
+            self.inst, model, boundaryT, maskScalingFactorLocal, blendPadding=0
+        )
+        image = self.wfsImg.getImg()
+        mask_comp = self.wfsImg.getPaddedMask()
+        mask_pupil = self.wfsImg.getNonPaddedMask()
+        self.assertEqual(np.sum(mask_comp), 0)
+        self.assertEqual(np.sum(mask_pupil), 0)
+
+    def testCreateBlendedCoadd(self):
+
+        self._setIntraImg()
+
+        boundaryT = 8
+        maskScalingFactorLocal = 1
+        model = "offAxis"
+
+        blendOffsetX, blendOffsetY = [0, 0]
+        self.wfsImg.blendOffsetX = [blendOffsetX]
+        self.wfsImg.blendOffsetY = [blendOffsetY]
+        self.wfsImg.makeMask(self.inst, model, boundaryT, maskScalingFactorLocal)
+
+        # Test that blendedCoadd for object in same location
+        # cancels out original donut
+        blendedCoadd = self.wfsImg.createBlendedCoadd(
+            self.inst, self.wfsImg.mask_pupil, 0
+        )
+        self.assertEqual(np.sum(blendedCoadd), 0)
 
 
 if __name__ == "__main__":

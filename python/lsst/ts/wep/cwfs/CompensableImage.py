@@ -25,9 +25,14 @@ import os
 import re
 import warnings
 import numpy as np
+from copy import copy
 
 from scipy.ndimage import generate_binary_structure, iterate_structure
-from scipy.ndimage import binary_dilation, binary_erosion
+from scipy.ndimage import (
+    binary_dilation,
+    binary_erosion,
+    shift,
+)
 from scipy.interpolate import RectBivariateSpline
 from scipy.signal import correlate
 
@@ -39,7 +44,7 @@ from lsst.ts.wep.cwfs.Tool import (
     ZernikeAnnularJacobian,
 )
 from lsst.ts.wep.cwfs.Image import Image
-from lsst.ts.wep.Utility import DefocalType, CentroidFindType
+from lsst.ts.wep.Utility import DefocalType, CentroidFindType, rotMatrix
 from galsim.utilities import horner2d
 
 
@@ -61,6 +66,11 @@ class CompensableImage(object):
         # Field coordinate in degree
         self.fieldX = 0
         self.fieldY = 0
+
+        # Blended coordinates in pixels relative
+        # to central donut
+        self.blendOffsetX = []
+        self.blendOffsetY = []
 
         # Initial image before doing the compensation
         self.image0 = None
@@ -196,7 +206,9 @@ class CompensableImage(object):
 
         return self.fieldX, self.fieldY
 
-    def setImg(self, fieldXY, defocalType, image=None, imageFile=None):
+    def setImg(
+        self, fieldXY, defocalType, blendOffsets=[[], []], image=None, imageFile=None
+    ):
         """Set the wavefront image.
 
         Parameters
@@ -205,10 +217,21 @@ class CompensableImage(object):
             Position of donut on the focal plane in degree (field x, field y).
         defocalType : enum 'DefocalType'
             Defocal type of image.
+        blendOffsets : list, optional
+            Positions of blended donuts relative to location of center donut.
+            Enter as [xCoordList, yCoordList].
+            Length of xCoordList and yCoordList must be same length.
+            (the default is [[], []]).
         image : numpy.ndarray, optional
             Array of image. (the default is None.)
         imageFile : str, optional
             Path of image file. (the default is None.)
+
+        Raises
+        ------
+        ValueError
+            Input to blendOffsets must have same number of x-coordinates
+            and y-coordinates.
         """
 
         self._image.setImg(image=image, imageFile=imageFile)
@@ -216,6 +239,12 @@ class CompensableImage(object):
 
         self.fieldX, self.fieldY = fieldXY
         self.defocalType = defocalType
+        self.blendOffsetX = blendOffsets[0]
+        self.blendOffsetY = blendOffsets[1]
+        if len(self.blendOffsetX) != len(self.blendOffsetY):
+            raise ValueError(
+                "Length of blend x-coord list must equal length of y-coord list."
+            )
 
         self._resetInternalAttributes()
 
@@ -1510,3 +1539,107 @@ class CompensableImage(object):
         if not compensated and self.defocalType == DefocalType.Extra:
             self.mask_pupil = np.rot90(self.mask_pupil, 2)
             self.mask_comp = np.rot90(self.mask_comp, 2)
+
+    def makeBlendedMask(
+        self,
+        inst,
+        model,
+        boundaryT,
+        maskScalingFactorLocal,
+        blendPadding=8,
+        compensated=True,
+    ):
+        """Create a binary mask of a central source with the area overlapping
+        a blended object cut out.
+
+        Parameters
+        ----------
+        inst : Instrument
+            Instrument to use.
+        model : str
+            Optical model. It can be "paraxial", "onAxis", or "offAxis".
+        boundaryT : int
+            Extended boundary in pixel. It defines how far the computation mask
+            extends beyond the pupil mask. And, in fft, it is also the width of
+            Neuman boundary where the derivative of the wavefront is set to
+            zero.
+        maskScalingFactorLocal : float
+            Mask scaling factor (for fast beam) for local correction.
+        blendPadding : int, optional
+            Number of pixels to increase the radius and expand the
+            footprint of the blended source. (the default is 8.)
+        compensated: bool, optional
+            Whether to calculate masks for the compensated or original image.
+            If True, mask will be in orientation of the compensated image.
+            If False, mask will be in orientation of the original image.
+            Note this is only relevant for extrafocal images.
+            (the default is True.)
+
+        Returns
+        -------
+        numpy.ndarray
+            Projection of image with the footprint of any overlapping donuts
+            cutout of the mask. It will be a binary image if raytrace=False.
+        """
+
+        self.makeMask(
+            inst, model, boundaryT, maskScalingFactorLocal, compensated=compensated
+        )
+
+        # Add blended donuts if they exist
+        if len(self.blendOffsetX) > 0:
+            newMaskPupil = self.createBlendedCoadd(inst, self.mask_pupil, blendPadding)
+            newMaskComp = self.createBlendedCoadd(inst, self.mask_comp, blendPadding)
+            self.mask_pupil = newMaskPupil
+            self.mask_comp = newMaskComp
+
+    def createBlendedCoadd(self, inst, maskArray, blendPadding):
+        """Cutout regions of the input mask where blended donuts
+        overlap with the original donut.
+
+        Parameters
+        ----------
+        inst : Instrument
+            Instrument to use.
+        maskArray : numpy.ndArray
+            Original input binary mask with just a single unblended donut.
+        blendPadding : int
+            Number of pixels to increase the radius and expand the
+            footprint of the blended source.
+
+        Returns
+        -------
+        numpy.ndarray
+            New maskArray modified to remove the footprint of any
+            overlapping donuts from the masked area of the original donut.
+        """
+
+        pixelShift = np.array([self.blendOffsetY, self.blendOffsetX]).T
+
+        # Create binary images of individual blended donuts across mask
+        maskBlends = []
+        for xShift, yShift in pixelShift:
+            shiftVector = np.array([xShift, yShift], dtype=int)
+            # Rotate extrafocal donut position 180 degrees
+            if self.defocalType == DefocalType.Extra:
+                theta = np.degrees(np.pi)
+                shiftVector = np.dot(rotMatrix(theta), shiftVector)
+            shiftedMask = shift(copy(maskArray), shiftVector)
+            if blendPadding > 0:
+                shiftedMask = binary_dilation(shiftedMask, iterations=blendPadding)
+            maskBlends.append(shiftedMask)
+
+        # Sum blends with original source mask to find where overlaps exist
+        maskCoadd = copy(maskArray)
+        for maskBlend in maskBlends:
+            maskCoadd += maskBlend
+        # Turn into a binary mask of the overlap regions
+        maskCoadd[maskCoadd <= 1] = 0
+        maskCoadd[maskCoadd > 0] = 1
+
+        # Subtract blended region from single donut image
+        # to get mask of only unblended donut area
+        maskFinal = maskArray - maskCoadd
+        maskFinal[maskFinal < 0] = 0
+
+        return maskFinal
