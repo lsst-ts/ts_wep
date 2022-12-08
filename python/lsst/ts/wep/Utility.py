@@ -52,6 +52,7 @@ __all__ = [
 import os
 import subprocess
 import re
+import numpy as np
 from scipy.ndimage import center_of_mass
 from enum import IntEnum, auto
 
@@ -723,3 +724,21 @@ def createInstDictFromConfig(config):
         "offset": config.instDefocalOffset,
         "pixelSize": config.instPixelSize,
     }
+
+
+def rotMatrix(thetaDegrees):
+    """Create a 2-d rotation matrix for given angle.
+
+    Parameters
+    ----------
+    thetaDegrees : float
+        Rotation angle in degrees.
+
+    Returns
+    -------
+    np.ndarray
+        Rotation matrix for theta.
+    """
+
+    theta = np.radians(thetaDegrees)
+    return np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])

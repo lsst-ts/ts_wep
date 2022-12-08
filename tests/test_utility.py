@@ -21,6 +21,7 @@
 
 import os
 import unittest
+import numpy as np
 from enum import IntEnum
 
 from lsst.ts.wep.Utility import (
@@ -48,6 +49,7 @@ from lsst.ts.wep.Utility import (
     getCamTypeFromButlerName,
     getCamNameFromCamType,
     createInstDictFromConfig,
+    rotMatrix,
 )
 from lsst.afw.cameraGeom import DetectorType
 from lsst.ts.wep.task.CalcZernikesTask import CalcZernikesTaskConfig
@@ -327,6 +329,23 @@ class TestUtility(unittest.TestCase):
         }
 
         self.assertDictEqual(truthInstDict, testInstDict)
+
+    def testRotMatrix(self):
+
+        # Test rotation with 0 degrees
+        testTheta1 = 0
+        rotMatrix1 = np.array([[1, 0], [0, 1]])
+        np.testing.assert_array_almost_equal(rotMatrix1, rotMatrix(testTheta1))
+
+        # Test rotation with 90 degrees
+        testTheta2 = 90
+        rotMatrix2 = np.array([[0, -1], [1, 0]])
+        np.testing.assert_array_almost_equal(rotMatrix2, rotMatrix(testTheta2))
+
+        # Test rotation with 45 degrees
+        testTheta3 = 45
+        rotMatrix3 = np.array([[0.707107, -0.707107], [0.707107, 0.707107]])
+        np.testing.assert_array_almost_equal(rotMatrix3, rotMatrix(testTheta3))
 
 
 if __name__ == "__main__":
