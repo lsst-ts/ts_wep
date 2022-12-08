@@ -192,9 +192,6 @@ class DonutSourceSelectorTask(pipeBase.Task):
         unblendedSeparation = self.config.unblendedSeparation
         minBlendedSeparation = self.config.minBlendedSeparation
 
-        # Keep sources with minMagDiff of the lower bound of our
-        # magnitude limits since these will affect whether a source
-        # is isolated or not
         magSelected = np.ones(len(sourceCat), dtype=bool)
         if self.config.doMagLimit:
             magSelected &= mag < (magMax + minMagDiff)

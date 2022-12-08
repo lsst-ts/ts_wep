@@ -163,6 +163,8 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.instParams["apertureDiameter"], 8.36)
         self.assertEqual(self.task.instParams["offset"], 1.5)
         self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
+        self.assertFalse(self.task.multiplyMask)
+        self.assertEqual(self.task.maskGrowthIter, 6)
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
@@ -174,6 +176,8 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         self.config.instApertureDiameter = 1.0
         self.config.instDefocalOffset = 1.0
         self.config.instPixelSize = 1.0
+        self.config.multiplyMask = True
+        self.config.maskGrowthIter = 4
         self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
 
         self.assertEqual(self.task.donutTemplateSize, 120)
@@ -186,6 +190,8 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.instParams["apertureDiameter"], 1.0)
         self.assertEqual(self.task.instParams["offset"], 1.0)
         self.assertEqual(self.task.instParams["pixelSize"], 1.0)
+        self.assertTrue(self.task.multiplyMask)
+        self.assertEqual(self.task.maskGrowthIter, 4)
 
     def testCreateInstDictFromConfig(self):
 
@@ -295,6 +301,66 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
         )
         expCutOut = exposure[stampBBox].image.array
         np.testing.assert_array_equal(donutStamps[0].stamp_im.image.array, expCutOut)
+
+    def testCutOutStampsBlended(self):
+
+        exposure = self.butler.get(
+            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutCatalog = self.butler.get(
+            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+
+        donutStampsNoBlend = self.task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+
+        # Test that even with blends there is no mask multiplication
+        # when multiplyMask is False
+        donutCatalog["blend_centroid_x"] = [[donutCatalog["centroid_x"].iloc[0]], []]
+        donutCatalog["blend_centroid_y"] = [[donutCatalog["centroid_y"].iloc[0]], []]
+
+        # Reload exposure everytime since it is modified by stamp generation
+        exposure = self.butler.get(
+            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutStampsNoMultiply = self.task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+        np.testing.assert_array_equal(
+            donutStampsNoBlend[0].stamp_im.image.array,
+            donutStampsNoMultiply[0].stamp_im.image.array,
+        )
+
+        # Test that turning on multiply mask includes mask in stamp image
+        multiplyConfig = EstimateZernikesBaseConfig(
+            instDefocalOffset=1.5, multiplyMask=True
+        )
+        maskedTask = EstimateZernikesBaseTask(config=multiplyConfig, name="Masked Task")
+        exposure = self.butler.get(
+            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutStampsMasked = maskedTask.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+        self.assertGreater(
+            np.sum(donutStampsNoBlend[0].stamp_im.image.array),
+            np.sum(donutStampsMasked[0].stamp_im.image.array),
+        )
+        # Test that unblended stamp does not change
+        np.testing.assert_array_equal(
+            donutStampsNoBlend[1].stamp_im.image.array,
+            donutStampsMasked[1].stamp_im.image.array,
+        )
+        # Test that stamp centroid positions are added to donutStamp
+        self.assertEqual(
+            int(donutStampsMasked[0].blend_centroid_positions[0][0]),
+            donutStampsMasked[0].centroid_position.getX(),
+        )
+        self.assertEqual(
+            int(donutStampsMasked[0].blend_centroid_positions[0][1]),
+            donutStampsMasked[0].centroid_position.getY(),
+        )
 
     def testEstimateZernikes(self):
 

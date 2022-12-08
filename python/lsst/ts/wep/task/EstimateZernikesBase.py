@@ -44,11 +44,13 @@ from lsst.ts.wep.Utility import (
     DefocalType,
     CamType,
     createInstDictFromConfig,
+    rotMatrix,
 )
+from lsst.ts.wep.cwfs.Instrument import Instrument
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from scipy.signal import correlate
-from scipy.ndimage import rotate
+from scipy.ndimage import rotate, shift, binary_dilation
 
 from lsst.ts.wep.task.DonutStamps import DonutStamp, DonutStamps
 
@@ -159,6 +161,16 @@ class EstimateZernikesBaseConfig(
     instPixelSize = pexConfig.Field(
         doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
+    multiplyMask = pexConfig.Field(
+        doc="Multiply the mask with the postage stamp before saving.",
+        dtype=bool,
+        default=False,
+    )
+    maskGrowthIter = pexConfig.Field(
+        doc="How many iterations of binary dilation to run on the mask model.",
+        dtype=int,
+        default=6,
+    )
 
 
 class EstimateZernikesBaseTask(pipeBase.PipelineTask):
@@ -200,6 +212,9 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         # Set up instrument configuration dict
         self.instParams = createInstDictFromConfig(self.config)
+        # Parameters for mask multiplication (for deblending)
+        self.multiplyMask = self.config.multiplyMask
+        self.maskGrowthIter = self.config.maskGrowthIter
 
         warnings.warn(
             """
@@ -421,12 +436,20 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         if self.instParams["offset"] is None:
             self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ)
 
+        # Set up instrument for masks
+        inst = Instrument()
+        inst.configFromDict(self.instParams, self.donutTemplateSize, camType)
+
         # Final list of DonutStamp objects
         finalStamps = []
 
         # Final locations of donut centroids in pixels
         finalXCentList = []
         finalYCentList = []
+
+        # Final locations of blended sources in pixels
+        finalBlendXList = []
+        finalBlendYList = []
 
         # Final locations of BBox corners for DonutStamp images
         xCornerList = []
@@ -446,6 +469,8 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             finalDonutX, finalDonutY, xCorner, yCorner = self.calculateFinalCentroid(
                 exposure, template, xCent, yCent
             )
+            xShift = finalDonutX - xCent
+            yShift = finalDonutY - yCent
             finalXCentList.append(finalDonutX)
             finalYCentList.append(finalDonutY)
 
@@ -460,22 +485,80 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
             # Save MaskedImage to stamp
             finalStamp = finalCutout.getMaskedImage()
-            finalStamps.append(
-                DonutStamp(
-                    stamp_im=finalStamp,
-                    sky_position=lsst.geom.SpherePoint(
-                        donutRow["coord_ra"],
-                        donutRow["coord_dec"],
-                        lsst.geom.radians,
-                    ),
-                    centroid_position=lsst.geom.Point2D(finalDonutX, finalDonutY),
-                    detector_name=detectorName,
-                    cam_name=cameraName,
-                    defocal_type=defocalType.value,
-                    # Save defocal offset in mm.
-                    defocal_distance=self.instParams["offset"],
-                )
+
+            # Save centroid positions as str so we can store in header
+            blendStrX = ""
+            blendStrY = ""
+
+            for blend_cx, blend_cy in zip(
+                donutRow["blend_centroid_x"], donutRow["blend_centroid_y"]
+            ):
+                blend_final_x = blend_cx + xShift
+                blend_final_y = blend_cy + yShift
+                blendStrX += f"{blend_final_x:.2f},"
+                blendStrY += f"{blend_final_y:.2f},"
+            # Remove comma from last entry
+            if len(blendStrX) > 0:
+                blendStrX = blendStrX[:-1]
+                blendStrY = blendStrY[:-1]
+            else:
+                blendStrX = None
+                blendStrY = None
+            finalBlendXList.append(blendStrX)
+            finalBlendYList.append(blendStrY)
+
+            donutStamp = DonutStamp(
+                stamp_im=finalStamp,
+                sky_position=lsst.geom.SpherePoint(
+                    donutRow["coord_ra"],
+                    donutRow["coord_dec"],
+                    lsst.geom.radians,
+                ),
+                centroid_position=lsst.geom.Point2D(finalDonutX, finalDonutY),
+                blend_centroid_positions=np.array(
+                    [
+                        donutRow["blend_centroid_x"] + xShift,
+                        donutRow["blend_centroid_y"] + yShift,
+                    ]
+                ).T
+                if len(donutRow["blend_centroid_x"]) > 0
+                else np.array([[], []]),
+                detector_name=detectorName,
+                cam_name=cameraName,
+                defocal_type=defocalType.value,
+                # Save defocal offset in mm.
+                defocal_distance=self.instParams["offset"],
             )
+            boundaryT = 1
+            maskScalingFactorLocal = 1
+            donutStamp.makeMasks(
+                inst, self.opticalModel, boundaryT, maskScalingFactorLocal
+            )
+            donutStamp.stamp_im.setMask(donutStamp.mask_comp)
+
+            # Create shifted mask from non-blended mask
+            blendExists = True if len(donutRow["blend_centroid_x"]) > 0 else False
+            if self.multiplyMask and blendExists:
+                donutStamp.comp_im.makeMask(
+                    inst, self.opticalModel, boundaryT, maskScalingFactorLocal
+                )
+                shiftedMask = shift(
+                    donutStamp.comp_im.mask_pupil,
+                    np.array(
+                        [
+                            donutStamp.comp_im.blendOffsetY,
+                            donutStamp.comp_im.blendOffsetX,
+                        ]
+                    ),
+                )
+                shiftedMask = (
+                    binary_dilation(shiftedMask, iterations=self.maskGrowthIter) * 1.0
+                )
+                shiftedMask[shiftedMask == 0] += 2
+                shiftedMask -= 1
+                donutStamp.stamp_im.image.array *= shiftedMask
+
+            finalStamps.append(donutStamp)
 
         catalogLength = len(donutCatalog)
         stampsMetadata = PropertyList()
@@ -490,6 +573,9 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)
+        # Save the centroid positions of blended sources
+        stampsMetadata["BLEND_CX"] = np.array(finalBlendXList, dtype=str)
+        stampsMetadata["BLEND_CY"] = np.array(finalBlendYList, dtype=str)
         # Save the corner values
         stampsMetadata["X0"] = np.array(xCornerList)
         stampsMetadata["Y0"] = np.array(yCornerList)
@@ -558,15 +644,39 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
             # NOTE: TS_WEP expects these images to be transposed
             # TODO: Look into this
+            if np.shape(donutExtra.blend_centroid_positions)[1] > 0:
+                blendCentersExtra = (
+                    donutExtra.blend_centroid_positions - donutExtra.centroid_position
+                )
+                blendCentersExtra = np.dot(blendCentersExtra, rotMatrix(eulerZExtra))
+                # Exchange X,Y since we transpose the image below
+                blendCentersExtra = blendCentersExtra.T[::-1]
+            else:
+                # If empty array then just pass this as the offset since
+                # CompensableImage understands empty lists mean no blend
+                blendCentersExtra = donutExtra.blend_centroid_positions
+
+            # Same changes for Intra as Extra above
+            if np.shape(donutIntra.blend_centroid_positions)[1] > 0:
+                blendCentersIntra = (
+                    donutIntra.blend_centroid_positions - donutIntra.centroid_position
+                )
+                blendCentersIntra = np.dot(blendCentersIntra, rotMatrix(eulerZIntra))
+                blendCentersIntra = blendCentersIntra.T[::-1]
+            else:
+                blendCentersIntra = donutIntra.blend_centroid_positions
+
             wfEsti.setImg(
                 fieldXYExtra,
                 DefocalType.Extra,
                 image=rotate(donutExtra.stamp_im.getImage().getArray(), eulerZExtra).T,
+                blendOffsets=blendCentersExtra.tolist(),
             )
             wfEsti.setImg(
                 fieldXYIntra,
                 DefocalType.Intra,
                 image=rotate(donutIntra.stamp_im.getImage().getArray(), eulerZIntra).T,
+                blendOffsets=blendCentersIntra.tolist(),
             )
             wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()

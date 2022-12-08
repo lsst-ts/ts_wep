@@ -48,6 +48,9 @@ class DonutStamp(AbstractStamp):
         must keep track of the coordinate system
     centroid_position : `lsst.geom.Point2D`
         Position of the center of the stamp in pixels
+    blend_centroid_positions : `np.array`
+        Positions of the centroids (in pixels) for sources
+        blended with the central source
     defocal_type : `str`
         Defocal state of the stamp. "extra" or "intra" are
         allowed values.
@@ -75,6 +78,7 @@ class DonutStamp(AbstractStamp):
     stamp_im: afwImage.maskedImage.MaskedImageF
     sky_position: lsst.geom.SpherePoint
     centroid_position: lsst.geom.Point2D
+    blend_centroid_positions: np.array
     defocal_type: str
     defocal_distance: float
     detector_name: str
@@ -129,6 +133,16 @@ class DonutStamp(AbstractStamp):
             centroid_position=lsst.geom.Point2D(
                 metadata.getArray("CENT_X")[index], metadata.getArray("CENT_Y")[index]
             ),
+            # Blend centroid positions "BLEND_CX" and "BLEND_CY" in pixels
+            blend_centroid_positions=np.array(
+                [
+                    metadata.getArray("BLEND_CX")[index].split(","),
+                    metadata.getArray("BLEND_CY")[index].split(","),
+                ],
+                dtype=float,
+            ).T
+            if metadata.get("BLEND_CX") is not None
+            else np.array([[], []]),
             # "DET_NAME" stands for detector (CCD) name
             detector_name=metadata.getArray("DET_NAME")[index],
             # "CAM_NAME" stands for camera name
@@ -193,11 +207,19 @@ class DonutStamp(AbstractStamp):
         """
 
         field_xy = self.calcFieldXY()
+        if np.shape(self.blend_centroid_positions)[1] > 0:
+            blendOffsets = self.blend_centroid_positions - self.centroid_position
+            blendOffsets = blendOffsets.T
+        else:
+            # If empty array then just pass this as the offset since
+            # CompensableImage understands empty lists mean no blend
+            blendOffsets = self.blend_centroid_positions
 
         self.comp_im.setImg(
             field_xy,
             DefocalType(self.defocal_type),
-            self.stamp_im.getImage().getArray(),
+            blendOffsets=blendOffsets.tolist(),
+            image=self.stamp_im.getImage().getArray(),
         )
         self.mask_pupil = afwImage.Mask()
         self.mask_comp = afwImage.Mask()
@@ -228,7 +250,7 @@ class DonutStamp(AbstractStamp):
             Padded mask for use at the offset planes.
         """
 
-        self.comp_im.makeMask(inst, model, boundaryT, maskScalingFactorLocal)
+        self.comp_im.makeBlendedMask(inst, model, boundaryT, maskScalingFactorLocal)
 
         # 0 flag in mask is part of image that is not donut
         # 1 flag in mask means it is part of the model donut

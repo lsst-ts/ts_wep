@@ -36,6 +36,7 @@ from lsst.ts.wep.Utility import (
     DefocalType,
     getCamTypeFromButlerName,
     createInstDictFromConfig,
+    rotMatrix,
 )
 from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from scipy.ndimage import rotate
@@ -192,15 +193,39 @@ class CalcZernikesTask(pipeBase.PipelineTask):
 
             # NOTE: TS_WEP expects these images to be transposed
             # TODO: Look into this
+            if np.shape(donutExtra.blend_centroid_positions)[1] > 0:
+                blendCentersExtra = (
+                    donutExtra.blend_centroid_positions - donutExtra.centroid_position
+                )
+                blendCentersExtra = np.dot(blendCentersExtra, rotMatrix(eulerZExtra))
+                # Exchange X,Y since we transpose the image below
+                blendCentersExtra = blendCentersExtra.T[::-1]
+            else:
+                # If empty array then just pass this as the offset since
+                # CompensableImage understands empty lists mean no blend
+                blendCentersExtra = donutExtra.blend_centroid_positions
+
+            # Same changes for Intra as Extra above
+            if np.shape(donutIntra.blend_centroid_positions)[1] > 0:
+                blendCentersIntra = (
+                    donutIntra.blend_centroid_positions - donutIntra.centroid_position
+                )
+                blendCentersIntra = np.dot(blendCentersIntra, rotMatrix(eulerZIntra))
+                blendCentersIntra = blendCentersIntra.T[::-1]
+            else:
+                blendCentersIntra = donutIntra.blend_centroid_positions
+
             wfEsti.setImg(
                 fieldXYExtra,
                 DefocalType.Extra,
                 image=rotate(donutExtra.stamp_im.getImage().getArray(), eulerZExtra).T,
+                blendOffsets=blendCentersExtra.tolist(),
             )
             wfEsti.setImg(
                 fieldXYIntra,
                 DefocalType.Intra,
                 image=rotate(donutIntra.stamp_im.getImage().getArray(), eulerZIntra).T,
+                blendOffsets=blendCentersIntra.tolist(),
             )
             wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()
