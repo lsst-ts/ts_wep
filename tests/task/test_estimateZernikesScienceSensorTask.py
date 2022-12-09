@@ -95,6 +95,11 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
             "visit": 4021123106002,
         }
 
+    def testDeprecationWarning(self):
+
+        with self.assertWarns(DeprecationWarning):
+            self.task = EstimateZernikesScienceSensorTask(config=self.config, name="Science Sensor Task")
+
     def testValidateConfigs(self):
 
         self.config.donutTemplateSize = 120

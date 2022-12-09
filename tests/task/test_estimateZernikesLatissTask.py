@@ -114,6 +114,11 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
             "visit": 2021090800488,
         }
 
+    def testDeprecationWarning(self):
+
+        with self.assertWarns(DeprecationWarning):
+            self.task = EstimateZernikesLatissTask(config=self.config, name="Latiss Task")
+
     def testValidateConfigs(self):
 
         # Test defaults
