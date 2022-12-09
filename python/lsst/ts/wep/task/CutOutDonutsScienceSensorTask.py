@@ -91,17 +91,19 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
 
         exposures = butlerQC.get(inputRefs.exposures)
         focusZVals = [exp.visitInfo.focusZ for exp in exposures]
-        extraIdx, intraIdx = self.assignExtraIntraIdx(focusZVals[0], focusZVals[1])
+        camera = butlerQC.get(inputRefs.camera)
+        extraIdx, intraIdx = self.assignExtraIntraIdx(
+            focusZVals[0], focusZVals[1], camera.getName()
+        )
 
         donutCats = butlerQC.get(inputRefs.donutCatalog)
-        camera = butlerQC.get(inputRefs.camera)
 
         outputs = self.run(exposures, donutCats, camera)
 
         butlerQC.put(outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraIdx])
         butlerQC.put(outputs.donutStampsIntra, outputRefs.donutStampsIntra[extraIdx])
 
-    def assignExtraIntraIdx(self, focusZVal0, focusZVal1):
+    def assignExtraIntraIdx(self, focusZVal0, focusZVal1, cameraName):
         """
         Identify which exposure in the list is the extra-focal and which
         is the intra-focal based upon `FOCUSZ` parameter in header.
@@ -112,6 +114,9 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             The `FOCUSZ` parameter from the first exposure.
         focusZVal1 : float
             The `FOCUSZ` parameter from the second exposure.
+        cameraName : str
+            Name of camera for the exposure. Can accept "LSSTCam",
+            "LSSTComCam", "LATISS".
 
         Returns
         -------
@@ -125,23 +130,47 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         ValueError
             Exposures must be a pair with one intra-focal
             and one extra-focal image.
+        ValueError
+            Invalid cameraName variable.
         """
 
-        errorStr = "Must have one extra-focal and one intra-focal image."
-        if focusZVal0 < 0:
-            # Check that other image does not have same defocal direction
-            if focusZVal1 <= 0:
+        if cameraName in ["LSSTCam", "LSSTComCam"]:
+            errorStr = "Must have one extra-focal and one intra-focal image."
+            if focusZVal0 < 0:
+                # Check that other image does not have same defocal direction
+                if focusZVal1 <= 0:
+                    raise ValueError(errorStr)
+                extraExpIdx = 1
+                intraExpIdx = 0
+            elif focusZVal0 > 0:
+                # Check that other image does not have same defocal direction
+                if focusZVal1 >= 0:
+                    raise ValueError(errorStr)
+                extraExpIdx = 0
+                intraExpIdx = 1
+            else:
+                # Need to be defocal images ('FOCUSZ != 0')
                 raise ValueError(errorStr)
-            extraExpIdx = 1
-            intraExpIdx = 0
-        elif focusZVal0 > 0:
-            # Check that other image does not have same defocal direction
-            if focusZVal1 >= 0:
+        elif cameraName == "LATISS":
+            errorStr = "Must have two images with different FOCUSZ parameter."
+            if focusZVal0 != focusZVal1:
+                # the exposure with smallest focusZVal is extra-focal
+                # just find the smallest value...
+                focuszPair = (focusZVal0, focusZVal1)
+                extraExp = min(focuszPair)
+                intraExp = max(focuszPair)
+
+                expDicIdx = {focusZVal0: 0, focusZVal1: 1}
+                intraExpIdx = expDicIdx[intraExp]
+                extraExpIdx = expDicIdx[extraExp]
+            else:
+                # Need two different focusz values
                 raise ValueError(errorStr)
-            extraExpIdx = 0
-            intraExpIdx = 1
         else:
-            # Need to be defocal images ('FOCUSZ != 0')
+            errorStr = str(
+                "Invalid cameraName parameter: {cameraName}. Camera must  "
+                "be one of: 'LSSTCam', 'LSSTComCam' or 'LATISS'",
+            )
             raise ValueError(errorStr)
 
         return extraExpIdx, intraExpIdx
@@ -161,12 +190,14 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         # Get defocal distance from focusZ.
         self._checkAndSetOffset(np.abs(focusZ0))
 
-        extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(focusZ0, focusZ1)
+        cameraName = camera.getName()
+        extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(
+            focusZ0, focusZ1, cameraName
+        )
 
         # Get the donut stamps from extra and intra focal images
         # The donut catalogs for each exposure should be the same
         # so we just pick the one for the first exposure
-        cameraName = camera.getName()
         donutStampsExtra = self.cutOutStamps(
             exposures[extraExpIdx], donutCatalog[0], DefocalType.Extra, cameraName
         )

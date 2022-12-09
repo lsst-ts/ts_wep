@@ -20,19 +20,20 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
-import pandas as pd
 import pytest
 import tempfile
+import pandas as pd
+
 import lsst.utils.tests
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.EstimateZernikesLatissTask import (
-    EstimateZernikesLatissTask,
-    EstimateZernikesLatissTaskConfig,
+from lsst.ts.wep.task.CutOutDonutsScienceSensorTask import (
+    CutOutDonutsScienceSensorTask,
+    CutOutDonutsScienceSensorTaskConfig,
 )
 from lsst.ts.wep.Utility import (
     getModulePath,
     runProgram,
+    DefocalType,
     writePipetaskCmd,
     writeCleanUpRepoCmd,
 )
@@ -42,7 +43,7 @@ from lsst.ts.wep.Utility import (
     os.path.exists("/sdf/data/rubin/repo/main") is False,
     reason="requires access to data in /repo/main",
 )
-class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
+class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -77,7 +78,9 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         collections = "LATISS/raw/all,LATISS/calib"
         instrument = "lsst.obs.lsst.Latiss"
         cls.cameraName = "LATISS"
-        pipelineYaml = os.path.join(testPipelineConfigDir, "testLatissPipeline.yaml")
+        pipelineYaml = os.path.join(
+            testPipelineConfigDir, "testCutoutsLatissPipeline.yaml"
+        )
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
@@ -85,19 +88,14 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         pipeCmd += " -d 'exposure IN (2021090800487, 2021090800488) AND visit_system=0'"
         runProgram(pipeCmd)
 
-    @classmethod
-    def tearDownClass(cls):
-
-        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-        runProgram(cleanUpCmd)
-
     def setUp(self):
 
-        self.config = EstimateZernikesLatissTaskConfig()
+        self.config = CutOutDonutsScienceSensorTaskConfig()
         self.config.donutStampSize = 200
         self.config.donutTemplateSize = 200
         self.config.opticalModel = "onAxis"
-        self.task = EstimateZernikesLatissTask(config=self.config)
+        self.task = CutOutDonutsScienceSensorTask(config=self.config)
+
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
@@ -114,53 +112,27 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
             "visit": 2021090800488,
         }
 
-    def testValidateConfigs(self):
-
-        # Test defaults
-        self.assertEqual(self.task.instParams["obscuration"], 0.3525)
-        self.assertEqual(self.task.instParams["focalLength"], 21.6)
-        self.assertEqual(self.task.instParams["apertureDiameter"], 1.2)
-        self.assertEqual(self.task.instParams["offset"], 32.8)
-        self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
-
-        self.config.donutTemplateSize = 200
-        self.config.donutStampSize = 200
-        self.config.initialCutoutPadding = 40
-        self.config.opticalModel = "onAxis"
-        self.config.instObscuration = 1.0
-        self.config.instFocalLength = 1.0
-        self.config.instApertureDiameter = 1.0
-        self.config.instDefocalOffset = 1.0
-        self.config.instPixelSize = 1.0
-        self.task = EstimateZernikesLatissTask(config=self.config)
-
-        self.assertEqual(self.task.donutTemplateSize, 200)
-        self.assertEqual(self.task.donutStampSize, 200)
-        self.assertEqual(self.task.initialCutoutPadding, 40)
-        self.assertEqual(self.task.opticalModel, "onAxis")
-        self.assertEqual(self.task.instParams["obscuration"], 1.0)
-        self.assertEqual(self.task.instParams["focalLength"], 1.0)
-        self.assertEqual(self.task.instParams["apertureDiameter"], 1.0)
-        self.assertEqual(self.task.instParams["offset"], 1.0)
-        self.assertEqual(self.task.instParams["pixelSize"], 1.0)
-
     def testAssignExtraIntraIdx(self):
 
         focusZextra = -1.5
         focusZintra = -1.2
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZextra, focusZintra)
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
+            focusZextra, focusZintra, "LATISS"
+        )
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
         # invert the order
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZintra, focusZextra)
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
+            focusZintra, focusZextra, "LATISS"
+        )
         self.assertEqual(extraIdx, 1)
         self.assertEqual(intraIdx, 0)
 
         with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZextra, focusZextra)
+            self.task.assignExtraIntraIdx(focusZextra, focusZextra, "LATISS")
         with self.assertRaises(ValueError) as context:
-            self.task.assignExtraIntraIdx(focusZintra, focusZintra)
+            self.task.assignExtraIntraIdx(focusZintra, focusZintra, "LATISS")
         self.assertEqual(
             "Must have two images with different FOCUSZ parameter.",
             str(context.exception),
@@ -188,79 +160,41 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
             dataId={"instrument": "LATISS"},
             collections="LATISS/calib/unbounded",
         )
+
         # Test return values when no sources in catalog
         noSrcDonutCatalog = pd.DataFrame(columns=donutCatalogExtra.columns)
         testOutNoSrc = self.task.run(
             [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
 
-        np.testing.assert_array_equal(
-            testOutNoSrc.outputZernikesRaw, [np.ones(19) * np.nan] * 2
-        )
-        np.testing.assert_array_equal(
-            testOutNoSrc.outputZernikesAvg, [np.ones(19) * np.nan] * 2
-        )
-        self.assertEqual(len(testOutNoSrc.donutStampsExtra[0]), 0)
-        self.assertEqual(len(testOutNoSrc.donutStampsIntra[1]), 0)
+        self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
+        self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureExtra, exposureIntra],
+            [exposureIntra, exposureExtra],
             [donutCatalogExtra, donutCatalogIntra],
             camera,
         )
 
-        zkList = np.array(
-            [
-                [
-                    8.51874706e-03,
-                    1.14889498e-01,
-                    -4.59798303e-02,
-                    1.17980813e-02,
-                    5.47971263e-03,
-                    -3.37311212e-02,
-                    -1.68802493e-02,
-                    -3.78572402e-02,
-                    1.05657862e-02,
-                    1.10063567e-04,
-                    -8.53572243e-03,
-                    -1.01936034e-02,
-                    1.75246804e-03,
-                    -1.78255049e-03,
-                    -8.62521565e-04,
-                    -5.23579524e-04,
-                    4.45220226e-03,
-                    2.38692144e-03,
-                    9.67399215e-03,
-                ],
-                [
-                    -2.40261395e-02,
-                    1.10103556e-01,
-                    -1.31705158e-03,
-                    8.44028035e-03,
-                    3.96194900e-04,
-                    -3.09416580e-02,
-                    -2.19351288e-02,
-                    -3.03180146e-02,
-                    6.07601745e-03,
-                    1.00489422e-03,
-                    -1.02136815e-02,
-                    -7.33892033e-03,
-                    1.18980188e-03,
-                    -2.71901549e-04,
-                    3.58675079e-04,
-                    3.15012317e-04,
-                    5.05772823e-03,
-                    1.09876495e-03,
-                    7.51209259e-03,
-                ],
-            ]
+        testExtraStamps = self.task.cutOutStamps(
+            exposureExtra, donutCatalogExtra, DefocalType.Extra, camera.getName()
+        )
+        testIntraStamps = self.task.cutOutStamps(
+            exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
         )
 
-        for i in range(2):
-            # ensure total rms error is within 0.5 microns from the
-            # recorded values with possible changes from ISR pipeline, etc.
-            self.assertLess(
-                np.sqrt(np.sum(np.square(taskOut.outputZernikesRaw[0][i] - zkList[i]))),
-                0.5,
+        for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
+            self.assertMaskedImagesAlmostEqual(
+                donutStamp.stamp_im, cutOutStamp.stamp_im
             )
+        for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
+            self.assertMaskedImagesAlmostEqual(
+                donutStamp.stamp_im, cutOutStamp.stamp_im
+            )
+
+    @classmethod
+    def tearDownClass(cls):
+
+        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+        runProgram(cleanUpCmd)

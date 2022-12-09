@@ -1,0 +1,53 @@
+# This yaml file is used to define the tasks and configuration of
+# a Gen 3 pipeline used for testing in ts_wep.
+description: wep basic processing test pipeline
+instrument: lsst.obs.lsst.Latiss
+# Use imported instrument configuration
+imports:
+  - location: $TS_WEP_DIR/policy/cwfs/instData/auxTel/instParamCalcZernikesConfig.yaml
+tasks:
+  isr:
+    class: lsst.ip.isr.isrTask.IsrTask
+    # Below we specify the configuration settings we want to use
+    # when running the task in this pipeline. Since our data doesn't
+    # include bias or flats we only want to use doApplyGains and
+    # doOverscan in our isr task.
+    config:
+      connections.outputExposure: 'postISRCCD'
+      doBias: False
+      doVariance: False
+      doLinearize: False
+      doCrosstalk: False
+      doDefect: False
+      doNanMasking: False
+      doInterpolate: False
+      doBrighterFatter: False
+      doDark: False
+      doFlat: False
+      doApplyGains: True
+      doFringe: False
+      doOverscan: True
+      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.GenerateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutTemplateSize: 200
+      removeBlends: True
+      opticalModel: 'onAxis'
+      instObscuration: 0.3525
+      instFocalLength: 21.6
+      instApertureDiameter: 1.2
+      instDefocalOffset: 32.8
+      instPixelSize: 10.0e-6
+  CutOutDonutsScienceSensorTask:
+    class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      # And here we specify the configuration settings
+      donutTemplateSize: 200
+      donutStampSize: 200
+      initialCutoutPadding: 40
+      opticalModel: 'onAxis'
+  calcZernikesTask:
+    class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
+    config:
+      opticalModel: 'onAxis'

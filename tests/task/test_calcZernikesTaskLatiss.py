@@ -20,16 +20,18 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
-import pandas as pd
 import pytest
 import tempfile
+import numpy as np
+
 import lsst.utils.tests
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.EstimateZernikesLatissTask import (
-    EstimateZernikesLatissTask,
-    EstimateZernikesLatissTaskConfig,
+from lsst.ts.wep.task.CalcZernikesTask import (
+    CalcZernikesTask,
+    CalcZernikesTaskConfig,
 )
+from lsst.ts.wep.task.CombineZernikesMeanTask import CombineZernikesMeanTask
+from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.Utility import (
     getModulePath,
     runProgram,
@@ -42,12 +44,11 @@ from lsst.ts.wep.Utility import (
     os.path.exists("/sdf/data/rubin/repo/main") is False,
     reason="requires access to data in /repo/main",
 )
-class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
+class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
-        Run the pipeline only once since it takes a
-        couple minutes with the ISR.
+        Generate donutCatalog needed for task.
         """
 
         moduleDir = getModulePath()
@@ -77,7 +78,9 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
         collections = "LATISS/raw/all,LATISS/calib"
         instrument = "lsst.obs.lsst.Latiss"
         cls.cameraName = "LATISS"
-        pipelineYaml = os.path.join(testPipelineConfigDir, "testLatissPipeline.yaml")
+        pipelineYaml = os.path.join(
+            testPipelineConfigDir, "testCalcZernikesLatissPipeline.yaml"
+        )
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
@@ -93,11 +96,10 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
 
     def setUp(self):
 
-        self.config = EstimateZernikesLatissTaskConfig()
-        self.config.donutStampSize = 200
-        self.config.donutTemplateSize = 200
+        self.config = CalcZernikesTaskConfig()
         self.config.opticalModel = "onAxis"
-        self.task = EstimateZernikesLatissTask(config=self.config)
+        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
@@ -116,99 +118,28 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
 
     def testValidateConfigs(self):
 
-        # Test defaults
-        self.assertEqual(self.task.instParams["obscuration"], 0.3525)
-        self.assertEqual(self.task.instParams["focalLength"], 21.6)
-        self.assertEqual(self.task.instParams["apertureDiameter"], 1.2)
-        self.assertEqual(self.task.instParams["offset"], 32.8)
-        self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
+        self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
-        self.config.donutTemplateSize = 200
-        self.config.donutStampSize = 200
-        self.config.initialCutoutPadding = 40
-        self.config.opticalModel = "onAxis"
-        self.config.instObscuration = 1.0
-        self.config.instFocalLength = 1.0
-        self.config.instApertureDiameter = 1.0
-        self.config.instDefocalOffset = 1.0
-        self.config.instPixelSize = 1.0
-        self.task = EstimateZernikesLatissTask(config=self.config)
+        self.config.combineZernikes.retarget(CombineZernikesMeanTask)
+        self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
-        self.assertEqual(self.task.donutTemplateSize, 200)
-        self.assertEqual(self.task.donutStampSize, 200)
-        self.assertEqual(self.task.initialCutoutPadding, 40)
-        self.assertEqual(self.task.opticalModel, "onAxis")
-        self.assertEqual(self.task.instParams["obscuration"], 1.0)
-        self.assertEqual(self.task.instParams["focalLength"], 1.0)
-        self.assertEqual(self.task.instParams["apertureDiameter"], 1.0)
-        self.assertEqual(self.task.instParams["offset"], 1.0)
-        self.assertEqual(self.task.instParams["pixelSize"], 1.0)
+        self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
-    def testAssignExtraIntraIdx(self):
+    def testEstimateZernikes(self):
 
-        focusZextra = -1.5
-        focusZintra = -1.2
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZextra, focusZintra)
-        self.assertEqual(extraIdx, 0)
-        self.assertEqual(intraIdx, 1)
-        # invert the order
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZintra, focusZextra)
-        self.assertEqual(extraIdx, 1)
-        self.assertEqual(intraIdx, 0)
-
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZextra, focusZextra)
-        with self.assertRaises(ValueError) as context:
-            self.task.assignExtraIntraIdx(focusZintra, focusZintra)
-        self.assertEqual(
-            "Must have two images with different FOCUSZ parameter.",
-            str(context.exception),
+        donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        # Use dataIdExtra here too because both sets of donutStamps
+        # get saved to extraFocal dataId so we can run this task
+        # in parallel across detector pairs of the same visit.
+        donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-    def testTaskRun(self):
+        zernCoeff = self.task.run(donutStampsExtra, donutStampsIntra)
 
-        # Grab two exposures from the same detector at two different visits to
-        # get extra and intra
-        exposureExtra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        exposureIntra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
-        )
-
-        donutCatalogExtra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutCatalogIntra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
-        )
-        camera = self.butler.get(
-            "camera",
-            dataId={"instrument": "LATISS"},
-            collections="LATISS/calib/unbounded",
-        )
-        # Test return values when no sources in catalog
-        noSrcDonutCatalog = pd.DataFrame(columns=donutCatalogExtra.columns)
-        testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
-        )
-
-        np.testing.assert_array_equal(
-            testOutNoSrc.outputZernikesRaw, [np.ones(19) * np.nan] * 2
-        )
-        np.testing.assert_array_equal(
-            testOutNoSrc.outputZernikesAvg, [np.ones(19) * np.nan] * 2
-        )
-        self.assertEqual(len(testOutNoSrc.donutStampsExtra[0]), 0)
-        self.assertEqual(len(testOutNoSrc.donutStampsIntra[1]), 0)
-
-        # Test normal behavior
-        taskOut = self.task.run(
-            [exposureExtra, exposureIntra],
-            [donutCatalogExtra, donutCatalogIntra],
-            camera,
-        )
+        self.assertEqual(np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19))
 
         zkList = np.array(
             [
@@ -261,6 +192,20 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
             # ensure total rms error is within 0.5 microns from the
             # recorded values with possible changes from ISR pipeline, etc.
             self.assertLess(
-                np.sqrt(np.sum(np.square(taskOut.outputZernikesRaw[0][i] - zkList[i]))),
+                np.sqrt(
+                    np.sum(np.square(zernCoeff.outputZernikesRaw[0][i] - zkList[i]))
+                ),
                 0.5,
             )
+
+    def testGetCombinedZernikes(self):
+
+        testArr = np.zeros((2, 19))
+        testArr[1] += 2.0
+        combinedZernikesStruct = self.task.getCombinedZernikes(testArr)
+        np.testing.assert_array_equal(
+            combinedZernikesStruct.combinedZernikes, np.ones(19)
+        )
+        np.testing.assert_array_equal(
+            combinedZernikesStruct.flags, np.zeros(len(testArr))
+        )
