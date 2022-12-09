@@ -139,7 +139,9 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
 
         zernCoeff = self.task.run(donutStampsExtra, donutStampsIntra)
 
-        self.assertEqual(np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19))
+        self.assertEqual(
+            np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19)
+        )
 
         zkList = np.array(
             [

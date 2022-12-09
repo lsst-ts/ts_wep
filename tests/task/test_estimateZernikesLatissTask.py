@@ -117,7 +117,9 @@ class TestEstimateZernikesLatissTask(lsst.utils.tests.TestCase):
     def testDeprecationWarning(self):
 
         with self.assertWarns(DeprecationWarning):
-            self.task = EstimateZernikesLatissTask(config=self.config, name="Latiss Task")
+            self.task = EstimateZernikesLatissTask(
+                config=self.config, name="Latiss Task"
+            )
 
     def testValidateConfigs(self):
 

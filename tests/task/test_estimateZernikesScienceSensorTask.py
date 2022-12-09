@@ -98,7 +98,9 @@ class TestEstimateZernikesScienceSensorTask(lsst.utils.tests.TestCase):
     def testDeprecationWarning(self):
 
         with self.assertWarns(DeprecationWarning):
-            self.task = EstimateZernikesScienceSensorTask(config=self.config, name="Science Sensor Task")
+            self.task = EstimateZernikesScienceSensorTask(
+                config=self.config, name="Science Sensor Task"
+            )
 
     def testValidateConfigs(self):
 
