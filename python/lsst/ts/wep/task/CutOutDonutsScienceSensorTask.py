@@ -168,7 +168,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
                 raise ValueError(errorStr)
         else:
             errorStr = str(
-                "Invalid cameraName parameter: {cameraName}. Camera must  "
+                f"Invalid cameraName parameter: {cameraName}. Camera must  "
                 "be one of: 'LSSTCam', 'LSSTComCam' or 'LATISS'",
             )
             raise ValueError(errorStr)
@@ -196,13 +196,17 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         )
 
         # Get the donut stamps from extra and intra focal images
-        # The donut catalogs for each exposure should be the same
-        # so we just pick the one for the first exposure
         donutStampsExtra = self.cutOutStamps(
-            exposures[extraExpIdx], donutCatalog[0], DefocalType.Extra, cameraName
+            exposures[extraExpIdx],
+            donutCatalog[extraExpIdx],
+            DefocalType.Extra,
+            cameraName
         )
         donutStampsIntra = self.cutOutStamps(
-            exposures[intraExpIdx], donutCatalog[0], DefocalType.Intra, cameraName
+            exposures[intraExpIdx],
+            donutCatalog[intraExpIdx],
+            DefocalType.Intra,
+            cameraName
         )
 
         # If no donuts are in the donutCatalog for a set of exposures

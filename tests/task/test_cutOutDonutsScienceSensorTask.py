@@ -168,7 +168,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         with self.assertRaises(ValueError) as context:
             self.task.assignExtraIntraIdx(-1, 1, cameraName)
         errorStr = str(
-            "Invalid cameraName parameter: {cameraName}. Camera must  "
+            f"Invalid cameraName parameter: {cameraName}. Camera must  "
             "be one of: 'LSSTCam', 'LSSTComCam' or 'LATISS'",
         )
         self.assertEqual(errorStr, str(context.exception))

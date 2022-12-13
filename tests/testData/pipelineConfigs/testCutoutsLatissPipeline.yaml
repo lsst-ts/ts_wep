@@ -28,7 +28,7 @@ tasks:
       doApplyGains: True
       doFringe: False
       doOverscan: True
-      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
+      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN_PER_ROW'
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.GenerateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:

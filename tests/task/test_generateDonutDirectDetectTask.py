@@ -154,13 +154,13 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         tolerance = 10  # pixels
         outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
 
-        result_y = np.sort(outputDf["centroid_y"].values)
+        result_y = np.sort(outputDf['centroid_y'].values)
         truth_y = np.sort(np.array([3196, 2198, 2196, 3197]))
-        diff_y = np.sum(result_y - truth_y)
+        diff_y = np.sum(result_y-truth_y)
 
-        result_x = np.sort(outputDf["centroid_x"].values)
+        result_x = np.sort(outputDf['centroid_x'].values)
         truth_x = np.sort(np.array([3815, 2814, 2811, 3812]))
-        diff_x = np.sum(result_x - truth_x)
+        diff_x = np.sum(result_x-truth_x)
 
         self.assertLess(diff_x, tolerance)
         self.assertLess(diff_y, tolerance)

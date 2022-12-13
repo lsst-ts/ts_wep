@@ -94,6 +94,12 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         self.config.donutStampSize = 200
         self.config.donutTemplateSize = 200
         self.config.opticalModel = "onAxis"
+        self.config.initialCutoutPadding = 40
+        self.config.instObscuration = 0.3525
+        self.config.instFocalLength = 21.6
+        self.config.instApertureDiameter = 1.2
+        self.config.instDefocalOffset = 32.8
+        self.config.instPixelSize = 10.0e-6
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -172,10 +178,20 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra],
+            [exposureExtra, exposureIntra],
             [donutCatalogExtra, donutCatalogIntra],
             camera,
         )
+
+        # Make sure donut catalog actually has sources to test
+        self.assertGreater(len(donutCatalogExtra), 0)
+        self.assertGreater(len(donutCatalogIntra), 0)
+        # Test they have the same number of sources
+        self.assertEqual(len(donutCatalogExtra), len(donutCatalogIntra))
+
+        # Check that donut catalog sources are all cut out
+        self.assertEqual(len(taskOut.donutStampsExtra), len(donutCatalogExtra))
+        self.assertEqual(len(taskOut.donutStampsIntra), len(donutCatalogIntra))
 
         testExtraStamps = self.task.cutOutStamps(
             exposureExtra, donutCatalogExtra, DefocalType.Extra, camera.getName()
