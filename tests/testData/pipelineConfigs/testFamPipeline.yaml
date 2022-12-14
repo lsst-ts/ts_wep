@@ -4,9 +4,6 @@ description: wep basic processing test pipeline
 # Here we specify the corresponding instrument for the data we
 # will be using.
 instrument: lsst.obs.lsst.LsstCam
-# Use imported instrument configuration
-imports:
-  - location: $TS_WEP_DIR/policy/cwfs/instData/lsstfam/instParamPipeConfig.yaml
 # Then we can specify each task in our pipeline by a name
 # and then specify the class name corresponding to that task
 tasks:
@@ -45,3 +42,14 @@ tasks:
       donutTemplateSize: 160
       donutStampSize: 160
       initialCutoutPadding: 40
+      # Obscuration (inner_radius / outer_radius of M1M3)
+      instObscuration: 0.61
+      # Focal length in m
+      instFocalLength: 10.312
+      # Aperture diameter in m
+      instApertureDiameter: 8.36
+      # Defocal distance offset in mm
+      # Bo Xin used the offset of 1.5225 mm to get the parameters used for 1.5 mm in ZEMAX
+      instDefocalOffset: 1.5225
+      # Camera pixel size in m
+      instPixelSize: 10.0e-6

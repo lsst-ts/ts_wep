@@ -4,7 +4,7 @@ description: wep basic processing test pipeline
 instrument: lsst.obs.lsst.Latiss
 # Use imported instrument configuration
 imports:
-  - location: $TS_WEP_DIR/policy/cwfs/instData/auxTel/instParamCalcZernikesConfig.yaml
+  - location: $TS_WEP_DIR/policy/cwfs/instData/auxTel/instParamPipeConfig.yaml
 tasks:
   isr:
     class: lsst.ip.isr.isrTask.IsrTask
@@ -34,20 +34,12 @@ tasks:
       donutTemplateSize: 200
       removeBlends: True
       opticalModel: 'onAxis'
-      instObscuration: 0.3525
-      instFocalLength: 21.6
-      instApertureDiameter: 1.2
-      instDefocalOffset: 32.8
-      instPixelSize: 10.0e-6
-  CutOutDonutsScienceSensorTask:
+  cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings
       donutTemplateSize: 200
       donutStampSize: 200
       initialCutoutPadding: 40
-      opticalModel: 'onAxis'
   calcZernikesTask:
     class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
-    config:
-      opticalModel: 'onAxis'

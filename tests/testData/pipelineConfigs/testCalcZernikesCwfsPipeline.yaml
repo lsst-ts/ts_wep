@@ -4,6 +4,9 @@ description: wep basic processing test pipeline
 # Here we specify the corresponding instrument for the data we
 # will be using.
 instrument: lsst.obs.lsst.LsstCam
+# Use imported instrument configuration
+imports:
+  - location: $TS_WEP_DIR/policy/cwfs/instData/lsst/instParamPipeConfig.yaml
 # Then we can specify each task in our pipeline by a name
 # and then specify the class name corresponding to that task
 tasks:
@@ -38,7 +41,7 @@ tasks:
     class: lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       # And here we specify the configuration settings originally defined in
-      # EstimateZernikesCwfsTaskConfig.
+      # CutOutDonutsCwfsTaskConfig.
       # Test with default instrument configuration parameters
       donutTemplateSize: 160
       donutStampSize: 160

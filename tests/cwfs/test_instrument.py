@@ -94,7 +94,7 @@ class TestInstrument(unittest.TestCase):
             "tests",
             "testData",
             "pipelineConfigs",
-            "testCwfsPipeline.yaml",
+            "testBasePipeline.yaml",
         )
         with self.assertRaises(ValueError) as context:
             self.inst.configFromFile(120, CamType.LsstCam, badFilePath)

@@ -35,7 +35,7 @@ tasks:
       donutTemplateSize: 200
       removeBlends: True
       opticalModel: 'onAxis'
-  CutOutDonutsScienceSensorTask:
+  cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings
