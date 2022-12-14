@@ -292,8 +292,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
         # Test that even with blends there is no mask multiplication
         # when multiplyMask is False
-        donutCatalog["blend_centroid_x"] = [[donutCatalog["centroid_x"].iloc[0]], []]
-        donutCatalog["blend_centroid_y"] = [[donutCatalog["centroid_y"].iloc[0]], []]
+        donutCatalog["blend_centroid_x"] = [[donutCatalog["centroid_x"].iloc[0]], [], []]
+        donutCatalog["blend_centroid_y"] = [[donutCatalog["centroid_y"].iloc[0]], [], []]
 
         # Reload exposure everytime since it is modified by stamp generation
         exposure = self.butler.get(

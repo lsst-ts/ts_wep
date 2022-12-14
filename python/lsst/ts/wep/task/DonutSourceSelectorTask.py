@@ -86,7 +86,8 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     maxBlended = pexConfig.Field(
         dtype=int,
         default=0,
-        doc="Number of blended objects (defined by unblendedSeparation and isoMagDiff) allowed with a bright source.",
+        doc="Number of blended objects (defined by unblendedSeparation and isoMagDiff) "
+        + "allowed with a bright source.",
     )
 
 
@@ -96,8 +97,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
     query to find all donuts within the pixel radius set in the
     config. Then it goes from the brightest sources down to the faintest
     picking donuts that are at least isoMagDiff brighter than any sources
-    with centers within 2 times the unblendedSeparation until reaching numSources
-    kept or going through the whole list.
+    with centers within 2 times the unblendedSeparation until reaching
+    numSources kept or going through the whole list.
     """
 
     ConfigClass = DonutSourceSelectorTaskConfig
@@ -269,20 +270,18 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 blendCentersX.append([])
                 blendCentersY.append([])
                 sourcesKept += 1
+            # In this case there is at least one overlapping source
             else:
-                # In this case there is at least one overlapping source
+                # Measure magnitude differences with overlapping objects
                 magDiff = magSortedDf["mag"].iloc[idxList[1:]] - srcMag
+                magTooClose = magDiff.values < minMagDiff
+
+                # Measure distances to overlapping objects
+                blendSeparations = nbrDist[1:]
+                blendTooClose = blendSeparations < minBlendedSeparation
+
                 # If this is the fainter source of the overlaps move on
                 if np.min(magDiff) < 0.0:
-                    continue
-                # If the centers of any blended objects are closer
-                # than minBlendSeparation move on
-                blendSeparations = nbrDist[1:]
-                blendTooClose = (blendSeparations < minBlendedSeparation) & (magDiff.values < minMagDiff)
-                if np.sum(blendTooClose) > 0:
-                    print(blendTooClose, np.sum(blendTooClose))
-                    print(srcX, srcY, srcMag)
-                    print(magSortedDf.iloc[idxList[1:]])
                     continue
                 # If this source overlaps but is brighter than all its
                 # overlapping sources by minMagDiff then keep it
@@ -291,6 +290,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     blendCentersX.append([])
                     blendCentersY.append([])
                     sourcesKept += 1
+                # If the centers of any blended objects with a magnitude
+                # within minMagDiff of the source magnitude
+                # are closer than minBlendedSeparation move on
+                elif np.sum(blendTooClose & magTooClose) > 0:
+                    continue
                 # If the number of overlapping sources is less than or equal to
                 # maxBlended then keep this source
                 elif len(magDiff) <= maxBlended:
