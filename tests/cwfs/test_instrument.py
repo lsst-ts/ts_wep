@@ -39,20 +39,32 @@ class TestInstrument(unittest.TestCase):
         self.maskConfigFile = os.path.join(
             self.instConfigDir, "lsst", "maskMigrate.yaml"
         )
+        self.instConfigDict = {
+            # Obscuration (inner_radius / outer_radius of M1M3)
+            "obscuration": 0.61,
+            # Focal length in m
+            "focalLength": 10.312,
+            # Aperture diameter in m
+            "apertureDiameter": 8.36,
+            # Defocal distance offset in mm
+            "offset": 1.5,
+            # Camera pixel size in m
+            "pixelSize": 10.0e-6,
+        }
 
         self.dimOfDonutOnSensor = 120
         self.inst = Instrument()
-        self.inst.configFromFile(
+        self.inst.configFromDict(
+            self.instConfigDict,
             self.dimOfDonutOnSensor,
             CamType.LsstCam,
-            self.instConfigFile,
             self.maskConfigFile,
         )
 
     def testConfigFromFileDefault(self):
 
         newInst = Instrument()
-        newInst.configFromFile(self.dimOfDonutOnSensor, CamType.LsstCam)
+        newInst.configFromFile(self.dimOfDonutOnSensor, CamType.LsstFamCam)
         self.assertDictEqual(self.inst.instParams, newInst.instParams)
 
     def testConfigFromDict(self):

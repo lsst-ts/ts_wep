@@ -63,17 +63,27 @@ class TestCompensableImage(unittest.TestCase):
         # Define the instrument folder
         cwfsConfigDir = os.path.join(getConfigDir(), "cwfs")
         instDir = os.path.join(cwfsConfigDir, "instData")
-        instConfigFile = os.path.join(instDir, "lsst", "instParamPipeConfig.yaml")
         maskConfigFile = os.path.join(instDir, "lsst", "maskMigrate.yaml")
 
         # Define the instrument name
         dimOfDonutOnSensor = 120
+        instConfigDict = {
+            # Obscuration (inner_radius / outer_radius of M1M3)
+            "obscuration": 0.61,
+            # Focal length in m
+            "focalLength": 10.312,
+            # Aperture diameter in m
+            "apertureDiameter": 8.36,
+            # Defocal distance offset in mm
+            "offset": 1.0,
+            # Camera pixel size in m
+            "pixelSize": 10.0e-6,
+        }
 
         self.inst = Instrument()
-        self.inst.configFromFile(
-            dimOfDonutOnSensor, CamType.LsstCam, instConfigFile, maskConfigFile
+        self.inst.configFromDict(
+            instConfigDict, dimOfDonutOnSensor, CamType.LsstCam, maskConfigFile
         )
-        self.inst.instParams["offset"] = 1.0
 
         # Define the image folder and image names
         # Image data -- Don't know the final image format.
