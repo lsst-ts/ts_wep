@@ -171,12 +171,16 @@ class WfEstimator(object):
         """
 
         if solver not in ("exp", "fft"):
-            raise ValueError("Poisson solver can not be '%s'." % solver)
+            raise ValueError("Poisson solver cannot be '%s'." % solver)
 
         if opticalModel not in ("paraxial", "onAxis", "offAxis"):
-            raise ValueError("Optical model can not be '%s'." % opticalModel)
+            raise ValueError("Optical model cannot be '%s'." % opticalModel)
         else:
             self.opticalModel = opticalModel
+
+        if camType == CamType.AuxTel:
+            if opticalModel not in ("paraxial", "onAxis"):
+                raise ValueError("Optical model cannot be '%s' for AuxTel." % opticalModel)
 
         # Update the instrument name
         self.sizeInPix = int(sizeInPix)
