@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.1.5:
+
+-------------
+3.1.5
+-------------
+
+* Throw exception when auxTel is trying to use offAxis model..
+
 .. _lsst.ts.wep-3.1.4:
 
 -------------
