@@ -73,7 +73,7 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
         default=120,
         doc="Minimum separation in pixels between blended donut centers.",
     )
-    isoMagDiff = pexConfig.Field(
+    isolatedMagDiff = pexConfig.Field(
         dtype=float,
         default=2,
         doc="Min. difference in magnitude for 'isolated' star.",
@@ -86,7 +86,7 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     maxBlended = pexConfig.Field(
         dtype=int,
         default=0,
-        doc="Number of blended objects (defined by unblendedSeparation and isoMagDiff) "
+        doc="Number of blended objects (defined by unblendedSeparation and isolatedMagDiff) "
         + "allowed with a bright source.",
     )
 
@@ -96,7 +96,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
     Donut Source Selector that uses a nearest neighbors radius
     query to find all donuts within the pixel radius set in the
     config. Then it goes from the brightest sources down to the faintest
-    picking donuts that are at least isoMagDiff brighter than any sources
+    picking donuts that are at least isolatedMagDiff brighter than any sources
     with centers within 2 times the unblendedSeparation until reaching
     numSources kept or going through the whole list.
     """
@@ -189,7 +189,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         mag = (flux * u.nJy).to_value(u.ABmag)
         magMin = self.config.magMin
         magMax = self.config.magMax
-        minMagDiff = self.config.isoMagDiff
+        minMagDiff = self.config.isolatedMagDiff
         unblendedSeparation = self.config.unblendedSeparation
         minBlendedSeparation = self.config.minBlendedSeparation
 
