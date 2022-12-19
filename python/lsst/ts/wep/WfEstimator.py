@@ -168,6 +168,8 @@ class WfEstimator(object):
             Wrong Poisson solver name.
         ValueError
             Wrong optical model.
+        ValueError
+            Wrong optical model for AuxTel ("offAxis" is not implemented).
         """
 
         if solver not in ("exp", "fft"):
@@ -178,9 +180,8 @@ class WfEstimator(object):
         else:
             self.opticalModel = opticalModel
 
-        if camType == CamType.AuxTel:
-            if opticalModel not in ("paraxial", "onAxis"):
-                raise ValueError("Optical model cannot be '%s' for AuxTel." % opticalModel)
+        if camType == CamType.AuxTel and opticalModel not in ("paraxial", "onAxis"):
+            raise ValueError(f"Optical model cannot be {opticalModel} for AuxTel.")
 
         # Update the instrument name
         self.sizeInPix = int(sizeInPix)
