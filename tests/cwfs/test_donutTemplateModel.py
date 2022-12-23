@@ -78,7 +78,7 @@ class TestTemplateModel(unittest.TestCase):
         # This should load default instParams from file.
         imageSize = 160
         templateArray = self.templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, imageSize
+            "R22_S11", DefocalType.Extra, imageSize, camType=CamType.LsstFamCam
         )
 
         self.assertTrue(isinstance(templateArray, np.ndarray))

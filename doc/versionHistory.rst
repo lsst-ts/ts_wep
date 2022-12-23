@@ -6,6 +6,23 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-3.2.0:
+
+-------------
+3.2.0
+-------------
+
+* Port Latiss functionality from EstimateZernikesLatissTask into CutOutDonutsScienceSensorTask + CalcZernikesTask pipeline.
+* Deprecate EstimateZernikes family of tasks. These tasks will no longer be updated and will be removed after January 2023.
+
+.. _lsst.ts.wep-3.1.5:
+
+-------------
+3.1.5
+-------------
+
+* Throw exception when auxTel is trying to use offAxis model.
+
 .. _lsst.ts.wep-3.1.4:
 
 -------------

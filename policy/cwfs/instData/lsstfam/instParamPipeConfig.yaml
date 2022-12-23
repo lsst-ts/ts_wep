@@ -2,8 +2,21 @@ description: LSST Telescope Parameters
 instrument: lsst.obs.lsst.LsstCam
 
 tasks:
-  estimateZernikesScienceSensorTask:
-    class: lsst.ts.wep.task.EstimateZernikesScienceSensorTask.EstimateZernikesScienceSensorTask
+  cutOutDonutsScienceSensorTask:
+    class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      # Obscuration (inner_radius / outer_radius of M1M3)
+      instObscuration: 0.61
+      # Focal length in m
+      instFocalLength: 10.312
+      # Aperture diameter in m
+      instApertureDiameter: 8.36
+      # Defocal distance offset in mm
+      instDefocalOffset: 1.5
+      # Camera pixel size in m
+      instPixelSize: 10.0e-6
+  calcZernikesTask:
+    class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
     config:
       # Obscuration (inner_radius / outer_radius of M1M3)
       instObscuration: 0.61

@@ -146,6 +146,11 @@ class TestEstimateZernikesBase(lsst.utils.tests.TestCase):
 
         return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
+    def testDeprecationWarning(self):
+
+        with self.assertWarns(DeprecationWarning):
+            self.task = EstimateZernikesBaseTask(config=self.config, name="Base Task")
+
     def testValidateConfigs(self):
 
         self.assertEqual(self.task.donutTemplateSize, 160)

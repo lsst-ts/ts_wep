@@ -89,6 +89,7 @@ class Instrument(object):
         """
 
         self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
+        self._instName = self._getInstName(camType)
 
         # Check that dictionary keys match
         assert (
