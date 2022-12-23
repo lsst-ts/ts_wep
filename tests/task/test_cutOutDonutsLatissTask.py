@@ -20,6 +20,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+import pytest
+import tempfile
 import pandas as pd
 
 import lsst.utils.tests
@@ -37,7 +39,11 @@ from lsst.ts.wep.Utility import (
 )
 
 
-class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
+@pytest.mark.skipif(
+    os.path.exists("/sdf/data/rubin/repo/main") is False,
+    reason="requires access to data in /repo/main",
+)
+class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -48,8 +54,16 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         moduleDir = getModulePath()
         testDataDir = os.path.join(moduleDir, "tests", "testData")
         testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
-        cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
-        cls.runName = "run1"
+        cls.repoDir = "/sdf/data/rubin/repo/main"
+
+        # Create a temporary test directory
+        # under /sdf/data/rubin/repo/main/u/$USER
+        # to ensure write access is granted
+        user = os.getlogin()
+        tempDir = os.path.join(cls.repoDir, "u", user)
+        cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
+        testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
+        cls.runName = os.path.join("u", user, testDirName)
 
         # Check that run doesn't already exist due to previous improper cleanup
         butler = dafButler.Butler(cls.repoDir)
@@ -59,119 +73,76 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-        # Point to the collections for the reference catalogs,
-        # the raw images and the camera model in the calib directory
-        # that comes from `butler write-curated-calibrations`.
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
-        instrument = "lsst.obs.lsst.LsstCam"
-        cls.cameraName = "LSSTCam"
+        # Point to the collections with
+        # the raw images and calibrations
+        collections = "LATISS/raw/all,LATISS/calib"
+        instrument = "lsst.obs.lsst.Latiss"
+        cls.cameraName = "LATISS"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCutoutsFamPipeline.yaml"
+            testPipelineConfigDir, "testCutoutsLatissPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
         )
-        pipeCmd += " -d 'exposure IN (4021123106001, 4021123106002)'"
+        pipeCmd += " -d 'exposure IN (2021090800487, 2021090800488) AND visit_system=0'"
         runProgram(pipeCmd)
 
     def setUp(self):
 
         self.config = CutOutDonutsScienceSensorTaskConfig()
+        self.config.donutStampSize = 200
+        self.config.donutTemplateSize = 200
+        self.config.opticalModel = "onAxis"
+        self.config.initialCutoutPadding = 40
+        self.config.instObscuration = 0.3525
+        self.config.instFocalLength = 21.6
+        self.config.instApertureDiameter = 1.2
+        self.config.instDefocalOffset = 32.8
+        self.config.instPixelSize = 10.0e-6
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
-            "instrument": "LSSTCam",
-            "detector": 94,
-            "exposure": 4021123106001,
-            "visit": 4021123106001,
+            "instrument": "LATISS",
+            "detector": 0,
+            "exposure": 2021090800487,
+            "visit": 2021090800487,
         }
         self.dataIdIntra = {
-            "instrument": "LSSTCam",
-            "detector": 94,
-            "exposure": 4021123106002,
-            "visit": 4021123106002,
+            "instrument": "LATISS",
+            "detector": 0,
+            "exposure": 2021090800488,
+            "visit": 2021090800488,
         }
 
-    def testValidateConfigs(self):
+    def testAssignExtraIntraIdx(self):
 
-        self.config.donutTemplateSize = 120
-        self.config.donutStampSize = 120
-        self.config.initialCutoutPadding = 290
-        self.task = CutOutDonutsScienceSensorTask(config=self.config)
-
-        self.assertEqual(self.task.donutTemplateSize, 120)
-        self.assertEqual(self.task.donutStampSize, 120)
-        self.assertEqual(self.task.initialCutoutPadding, 290)
-
-    def testAssignExtraIntraIdxLsstCam(self):
-
-        focusZNegative = -1
-        focusZPositive = 1
+        focusZextra = -1.5
+        focusZintra = -1.2
 
         extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZNegative, focusZPositive, "LSSTCam"
+            focusZextra, focusZintra, "LATISS"
+        )
+        self.assertEqual(extraIdx, 0)
+        self.assertEqual(intraIdx, 1)
+        # invert the order
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
+            focusZintra, focusZextra, "LATISS"
         )
         self.assertEqual(extraIdx, 1)
         self.assertEqual(intraIdx, 0)
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZPositive, focusZNegative, "LSSTCam"
-        )
-        self.assertEqual(extraIdx, 0)
-        self.assertEqual(intraIdx, 1)
-
-    def testAssignExtraIntraIdxLsstComCam(self):
-
-        focusZNegative = -1
-        focusZPositive = 1
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZNegative, focusZPositive, "LSSTComCam"
-        )
-        self.assertEqual(extraIdx, 1)
-        self.assertEqual(intraIdx, 0)
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZPositive, focusZNegative, "LSSTComCam"
-        )
-        self.assertEqual(extraIdx, 0)
-        self.assertEqual(intraIdx, 1)
-
-    def testAssignExtraIntraIdxFocusZValueError(self):
-
-        focusZNegative = -1
-        focusZPositive = 1
-        focusZ0 = 0
-
         with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZPositive, focusZPositive, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZPositive, focusZ0, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZNegative, focusZNegative, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZNegative, focusZ0, "LSSTCam")
+            self.task.assignExtraIntraIdx(focusZextra, focusZextra, "LATISS")
         with self.assertRaises(ValueError) as context:
-            self.task.assignExtraIntraIdx(focusZ0, focusZPositive, "LSSTCam")
+            self.task.assignExtraIntraIdx(focusZintra, focusZintra, "LATISS")
         self.assertEqual(
-            "Must have one extra-focal and one intra-focal image.",
+            "Must have two images with different FOCUSZ parameter.",
             str(context.exception),
         )
-
-    def testAssignExtraIntraIdxInvalidCamera(self):
-
-        cameraName = "WrongCam"
-        with self.assertRaises(ValueError) as context:
-            self.task.assignExtraIntraIdx(-1, 1, cameraName)
-        errorStr = str(
-            f"Invalid cameraName parameter: {cameraName}. Camera must  "
-            "be one of: 'LSSTCam', 'LSSTComCam' or 'LATISS'",
-        )
-        self.assertEqual(errorStr, str(context.exception))
 
     def testTaskRun(self):
 
@@ -192,8 +163,8 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         )
         camera = self.butler.get(
             "camera",
-            dataId={"instrument": "LSSTCam"},
-            collections="LSSTCam/calib/unbounded",
+            dataId={"instrument": "LATISS"},
+            collections="LATISS/calib/unbounded",
         )
 
         # Test return values when no sources in catalog
@@ -207,10 +178,20 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra],
+            [exposureExtra, exposureIntra],
             [donutCatalogExtra, donutCatalogIntra],
             camera,
         )
+
+        # Make sure donut catalog actually has sources to test
+        self.assertGreater(len(donutCatalogExtra), 0)
+        self.assertGreater(len(donutCatalogIntra), 0)
+        # Test they have the same number of sources
+        self.assertEqual(len(donutCatalogExtra), len(donutCatalogIntra))
+
+        # Check that donut catalog sources are all cut out
+        self.assertEqual(len(taskOut.donutStampsExtra), len(donutCatalogExtra))
+        self.assertEqual(len(taskOut.donutStampsIntra), len(donutCatalogIntra))
 
         testExtraStamps = self.task.cutOutStamps(
             exposureExtra, donutCatalogExtra, DefocalType.Extra, camera.getName()

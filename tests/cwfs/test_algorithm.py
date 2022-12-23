@@ -69,13 +69,23 @@ class TestAlgorithm(unittest.TestCase):
         cwfsConfigDir = os.path.join(getConfigDir(), "cwfs")
         instDir = os.path.join(cwfsConfigDir, "instData")
         self.inst = Instrument()
-        instConfigFile = os.path.join(instDir, "lsst", "instParamPipeConfig.yaml")
+        instConfigDict = {
+            # Obscuration (inner_radius / outer_radius of M1M3)
+            "obscuration": 0.61,
+            # Focal length in m
+            "focalLength": 10.312,
+            # Aperture diameter in m
+            "apertureDiameter": 8.36,
+            # Defocal distance offset in mm
+            "offset": 1.0,
+            # Camera pixel size in m
+            "pixelSize": 10.0e-6,
+        }
         maskConfigFile = os.path.join(instDir, "lsst", "maskMigrate.yaml")
 
-        self.inst.configFromFile(
-            self.I1.getImgSizeInPix(), CamType.LsstCam, instConfigFile, maskConfigFile
+        self.inst.configFromDict(
+            instConfigDict, self.I1.getImgSizeInPix(), CamType.LsstCam, maskConfigFile
         )
-        self.inst.instParams["offset"] = 1.0
 
         # Set up the algorithm
         algoDir = os.path.join(cwfsConfigDir, "algo")

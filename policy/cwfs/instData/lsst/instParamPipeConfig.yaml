@@ -2,8 +2,8 @@ description: LSST Telescope Parameters
 instrument: lsst.obs.lsst.LsstCam
 
 tasks:
-  estimateZernikesCwfsTask:
-    class: lsst.ts.wep.task.EstimateZernikesCwfsTask.EstimateZernikesCwfsTask
+  cutOutDonutsCwfsTask:
+    class: lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       # Obscuration (inner_radius / outer_radius of M1M3)
       instObscuration: 0.61
@@ -12,6 +12,23 @@ tasks:
       # Aperture diameter in m
       instApertureDiameter: 8.36
       # Defocal distance offset in mm
-      instDefocalOffset: 1.5
+      # Set to 0.0 when running CWFS because
+      # focal plane offset is 0.
+      instDefocalOffset: 0.0
+      # Camera pixel size in m
+      instPixelSize: 10.0e-6
+  calcZernikesTask:
+    class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
+    config:
+      # Obscuration (inner_radius / outer_radius of M1M3)
+      instObscuration: 0.61
+      # Focal length in m
+      instFocalLength: 10.312
+      # Aperture diameter in m
+      instApertureDiameter: 8.36
+      # Defocal distance offset in mm
+      # Set to 0.0 when running CWFS because
+      # focal plane offset is 0.
+      instDefocalOffset: 0.0
       # Camera pixel size in m
       instPixelSize: 10.0e-6

@@ -2,8 +2,23 @@ description: High Speed ZW Optical Camera Parameters
 instrument: lsst.obs.lsst.Latiss
 
 tasks:
-  estimateZernikeLatissTask:
-    class: lsst.ts.wep.task.EstimateZernikesLatissTask.EstimateZernikesLatissTask
+  cutOutDonutsScienceSensorTask:
+    class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      # Obscuration (inner_radius / outer_radius of primary mirror)
+      instObscuration: 0.3525
+      # Focal length in m
+      instFocalLength: 21.6
+      # Aperture diameter in m
+      instApertureDiameter: 1.2
+      # Move the M2 to fake the move of focal plane dz
+      # Move the M2 by 0.5 mm = move the focal plane by 20.5 mm (magnification of 41)
+      # Defocal distance offset in mm
+      instDefocalOffset: 20.5
+      # Camera pixel size in m
+      instPixelSize: 15.2e-6
+  calcZernikesTask:
+    class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
     config:
       # Obscuration (inner_radius / outer_radius of primary mirror)
       instObscuration: 0.3525

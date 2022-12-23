@@ -4,6 +4,9 @@ description: wep basic processing test pipeline
 # Here we specify the corresponding instrument for the data we
 # will be using.
 instrument: lsst.obs.lsst.LsstCam
+# Use imported instrument configuration
+imports:
+  - location: $TS_WEP_DIR/policy/cwfs/instData/lsstfam/instParamPipeConfig.yaml
 # Then we can specify each task in our pipeline by a name
 # and then specify the class name corresponding to that task
 tasks:
@@ -43,10 +46,5 @@ tasks:
       donutTemplateSize: 160
       donutStampSize: 160
       initialCutoutPadding: 40
-      instObscuration: 0.61
-      instFocalLength: 10.312
-      instApertureDiameter: 8.36
-      instDefocalOffset: 1.5
-      instPixelSize: 10.0e-6
   calcZernikesTask:
     class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask

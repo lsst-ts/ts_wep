@@ -157,6 +157,11 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
             camera,
         )
 
+    def testDeprecationWarning(self):
+
+        with self.assertWarns(DeprecationWarning):
+            self.task = EstimateZernikesCwfsTask(config=self.config, name="Cwfs Task")
+
     def testValidateConfigs(self):
 
         self.config.donutTemplateSize = 120

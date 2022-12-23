@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 import os
+import warnings
 import numpy as np
 
 import lsst.geom
@@ -199,6 +200,16 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
         # Set up instrument configuration dict
         self.instParams = createInstDictFromConfig(self.config)
+
+        warnings.warn(
+            """
+            The EstimateZernikes family of tasks is deprecated.
+            Please use CutOutDonuts + CalcZernikes tasks.
+            The EstimateZernikes tasks will not be updated as of
+            ts_wep v3.2.0 and will be removed after January 2023.
+            """,
+            DeprecationWarning,
+        )
 
     def _checkAndSetOffset(self, dataOffsetValue):
         """Check offset in instParams dictionary and if it

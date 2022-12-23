@@ -1,14 +1,10 @@
 # This yaml file is used to define the tasks and configuration of
 # a Gen 3 pipeline used for testing in ts_wep.
 description: wep basic processing test pipeline
-# Here we specify the corresponding instrument for the data we
-# will be using.
-instrument: lsst.obs.lsst.LsstCam
+instrument: lsst.obs.lsst.Latiss
 # Use imported instrument configuration
 imports:
-  - location: $TS_WEP_DIR/policy/cwfs/instData/lsst/instParamPipeConfig.yaml
-# Then we can specify each task in our pipeline by a name
-# and then specify the class name corresponding to that task
+  - location: $TS_WEP_DIR/policy/cwfs/instData/auxTel/instParamPipeConfig.yaml
 tasks:
   isr:
     class: lsst.ip.isr.isrTask.IsrTask
@@ -31,20 +27,19 @@ tasks:
       doApplyGains: True
       doFringe: False
       doOverscan: True
-      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
-  generateDonutCatalogWcsTask:
-    class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN_PER_ROW'
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.GenerateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      donutSelector.fluxField: 'g_flux'
-      donutSelector.donutRadius: 0.0
-  cutOutDonutsCwfsTask:
-    class: lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+      donutTemplateSize: 200
+      removeBlends: True
+      opticalModel: 'onAxis'
+  cutOutDonutsScienceSensorTask:
+    class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
-      # And here we specify the configuration settings originally defined in
-      # CutOutDonutsCwfsTaskConfig.
-      # Test with default instrument configuration parameters
-      donutTemplateSize: 160
-      donutStampSize: 160
+      # And here we specify the configuration settings
+      donutTemplateSize: 200
+      donutStampSize: 200
       initialCutoutPadding: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
