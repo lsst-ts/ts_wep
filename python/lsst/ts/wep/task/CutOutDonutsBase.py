@@ -495,7 +495,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             # Create shifted mask from non-blended mask
-            blendExists = True if len(donutRow["blend_centroid_x"]) > 0 else False
+            blendExists = (len(donutRow["blend_centroid_x"]) > 0)
             if self.multiplyMask and blendExists:
                 donutStamp.comp_im.makeMask(
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal
