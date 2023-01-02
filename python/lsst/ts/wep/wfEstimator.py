@@ -30,6 +30,9 @@ from lsst.ts.wep.utility import (
     CentroidFindType,
     FilterType,
 )
+from lsst.ts.phosim.utils.ConvertZernikesToPsfWidth import convertZernikesToPsfWidth
+
+import warnings
 
 
 class WfEstimator(object):
@@ -42,8 +45,9 @@ class WfEstimator(object):
     """
 
     def __init__(self, algoDir):
+
+        self.algoDir = algoDir
         self.inst = Instrument()
-        self.algo = Algorithm(algoDir)
 
         self.imgIntra = CompensableImage()
         self.imgExtra = CompensableImage()
@@ -59,8 +63,12 @@ class WfEstimator(object):
         Algorithm
             Algorithm object.
         """
-
-        return self.algo
+        try:
+            return self.algo
+        except AttributeError as algoErr:
+            raise RuntimeError(
+                "The algorithm has not been configured yet. See the config() method."
+            ) from algoErr
 
     def getInst(self):
         """Get the instrument object.
@@ -124,77 +132,116 @@ class WfEstimator(object):
         settings.
         """
 
+        # reset the algorithm
         self.algo.reset()
+
+        # reset the images
+        try:
+            self.imgIntra = CompensableImage(centroidFindType=self._centroidFindType)
+            self.imgExtra = CompensableImage(centroidFindType=self._centroidFindType)
+        except AttributeError:
+            self.imgIntra = CompensableImage()
+            self.imgExtra = CompensableImage()
 
     def config(
         self,
         instParams=None,
-        solver="exp",
+        algo="exp",
         camType=CamType.LsstCam,
         opticalModel="offAxis",
         sizeInPix=120,
         centroidFindType=CentroidFindType.RandomWalk,
+        units="nm",
         debugLevel=0,
+        solver=None,
     ):
-        """Configure the TIE solver.
+        """Configure the wavefront estimation algorithm.
 
         Parameters
         ----------
         instParams : dict or None, optional
             Instrument Configuration Parameters to use. If None will default to
             files in policy/cwfs directory.
-        solver : str, optional
-            Algorithm to solve the Poisson's equation in the transport of
-            intensity equation (TIE). It can be "fft" or "exp" here. (the
-            default is "exp".)
+        algo : str, optional
+            Algorithm to estimate the wavefront. Options are "exp", "fft", or
+            "ml". The first two use the cwfs.Algorithm class to solve the
+            transport of intensity equation (TIE), while the third uses the
+            cwfs.MachineLearningAlgorithm class. (the default is "exp".)
         camType : enum 'CamType', optional
             Camera type. (the default is CamType.LsstCam.)
         opticalModel : str, optional
-            Optical model. It can be "paraxial", "onAxis", or "offAxis". (the
-            default is "offAxis".)
+            Optical model (irrelevant if algo=="ml"). Options are "paraxial",
+            "onAxis", or "offAxis". (the default is "offAxis".)
         sizeInPix : int, optional
             Wavefront image pixel size. (the default is 120.)
         centroidFindType : enum 'CentroidFindType', optional
             Algorithm to find the centroid of donut. (the default is
             CentroidFindType.RandomWalk.)
+        units : str, optional
+            Units to return Zernikes in. Options are "microns", "nm", "waves",
+            or "arcsecs". (the default is "nm".)
         debugLevel : int, optional
             Show the information under the running. If the value is higher,
             the information shows more. It can be 0, 1, 2, or 3. (the default
             is 0.)
+        solver : str, optional
+            Deprecated alias for algo. Use algo instead.
 
         Raises
         ------
         ValueError
-            Wrong Poisson solver name.
+            Invalid algo name.
         ValueError
-            Wrong optical model.
-        ValueError
-            Wrong optical model for AuxTel ("offAxis" is not implemented).
+            Invalid optical model.
         """
 
-        if solver not in ("exp", "fft"):
-            raise ValueError("Poisson solver cannot be '%s'." % solver)
-
-        if opticalModel not in ("paraxial", "onAxis", "offAxis"):
-            raise ValueError("Optical model cannot be '%s'." % opticalModel)
+        # configure the algorithm
+        if solver is not None:
+            warnings.warn(
+                "Argument `solver` is deprecated. Use `algo` instead.",
+                DeprecationWarning,
+            )
+            algo = solver
+        if algo in ["exp", "fft"]:
+            self.algo = Algorithm(self.algoDir)
+            self.algo.config(algo, self.inst, debugLevel=debugLevel)
+        elif solver == "ml":
+            raise NotImplementedError("ML method not yet implemented.")
         else:
-            self.opticalModel = opticalModel
+            raise ValueError(f"algo cannot be {algo}.")
 
+        # set the optical model
         if camType == CamType.AuxTel and opticalModel not in ("paraxial", "onAxis"):
             raise ValueError(f"Optical model cannot be {opticalModel} for AuxTel.")
+        elif opticalModel not in ("paraxial", "onAxis", "offAxis"):
+            raise ValueError(f"Optical model can not be {opticalModel}")
 
-        # Update the instrument name
+        if algo == "ml":
+            opticalModel = ""
+
+        self.opticalModel = opticalModel
+
+        # configure the instrument
         self.sizeInPix = int(sizeInPix)
-
         if instParams is None:
             self.inst.configFromFile(sizeInPix, camType)
         else:
             self.inst.configFromDict(instParams, sizeInPix, camType)
 
-        self.algo.config(solver, self.inst, debugLevel=debugLevel)
-
+        # create empty compensable images with the desired centroidFindType
+        self._centroidFindType = centroidFindType
         self.imgIntra = CompensableImage(centroidFindType=centroidFindType)
         self.imgExtra = CompensableImage(centroidFindType=centroidFindType)
+
+        # save the unit type
+        if units not in ["microns", "nm", "waves", "arcsecs"]:
+            raise ValueError(f"Invalid unit type {units}")
+        if units == "waves":
+            raise NotImplementedError(
+                "Unit type 'waves' not supported until wavelength "
+                "information added to CompensableImage class"
+            )
+        self.units = units
 
     def setImg(
         self,
@@ -241,23 +288,22 @@ class WfEstimator(object):
             imageFile=imageFile,
         )
 
-    def calWfsErr(self, tol=1e-3, showZer=False, showPlot=False):
-        """Calculate the wavefront error.
+    def _calZkUsingTie(self, tol, showZer, showPlot):
+        """Calculate the Zernikes using the TIE solver.
 
         Parameters
         ----------
-        tol : float, optional
-            [description] (the default is 1e-3.)
+        tol : float
+            [description]
         showZer : bool, optional
-            Decide to show the annular Zernike polynomails or not. (the default
-            is False.)
-        showPlot : bool, optional
-            Decide to show the plot or not. (the default is False.)
+            Decide to show the annular Zernike polynomials or not.
+        showPlot : bool
+            Decide to show the plot or not.
 
         Returns
         -------
         numpy.ndarray
-            Coefficients of Zernike polynomials (z4 - z22).
+            Coefficients of Zernike polynomials (z4 - z22), in nanometers.
 
         Raises
         ------
@@ -283,3 +329,56 @@ class WfEstimator(object):
             self.algo.outZer4Up(showPlot=showPlot)
 
         return self.algo.getZer4UpInNm()
+
+    def _calZkUsingMl(self):
+        """Calculate the Zernikes using the ML model.
+
+        Returns
+        -------
+        numpy.ndarray
+            Coefficients of Zernike polynomials (z4 - z22), in nanometers.
+        """
+        raise NotImplementedError("ML method not yet implemented.")
+
+    def calWfsErr(self, tol=1e-3, showZer=False, showPlot=False):
+        """Calculate the wavefront error.
+
+        Parameters
+        ----------
+        tol : float, optional
+            [description] (the default is 1e-3.)
+        showZer : bool, optional
+            Decide to show the annular Zernike polynomials or not.
+            (the default is False.)
+        showPlot : bool, optional
+            Decide to show the plot or not. (the default is False.)
+
+        Returns
+        -------
+        numpy.ndarray
+            Coefficients of Zernike polynomials (z4 - z22), in the units set
+            during the config() method.
+
+        Raises
+        ------
+        RuntimeError
+            Input image shape is wrong.
+        """
+
+        # get Zernikes in nm
+        if isinstance(self.algo, Algorithm):
+            zk = self._calZkUsingTie(tol, showZer, showPlot)
+        else:
+            zk = self._calZkUsingMl()
+
+        # convert zernikes to desired units
+        if self.units in ["microns", "arcsecs"]:
+            zk /= 1e3  # convert nm --> microns
+        if self.units == "arcsecs":
+            # get the aperture radii
+            R_outer = self.inst.apertureDiameter / 2
+            R_inner = R_outer * self.inst.obscuration
+            # convert microns --> PSF FWHM contribution in arcseconds
+            zk = convertZernikesToPsfWidth(zk, R_outer=R_outer, R_inner=R_inner)
+
+        return zk
