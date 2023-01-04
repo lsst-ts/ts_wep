@@ -23,6 +23,7 @@ __all__ = ["WfEstimator"]
 
 from lsst.ts.wep.cwfs.instrument import Instrument
 from lsst.ts.wep.cwfs.algorithm import Algorithm
+from lsst.ts.wep.cwfs.machineLearningAlgorithm import MachineLearningAlgorithm
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.utility import (
     DefocalType,
@@ -66,7 +67,7 @@ class WfEstimator(object):
         try:
             return self.algo
         except AttributeError as algoErr:
-            raise RuntimeError(
+            raise AttributeError(
                 "The algorithm has not been configured yet. See the config() method."
             ) from algoErr
 
@@ -151,6 +152,7 @@ class WfEstimator(object):
         opticalModel="offAxis",
         sizeInPix=120,
         centroidFindType=CentroidFindType.RandomWalk,
+        mlFile=None,
         units="nm",
         debugLevel=0,
         solver=None,
@@ -170,13 +172,19 @@ class WfEstimator(object):
         camType : enum 'CamType', optional
             Camera type. (the default is CamType.LsstCam.)
         opticalModel : str, optional
-            Optical model (irrelevant if algo=="ml"). Options are "paraxial",
-            "onAxis", or "offAxis". (the default is "offAxis".)
+            Optical model. Options are "paraxial", "onAxis", or "offAxis".
+            (the default is "offAxis".)
+            This argument is irrelevant if algo=="ml".
         sizeInPix : int, optional
             Wavefront image pixel size. (the default is 120.)
+            This argument is irrelevant if algo=="ml".
         centroidFindType : enum 'CentroidFindType', optional
             Algorithm to find the centroid of donut. (the default is
             CentroidFindType.RandomWalk.)
+            This argument is irrelevant if algo=="ml".
+        mlFile : str, optional
+            If algo=="ml", this is the path where the machine learning model
+            is saved. TODO: ADD DEFAULT
         units : str, optional
             Units to return Zernikes in. Options are "microns", "nm", "waves",
             or "arcsecs". (the default is "nm".)
@@ -206,7 +214,18 @@ class WfEstimator(object):
             self.algo = Algorithm(self.algoDir)
             self.algo.config(algo, self.inst, debugLevel=debugLevel)
         elif solver == "ml":
-            raise NotImplementedError("ML method not yet implemented.")
+            mlAlgo = MachineLearningAlgorithm(self.algoDir)
+            mlAlgo.config(mlFile, debugLevel)
+
+            # if the ML model has a camType attribute,
+            # make sure it matches the configured camType
+            if hasattr(mlAlgo, "camType") and mlAlgo.camType != camType:
+                raise ValueError(
+                    f"You are trying to configure WfEstimator for camType='{camType}',"
+                    f"but this model was designed for '{self.algo.camType}'."
+                )
+
+            self.algo = mlAlgo
         else:
             raise ValueError(f"algo cannot be {algo}.")
 
@@ -338,7 +357,12 @@ class WfEstimator(object):
         numpy.ndarray
             Coefficients of Zernike polynomials (z4 - z22), in nanometers.
         """
-        raise NotImplementedError("ML method not yet implemented.")
+
+        # get the non-empty images
+        imgIntra = None if self.imgIntra.size == 0 else self.imgIntra
+        imgExtra = None if self.imgExtra.size == 0 else self.imgExtra
+
+        return self.algo.runIt(imgIntra, imgExtra)
 
     def calWfsErr(self, tol=1e-3, showZer=False, showPlot=False):
         """Calculate the wavefront error.

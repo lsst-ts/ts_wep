@@ -1,0 +1,5 @@
+---
+# Algorithm parameters for the machine learning (ML) method
+
+# Path where the machine learning model is saved
+mlFile: some file name
