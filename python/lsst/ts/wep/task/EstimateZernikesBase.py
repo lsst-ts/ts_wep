@@ -221,7 +221,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             The EstimateZernikes family of tasks is deprecated.
             Please use CutOutDonuts + CalcZernikes tasks.
             The EstimateZernikes tasks will not be updated as of
-            ts_wep v3.2.0 and will be removed after January 2023.
+            ts_wep v4.0.0 and will be removed after January 2023.
             """,
             DeprecationWarning,
         )
@@ -537,7 +537,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             # Create shifted mask from non-blended mask
-            blendExists = True if len(donutRow["blend_centroid_x"]) > 0 else False
+            blendExists = len(donutRow["blend_centroid_x"]) > 0
             if self.multiplyMask and blendExists:
                 donutStamp.comp_im.makeMask(
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal
@@ -551,9 +551,9 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
                         ]
                     ),
                 )
-                shiftedMask = (
-                    binary_dilation(shiftedMask, iterations=self.maskGrowthIter) * 1.0
-                )
+                shiftedMask = binary_dilation(
+                    shiftedMask, iterations=self.maskGrowthIter
+                ).astype(int)
                 shiftedMask[shiftedMask == 0] += 2
                 shiftedMask -= 1
                 donutStamp.stamp_im.image.array *= shiftedMask
@@ -581,6 +581,42 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         stampsMetadata["Y0"] = np.array(yCornerList)
 
         return DonutStamps(finalStamps, metadata=stampsMetadata)
+
+    def calcBlendOffsets(self, donutStamp, eulerAngle):
+        """
+        Calculate the offsets between the center of the donutStamp
+        image and the centers of blended donuts appearing on the
+        stamp image. Include rotations for rotated wavefront
+        sensors.
+
+        Parameters
+        ----------
+        donutStamp : DonutStamp
+            Extra or intra-focal DonutStamp object.
+        eulerAngle : float
+            Angle of rotation of sensor compared to the
+            standard alignment of the focal plane.
+
+        Returns
+        -------
+        numpy.ndarray
+            Offsets of blended donuts compared to center of
+            DonutStamp postage stamp image.
+        """
+
+        if np.shape(donutStamp.blend_centroid_positions)[1] > 0:
+            blendOffsets = (
+                donutStamp.blend_centroid_positions - donutStamp.centroid_position
+            )
+            blendOffsets = np.dot(blendOffsets, rotMatrix(eulerAngle))
+            # Exchange X,Y since we transpose the image below
+            blendOffsets = blendOffsets.T[::-1]
+        else:
+            # If empty array then just pass this as the offset since
+            # CompensableImage understands empty lists mean no blend
+            blendOffsets = donutStamp.blend_centroid_positions
+
+        return blendOffsets
 
     def estimateZernikes(
         self, donutStampsExtra, donutStampsIntra, cameraName, detectorType
@@ -644,39 +680,20 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
             # NOTE: TS_WEP expects these images to be transposed
             # TODO: Look into this
-            if np.shape(donutExtra.blend_centroid_positions)[1] > 0:
-                blendCentersExtra = (
-                    donutExtra.blend_centroid_positions - donutExtra.centroid_position
-                )
-                blendCentersExtra = np.dot(blendCentersExtra, rotMatrix(eulerZExtra))
-                # Exchange X,Y since we transpose the image below
-                blendCentersExtra = blendCentersExtra.T[::-1]
-            else:
-                # If empty array then just pass this as the offset since
-                # CompensableImage understands empty lists mean no blend
-                blendCentersExtra = donutExtra.blend_centroid_positions
-
-            # Same changes for Intra as Extra above
-            if np.shape(donutIntra.blend_centroid_positions)[1] > 0:
-                blendCentersIntra = (
-                    donutIntra.blend_centroid_positions - donutIntra.centroid_position
-                )
-                blendCentersIntra = np.dot(blendCentersIntra, rotMatrix(eulerZIntra))
-                blendCentersIntra = blendCentersIntra.T[::-1]
-            else:
-                blendCentersIntra = donutIntra.blend_centroid_positions
+            blendOffsetsExtra = self.calcBlendOffsets(donutExtra, eulerZExtra)
+            blendOffsetsIntra = self.calcBlendOffsets(donutIntra, eulerZIntra)
 
             wfEsti.setImg(
                 fieldXYExtra,
                 DefocalType.Extra,
                 image=rotate(donutExtra.stamp_im.getImage().getArray(), eulerZExtra).T,
-                blendOffsets=blendCentersExtra.tolist(),
+                blendOffsets=blendOffsetsExtra.tolist(),
             )
             wfEsti.setImg(
                 fieldXYIntra,
                 DefocalType.Intra,
                 image=rotate(donutIntra.stamp_im.getImage().getArray(), eulerZIntra).T,
-                blendOffsets=blendCentersIntra.tolist(),
+                blendOffsets=blendOffsetsIntra.tolist(),
             )
             wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()

@@ -200,13 +200,13 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             exposures[extraExpIdx],
             donutCatalog[extraExpIdx],
             DefocalType.Extra,
-            cameraName
+            cameraName,
         )
         donutStampsIntra = self.cutOutStamps(
             exposures[intraExpIdx],
             donutCatalog[intraExpIdx],
             DefocalType.Intra,
-            cameraName
+            cameraName,
         )
 
         # If no donuts are in the donutCatalog for a set of exposures

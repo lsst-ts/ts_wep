@@ -66,12 +66,14 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     unblendedSeparation = pexConfig.Field(
         dtype=int,
         default=160,
-        doc="Distance in pixels between two donut centers for them to be considered unblended.",
+        doc="Distance in pixels between two donut centers for them to be considered unblended. "
+        + "This setting and minBlendedSeparation will both be affected by the defocal distance.",
     )
     minBlendedSeparation = pexConfig.Field(
         dtype=int,
         default=120,
-        doc="Minimum separation in pixels between blended donut centers.",
+        doc="Minimum separation in pixels between blended donut centers. "
+        + "This setting and unblendedSeparation will both be affected by the defocal distance.",
     )
     isolatedMagDiff = pexConfig.Field(
         dtype=float,
@@ -221,7 +223,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         # only area at least distance for unblended separation from edges
         trimmedBBox = bbox.erodedBy(unblendedSeparation)
 
-        index = []
+        index = list()
         magSortedDf = df.sort_values("mag")
         groupIndices = magSortedDf.index.values
         xyNeigh.fit(magSortedDf[["x", "y"]])
@@ -237,8 +239,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
             raise ValueError(errMsg)
 
         maxBlended = self.config.maxBlended
-        blendCentersX = []
-        blendCentersY = []
+        blendCentersX = list()
+        blendCentersY = list()
         sourcesKept = 0
         # Go through catalog with nearest neighbor information
         # and keep sources that match our configuration settings
@@ -325,7 +327,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
             ):
                 break
 
-        magIndex = np.where(magSelected == 1)[0]
+        # magSelected is a boolean array so we can
+        # find indices with True by finding nonzero elements
+        magIndex = magSelected.nonzero()[0]
         finalIndex = magIndex[index]
         selected[finalIndex] = True
 

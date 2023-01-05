@@ -802,7 +802,7 @@ class Algorithm(object):
                     sys.exit()
 
                 # Check for blends
-                if len(I1.blendOffsetX) > 0 or len(I2.blendOffsetX) > 0:
+                if (len(I1.blendOffsetX) > 0) or (len(I2.blendOffsetX) > 0):
                     self.blend_exists = True
 
                 # Create the pupil masks
@@ -1361,7 +1361,7 @@ class Algorithm(object):
         # If there is a blend we need to include the mask overlap
         # because the blended donut will appear on opposite sides
         # of the central donut.
-        if (I1.getFieldXY() != I2.getFieldXY()) or (self.blend_exists is True):
+        if (I1.getFieldXY() != I2.getFieldXY()) or self.blend_exists:
 
             # Get the overlap region of image
             I1.updateImage(I1.getImg() * self.mask_pupil)

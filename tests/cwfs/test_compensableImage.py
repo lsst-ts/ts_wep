@@ -176,7 +176,10 @@ class TestCompensableImage(unittest.TestCase):
         self._setIntraImg()
         self.assertEqual(self.wfsImg.getImg().shape, (120, 120))
 
-    def _setIntraImg(self, blendOffsets=[[], []]):
+    def _setIntraImg(self, blendOffsets=None):
+
+        if blendOffsets is None:
+            blendOffsets = [[], []]
 
         self.wfsImg.setImg(
             self.fieldXY,
@@ -393,9 +396,7 @@ class TestCompensableImage(unittest.TestCase):
 
         # Test that blendedCoadd for object in same location
         # cancels out original donut
-        blendedCoadd = self.wfsImg.createBlendedCoadd(
-            self.inst, self.wfsImg.mask_pupil, 0
-        )
+        blendedCoadd = self.wfsImg.createBlendedCoadd(self.wfsImg.mask_pupil, 0)
         self.assertEqual(np.sum(blendedCoadd), 0)
 
 

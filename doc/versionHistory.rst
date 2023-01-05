@@ -13,7 +13,7 @@ Version History
 -------------
 
 * Add masked deblending to CompensableImage and pipeline tasks.
-* Change how DonutSourceSelectorTask works by add minBlendedSeparation parameter and changing DonutRadius to unblendedSeparation parameter.
+* Change how DonutSourceSelectorTask works by adding minBlendedSeparation parameter and changing DonutRadius to unblendedSeparation parameter.
 
 .. _lsst.ts.wep-3.2.0:
 

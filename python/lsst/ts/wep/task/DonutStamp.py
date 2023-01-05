@@ -48,7 +48,7 @@ class DonutStamp(AbstractStamp):
         must keep track of the coordinate system
     centroid_position : `lsst.geom.Point2D`
         Position of the center of the stamp in pixels
-    blend_centroid_positions : `np.array`
+    blend_centroid_positions : `np.ndarray`
         Positions of the centroids (in pixels) for sources
         blended with the central source
     defocal_type : `str`
@@ -78,7 +78,7 @@ class DonutStamp(AbstractStamp):
     stamp_im: afwImage.maskedImage.MaskedImageF
     sky_position: lsst.geom.SpherePoint
     centroid_position: lsst.geom.Point2D
-    blend_centroid_positions: np.array
+    blend_centroid_positions: np.ndarray
     defocal_type: str
     defocal_distance: float
     detector_name: str

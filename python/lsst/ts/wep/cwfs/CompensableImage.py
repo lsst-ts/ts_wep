@@ -69,8 +69,8 @@ class CompensableImage(object):
 
         # Blended coordinates in pixels relative
         # to central donut
-        self.blendOffsetX = []
-        self.blendOffsetY = []
+        self.blendOffsetX = list()
+        self.blendOffsetY = list()
 
         # Initial image before doing the compensation
         self.image0 = None
@@ -207,7 +207,7 @@ class CompensableImage(object):
         return self.fieldX, self.fieldY
 
     def setImg(
-        self, fieldXY, defocalType, blendOffsets=[[], []], image=None, imageFile=None
+        self, fieldXY, defocalType, blendOffsets=None, image=None, imageFile=None
     ):
         """Set the wavefront image.
 
@@ -221,7 +221,7 @@ class CompensableImage(object):
             Positions of blended donuts relative to location of center donut.
             Enter as [xCoordList, yCoordList].
             Length of xCoordList and yCoordList must be same length.
-            (the default is [[], []]).
+            (the default is None).
         image : numpy.ndarray, optional
             Array of image. (the default is None.)
         imageFile : str, optional
@@ -236,6 +236,9 @@ class CompensableImage(object):
 
         self._image.setImg(image=image, imageFile=imageFile)
         self._checkImgShape()
+
+        if blendOffsets is None:
+            blendOffsets = [[], []]
 
         self.fieldX, self.fieldY = fieldXY
         self.defocalType = defocalType
@@ -1550,7 +1553,7 @@ class CompensableImage(object):
         compensated=True,
     ):
         """Create a binary mask of a central source with the area overlapping
-        a blended object cut out.
+        a blended object cutout.
 
         Parameters
         ----------
@@ -1588,20 +1591,18 @@ class CompensableImage(object):
 
         # Add blended donuts if they exist
         if len(self.blendOffsetX) > 0:
-            newMaskPupil = self.createBlendedCoadd(inst, self.mask_pupil, blendPadding)
-            newMaskComp = self.createBlendedCoadd(inst, self.mask_comp, blendPadding)
+            newMaskPupil = self.createBlendedCoadd(self.mask_pupil, blendPadding)
+            newMaskComp = self.createBlendedCoadd(self.mask_comp, blendPadding)
             self.mask_pupil = newMaskPupil
             self.mask_comp = newMaskComp
 
-    def createBlendedCoadd(self, inst, maskArray, blendPadding):
+    def createBlendedCoadd(self, maskArray, blendPadding):
         """Cutout regions of the input mask where blended donuts
         overlap with the original donut.
 
         Parameters
         ----------
-        inst : Instrument
-            Instrument to use.
-        maskArray : numpy.ndArray
+        maskArray : numpy.ndarray
             Original input binary mask with just a single unblended donut.
         blendPadding : int
             Number of pixels to increase the radius and expand the
@@ -1614,10 +1615,14 @@ class CompensableImage(object):
             overlapping donuts from the masked area of the original donut.
         """
 
+        # Switch x,y order because x,y locations in the catalogs and the
+        # LSST Science Pipeline objects are consistent with each other but
+        # numpy arrays are [row, column] so when using the catalog x,y values
+        # with numpy arrays we switch the order to get the right location.
         pixelShift = np.array([self.blendOffsetY, self.blendOffsetX]).T
 
         # Create binary images of individual blended donuts across mask
-        maskBlends = []
+        maskBlends = list()
         for xShift, yShift in pixelShift:
             shiftVector = np.array([xShift, yShift], dtype=int)
             # Rotate extrafocal donut position 180 degrees

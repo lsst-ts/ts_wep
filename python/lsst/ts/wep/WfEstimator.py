@@ -197,7 +197,7 @@ class WfEstimator(object):
         self.imgExtra = CompensableImage(centroidFindType=centroidFindType)
 
     def setImg(
-        self, fieldXY, defocalType, blendOffsets=[[], []], image=None, imageFile=None
+        self, fieldXY, defocalType, blendOffsets=None, image=None, imageFile=None
     ):
         """Set the wavefront image.
 
@@ -211,8 +211,8 @@ class WfEstimator(object):
         blendOffsets : list, optional
             Positions of blended donuts relative to location of center donut.
             Enter as [xCoordList, yCoordList].
-            Length of xCoordList and yCoordList must be same length.
-            (the default is [[], []]).
+            Length of xCoordList and yCoordList must be the same length.
+            (the default is None).
         image : numpy.ndarray, optional
             Array of image. (the default is None.)
         imageFile : str, optional
@@ -223,6 +223,9 @@ class WfEstimator(object):
             img = self.imgIntra
         elif defocalType == DefocalType.Extra:
             img = self.imgExtra
+
+        if blendOffsets is None:
+            blendOffsets = [[], []]
 
         img.setImg(
             fieldXY,

@@ -399,19 +399,19 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         inst.configFromDict(self.instParams, self.donutTemplateSize, camType)
 
         # Final list of DonutStamp objects
-        finalStamps = []
+        finalStamps = list()
 
         # Final locations of donut centroids in pixels
-        finalXCentList = []
-        finalYCentList = []
+        finalXCentList = list()
+        finalYCentList = list()
 
         # Final locations of blended sources in pixels
-        finalBlendXList = []
-        finalBlendYList = []
+        finalBlendXList = list()
+        finalBlendYList = list()
 
         # Final locations of BBox corners for DonutStamp images
-        xCornerList = []
-        yCornerList = []
+        xCornerList = list()
+        yCornerList = list()
 
         for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
@@ -495,7 +495,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             # Create shifted mask from non-blended mask
-            blendExists = (len(donutRow["blend_centroid_x"]) > 0)
+            blendExists = len(donutRow["blend_centroid_x"]) > 0
             if self.multiplyMask and blendExists:
                 donutStamp.comp_im.makeMask(
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal
@@ -509,9 +509,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                         ]
                     ),
                 )
-                shiftedMask = (
-                    binary_dilation(shiftedMask, iterations=self.maskGrowthIter) * 1.0
-                )
+                shiftedMask = binary_dilation(
+                    shiftedMask, iterations=self.maskGrowthIter
+                ).astype(int)
                 shiftedMask[shiftedMask == 0] += 2
                 shiftedMask -= 1
                 donutStamp.stamp_im.image.array *= shiftedMask

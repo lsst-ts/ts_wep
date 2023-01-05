@@ -122,31 +122,26 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         eulerAngle = 0
         blendOffsetsNone = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
         np.testing.assert_array_almost_equal(
-            blendOffsetsNone,
-            donutStampExtra.blend_centroid_positions
+            blendOffsetsNone, donutStampExtra.blend_centroid_positions
         )
         # Test with blend centroid present
-        trueOffset = np.array([[10.], [10.]])
+        trueOffset = np.array([[10.0], [10.0]])
         eulerAngle = 0
         centroidPos = donutStampExtra.centroid_position
         centroid10PixOffset = np.array([[centroidPos.x], [centroidPos.y]]) + trueOffset
         donutStampExtra.blend_centroid_positions = centroid10PixOffset.T
         blendOffsetsCentroid = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
-        np.testing.assert_array_almost_equal(
-            blendOffsetsCentroid,
-            trueOffset
-        )
+        np.testing.assert_array_almost_equal(blendOffsetsCentroid, trueOffset)
         # Test with euler angle non-zero
         eulerAngle = 180
         blendOffsetsCentroid = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
-        np.testing.assert_array_almost_equal(
-            blendOffsetsCentroid,
-            -1.*trueOffset
-        )
+        np.testing.assert_array_almost_equal(blendOffsetsCentroid, -1.0 * trueOffset)
 
     def testEstimateZernikes(self):
 
-        zernCoeff = self.task.estimateZernikes(self.donutStampsExtra, self.donutStampsIntra)
+        zernCoeff = self.task.estimateZernikes(
+            self.donutStampsExtra, self.donutStampsIntra
+        )
 
         self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 19))
 
