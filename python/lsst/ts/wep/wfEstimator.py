@@ -153,6 +153,7 @@ class WfEstimator(object):
         sizeInPix=120,
         centroidFindType=CentroidFindType.RandomWalk,
         mlFile=None,
+        mlReshape="pad",
         units="nm",
         debugLevel=0,
         solver=None,
@@ -185,6 +186,26 @@ class WfEstimator(object):
         mlFile : str, optional
             If algo=="ml", this is the path where the machine learning model
             is saved. TODO: ADD DEFAULT
+        mlReshape : str, optional
+            If algo=="ml", this sets how to handle incompatible shapes when
+            reshaping images for the machine learning algorithm. Options are:
+            - "pad" : the image is symmetrically zero-padded to expand the
+                        image to the correct shape. This assumes the input
+                        image is smaller than the requested shape.
+            - "crop" : the image is cropped to fit inside the requested shape,
+                        then any empty space is filled with zeros to achieve
+                        the requested shape.
+            - "zoomMin" : the image is zoomed to the maximum extent that still
+                        fits inside the requested shape. Any empty space is
+                        then filled with zeros to achieve the requested shape.
+                        This is only different from "zoomMax" if either the
+                        image or the requested shape is rectangular.
+            - "zoomMax" : the image is zoomed to the minimum extent that fills
+                        the entire requested shape. Any part of the image that
+                        lies outside the requested shape is cropped. This is
+                        only different from "zoomMin" if either the image or
+                        the requested shape is rectangular.
+            (the default is "pad")
         units : str, optional
             Units to return Zernikes in. Options are "microns", "nm", "waves",
             or "arcsecs". (the default is "nm".)
@@ -215,7 +236,7 @@ class WfEstimator(object):
             self.algo.config(algo, self.inst, debugLevel=debugLevel)
         elif solver == "ml":
             mlAlgo = MachineLearningAlgorithm(self.algoDir)
-            mlAlgo.config(mlFile, debugLevel)
+            mlAlgo.config(mlFile, mlReshape, debugLevel)
 
             # if the ML model has a camType attribute,
             # make sure it matches the configured camType

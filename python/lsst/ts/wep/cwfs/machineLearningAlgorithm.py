@@ -56,16 +56,17 @@ class MachineLearningAlgorithm(object):
         # Create an attribute to store the algorithm history
         self._history = dict()
 
-    def config(self, mlFile, mlReshape="pad", debugLevel=0):
+    def config(self, mlFile=None, mlReshape="pad", debugLevel=0):
         """Configure the algorithm to estimate Zernikes.
 
         Parameters
         ----------
-        mlFile : str
+        mlFile : str, optional
             Path where the machine learning model is saved. The model must be
-            saved in a torchscript file.
+            saved in a torchscript file. TODO: ADD DEFAULT
         mlReshape : str, optional
-            How to handle incompatible sizes in the last two image dimensions.
+            How to handle incompatible shapes when reshaping images for the
+            machine learning algorithm. Options are:
             - "pad" : the image is symmetrically zero-padded to expand the
                         image to the correct shape. This assumes the input
                         image is smaller than the requested shape.

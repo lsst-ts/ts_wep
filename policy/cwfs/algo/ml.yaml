@@ -1,5 +1,8 @@
 ---
 # Algorithm parameters for the machine learning (ML) method
 
-# Path where the machine learning model is saved
+# Path where the machine learning model is saved. Must be a torchscript file.
 mlFile: some file name
+
+# How to handle incompatible shapes when reshaping images for ML algorithm
+mlReshape: pad
