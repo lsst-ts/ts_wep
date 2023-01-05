@@ -83,6 +83,7 @@ class MachineLearningAlgorithm(object):
                         lies outside the requested shape is cropped. This is
                         only different from "zoomMin" if either the image or
                         the requested shape is rectangular.
+            - None : the image is not reshaped.
             (the default is "pad")
         debugLevel : int, optional
             Determines whether to save or print information during running.
@@ -109,7 +110,7 @@ class MachineLearningAlgorithm(object):
         self._model = model
 
         # Set the reshape mode
-        allowed_mlReshape = ["pad", "crop", "zoomMin", "zoomMax"]
+        allowed_mlReshape = [None, "pad", "crop", "zoomMin", "zoomMax"]
         if mlReshape not in allowed_mlReshape:
             raise ValueError(
                 f"mlReshape must be one of {', '.join(allowed_mlReshape)}."
@@ -181,7 +182,7 @@ class MachineLearningAlgorithm(object):
         """
 
         # Determine how much to pad each axis
-        padWidth = np.subtract(shape[-2:], img.shape)
+        padWidth = np.subtract(shape, img.shape)
 
         # Split these widths into front and back halves
         # If a width is odd, the front half is one less than the back half
@@ -234,20 +235,16 @@ class MachineLearningAlgorithm(object):
     def _reshapeImage(self, img, shape, mlReshape="pad"):
         """Reshape the image.
 
-        This method does not assume the image is the correct size to be naively
-        reshaped. In other words, this function works when img.reshape(shape)
-        does not. It achieves this either by padding, cropping, or zooming.
-        See `mlReshape` below.
+        This is not simply a numpy.reshape(). This method fits the input image
+        into the required shape by some combination of padding, cropping, and
+        zooming. See the description of `mlReshape` below.
 
         Parameters
         ----------
         img : np.ndarray
             2D numpy array representing the image to be reshaped.
         shape : tuple
-            Tuple of arbitrary length, specifying the output shape of the
-            image. The tuple must have the form (..., H, W), where H and W
-            are the height and width of the image, respectively. The preceding
-            values in the tuple ("..." above) can be batches, channels, etc.
+            Tuple of length 2, specifying the output shape of the image.
         mlReshape : str, optional
             How to handle incompatible sizes in the last two image dimensions.
             - "pad" : the image is symmetrically zero-padded to expand the
@@ -275,71 +272,84 @@ class MachineLearningAlgorithm(object):
         ValueError
             mlReshape value is invalid.
         """
-
-        # first we will worry about reshaping the 2D image that corresponds
-        # to the final two dimensions in shape
         if mlReshape == "pad":
             # check that the input image isn't too large
-            if np.greater(img.shape, shape[-2:]).any():
+            if np.greater(img.shape, shape).any():
                 raise ValueError(
                     f"The image has shape {img.shape}, which cannot fit "
-                    f"inside the requested input shape {shape[-2:]}. "
+                    f"inside the requested input shape {shape}. "
                     "Either use a smaller image, a different model, "
                     "or set mlReshape='crop', 'zoomMin', or 'zoomMax'."
                 )
 
             # pad the image
-            imgReshaped = self._padImage(img, shape[-2:])
+            imgReshaped = self._padImage(img, shape)
 
         elif mlReshape == "crop":
             # crop the image
-            imgReshaped = self._cropImage(img, shape[-2:])
+            imgReshaped = self._cropImage(img, shape)
 
             # fill empty space with zeros
-            imgReshaped = self._padImage(imgReshaped, shape[-2:])
+            imgReshaped = self._padImage(imgReshaped, shape)
 
         elif mlReshape == "zoomMin":
             # zoom to the maximum extent that still fits inside the shape
-            zoom_factor = np.divide(shape[-2:], img.shape).min()
+            zoom_factor = np.divide(shape, img.shape).min()
             imgReshaped = zoom(img, zoom_factor)
 
             # fill empty space with zeros
-            imgReshaped = self._padImage(imgReshaped, shape[-2:])
+            imgReshaped = self._padImage(imgReshaped, shape)
 
         elif mlReshape == "zoomMax":
             # zoom to the minimum extent that fills the entire shape
-            zoom_factor = np.divide(shape[-2:], img.shape).max()
+            zoom_factor = np.divide(shape, img.shape).max()
             imgReshaped = zoom(img, zoom_factor)
 
             # crop zoomed image to fit the shape
-            imgReshaped = self._cropImage(imgReshaped, shape[-2:])
+            imgReshaped = self._cropImage(imgReshaped, shape)
 
         else:
             raise ValueError(
                 "mlReshape must be one of 'pad', 'crop', 'zoomMin' or 'zoomMax'."
             )
 
-        # now we can call numpy.reshape to add any batch or channel dimensions
-        imgReshaped = imgReshaped.reshape(shape)
-
         return imgReshaped
 
-    def _predict(self, img):
-        """Predict Zernikes using the model.
+    def _predict(self, img, fx, fy, focalFlag):
+        """Predict Zernikes using the machine learning model.
 
         Parameters
         ----------
-        img : CompensableImage
-            Intra- or extra-focal image.
+        img : np.ndarray
+            2D image array.
+        fx : float
+            x-axis field angle, in degrees
+        fy : float
+            y-axis field angle, in degrees
+        focalFlag : bool
+            Boolean indicating whether the image is intrafocal (True) or
+            extrafocal (False)
 
         Returns
         -------
         numpy.ndarray
             Coefficients of Zernike polynomials (z4 - z22), in nm.
         """
+        # Put the values into Pytorch Tensors
+        img = torch.from_numpy(img[None, None, :, :]).float()
+        fx = torch.FloatTensor([[fx]])
+        fy = torch.FloatTensor([[fy]])
+        focalFlag = torch.FloatTensor([[focalFlag]])
+
+        # Predict Zernikes
         with torch.no_grad():
-            zk = self._model(img)
-        return zk.numpy().squeeze()
+            zk = self._model.tswep_predict(img, fx, fy, focalFlag)
+
+        # Move the Zernikes to the CPU (just in case it was on a GPU),
+        # convert to a numpy array, and remove extraneous dimensions
+        zk = zk.cpu().numpy().squeeze()
+
+        return zk
 
     def _runSingleImg(self, img, number):
         """Reshape, predict, and log for a single image.
@@ -356,25 +366,34 @@ class MachineLearningAlgorithm(object):
         numpy.ndarray
             Coefficients of Zernike polynomials (z4 - z22), in nm.
         """
-        # Save the initial image
-        imgInit = img.getImg()
-        self._recordItem(imgInit, f"I{number}", 1)
+        # Extract the data from the CompensableImage
+        imgInit = img.getImg().copy()
+        fx, fy = img.getFieldXY()
+        focalFlag = img.getDefocalType().name == "Intra"
 
         # Reshape the image
-        imgReshaped = self._reshapeImage(
-            imgInit, self._model.input_shape, self.mlReshape
-        )
-        img.updateImage(imgReshaped)
+        self._recordItem(imgInit, f"I{number}", 1)
+        if self.mlReshape is None:
+            imgReshaped = imgInit.copy()
+        else:
+            imgReshaped = self._reshapeImage(
+                imgInit, self._model.inputShape, self.mlReshape
+            )
         self._recordItem(imgReshaped, f"I{number}reshaped", 1)
 
+        # Check that the image now has the correct shape
+        if imgReshaped.shape != self._model.inputShape:
+            raise ValueError(
+                f"Image has shape {imgReshaped.shape} instead of the required "
+                f"{self._model.inputShape}. Consider changing `mlReshape` to "
+                "'pad', 'crop', 'minZoom', or 'maxZoom'."
+            )
+
         # Estimate Zernikes
-        zk = self._predict(img)
+        zk = self._predict(imgReshaped, fx, fy, focalFlag)
         self._recordItem(zk, f"zk{number}", 1)
         if self.debugLevel >= 2:
             print(f"Zernikes_I{number} (nm) = {zk:.3f}")
-
-        # Reset the CompensableImage
-        img.updateImage(imgInit)
 
         return zk
 
@@ -384,7 +403,7 @@ class MachineLearningAlgorithm(object):
         This method differs from the method in the TIE Algorithm class (i.e.
         in ts.wep.cwfs.Algorithm) in that it can estimate Zernikes for an
         individual image. Therefore, you need only provide either I1 or I2.
-        If both I1 and I2 are provided, then average of the Zernikes are
+        If both I1 and I2 are provided, the average of the Zernikes are
         returned.
 
         Parameters

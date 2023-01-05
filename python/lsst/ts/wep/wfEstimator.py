@@ -133,10 +133,13 @@ class WfEstimator(object):
         settings.
         """
 
-        # reset the algorithm
-        self.algo.reset()
+        # Reset the algorithm
+        try:
+            self.algo.reset()
+        except AttributeError:
+            pass
 
-        # reset the images
+        # Reset the images
         try:
             self.imgIntra = CompensableImage(centroidFindType=self._centroidFindType)
             self.imgExtra = CompensableImage(centroidFindType=self._centroidFindType)
@@ -152,7 +155,7 @@ class WfEstimator(object):
         opticalModel="offAxis",
         sizeInPix=120,
         centroidFindType=CentroidFindType.RandomWalk,
-        mlFile=None,
+        mlFile="/phys/users/jfc20/ml-aos/LsstCam-ML-AOS-Model.pt",
         mlReshape="pad",
         units="nm",
         debugLevel=0,
@@ -205,10 +208,11 @@ class WfEstimator(object):
                         lies outside the requested shape is cropped. This is
                         only different from "zoomMin" if either the image or
                         the requested shape is rectangular.
+            - None : the image is not reshaped.
             (the default is "pad")
         units : str, optional
-            Units to return Zernikes in. Options are "microns", "nm", "waves",
-            or "arcsecs". (the default is "nm".)
+            Units to return Zernikes in. Options are "um", "nm", "waves", or
+            "arcsecs". (the default is "nm".)
         debugLevel : int, optional
             Show the information under the running. If the value is higher,
             the information shows more. It can be 0, 1, 2, or 3. (the default
@@ -224,7 +228,7 @@ class WfEstimator(object):
             Invalid optical model.
         """
 
-        # configure the algorithm
+        # Configure the algorithm
         if solver is not None:
             warnings.warn(
                 "Argument `solver` is deprecated. Use `algo` instead.",
@@ -234,13 +238,13 @@ class WfEstimator(object):
         if algo in ["exp", "fft"]:
             self.algo = Algorithm(self.algoDir)
             self.algo.config(algo, self.inst, debugLevel=debugLevel)
-        elif solver == "ml":
+        elif algo == "ml":
             mlAlgo = MachineLearningAlgorithm(self.algoDir)
             mlAlgo.config(mlFile, mlReshape, debugLevel)
 
-            # if the ML model has a camType attribute,
+            # If the ML model has a camType attribute,
             # make sure it matches the configured camType
-            if hasattr(mlAlgo, "camType") and mlAlgo.camType != camType:
+            if hasattr(mlAlgo, "camType") and mlAlgo.camType != camType.name:
                 raise ValueError(
                     f"You are trying to configure WfEstimator for camType='{camType}',"
                     f"but this model was designed for '{self.algo.camType}'."
@@ -261,20 +265,20 @@ class WfEstimator(object):
 
         self.opticalModel = opticalModel
 
-        # configure the instrument
+        # Configure the instrument
         self.sizeInPix = int(sizeInPix)
         if instParams is None:
             self.inst.configFromFile(sizeInPix, camType)
         else:
             self.inst.configFromDict(instParams, sizeInPix, camType)
 
-        # create empty compensable images with the desired centroidFindType
+        # Create empty compensable images with the desired centroidFindType
         self._centroidFindType = centroidFindType
         self.imgIntra = CompensableImage(centroidFindType=centroidFindType)
         self.imgExtra = CompensableImage(centroidFindType=centroidFindType)
 
-        # save the unit type
-        if units not in ["microns", "nm", "waves", "arcsecs"]:
+        # Save the unit type
+        if units not in ["um", "nm", "waves", "arcsecs"]:
             raise ValueError(f"Invalid unit type {units}")
         if units == "waves":
             raise NotImplementedError(
@@ -348,8 +352,14 @@ class WfEstimator(object):
         Raises
         ------
         RuntimeError
+            Intra- and extra-focal images are not both set.
+        RuntimeError
             Input image shape is wrong.
         """
+
+        # Check that both images are present
+        if self.imgIntra.getImg().size == 0 or self.imgExtra.getImg().size == 0:
+            raise RuntimeError("Intra- and extra-focal images are not both set.")
 
         # Check the image size
         for img in (self.imgIntra, self.imgExtra):
@@ -377,11 +387,19 @@ class WfEstimator(object):
         -------
         numpy.ndarray
             Coefficients of Zernike polynomials (z4 - z22), in nanometers.
+
+        Raises
+        ------
+        RuntimeError
+            Neither intra- nor extra-focal images are set.
         """
 
         # get the non-empty images
-        imgIntra = None if self.imgIntra.size == 0 else self.imgIntra
-        imgExtra = None if self.imgExtra.size == 0 else self.imgExtra
+        imgIntra = None if self.imgIntra.getImg().size == 0 else self.imgIntra
+        imgExtra = None if self.imgExtra.getImg().size == 0 else self.imgExtra
+
+        if imgIntra is None and imgExtra is None:
+            raise RuntimeError("Neither intra- nor extra-focal images are set.")
 
         return self.algo.runIt(imgIntra, imgExtra)
 
@@ -403,27 +421,22 @@ class WfEstimator(object):
         numpy.ndarray
             Coefficients of Zernike polynomials (z4 - z22), in the units set
             during the config() method.
-
-        Raises
-        ------
-        RuntimeError
-            Input image shape is wrong.
         """
 
-        # get Zernikes in nm
+        # Get Zernikes in nm
         if isinstance(self.algo, Algorithm):
             zk = self._calZkUsingTie(tol, showZer, showPlot)
         else:
             zk = self._calZkUsingMl()
 
-        # convert zernikes to desired units
-        if self.units in ["microns", "arcsecs"]:
+        # Convert zernikes to desired units
+        if self.units in ["um", "arcsecs"]:
             zk /= 1e3  # convert nm --> microns
         if self.units == "arcsecs":
-            # get the aperture radii
+            # Get the aperture radii
             R_outer = self.inst.apertureDiameter / 2
             R_inner = R_outer * self.inst.obscuration
-            # convert microns --> PSF FWHM contribution in arcseconds
+            # Convert microns --> PSF FWHM contribution in arcseconds
             zk = convertZernikesToPsfWidth(zk, R_outer=R_outer, R_inner=R_inner)
 
         return zk

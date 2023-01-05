@@ -255,6 +255,7 @@ class CalcZernikesTask(pipeBase.PipelineTask):
                     donutIntra.stamp_im.getImage().getArray(), eulerZIntra
                 )
 
+            wfEsti.reset()
             wfEsti.setImg(
                 fieldXYExtra,
                 DefocalType.Extra,
@@ -269,7 +270,6 @@ class CalcZernikesTask(pipeBase.PipelineTask):
                 image=imageIntra,
                 blendOffsets=blendOffsetsIntra.tolist(),
             )
-            wfEsti.reset()
             zer4UpNm = wfEsti.calWfsErr()
             zer4UpMicrons = zer4UpNm * 1e-3
 
