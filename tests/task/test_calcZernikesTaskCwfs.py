@@ -99,6 +99,12 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
             "exposure": 4021123106000,
             "visit": 4021123106000,
         }
+        self.donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        self.donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
 
     def testValidateConfigs(self):
 
@@ -109,18 +115,35 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
+    def testCalcBlendOffsets(self):
+
+        # Test with no blend centroid
+        donutStampExtra = self.donutStampsExtra[0]
+        eulerAngle = 0
+        blendOffsetsNone = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
+        np.testing.assert_array_almost_equal(
+            blendOffsetsNone, donutStampExtra.blend_centroid_positions
+        )
+        # Test with blend centroid present
+        trueOffset = np.array([[10.0], [10.0]])
+        eulerAngle = 0
+        centroidPos = donutStampExtra.centroid_position
+        centroid10PixOffset = np.array([[centroidPos.x], [centroidPos.y]]) + trueOffset
+        donutStampExtra.blend_centroid_positions = centroid10PixOffset.T
+        blendOffsetsCentroid = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
+        np.testing.assert_array_almost_equal(blendOffsetsCentroid, trueOffset)
+        # Test with euler angle non-zero
+        eulerAngle = 180
+        blendOffsetsCentroid = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
+        np.testing.assert_array_almost_equal(blendOffsetsCentroid, -1.0 * trueOffset)
+
     def testEstimateZernikes(self):
 
-        donutStampsExtra = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsIntra = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        zernCoeff = self.task.estimateZernikes(
+            self.donutStampsExtra, self.donutStampsIntra
         )
 
-        zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
-
-        self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
+        self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 19))
 
     def testEstimateCornerZernikes(self):
         """

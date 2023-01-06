@@ -179,17 +179,20 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         bbox = detector.getBBox()
         donutCatalog = refObjLoader.loadPixelBox(bbox, wcs, filterName).refCat
 
-        refSelection = self.referenceSelector.run(donutCatalog)
-
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
             donutSelection = self.donutSelector.run(donutCatalog, detector)
-            finalSelection = refSelection.selected & donutSelection.selected
-            return donutCatalog[finalSelection]
+            return (
+                donutCatalog[donutSelection.selected],
+                donutSelection.blendCentersX,
+                donutSelection.blendCentersY,
+            )
         else:
-            return refSelection.sourceCat
+            return donutCatalog, [[]] * len(donutCatalog), [[]] * len(donutCatalog)
 
-    def donutCatalogToDataFrame(self, donutCatalog=None):
+    def donutCatalogToDataFrame(
+        self, donutCatalog=None, blendCentersX=None, blendCentersY=None
+    ):
         """
         Reformat afwCatalog into a pandas dataframe sorted by flux with
         the brightest objects at the top.
@@ -213,6 +216,8 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         centroidX = []
         centroidY = []
         sourceFlux = []
+        blendCX = []
+        blendCY = []
 
         if donutCatalog is not None:
             ra = donutCatalog["coord_ra"]
@@ -220,6 +225,8 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             centroidX = donutCatalog["centroid_x"]
             centroidY = donutCatalog["centroid_y"]
             sourceFlux = donutCatalog[f"{self.filterName}_flux"]
+            blendCX = blendCentersX
+            blendCY = blendCentersY
 
         fieldObjects = pd.DataFrame([])
         fieldObjects["coord_ra"] = ra
@@ -227,6 +234,8 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         fieldObjects["centroid_x"] = centroidX
         fieldObjects["centroid_y"] = centroidY
         fieldObjects["source_flux"] = sourceFlux
+        fieldObjects["blend_centroid_x"] = blendCX
+        fieldObjects["blend_centroid_y"] = blendCY
 
         fieldObjects = fieldObjects.sort_values(
             "source_flux", ascending=False
@@ -248,7 +257,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         try:
             # Match detector layout to reference catalog
-            refSelection = self.runSelection(
+            refSelection, blendCentersX, blendCentersY = self.runSelection(
                 refObjLoader, detector, detectorWcs, self.filterName
             )
 
@@ -260,7 +269,11 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                 RuntimeWarning,
             )
             refSelection = None
+            blendCentersX = None
+            blendCentersY = None
 
-        fieldObjects = self.donutCatalogToDataFrame(refSelection)
+        fieldObjects = self.donutCatalogToDataFrame(
+            refSelection, blendCentersX, blendCentersY
+        )
 
         return pipeBase.Struct(donutCatalog=fieldObjects)

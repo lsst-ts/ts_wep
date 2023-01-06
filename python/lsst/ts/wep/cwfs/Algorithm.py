@@ -116,6 +116,9 @@ class Algorithm(object):
         # Create an attribute to store the algorithm history
         self._history = dict()
 
+        # True if at least one of images has a blended object
+        self.blend_exists = False
+
     def reset(self):
         """Reset the calculation for the new input images with the same
         algorithm settings."""
@@ -138,6 +141,7 @@ class Algorithm(object):
         self.mask_pupil_pad = None
 
         self._history = dict()
+        self.blend_exists = False
 
     def config(self, algoName, inst, debugLevel=0):
         """Configure the algorithm to solve TIE.
@@ -797,12 +801,18 @@ class Algorithm(object):
                     )
                     sys.exit()
 
+                # Check for blends
+                if (len(I1.blendOffsetX) > 0) or (len(I2.blendOffsetX) > 0):
+                    self.blend_exists = True
+
                 # Create the pupil masks
                 # These will be applied to compensated images, so we will
                 # create the masks with compensated=True
                 boundaryT = self.getBoundaryThickness()
-                I1.makeMask(self._inst, model, boundaryT, 1, compensated=True)
-                I2.makeMask(self._inst, model, boundaryT, 1, compensated=True)
+                # If the compensable image has no blended centroids
+                # this function will just create a single masked donut
+                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)
+                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
                 # Load the offAxis correction coefficients
@@ -1348,7 +1358,10 @@ class Algorithm(object):
         """
 
         # Get the overlap region of images and do the normalization.
-        if I1.getFieldXY() != I2.getFieldXY():
+        # If there is a blend we need to include the mask overlap
+        # because the blended donut will appear on opposite sides
+        # of the central donut.
+        if (I1.getFieldXY() != I2.getFieldXY()) or self.blend_exists:
 
             # Get the overlap region of image
             I1.updateImage(I1.getImg() * self.mask_pupil)
