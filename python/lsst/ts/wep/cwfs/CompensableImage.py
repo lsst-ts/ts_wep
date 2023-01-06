@@ -217,7 +217,7 @@ class CompensableImage(object):
             Position of donut on the focal plane in degree (field x, field y).
         defocalType : enum 'DefocalType'
             Defocal type of image.
-        blendOffsets : list, optional
+        blendOffsets : list or None, optional
             Positions of blended donuts relative to location of center donut.
             Enter as [xCoordList, yCoordList].
             Length of xCoordList and yCoordList must be same length.
@@ -1553,7 +1553,9 @@ class CompensableImage(object):
         compensated=True,
     ):
         """Create a binary mask of a central source with the area overlapping
-        a blended object cutout.
+        a blended object cut out. Thus this mask will cover only the
+        unblended footprint of the central donut. Modifies `self.mask_pupil`
+        and `self.mask_comp` (see `makeMask` for more details).
 
         Parameters
         ----------
@@ -1577,12 +1579,6 @@ class CompensableImage(object):
             If False, mask will be in orientation of the original image.
             Note this is only relevant for extrafocal images.
             (the default is True.)
-
-        Returns
-        -------
-        numpy.ndarray
-            Projection of image with the footprint of any overlapping donuts
-            cutout of the mask. It will be a binary image if raytrace=False.
         """
 
         self.makeMask(
@@ -1597,7 +1593,7 @@ class CompensableImage(object):
             self.mask_comp = newMaskComp
 
     def createBlendedCoadd(self, maskArray, blendPadding):
-        """Cutout regions of the input mask where blended donuts
+        """Cut out regions of the input mask where blended donuts
         overlap with the original donut.
 
         Parameters
@@ -1610,7 +1606,7 @@ class CompensableImage(object):
 
         Returns
         -------
-        numpy.ndarray
+        numpy.ndarray [int]
             New maskArray modified to remove the footprint of any
             overlapping donuts from the masked area of the original donut.
         """

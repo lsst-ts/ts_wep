@@ -48,7 +48,7 @@ class DonutStamp(AbstractStamp):
         must keep track of the coordinate system
     centroid_position : `lsst.geom.Point2D`
         Position of the center of the stamp in pixels
-    blend_centroid_positions : `np.ndarray`
+    blend_centroid_positions : `numpy.ndarray`
         Positions of the centroids (in pixels) for sources
         blended with the central source
     defocal_type : `str`
@@ -121,6 +121,17 @@ class DonutStamp(AbstractStamp):
         DonutStamp
             An instance of this class
         """
+        # Include blend centroid positions if they exist
+        if metadata.get("BLEND_CX") is not None:
+            blend_centroid_positions = np.array(
+                [
+                    metadata.getArray("BLEND_CX")[index].split(","),
+                    metadata.getArray("BLEND_CY")[index].split(","),
+                ],
+                dtype=float,
+            ).T
+        else:
+            blend_centroid_positions = np.array([[], []])
 
         return cls(
             stamp_im=stamp_im,
@@ -134,15 +145,7 @@ class DonutStamp(AbstractStamp):
                 metadata.getArray("CENT_X")[index], metadata.getArray("CENT_Y")[index]
             ),
             # Blend centroid positions "BLEND_CX" and "BLEND_CY" in pixels
-            blend_centroid_positions=np.array(
-                [
-                    metadata.getArray("BLEND_CX")[index].split(","),
-                    metadata.getArray("BLEND_CY")[index].split(","),
-                ],
-                dtype=float,
-            ).T
-            if metadata.get("BLEND_CX") is not None
-            else np.array([[], []]),
+            blend_centroid_positions=blend_centroid_positions,
             # "DET_NAME" stands for detector (CCD) name
             detector_name=metadata.getArray("DET_NAME")[index],
             # "CAM_NAME" stands for camera name

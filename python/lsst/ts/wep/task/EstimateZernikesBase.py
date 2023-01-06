@@ -441,19 +441,19 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
         inst.configFromDict(self.instParams, self.donutTemplateSize, camType)
 
         # Final list of DonutStamp objects
-        finalStamps = []
+        finalStamps = list()
 
         # Final locations of donut centroids in pixels
-        finalXCentList = []
-        finalYCentList = []
+        finalXCentList = list()
+        finalYCentList = list()
 
         # Final locations of blended sources in pixels
-        finalBlendXList = []
-        finalBlendYList = []
+        finalBlendXList = list()
+        finalBlendYList = list()
 
         # Final locations of BBox corners for DonutStamp images
-        xCornerList = []
-        yCornerList = []
+        xCornerList = list()
+        yCornerList = list()
 
         for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
@@ -507,6 +507,17 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             finalBlendXList.append(blendStrX)
             finalBlendYList.append(blendStrY)
 
+            # Prepare blend centroid position information
+            if len(donutRow["blend_centroid_x"]) > 0:
+                blendCentroidPositions = np.array(
+                    [
+                        donutRow["blend_centroid_x"] + xShift,
+                        donutRow["blend_centroid_y"] + yShift,
+                    ]
+                ).T
+            else:
+                blendCentroidPositions = np.array([[], []])
+
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
                 sky_position=lsst.geom.SpherePoint(
@@ -515,14 +526,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
                     lsst.geom.radians,
                 ),
                 centroid_position=lsst.geom.Point2D(finalDonutX, finalDonutY),
-                blend_centroid_positions=np.array(
-                    [
-                        donutRow["blend_centroid_x"] + xShift,
-                        donutRow["blend_centroid_y"] + yShift,
-                    ]
-                ).T
-                if len(donutRow["blend_centroid_x"]) > 0
-                else np.array([[], []]),
+                blend_centroid_positions=blendCentroidPositions,
                 detector_name=detectorName,
                 cam_name=cameraName,
                 defocal_type=defocalType.value,
@@ -538,7 +542,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
 
             # Create shifted mask from non-blended mask
             blendExists = len(donutRow["blend_centroid_x"]) > 0
-            if self.multiplyMask and blendExists:
+            if (self.multiplyMask is True) and blendExists:
                 donutStamp.comp_im.makeMask(
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal
                 )

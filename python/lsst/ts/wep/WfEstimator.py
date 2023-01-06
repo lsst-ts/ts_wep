@@ -208,7 +208,7 @@ class WfEstimator(object):
             extra-focal images.
         defocalType : enum 'DefocalType'
             Defocal type of image.
-        blendOffsets : list, optional
+        blendOffsets : list or None, optional
             Positions of blended donuts relative to location of center donut.
             Enter as [xCoordList, yCoordList].
             Length of xCoordList and yCoordList must be the same length.
