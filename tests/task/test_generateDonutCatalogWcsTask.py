@@ -40,7 +40,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
         self.config = GenerateDonutCatalogWcsTaskConfig()
         self.config.donutSelector.fluxField = "g_flux"
-        self.config.donutSelector.donutRadius = 0.0
+        self.config.donutSelector.unblendedSeparation = 1
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         moduleDir = getModulePath()
@@ -129,7 +129,9 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         self.config.referenceSelector.magLimit.maximum = 18.0
         self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
         refObjLoader = self.task.getRefObjLoader(refCatList)
-        donutCatFull = self.task.runSelection(refObjLoader, detector, wcs, "g")
+        donutCatFull, blendX, blendY = self.task.runSelection(
+            refObjLoader, detector, wcs, "g"
+        )
         self.assertEqual(len(donutCatFull), 4)
 
     def testDonutCatalogToDataFrame(self):
@@ -162,6 +164,8 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
+                "blend_centroid_x",
+                "blend_centroid_y",
             ],
         )
 
@@ -176,6 +180,8 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
+                "blend_centroid_x",
+                "blend_centroid_y",
             ],
         )
 
@@ -237,6 +243,8 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
+                "blend_centroid_x",
+                "blend_centroid_y",
             ],
         )
         self.assertCountEqual(

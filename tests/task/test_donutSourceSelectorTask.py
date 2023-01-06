@@ -84,16 +84,16 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         minimalCat, detector = self._createTestCat()
 
         # All donuts chosen since none overlap in this instance
-        self.config.donutRadius = 15.0
-        self.config.isoMagDiff = 2
+        self.config.unblendedSeparation = 30
+        self.config.isolatedMagDiff = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
 
         # The first three donuts overlap but none are more than
-        # isoMagDiff brigher than the rest so none are chosen
-        self.config.donutRadius = 50.0
+        # isolatedMagDiff brigher than the rest so none are chosen
+        self.config.unblendedSeparation = 100
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
@@ -101,7 +101,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
 
         # Will now take the brightest of the three donuts
         # for a total of 2 selected donuts
-        self.config.isoMagDiff = 0.0
+        self.config.isolatedMagDiff = 0.0
+        self.config.minBlendedSeparation = 0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
@@ -136,8 +137,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # Test that only the brightest blended on the end that only
         # blends with one other donut is not accepted if maxBlended
         # is still set to 0.
-        self.config.isoMagDiff = 2.0
-        self.config.donutRadius = 35.0
+        self.config.isolatedMagDiff = 2.0
+        self.config.unblendedSeparation = 70
         self.config.maxBlended = 0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
@@ -146,10 +147,10 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
 
         # Test that only the brightest blended on the end that only
         # blends with one other donut is accepted even though
-        # it does not meet the isoMagDiff criterion we allow it because
-        # we now allow maxBlended up to 1.
-        self.config.isoMagDiff = 2.0
-        self.config.donutRadius = 35.0
+        # it does not meet the isolatedMagDiff criterion we allow
+        # it because we now allow maxBlended up to 1.
+        self.config.isolatedMagDiff = 2.0
+        self.config.unblendedSeparation = 70
         self.config.maxBlended = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
@@ -158,24 +159,24 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # the brightest one.
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
-        # If we increase donutRadius back to 50 then our group of
+        # If we increase unblendedSeparation back to 50 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
         # maxBlended set to one should not allow the brightest donut
         # through since it is blended with two objects.
-        self.config.isoMagDiff = 2.0
-        self.config.donutRadius = 50.0
+        self.config.isolatedMagDiff = 2.0
+        self.config.unblendedSeparation = 100
         self.config.maxBlended = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
-        # If we increase donutRadius back to 50 then our group of
+        # If we increase unblendedSeparation back to 50 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
         # maxBlended set to one should not allow the brightest donut
         # through since it is blended with two objects.
-        self.config.isoMagDiff = 2.0
-        self.config.donutRadius = 50.0
+        self.config.isolatedMagDiff = 2.0
+        self.config.unblendedSeparation = 100
         self.config.maxBlended = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
@@ -186,10 +187,27 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
 
         # Donut furthest from center is over 0.15 degrees from field center
         # and should get cut out when setting maxFieldDist to 0.15
-        self.config.donutRadius = 15.0
-        self.config.isoMagDiff = 2
+        self.config.unblendedSeparation = 30
+        self.config.isolatedMagDiff = 2
         self.config.maxFieldDist = 0.15
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, True, True, True])
+
+        # Blended donut separation should exclude all donuts that have a blend
+        # less than minBlendedSeparation from themselves even if blends are
+        # allowed. First check that it is excluded if closer than the limit.
+        self.config.unblendedSeparation = 100
+        self.config.minBlendedSeparation = 80
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, False, True])
+
+        # Now test that it is allowed once the minBlendedSeparation is lowered.
+        self.config.minBlendedSeparation = 45
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])

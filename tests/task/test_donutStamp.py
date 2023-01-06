@@ -62,6 +62,8 @@ class TestDonutStamp(unittest.TestCase):
         decs = np.arange(nStamps) + 5
         centX = np.arange(nStamps) + 20
         centY = np.arange(nStamps) + 25
+        blendCentX = np.array([f"{val}" for val in np.arange(30, 30 + nStamps)])
+        blendCentY = np.array([f"{val}" for val in np.arange(35, 35 + nStamps)])
         detectorNames = ["R22_S11"] * nStamps
         camNames = ["LSSTCam"] * nStamps
         dfcTypes = [DefocalType.Extra.value] * nStamps
@@ -74,6 +76,9 @@ class TestDonutStamp(unittest.TestCase):
         metadata["DEC_DEG"] = decs
         metadata["CENT_X"] = centX
         metadata["CENT_Y"] = centY
+        if testDefaults is False:
+            metadata["BLEND_CX"] = blendCentX
+            metadata["BLEND_CY"] = blendCentY
         metadata["DET_NAME"] = detectorNames
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
@@ -106,6 +111,10 @@ class TestDonutStamp(unittest.TestCase):
             centroidPos = donutStamp.centroid_position
             self.assertEqual(centroidPos.getX(), i + 20)
             self.assertEqual(centroidPos.getY(), i + 25)
+            blendCentroidPos = donutStamp.blend_centroid_positions
+            np.testing.assert_array_equal(
+                blendCentroidPos, np.array([[i + 30, i + 35]])
+            )
             camName = donutStamp.cam_name
             self.assertEqual("LSSTCam", camName)
             defocalType = donutStamp.defocal_type
@@ -139,6 +148,10 @@ class TestDonutStamp(unittest.TestCase):
             defocalDist = donutStamp.defocal_distance
             # Test default metadata distance of 1.5 mm
             self.assertEqual(defocalDist, 1.5)
+            # Test blend centroids arrays are empty
+            np.testing.assert_array_equal(
+                donutStamp.blend_centroid_positions, np.array([[], []])
+            )
 
     def testGetCamera(self):
 
@@ -170,6 +183,7 @@ class TestDonutStamp(unittest.TestCase):
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
+            np.array([[], []]).T,
             DefocalType.Extra.value,
             1.5e-3,
             "R22_S11",
@@ -194,6 +208,7 @@ class TestDonutStamp(unittest.TestCase):
                     self.testStamps[0],
                     lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
                     refPt,
+                    np.array([[20], [20]]).T,
                     DefocalType.Extra.value,
                     0.0,
                     detName,
@@ -208,6 +223,7 @@ class TestDonutStamp(unittest.TestCase):
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
+            np.array([[], []]).T,
             DefocalType.Extra.value,
             1.5e-3,
             "R22_S11",
@@ -216,11 +232,15 @@ class TestDonutStamp(unittest.TestCase):
 
         # Set up instrument
         instDataPath = os.path.join(getConfigDir(), "cwfs", "instData")
-        instConfigFile = os.path.join(instDataPath, "lsstfam", "instParamPipeConfig.yaml")
+        instConfigFile = os.path.join(
+            instDataPath, "lsstfam", "instParamPipeConfig.yaml"
+        )
         maskConfigFile = os.path.join(instDataPath, "lsstfam", "maskMigrate.yaml")
         inst = Instrument()
         donutWidth = 126
-        inst.configFromFile(donutWidth, CamType.LsstFamCam, instConfigFile, maskConfigFile)
+        inst.configFromFile(
+            donutWidth, CamType.LsstFamCam, instConfigFile, maskConfigFile
+        )
 
         # Check that masks are empty at start
         np.testing.assert_array_equal(

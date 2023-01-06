@@ -21,6 +21,7 @@
 
 __all__ = ["DonutStamps"]
 
+import numpy as np
 from lsst.meas.algorithms.stamps import StampsBase, readFitsWithOptions
 from lsst.ts.wep.task.DonutStamp import DonutStamp
 
@@ -43,6 +44,9 @@ class DonutStamps(StampsBase):
         centroid_positions = self.getCentroidPositions()
         self.metadata["CENT_X"] = [p.getX() for p in centroid_positions]
         self.metadata["CENT_Y"] = [p.getY() for p in centroid_positions]
+        blend_centroid_positions = self.getBlendCentroids()
+        self.metadata["BLEND_CX"] = [x_cent for x_cent in blend_centroid_positions[0]]
+        self.metadata["BLEND_CY"] = [y_cent for y_cent in blend_centroid_positions[1]]
         det_names = self.getDetectorNames()
         self.metadata["DET_NAME"] = [det for det in det_names]
         cam_names = self.getCameraNames()
@@ -84,6 +88,39 @@ class DonutStamps(StampsBase):
             X,Y pixel locations of center of DonutStamp images.
         """
         return [stamp.centroid_position for stamp in self]
+
+    def getBlendCentroids(self):
+        """
+        Get the X,Y centroid positions of the blended sources in pixels.
+
+        Returns
+        -------
+        list [[str], [str]]
+            X,Y pixel locations of centers of sources blended with
+            the central source.
+        """
+        blend_centroids = [stamp.blend_centroid_positions for stamp in self]
+        # Save centroid positions as str so we can store in header
+        finalBlendXList = []
+        finalBlendYList = []
+        for centroid_array in blend_centroids:
+            blendStrX = ""
+            blendStrY = ""
+            if np.shape(centroid_array)[1] == 0:
+                finalBlendXList.append(None)
+                finalBlendYList.append(None)
+                continue
+            for blend_cx, blend_cy in centroid_array:
+                blendStrX += f"{blend_cx:.2f},"
+                blendStrY += f"{blend_cy:.2f},"
+            # Remove comma from last entry
+            if len(blendStrX) > 0:
+                blendStrX = blendStrX[:-1]
+                blendStrY = blendStrY[:-1]
+            finalBlendXList.append(blendStrX)
+            finalBlendYList.append(blendStrY)
+
+        return [finalBlendXList, finalBlendYList]
 
     def getDetectorNames(self):
         """
