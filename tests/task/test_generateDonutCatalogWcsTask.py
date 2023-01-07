@@ -39,7 +39,6 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
     def setUp(self):
 
         self.config = GenerateDonutCatalogWcsTaskConfig()
-        self.config.donutSelector.fluxField = "g_flux"
         self.config.donutSelector.unblendedSeparation = 1
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
@@ -66,11 +65,9 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
     def testValidateConfigs(self):
 
-        self.config.filterName = "r"
         self.config.doDonutSelection = False
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
-        self.assertEqual(self.task.config.filterName, "r")
         self.assertEqual(self.task.config.doDonutSelection, False)
 
     def testGetRefObjLoader(self):

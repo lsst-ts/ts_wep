@@ -22,10 +22,12 @@
 import os
 import unittest
 import pandas as pd
+import astropy.units as u
 
 from lsst.daf import butler as dafButler
 from lsst.pex.config import FieldValidationError
-from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.Utility import getModulePath, getConfigDir
+from lsst.ts.wep.ParamReader import ParamReader
 from lsst.ts.wep.task.DonutSourceSelectorTask import (
     DonutSourceSelectorTask,
     DonutSourceSelectorTaskConfig,
@@ -44,11 +46,30 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
+        self.filterName = "g"
+
+        self.magMax = 99.0
+        self.magMin = -99.0
 
     def _createTestCat(self):
 
         minimalCat = pd.DataFrame()
-        minimalCat["flux"] = [30000.0, 30010.0, 30020.0, 30005.0]
+
+        # Set magnitudes to test with policy file values
+        magPolicyFile = os.path.join(getConfigDir(), "task", "magLimitStar.yaml")
+        magPolicyDefaults = ParamReader(magPolicyFile).getContent()
+        defaultFilterKey = f"filter{self.filterName.upper()}"
+        self.magMax = magPolicyDefaults[defaultFilterKey]["high"]
+        self.magMin = magPolicyDefaults[defaultFilterKey]["low"]
+        magArray = [
+            self.magMax + 1.0,
+            self.magMax - 0.1,
+            self.magMin - 1.0,
+            self.magMax - 1.0,
+        ]
+        flux = (magArray * u.ABmag).to_value(u.nJy)
+
+        minimalCat["g_flux"] = flux
         minimalCat["centroid_x"] = [100.0, 140.0, 190.0, 400.0]
         minimalCat["centroid_y"] = [100.0, 100.0, 100.0, 100.0]
         camera = self.butler.get(
@@ -79,23 +100,60 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             # sourceLimit defined to be integer. Float should raise error.
             self.config.sourceLimit = 2.1
 
+    def testSelectSourcesMagLimits(self):
+
+        minimalCat, detector = self._createTestCat()
+
+        # All donuts should pass since default mag limit is (-99.0, 99.0)
+        self.config.userMagLimit = True
+        self.config.unblendedSeparation = 30
+        self.config.isolatedMagDiff = 2
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [True, True, True, True])
+
+        # Test magMin
+        self.config.magMin = self.magMin
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [True, True, False, True])
+
+        # Test magMax
+        self.config.magMin = -99.0
+        self.config.magMax = self.magMax
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, True, True, True])
+
+        # Test Defaults are used when userMagLimit is turned off.
+        self.config.userMagLimit = False
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, True, False, True])
+
     def testSelectSources(self):
 
         minimalCat, detector = self._createTestCat()
 
         # All donuts chosen since none overlap in this instance
+        self.config.userMagLimit = True
         self.config.unblendedSeparation = 30
         self.config.isolatedMagDiff = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
 
         # The first three donuts overlap but none are more than
-        # isolatedMagDiff brigher than the rest so none are chosen
+        # isolatedMagDiff brighter than the rest so none are chosen
+        self.config.isolatedMagDiff = 10.0
         self.config.unblendedSeparation = 100
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
@@ -104,7 +162,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.config.isolatedMagDiff = 0.0
         self.config.minBlendedSeparation = 0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
@@ -113,7 +171,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # as the only result
         self.config.sourceLimit = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, False])
 
@@ -125,23 +183,25 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             + "or turned off by setting it to '-1'"
         )
         with self.assertRaises(ValueError, msg=errMsg):
-            testCatStruct = self.task.selectSources(minimalCat, detector)
+            testCatStruct = self.task.selectSources(
+                minimalCat, detector, self.filterName
+            )
 
         # Test that setting sourceLimit returns all selected sources
         self.config.sourceLimit = -1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
         # Test that only the brightest blended on the end that only
         # blends with one other donut is not accepted if maxBlended
         # is still set to 0.
-        self.config.isolatedMagDiff = 2.0
+        self.config.isolatedMagDiff = 10.0
         self.config.unblendedSeparation = 70
         self.config.maxBlended = 0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
@@ -149,11 +209,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # blends with one other donut is accepted even though
         # it does not meet the isolatedMagDiff criterion we allow
         # it because we now allow maxBlended up to 1.
-        self.config.isolatedMagDiff = 2.0
+        self.config.isolatedMagDiff = 10.0
         self.config.unblendedSeparation = 70
         self.config.maxBlended = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         # Make sure the one that gets through selection is
         # the brightest one.
@@ -163,11 +223,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # 3 donuts should all be overlapping and blended. Therefore,
         # maxBlended set to one should not allow the brightest donut
         # through since it is blended with two objects.
-        self.config.isolatedMagDiff = 2.0
+        self.config.isolatedMagDiff = 10.0
         self.config.unblendedSeparation = 100
         self.config.maxBlended = 1
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
@@ -175,11 +235,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # 3 donuts should all be overlapping and blended. Therefore,
         # maxBlended set to one should not allow the brightest donut
         # through since it is blended with two objects.
-        self.config.isolatedMagDiff = 2.0
+        self.config.isolatedMagDiff = 10.0
         self.config.unblendedSeparation = 100
         self.config.maxBlended = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         # Make sure the one that gets through selection is
         # the brightest one.
@@ -188,10 +248,10 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # Donut furthest from center is over 0.15 degrees from field center
         # and should get cut out when setting maxFieldDist to 0.15
         self.config.unblendedSeparation = 30
-        self.config.isolatedMagDiff = 2
+        self.config.isolatedMagDiff = 10.0
         self.config.maxFieldDist = 0.15
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, True, True, True])
 
@@ -201,13 +261,13 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.config.unblendedSeparation = 100
         self.config.minBlendedSeparation = 80
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
         # Now test that it is allowed once the minBlendedSeparation is lowered.
         self.config.minBlendedSeparation = 45
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector)
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])

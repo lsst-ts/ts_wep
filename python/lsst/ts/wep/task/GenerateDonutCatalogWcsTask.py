@@ -87,7 +87,6 @@ class GenerateDonutCatalogWcsTaskConfig(
     that run to do the source selection.
     """
 
-    filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
     referenceSelector = pexConfig.ConfigurableField(
         target=ReferenceSourceSelectorTask, doc="How to select reference objects."
     )
@@ -112,10 +111,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         super().__init__(**kwargs)
 
         # The filter in the reference catalog we want to use to find sources.
-        self.filterName = self.config.filterName
         self.makeSubtask("referenceSelector")
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
+
+        # This will come from the exposure when task is run.
+        self.filterName = None
 
         # TODO: Temporary until DM-24162 is closed at which point we
         # can remove this
@@ -181,7 +182,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(donutCatalog, detector)
+            donutSelection = self.donutSelector.run(donutCatalog, detector, filterName)
             return (
                 donutCatalog[donutSelection.selected],
                 donutSelection.blendCentersX,
@@ -191,7 +192,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             return donutCatalog, [[]] * len(donutCatalog), [[]] * len(donutCatalog)
 
     def donutCatalogToDataFrame(
-        self, donutCatalog=None, blendCentersX=None, blendCentersY=None
+        self, donutCatalog=None, filterName=None, blendCentersX=None, blendCentersY=None
     ):
         """
         Reformat afwCatalog into a pandas dataframe sorted by flux with
@@ -204,6 +205,10 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             ReferenceObjectLoader search over the detector footprint.
             If None then it will return an empty dataframe.
             (the default is None.)
+        filterName
+        blendCentersX
+        blendCentersY
+
 
         Returns
         -------
@@ -254,11 +259,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         detector = exposure.getDetector()
         detectorWcs = exposure.getWcs()
+        filterName = exposure.filter.bandLabel
 
         try:
             # Match detector layout to reference catalog
             refSelection, blendCentersX, blendCentersY = self.runSelection(
-                refObjLoader, detector, detectorWcs, self.filterName
+                refObjLoader, detector, detectorWcs, filterName
             )
 
         # Except RuntimeError caused when no reference catalog
