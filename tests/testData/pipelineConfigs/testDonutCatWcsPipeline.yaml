@@ -33,3 +33,5 @@ tasks:
     class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
       donutSelector.unblendedSeparation: 1
+      donutSelector.userMagLimit: True
+

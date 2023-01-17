@@ -35,7 +35,6 @@ tasks:
   generateDonutCatalogWcsTask:
     class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
-      donutSelector.fluxField: 'g_flux'
       donutSelector.unblendedSeparation: 1
   cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask

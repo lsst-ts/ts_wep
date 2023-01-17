@@ -101,9 +101,8 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         )
         detector = camera["R22_S11"]
 
-        self.config.referenceSelector.magLimit.maximum = 17.0
-        self.config.referenceSelector.magLimit.fluxField = "g_flux"
-        self.config.referenceSelector.doMagLimit = True
+        self.config.donutSelector.userMagLimit = True
+        self.config.donutSelector.magMax = 17.0
         self.config.doDonutSelection = False
 
         self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
@@ -123,7 +122,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
         # If we increase the mag limit to 18 we should
         # get all the sources in the catalog.
-        self.config.referenceSelector.magLimit.maximum = 18.0
+        self.config.donutSelector.magMax = 18.0
         self.task = GenerateDonutCatalogWcsTask(config=self.config, name="Base Task")
         refObjLoader = self.task.getRefObjLoader(refCatList)
         donutCatFull, blendX, blendY = self.task.runSelection(
@@ -151,7 +150,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             testExposure.getWcs(),
             testExposure.filter.bandLabel,
         )
-        fieldObjects = self.task.donutCatalogToDataFrame(donutCatSmall.refCat)
+        fieldObjects = self.task.donutCatalogToDataFrame(donutCatSmall.refCat, "g")
         self.assertEqual(len(fieldObjects), 4)
         self.assertCountEqual(
             fieldObjects.columns,
@@ -181,6 +180,49 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
                 "blend_centroid_y",
             ],
         )
+
+    def testDonutCatalogToDataFrameErrors(self):
+
+        columnList = [
+            "coord_ra",
+            "coord_dec",
+            "centroid_x",
+            "centroid_y",
+            "g_flux",
+            "blend_centroid_x",
+            "blend_centroid_y",
+        ]
+        donutCat = pd.DataFrame([], columns=columnList)
+
+        # Test donutCatalog supplied but no filterName
+        filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
+        with self.assertRaises(ValueError) as context:
+            self.task.donutCatalogToDataFrame(donutCat)
+        self.assertTrue(filterErrMsg in str(context.exception))
+
+        # Test blendCenters are both supplied or both left as None
+        blendErrMsg = (
+            "blendCentersX and blendCentersY must be"
+            + " both be None or both be a list."
+        )
+        with self.assertRaises(ValueError) as context:
+            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersX=[])
+        self.assertTrue(blendErrMsg in str(context.exception))
+        with self.assertRaises(ValueError) as context:
+            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersY=[])
+        self.assertTrue(blendErrMsg in str(context.exception))
+
+        # Test blendCenters must be same length as donutCat
+        lengthErrMsg = (
+            "blendCentersX and blendCentersY must be"
+            + " both be None or both be a list."
+        )
+        with self.assertRaises(ValueError) as context:
+            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersX=[[], []])
+        self.assertTrue(lengthErrMsg in str(context.exception))
+        with self.assertRaises(ValueError) as context:
+            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersY=[[], []])
+        self.assertTrue(lengthErrMsg in str(context.exception))
 
     def testPipeline(self):
         """
@@ -309,6 +351,8 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
         # run task on all exposures
         donutCatDfList = []
+        # Set task to take all donuts regardless of magnitude
+        self.task.config.donutSelector.userMagLimit = True
         for exposure in expList:
             taskOutput = self.task.run(deferredList, exposure)
             self.assertEqual(len(taskOutput.donutCatalog), 4)
