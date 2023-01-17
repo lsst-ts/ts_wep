@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.0.1:
+
+-------------
+4.0.1
+-------------
+
+* Remove Gen2 daf_persistence from UPS table.
+
 .. _lsst.ts.wep-4.0.0:
 
 -------------
