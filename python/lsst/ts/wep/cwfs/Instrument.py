@@ -170,15 +170,19 @@ class Instrument(object):
         # Expect instrument configurations to be found
         # in one of the task configurations
         instConfigDict = None
+        invalidFormatMsg = str(
+            "Instrument configuration file does not have expected format. "
+            + "See examples in policy/cwfs/instData."
+        )
         for taskDict in instParamReader.getContent()["tasks"].values():
-            if "instObscuration" in list(taskDict["config"].keys()):
-                instConfigDict = taskDict["config"]
+            try:
+                if "instObscuration" in list(taskDict["config"].keys()):
+                    instConfigDict = taskDict["config"]
+            except KeyError:
+                continue
 
         if instConfigDict is None:
-            raise ValueError(
-                "Instrument configuration file does not have expected format. "
-                + "See examples in policy/cwfs/instData."
-            )
+            raise ValueError(invalidFormatMsg)
 
         # Translate between task configuration parameter names
         # and cwfs expected parameter names
