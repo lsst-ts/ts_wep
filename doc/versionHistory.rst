@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.0.2:
+
+-------------
+4.0.2
+-------------
+
+* Fix test_estimateZernikesCwfsTask call to ButlerQuantumContext.
+
 .. _lsst.ts.wep-4.0.1:
 
 -------------
