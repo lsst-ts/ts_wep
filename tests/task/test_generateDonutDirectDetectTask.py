@@ -76,18 +76,29 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         x_center = np.arange(15)
         y_center = 0.5 * np.arange(15)
         donutCat = pd.DataFrame(
-            data=list(zip(x_center, y_center)), columns=["x_center", "y_center"]
+            data=list(zip(x_center, y_center, x_center, y_center)),
+            columns=["x_center", "y_center", "x_blend_center", "y_blend_center"],
         )
         # update the donut catalog
         donutCatUpd = self.task.updateDonutCatalog(donutCat, testExposure)
 
         # check that all these new columns are present
-        newColumns = ["centroid_y", "centroid_x", "detector", "coord_ra", "coord_dec"]
-        self.assertEqual(np.sum(np.in1d(newColumns, list(donutCatUpd.columns))), 5)
+        newColumns = [
+            "centroid_y",
+            "centroid_x",
+            "detector",
+            "coord_ra",
+            "coord_dec",
+            "blend_centroid_x",
+            "blend_centroid_y",
+        ]
+        self.assertEqual(np.sum(np.in1d(newColumns, list(donutCatUpd.columns))), 7)
 
         # check that columns got transposed
         np.testing.assert_array_equal(donutCatUpd["centroid_x"].values, y_center)
         np.testing.assert_array_equal(donutCatUpd["centroid_y"].values, x_center)
+        np.testing.assert_array_equal(donutCatUpd["blend_centroid_x"], y_center)
+        np.testing.assert_array_equal(donutCatUpd["blend_centroid_y"], x_center)
 
     def testPipeline(self):
         """
@@ -149,6 +160,8 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
                 "blended_with",
                 "num_blended_neighbors",
                 "detector",
+                "blend_centroid_x",
+                "blend_centroid_y",
             ],
         )
         tolerance = 10  # pixels

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.0.3:
+
+-------------
+4.0.3
+-------------
+
+* Add blend_centroid_x and blend_centroid_y to GenerateDonutDirectDetectTask catalogs.
+
 .. _lsst.ts.wep-4.0.2:
 
 -------------

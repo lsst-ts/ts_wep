@@ -142,6 +142,10 @@ class DonutDetector(object):
             which donuts are blended with which.
         """
 
+        # Add blend_center columns
+        donutDf["x_blend_center"] = [list() for x in range(len(donutDf))]
+        donutDf["y_blend_center"] = [list() for y in range(len(donutDf))]
+
         # Find distances between each pair of objects
         donutCenters = [donutDf["x_center"].values, donutDf["y_center"].values]
         donutCenters = np.array(donutCenters).T
@@ -165,7 +169,19 @@ class DonutDetector(object):
             if donutDf.loc[donutTwo, "blended_with"] is None:
                 donutDf.at[donutTwo, "blended_with"] = []
             donutDf.loc[donutOne, "blended_with"].append(donutTwo)
+            donutDf.loc[donutOne, "x_blend_center"].append(
+                donutDf.loc[donutTwo, "x_center"]
+            )
+            donutDf.loc[donutOne, "y_blend_center"].append(
+                donutDf.loc[donutTwo, "y_center"]
+            )
             donutDf.loc[donutTwo, "blended_with"].append(donutOne)
+            donutDf.loc[donutTwo, "x_blend_center"].append(
+                donutDf.loc[donutOne, "x_center"]
+            )
+            donutDf.loc[donutTwo, "y_blend_center"].append(
+                donutDf.loc[donutOne, "y_center"]
+            )
 
         # Count the number of other donuts overlapping
         # each donut

@@ -211,6 +211,12 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         donutCat = donutCat.rename(
             columns={"y_center": "centroid_x", "x_center": "centroid_y"}
         )
+        donutCat = donutCat.rename(
+            columns={
+                "y_blend_center": "blend_centroid_x",
+                "x_blend_center": "blend_centroid_y",
+            }
+        )
 
         # pass the boresight ra, dec
         wcs = exposure.getWcs()
