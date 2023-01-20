@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.0.4:
+
+-------------
+4.0.4
+-------------
+
+* Update calls to deprecated LoadIndexedReferenceObjectsTask to use LoadReferenceObjectsTask.
+
 .. _lsst.ts.wep-4.0.3:
 
 -------------
