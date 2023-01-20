@@ -199,7 +199,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
                 inputRefs.camera.datasetType: [inputRefs.camera],
             }
         )
-        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
+        butlerQC = pipeBase.ButlerQuantumContext.from_full(self.butler, quantum)
 
         # Test that we will get an error if we try to use an
         # unsupported instrument.
@@ -236,7 +236,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
                 inputRefs.camera.datasetType: [inputRefs.camera],
             }
         )
-        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
+        butlerQC = pipeBase.ButlerQuantumContext.from_full(self.butler, quantum)
         unequalMsg = "Unequal number of intra and extra focal detectors."
         with self.assertRaises(ValueError) as context:
             self.task.runQuantum(butlerQC, inputRefs, outputRefs)
@@ -253,7 +253,7 @@ class TestEstimateZernikesCwfsTask(lsst.utils.tests.TestCase):
                 "postISRCCD", dataId=self.mismatchDataId, collections=[self.runName]
             ).ref
         )
-        butlerQC = pipeBase.ButlerQuantumContext(self.butler, quantum)
+        butlerQC = pipeBase.ButlerQuantumContext.from_full(self.butler, quantum)
         mismatchMsg = "Intra and extra focal detectors not adjacent."
         with self.assertRaises(ValueError) as context:
             self.task.runQuantum(butlerQC, inputRefs, outputRefs)
