@@ -28,7 +28,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms import (
-    LoadIndexedReferenceObjectsTask,
+    LoadReferenceObjectsTask,
     ReferenceSourceSelectorTask,
     ReferenceObjectLoader,
 )
@@ -40,7 +40,7 @@ class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
     """Configuration for GenerateDonutCatalogOnlineTask."""
 
     refObjLoader = pexConfig.ConfigurableField(
-        target=LoadIndexedReferenceObjectsTask,
+        target=LoadReferenceObjectsTask,
         doc="Reference object loader for photometry",
     )
     referenceSelector = pexConfig.ConfigurableField(
