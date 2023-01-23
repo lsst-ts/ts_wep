@@ -105,7 +105,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         minimalCat, detector = self._createTestCat()
 
         # All donuts should pass since default mag limit is (-99.0, 99.0)
-        self.config.userMagLimit = True
+        self.config.useCustomMagLimit = True
         self.config.unblendedSeparation = 30
         self.config.isolatedMagDiff = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
@@ -128,8 +128,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, True, True, True])
 
-        # Test Defaults are used when userMagLimit is turned off.
-        self.config.userMagLimit = False
+        # Test Defaults are used when useCustomMagLimit is turned off.
+        self.config.useCustomMagLimit = False
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
@@ -140,7 +140,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         minimalCat, detector = self._createTestCat()
 
         # All donuts chosen since none overlap in this instance
-        self.config.userMagLimit = True
+        self.config.useCustomMagLimit = True
         self.config.unblendedSeparation = 30
         self.config.isolatedMagDiff = 2
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")

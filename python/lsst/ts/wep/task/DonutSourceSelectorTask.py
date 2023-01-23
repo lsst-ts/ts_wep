@@ -47,7 +47,7 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     yCoordField = pexConfig.Field(
         dtype=str, default="centroid_y", doc="Name of y-coordinate column."
     )
-    userMagLimit = pexConfig.Field(
+    useCustomMagLimit = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="Apply user-defined magnitude limit? If this is False then the code"
@@ -56,12 +56,12 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     magMax = pexConfig.Field(
         dtype=float,
         default=99.0,
-        doc="Maximum magnitude for selection. Only used if userMagLimit is True.",
+        doc="Maximum magnitude for selection. Only used if useCustomMagLimit is True.",
     )
     magMin = pexConfig.Field(
         dtype=float,
         default=-99.0,
-        doc="Minimum magnitude for selection. Only used if userMagLimit is True.",
+        doc="Minimum magnitude for selection. Only used if useCustomMagLimit is True.",
     )
     # For information on where this default maxFieldDist comes from see details
     # in ts_analysis_notebooks/aos/vignetting.
@@ -126,7 +126,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
             Catalog of sources to select from.
         detector : `lsst.afw.cameraGeom.Detector`
             Detector object from the camera.
-        filterName : str
+        filterName : `str`
             Name of camera filter.
 
         Returns
@@ -175,7 +175,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
             Catalog of sources to select from.
         detector : `lsst.afw.cameraGeom.Detector`
             Detector object from the camera.
-        filterName : str
+        filterName : `str`
             Name of camera filter.
 
         Returns
@@ -205,8 +205,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
         unblendedSeparation = self.config.unblendedSeparation
         minBlendedSeparation = self.config.minBlendedSeparation
 
-        # Use user defined inputs or ts_wep defaults depending on userMagLimit.
-        if self.config.userMagLimit:
+        # Use user defined inputs or ts_wep defaults
+        # depending on useCustomMagLimit.
+        if self.config.useCustomMagLimit:
             magMin = self.config.magMin
             magMax = self.config.magMax
         else:

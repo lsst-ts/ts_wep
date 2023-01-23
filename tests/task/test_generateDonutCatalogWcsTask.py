@@ -63,6 +63,31 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
         return refCatList
 
+    def _createTestDonutCat(self):
+
+        refCatList = self._getRefCat()
+        refObjLoader = self.task.getRefObjLoader(refCatList)
+
+        # Check that our refObjLoader loads the available objects
+        # within a given footprint from a sample exposure
+        testDataId = {
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106001,
+        }
+        testExposure = self.butler.get(
+            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
+        )
+        # From the test data provided this will create
+        # a catalog of 4 objects.
+        donutCatSmall = refObjLoader.loadPixelBox(
+            testExposure.getBBox(),
+            testExposure.getWcs(),
+            testExposure.filter.bandLabel,
+        )
+
+        return donutCatSmall.refCat
+
     def testValidateConfigs(self):
 
         self.config.doDonutSelection = False
@@ -101,7 +126,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         )
         detector = camera["R22_S11"]
 
-        self.config.donutSelector.userMagLimit = True
+        self.config.donutSelector.useCustomMagLimit = True
         self.config.donutSelector.magMax = 17.0
         self.config.doDonutSelection = False
 
@@ -132,25 +157,9 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
 
     def testDonutCatalogToDataFrame(self):
 
-        refCatList = self._getRefCat()
-        refObjLoader = self.task.getRefObjLoader(refCatList)
+        donutCatSmall = self._createTestDonutCat()
 
-        # Check that our refObjLoader loads the available objects
-        # within a given footprint from a sample exposure
-        testDataId = {
-            "instrument": "LSSTCam",
-            "detector": 94,
-            "exposure": 4021123106001,
-        }
-        testExposure = self.butler.get(
-            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
-        )
-        donutCatSmall = refObjLoader.loadPixelBox(
-            testExposure.getBBox(),
-            testExposure.getWcs(),
-            testExposure.filter.bandLabel,
-        )
-        fieldObjects = self.task.donutCatalogToDataFrame(donutCatSmall.refCat, "g")
+        fieldObjects = self.task.donutCatalogToDataFrame(donutCatSmall, "g")
         self.assertEqual(len(fieldObjects), 4)
         self.assertCountEqual(
             fieldObjects.columns,
@@ -181,6 +190,21 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             ],
         )
 
+        # Test that blendCentersX and blendCentersY
+        # get assigned correctly.
+        fieldObjectsBlends = self.task.donutCatalogToDataFrame(
+            donutCatSmall,
+            "g",
+        )
+        fieldObjectsBlends.at[1, "blend_centroid_x"].append(5)
+        fieldObjectsBlends.at[1, "blend_centroid_y"].append(3)
+        np.testing.assert_array_equal(
+            fieldObjectsBlends["blend_centroid_x"], [[], [5], [], []]
+        )
+        np.testing.assert_array_equal(
+            fieldObjectsBlends["blend_centroid_y"], [[], [3], [], []]
+        )
+
     def testDonutCatalogToDataFrameErrors(self):
 
         columnList = [
@@ -192,12 +216,12 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             "blend_centroid_x",
             "blend_centroid_y",
         ]
-        donutCat = pd.DataFrame([], columns=columnList)
+        donutCatZero = pd.DataFrame([], columns=columnList)
 
         # Test donutCatalog supplied but no filterName
         filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
         with self.assertRaises(ValueError) as context:
-            self.task.donutCatalogToDataFrame(donutCat)
+            self.task.donutCatalogToDataFrame(donutCatZero)
         self.assertTrue(filterErrMsg in str(context.exception))
 
         # Test blendCenters are both supplied or both left as None
@@ -206,10 +230,10 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             + " both be None or both be a list."
         )
         with self.assertRaises(ValueError) as context:
-            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersX=[])
+            self.task.donutCatalogToDataFrame(donutCatZero, "g", blendCentersX=[])
         self.assertTrue(blendErrMsg in str(context.exception))
         with self.assertRaises(ValueError) as context:
-            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersY=[])
+            self.task.donutCatalogToDataFrame(donutCatZero, "g", blendCentersY=[])
         self.assertTrue(blendErrMsg in str(context.exception))
 
         # Test blendCenters must be same length as donutCat
@@ -218,11 +242,30 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             + " both be None or both be a list."
         )
         with self.assertRaises(ValueError) as context:
-            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersX=[[], []])
+            self.task.donutCatalogToDataFrame(donutCatZero, "g", blendCentersX=[[], []])
         self.assertTrue(lengthErrMsg in str(context.exception))
         with self.assertRaises(ValueError) as context:
-            self.task.donutCatalogToDataFrame(donutCat, "g", blendCentersY=[[], []])
+            self.task.donutCatalogToDataFrame(donutCatZero, "g", blendCentersY=[[], []])
         self.assertTrue(lengthErrMsg in str(context.exception))
+
+        donutCatSmall = self._createTestDonutCat()
+
+        # Test that each list within blendCentersX
+        # has the same length as the list at the same
+        # index within blendCentersY.
+        xyMismatchErrMsg = (
+            "Each list in blendCentersX must have the same "
+            + "length as the list in blendCentersY at the "
+            + "same index."
+        )
+        with self.assertRaises(ValueError) as context:
+            self.task.donutCatalogToDataFrame(
+                donutCatSmall,
+                "g",
+                blendCentersX=[[1], [0], [], []],
+                blendCentersY=[[4], [], [], []],
+            )
+        self.assertTrue(xyMismatchErrMsg in str(context.exception))
 
     def testPipeline(self):
         """
@@ -352,7 +395,7 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         # run task on all exposures
         donutCatDfList = []
         # Set task to take all donuts regardless of magnitude
-        self.task.config.donutSelector.userMagLimit = True
+        self.task.config.donutSelector.useCustomMagLimit = True
         for exposure in expList:
             taskOutput = self.task.run(deferredList, exposure)
             self.assertEqual(len(taskOutput.donutCatalog), 4)

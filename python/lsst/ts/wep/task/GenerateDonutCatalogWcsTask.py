@@ -202,15 +202,15 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             ReferenceObjectLoader search over the detector footprint.
             If None then it will return an empty dataframe.
             (the default is None.)
-        filterName : str or `None`, optional
+        filterName : `str` or `None`, optional
             Name of camera filter. If donutCatalog is not None then
             this cannot be None. (the default is None.)
-        blendCentersX : list or `None`, optional
+        blendCentersX : `list` or `None`, optional
              X pixel position of centroids for blended objects. List
              should be the same length as the donutCatalog. If
              blendCentersY is not None then this cannot be None. (the default
              is None.)
-        blendCentersY : list or `None`, optional
+        blendCentersY : `list` or `None`, optional
              Y pixel position of centroids for blended objects. List
              should be the same length as the donutCatalog. If
              blendCentersX is not None then this cannot be None. (the default
@@ -220,6 +220,16 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         -------
         `pandas.DataFrame`
             Complete catalog of reference sources in the pointing.
+
+        Raises
+        ------
+        `ValueError`
+            Raised if filterName is None when donutCatalog is not None.
+        `ValueError`
+            Raised if blendCentersX and blendCentersY are not the same length.
+        `ValueError`
+            Raised if blendCentersX and blendCentersY are not both
+            a list or are not both None.
         """
 
         ra = []
@@ -241,9 +251,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             sourceFlux = donutCatalog[f"{filterName}_flux"]
 
             if (blendCentersX is None) and (blendCentersY is None):
-                blendCX = [[]] * len(donutCatalog)
-                blendCY = [[]] * len(donutCatalog)
-            elif (type(blendCentersX) == list) and (type(blendCentersY) is list):
+                blendCX = list()
+                blendCY = list()
+                for idx in range(len(donutCatalog)):
+                    blendCX.append(list())
+                    blendCY.append(list())
+            elif isinstance(blendCentersX, list) and isinstance(blendCentersY, list):
                 lengthErrMsg = (
                     "blendCentersX and blendCentersY need "
                     + "to be same length as donutCatalog."
@@ -252,6 +265,14 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                     len(blendCentersY) != len(donutCatalog)
                 ):
                     raise ValueError(lengthErrMsg)
+                xyMismatchErrMsg = (
+                    "Each list in blendCentersX must have the same "
+                    + "length as the list in blendCentersY at the "
+                    + "same index."
+                )
+                for xList, yList in zip(blendCentersX, blendCentersY):
+                    if len(xList) != len(yList):
+                        raise ValueError(xyMismatchErrMsg)
                 blendCX = blendCentersX
                 blendCY = blendCentersY
             else:
