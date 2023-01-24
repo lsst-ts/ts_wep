@@ -31,5 +31,3 @@ tasks:
       python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
   generateDonutCatalogWcsTask:
     class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
-    config:
-      donutSelector.fluxField: 'g_flux'
