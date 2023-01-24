@@ -87,7 +87,6 @@ class GenerateDonutCatalogWcsTaskConfig(
     that run to do the source selection.
     """
 
-    filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
     referenceSelector = pexConfig.ConfigurableField(
         target=ReferenceSourceSelectorTask, doc="How to select reference objects."
     )
@@ -112,7 +111,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         super().__init__(**kwargs)
 
         # The filter in the reference catalog we want to use to find sources.
-        self.filterName = self.config.filterName
         self.makeSubtask("referenceSelector")
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
@@ -181,7 +179,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(donutCatalog, detector)
+            donutSelection = self.donutSelector.run(donutCatalog, detector, filterName)
             return (
                 donutCatalog[donutSelection.selected],
                 donutSelection.blendCentersX,
@@ -191,7 +189,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             return donutCatalog, [[]] * len(donutCatalog), [[]] * len(donutCatalog)
 
     def donutCatalogToDataFrame(
-        self, donutCatalog=None, blendCentersX=None, blendCentersY=None
+        self, donutCatalog=None, filterName=None, blendCentersX=None, blendCentersY=None
     ):
         """
         Reformat afwCatalog into a pandas dataframe sorted by flux with
@@ -204,11 +202,34 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             ReferenceObjectLoader search over the detector footprint.
             If None then it will return an empty dataframe.
             (the default is None.)
+        filterName : `str` or `None`, optional
+            Name of camera filter. If donutCatalog is not None then
+            this cannot be None. (the default is None.)
+        blendCentersX : `list` or `None`, optional
+             X pixel position of centroids for blended objects. List
+             should be the same length as the donutCatalog. If
+             blendCentersY is not None then this cannot be None. (the default
+             is None.)
+        blendCentersY : `list` or `None`, optional
+             Y pixel position of centroids for blended objects. List
+             should be the same length as the donutCatalog. If
+             blendCentersX is not None then this cannot be None. (the default
+             is None.)
 
         Returns
         -------
         `pandas.DataFrame`
             Complete catalog of reference sources in the pointing.
+
+        Raises
+        ------
+        `ValueError`
+            Raised if filterName is None when donutCatalog is not None.
+        `ValueError`
+            Raised if blendCentersX and blendCentersY are not the same length.
+        `ValueError`
+            Raised if blendCentersX and blendCentersY are not both
+            a list or are not both None.
         """
 
         ra = []
@@ -220,13 +241,46 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         blendCY = []
 
         if donutCatalog is not None:
+            filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
+            if filterName is None:
+                raise ValueError(filterErrMsg)
             ra = donutCatalog["coord_ra"]
             dec = donutCatalog["coord_dec"]
             centroidX = donutCatalog["centroid_x"]
             centroidY = donutCatalog["centroid_y"]
-            sourceFlux = donutCatalog[f"{self.filterName}_flux"]
-            blendCX = blendCentersX
-            blendCY = blendCentersY
+            sourceFlux = donutCatalog[f"{filterName}_flux"]
+
+            if (blendCentersX is None) and (blendCentersY is None):
+                blendCX = list()
+                blendCY = list()
+                for idx in range(len(donutCatalog)):
+                    blendCX.append(list())
+                    blendCY.append(list())
+            elif isinstance(blendCentersX, list) and isinstance(blendCentersY, list):
+                lengthErrMsg = (
+                    "blendCentersX and blendCentersY need "
+                    + "to be same length as donutCatalog."
+                )
+                if (len(blendCentersX) != len(donutCatalog)) or (
+                    len(blendCentersY) != len(donutCatalog)
+                ):
+                    raise ValueError(lengthErrMsg)
+                xyMismatchErrMsg = (
+                    "Each list in blendCentersX must have the same "
+                    + "length as the list in blendCentersY at the "
+                    + "same index."
+                )
+                for xList, yList in zip(blendCentersX, blendCentersY):
+                    if len(xList) != len(yList):
+                        raise ValueError(xyMismatchErrMsg)
+                blendCX = blendCentersX
+                blendCY = blendCentersY
+            else:
+                blendErrMsg = (
+                    "blendCentersX and blendCentersY must be"
+                    + " both be None or both be a list."
+                )
+                raise ValueError(blendErrMsg)
 
         fieldObjects = pd.DataFrame([])
         fieldObjects["coord_ra"] = ra
@@ -254,11 +308,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         detector = exposure.getDetector()
         detectorWcs = exposure.getWcs()
+        filterName = exposure.filter.bandLabel
 
         try:
             # Match detector layout to reference catalog
             refSelection, blendCentersX, blendCentersY = self.runSelection(
-                refObjLoader, detector, detectorWcs, self.filterName
+                refObjLoader, detector, detectorWcs, filterName
             )
 
         # Except RuntimeError caused when no reference catalog
@@ -273,7 +328,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             blendCentersY = None
 
         fieldObjects = self.donutCatalogToDataFrame(
-            refSelection, blendCentersX, blendCentersY
+            refSelection, filterName, blendCentersX, blendCentersY
         )
 
         return pipeBase.Struct(donutCatalog=fieldObjects)

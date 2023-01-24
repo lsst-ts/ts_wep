@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.1.0:
+
+-------------
+4.1.0
+-------------
+
+* GenerateDonutCatalogWcsTask takes filter information from exposures automatically.
+* DonutSourceSelectorTask uses policy/task/magLimitStar.yaml for default magnitude limits.
+
 .. _lsst.ts.wep-4.0.4:
 
 -------------

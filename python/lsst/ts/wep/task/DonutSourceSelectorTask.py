@@ -21,6 +21,7 @@
 
 __all__ = ["DonutSourceSelectorTaskConfig", "DonutSourceSelectorTask"]
 
+import os
 import numpy as np
 import pandas as pd
 import astropy.units as u
@@ -34,6 +35,8 @@ from lsst.meas.algorithms.sourceSelector import (
     _getFieldFromCatalog,
 )
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
+from lsst.ts.wep.Utility import getConfigDir
+from lsst.ts.wep.ParamReader import ParamReader
 
 
 class DonutSourceSelectorTaskConfig(pexConfig.Config):
@@ -44,17 +47,21 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     yCoordField = pexConfig.Field(
         dtype=str, default="centroid_y", doc="Name of y-coordinate column."
     )
-    fluxField = pexConfig.Field(
-        dtype=str, default="flux", doc="Name of the source flux field to use."
-    )
-    doMagLimit = pexConfig.Field(
-        dtype=bool, default=False, doc="Apply magnitude limit?"
+    useCustomMagLimit = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Apply user-defined magnitude limit? If this is False then the code"
+        + " will default to use the magnitude values in policy/task/magLimitStar.yaml.",
     )
     magMax = pexConfig.Field(
-        dtype=float, default=15.90, doc="Maximum magnitude for selection."
+        dtype=float,
+        default=99.0,
+        doc="Maximum magnitude for selection. Only used if useCustomMagLimit is True.",
     )
     magMin = pexConfig.Field(
-        dtype=float, default=8.74, doc="Minimum magnitude for selection."
+        dtype=float,
+        default=-99.0,
+        doc="Minimum magnitude for selection. Only used if useCustomMagLimit is True.",
     )
     # For information on where this default maxFieldDist comes from see details
     # in ts_analysis_notebooks/aos/vignetting.
@@ -109,7 +116,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
     def __init__(self, **kwargs):
         pipeBase.Task.__init__(self, **kwargs)
 
-    def run(self, sourceCat, detector):
+    def run(self, sourceCat, detector, filterName):
         """Select sources and return them.
 
         Parameters
@@ -119,6 +126,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
             Catalog of sources to select from.
         detector : `lsst.afw.cameraGeom.Detector`
             Detector object from the camera.
+        filterName : `str`
+            Name of camera filter.
 
         Returns
         -------
@@ -144,7 +153,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     "Input catalogs for source selection must be contiguous."
                 )
 
-        result = self.selectSources(sourceCat, detector)
+        result = self.selectSources(sourceCat, detector, filterName)
 
         return pipeBase.Struct(
             sourceCat=sourceCat[result.selected],
@@ -154,7 +163,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         )
 
     @timeMethod
-    def selectSources(self, sourceCat, detector):
+    def selectSources(self, sourceCat, detector, filterName):
         """
         Run the source selection algorithm and return the indices to keep
         in the original catalog.
@@ -166,6 +175,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
             Catalog of sources to select from.
         detector : `lsst.afw.cameraGeom.Detector`
             Detector object from the camera.
+        filterName : `str`
+            Name of camera filter.
 
         Returns
         -------
@@ -187,17 +198,27 @@ class DonutSourceSelectorTask(pipeBase.Task):
         if len(selected) == 0:
             return pipeBase.Struct(selected=selected)
 
-        flux = _getFieldFromCatalog(sourceCat, self.config.fluxField)
+        fluxField = f"{filterName}_flux"
+        flux = _getFieldFromCatalog(sourceCat, fluxField)
         mag = (flux * u.nJy).to_value(u.ABmag)
-        magMin = self.config.magMin
-        magMax = self.config.magMax
         minMagDiff = self.config.isolatedMagDiff
         unblendedSeparation = self.config.unblendedSeparation
         minBlendedSeparation = self.config.minBlendedSeparation
 
+        # Use user defined inputs or ts_wep defaults
+        # depending on useCustomMagLimit.
+        if self.config.useCustomMagLimit:
+            magMin = self.config.magMin
+            magMax = self.config.magMax
+        else:
+            magPolicyFile = os.path.join(getConfigDir(), "task", "magLimitStar.yaml")
+            magPolicyDefaults = ParamReader(magPolicyFile).getContent()
+            defaultFilterKey = f"filter{filterName.upper()}"
+            magMax = magPolicyDefaults[defaultFilterKey]["high"]
+            magMin = magPolicyDefaults[defaultFilterKey]["low"]
+
         magSelected = np.ones(len(sourceCat), dtype=bool)
-        if self.config.doMagLimit:
-            magSelected &= mag < (magMax + minMagDiff)
+        magSelected &= mag < (magMax + minMagDiff)
         mag = mag[magSelected]
 
         xCoord = _getFieldFromCatalog(sourceCat[magSelected], self.config.xCoordField)
@@ -261,9 +282,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
             # If this source's magnitude is outside our bounds then discard
             srcMag = magSortedDf["mag"].iloc[srcOn]
-            if self.config.doMagLimit:
-                if (srcMag > magMax) | (srcMag < magMin):
-                    continue
+            if (srcMag > magMax) | (srcMag < magMin):
+                continue
 
             # If there is no overlapping source keep
             # the source and move on to next

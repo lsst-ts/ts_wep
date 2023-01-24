@@ -100,7 +100,6 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         self.config.referenceSelector.signalToNoise.fluxField = (
             f"{self.filterName}_flux"
         )
-        self.config.donutSelector.fluxField = f"{self.filterName}_flux"
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
@@ -163,7 +162,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
 
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(refCat, detector)
+            donutSelection = self.donutSelector.run(refCat, detector, self.filterName)
             donutSelected = donutSelection.selected
         else:
             donutSelected = np.ones(len(refCat), dtype=bool)
