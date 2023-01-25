@@ -5,6 +5,7 @@ from .CombineZernikesSigmaClipTask import *
 from .CutOutDonutsBase import *
 from .CutOutDonutsCwfsTask import *
 from .CutOutDonutsScienceSensorTask import *
+from .DonutQuickMeasurementTask import *
 from .DonutSourceSelectorTask import *
 from .DonutStamp import *
 from .DonutStamps import *

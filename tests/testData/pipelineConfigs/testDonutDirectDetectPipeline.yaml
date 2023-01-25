@@ -32,8 +32,6 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.GenerateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      donutTemplateSize: 160
-      removeBlends: True
       instObscuration: 0.61
       instFocalLength: 10.312
       instApertureDiameter: 8.36
