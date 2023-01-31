@@ -90,6 +90,8 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutCatalogWcsTask**: Gen 3 middleware task to take the WCS from each detector in a postISRCCD exposure and create a catalog of donut sources for that exposure.
 * **DonutSourceSelectorTaskConfig**: Configuration setup for DonutSourceSelectorTask.
 * **DonutSourceSelectorTask**: Filter a reference catalog according to parameters specified in DonutSourceSelectorTaskConfig to create a catalog of donut sources acceptable for EstimateZernikes...Task.
+* **DonutQuickMeasurementTaskConfig** Configuration setup for DonutQuickMeasurementTask.
+* **DonutQuickMeasurementTask**: Run quick donut detection and measurement on exposures.
 * **DonutStamp**: Storage class for a single donut postage stamp and associated metadata.
 * **DonutStamps**: Gen 3 Butler readable storage class for a list of DonutStamp objects with helper functions to get metadata and to save DonutStamps object as FITS file.
 * **EstimateZernikesBaseTaskConnections**: Base connections class for EstimateZernikes tasks.
