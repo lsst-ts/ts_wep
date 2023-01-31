@@ -88,6 +88,7 @@ class GenerateDonutDirectDetectTaskConfig(
     Specifies filter and camera details as well as subtasks
     that run to do the source selection.
     """
+
     measurementTask = pexConfig.ConfigurableField(
         target=DonutQuickMeasurementTask,
         doc="How to run source detection and measurement.",

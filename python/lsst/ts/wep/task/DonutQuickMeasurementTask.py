@@ -45,6 +45,14 @@ class DonutQuickMeasurementTaskConfig(QuickFrameMeasurementTaskConfig):
         dtype=int,
         default=5,
     )
+    doPreConvolution = pexConfig.Field(
+        doc=str(
+            "Perform a preconvolution of the image with a donut model? "
+            + "(The default is True.)"
+        ),
+        dtype=bool,
+        default=True,
+    )
 
 
 class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
@@ -52,7 +60,7 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
     ConfigClass = DonutQuickMeasurementTaskConfig
     _DefaultName = "donutQuickMeasurementTask"
 
-    def run(self, exp, template, donutDiameter=None, cutoutPadding=None):
+    def run(self, exp, template=None, donutDiameter=None, cutoutPadding=None):
         """
         Run method for the task. This task runs a quick detection and
         measurement scheme to detect donuts in images based upon
@@ -62,8 +70,10 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
         ----------
         exp : `lsst.afw.image.Exposure`
             Post-ISR image with donut sources.
-        template: `numpy.ndarray`
-            Donut template binary image.
+        template: `numpy.ndarray` or None, optional
+            Donut template binary image. A template is
+            required if `doPreConvolution` is True
+            in configuration. (The Default is None.)
         donutDiameter : `int` or `None`, optional
             Expected size of donut in pixels. If None
             then it will take this from the input
@@ -82,6 +92,12 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
                 - detectedCatalog : `dict`
                     Dictionary of detected sources with location
                     and flux measurements.
+
+        Raises
+        ------
+        ValueError
+            Raised if template is None when doPreConvolution
+            configuration parameter is set to True.
         """
         if donutDiameter is None:
             donutDiameter = self.config.donutDiameter
@@ -96,10 +112,17 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
         # image to its original state when the task is done.
         exp.image -= median
         expImageCopy = copy(exp.image.array)
-        exp.image.array = np.array(
-            correlate(exp.image.array, template, mode="same"),
-            dtype=exp.image.array.dtype,
-        )
+        if self.config.doPreConvolution:
+            if template is None:
+                errMsg = str(
+                    "Template required if doPreConvolution "
+                    + "configuration parameter is set to True."
+                )
+                raise ValueError(errMsg)
+            exp.image.array = np.array(
+                correlate(exp.image.array, template, mode="same"),
+                dtype=exp.image.array.dtype,
+            )
         self.installPsf.run(exp)
         sources = self.detectObjectsInExp(
             exp,
@@ -137,9 +160,7 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
         # Add in padding as cutting off side of donut is very bad.
         # If donut edge on one side is cut of we will not
         # get accurate centroids.
-        boxSize = (
-            donutDiameter + cutoutPadding
-        )
+        boxSize = donutDiameter + cutoutPadding
         for objNum in range(len(objData)):
             obj = objData[objNum]
             objCentroid = (obj["xCentroid"], obj["yCentroid"])

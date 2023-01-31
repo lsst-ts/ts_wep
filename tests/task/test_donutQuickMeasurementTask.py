@@ -26,7 +26,7 @@ import pandas as pd
 
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.Utility import getModulePath
-from lsst.ip.isr.isrTask import IsrTaskConfig, IsrTask
+from lsst.ip.isr.isrTask import IsrTask
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.Utility import DonutTemplateType, DefocalType
 from lsst.ts.wep.task.DonutQuickMeasurementTask import (
@@ -48,34 +48,33 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
-    def _getData(self):
-
         # Get image from butler
         testDataId = {
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106001,
         }
-        testExposure = self.butler.get(
+        self.testExposure = self.butler.get(
             "raw", dataId=testDataId, collections="LSSTCam/raw/all"
         )
-        isrTaskConfig = IsrTaskConfig()
-        isrTaskConfig.doBias = False
-        isrTaskConfig.doVariance = False
-        isrTaskConfig.doLinearize = False
-        isrTaskConfig.doCrosstalk = False
-        isrTaskConfig.doDefect = False
-        isrTaskConfig.doNanMasking = False
-        isrTaskConfig.doInterpolate = False
-        isrTaskConfig.doBrighterFatter = False
-        isrTaskConfig.doDark = False
-        isrTaskConfig.doFlat = False
-        isrTaskConfig.doFringe = False
-        isrTaskConfig.doApplyGains = True
-        isrTaskConfig.doOverscan = True
-        isrTaskConfig.overscan.fitType = "MEDIAN"
-        isrTask = IsrTask(config=isrTaskConfig)
-        postIsrExp = isrTask.run(testExposure)
+
+    def _getData(self, runIsr=True):
+
+        isrTask = IsrTask()
+        isrTask.config.doBias = False
+        isrTask.config.doVariance = False
+        isrTask.config.doLinearize = False
+        isrTask.config.doCrosstalk = False
+        isrTask.config.doDefect = False
+        isrTask.config.doNanMasking = False
+        isrTask.config.doInterpolate = False
+        isrTask.config.doBrighterFatter = False
+        isrTask.config.doDark = False
+        isrTask.config.doFlat = False
+        isrTask.config.doApplyGains = True
+        isrTask.config.doOverscan = True
+        isrTask.config.overscan.fitType = "MEDIAN"
+        postIsrExp = isrTask.run(self.testExposure)
 
         # Create template
         templateMaker = DonutTemplateFactory.createDonutTemplate(
@@ -102,23 +101,60 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         # Check default configuration
         self.origTask = DonutQuickMeasurementTask(config=self.config, name="Orig Task")
         self.assertEqual(self.origTask.config.initialCutoutPadding, 5)
+        self.assertTrue(self.origTask.config.doPreConvolution)
         # Test inherited config from QuickFrameMeasurementTask
         self.assertEqual(self.origTask.config.nSigmaDetection, 20)
 
         # Check configuration changes are passed through
         self.config.initialCutoutPadding = 10
+        self.config.doPreConvolution = False
         self.config.nSigmaDetection = 5
         self.modifiedTask = DonutQuickMeasurementTask(
             config=self.config, name="Mod Task"
         )
         self.assertEqual(self.modifiedTask.config.initialCutoutPadding, 10)
+        self.assertFalse(self.modifiedTask.config.doPreConvolution)
         self.assertEqual(self.modifiedTask.config.nSigmaDetection, 5)
 
-    def testTaskRun(self):
+    def testTaskTemplateError(self):
+
+        with self.assertRaises(ValueError) as context:
+            self.task.run(self.testExposure)
+        self.assertEqual(
+            str(
+                "Template required if doPreConvolution "
+                + "configuration parameter is set to True."
+            ),
+            str(context.exception),
+        )
+
+    def testTaskRunWithPreConvolve(self):
 
         postIsrExp, template = self._getData()
 
         output = self.task.run(postIsrExp, template)
+
+        outputDf = pd.DataFrame.from_dict(output.detectedCatalog, orient="index")
+
+        self.assertEqual(len(outputDf), 3)
+        # Check centroids within 10 pixels of expected
+        np.testing.assert_allclose(
+            np.sort(outputDf["centroid_x"]), [617.0, 2814.0, 3815.0], atol=10
+        )
+        np.testing.assert_allclose(
+            np.sort(outputDf["centroid_y"]), [398.0, 2198.0, 3196.0], atol=10
+        )
+        # All detected donuts should be same magnitude.
+        # Check aperture fluxes are all within 10% of one another.
+        relFluxDiff = outputDf["apFlux70"] / np.max(outputDf["apFlux70"])
+        np.testing.assert_allclose(relFluxDiff, 1.0, atol=0.1)
+
+    def testTaskRunWithoutPreConvolve(self):
+
+        postIsrExp, template = self._getData()
+
+        self.task.config.doPreConvolution = False
+        output = self.task.run(postIsrExp)
 
         outputDf = pd.DataFrame.from_dict(output.detectedCatalog, orient="index")
 
