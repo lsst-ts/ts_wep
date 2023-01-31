@@ -90,7 +90,11 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
 
         self.plateScale = exp.getWcs().getPixelScale().asArcseconds()
         median = np.nanmedian(exp.image.array)
-        exp.image -= median  # is put back later
+        # Subtract an estimated background by
+        # subtracting the median from the image.
+        # We will add it back later to return the
+        # image to its original state when the task is done.
+        exp.image -= median
         expImageCopy = copy(exp.image.array)
         exp.image.array = np.array(
             correlate(exp.image.array, template, mode="same"),
@@ -106,12 +110,12 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
         fpSet = sources.getFootprints()
         self.log.info("Found %d sources in exposure", len(fpSet))
 
-        objData = {}
-        nMeasured = 0
+        objData = dict()
 
         exp.image.array = copy(expImageCopy)
         self.installPsf.run(exp)
 
+        nMeasured = 0
         for srcNum, fp in enumerate(fpSet):
             try:
                 src = self._measureFp(fp, exp)
@@ -130,9 +134,12 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
 
         exp.image += median  # put background back in
 
+        # Add in padding as cutting off side of donut is very bad.
+        # If donut edge on one side is cut of we will not
+        # get accurate centroids.
         boxSize = (
             donutDiameter + cutoutPadding
-        )  # allow some slack, as cutting off side of donut is very bad
+        )
         for objNum in range(len(objData)):
             obj = objData[objNum]
             objCentroid = (obj["xCentroid"], obj["yCentroid"])

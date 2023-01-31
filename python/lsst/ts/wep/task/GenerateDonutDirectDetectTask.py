@@ -83,11 +83,11 @@ class GenerateDonutDirectDetectTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=GenerateDonutDirectDetectTaskConnections,
 ):
-    # """
-    # Configuration settings for GenerateDonutDirectDetectTask.
-    # Specifies filter and camera details as well as subtasks
-    # that run to do the source selection.
-    # """
+    """
+    Configuration settings for GenerateDonutDirectDetectTask.
+    Specifies filter and camera details as well as subtasks
+    that run to do the source selection.
+    """
     measurementTask = pexConfig.ConfigurableField(
         target=DonutQuickMeasurementTask,
         doc="How to run source detection and measurement.",
@@ -248,7 +248,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         templateMaker = DonutTemplateFactory.createDonutTemplate(
             DonutTemplateType.Model
         )
-        templateSize = self.config.donutDiameter + self.config.initialCutoutPadding
+        templateSize = int(self.config.donutDiameter + self.config.initialCutoutPadding)
         if templateSize % 2 == 1:
             templateSize += 1
         template = templateMaker.makeTemplate(
@@ -268,6 +268,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             cutoutPadding=self.config.initialCutoutPadding,
         )
         donutDf = pd.DataFrame.from_dict(objData.detectedCatalog, orient="index")
+        # Use the aperture flux with a 70 pixel aperture
         donutDf[f"{filterName}_flux"] = donutDf["apFlux70"]
 
         # Run the donut selector task.
