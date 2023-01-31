@@ -25,10 +25,15 @@ import numpy as np
 import pandas as pd
 
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.Utility import getModulePath
-from lsst.ip.isr.isrTask import IsrTask
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.Utility import DonutTemplateType, DefocalType
+from lsst.ts.wep.Utility import (
+    DonutTemplateType,
+    DefocalType,
+    getModulePath,
+    writePipetaskCmd,
+    runProgram,
+    writeCleanUpRepoCmd,
+)
 from lsst.ts.wep.task.DonutQuickMeasurementTask import (
     DonutQuickMeasurementTaskConfig,
     DonutQuickMeasurementTask,
@@ -36,6 +41,45 @@ from lsst.ts.wep.task.DonutQuickMeasurementTask import (
 
 
 class TestDonutQuickMeasurementTask(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        """
+        Produce ISR image for task.
+        """
+
+        moduleDir = getModulePath()
+        cls.testDataDir = os.path.join(moduleDir, "tests", "testData")
+        testPipelineConfigDir = os.path.join(cls.testDataDir, "pipelineConfigs")
+        cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
+        cls.runName = "run1"
+
+        # Check that run doesn't already exist due to previous improper cleanup
+        butler = dafButler.Butler(cls.repoDir)
+        registry = butler.registry
+        collectionsList = list(registry.queryCollections())
+        if cls.runName in collectionsList:
+            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+            runProgram(cleanUpCmd)
+
+        collections = "LSSTCam/calib/unbounded,LSSTCam/raw/all"
+        instrument = "lsst.obs.lsst.LsstCam"
+        cls.cameraName = "LSSTCam"
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testIsrPipeline.yaml")
+
+        pipeCmd = writePipetaskCmd(
+            cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+        )
+        cls.expNum = 4021123106001
+        cls.detNum = 94
+        pipeCmd += f" -d 'detector in ({cls.detNum}) and exposure in ({cls.expNum})'"
+        runProgram(pipeCmd)
+
+    @classmethod
+    def tearDownClass(cls):
+
+        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+        runProgram(cleanUpCmd)
+
     def setUp(self):
 
         self.config = DonutQuickMeasurementTaskConfig()
@@ -51,30 +95,15 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         # Get image from butler
         testDataId = {
             "instrument": "LSSTCam",
-            "detector": 94,
-            "exposure": 4021123106001,
+            "detector": self.detNum,
+            "exposure": self.expNum,
+            "visit": self.expNum,
         }
-        self.testExposure = self.butler.get(
-            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
+        self.postIsrExp = self.butler.get(
+            "postISRCCD", dataId=testDataId, collections="run1"
         )
 
-    def _getData(self, runIsr=True):
-
-        isrTask = IsrTask()
-        isrTask.config.doBias = False
-        isrTask.config.doVariance = False
-        isrTask.config.doLinearize = False
-        isrTask.config.doCrosstalk = False
-        isrTask.config.doDefect = False
-        isrTask.config.doNanMasking = False
-        isrTask.config.doInterpolate = False
-        isrTask.config.doBrighterFatter = False
-        isrTask.config.doDark = False
-        isrTask.config.doFlat = False
-        isrTask.config.doApplyGains = True
-        isrTask.config.doOverscan = True
-        isrTask.config.overscan.fitType = "MEDIAN"
-        postIsrExp = isrTask.run(self.testExposure)
+    def _getTemplate(self):
 
         # Create template
         templateMaker = DonutTemplateFactory.createDonutTemplate(
@@ -94,7 +123,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
             "R22_S11", DefocalType.Extra, 160, instParams=instParams
         )
 
-        return postIsrExp.outputExposure, template
+        return template
 
     def testValidateConfigs(self):
 
@@ -119,7 +148,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
     def testTaskTemplateError(self):
 
         with self.assertRaises(ValueError) as context:
-            self.task.run(self.testExposure)
+            self.task.run(self.postIsrExp)
         self.assertEqual(
             str(
                 "Template required if doPreConvolution "
@@ -130,9 +159,9 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
 
     def testTaskRunWithPreConvolve(self):
 
-        postIsrExp, template = self._getData()
+        template = self._getTemplate()
 
-        output = self.task.run(postIsrExp, template)
+        output = self.task.run(self.postIsrExp, template)
 
         outputDf = pd.DataFrame.from_dict(output.detectedCatalog, orient="index")
 
@@ -151,10 +180,8 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
 
     def testTaskRunWithoutPreConvolve(self):
 
-        postIsrExp, template = self._getData()
-
         self.task.config.doPreConvolution = False
-        output = self.task.run(postIsrExp)
+        output = self.task.run(self.postIsrExp)
 
         outputDf = pd.DataFrame.from_dict(output.detectedCatalog, orient="index")
 
