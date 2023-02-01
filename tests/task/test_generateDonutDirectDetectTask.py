@@ -27,20 +27,17 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
 
     def testValidateConfigs(self):
 
-        self.config.donutTemplateSize = 123
+        # Test config in task
         self.config.opticalModel = "another"
-        self.config.removeBlends = False
-        self.config.blendRadius = 456
-        self.config.peakThreshold = 0.56
-        self.config.binaryChoice = "centroid"
+        # Test config in measurement sub task
+        self.config.measurementTask.nSigmaDetection = 5.0
+        # Test config in source selector sub task
+        self.config.donutSelector.useCustomMagLimit = True
         self.task = GenerateDonutDirectDetectTask(config=self.config)
 
-        self.assertEqual(self.task.config.donutTemplateSize, 123)
         self.assertEqual(self.task.config.opticalModel, "another")
-        self.assertEqual(self.task.config.removeBlends, False)
-        self.assertEqual(self.task.config.blendRadius, 456)
-        self.assertEqual(self.task.config.peakThreshold, 0.56)
-        self.assertEqual(self.task.config.binaryChoice, "centroid")
+        self.assertEqual(self.task.config.measurementTask.nSigmaDetection, 5.0)
+        self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
 
     def testCreateInstDictFromConfig(self):
 
@@ -75,9 +72,16 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         # setup a test donut catalog DataFrame
         x_center = np.arange(15)
         y_center = 0.5 * np.arange(15)
+        flux = 10000.0 * np.ones(15)
         donutCat = pd.DataFrame(
-            data=list(zip(x_center, y_center, x_center, y_center)),
-            columns=["x_center", "y_center", "x_blend_center", "y_blend_center"],
+            data=list(zip(x_center, y_center, x_center, y_center, flux)),
+            columns=[
+                "centroid_x",
+                "centroid_y",
+                "blend_centroid_x",
+                "blend_centroid_y",
+                "source_flux",
+            ],
         )
         # update the donut catalog
         donutCatUpd = self.task.updateDonutCatalog(donutCat, testExposure)
@@ -89,16 +93,11 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
             "detector",
             "coord_ra",
             "coord_dec",
+            "source_flux",
             "blend_centroid_x",
             "blend_centroid_y",
         ]
-        self.assertEqual(np.sum(np.in1d(newColumns, list(donutCatUpd.columns))), 7)
-
-        # check that columns got transposed
-        np.testing.assert_array_equal(donutCatUpd["centroid_x"].values, y_center)
-        np.testing.assert_array_equal(donutCatUpd["centroid_y"].values, x_center)
-        np.testing.assert_array_equal(donutCatUpd["blend_centroid_x"], y_center)
-        np.testing.assert_array_equal(donutCatUpd["blend_centroid_y"], x_center)
+        self.assertEqual(np.sum(np.in1d(newColumns, list(donutCatUpd.columns))), 8)
 
     def testPipeline(self):
         """
@@ -143,12 +142,13 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         )
 
         # Check 2 unblended sources in each detector
-        self.assertEqual(len(donutCatDf_S11), 2)
-        self.assertEqual(len(donutCatDf_S10), 2)
+        # and 1 source much brighter than blend so is "isolated"
+        self.assertEqual(len(donutCatDf_S11), 3)
+        self.assertEqual(len(donutCatDf_S10), 3)
 
         # Check outputs are correct
         outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
-        self.assertEqual(len(outputDf), 4)
+        self.assertEqual(len(outputDf), 6)
         self.assertCountEqual(
             outputDf.columns,
             [
@@ -156,23 +156,21 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
                 "coord_dec",
                 "centroid_x",
                 "centroid_y",
-                "blended",
-                "blended_with",
-                "num_blended_neighbors",
                 "detector",
+                "source_flux",
                 "blend_centroid_x",
                 "blend_centroid_y",
             ],
         )
-        tolerance = 10  # pixels
-        outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
+
+        tolerance = 15  # pixels
 
         result_y = np.sort(outputDf["centroid_y"].values)
-        truth_y = np.sort(np.array([3196, 2198, 2196, 3197]))
+        truth_y = np.sort(np.array([3196, 2198, 398, 2196, 3197, 398]))
         diff_y = np.sum(result_y - truth_y)
 
         result_x = np.sort(outputDf["centroid_x"].values)
-        truth_x = np.sort(np.array([3815, 2814, 2811, 3812]))
+        truth_x = np.sort(np.array([3815, 2814, 617, 2811, 3812, 614]))
         diff_x = np.sum(result_x - truth_x)
 
         self.assertLess(diff_x, tolerance)

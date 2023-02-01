@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.2.0:
+
+-------------
+4.2.0
+-------------
+
+* Add DonutQuickMeasurementTask.py to incorporate quick donut detection and measurement using LSST Science Pipelines.
+* Integrate DonutQuickMeasurementTask into GenerateDonutDirectDetectTask to speed up direct detection catalog generation.
+
 .. _lsst.ts.wep-4.1.0:
 
 -------------

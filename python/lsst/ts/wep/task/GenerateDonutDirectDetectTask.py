@@ -25,17 +25,13 @@ __all__ = [
     "GenerateDonutDirectDetectTask",
 ]
 
-import os
 import numpy as np
-from copy import copy
-import lsst.afw.cameraGeom
+import pandas as pd
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-import lsst.afw.image as afwImage
 import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.utils.timer import timeMethod
 from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
-from lsst.ts.wep.DonutDetector import DonutDetector
 from lsst.ts.wep.Utility import (
     DefocalType,
     DonutTemplateType,
@@ -43,6 +39,8 @@ from lsst.ts.wep.Utility import (
     createInstDictFromConfig,
 )
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.task.DonutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.DonutQuickMeasurementTask import DonutQuickMeasurementTask
 
 
 class GenerateDonutDirectDetectTaskConnections(
@@ -91,35 +89,19 @@ class GenerateDonutDirectDetectTaskConfig(
     that run to do the source selection.
     """
 
-    # Config setting for pipeline task with defaults
-    donutTemplateSize = pexConfig.Field(
-        doc="Size of Template in pixels", dtype=int, default=160
+    measurementTask = pexConfig.ConfigurableField(
+        target=DonutQuickMeasurementTask,
+        doc="How to run source detection and measurement.",
+    )
+    donutDiameter = pexConfig.Field(
+        dtype=int,
+        doc="The expected diameter of donuts in a donut image, in pixels.",
+        default=400,
     )
     opticalModel = pexConfig.Field(
         doc="Specify the optical model (offAxis, paraxial, onAxis).",
         dtype=str,
         default="offAxis",
-    )
-    removeBlends = pexConfig.Field(
-        doc="Decide whether to remove blended objects from the donut catalog.",
-        dtype=bool,
-        default=True,
-    )
-    blendRadius = pexConfig.Field(
-        doc="Specify the pixel radius within which an object is considered as blended.",
-        dtype=int,
-        default=200,
-    )
-    peakThreshold = pexConfig.Field(
-        doc="Specify the fraction (between 0 and 1) of the highest pixel value in the convolved image.",
-        dtype=float,
-        default=0.99,
-    )
-    binaryChoice = pexConfig.Field(
-        doc="Choose how donut detector should arrive at the binary image ('centroid' for centroidFinder,\
-        'deblend' for adaptative image thresholding, 'exposure' to use the exposure image directly).",
-        dtype=str,
-        default="deblend",
     )
     instObscuration = pexConfig.Field(
         doc="Obscuration (inner_radius / outer_radius of M1M3)",
@@ -143,6 +125,21 @@ class GenerateDonutDirectDetectTaskConfig(
     instPixelSize = pexConfig.Field(
         doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
+    initialCutoutPadding = pexConfig.Field(
+        doc=str(
+            "Additional padding in pixels on each side of initial "
+            + "`donutDiameter` guess for template postage stamp size "
+            + "and for bounding boxes used for estimating centroids."
+        ),
+        dtype=int,
+        default=5,
+    )
+    donutSelector = pexConfig.ConfigurableField(
+        target=DonutSourceSelectorTask, doc="How to select donut targets."
+    )
+    doDonutSelection = pexConfig.Field(
+        doc="Whether or not to run donut selector.", dtype=bool, default=True
+    )
 
 
 class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
@@ -157,25 +154,15 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # TODO: Temporary until DM-24162 is closed at which point we
-        # can remove this
-        os.environ["NUMEXPR_MAX_THREADS"] = "1"
+        # Instantiate the quickFrameMeasurementTask
+        self.makeSubtask("measurementTask")
 
-        # Set size (in pixels) of donut template image used for
-        # convolution with template
-        self.donutTemplateSize = self.config.donutTemplateSize
-        # specify optical model
-        self.opticalModel = self.config.opticalModel
-        # decide whether to remove blends from catalog
-        self.removeBlends = self.config.removeBlends
-        # specify blend radius
-        self.blendRadius = self.config.blendRadius
-        # specify peak threshold
-        self.peakThreshold = self.config.peakThreshold
-        # choose how to calculate binary image
-        self.binaryChoice = self.config.binaryChoice
         # Set up instrument configuration dict
         self.instParams = createInstDictFromConfig(self.config)
+
+        # Set up the donut selector task if we need it
+        if self.config.doDonutSelection:
+            self.makeSubtask("donutSelector")
 
     def updateDonutCatalog(self, donutCat, exposure):
         """
@@ -205,18 +192,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # source_flux; detector; mags
 
         # add a detector column
-        donutCat["detector"] = exposure.getDetector().getName()
-
-        # rename columns: transpose y --> x
-        donutCat = donutCat.rename(
-            columns={"y_center": "centroid_x", "x_center": "centroid_y"}
-        )
-        donutCat = donutCat.rename(
-            columns={
-                "y_blend_center": "blend_centroid_x",
-                "x_blend_center": "blend_centroid_y",
-            }
-        )
+        donutCat["detector"] = exposure.detector.getName()
 
         # pass the boresight ra, dec
         wcs = exposure.getWcs()
@@ -231,19 +207,29 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         donutCat["coord_ra"] = ra
         donutCat["coord_dec"] = dec
-        return donutCat
+
+        donutCatUpd = donutCat[
+            [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "detector",
+                "source_flux",
+                "blend_centroid_x",
+                "blend_centroid_y",
+            ]
+        ]
+
+        return donutCatUpd
 
     @timeMethod
-    def run(
-        self,
-        exposure: afwImage.Exposure,
-        camera: lsst.afw.cameraGeom.Camera,
-    ) -> pipeBase.Struct:
+    def run(self, exposure, camera):
 
-        detectorName = exposure.getDetector().getName()
-        detectorType = exposure.getDetector().getType()
+        detectorName = exposure.detector.getName()
+        detectorType = exposure.detector.getType()
+        filterName = exposure.filter.bandLabel
         defocalType = DefocalType.Extra  # we use one of the DefocalTypes,
-        # TODO: perhaps could make that as another configurable
         camType = getCamTypeFromButlerName(camera.getName(), detectorType)
         pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
 
@@ -263,36 +249,46 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         templateMaker = DonutTemplateFactory.createDonutTemplate(
             DonutTemplateType.Model
         )
-
+        templateSize = int(self.config.donutDiameter + self.config.initialCutoutPadding)
+        if templateSize % 2 == 1:
+            templateSize += 1
         template = templateMaker.makeTemplate(
             detectorName,
             defocalType,
-            self.donutTemplateSize,
+            templateSize,
             camType=camType,
-            opticalModel=self.opticalModel,
+            opticalModel=self.config.opticalModel,
             pixelScale=pixelScale,
             instParams=self.instParams,
         )
 
-        # given this template, detect donuts in one of the defocal images
-        detector = DonutDetector()
-        expArray = copy(exposure.getImage().getArray())
-        donutDf = detector.detectDonuts(
-            expArray,
+        objData = self.measurementTask.run(
+            exposure,
             template,
-            blendRadius=self.blendRadius,
-            peakThreshold=self.peakThreshold,
-            binaryChoice=self.binaryChoice,
+            donutDiameter=self.config.donutDiameter,
+            cutoutPadding=self.config.initialCutoutPadding,
+        )
+        donutDf = pd.DataFrame.from_dict(objData.detectedCatalog, orient="index")
+        # Use the aperture flux with a 70 pixel aperture
+        donutDf[f"{filterName}_flux"] = donutDf["apFlux70"]
+
+        # Run the donut selector task.
+        if self.config.doDonutSelection:
+            self.log.info("Running Donut Selector")
+            donutSelection = self.donutSelector.run(
+                donutDf, exposure.detector, filterName
+            )
+            donutCatSelected = donutDf[donutSelection.selected].reset_index(drop=True)
+            donutCatSelected["blend_centroid_x"] = donutSelection.blendCentersX
+            donutCatSelected["blend_centroid_y"] = donutSelection.blendCentersY
+        else:
+            donutCatSelected = donutDf
+
+        donutCatSelected.rename(
+            columns={f"{filterName}_flux": "source_flux"}, inplace=True
         )
 
-        # make a donut catalog :
-        # 1) remove the blends in donut catalog
-        if self.config.removeBlends:
-            donutDfCopy = donutDf[~donutDf["blended"]].copy()
-        else:
-            donutDfCopy = donutDf
-
-        # 2) update column names and content
-        donutCatUpd = self.updateDonutCatalog(donutDfCopy, exposure)
+        # update column names and content
+        donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
 
         return pipeBase.Struct(donutCatalog=donutCatUpd)
