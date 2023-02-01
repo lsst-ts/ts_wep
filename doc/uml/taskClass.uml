@@ -6,9 +6,12 @@ CombineZernikesBaseTask *-- CombineZernikesBaseConfig
 CombineZernikesBaseConfig <|-- CombineZernikesSigmaClipTaskConfig
 CombineZernikesSigmaClipTask *-- CombineZernikesSigmaClipTaskConfig
 DonutSourceSelectorTask *-- DonutSourceSelectorTaskConfig
+DonutQuickMeasurementTask *-- DonutQuickMeasurementTaskConfig
 GenerateDonutCatalogOnlineTaskConfig *-- DonutSourceSelectorTask
 GenerateDonutCatalogOnlineTask *-- GenerateDonutCatalogOnlineTaskConfig
 GenerateDonutDirectDetectTaskConfig *-- GenerateDonutDirectDetectTaskConnections
+GenerateDonutDirectDetectTaskConfig *-- DonutSourceSelectorTask
+GenerateDonutDirectDetectTaskConfig *-- DonutQuickMeasurementTask
 GenerateDonutDirectDetectTask *-- GenerateDonutDirectDetectTaskConfig
 GenerateDonutDirectDetectTask ..> DonutTemplateFactory
 GenerateDonutCatalogWcsTaskConfig *-- DonutSourceSelectorTask
