@@ -148,9 +148,10 @@ class TestDonutStamp(unittest.TestCase):
             defocalDist = donutStamp.defocal_distance
             # Test default metadata distance of 1.5 mm
             self.assertEqual(defocalDist, 1.5)
-            # Test blend centroids arrays are empty
+            # Test blend centroids arrays are nans
             np.testing.assert_array_equal(
-                donutStamp.blend_centroid_positions, np.array([[], []])
+                donutStamp.blend_centroid_positions,
+                np.array([["nan"], ["nan"]], dtype=float).T,
             )
 
     def testGetCamera(self):

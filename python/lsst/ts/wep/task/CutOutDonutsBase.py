@@ -466,6 +466,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             finalBlendYList.append(blendStrY)
 
             # Prepare blend centroid position information
+            blendExists = False
             if len(donutRow["blend_centroid_x"]) > 0:
                 blendCentroidPositions = np.array(
                     [
@@ -473,8 +474,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                         donutRow["blend_centroid_y"] + yShift,
                     ]
                 ).T
+                blendExists = True
             else:
-                blendCentroidPositions = np.array([[], []])
+                blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
 
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
@@ -499,7 +501,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             # Create shifted mask from non-blended mask
-            blendExists = len(donutRow["blend_centroid_x"]) > 0
             if (self.multiplyMask is True) and blendExists:
                 donutStamp.comp_im.makeMask(
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal

@@ -122,7 +122,7 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         eulerAngle = 0
         blendOffsetsNone = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
         np.testing.assert_array_almost_equal(
-            blendOffsetsNone, donutStampExtra.blend_centroid_positions
+            blendOffsetsNone, np.array([["nan"], ["nan"]], dtype=float)
         )
         # Test with blend centroid present
         trueOffset = np.array([[10.0], [10.0]])
