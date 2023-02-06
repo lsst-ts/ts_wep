@@ -56,14 +56,18 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         decs = np.arange(nStamps) + 5
         centX = np.arange(nStamps) + 20
         centY = np.arange(nStamps) + 25
-        blendCentX = np.array([f"{val}" for val in np.arange(30, 30 + nStamps)])
-        blendCentY = np.array([f"{val}" for val in np.arange(35, 35 + nStamps)])
+        blendCentX = [f"{val}" for val in np.arange(30, 30 + nStamps)]
+        blendCentY = [f"{val}" for val in np.arange(35, 35 + nStamps)]
         detectorNames = ["R22_S11"] * nStamps
         camNames = ["LSSTCam"] * nStamps
         dfcTypes = [DefocalType.Extra.value] * nStamps
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
         dfcDists = np.ones(nStamps) * 1.5
+
+        # Test mixture of donuts with blends and those without
+        blendCentX[-1] = "nan"
+        blendCentY[-1] = "nan"
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -133,9 +137,11 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
     def testGetBlendCentroids(self):
 
         xPos, yPos = self.donutStamps.getBlendCentroids()
-        for idx in range(self.nStamps):
+        for idx in range(self.nStamps - 1):
             self.assertEqual(xPos[idx], f"{idx + 30:.2f}")
             self.assertEqual(yPos[idx], f"{idx + 35:.2f}")
+        self.assertEqual(xPos[-1], "nan")
+        self.assertEqual(yPos[-1], "nan")
 
     def testGetDetectorNames(self):
 

@@ -69,8 +69,8 @@ class CompensableImage(object):
 
         # Blended coordinates in pixels relative
         # to central donut
-        self.blendOffsetX = list()
-        self.blendOffsetY = list()
+        self.blendOffsetX = None
+        self.blendOffsetY = None
 
         # Initial image before doing the compensation
         self.image0 = None
@@ -238,7 +238,7 @@ class CompensableImage(object):
         self._checkImgShape()
 
         if blendOffsets is None:
-            blendOffsets = [[], []]
+            blendOffsets = np.array([["nan"], ["nan"]], dtype=float)
 
         self.fieldX, self.fieldY = fieldXY
         self.defocalType = defocalType
@@ -1586,7 +1586,7 @@ class CompensableImage(object):
         )
 
         # Add blended donuts if they exist
-        if len(self.blendOffsetX) > 0:
+        if np.sum(np.isnan(self.blendOffsetX)) == 0:
             newMaskPupil = self.createBlendedCoadd(self.mask_pupil, blendPadding)
             newMaskComp = self.createBlendedCoadd(self.mask_comp, blendPadding)
             self.mask_pupil = newMaskPupil

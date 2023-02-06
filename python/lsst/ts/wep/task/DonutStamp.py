@@ -131,7 +131,7 @@ class DonutStamp(AbstractStamp):
                 dtype=float,
             ).T
         else:
-            blend_centroid_positions = np.array([[], []])
+            blend_centroid_positions = np.array([["nan"], ["nan"]], dtype=float).T
 
         return cls(
             stamp_im=stamp_im,

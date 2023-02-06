@@ -224,9 +224,6 @@ class WfEstimator(object):
         elif defocalType == DefocalType.Extra:
             img = self.imgExtra
 
-        if blendOffsets is None:
-            blendOffsets = [[], []]
-
         img.setImg(
             fieldXY,
             defocalType,
