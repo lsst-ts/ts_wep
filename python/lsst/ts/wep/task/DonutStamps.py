@@ -107,8 +107,8 @@ class DonutStamps(StampsBase):
             blendStrX = ""
             blendStrY = ""
             if np.shape(centroid_array)[1] == 0:
-                finalBlendXList.append(None)
-                finalBlendYList.append(None)
+                finalBlendXList.append("nan")
+                finalBlendYList.append("nan")
                 continue
             for blend_cx, blend_cy in centroid_array:
                 blendStrX += f"{blend_cx:.2f},"

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.2.1:
+
+-------------
+4.2.1
+-------------
+
+* Use nan string instead of None so we can convert to float and use writeFits method in DonutStamps successfully and save in butler.
+
 .. _lsst.ts.wep-4.2.0:
 
 -------------

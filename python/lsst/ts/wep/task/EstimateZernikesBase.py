@@ -508,6 +508,7 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             finalBlendYList.append(blendStrY)
 
             # Prepare blend centroid position information
+            blendExists = False
             if len(donutRow["blend_centroid_x"]) > 0:
                 blendCentroidPositions = np.array(
                     [
@@ -515,8 +516,9 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
                         donutRow["blend_centroid_y"] + yShift,
                     ]
                 ).T
+                blendExists = True
             else:
-                blendCentroidPositions = np.array([[], []])
+                blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
 
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
@@ -541,7 +543,6 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             # Create shifted mask from non-blended mask
-            blendExists = len(donutRow["blend_centroid_x"]) > 0
             if (self.multiplyMask is True) and blendExists:
                 donutStamp.comp_im.makeMask(
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal
@@ -608,17 +609,17 @@ class EstimateZernikesBaseTask(pipeBase.PipelineTask):
             DonutStamp postage stamp image.
         """
 
-        if np.shape(donutStamp.blend_centroid_positions)[1] > 0:
-            blendOffsets = (
-                donutStamp.blend_centroid_positions - donutStamp.centroid_position
-            )
+        blendCentroids = donutStamp.blend_centroid_positions
+        # If there are blends the array will not have nans
+        if np.sum(np.isnan(blendCentroids)) == 0:
+            blendOffsets = blendCentroids - donutStamp.centroid_position
             blendOffsets = np.dot(blendOffsets, rotMatrix(eulerAngle))
             # Exchange X,Y since we transpose the image below
             blendOffsets = blendOffsets.T[::-1]
         else:
-            # If empty array then just pass this as the offset since
-            # CompensableImage understands empty lists mean no blend
-            blendOffsets = donutStamp.blend_centroid_positions
+            # If no blend then pass nan array.
+            # CompensableImage understands nans means no blend.
+            blendOffsets = blendCentroids.T
 
         return blendOffsets
 

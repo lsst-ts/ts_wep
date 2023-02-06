@@ -156,17 +156,17 @@ class CalcZernikesTask(pipeBase.PipelineTask):
             DonutStamp postage stamp image.
         """
 
-        if np.shape(donutStamp.blend_centroid_positions)[1] > 0:
-            blendOffsets = (
-                donutStamp.blend_centroid_positions - donutStamp.centroid_position
-            )
+        blendCentroids = donutStamp.blend_centroid_positions
+        # If there are blends the array will not have nans
+        if np.sum(np.isnan(blendCentroids)) == 0:
+            blendOffsets = blendCentroids - donutStamp.centroid_position
             blendOffsets = np.dot(blendOffsets, rotMatrix(eulerAngle))
             # Exchange X,Y since we transpose the image below
             blendOffsets = blendOffsets.T[::-1]
         else:
-            # If empty array then just pass this as the offset since
-            # CompensableImage understands empty lists mean no blend
-            blendOffsets = donutStamp.blend_centroid_positions
+            # If no blend then pass nan array.
+            # CompensableImage understands nans means no blend.
+            blendOffsets = blendCentroids.T
 
         return blendOffsets
 

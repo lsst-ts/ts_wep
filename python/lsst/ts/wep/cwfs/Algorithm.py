@@ -802,7 +802,9 @@ class Algorithm(object):
                     sys.exit()
 
                 # Check for blends
-                if (len(I1.blendOffsetX) > 0) or (len(I2.blendOffsetX) > 0):
+                if (np.sum(np.isnan(I1.blendOffsetX)) == 0) and (
+                    np.sum(np.isnan(I2.blendOffsetX)) == 0
+                ):
                     self.blend_exists = True
 
                 # Create the pupil masks
