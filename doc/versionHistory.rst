@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.2.2:
+
+-------------
+4.2.2
+-------------
+
+* Add flux sort into GenerateDonutDirectDetectTask to make it consistent with other catalog generation tasks.
+
 .. _lsst.ts.wep-4.2.1:
 
 -------------
