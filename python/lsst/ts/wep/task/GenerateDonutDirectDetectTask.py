@@ -221,6 +221,10 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             ]
         ]
 
+        donutCatUpd = donutCatUpd.sort_values(
+            "source_flux", ascending=False
+        ).reset_index(drop=True)
+
         return donutCatUpd
 
     @timeMethod

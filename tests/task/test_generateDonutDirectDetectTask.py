@@ -146,6 +146,14 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.assertEqual(len(donutCatDf_S11), 3)
         self.assertEqual(len(donutCatDf_S10), 3)
 
+        # Test that brighter sources are at the top of the list
+        np.testing.assert_array_equal(
+            np.arange(3), np.argsort(donutCatDf_S10["source_flux"].values)[::-1]
+        )
+        np.testing.assert_array_equal(
+            np.arange(3), np.argsort(donutCatDf_S11["source_flux"].values)[::-1]
+        )
+
         # Check outputs are correct
         outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
         self.assertEqual(len(outputDf), 6)
