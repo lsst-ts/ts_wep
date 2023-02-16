@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-4.2.3:
+
+-------------
+4.2.3
+-------------
+
+* Add transposeImages as optional config to CalcZernikesTask.
+
 .. _lsst.ts.wep-4.2.2:
 
 -------------
