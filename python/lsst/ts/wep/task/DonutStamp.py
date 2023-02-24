@@ -61,6 +61,8 @@ class DonutStamp(AbstractStamp):
     cam_name : `str`
         Camera name for the stamp image. "LSSTCam" or "LSSTComCam"
         are available camera names currently.
+    bandpass : `str`
+        The bandpass for the stamp image.
     archive_element : `afwTable.io.Persistable`, optional
         Archive element (e.g. Transform or WCS) associated with this stamp.
         (the default is None.)
@@ -83,6 +85,7 @@ class DonutStamp(AbstractStamp):
     defocal_distance: float
     detector_name: str
     cam_name: str
+    bandpass: str
     archive_element: Optional[afwTable.io.Persistable] = None
     comp_im: CompensableImage = field(default_factory=CompensableImage)
     mask_comp: afwImage.Mask = field(init=False)
@@ -159,6 +162,12 @@ class DonutStamp(AbstractStamp):
             defocal_distance=metadata.getArray("DFC_DIST")[index]
             if metadata.get("DFC_DIST") is not None
             else 1.5,
+            # "BANDPASS" stands for the exposure bandpass
+            # If this is an old version of the stamps without bandpass
+            # information then an empty string ("") will be set as default.
+            bandpass=metadata.getArray("BANDPASS")[index]
+            if metadata.get("BANDPASS") is not None
+            else "",
         )
 
     def getCamera(self):

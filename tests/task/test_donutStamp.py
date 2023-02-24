@@ -68,20 +68,21 @@ class TestDonutStamp(unittest.TestCase):
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
         dfcDists = np.ones(nStamps) * 1.25
+        bandpass = ["r"] * nStamps
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
         metadata["DEC_DEG"] = decs
         metadata["CENT_X"] = centX
         metadata["CENT_Y"] = centY
-        if testDefaults is False:
-            metadata["BLEND_CX"] = blendCentX
-            metadata["BLEND_CY"] = blendCentY
         metadata["DET_NAME"] = detectorNames
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
         if testDefaults is False:
             metadata["DFC_DIST"] = dfcDists
+            metadata["BLEND_CX"] = blendCentX
+            metadata["BLEND_CY"] = blendCentY
+            metadata["BANDPASS"] = bandpass
 
         return stampList, metadata
 
@@ -121,6 +122,8 @@ class TestDonutStamp(unittest.TestCase):
                 self.assertEqual(defocalType, DefocalType.Extra.value)
             defocalDist = donutStamp.defocal_distance
             self.assertEqual(defocalDist, 1.25)
+            bandpass = donutStamp.bandpass
+            self.assertEqual(bandpass, "r")
 
             self.assertEqual(type(donutStamp.comp_im), CompensableImage)
             self.assertEqual(type(donutStamp.mask_comp), afwImage.MaskX)
@@ -150,6 +153,9 @@ class TestDonutStamp(unittest.TestCase):
                 donutStamp.blend_centroid_positions,
                 np.array([["nan"], ["nan"]], dtype=float).T,
             )
+            # Test default bandpass value is empty string
+            bandpass = donutStamp.bandpass
+            self.assertEqual(bandpass, "")
 
     def testGetCamera(self):
         donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0)
@@ -184,6 +190,7 @@ class TestDonutStamp(unittest.TestCase):
             1.5e-3,
             "R22_S11",
             "LSSTCam",
+            "r",
         )
         np.testing.assert_array_almost_equal(donutStamp.calcFieldXY(), (0, 0))
 
@@ -209,6 +216,7 @@ class TestDonutStamp(unittest.TestCase):
                     0.0,
                     detName,
                     "LSSTCam",
+                    "r",
                 )
                 self.assertEqual(donutStamp.comp_im.fieldX, np.degrees(trueFieldAngleX))
                 self.assertEqual(donutStamp.comp_im.fieldY, np.degrees(trueFieldAngleY))
@@ -223,6 +231,7 @@ class TestDonutStamp(unittest.TestCase):
             1.5e-3,
             "R22_S11",
             "LSSTCam",
+            "r",
         )
 
         # Set up instrument

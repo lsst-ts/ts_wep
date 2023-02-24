@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-5.1.0:
+
+-------------
+5.1.0
+-------------
+
+* Add bandpass information into DonutStamp objects.
+
 .. _lsst.ts.wep-5.0.1:
 
 -------------
