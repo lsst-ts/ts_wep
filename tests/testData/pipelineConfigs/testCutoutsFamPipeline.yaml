@@ -37,7 +37,7 @@ tasks:
     class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings originally defined in
-      # EstimateZernikesCwfsTaskConfig.
+      # CutOutDonutsScienceSensorTaskConfig.
       # Test with default instrument configuration parameters
       donutTemplateSize: 160
       donutStampSize: 160

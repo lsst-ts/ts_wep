@@ -22,8 +22,7 @@ Important classes:
 
 Important Pipeline Tasks:
 
-* `task.EstimateZernikesScienceSensorTask` calculates the Zernike polynomials for LSSTFam or ComCam sensors when provided input exposures and source catalog.
-* `task.EstimateZernikesCwfsTask` calculates the Zernike polynomials on corner wavefront sensors when provided input exposures and source catalog.
+* `task.GenerateDonutCatalogWcsTask` creates a donut source catalog from available reference catalogs.
 * `task.CutOutDonutsScienceSensorTask` cuts out donuts stamps in image from LSSTFam or ComCam sensors when provided input exposures and source catalog.
 * `task.CutOutDonutsCwfsTask` cuts out donuts stamps in image from LSSTCam corner wavefront sensors when provided input exposures and source catalog.
 * `task.CalcZernikesTask` calculates the Zernikes polynomials from donut stamps already stored in a butler repository.

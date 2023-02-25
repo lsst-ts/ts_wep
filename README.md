@@ -95,17 +95,18 @@ To run the pipeline with the Gen3 DM Middleware you can use the test repository 
 Here we show how to run the pipeline on the LSSTCam corner wavefront sensors.
 
 1. The order of the tasks and the configuration overrides for the tasks are set in the pipeline definition `yaml` file.
-In this case that is found in `tests/testData/pipelineConfigs/testCwfsPipeline.yaml`.
-Looking at this file we see that the three tasks we will run are:
+In this case that is found in `tests/testData/pipelineConfigs/testCalcZernikesCwfsPipeline.yaml`.
+Looking at this file we see that the four tasks we will run are:
 
 - `lsst.ip.isr.isrTask.IsrTask`
-- `lsst.ts.wep.task.GenerateDonutCatalogOnlineTask.GenerateDonutCatalogOnlineTask`
-- `lsst.ts.wep.task.EstimateZernikesCwfsTask.EstimateZernikesCwfsTask`
+- `lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask`
+- `lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask`
+- `lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask`
 
 2. Run the `pipetask` from the command line:
 
 ```bash
-pipetask run -b $path_of_ts_wep/tests/testData/gen3TestRepo -i refcats/gen2,LSSTCam/raw/all,LSSTCam/calib --instrument lsst.obs.lsst.LsstCam --register-dataset-types --output-run run1 -p $path_of_ts_wep/tests/testData/pipelineConfigs/testCwfsPipeline.yaml -d "exposure IN (4021123106000)"
+pipetask run -b $path_of_ts_wep/tests/testData/gen3TestRepo -i refcats/gen2,LSSTCam/raw/all,LSSTCam/calib --instrument lsst.obs.lsst.LsstCam --register-dataset-types --output-run run1 -p $path_of_ts_wep/tests/testData/pipelineConfigs/testCalcZernikesCwfsPipeline.yaml -d "exposure IN (4021123106000)"
 ```
 
 The options used above are as follows:
