@@ -303,68 +303,6 @@ class CompensableImage(object):
         # Update the initial image for future use
         self.image0 = self.getImg().copy()
 
-    def imageCoCenter(self, inst, fov=3.5, debugLevel=0):
-        """Shift the weighting center of donut to the center of reference
-        image with the correction of projection of fieldX and fieldY.
-        Parameters
-        ----------
-        inst : Instrument
-            Instrument to use.
-        fov : float, optional
-            Field of view (FOV) of telescope. (the default is 3.5.)
-        debugLevel : int, optional
-            Show the information under the running. If the value is higher, the
-            information shows more. It can be 0, 1, 2, or 3. (the default is
-            0.)
-        """
-
-        warnings.warn(
-            "This function is deprecated.  Will be removed after January 2023.",
-            DeprecationWarning,
-        )
-
-        # Calculate the weighting center (x, y) and radius
-        x1, y1 = self._image.getCenterAndR()[0:2]
-
-        # Show the co-center information
-        if debugLevel >= 3:
-            print("imageCoCenter: (x, y) = (%8.2f,%8.2f)\n" % (x1, y1))
-
-        # Calculate the center position on image
-        # 0.5 is the half of 1 pixel
-        stampCenterx1 = inst.dimOfDonutImg / 2 + 0.5
-        stampCentery1 = inst.dimOfDonutImg / 2 + 0.5
-
-        # Shift in the radial direction
-        # The field of view (FOV) of LSST camera is 3.5 degree
-        radialShift = fov * (inst.defocalDisOffsetInM / 1e-3) * (10e-6 / inst.pixelSize)
-
-        # Calculate the projection of distance of donut to center
-        fieldDist = self._getFieldDistFromOrigin()
-        radialShift = radialShift * (fieldDist / (fov / 2))
-
-        # Do not consider the condition out of FOV of lsst
-        if fieldDist > (fov / 2):
-            radialShift = 0
-
-        # Calculate the cos(theta) for projection
-        I1c = self.fieldX / fieldDist
-
-        # Calculate the sin(theta) for projection
-        I1s = self.fieldY / fieldDist
-
-        # Get the projected x, y-coordinate
-        stampCenterx1 = stampCenterx1 + radialShift * I1c
-        stampCentery1 = stampCentery1 + radialShift * I1s
-
-        # Shift the image to the projected position
-        self.updateImage(
-            np.roll(self.getImg(), int(np.round(stampCentery1 - y1)), axis=0)
-        )
-        self.updateImage(
-            np.roll(self.getImg(), int(np.round(stampCenterx1 - x1)), axis=1)
-        )
-
     def _getFieldDistFromOrigin(self, fieldX=None, fieldY=None, minDist=1e-8):
         """Get the field distance from the origin.
 
