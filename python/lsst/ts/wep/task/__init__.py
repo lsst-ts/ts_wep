@@ -9,10 +9,6 @@ from .DonutQuickMeasurementTask import *
 from .DonutSourceSelectorTask import *
 from .DonutStamp import *
 from .DonutStamps import *
-from .EstimateZernikesBase import *
-from .EstimateZernikesCwfsTask import *
-from .EstimateZernikesLatissTask import *
-from .EstimateZernikesScienceSensorTask import *
 from .GenerateDonutCatalogOnlineTask import *
 from .GenerateDonutCatalogWcsTask import *
 from .GenerateDonutDirectDetectTask import *
