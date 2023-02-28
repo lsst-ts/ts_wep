@@ -162,7 +162,6 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         donutCatalogs: typing.List[pd.DataFrame],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
-
         cameraName = camera.getName()
         extraCatalog, intraCatalog = donutCatalogs
 

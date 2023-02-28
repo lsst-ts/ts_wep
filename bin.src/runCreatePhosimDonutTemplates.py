@@ -26,7 +26,6 @@ import argparse
 from lsst.ts.wep.CreatePhosimDonutTemplates import CreatePhosimDonutTemplates
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(
         description="Generate donut templates for AOS using Phosim."
     )

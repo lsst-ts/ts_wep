@@ -30,7 +30,6 @@ class TestTemplateModel(unittest.TestCase):
     """Test the TemplateModel class."""
 
     def setUp(self):
-
         self.templateMaker = DonutTemplateModel()
 
         # Set LSST instParams
@@ -52,7 +51,6 @@ class TestTemplateModel(unittest.TestCase):
         }
 
     def testMakeTemplateWithDict(self):
-
         # Generate a test template on the center chip and specify instParams
         imageSize = 160
         templateArray = self.templateMaker.makeTemplate(
@@ -73,7 +71,6 @@ class TestTemplateModel(unittest.TestCase):
         )
 
     def testMakeTemplateWithFile(self):
-
         # Generate a test template on the center chip w/o specifying instParams
         # This should load default instParams from file.
         imageSize = 160
@@ -95,7 +92,6 @@ class TestTemplateModel(unittest.TestCase):
         )
 
     def testMakeTemplateCheckCamTypes(self):
-
         # Generate a test template on the center chip
         imageSize = 160
         for camType in [CamType.LsstCam, CamType.LsstFamCam, CamType.ComCam]:
@@ -134,7 +130,6 @@ class TestTemplateModel(unittest.TestCase):
         )
 
     def testTemplateSize(self):
-
         # Generate a test template on the center chip
         imageSize = 160
         templateArray = self.templateMaker.makeTemplate(
@@ -150,7 +145,6 @@ class TestTemplateModel(unittest.TestCase):
         np.testing.assert_array_equal(templateArray[10:-10, 10:-10], smallTemplate)
 
     def testMakeTemplateAuxTelOnlyWorksOnAxis(self):
-
         # Generate a test template for auxTel
         imageSize = 200
         pixelScale = 0.0956949999339899
@@ -194,7 +188,6 @@ class TestTemplateModel(unittest.TestCase):
         )
 
     def testMakeTemplateAuxTel(self):
-
         # Generate a test template for auxTel
         imageSize = 200
         pixelScale = 0.0956949999339899
@@ -238,6 +231,5 @@ class TestTemplateModel(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

@@ -31,7 +31,6 @@ class CentroidRandomWalk(CentroidDefault):
     random walk model."""
 
     def __init__(self):
-
         # Minimum effective signal
         self.minEffSignal = 1e-8
 
@@ -104,10 +103,8 @@ class CentroidRandomWalk(CentroidDefault):
             # Do the random walk search
             np.random.seed(seed=self.seed)
             for ii in range(nwalk + 1):
-
                 # if (minind <= slide):
                 if minind >= slide:
-
                     # Find the index of bin that the count is not zero
                     while minval == 0:
                         minind = minind - 1
@@ -127,7 +124,6 @@ class CentroidRandomWalk(CentroidDefault):
 
                     # Look for the minimum point
                     if hist[int(minind + ind - 1)] < (minval * thermal):
-
                         # Add the panality to go to the high intensity position
                         if ind > 0:
                             ind = int(ind / 3)

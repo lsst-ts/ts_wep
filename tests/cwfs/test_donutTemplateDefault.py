@@ -28,11 +28,9 @@ class TestDonutTemplateDefault(unittest.TestCase):
     """Test the TemplateDefault class."""
 
     def setUp(self):
-
         self.templateMaker = DonutTemplateDefault()
 
     def testMakeTemplate(self):
-
         self.assertRaises(
             NotImplementedError,
             self.templateMaker.makeTemplate,
@@ -43,6 +41,5 @@ class TestDonutTemplateDefault(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

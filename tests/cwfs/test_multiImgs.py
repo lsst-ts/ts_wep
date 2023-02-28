@@ -32,7 +32,6 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
     """Test the images to compare with bxin/cwfs package"""
 
     def setUp(self):
-
         # Path of test images and validation data
         modulePath = getModulePath()
         self.imageFolderPath = os.path.join(
@@ -59,13 +58,11 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
         self.startTime = time.perf_counter()
 
     def tearDown(self):
-
         # Calculate the duration
         t = time.perf_counter() - self.startTime
         print("%s: %.3f s." % (self.id(), t))
 
     def testCase1(self):
-
         self._calcWfErrAndCompareWithAns(
             "LSST_NE_SN25", "z11_0.25", (1.185, 1.185), "exp", "offAxis"
         )
@@ -73,7 +70,6 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
     def _calcWfErrAndCompareWithAns(
         self, imageFolderName, baseImageName, fieldXY, algoName, opticalModel
     ):
-
         imageFileIntra = os.path.join(
             self.imageFolderPath, imageFolderName, f"{baseImageName}_intra.txt"
         )
@@ -99,31 +95,26 @@ class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):
         self.compareDiffWithTol(wfErr, wfErrAns, self.tolMax, self.tolRms)
 
     def testCase2(self):
-
         self._calcWfErrAndCompareWithAns(
             "LSST_NE_SN25", "z11_0.25", (1.185, 1.185), "fft", "offAxis"
         )
 
     def testCase3(self):
-
         self._calcWfErrAndCompareWithAns(
             "F1.23_1mm_v61", "z7_0.25", (0, 0), "fft", "paraxial"
         )
 
     def testCase4(self):
-
         self._calcWfErrAndCompareWithAns(
             "LSST_C_SN26", "z7_0.25", (0, 0), "fft", "onAxis"
         )
 
     def testCase5(self):
-
         self._calcWfErrAndCompareWithAns(
             "LSST_C_SN26", "z7_0.25", (0, 0), "exp", "onAxis"
         )
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

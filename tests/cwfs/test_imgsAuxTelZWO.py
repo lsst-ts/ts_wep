@@ -32,7 +32,6 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
     """Test the images of auxiliary telescope ZWO camera"""
 
     def setUp(self):
-
         testImageDataDir = os.path.join(
             getModulePath(), "tests", "testData", "testImages"
         )
@@ -54,7 +53,6 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         self.tolRms = 2
 
     def testCase1paraxial(self):
-
         imgIntraName, imgExtraName = self._getImgsCase1()
         zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "paraxial", self.instParams
@@ -64,7 +62,6 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         self.compareDiffWithTol(zer4UpNm, ans, self.tolMax, self.tolRms)
 
     def _getImgsCase1(self):
-
         imgIntraName = "1579925613-16Pup_intra-0-1.fits"
         imgExtraName = "1579925662-16Pup_extra-0-1.fits"
 
@@ -73,7 +70,6 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
     def _calcWfErrAuxTelZWO(
         self, imgIntraName, imgExtraName, offset, model, instParams
     ):
-
         # Cut the donut image from input files
         centroidFindType = CentroidFindType.Otsu
         imgIntra = Image(centroidFindType=centroidFindType)
@@ -113,13 +109,11 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         return wfErr
 
     def _getDataVerify(self, fileName):
-
         filePath = os.path.join(self.validationDir, fileName)
 
         return np.loadtxt(filePath)
 
     def testCase1onaxis(self):
-
         imgIntraName, imgExtraName = self._getImgsCase1()
         zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "onAxis", self.instParams
@@ -129,7 +123,6 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         self.compareDiffWithTol(zer4UpNm, ans, self.tolMax, self.tolRms)
 
     def testCase2paraxial(self):
-
         imgIntraName, imgExtraName = self._getImgsCase2()
         zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "paraxial", self.instParams
@@ -139,14 +132,12 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
         self.compareDiffWithTol(zer4UpNm, ans, self.tolMax, self.tolRms)
 
     def _getImgsCase2(self):
-
         imgIntraName = "1579925833-16Pup_intra-0-1.fits"
         imgExtraName = "1579925882-16Pup_extra-0-1.fits"
 
         return imgIntraName, imgExtraName
 
     def testCase2onaxis(self):
-
         imgIntraName, imgExtraName = self._getImgsCase2()
         zer4UpNm = self._calcWfErrAuxTelZWO(
             imgIntraName, imgExtraName, self.offset, "onAxis", self.instParams
@@ -157,6 +148,5 @@ class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

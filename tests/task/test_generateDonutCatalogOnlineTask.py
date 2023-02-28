@@ -35,7 +35,6 @@ from lsst.ts.wep.task.GenerateDonutCatalogOnlineTask import (
 
 class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
     def setUp(self):
-
         boresightRa = 0.0
         boresightDec = 0.0
         boresightRotAng = 0.0
@@ -65,7 +64,6 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
 
     def testValidateConfigs(self):
-
         self.config.filterName = "r"
         self.config.doReferenceSelection = False
         self.config.doDonutSelection = False
@@ -78,7 +76,6 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         self.assertEqual(task.config.doDonutSelection, False)
 
     def testFormatCatalog(self):
-
         detectorName = "R22_S01"
         detector = self.camera[detectorName]
         detWcs = self.refCatInterface.getDetectorWcs(detector)
@@ -109,7 +106,6 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
 
     def testTaskRun(self):
-
         self.config.doDonutSelection = False
         task = GenerateDonutCatalogOnlineTask(
             self.dataIds, self.dataRefs, config=self.config

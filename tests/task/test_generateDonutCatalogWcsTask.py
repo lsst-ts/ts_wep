@@ -37,7 +37,6 @@ from lsst.ts.wep.Utility import runProgram, writePipetaskCmd, writeCleanUpRepoCm
 
 class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
     def setUp(self):
-
         self.config = GenerateDonutCatalogWcsTaskConfig()
         self.config.donutSelector.unblendedSeparation = 1
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
@@ -51,7 +50,6 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         self.registry = self.butler.registry
 
     def _getRefCat(self):
-
         refCatList = []
         datasetGenerator = self.registry.queryDatasets(
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
@@ -64,7 +62,6 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         return refCatList
 
     def _createTestDonutCat(self):
-
         refCatList = self._getRefCat()
         refObjLoader = self.task.getRefObjLoader(refCatList)
 
@@ -89,14 +86,12 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         return donutCatSmall.refCat
 
     def testValidateConfigs(self):
-
         self.config.doDonutSelection = False
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         self.assertEqual(self.task.config.doDonutSelection, False)
 
     def testGetRefObjLoader(self):
-
         refCatList = self._getRefCat()
         refObjLoader = self.task.getRefObjLoader(refCatList)
 
@@ -117,7 +112,6 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         self.assertEqual(len(donutCatFull.refCat), 24)
 
     def testRunSelection(self):
-
         refCatList = self._getRefCat()
         camera = self.butler.get(
             "camera",
@@ -156,7 +150,6 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         self.assertEqual(len(donutCatFull), 4)
 
     def testDonutCatalogToDataFrame(self):
-
         donutCatSmall = self._createTestDonutCat()
 
         fieldObjects = self.task.donutCatalogToDataFrame(donutCatSmall, "g")
@@ -206,7 +199,6 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         )
 
     def testDonutCatalogToDataFrameErrors(self):
-
         columnList = [
             "coord_ra",
             "coord_dec",

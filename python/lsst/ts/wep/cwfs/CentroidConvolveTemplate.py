@@ -34,7 +34,6 @@ class CentroidConvolveTemplate(CentroidDefault):
     convolution with a template donut image."""
 
     def __init__(self):
-
         super(CentroidConvolveTemplate, self).__init__()
         self._centRandomWalk = CentroidRandomWalk()
 

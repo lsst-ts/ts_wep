@@ -31,7 +31,6 @@ class TestInstrument(unittest.TestCase):
     """Test the Instrument class."""
 
     def setUp(self):
-
         self.instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
         self.instConfigFile = os.path.join(
             self.instConfigDir, "lsst", "instParamPipeConfig.yaml"
@@ -62,13 +61,11 @@ class TestInstrument(unittest.TestCase):
         )
 
     def testConfigFromFileDefault(self):
-
         newInst = Instrument()
         newInst.configFromFile(self.dimOfDonutOnSensor, CamType.LsstFamCam)
         self.assertDictEqual(self.inst.instParams, newInst.instParams)
 
     def testConfigFromDict(self):
-
         newInst = Instrument()
         newInst.configFromDict(
             self.inst.instParams, self.dimOfDonutOnSensor, CamType.LsstCam
@@ -76,7 +73,6 @@ class TestInstrument(unittest.TestCase):
         self.assertDictEqual(self.inst.instParams, newInst.instParams)
 
     def testConfigFromDictWithIncorrectDictKeys(self):
-
         # Check that error is raised when configDict keys are incorrect
         newInst = Instrument()
         instParamsList = list(self.inst.instParams.items())
@@ -90,7 +86,6 @@ class TestInstrument(unittest.TestCase):
         self.assertEqual(str(context.exception), errMsg)
 
     def testConfigFromFileWithIncorrectInstConfigFilePath(self):
-
         badFilePath = "NoFile"
         with self.assertRaises(ValueError) as context:
             self.inst.configFromFile(120, CamType.LsstCam, badFilePath)
@@ -100,7 +95,6 @@ class TestInstrument(unittest.TestCase):
         )
 
     def testConfigFromFileWithIncorrectInstConfigFormat(self):
-
         badFilePath = os.path.join(
             getModulePath(),
             "tests",
@@ -115,7 +109,6 @@ class TestInstrument(unittest.TestCase):
         self.assertEqual(str(context.exception), errMsg)
 
     def testConfigFromFileWithIncorrectMaskConfigFilePath(self):
-
         badMaskFilePath = "NoMaskFile"
         with self.assertRaises(ValueError) as context:
             self.inst.configFromFile(
@@ -127,7 +120,6 @@ class TestInstrument(unittest.TestCase):
         )
 
     def testConfigFromDictWithIncorrectMaskConfigFilePath(self):
-
         badMaskFilePath = "NoMaskFile"
         with self.assertRaises(ValueError) as context:
             self.inst.configFromDict(
@@ -142,7 +134,6 @@ class TestInstrument(unittest.TestCase):
         )
 
     def testSetDefaultMaskParams(self):
-
         newInst = Instrument()
         self.assertEqual(newInst.maskOffAxisCorr, [])
 
@@ -159,57 +150,47 @@ class TestInstrument(unittest.TestCase):
         self.assertEqual(newInst.maskOffAxisCorr[2, 3], -0.090100858)
 
     def testGetMaskOffAxisCorr(self):
-
         self.assertEqual(self.inst.maskOffAxisCorr.shape, (9, 5))
         self.assertEqual(self.inst.maskOffAxisCorr[0, 0], 1.07)
         self.assertEqual(self.inst.maskOffAxisCorr[2, 3], -0.090100858)
 
     def testGetDimOfDonutImg(self):
-
         dimOfDonutOnSensor = self.inst.dimOfDonutImg
         self.assertEqual(dimOfDonutOnSensor, self.dimOfDonutOnSensor)
 
     def testGetObscuration(self):
-
         obscuration = self.inst.obscuration
         self.assertEqual(obscuration, 0.61)
 
     def testGetFocalLength(self):
-
         focalLength = self.inst.focalLength
         self.assertEqual(focalLength, 10.312)
 
     def testGetApertureDiameter(self):
-
         apertureDiameter = self.inst.apertureDiameter
         self.assertEqual(apertureDiameter, 8.36)
 
     def testGetDefocalDisOffseInM(self):
-
         defocalDisInM = self.inst.defocalDisOffsetInM
 
         # The answer is 1.5 mm
         self.assertEqual(defocalDisInM * 1e3, 1.5)
 
     def testGetPixelSize(self):
-
         camPixelSizeInM = self.inst.pixelSize
 
         # The answer is 10 um
         self.assertEqual(camPixelSizeInM * 1e6, 10)
 
     def testGetMarginalFocalLength(self):
-
         marginalFL = self.inst.getMarginalFocalLength()
         self.assertAlmostEqual(marginalFL, 9.4268, places=4)
 
     def testGetSensorFactor(self):
-
         sensorFactor = self.inst.getSensorFactor()
         self.assertAlmostEqual(sensorFactor, 0.98679, places=5)
 
     def testGetSensorCoor(self):
-
         xSensor, ySensor = self.inst.getSensorCoor()
         self.assertEqual(
             xSensor.shape, (self.dimOfDonutOnSensor, self.dimOfDonutOnSensor)
@@ -224,7 +205,6 @@ class TestInstrument(unittest.TestCase):
         self.assertAlmostEqual(ySensor[1, 0], -0.96212, places=5)
 
     def testGetSensorCoorAnnular(self):
-
         xoSensor, yoSensor = self.inst.getSensorCoorAnnular()
         self.assertEqual(
             xoSensor.shape, (self.dimOfDonutOnSensor, self.dimOfDonutOnSensor)
@@ -239,13 +219,11 @@ class TestInstrument(unittest.TestCase):
         self.assertTrue(np.isnan(yoSensor[60, 60]))
 
     def testCalcSizeOfDonutExpected(self):
-
         self.assertAlmostEqual(
             self.inst.calcSizeOfDonutExpected(), 121.60589604, places=7
         )
 
     def testDataAuxTel(self):
-
         auxTelConfigFile = os.path.join(
             self.instConfigDir, "auxTel", "instParamPipeConfig.yaml"
         )
@@ -260,7 +238,6 @@ class TestInstrument(unittest.TestCase):
         self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 182.2222222, places=7)
 
     def testDataAuxTelZWO(self):
-
         auxTelZWOConfigFile = os.path.join(
             self.instConfigDir, "auxTelZWO", "instParamPipeConfig.yaml"
         )
@@ -276,6 +253,5 @@ class TestInstrument(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

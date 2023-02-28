@@ -31,16 +31,13 @@ class TestDeblendAdapt(unittest.TestCase):
     """Test the DeblendAdapt class."""
 
     def setUp(self):
-
         self.deblend = DeblendAdapt()
 
     def testDeblendDonutMoreThanOneStarNgr(self):
-
         iniGuessXY = [(1, 2), (3, 4)]
         self.assertRaises(ValueError, self.deblend.deblendDonut, [], iniGuessXY)
 
     def testDeblendDonut(self):
-
         template, imgToDeblend, iniGuessXY = self._genBlendedImg()
         imgDeblend, realcx, realcy = self.deblend.deblendDonut(imgToDeblend, iniGuessXY)
 
@@ -51,7 +48,6 @@ class TestDeblendAdapt(unittest.TestCase):
         self.assertEqual(np.rint(realcy), 93)
 
     def _genBlendedImg(self):
-
         imageFilePath = os.path.join(
             getModulePath(),
             "tests",
@@ -74,6 +70,5 @@ class TestDeblendAdapt(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

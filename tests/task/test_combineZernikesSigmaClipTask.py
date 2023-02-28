@@ -32,12 +32,10 @@ from lsst.ts.wep.task.CombineZernikesSigmaClipTask import (
 
 class TestCombineZernikesSigmaClipTask(unittest.TestCase):
     def setUp(self):
-
         self.config = CombineZernikesSigmaClipTaskConfig()
         self.task = CombineZernikesSigmaClipTask()
 
     def prepareTestData(self):
-
         inputArray = np.ones((101, 10))
         inputArray[50:100] += 2.0
         inputArray[100] += 100.0
@@ -46,7 +44,6 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         return inputArray, outputFlags
 
     def testValidateConfigs(self):
-
         self.assertEqual(3.0, self.task.sigma)
         self.assertEqual(3, self.task.maxZernClip)
         self.config.sigma = 2.0
@@ -56,7 +53,6 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertEqual(5, self.task.maxZernClip)
 
     def testCombineZernikes(self):
-
         zernikeArray, trueFlags = self.prepareTestData()
         combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
         np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
@@ -84,7 +80,6 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertTrue(isinstance(testFlags[0], numbers.Integral))
 
     def testTaskRun(self):
-
         zernikeArray, trueFlags = self.prepareTestData()
         combinedZernikesStruct = self.task.run(zernikeArray)
         self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)

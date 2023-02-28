@@ -31,7 +31,6 @@ class TestWfEstimator(unittest.TestCase):
     """Test the wavefront estimator class."""
 
     def setUp(self):
-
         self.instParams = {
             "obscuration": 0.61,
             "focalLength": 10.312,
@@ -61,7 +60,6 @@ class TestWfEstimator(unittest.TestCase):
         self.fieldXY = (1.185, 1.185)
 
     def testCalWfsErrOfExp(self):
-
         # Setup the configuration
         # If the configuration is reset, the images are needed to be set again.
         self.wfsEst.config(
@@ -109,7 +107,6 @@ class TestWfEstimator(unittest.TestCase):
         )
 
     def testCalWfsErrOfFft(self):
-
         # Change the algorithm to fft
         self.wfsEst.config(
             self.instParams,
@@ -157,6 +154,5 @@ class TestWfEstimator(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

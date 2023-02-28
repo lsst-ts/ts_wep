@@ -315,10 +315,8 @@ class DeblendAdapt(DeblendDefault):
         m, n = np.where(boundaryOverlap == 1)
 
         for ii in range(len(m)):
-
             # Correct values that are not on the boundary next to environment
             if imgBinary[m[ii] - 1 : m[ii] + 2, n[ii] - 1 : n[ii] + 2].all():
-
                 # Modify the value in column
                 neighborValues = repairImgDeblend[m[ii], n[ii] - 4 : n[ii] + 5]
                 temp = neighborValues[neighborValues != 0]

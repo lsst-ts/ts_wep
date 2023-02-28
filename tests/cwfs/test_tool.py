@@ -42,7 +42,6 @@ class TestTool(TestCase):
     """Test the functions in Tool."""
 
     def setUp(self):
-
         self.testDataDir = os.path.join(
             getModulePath(), "tests", "testData", "cwfsZernike"
         )
@@ -58,7 +57,6 @@ class TestTool(TestCase):
         self.zerCoef = np.arange(1, 1 + numOfZk) * 0.1
 
     def _genGridXy(self, point, ratio):
-
         yy, xx = np.mgrid[
             -(point / 2 - 0.5) : (point / 2 + 0.5),
             -(point / 2 - 0.5) : (point / 2 + 0.5),
@@ -70,20 +68,17 @@ class TestTool(TestCase):
         return xx, yy
 
     def testZernikeAnnularEval(self):
-
         surface = ZernikeAnnularEval(self.zerCoef, self.xx, self.yy, self.obscuration)
 
         self._checkAnsWithFile(surface, "annularZernikeEval.txt")
 
     def _checkAnsWithFile(self, value, ansFileName, rtol=1e-8, atol=1e-8):
-
         ansFilePath = os.path.join(self.testDataDir, ansFileName)
         ans = np.loadtxt(ansFilePath)
 
         self.assertFloatsAlmostEqual(value, ans, rtol=rtol, atol=atol)
 
     def testZernikeAnnularNormality(self):
-
         ansValue = np.pi * (1 - self.obscuration**2)
         for ii in range(28):
             z = np.zeros(28)
@@ -98,13 +93,11 @@ class TestTool(TestCase):
             self.assertAlmostEqual(normalization, ansValue)
 
     def _genNormalizedFunc(self, r, theta, z, e):
-
         func = r * ZernikeAnnularEval(z, r * np.cos(theta), r * np.sin(theta), e) ** 2
 
         return func
 
     def testZernikeAnnularOrthogonality(self):
-
         # Check the orthogonality for Z1 - Z28
         for jj in range(28):
             z1 = np.zeros(28)
@@ -123,7 +116,6 @@ class TestTool(TestCase):
                     self.assertAlmostEqual(orthogonality, 0)
 
     def _genOrthogonalFunc(self, r, theta, z1, z2, e):
-
         func = (
             r
             * ZernikeAnnularEval(z1, r * np.cos(theta), r * np.sin(theta), e)
@@ -133,7 +125,6 @@ class TestTool(TestCase):
         return func
 
     def testZernikeAnnularGradDx(self):
-
         surfGrad = ZernikeAnnularGrad(
             self.zerCoef, self.xx, self.yy, self.obscuration, "dx"
         )
@@ -141,7 +132,6 @@ class TestTool(TestCase):
         self._checkAnsWithFile(surfGrad, "annularZernikeGradDx.txt")
 
     def testZernikeAnnularGradDy(self):
-
         surfGrad = ZernikeAnnularGrad(
             self.zerCoef, self.xx, self.yy, self.obscuration, "dy"
         )
@@ -149,7 +139,6 @@ class TestTool(TestCase):
         self._checkAnsWithFile(surfGrad, "annularZernikeGradDy.txt")
 
     def testZernikeAnnularGradDx2(self):
-
         surfGrad = ZernikeAnnularGrad(
             self.zerCoef, self.xx, self.yy, self.obscuration, "dx2"
         )
@@ -157,7 +146,6 @@ class TestTool(TestCase):
         self._checkAnsWithFile(surfGrad, "annularZernikeGradDx2.txt")
 
     def testZernikeAnnularGradDy2(self):
-
         surfGrad = ZernikeAnnularGrad(
             self.zerCoef, self.xx, self.yy, self.obscuration, "dy2"
         )
@@ -165,7 +153,6 @@ class TestTool(TestCase):
         self._checkAnsWithFile(surfGrad, "annularZernikeGradDy2.txt")
 
     def testZernikeAnnularGradDxy(self):
-
         surfGrad = ZernikeAnnularGrad(
             self.zerCoef, self.xx, self.yy, self.obscuration, "dxy"
         )
@@ -173,14 +160,12 @@ class TestTool(TestCase):
         self._checkAnsWithFile(surfGrad, "annularZernikeGradDxy.txt")
 
     def testZernikeAnnularGradWrongAxis(self):
-
         with self.assertRaises(ValueError):
             ZernikeAnnularGrad(
                 self.zerCoef, self.xx, self.yy, self.obscuration, "wrongAxis"
             )
 
     def testZernikeAnnularJacobian1st(self):
-
         annuZerJacobian = ZernikeAnnularJacobian(
             self.zerCoef, self.xx, self.yy, self.obscuration, "1st"
         )
@@ -188,7 +173,6 @@ class TestTool(TestCase):
         self._checkAnsWithFile(annuZerJacobian, "annularZernikeJaco1st.txt")
 
     def testZernikeAnnularJacobian2nd(self):
-
         annuZerJacobian = ZernikeAnnularJacobian(
             self.zerCoef, self.xx, self.yy, self.obscuration, "2nd"
         )
@@ -196,14 +180,12 @@ class TestTool(TestCase):
         self._checkAnsWithFile(annuZerJacobian, "annularZernikeJaco2nd.txt")
 
     def testZernikeAnnularJacobianWrongType(self):
-
         with self.assertRaises(ValueError):
             ZernikeAnnularJacobian(
                 self.zerCoef, self.xx, self.yy, self.obscuration, "wrongType"
             )
 
     def testZernikeAnnularFit(self):
-
         opdFitsFile = os.path.join(self.testDataDir, "sim6_iter0_opd0.fits.gz")
         opd = fits.getdata(opdFitsFile)
 
@@ -241,7 +223,6 @@ class TestTool(TestCase):
         self.assertLess(np.sum(np.abs(zr - self.zerCoef[0:nc]) ** 2), 1e-10)
 
     def testPadArray(self):
-
         imgDim = 10
         padPixelSize = 20
 
@@ -250,14 +231,12 @@ class TestTool(TestCase):
         self.assertEqual(imgPadded.shape[0], imgDim + padPixelSize)
 
     def _padRandomImg(self, imgDim, padPixelSize):
-
         img = np.random.rand(imgDim, imgDim)
         imgPadded = padArray(img, imgDim + padPixelSize)
 
         return img, imgPadded
 
     def testExtractArray(self):
-
         imgDim = 10
         padPixelSize = 20
         img, imgPadded = self._padRandomImg(imgDim, padPixelSize)
@@ -268,6 +247,5 @@ class TestTool(TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

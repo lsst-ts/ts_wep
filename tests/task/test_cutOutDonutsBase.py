@@ -73,12 +73,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
     def setUp(self):
-
         self.config = CutOutDonutsBaseTaskConfig(instDefocalOffset=1.5)
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
@@ -99,7 +97,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         }
 
     def _generateTestExposures(self):
-
         # Generate donut template
         template = self.task.getTemplate(
             "R22_S11", DefocalType.Extra, self.task.donutTemplateSize, CamType.LsstCam
@@ -144,7 +141,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
     def testValidateConfigs(self):
-
         self.assertEqual(self.task.donutTemplateSize, 160)
         self.assertEqual(self.task.donutStampSize, 160)
         self.assertEqual(self.task.initialCutoutPadding, 5)
@@ -169,7 +165,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.opticalModel, "onAxis")
 
     def testCreateInstDictFromConfig(self):
-
         self.config.instObscuration = 0.1
         self.config.instFocalLength = 10.0
         self.config.instApertureDiameter = 10.0
@@ -188,7 +183,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertDictEqual(testDict, task.instParams)
 
     def testCheckAndSetOffset(self):
-
         # If offset is already set then no change
         self.assertEqual(self.task.instParams["offset"], 1.5)
         self.task._checkAndSetOffset(30.0)
@@ -200,7 +194,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.instParams["offset"], 30.0)
 
     def testGetTemplate(self):
-
         extra_template = self.task.getTemplate(
             "R22_S11", DefocalType.Extra, self.task.donutTemplateSize, CamType.LsstCam
         )
@@ -216,7 +209,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(np.shape(intra_template), (180, 180))
 
     def testShiftCenter(self):
-
         centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)
         self.assertEqual(centerUpperLimit, 180.0)
         centerLowerLimit = self.task.shiftCenter(10.0, 0.0, 20.0)
@@ -227,7 +219,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(centerNoChangeLower, 100.0)
 
     def testCalculateFinalCentroid(self):
-
         (
             centeredExp,
             centerCoord,
@@ -257,7 +248,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(cornerY, 0)
 
     def testCutOutStamps(self):
-
         exposure = self.butler.get(
             "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
         )
@@ -278,7 +268,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(donutStamps[0].stamp_im.image.array, expCutOut)
 
     def testCutOutStampsBlended(self):
-
         exposure = self.butler.get(
             "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
         )

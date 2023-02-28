@@ -67,7 +67,6 @@ class TestUtility(unittest.TestCase):
         taskName=None,
         pipelineName=None,
     ):
-
         # Write the part of the command that is always included
         testCmd = f"pipetask run -b {repoName} -i {collections} "
         testCmd += f"--instrument {instrument} "
@@ -84,29 +83,24 @@ class TestUtility(unittest.TestCase):
         return testCmd
 
     def _writeCleanUpCmd(self, repoName, runName):
-
         testCmd = f"butler remove-runs {repoName} {runName}"
         testCmd += " --no-confirm"
 
         return testCmd
 
     def testMapFilterRefToG(self):
-
         mappedFilterType = mapFilterRefToG(FilterType.REF)
         self.assertEqual(mappedFilterType, FilterType.G)
 
     def testMapFilterRefToGForFilterU(self):
-
         mappedFilterType = mapFilterRefToG(FilterType.U)
         self.assertEqual(mappedFilterType, FilterType.U)
 
     def testGetConfigDir(self):
-
         ansConfigDir = os.path.join(getModulePath(), "policy")
         self.assertEqual(getConfigDir(), ansConfigDir)
 
     def testGetObsLsstCmdTaskConfigDir(self):
-
         obsLsstCmdTaskConfirDir = getObsLsstCmdTaskConfigDir()
         configNormPath = os.path.normpath(obsLsstCmdTaskConfirDir)
         configNormPathList = configNormPath.split(os.sep)
@@ -115,25 +109,20 @@ class TestUtility(unittest.TestCase):
         self.assertTrue(("obs_lsst" in configNormPathList))
 
     def testGetBscDbType(self):
-
         self.assertEqual(getBscDbType("localDb"), BscDbType.LocalDb)
         self.assertEqual(getBscDbType("file"), BscDbType.LocalDbForStarFile)
 
     def testGetBscDbTypeWithWrongInput(self):
-
         self.assertRaises(ValueError, getBscDbType, "wrongType")
 
     def testGetImageType(self):
-
         self.assertEqual(getImageType("amp"), ImageType.Amp)
         self.assertEqual(getImageType("eimage"), ImageType.Eimg)
 
     def testGetImageTypeWithWrongInput(self):
-
         self.assertRaises(ValueError, getImageType, "wrongType")
 
     def testGetCentroidFindType(self):
-
         self.assertEqual(getCentroidFindType("randomWalk"), CentroidFindType.RandomWalk)
         self.assertEqual(getCentroidFindType("otsu"), CentroidFindType.Otsu)
         self.assertEqual(
@@ -141,28 +130,22 @@ class TestUtility(unittest.TestCase):
         )
 
     def testGetCentroidFindTypeWithWrongInput(self):
-
         self.assertRaises(ValueError, getCentroidFindType, "wrongType")
 
     def testGetDeblendDonutType(self):
-
         self.assertEqual(getDeblendDonutType("adapt"), DeblendDonutType.Adapt)
 
     def testGetDeblendDonutTypeWithWrongInput(self):
-
         self.assertRaises(ValueError, getDeblendDonutType, "wrongType")
 
     def testGetDonutTemplateType(self):
-
         self.assertEqual(getDonutTemplateType("model"), DonutTemplateType.Model)
         self.assertEqual(getDonutTemplateType("phosim"), DonutTemplateType.Phosim)
 
     def testGetDonutTemplateTypeWithWrongInput(self):
-
         self.assertRaises(ValueError, getDonutTemplateType, "wrongType")
 
     def testGetAmpImagesFromDir(self):
-
         # path to repackaged phosim files
         # with amplifier images and e-images
         defocalImgDir = os.path.join(
@@ -195,7 +178,6 @@ class TestUtility(unittest.TestCase):
         self.assertEqual(len(ampFiles), 2)
 
     def testWritePipetaskCmd(self):
-
         repoName = "testRepo"
         instrument = "lsst.obs.lsst.LsstCam"
         collections = "refcats"
@@ -229,7 +211,6 @@ class TestUtility(unittest.TestCase):
         self.assertTrue(assertMsg in str(context.exception))
 
     def testWriteCleanUpRepoCmd(self):
-
         repoName = "testRepo"
         runName = "run2"
 
@@ -259,7 +240,6 @@ class TestUtility(unittest.TestCase):
         self.assertTrue(assertMsg in str(context.exception))
 
     def testGetCamTypeFromButlerName(self):
-
         self.assertEqual(
             getCamTypeFromButlerName("LSSTCam", DetectorType.WAVEFRONT), CamType.LsstCam
         )
@@ -296,7 +276,6 @@ class TestUtility(unittest.TestCase):
         self.assertTrue(detAssertMsg in str(context.exception))
 
     def testGetCamNameFromCamType(self):
-
         # Test allowable CamType values
         self.assertEqual(getCamNameFromCamType(CamType.LsstCam), "lsst")
         self.assertEqual(getCamNameFromCamType(CamType.LsstFamCam), "lsstfam")
@@ -316,7 +295,6 @@ class TestUtility(unittest.TestCase):
         self.assertEqual(str(context.exception), errMsg)
 
     def testCreateInstDictFromConfig(self):
-
         # Test instDict creation in tasks
         testConfig = CalcZernikesTaskConfig()
         testInstDict = createInstDictFromConfig(testConfig)
@@ -331,7 +309,6 @@ class TestUtility(unittest.TestCase):
         self.assertDictEqual(truthInstDict, testInstDict)
 
     def testRotMatrix(self):
-
         # Test rotation with 0 degrees
         testTheta1 = 0
         rotMatrix1 = np.array([[1, 0], [0, 1]])
@@ -349,6 +326,5 @@ class TestUtility(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

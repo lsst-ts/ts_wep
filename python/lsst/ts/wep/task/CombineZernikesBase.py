@@ -44,7 +44,6 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
     _DefaultName = "combineZernikes"
 
     def __init__(self, **kwargs):
-
         pipeBase.Task.__init__(self, **kwargs)
         self.log = logging.getLogger(type(self).__name__)
 

@@ -31,27 +31,23 @@ class TestTemplateMakerFactory(unittest.TestCase):
     """Test the TemplateMakerFactory class."""
 
     def testCreateTemplateModel(self):
-
         donutTemplate = DonutTemplateFactory.createDonutTemplate(
             DonutTemplateType.Model
         )
         self.assertTrue(isinstance(donutTemplate, DonutTemplateModel))
 
     def testCreateTemplatePhosim(self):
-
         donutTemplate = DonutTemplateFactory.createDonutTemplate(
             DonutTemplateType.Phosim
         )
         self.assertTrue(isinstance(donutTemplate, DonutTemplatePhosim))
 
     def testCreateCentroidFindWrongType(self):
-
         self.assertRaises(
             ValueError, DonutTemplateFactory.createDonutTemplate, "wrongType"
         )
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

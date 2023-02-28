@@ -27,7 +27,6 @@ from mapSensorAndFieldIdx import getMappingFromFieldXY
 
 
 if __name__ == "__main__":
-
     # Set the 189 field points
     fieldPosFilePath = os.path.join(getModulePath(), "examples", "fieldPosLsst.txt")
     fieldXY = np.loadtxt(fieldPosFilePath)

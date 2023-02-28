@@ -31,7 +31,6 @@ class CentroidOtsu(CentroidDefault):
     Otsu's method."""
 
     def __init__(self):
-
         # Number of bins in the histogram
         self.numOfBins = 256
 

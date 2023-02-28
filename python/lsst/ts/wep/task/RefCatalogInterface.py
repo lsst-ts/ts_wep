@@ -43,7 +43,6 @@ class RefCatalogInterface(object):
     """
 
     def __init__(self, boresightRa, boresightDec, boresightRotAng):
-
         # Set the pointing information
         self.boresightRa = boresightRa
         self.boresightDec = boresightDec
