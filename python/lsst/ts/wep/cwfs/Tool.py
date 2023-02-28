@@ -34,7 +34,6 @@ __all__ = [
 ]
 
 import numpy as np
-import warnings
 
 from galsim.zernike import Zernike as GSZernike
 

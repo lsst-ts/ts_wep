@@ -23,7 +23,6 @@ __all__ = ["CompensableImage"]
 
 import os
 import re
-import warnings
 import numpy as np
 from copy import copy
 
@@ -59,7 +58,6 @@ class CompensableImage(object):
     """
 
     def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
-
         self._image = Image(centroidFindType=centroidFindType)
         self.defocalType = DefocalType.Intra
 
@@ -545,7 +543,6 @@ class CompensableImage(object):
             lutyp = luty
 
         elif model == "onAxis":
-
             # Calculate F(x, y) = m * sqrt(f^2-R^2) / sqrt(f^2-(x^2+y^2)*R^2)
             # m is the mask scaling factor
             myA2 = (inst.focalLength**2 - R**2) / (
@@ -567,7 +564,6 @@ class CompensableImage(object):
             lutyp = maskScalingFactor * myA * luty
 
         elif model == "offAxis":
-
             # Get the coefficient of polynomials for off-axis correction
             tt = self.offAxisOffset
 
@@ -848,11 +844,11 @@ class CompensableImage(object):
         grad = np.zeros(carr.shape, dtype=np.float64)
 
         if atype == "dx":
-            for (i, j) in zip(*np.nonzero(carr)):
+            for i, j in zip(*np.nonzero(carr)):
                 if i > 0:
                     grad[i - 1, j] = carr[i, j] * i
         elif atype == "dy":
-            for (i, j) in zip(*np.nonzero(carr)):
+            for i, j in zip(*np.nonzero(carr)):
                 if j > 0:
                     grad[i, j - 1] = carr[i, j] * j
         return horner2d(x, y, grad)
@@ -1099,7 +1095,6 @@ class CompensableImage(object):
         # Read files
         offAxisCoeff = []
         for config in configList:
-
             # Construct the configuration file name
             for fileName in fileList:
                 m = re.match(r"\S*%s\S*.yaml" % config, fileName)
@@ -1285,7 +1280,6 @@ class CompensableImage(object):
         # Masklist = [center_x, center_y, radius_of_boundary,
         #             1/ 0 for outer/ inner boundary]
         if model in ("paraxial", "onAxis"):
-
             if inst.obscuration == 0:
                 masklist = np.array([[0, 0, 1, 1]])
             else:
@@ -1429,7 +1423,6 @@ class CompensableImage(object):
         xSensor, ySensor = inst.getSensorCoor()
         masklist = self.makeMaskList(inst, model)
         for ii in range(masklist.shape[0]):
-
             # Distance to center on pupil
             r = np.sqrt(
                 (xSensor - masklist[ii, 0]) ** 2 + (ySensor - masklist[ii, 1]) ** 2
