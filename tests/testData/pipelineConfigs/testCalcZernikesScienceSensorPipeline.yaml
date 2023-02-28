@@ -40,7 +40,7 @@ tasks:
     class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings originally defined in
-      # EstimateZernikesCwfsTaskConfig.
+      # CutOutDonutsScienceSensorTaskConfig.
       # Test Science Sensor pipeline works when specifying instrument configuration
       donutTemplateSize: 160
       donutStampSize: 160

@@ -34,21 +34,17 @@ class TempAlgo(object):
     """Temporary algorithm class used for the testing."""
 
     def __init__(self):
-
         self.numTerms = 22
         self.offAxisPolyOrder = 10
         self.zobsR = 0.61
 
     def getNumOfZernikes(self):
-
         return self.numTerms
 
     def getOffAxisPolyOrder(self):
-
         return self.offAxisPolyOrder
 
     def getObsOfZernikes(self):
-
         return self.zobsR
 
 
@@ -56,7 +52,6 @@ class TestCompensableImage(unittest.TestCase):
     """Test the CompensableImage class."""
 
     def setUp(self):
-
         # Get the path of module
         modulePath = getModulePath()
 
@@ -117,67 +112,55 @@ class TestCompensableImage(unittest.TestCase):
         self.wfsImg = CompensableImage()
 
     def testGetDefocalType(self):
-
         defocalType = self.wfsImg.getDefocalType()
         self.assertEqual(defocalType, DefocalType.Intra)
 
     def testGetImgObj(self):
-
         imgObj = self.wfsImg.getImgObj()
         self.assertTrue(isinstance(imgObj, Image))
 
     def testGetImg(self):
-
         img = self.wfsImg.getImg()
         self.assertTrue(isinstance(img, np.ndarray))
         self.assertEqual(len(img), 0)
 
     def testGetImgSizeInPix(self):
-
         imgSizeInPix = self.wfsImg.getImgSizeInPix()
         self.assertEqual(imgSizeInPix, 0)
 
     def testGetOffAxisCoeff(self):
-
         offAxisCoeff, offAxisOffset = self.wfsImg.getOffAxisCoeff()
         self.assertTrue(isinstance(offAxisCoeff, np.ndarray))
         self.assertEqual(len(offAxisCoeff), 0)
         self.assertEqual(offAxisOffset, 0.0)
 
     def testGetImgInit(self):
-
         imgInit = self.wfsImg.getImgInit()
         self.assertEqual(imgInit, None)
 
     def testIsCaustic(self):
-
         self.assertFalse(self.wfsImg.isCaustic())
 
     def testGetPaddedMask(self):
-
         mask_comp = self.wfsImg.getPaddedMask()
         self.assertEqual(len(mask_comp), 0)
         self.assertEqual(mask_comp.dtype, int)
 
     def testGetNonPaddedMask(self):
-
         mask_pupil = self.wfsImg.getNonPaddedMask()
         self.assertEqual(len(mask_pupil), 0)
         self.assertEqual(mask_pupil.dtype, int)
 
     def testGetFieldXY(self):
-
         fieldX, fieldY = self.wfsImg.getFieldXY()
         self.assertEqual(fieldX, 0)
         self.assertEqual(fieldY, 0)
 
     def testSetImg(self):
-
         self._setIntraImg()
         self.assertEqual(self.wfsImg.getImg().shape, (120, 120))
 
     def _setIntraImg(self, blendOffsets=None):
-
         if blendOffsets is None:
             blendOffsets = [[], []]
 
@@ -195,7 +178,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(str(context.exception), errMsg)
 
     def testUpdateImage(self):
-
         self._setIntraImg()
 
         newImg = np.random.rand(5, 5)
@@ -204,7 +186,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertTrue(np.all(self.wfsImg.getImg() == newImg))
 
     def testUpdateImgInit(self):
-
         self._setIntraImg()
 
         self.wfsImg.updateImgInit()
@@ -212,21 +193,7 @@ class TestCompensableImage(unittest.TestCase):
         delta = np.sum(np.abs(self.wfsImg.getImgInit() - self.wfsImg.getImg()))
         self.assertEqual(delta, 0)
 
-    def testImageCoCenter(self):
-
-        self._setIntraImg()
-
-        self.wfsImg.imageCoCenter(self.inst)
-
-        xc, yc = self.wfsImg.getImgObj().getCenterAndR()[0:2]
-        self.assertEqual(int(xc), 63)
-        self.assertEqual(int(yc), 63)
-
-        with self.assertWarns(DeprecationWarning):
-            self.wfsImg.imageCoCenter(self.inst)
-
     def testCompensate(self):
-
         # Generate a fake algorithm class
         algo = TempAlgo()
 
@@ -269,7 +236,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertLess(res, 500)
 
     def testCenterOnProjection(self):
-
         template = self._prepareGaussian2D(100, 1)
 
         dx = 2
@@ -283,7 +249,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertLess(np.sum(np.abs(imgRecenter - template)), 1e-7)
 
     def _prepareGaussian2D(self, imgSize, sigma):
-
         x = np.linspace(-10, 10, imgSize)
         y = np.linspace(-10, 10, imgSize)
 
@@ -296,7 +261,6 @@ class TestCompensableImage(unittest.TestCase):
         )
 
     def testSetOffAxisCorr(self):
-
         self._setIntraImg()
 
         offAxisCorrOrder = 10
@@ -308,7 +272,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(offAxisOffset, 0.001)
 
     def testMakeMaskListOfParaxial(self):
-
         self._setIntraImg()
 
         model = "paraxial"
@@ -318,7 +281,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(np.sum(np.abs(masklist - masklistAns)), 0)
 
     def testMakeMaskListOfOffAxis(self):
-
         self._setIntraImg()
 
         model = "offAxis"
@@ -335,7 +297,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertAlmostEqual(np.sum(np.abs(masklist - masklistAns)), 0)
 
     def testMakeMask(self):
-
         self._setIntraImg()
 
         boundaryT = 8
@@ -351,7 +312,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(np.sum(np.abs(mask_pupil - mask_comp)), 3001)
 
     def testMakeBlendedMask(self):
-
         self._setIntraImg()
 
         boundaryT = 8
@@ -382,7 +342,6 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(np.sum(mask_pupil), 0)
 
     def testCreateBlendedCoadd(self):
-
         self._setIntraImg()
 
         boundaryT = 8
@@ -401,6 +360,5 @@ class TestCompensableImage(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

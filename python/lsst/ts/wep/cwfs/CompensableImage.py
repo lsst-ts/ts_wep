@@ -23,7 +23,6 @@ __all__ = ["CompensableImage"]
 
 import os
 import re
-import warnings
 import numpy as np
 from copy import copy
 
@@ -59,7 +58,6 @@ class CompensableImage(object):
     """
 
     def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
-
         self._image = Image(centroidFindType=centroidFindType)
         self.defocalType = DefocalType.Intra
 
@@ -303,68 +301,6 @@ class CompensableImage(object):
         # Update the initial image for future use
         self.image0 = self.getImg().copy()
 
-    def imageCoCenter(self, inst, fov=3.5, debugLevel=0):
-        """Shift the weighting center of donut to the center of reference
-        image with the correction of projection of fieldX and fieldY.
-        Parameters
-        ----------
-        inst : Instrument
-            Instrument to use.
-        fov : float, optional
-            Field of view (FOV) of telescope. (the default is 3.5.)
-        debugLevel : int, optional
-            Show the information under the running. If the value is higher, the
-            information shows more. It can be 0, 1, 2, or 3. (the default is
-            0.)
-        """
-
-        warnings.warn(
-            "This function is deprecated.  Will be removed after January 2023.",
-            DeprecationWarning,
-        )
-
-        # Calculate the weighting center (x, y) and radius
-        x1, y1 = self._image.getCenterAndR()[0:2]
-
-        # Show the co-center information
-        if debugLevel >= 3:
-            print("imageCoCenter: (x, y) = (%8.2f,%8.2f)\n" % (x1, y1))
-
-        # Calculate the center position on image
-        # 0.5 is the half of 1 pixel
-        stampCenterx1 = inst.dimOfDonutImg / 2 + 0.5
-        stampCentery1 = inst.dimOfDonutImg / 2 + 0.5
-
-        # Shift in the radial direction
-        # The field of view (FOV) of LSST camera is 3.5 degree
-        radialShift = fov * (inst.defocalDisOffsetInM / 1e-3) * (10e-6 / inst.pixelSize)
-
-        # Calculate the projection of distance of donut to center
-        fieldDist = self._getFieldDistFromOrigin()
-        radialShift = radialShift * (fieldDist / (fov / 2))
-
-        # Do not consider the condition out of FOV of lsst
-        if fieldDist > (fov / 2):
-            radialShift = 0
-
-        # Calculate the cos(theta) for projection
-        I1c = self.fieldX / fieldDist
-
-        # Calculate the sin(theta) for projection
-        I1s = self.fieldY / fieldDist
-
-        # Get the projected x, y-coordinate
-        stampCenterx1 = stampCenterx1 + radialShift * I1c
-        stampCentery1 = stampCentery1 + radialShift * I1s
-
-        # Shift the image to the projected position
-        self.updateImage(
-            np.roll(self.getImg(), int(np.round(stampCentery1 - y1)), axis=0)
-        )
-        self.updateImage(
-            np.roll(self.getImg(), int(np.round(stampCenterx1 - x1)), axis=1)
-        )
-
     def _getFieldDistFromOrigin(self, fieldX=None, fieldY=None, minDist=1e-8):
         """Get the field distance from the origin.
 
@@ -607,7 +543,6 @@ class CompensableImage(object):
             lutyp = luty
 
         elif model == "onAxis":
-
             # Calculate F(x, y) = m * sqrt(f^2-R^2) / sqrt(f^2-(x^2+y^2)*R^2)
             # m is the mask scaling factor
             myA2 = (inst.focalLength**2 - R**2) / (
@@ -629,7 +564,6 @@ class CompensableImage(object):
             lutyp = maskScalingFactor * myA * luty
 
         elif model == "offAxis":
-
             # Get the coefficient of polynomials for off-axis correction
             tt = self.offAxisOffset
 
@@ -910,11 +844,11 @@ class CompensableImage(object):
         grad = np.zeros(carr.shape, dtype=np.float64)
 
         if atype == "dx":
-            for (i, j) in zip(*np.nonzero(carr)):
+            for i, j in zip(*np.nonzero(carr)):
                 if i > 0:
                     grad[i - 1, j] = carr[i, j] * i
         elif atype == "dy":
-            for (i, j) in zip(*np.nonzero(carr)):
+            for i, j in zip(*np.nonzero(carr)):
                 if j > 0:
                     grad[i, j - 1] = carr[i, j] * j
         return horner2d(x, y, grad)
@@ -1161,7 +1095,6 @@ class CompensableImage(object):
         # Read files
         offAxisCoeff = []
         for config in configList:
-
             # Construct the configuration file name
             for fileName in fileList:
                 m = re.match(r"\S*%s\S*.yaml" % config, fileName)
@@ -1347,7 +1280,6 @@ class CompensableImage(object):
         # Masklist = [center_x, center_y, radius_of_boundary,
         #             1/ 0 for outer/ inner boundary]
         if model in ("paraxial", "onAxis"):
-
             if inst.obscuration == 0:
                 masklist = np.array([[0, 0, 1, 1]])
             else:
@@ -1491,7 +1423,6 @@ class CompensableImage(object):
         xSensor, ySensor = inst.getSensorCoor()
         masklist = self.makeMaskList(inst, model)
         for ii in range(masklist.shape[0]):
-
             # Distance to center on pupil
             r = np.sqrt(
                 (xSensor - masklist[ii, 0]) ** 2 + (ySensor - masklist[ii, 1]) ** 2
