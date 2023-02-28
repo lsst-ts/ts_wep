@@ -6,6 +6,24 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-5.0.0:
+
+-------------
+5.0.0
+-------------
+
+* Remove deprecated keywords in cwfs/Tool.py and deprecated function in cwfs/CompensableImage.py.
+* Remove deprecated EstimateZernikes Tasks.
+* Remove deprecated pipelineConfig test files.
+
+.. _lsst.ts.wep-4.2.3:
+
+-------------
+4.2.3
+-------------
+
+* Add transposeImages as optional config to CalcZernikesTask.
+
 .. _lsst.ts.wep-4.2.2:
 
 -------------

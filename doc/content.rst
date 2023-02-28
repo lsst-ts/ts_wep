@@ -89,30 +89,18 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutCatalogWcsTaskConfig**: Configuration setup for GenerateDonutCatalogWcsTask.
 * **GenerateDonutCatalogWcsTask**: Gen 3 middleware task to take the WCS from each detector in a postISRCCD exposure and create a catalog of donut sources for that exposure.
 * **DonutSourceSelectorTaskConfig**: Configuration setup for DonutSourceSelectorTask.
-* **DonutSourceSelectorTask**: Filter a reference catalog according to parameters specified in DonutSourceSelectorTaskConfig to create a catalog of donut sources acceptable for EstimateZernikes...Task.
+* **DonutSourceSelectorTask**: Filter a reference catalog according to parameters specified in DonutSourceSelectorTaskConfig to create a catalog of donut sources acceptable for Zernike estimation.
 * **DonutQuickMeasurementTaskConfig** Configuration setup for DonutQuickMeasurementTask.
 * **DonutQuickMeasurementTask**: Run quick donut detection and measurement on exposures.
 * **DonutStamp**: Storage class for a single donut postage stamp and associated metadata.
 * **DonutStamps**: Gen 3 Butler readable storage class for a list of DonutStamp objects with helper functions to get metadata and to save DonutStamps object as FITS file.
-* **EstimateZernikesBaseTaskConnections**: Base connections class for EstimateZernikes tasks.
-* **EstimateZernikesBaseTaskConfig**: Base configuration class for EstimateZernikes tasks.
-* **EstimateZernikesBaseTask**: Base class for EstimateZernikes tasks.
-* **EstimateZernikesScienceSensorTaskConnections**: Connections setup for EstimateZernikesScienceSensorTask to run in a pipeline with Gen 3 middleware.
-* **EstimateZernikesScienceSensorTaskConfig**: Configuration setup for EstimateZernikesScienceSensorTask.
-* **EstimateZernikesScienceSensorTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running LSSTCam in full-array mode (FAM) or LSSTComCam. Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
-* **EstimateZernikesLatissTaskConnections**: Connections setup for EstimateZernikesLatissTask to run in a pipeline with Gen 3 middleware.
-* **EstimateZernikesLatissTaskConfig**: Configuration setup for EstimateZernikesLatissTask.
-* **EstimateZernikesLatissTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running LATISS (auxiliary telescope). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
-* **EstimateZernikesCwfsTaskConnections**: Connections setup for EstimateZernikesCwfsTask to run in a pipeline with Gen 3 middleware.
-* **EstimateZernikesCwfsTaskConfig**: Configuration setup for EstimateZernikesCwfsTask.
-* **EstimateZernikesCwfsTask**: Gen 3 middleware task to take exposures and donut source catalogs and calculate Zenikes coefficients for each CCD when running on corner wave front sensors (CWFS). Saves Zernike coefficients and associated DonutStamps to Gen 3 repository.
 * **RefCatalogInterface**: Tools to pick out the pieces of a reference catalog in the Gen3 Butler that cover the sky area of a pointing.
 * **CombineZernikesBaseTask**: Base class for CombineZernikes tasks that combine the Zernike coefficients from multiple donuts on a detector into a single set of coefficients for the detector.
 * **CombineZernikesBaseConfig**: Configuration setup for CombineZernikesBaseTask.
 * **CombineZernikesMeanTask**: Gen 3 middleware task to combine the Zernike coefficients using an unweighted mean of coefficients from all donut pairs.
 * **CombineZernikesSigmaClipTask**: Gen 3 middleware task to combine the Zernike coefficients with a sigma clipping method that will remove donuts with outlier Zernike values from the final averaging of donut pairs.
 * **CombineZernikesSigmaClipTaskConfig**: Configuration setup for CombineZernikesSigmaClipTask.
-* **CalcZernikesTask**: Gen 3 middleware task to calculate the zernikes from donut stamps that already exist in the butler. This is different from EstimateZernikesTasks that create the donut stamps and calculate the Zernikes as part of the same task.
+* **CalcZernikesTask**: Gen 3 middleware task to calculate the zernikes from donut stamps that already exist in the butler.
 * **CalcZernikesTaskConnections**: Connections setup for CalcZernikesTask.
 * **CalcZernikesTaskConfig**: Configuration setup for CalcZernikesTask.
 * **CutOutDonutsBaseTask**: Base class for CutOutDonuts tasks.

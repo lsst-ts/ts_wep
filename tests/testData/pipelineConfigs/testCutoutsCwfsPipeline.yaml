@@ -37,7 +37,7 @@ tasks:
     class: lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       # And here we specify the configuration settings originally defined in
-      # EstimateZernikesCwfsTaskConfig.
+      # CutOutDonutsCwfsTaskConfig.
       # Test CWFS pipeline works when specifying instrument parameters.
       donutTemplateSize: 160
       donutStampSize: 160
