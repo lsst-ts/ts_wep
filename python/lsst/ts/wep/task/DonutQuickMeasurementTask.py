@@ -35,7 +35,6 @@ from lsst.pipe.tasks.quickFrameMeasurement import (
 
 
 class DonutQuickMeasurementTaskConfig(QuickFrameMeasurementTaskConfig):
-
     initialCutoutPadding = pexConfig.Field(
         doc=str(
             "Additional padding in pixels on each side of initial "
@@ -56,7 +55,6 @@ class DonutQuickMeasurementTaskConfig(QuickFrameMeasurementTaskConfig):
 
 
 class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
-
     ConfigClass = DonutQuickMeasurementTaskConfig
     _DefaultName = "donutQuickMeasurementTask"
 

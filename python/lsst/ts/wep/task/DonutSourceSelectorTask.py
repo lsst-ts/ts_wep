@@ -40,7 +40,6 @@ from lsst.ts.wep.ParamReader import ParamReader
 
 
 class DonutSourceSelectorTaskConfig(pexConfig.Config):
-
     xCoordField = pexConfig.Field(
         dtype=str, default="centroid_x", doc="Name of x-coordinate column."
     )

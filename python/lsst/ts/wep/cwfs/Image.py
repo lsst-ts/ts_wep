@@ -41,7 +41,6 @@ class Image(object):
     """
 
     def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
-
         self.image = np.array([])
         self.imageFilePath = ""
 

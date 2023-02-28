@@ -13,7 +13,6 @@ from lsst.ts.wep.Utility import runProgram, writePipetaskCmd, writeCleanUpRepoCm
 
 class TestGenerateDonutDirectDetectTask(unittest.TestCase):
     def setUp(self):
-
         self.config = GenerateDonutDirectDetectTaskConfig()
         self.task = GenerateDonutDirectDetectTask(config=self.config)
 
@@ -26,7 +25,6 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.registry = self.butler.registry
 
     def testValidateConfigs(self):
-
         # Test config in task
         self.config.opticalModel = "another"
         # Test config in measurement sub task
@@ -40,7 +38,6 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
 
     def testCreateInstDictFromConfig(self):
-
         self.config.instObscuration = 0.1
         self.config.instFocalLength = 10.0
         self.config.instApertureDiameter = 10.0
@@ -59,7 +56,6 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.assertDictEqual(testDict, task.instParams)
 
     def testUpdateDonutCatalog(self):
-
         testDataId = {
             "instrument": "LSSTCam",
             "detector": 94,

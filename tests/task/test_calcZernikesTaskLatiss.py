@@ -90,12 +90,10 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
     def setUp(self):
-
         self.config = CalcZernikesTaskConfig()
         self.config.opticalModel = "onAxis"
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
@@ -117,7 +115,6 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         }
 
     def testValidateConfigs(self):
-
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
@@ -126,7 +123,6 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
     def testEstimateZernikes(self):
-
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
@@ -201,7 +197,6 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
             )
 
     def testGetCombinedZernikes(self):
-
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.getCombinedZernikes(testArr)

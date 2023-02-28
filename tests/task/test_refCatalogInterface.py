@@ -29,7 +29,6 @@ from lsst.ts.wep.task.RefCatalogInterface import RefCatalogInterface
 
 class TestRefCatalogInterface(unittest.TestCase):
     def setUp(self):
-
         self.boresightRa = 0.03
         self.boresightDec = -0.02
         self.boresightRotAng = 90.0

@@ -282,7 +282,6 @@ def readPhoSimSettingData(folderPath, fileName, atype):
         data = []
         # Analyze the sensor name to find the amplifier
         if fileName == "segmentation.txt":
-
             sensorNameStr = lineElement[0].split("_")
             if len(sensorNameStr) == 3:
                 if sensorNameStr[2] in ampList:
@@ -295,7 +294,6 @@ def readPhoSimSettingData(folderPath, fileName, atype):
                         data = lineElement[13:15]
 
         elif fileName == "focalplanelayout.txt":
-
             # Analyze the sensor name to make sure this line of data is
             # needed
             sensorNameStr = lineElement[0].split("_")

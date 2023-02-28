@@ -76,12 +76,10 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
     def setUp(self):
-
         self.config = DonutQuickMeasurementTaskConfig()
         self.task = DonutQuickMeasurementTask(config=self.config)
 
@@ -104,7 +102,6 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         )
 
     def _getTemplate(self):
-
         # Create template
         templateMaker = DonutTemplateFactory.createDonutTemplate(
             DonutTemplateType.Model
@@ -126,7 +123,6 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         return template
 
     def testValidateConfigs(self):
-
         # Check default configuration
         self.origTask = DonutQuickMeasurementTask(config=self.config, name="Orig Task")
         self.assertEqual(self.origTask.config.initialCutoutPadding, 5)
@@ -146,7 +142,6 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         self.assertEqual(self.modifiedTask.config.nSigmaDetection, 5)
 
     def testTaskTemplateError(self):
-
         with self.assertRaises(ValueError) as context:
             self.task.run(self.postIsrExp)
         self.assertEqual(
@@ -158,7 +153,6 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         )
 
     def testTaskRunWithPreConvolve(self):
-
         template = self._getTemplate()
 
         output = self.task.run(self.postIsrExp, template)
@@ -179,7 +173,6 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         np.testing.assert_allclose(relFluxDiff, 1.0, atol=0.1)
 
     def testTaskRunWithoutPreConvolve(self):
-
         self.task.config.doPreConvolution = False
         output = self.task.run(self.postIsrExp)
 

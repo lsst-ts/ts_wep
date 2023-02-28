@@ -229,7 +229,6 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
     @timeMethod
     def run(self, exposure, camera):
-
         detectorName = exposure.detector.getName()
         detectorType = exposure.detector.getType()
         filterName = exposure.filter.bandLabel

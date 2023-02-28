@@ -78,7 +78,6 @@ def getMappingFromFieldXY(fieldXY):
 
 
 if __name__ == "__main__":
-
     # Set the 35 field points
     nArm = 6
     armLen = [0.379, 0.841, 1.237, 1.535, 1.708]

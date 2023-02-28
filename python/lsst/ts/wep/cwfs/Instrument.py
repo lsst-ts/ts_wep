@@ -35,7 +35,6 @@ class Instrument(object):
     """
 
     def __init__(self):
-
         # Set initial parameters
         self._dimOfDonutImg = 0
 

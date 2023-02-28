@@ -37,7 +37,6 @@ class ParamReader(object):
     """
 
     def __init__(self, filePath=None):
-
         if filePath is None:
             self.filePath = ""
             self._content = dict()

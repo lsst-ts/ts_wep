@@ -29,11 +29,9 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
     """Test the CentroidConvolveTemplate class."""
 
     def setUp(self):
-
         self.centroidConv = CentroidConvolveTemplate()
 
     def _createData(self, radiusInner, radiusOuter, imageSize, addNoise=False):
-
         # Create two images. One with a single donut and one with two donuts.
         singleDonut = np.zeros((imageSize, imageSize))
         doubleDonut = np.zeros((imageSize, imageSize))
@@ -94,7 +92,6 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         return singleDonut, doubleDonut, eff_radius
 
     def testGetImgBinary(self):
-
         singleDonut, doubleDonut, eff_radius = self._createData(
             20, 40, 160, addNoise=False
         )
@@ -108,7 +105,6 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         np.testing.assert_array_equal(singleDonut, binarySingle)
 
     def testGetCenterAndRWithoutTemplate(self):
-
         singleDonut, doubleDonut, eff_radius = self._createData(
             20, 40, 160, addNoise=True
         )
@@ -121,7 +117,6 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         self.assertAlmostEqual(rad, eff_radius, delta=0.1)
 
     def testGetCenterAndRWithTemplate(self):
-
         singleDonut, doubleDonut, eff_radius = self._createData(
             20, 40, 160, addNoise=True
         )
@@ -136,7 +131,6 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         self.assertAlmostEqual(rad, eff_radius, delta=0.1)
 
     def testGetCenterAndRFromImgBinary(self):
-
         singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160)
 
         # Test recovery with defaults
@@ -147,7 +141,6 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         self.assertAlmostEqual(rad, eff_radius, delta=0.1)
 
     def testNDonutsAssertion(self):
-
         singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160)
 
         nDonutsAssertMsg = "nDonuts must be an integer >= 1 or -1"
@@ -167,7 +160,6 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
             )
 
     def testGetCenterAndRFromTemplateConvKMeans(self):
-
         singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160)
 
         # Test recovery of single donut
@@ -187,7 +179,6 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         self.assertAlmostEqual(rad, eff_radius, delta=0.1)
 
     def testGetCenterAndRFromTemplateConvDBSCAN(self):
-
         singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160)
 
         # Test recovery of single donut
@@ -208,5 +199,4 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     unittest.main()

@@ -81,7 +81,6 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
     _DefaultName = "generateDonutCatalogOnlineTask"
 
     def __init__(self, dataIds, refCats, **kwargs):
-
         super().__init__(**kwargs)
         refConfig = self.config.refObjLoader
         # refObjLoader handles the interaction with the butler repository

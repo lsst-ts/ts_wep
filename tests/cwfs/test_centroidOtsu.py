@@ -31,11 +31,9 @@ class TestCentroidOtsu(unittest.TestCase):
     """Test the CentroidOtsu class."""
 
     def setUp(self):
-
         self.centroid = CentroidOtsu()
 
     def testGetCenterAndR(self):
-
         imgDonut = self._prepareDonutImg(1000)
 
         realcx, realcy, realR = self.centroid.getCenterAndR(imgDonut)
@@ -44,7 +42,6 @@ class TestCentroidOtsu(unittest.TestCase):
         self.assertAlmostEqual(realR, 47.6698, places=3)
 
     def _prepareDonutImg(self, seed):
-
         # Read the image file
         imgFile = os.path.join(
             getModulePath(),
@@ -69,6 +66,5 @@ class TestCentroidOtsu(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

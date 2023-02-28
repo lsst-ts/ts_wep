@@ -32,11 +32,9 @@ class TestDonutDetector(unittest.TestCase):
     """Test the DonutDetector class."""
 
     def setUp(self):
-
         self.donutDetector = DonutDetector()
 
     def _makeData(self, imgSize, templateSize, donutSep):
-
         templateMaker = DonutTemplateFactory.createDonutTemplate(
             DonutTemplateType.Model
         )
@@ -76,7 +74,6 @@ class TestDonutDetector(unittest.TestCase):
         return template, blendedImg
 
     def testIdentifyBlendedDonuts(self):
-
         testDataFrame = pd.DataFrame()
         testDataFrame["x_center"] = [50.0, 100.0, 120.0]
         testDataFrame["y_center"] = [100.0, 100.0, 100.0]
@@ -106,7 +103,6 @@ class TestDonutDetector(unittest.TestCase):
         )
 
     def testDetectDonuts(self):
-
         template, testImg = self._makeData(480, 160, 60)
         donutDf = self.donutDetector.detectDonuts(testImg, template, 126)
 

@@ -76,7 +76,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         runProgram(pipeCmd)
 
     def setUp(self):
-
         self.config = CutOutDonutsScienceSensorTaskConfig()
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
@@ -97,7 +96,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         }
 
     def testValidateConfigs(self):
-
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
@@ -108,7 +106,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.initialCutoutPadding, 290)
 
     def testAssignExtraIntraIdxLsstCam(self):
-
         focusZNegative = -1
         focusZPositive = 1
 
@@ -125,7 +122,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(intraIdx, 1)
 
     def testAssignExtraIntraIdxLsstComCam(self):
-
         focusZNegative = -1
         focusZPositive = 1
 
@@ -142,7 +138,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(intraIdx, 1)
 
     def testAssignExtraIntraIdxFocusZValueError(self):
-
         focusZNegative = -1
         focusZPositive = 1
         focusZ0 = 0
@@ -163,7 +158,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         )
 
     def testAssignExtraIntraIdxInvalidCamera(self):
-
         cameraName = "WrongCam"
         with self.assertRaises(ValueError) as context:
             self.task.assignExtraIntraIdx(-1, 1, cameraName)
@@ -174,7 +168,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(errorStr, str(context.exception))
 
     def testTaskRun(self):
-
         # Grab two exposures from the same detector at two different visits to
         # get extra and intra
         exposureExtra = self.butler.get(
@@ -230,6 +223,5 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
