@@ -30,17 +30,14 @@ class TestCentroidDefault(unittest.TestCase):
     """Test the CentroidDefault class."""
 
     def setUp(self):
-
         self.centroid = CentroidDefault()
 
     def testGetImgBinary(self):
-
         self.assertRaises(
             NotImplementedError, self.centroid.getImgBinary, np.zeros((2, 2))
         )
 
     def testGetCenterAndRfromImgBinary(self):
-
         structOri = generate_binary_structure(2, 1).astype(int)
 
         iterations = 7
@@ -59,6 +56,5 @@ class TestCentroidDefault(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

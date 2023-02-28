@@ -66,7 +66,6 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.maxZernClip = self.config.maxZernClip
 
     def combineZernikes(self, zernikeArray):
-
         sigArray = sigma_clip(zernikeArray, sigma=self.sigma, axis=0, stdfunc="mad_std")
         # Find which donuts have outlier values from the mask
         flagArray = np.sum(sigArray.mask[:, : self.maxZernClip], axis=1)

@@ -75,12 +75,10 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
     def setUp(self):
-
         self.config = CalcZernikesTaskConfig()
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
@@ -107,7 +105,6 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         )
 
     def testValidateConfigs(self):
-
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
@@ -116,7 +113,6 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
     def testCalcBlendOffsets(self):
-
         # Test with no blend centroid
         donutStampExtra = self.donutStampsExtra[0]
         eulerAngle = 0
@@ -138,7 +134,6 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         np.testing.assert_array_almost_equal(blendOffsetsCentroid, -1.0 * trueOffset)
 
     def testEstimateZernikes(self):
-
         zernCoeff = self.task.estimateZernikes(
             self.donutStampsExtra, self.donutStampsIntra
         )
@@ -234,7 +229,6 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         )
 
     def testGetCombinedZernikes(self):
-
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.getCombinedZernikes(testArr)

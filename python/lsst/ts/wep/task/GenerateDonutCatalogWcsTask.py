@@ -303,7 +303,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         refCatalogs: typing.List[afwTable.SimpleCatalog],
         exposure: afwImage.Exposure,
     ) -> pipeBase.Struct:
-
         refObjLoader = self.getRefObjLoader(refCatalogs)
 
         detector = exposure.getDetector()

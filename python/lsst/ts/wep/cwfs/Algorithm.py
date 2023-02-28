@@ -60,7 +60,6 @@ class Algorithm(object):
     """
 
     def __init__(self, algoDir):
-
         self.algoDir = algoDir
         self.algoParamFile = ParamReader()
 
@@ -790,10 +789,8 @@ class Algorithm(object):
 
         # Set the pre-condition
         if self.currentItr == 0:
-
             # Check this is the first time of running iteration or not
             if I1.getImgInit() is None or I2.getImgInit() is None:
-
                 # Check the image dimension
                 if I1.getImg().shape != I2.getImg().shape:
                     print(
@@ -841,7 +838,6 @@ class Algorithm(object):
 
         # Solve the transport of intensity equation (TIE)
         if not self.caustic:
-
             # Reset the images before the compensation
             I1.updateImage(I1.getImgInit().copy())
             I2.updateImage(I2.getImgInit().copy())
@@ -851,7 +847,6 @@ class Algorithm(object):
             self._recordItem(I2.getImg().copy(), "initI2", jj, debugLevel=1)
 
             if compMode == "zer":
-
                 # Zk coefficient from the previous iteration
                 ztmp = self.zc.copy()
 
@@ -996,7 +991,6 @@ class Algorithm(object):
         zobsR = self.getObsOfZernikes()
         PoissonSolver = self.getPoissonSolverName()
         if PoissonSolver == "fft":
-
             # Use the differential method by fft to solve the Poisson's
             # equation
 
@@ -1055,7 +1049,6 @@ class Algorithm(object):
             # S just equals self.S as the initial condition of SCF
             S = Sini.copy()
             for jj in range(self.getNumOfInnerItr()):
-
                 # Record the initial image
                 self._recordItem(S.copy(), "initS", iOutItr, jj, debugLevel=1)
 
@@ -1128,7 +1121,6 @@ class Algorithm(object):
                 zc = np.zeros(numTerms)
 
         elif PoissonSolver == "exp":
-
             # Use the integration method by serial expansion to solve the
             # Poisson's equation
 
@@ -1364,7 +1356,6 @@ class Algorithm(object):
         # because the blended donut will appear on opposite sides
         # of the central donut.
         if (I1.getFieldXY() != I2.getFieldXY()) or self.blend_exists:
-
             # Get the overlap region of image
             I1.updateImage(I1.getImg() * self.mask_pupil)
             I2.updateImage(I2.getImg() * self.mask_pupil)

@@ -41,7 +41,6 @@ class WfEstimator(object):
     """
 
     def __init__(self, algoDir):
-
         self.inst = Instrument()
         self.algo = Algorithm(algoDir)
 

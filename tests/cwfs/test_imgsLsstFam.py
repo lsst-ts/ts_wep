@@ -31,7 +31,6 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
     """Test the images of LSST full-array mode (FAM)"""
 
     def setUp(self):
-
         testImageDataDir = os.path.join(
             getModulePath(), "tests", "testData", "testImages"
         )
@@ -48,7 +47,6 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
         }
 
     def testImages(self):
-
         sensorNames, fieldXYs = self._getSensorNameAndFieldXY()
         wfErrCwfs = self._getWfErrByCwfs()
         for idx, sensorName in enumerate(sensorNames):
@@ -70,7 +68,6 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
             self.compareDiffWithTol(wfErr, wfErrTruth, 60, 17)
 
     def _getSensorNameAndFieldXY(self):
-
         fileOfFieldXY = os.path.join(self.testImgDir, "ccdCenterTestImg.txt")
         data = np.loadtxt(fileOfFieldXY)
 
@@ -81,20 +78,17 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
         return sensorNames, data[:, 0:2]
 
     def _getWfErrByCwfs(self):
-
         fileWfErr = os.path.join(self.validationDir, "famTestResults.txt")
 
         return np.loadtxt(fileWfErr)
 
     def _getTestImgsPath(self, sensorName):
-
         imgFileIntra = os.path.join(self.testImgDir, f"Image_intra_{sensorName}.txt")
         imgFileExtra = os.path.join(self.testImgDir, f"Image_extra_{sensorName}.txt")
 
         return imgFileIntra, imgFileExtra
 
     def _getTruthOfWfErr(self, sensorName):
-
         fileWfErr = os.path.join(self.validationDir, f"zn_{sensorName}.txt")
         wfErr = np.loadtxt(fileWfErr)
 
@@ -102,6 +96,5 @@ class TestImgsLsstFam(BaseCwfsTestCase, unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

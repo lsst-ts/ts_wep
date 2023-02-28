@@ -31,11 +31,9 @@ class TestDeblendDefault(unittest.TestCase):
     """Test the DeblendDefault class."""
 
     def setUp(self):
-
         self.deblend = DeblendDefault()
 
     def testGenerateMultiDonutWithWrongInputs(self):
-
         img = np.random.rand(4, 4)
         self.assertRaises(
             ValueError, self.deblend.generateMultiDonut, img, -1.3, 0.3, 45.0
@@ -52,7 +50,6 @@ class TestDeblendDefault(unittest.TestCase):
         )
 
     def testGenerateMultiDonut(self):
-
         template = self._getTemplate()
         (
             image,
@@ -67,7 +64,6 @@ class TestDeblendDefault(unittest.TestCase):
         self.assertAlmostEqual(neighborY, 130.58742823, places=7)
 
     def _getTemplate(self):
-
         imageFilePath = os.path.join(
             getModulePath(),
             "tests",
@@ -83,6 +79,5 @@ class TestDeblendDefault(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

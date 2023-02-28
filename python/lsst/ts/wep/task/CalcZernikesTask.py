@@ -220,7 +220,6 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         )
 
         for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
-
             fieldXYExtra = donutExtra.calcFieldXY()
             fieldXYIntra = donutIntra.calcFieldXY()
 
@@ -241,11 +240,19 @@ class CalcZernikesTask(pipeBase.PipelineTask):
             blendOffsetsIntra = self.calcBlendOffsets(donutIntra, eulerZIntra)
 
             if self.transposeImages:
-                imageExtra = rotate(donutExtra.stamp_im.getImage().getArray(), eulerZExtra).T
-                imageIntra = rotate(donutIntra.stamp_im.getImage().getArray(), eulerZIntra).T
+                imageExtra = rotate(
+                    donutExtra.stamp_im.getImage().getArray(), eulerZExtra
+                ).T
+                imageIntra = rotate(
+                    donutIntra.stamp_im.getImage().getArray(), eulerZIntra
+                ).T
             else:
-                imageExtra = rotate(donutExtra.stamp_im.getImage().getArray(), eulerZExtra)
-                imageIntra = rotate(donutIntra.stamp_im.getImage().getArray(), eulerZIntra)
+                imageExtra = rotate(
+                    donutExtra.stamp_im.getImage().getArray(), eulerZExtra
+                )
+                imageIntra = rotate(
+                    donutIntra.stamp_im.getImage().getArray(), eulerZIntra
+                )
 
             wfEsti.setImg(
                 fieldXYExtra,
@@ -304,7 +311,6 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
     ) -> pipeBase.Struct:
-
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if (len(donutStampsExtra) == 0) or (len(donutStampsIntra) == 0):

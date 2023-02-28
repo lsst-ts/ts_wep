@@ -31,17 +31,14 @@ from lsst.ts.wep.task.CombineZernikesMeanTask import (
 
 class TestCombineZernikesMeanTask(unittest.TestCase):
     def setUp(self):
-
         self.task = CombineZernikesMeanTask()
 
     def prepareTestArray(self):
-
         inputArray = np.ones((2, 10))
         inputArray[1] += 2.0
         return inputArray
 
     def testCombineZernikes(self):
-
         zernikeArray = self.prepareTestArray()
         combinedZernikes, flags = self.task.combineZernikes(zernikeArray)
         np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
@@ -49,7 +46,6 @@ class TestCombineZernikesMeanTask(unittest.TestCase):
         self.assertTrue(isinstance(flags[0], numbers.Integral))
 
     def testTaskRun(self):
-
         zernikeArray = self.prepareTestArray()
         combinedZernikesStruct = self.task.run(zernikeArray)
         self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)

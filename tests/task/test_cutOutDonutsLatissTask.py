@@ -89,7 +89,6 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         runProgram(pipeCmd)
 
     def setUp(self):
-
         self.config = CutOutDonutsScienceSensorTaskConfig()
         self.config.donutStampSize = 200
         self.config.donutTemplateSize = 200
@@ -119,7 +118,6 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         }
 
     def testAssignExtraIntraIdx(self):
-
         focusZextra = -1.5
         focusZintra = -1.2
 
@@ -145,7 +143,6 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         )
 
     def testTaskRun(self):
-
         # Grab two exposures from the same detector at two different visits to
         # get extra and intra
         exposureExtra = self.butler.get(
@@ -211,6 +208,5 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)

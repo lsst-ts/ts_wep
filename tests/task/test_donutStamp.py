@@ -36,7 +36,6 @@ from lsst.ts.wep.Utility import getConfigDir, CamType, DefocalType
 
 class TestDonutStamp(unittest.TestCase):
     def setUp(self):
-
         self.nStamps = 3
         self.stampSize = 32
         self.testStamps, self.testMetadata = self._makeStamps(
@@ -47,7 +46,6 @@ class TestDonutStamp(unittest.TestCase):
         )
 
     def _makeStamps(self, nStamps, stampSize, testDefaults=False):
-
         randState = np.random.RandomState(42)
         stampList = []
 
@@ -88,7 +86,6 @@ class TestDonutStamp(unittest.TestCase):
         return stampList, metadata
 
     def testFactory(self):
-
         randState = np.random.RandomState(42)
         for i in range(self.nStamps):
             donutStamp = DonutStamp.factory(self.testStamps[i], self.testMetadata, i)
@@ -155,7 +152,6 @@ class TestDonutStamp(unittest.TestCase):
             )
 
     def testGetCamera(self):
-
         donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0)
 
         donutStamp.cam_name = "LSSTCam"
@@ -179,7 +175,6 @@ class TestDonutStamp(unittest.TestCase):
             donutStamp.getCamera()
 
     def testCalcFieldXY(self):
-
         donutStamp = DonutStamp(
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
@@ -219,7 +214,6 @@ class TestDonutStamp(unittest.TestCase):
                 self.assertEqual(donutStamp.comp_im.fieldY, np.degrees(trueFieldAngleY))
 
     def testMakeMasks(self):
-
         donutStamp = DonutStamp(
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),

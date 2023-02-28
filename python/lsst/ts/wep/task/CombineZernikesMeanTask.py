@@ -33,5 +33,4 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
     """
 
     def combineZernikes(self, zernikeArray):
-
         return np.mean(zernikeArray, axis=0), np.zeros(len(zernikeArray), dtype=int)

@@ -36,7 +36,6 @@ from lsst.ts.wep.task.DonutSourceSelectorTask import (
 
 class TestDonutSourceSelectorTask(unittest.TestCase):
     def setUp(self):
-
         self.config = DonutSourceSelectorTaskConfig()
         self.task = DonutSourceSelectorTask()
 
@@ -52,7 +51,6 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.magMin = -99.0
 
     def _createTestCat(self):
-
         minimalCat = pd.DataFrame()
 
         # Set magnitudes to test with policy file values
@@ -81,7 +79,6 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         return minimalCat, detector
 
     def testValidateConfigs(self):
-
         # Check default configuration
         self.OrigTask = DonutSourceSelectorTask(config=self.config, name="Orig Task")
         self.assertEqual(self.OrigTask.config.xCoordField, "centroid_x")
@@ -101,7 +98,6 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             self.config.sourceLimit = 2.1
 
     def testSelectSourcesMagLimits(self):
-
         minimalCat, detector = self._createTestCat()
 
         # All donuts should pass since default mag limit is (-99.0, 99.0)
@@ -136,7 +132,6 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, True, False, True])
 
     def testSelectSources(self):
-
         minimalCat, detector = self._createTestCat()
 
         # All donuts chosen since none overlap in this instance

@@ -32,7 +32,6 @@ class TestTemplatePhosim(unittest.TestCase):
     """Test the DonutTemplatePhosim class."""
 
     def setUp(self):
-
         modulePath = getModulePath()
         testDataPath = os.path.join(
             modulePath, "tests", "testData", "testDonutTemplates"
@@ -65,13 +64,11 @@ class TestTemplatePhosim(unittest.TestCase):
         )
 
     def tearDown(self):
-
         # Only remove the files we added to the template folder
         os.remove(os.path.join(self.defaultTemplatePath, "extra_template-R99_S99.txt"))
         os.remove(os.path.join(self.defaultTemplatePath, "intra_template-R99_S99.txt"))
 
     def testMakeTemplateExtra(self):
-
         # Generate a test extrafocal template
         imageSize = 160
         templateArray = self.templateMaker.makeTemplate(
@@ -85,7 +82,6 @@ class TestTemplatePhosim(unittest.TestCase):
         np.testing.assert_array_equal(templateArray, self.templateExtra[40:200, 40:200])
 
     def testMakeTemplateIntra(self):
-
         # Generate a test intrafocal template. Test odd imageSize.
         imageSize = 161
         templateArray = self.templateMaker.makeTemplate(
@@ -99,7 +95,6 @@ class TestTemplatePhosim(unittest.TestCase):
         np.testing.assert_array_equal(templateArray, self.templateIntra[39:200, 39:200])
 
     def testLargerTemplate(self):
-
         # Request to return a template larger than the phosim template
         imageSize = 280
         templateArray = self.templateMaker.makeTemplate(
@@ -111,6 +106,5 @@ class TestTemplatePhosim(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

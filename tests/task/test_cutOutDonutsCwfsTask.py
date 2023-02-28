@@ -82,12 +82,10 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
     def setUp(self):
-
         self.config = CutOutDonutsCwfsTaskConfig()
         self.task = CutOutDonutsCwfsTask(config=self.config)
 
@@ -114,7 +112,6 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             runProgram(cleanUpCmd)
 
     def tearDown(self):
-
         # Get Butler with updated registry
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -125,7 +122,6 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             runProgram(cleanUpCmd)
 
     def _getDataFromButler(self):
-
         # Grab two exposures from the same visits of adjacent detectors
         exposureExtra = self.butler.get(
             "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
@@ -156,7 +152,6 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         )
 
     def testValidateConfigs(self):
-
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
@@ -167,7 +162,6 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.initialCutoutPadding, 290)
 
     def testTaskRunNormal(self):
-
         (
             exposureExtra,
             exposureIntra,
@@ -200,7 +194,6 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             )
 
     def testPipeline(self):
-
         (
             exposureExtra,
             exposureIntra,

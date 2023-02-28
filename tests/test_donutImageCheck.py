@@ -31,11 +31,9 @@ class TestDonutImageCheck(unittest.TestCase):
     """Test the DonutImageCheck class."""
 
     def setUp(self):
-
         self.donutImgCheck = DonutImageCheck()
 
     def testIsEffDonutWithEffImg(self):
-
         imgFile = os.path.join(
             getModulePath(),
             "tests",
@@ -53,7 +51,6 @@ class TestDonutImageCheck(unittest.TestCase):
         self.assertTrue(self.donutImgCheck.isEffDonut(donutImg))
 
     def testIsEffDonutWithConstImg(self):
-
         zeroDonutImg = np.zeros((120, 120))
         self.assertFalse(self.donutImgCheck.isEffDonut(zeroDonutImg))
 
@@ -61,12 +58,10 @@ class TestDonutImageCheck(unittest.TestCase):
         self.assertFalse(self.donutImgCheck.isEffDonut(onesDonutImg))
 
     def testIsEffDonutWithRandImg(self):
-
         donutImg = np.random.rand(120, 120)
         self.assertFalse(self.donutImgCheck.isEffDonut(donutImg))
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

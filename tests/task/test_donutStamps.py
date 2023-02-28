@@ -34,13 +34,11 @@ from lsst.ts.wep.Utility import DefocalType
 
 class TestDonutStamps(lsst.utils.tests.TestCase):
     def setUp(self):
-
         self.nStamps = 3
         self.stampSize = 100
         self.donutStamps = self._makeDonutStamps(self.nStamps, self.stampSize)
 
     def _makeDonutStamps(self, nStamps, stampSize):
-
         randState = np.random.RandomState(42)
         stampList = []
 
@@ -114,28 +112,24 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
                 self.assertEqual(stamp1.detector_name, stamp2.detector_name)
 
     def testGetSkyPositions(self):
-
         skyPos = self.donutStamps.getSkyPositions()
         for idx in range(self.nStamps):
             self.assertEqual(skyPos[idx].getRa().asDegrees(), idx)
             self.assertEqual(skyPos[idx].getDec().asDegrees(), idx + 5)
 
     def testGetXY0Positions(self):
-
         xyPos = self.donutStamps.getXY0Positions()
         for idx in range(self.nStamps):
             self.assertEqual(xyPos[idx].getX(), idx + 10)
             self.assertEqual(xyPos[idx].getY(), idx + 15)
 
     def testGetCentroidPositions(self):
-
         xyPos = self.donutStamps.getCentroidPositions()
         for idx in range(self.nStamps):
             self.assertEqual(xyPos[idx].getX(), idx + 20)
             self.assertEqual(xyPos[idx].getY(), idx + 25)
 
     def testGetBlendCentroids(self):
-
         xPos, yPos = self.donutStamps.getBlendCentroids()
         for idx in range(self.nStamps - 1):
             self.assertEqual(xPos[idx], f"{idx + 30:.2f}")
@@ -144,17 +138,14 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         self.assertEqual(yPos[-1], "nan")
 
     def testGetDetectorNames(self):
-
         detNames = self.donutStamps.getDetectorNames()
         self.assertListEqual(detNames, ["R22_S11"] * self.nStamps)
 
     def testGetCameraNames(self):
-
         camNames = self.donutStamps.getCameraNames()
         self.assertListEqual(camNames, ["LSSTCam"] * self.nStamps)
 
     def testGetDefocalTypes(self):
-
         defocalTypes = self.donutStamps.getDefocalTypes()
         halfStampIdx = int(self.nStamps / 2)
         self.assertListEqual(
@@ -167,7 +158,6 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         )
 
     def testGetDefocalDistances(self):
-
         defocalDistances = self.donutStamps.getDefocalDistances()
         for idx in range(self.nStamps):
             self.assertEqual(defocalDistances[idx], 1.5)

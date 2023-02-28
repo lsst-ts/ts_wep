@@ -33,7 +33,6 @@ class TestAlgorithm(unittest.TestCase):
     """Test the Algorithm class."""
 
     def setUp(self):
-
         # Get the path of module
         self.modulePath = getModulePath()
 
@@ -117,11 +116,9 @@ class TestAlgorithm(unittest.TestCase):
         )
 
     def testGetDebugLevel(self):
-
         self.assertEqual(self.algoExp.getDebugLevel(), 0)
 
     def testSetDebugLevel(self):
-
         self.algoExp.config("exp", self.inst, debugLevel=3)
         self.assertEqual(self.algoExp.getDebugLevel(), 3)
 
@@ -129,22 +126,18 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(self.algoExp.getDebugLevel(), 0)
 
     def testGetZer4UpInNm(self):
-
         zer4UpNm = self.algoExp.getZer4UpInNm()
         self.assertTrue(isinstance(zer4UpNm, np.ndarray))
 
     def testGetPoissonSolverName(self):
-
         self.assertEqual(self.algoExp.getPoissonSolverName(), "exp")
         self.assertEqual(self.algoFft.getPoissonSolverName(), "fft")
 
     def testGetNumOfZernikes(self):
-
         self.assertEqual(self.algoExp.getNumOfZernikes(), 22)
         self.assertEqual(self.algoFft.getNumOfZernikes(), 22)
 
     def testGetZernikeTerms(self):
-
         zTerms = self.algoExp.getZernikeTerms()
         self.assertTrue(type(zTerms[0]), int)
         self.assertEqual(len(zTerms), self.algoExp.getNumOfZernikes())
@@ -156,36 +149,29 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(len(zTerms), self.algoExp.getNumOfZernikes())
 
     def testGetObsOfZernikes(self):
-
         self.assertEqual(self.algoExp.getObsOfZernikes(), self.inst.obscuration)
         self.assertEqual(self.algoFft.getObsOfZernikes(), self.inst.obscuration)
 
     def testGetNumOfOuterItr(self):
-
         self.assertEqual(self.algoExp.getNumOfOuterItr(), 14)
         self.assertEqual(self.algoFft.getNumOfOuterItr(), 14)
 
     def testGetNumOfInnerItr(self):
-
         self.assertEqual(self.algoFft.getNumOfInnerItr(), 6)
 
     def testGetFeedbackGain(self):
-
         self.assertEqual(self.algoExp.getFeedbackGain(), 0.6)
         self.assertEqual(self.algoFft.getFeedbackGain(), 0.6)
 
     def testGetOffAxisPolyOrder(self):
-
         self.assertEqual(self.algoExp.getOffAxisPolyOrder(), 10)
         self.assertEqual(self.algoFft.getOffAxisPolyOrder(), 10)
 
     def testGetCompensatorMode(self):
-
         self.assertEqual(self.algoExp.getCompensatorMode(), "zer")
         self.assertEqual(self.algoFft.getCompensatorMode(), "zer")
 
     def testGetCompSequence(self):
-
         compSequence = self.algoExp.getCompSequence()
         self.assertTrue(isinstance(compSequence, np.ndarray))
         self.assertEqual(compSequence.dtype, int)
@@ -197,16 +183,13 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(len(compSequence), self.algoFft.getNumOfOuterItr())
 
     def testGetBoundaryThickness(self):
-
         self.assertEqual(self.algoExp.getBoundaryThickness(), 8)
         self.assertEqual(self.algoFft.getBoundaryThickness(), 1)
 
     def testGetFftDimension(self):
-
         self.assertEqual(self.algoFft.getFftDimension(), 128)
 
     def testGetSignalClipSequence(self):
-
         sumclipSequence = self.algoFft.getSignalClipSequence()
         self.assertTrue(isinstance(sumclipSequence, np.ndarray))
         self.assertEqual(len(sumclipSequence), self.algoExp.getNumOfOuterItr() + 1)
@@ -214,16 +197,13 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(sumclipSequence[-1], 0.51)
 
     def testGetMaskScalingFactor(self):
-
         self.assertAlmostEqual(self.algoExp.getMaskScalingFactor(), 1.0939, places=4)
         self.assertAlmostEqual(self.algoFft.getMaskScalingFactor(), 1.0939, places=4)
 
     def testGetWavefrontMapEstiInIter0(self):
-
         self.assertRaises(RuntimeError, self.algoExp.getWavefrontMapEsti)
 
     def testGetWavefrontMapEstiAndResidual(self):
-
         self.algoExp.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
 
         wavefrontMapEsti = self.algoExp.getWavefrontMapEsti()
@@ -235,14 +215,12 @@ class TestAlgorithm(unittest.TestCase):
         self.assertLess(np.sum(np.abs(wavefrontMapResidual)), 2.5e-6)
 
     def testItr0(self):
-
         self.algoExp.itr0(self.I1, self.I2, self.opticalModel)
 
         zer4UpNm = self.algoExp.getZer4UpInNm()
         self.assertEqual(np.sum(np.abs(np.rint(zer4UpNm) - self._getAnsItr0())), 0)
 
     def _getAnsItr0(self):
-
         return [
             31,
             -69,
@@ -266,14 +244,12 @@ class TestAlgorithm(unittest.TestCase):
         ]
 
     def testNextItrWithOneIter(self):
-
         self.algoExp.nextItr(self.I1, self.I2, self.opticalModel, nItr=1)
 
         zer4UpNm = self.algoExp.getZer4UpInNm()
         self.assertEqual(np.sum(np.abs(np.rint(zer4UpNm) - self._getAnsItr0())), 0)
 
     def testNextItrWithTwoIter(self):
-
         self.algoExp.nextItr(self.I1, self.I2, self.opticalModel, nItr=2)
         zer4UpNm = self.algoExp.getZer4UpInNm()
 
@@ -301,7 +277,6 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(np.sum(np.abs(np.rint(zer4UpNm) - ansRint)), 0)
 
     def testIter0AndNextIterToCheckReset(self):
-
         self.algoExp.itr0(self.I1, self.I2, self.opticalModel)
         tmp1 = self.algoExp.getZer4UpInNm()
 
@@ -315,7 +290,6 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(difference, 0)
 
     def testRunItOfExp(self):
-
         self.algoExp.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
 
         # Check the value
@@ -323,7 +297,6 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(int(zk[7]), -192)
 
     def testResetAfterFullCalc(self):
-
         self.algoExp.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
 
         # Reset and check the calculation again
@@ -335,7 +308,6 @@ class TestAlgorithm(unittest.TestCase):
         self.assertEqual(int(zk[7]), -192)
 
     def testRunItOfFft(self):
-
         self.algoFft.runIt(self.I1, self.I2, self.opticalModel, tol=1e-3)
 
         zk = self.algoFft.getZer4UpInNm()
@@ -434,6 +406,5 @@ class TestAlgorithm(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     # Do the unit test
     unittest.main()

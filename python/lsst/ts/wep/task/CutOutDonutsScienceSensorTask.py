@@ -182,7 +182,6 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         donutCatalog: typing.List[pd.DataFrame],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
-
         # Use exposure focusZ to find which is extra and intra
         focusZ0 = exposures[0].visitInfo.focusZ
         focusZ1 = exposures[1].visitInfo.focusZ
