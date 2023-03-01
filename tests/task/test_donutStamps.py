@@ -62,6 +62,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
         dfcDists = np.ones(nStamps) * 1.5
+        bandpass = ["r"] * nStamps
 
         # Test mixture of donuts with blends and those without
         blendCentX[-1] = "nan"
@@ -78,6 +79,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
         metadata["DFC_DIST"] = dfcDists
+        metadata["BANDPASS"] = bandpass
 
         donutStampList = [
             DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)
@@ -110,6 +112,10 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
                     stamp1.centroid_position.getY(), stamp2.centroid_position.getY()
                 )
                 self.assertEqual(stamp1.detector_name, stamp2.detector_name)
+                self.assertEqual(stamp1.cam_name, stamp2.cam_name)
+                self.assertEqual(stamp1.defocal_type, stamp2.defocal_type)
+                self.assertEqual(stamp1.defocal_distance, stamp2.defocal_distance)
+                self.assertEqual(stamp1.bandpass, stamp2.bandpass)
 
     def testGetSkyPositions(self):
         skyPos = self.donutStamps.getSkyPositions()
@@ -161,6 +167,10 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         defocalDistances = self.donutStamps.getDefocalDistances()
         for idx in range(self.nStamps):
             self.assertEqual(defocalDistances[idx], 1.5)
+
+    def testGetBandpass(self):
+        bandpasses = self.donutStamps.getBandpasses()
+        self.assertListEqual(bandpasses, ["r"] * self.nStamps)
 
     def testAppend(self):
         """Test ability to append to a Stamps object"""
