@@ -381,6 +381,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         detectorType = exposure.getDetector().getType()
         pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
         camType = getCamTypeFromButlerName(cameraName, detectorType)
+        bandpass = exposure.filter.bandLabel
         # Get template
         template = self.getTemplate(
             detectorName,
@@ -492,6 +493,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 defocal_type=defocalType.value,
                 # Save defocal offset in mm.
                 defocal_distance=self.instParams["offset"],
+                bandpass=bandpass,
             )
             boundaryT = 1
             maskScalingFactorLocal = 1
