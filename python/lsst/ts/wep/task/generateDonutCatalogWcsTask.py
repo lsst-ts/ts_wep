@@ -38,7 +38,7 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms import ReferenceObjectLoader, LoadReferenceObjectsConfig
 from lsst.meas.algorithms.sourceSelector import ReferenceSourceSelectorTask
-from lsst.ts.wep.task.DonutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
 
 class GenerateDonutCatalogWcsTaskConnections(

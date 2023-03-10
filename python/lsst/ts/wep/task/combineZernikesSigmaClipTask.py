@@ -25,7 +25,7 @@ import numpy as np
 from astropy.stats import sigma_clip
 
 import lsst.pex.config as pexConfig
-from lsst.ts.wep.task.CombineZernikesBase import (
+from lsst.ts.wep.task.combineZernikesBase import (
     CombineZernikesBaseTask,
     CombineZernikesBaseConfig,
 )

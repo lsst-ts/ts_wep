@@ -39,8 +39,8 @@ from lsst.ts.wep.Utility import (
     createInstDictFromConfig,
 )
 from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.task.DonutSourceSelectorTask import DonutSourceSelectorTask
-from lsst.ts.wep.task.DonutQuickMeasurementTask import DonutQuickMeasurementTask
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 
 
 class GenerateDonutDirectDetectTaskConnections(
