@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from .DeblendAdapt import *
-from .DeblendDefault import *
-from .DeblendDonutFactory import *
+from .deblendAdapt import *
+from .deblendDefault import *
+from .deblendDonutFactory import *
 from .nelderMeadModify import *
