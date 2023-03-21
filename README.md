@@ -99,9 +99,9 @@ In this case that is found in `tests/testData/pipelineConfigs/testCalcZernikesCw
 Looking at this file we see that the four tasks we will run are:
 
 - `lsst.ip.isr.isrTask.IsrTask`
-- `lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask`
-- `lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask`
-- `lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask`
+- `lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask`
+- `lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask`
+- `lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask`
 
 2. Run the `pipetask` from the command line:
 
@@ -126,6 +126,18 @@ The options used above are as follows:
 ```bash
 butler query-collections $path_of_ts_wep/tests/testData/gen3TestRepo/
 ```
+
+## Using butler to access `donutStamps` created with `ts_wep` versions < 6.0.0
+
+In `ts_wep` release 6.0.0 we updated the module names to start with a lower case letter in order to bring them in line with LSST Data Management convention and enable batch processing of the WEP Gen 3 pipeline. This will lead to errors when attempting to load `donutStamps` created with older versions of `ts_wep`. However adding symlinks in the following way will enable loading the older `donutStamps` through the LSST Science Pipelines butler once again.
+
+```bash
+cd $path_of_ts_wep/python/lsst/ts/wep/task/
+ln -s donutStamp.py DonutStamp.py
+ln -s donutStamps.py DonutStamps.py
+```
+
+Note that adding these symbolic links might make the `git` workspace dirty. Please be careful not to add these file locations when making commits.
 
 ## Diagram of the Corner Wavefront Sensor Geometry
 
