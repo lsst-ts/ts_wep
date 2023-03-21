@@ -30,4 +30,4 @@ tasks:
       doOverscan: True
       python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
   generateDonutCatalogWcsTask:
-    class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask

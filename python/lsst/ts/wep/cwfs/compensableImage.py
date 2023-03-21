@@ -35,15 +35,15 @@ from scipy.ndimage import (
 from scipy.interpolate import RectBivariateSpline
 from scipy.signal import correlate
 
-from lsst.ts.wep.ParamReader import ParamReader
-from lsst.ts.wep.cwfs.Tool import (
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.cwfs.tool import (
     padArray,
     extractArray,
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
 )
-from lsst.ts.wep.cwfs.Image import Image
-from lsst.ts.wep.Utility import DefocalType, CentroidFindType, rotMatrix
+from lsst.ts.wep.cwfs.image import Image
+from lsst.ts.wep.utility import DefocalType, CentroidFindType, rotMatrix
 from galsim.utilities import horner2d
 
 

@@ -27,9 +27,9 @@ import lsst.geom
 import lsst.utils.tests
 import lsst.afw.image as afwImage
 from lsst.daf.base import PropertyList
-from lsst.ts.wep.task.DonutStamp import DonutStamp
-from lsst.ts.wep.task.DonutStamps import DonutStamps
-from lsst.ts.wep.Utility import DefocalType
+from lsst.ts.wep.task.donutStamp import DonutStamp
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.utility import DefocalType
 
 
 class TestDonutStamps(lsst.utils.tests.TestCase):

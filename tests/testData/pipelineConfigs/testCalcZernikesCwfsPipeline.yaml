@@ -33,11 +33,11 @@ tasks:
       doOverscan: True
       python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
   generateDonutCatalogWcsTask:
-    class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
       donutSelector.unblendedSeparation: 1
   cutOutDonutsCwfsTask:
-    class: lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       # And here we specify the configuration settings originally defined in
       # CutOutDonutsCwfsTaskConfig.
@@ -46,4 +46,4 @@ tasks:
       donutStampSize: 160
       initialCutoutPadding: 40
   calcZernikesTask:
-    class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask

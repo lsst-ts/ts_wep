@@ -23,8 +23,8 @@ import os
 import numpy as np
 import unittest
 
-from lsst.ts.wep.DonutImageCheck import DonutImageCheck
-from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.donutImageCheck import DonutImageCheck
+from lsst.ts.wep.utility import getModulePath
 
 
 class TestDonutImageCheck(unittest.TestCase):

@@ -30,11 +30,11 @@ tasks:
       doOverscan: True
       python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
   generateDonutCatalogWcsTask:
-    class: lsst.ts.wep.task.GenerateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
       donutSelector.unblendedSeparation: 1
   cutOutDonutsScienceSensorTask:
-    class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings originally defined in
       # CutOutDonutsScienceSensorTaskConfig.

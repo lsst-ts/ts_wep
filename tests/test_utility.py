@@ -24,7 +24,7 @@ import unittest
 import numpy as np
 from enum import IntEnum
 
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.utility import (
     mapFilterRefToG,
     FilterType,
     getModulePath,
@@ -52,7 +52,7 @@ from lsst.ts.wep.Utility import (
     rotMatrix,
 )
 from lsst.afw.cameraGeom import DetectorType
-from lsst.ts.wep.task.CalcZernikesTask import CalcZernikesTaskConfig
+from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTaskConfig
 
 
 class TestUtility(unittest.TestCase):

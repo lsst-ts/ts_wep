@@ -24,8 +24,8 @@ import numpy as np
 import tempfile
 import unittest
 
-from lsst.ts.wep.ParamReader import ParamReader
-from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.utility import getModulePath
 
 
 class TestParamReader(unittest.TestCase):

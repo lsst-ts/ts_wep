@@ -31,8 +31,8 @@ import lsst.afw.table as afwTable
 import lsst.obs.lsst as obs_lsst
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.stamps import AbstractStamp
-from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
-from lsst.ts.wep.Utility import DefocalType
+from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+from lsst.ts.wep.utility import DefocalType
 
 
 @dataclass

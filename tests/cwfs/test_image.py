@@ -23,9 +23,9 @@ import os
 import numpy as np
 import unittest
 
-from lsst.ts.wep.cwfs.Image import Image
-from lsst.ts.wep.cwfs.CentroidRandomWalk import CentroidRandomWalk
-from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.cwfs.image import Image
+from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
+from lsst.ts.wep.utility import getModulePath
 
 
 class TestImage(unittest.TestCase):

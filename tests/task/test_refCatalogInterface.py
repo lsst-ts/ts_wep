@@ -23,8 +23,8 @@ import os
 import unittest
 
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.task.RefCatalogInterface import RefCatalogInterface
+from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.task.refCatalogInterface import RefCatalogInterface
 
 
 class TestRefCatalogInterface(unittest.TestCase):

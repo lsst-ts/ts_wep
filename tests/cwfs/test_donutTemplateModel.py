@@ -22,8 +22,8 @@
 import unittest
 import numpy as np
 
-from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
-from lsst.ts.wep.Utility import DefocalType, CamType
+from lsst.ts.wep.cwfs.donutTemplateModel import DonutTemplateModel
+from lsst.ts.wep.utility import DefocalType, CamType
 
 
 class TestTemplateModel(unittest.TestCase):

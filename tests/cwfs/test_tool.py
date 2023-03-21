@@ -25,7 +25,7 @@ from scipy.integrate import nquad
 from astropy.io import fits
 import unittest
 
-from lsst.ts.wep.cwfs.Tool import (
+from lsst.ts.wep.cwfs.tool import (
     ZernikeAnnularEval,
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
@@ -34,7 +34,7 @@ from lsst.ts.wep.cwfs.Tool import (
     padArray,
     extractArray,
 )
-from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.utility import getModulePath
 from lsst.utils.tests import TestCase
 
 

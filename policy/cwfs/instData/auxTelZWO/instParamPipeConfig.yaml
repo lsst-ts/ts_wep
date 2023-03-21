@@ -3,7 +3,7 @@ instrument: lsst.obs.lsst.Latiss
 
 tasks:
   cutOutDonutsScienceSensorTask:
-    class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # Obscuration (inner_radius / outer_radius of primary mirror)
       instObscuration: 0.3525
@@ -18,7 +18,7 @@ tasks:
       # Camera pixel size in m
       instPixelSize: 15.2e-6
   calcZernikesTask:
-    class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       # Obscuration (inner_radius / outer_radius of primary mirror)
       instObscuration: 0.3525

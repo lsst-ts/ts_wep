@@ -30,8 +30,8 @@ from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
 
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.WfEstimator import WfEstimator
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.wfEstimator import WfEstimator
+from lsst.ts.wep.utility import (
     getConfigDir,
     DefocalType,
     getCamTypeFromButlerName,
