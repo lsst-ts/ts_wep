@@ -90,11 +90,11 @@ class TestUtility(unittest.TestCase):
 
     def testMapFilterRefToG(self):
         mappedFilterType = mapFilterRefToG(FilterType.REF)
-        self.assertEqual(mappedFilterType, FilterType.G)
+        self.assertEqual(mappedFilterType, FilterType.LSST_G)
 
     def testMapFilterRefToGForFilterU(self):
-        mappedFilterType = mapFilterRefToG(FilterType.U)
-        self.assertEqual(mappedFilterType, FilterType.U)
+        mappedFilterType = mapFilterRefToG(FilterType.LSST_U)
+        self.assertEqual(mappedFilterType, FilterType.LSST_U)
 
     def testGetConfigDir(self):
         ansConfigDir = os.path.join(getModulePath(), "policy")
