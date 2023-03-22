@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.0.1:
+
+-------------
+6.0.1
+-------------
+
+* Redesign and enhance documentation to match style and detail of other TS repositories.
+
 .. _lsst.ts.wep-6.0.0:
 
 -------------

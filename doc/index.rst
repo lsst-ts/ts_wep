@@ -1,89 +1,82 @@
-.. py:currentmodule:: lsst.ts.wep
+.. |CSC_developer| replace:: *Bryce Kalmbach <brycek@uw.edu>* and *Chris Suberlak <suberlak@uw.edu>*
+.. |CSC_product_owner| replace:: *Sandrine Thomas <sthomas@lsst.org>*
 
-.. _lsst.ts.wep:
+.. Note that the ts_ prefix is omitted from the title
 
-##############
-lsst.ts.wep
-##############
+###
+WEP
+###
 
-Wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the intra- and extra-focal donut images. The wavefront error is determined by solving the transport of intensity equation (TIE) that approximates the change of intensity mainly comes from the wavefront error.
+.. image:: https://img.shields.io/badge/GitHub-ts__wep-green.svg
+    :target: https://github.com/lsst-ts/ts_wep
+.. image:: https://img.shields.io/badge/Jenkins-ts__wep-green.svg
+    :target: https://tssw-ci.lsst.org/job/LSST_Telescope-and-Site/job/ts_wep
 
-.. _lsst.ts.wep-using:
+.. _Overview:
 
-Using lsst.ts.wep
-====================
-
-.. toctree::
-   :maxdepth: 1
-
-Important classes:
-
-* `WfEstimator` calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the defocal donut images.
-
-Important Pipeline Tasks:
-
-* `task.GenerateDonutCatalogWcsTask` creates a donut source catalog from available reference catalogs.
-* `task.CutOutDonutsScienceSensorTask` cuts out donuts stamps in image from LSSTFam or ComCam sensors when provided input exposures and source catalog.
-* `task.CutOutDonutsCwfsTask` cuts out donuts stamps in image from LSSTCam corner wavefront sensors when provided input exposures and source catalog.
-* `task.CalcZernikesTask` calculates the Zernikes polynomials from donut stamps already stored in a butler repository.
-
-Important enums:
-
-* `FilterType` defines the type of active filter.
-* `CamType` defines the type of camera.
-* `BscDbType` defines the type of bright star catalog database.
-
-.. _lsst.ts.wep-pyapi:
-
-Python API reference
-====================
-
-.. automodapi:: lsst.ts.wep
-    :no-inheritance-diagram:
-
-.. automodapi:: lsst.ts.wep.cwfs
-    :no-inheritance-diagram:
-
-.. automodapi:: lsst.ts.wep.deblend
-    :no-inheritance-diagram:
-
-.. automodapi:: lsst.ts.wep.task
-    :no-inheritance-diagram:
-
-.. _lsst.ts.wep-content:
-
-Content
-====================
-
-.. toctree::
-
-   content
-
-.. _lsst.ts.wep-contributing:
-
-Contributing
-============
-
-``lsst.ts.wep`` is developed at https://github.com/lsst-ts/ts_wep.
-
-
-.. _lsst.ts.wep-see-also:
-
-See Also
+Overview
 ========
 
+The wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials up to 22 terms based
+on the intra- and extra-focal donut images. The wavefront error is determined by solving the transport of intensity equation
+(TIE) that approximates the change of intensity mainly comes from the wavefront error.
+
+In automatic operation, WEP will be run as part of the Main Telescope Active Optics System (`MTAOS <https://ts-mtaos.lsst.io/index.html>`_).
+
+The badges above navigate to the GitHub repository for the WEP code and Jenkins CI jobs.
+
+.. _User_Documentation:
+
+User Documentation
+==================
+
+Observatory operators and other interested parties should consult the user guide for insights into WEP operations.
+
 .. toctree::
-    :maxdepth: 2
-    :titlesonly:
-    :glob:
+    user-guide/user-guide
+    :maxdepth: 1
 
-    phosimDonutTemplates.rst
+.. _Configuration:
 
-.. _lsst.ts.wep-version:
+Configuring the WEP
+=====================
 
-Version
-====================
+WEP's configuration is described at the following link.
 
 .. toctree::
+    configuration/configuration
+    :maxdepth: 1
 
-   versionHistory
+.. _Development_Documentation:
+
+Development Documentation
+=========================
+
+Classes and their methods, and how to get involved in the WEP development is described in this section.
+
+.. toctree::
+    developer-guide/developer-guide
+    :maxdepth: 1
+
+.. _Version_History:
+
+Version History
+===============
+
+The version history is at the following link.
+
+.. toctree::
+    versionHistory
+    :maxdepth: 1
+
+The released version is `here <https://github.com/lsst-ts/ts_wep/releases>`_.
+
+.. _Contact_Personnel:
+
+Contact Personnel
+=================
+
+For questions not covered in the documentation, emails should be addressed to the developers: |CSC_developer|.
+The product owner is |CSC_product_owner|.
+
+This page was last modified |today|.

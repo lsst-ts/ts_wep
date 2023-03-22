@@ -1,22 +1,53 @@
-.. py:currentmodule:: lsst.ts.wep
+.. _Developer_Guide:
 
-.. _lsst.ts.wep-modules:
+###################
+WEP Developer Guide
+###################
 
-##########
+Wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the intra- and extra-focal donut images.
+The wavefront error is determined by solving the transport of intensity equation (TIE) that approximates the change of intensity mainly comes from the wavefront error.
+For an in-depth explanation of the algorithm that solves the TIE equation see the following technote: `SITCOMTN-046: AOS Algorithm for Wavefront Estimation <https://sitcomtn-046.lsst.io/>`_.
+
+.. _WEP_Main_Classes:
+
+Main Classes
+============
+
+.. toctree::
+   :maxdepth: 1
+
+Important classes:
+
+* `WfEstimator` calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the defocal donut images.
+
+Important Pipeline Tasks:
+
+* `task.GenerateDonutCatalogWcsTask` creates a donut source catalog from available reference catalogs.
+* `task.CutOutDonutsScienceSensorTask` cuts out donuts stamps in image from LSSTFam or ComCam sensors when provided input exposures and source catalog.
+* `task.CutOutDonutsCwfsTask` cuts out donuts stamps in image from LSSTCam corner wavefront sensors when provided input exposures and source catalog.
+* `task.CalcZernikesTask` calculates the Zernikes polynomials from donut stamps already stored in a butler repository.
+
+Important enums:
+
+* `FilterType` defines the type of active filter.
+* `CamType` defines the type of camera.
+* `BscDbType` defines the type of bright star catalog database.
+
+.. _WEP_Modules:
+
 Modules
-##########
+=======
 
 The classes and files for each module are listed below.
 
-.. _lsst.ts.wep-modules_wep:
+.. _WEP_modules_wep:
 
--------------
 wep
 -------------
 
 This module is a high-level module to use other modules.
 
-.. uml:: uml/wepClass.uml
+.. uml:: ../uml/wepClass.uml
     :caption: Class diagram of wep
 
 * **WfEstimator**: Calculate the wavefront error in annular Zernike polynomials up to 22 terms based on the defocal donut images.
@@ -26,15 +57,14 @@ This module is a high-level module to use other modules.
 * **DonutImageCheck**: Donut image check class to judge the donut image is effective or not.
 * **DonutDetector**: Detect donuts directly from an out of focus image by convolution with a template image.
 
-.. _lsst.ts.wep-modules_wep_cwfs:
+.. _WEP_modules_wep_cwfs:
 
--------------
 wep.cwfs
 -------------
 
 This module calculates the wavefront error by solving the TIE.
 
-.. uml:: uml/cwfsClass.uml
+.. uml:: ../uml/cwfsClass.uml
     :caption: Class diagram of wep.cwfs
 
 * **Algorithm**: Algorithm class to solve the TIE to get the wavefront error.
@@ -51,17 +81,16 @@ This module calculates the wavefront error by solving the TIE.
 * **DonutTemplateFactory**: Factory for creating donut template objects used by CentroidConvolveTemplate.
 * **DonutTemplateDefault**: Default donut template class.
 * **DonutTemplateModel**: DonutTemplateDefault child class to make donut templates using an Instrument model.
-* **DonutTemplatePhosim**: DonutTemplateDefault child class to make donut templates from templates created with Phosim. See :doc:`here <phosimDonutTemplates>` for more information on creating and using Phosim donut templates.
+* **DonutTemplatePhosim**: DonutTemplateDefault child class to make donut templates from templates created with Phosim. See :doc:`here <../phosimDonutTemplates>` for more information on creating and using Phosim donut templates.
 
-.. _lsst.ts.wep-modules_wep_deblend:
+.. _WEP_modules_wep_deblend:
 
--------------
 wep.deblend
 -------------
 
 This module does the image deblending.
 
-.. uml:: uml/deblendClass.uml
+.. uml:: ../uml/deblendClass.uml
     :caption: Class diagram of wep.deblend
 
 * **DeblendDonutFactory**: Factory for creating the deblend donut object to deblend the bright star donut from neighboring stars.
@@ -69,15 +98,14 @@ This module does the image deblending.
 * **DeblendAdapt**: DeblendDefault child class to do the deblending by the adaptive threshold method.
 * **nelderMeadModify**: Do the numerical optimation according to the Nelder-Mead algorithm.
 
-.. _lsst.ts.wep-modules_wep_task:
+.. _WEP_modules_wep_task:
 
--------------
 wep.task
 -------------
 
 This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware.
 
-.. uml:: uml/taskClass.uml
+.. uml:: ../uml/taskClass.uml
     :caption: Class diagram of wep.task
 
 * **GenerateDonutDirectDetectTaskConnections**: Connections setup for GenerateDonutDirectDetectTask to run in a pipeline with Gen 3 middleware.
@@ -111,3 +139,31 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **CutOutDonutsScienceSensorTask**: Gen 3 middleware task to cut out donut stamps on science sensors from donut catalogs produced by GenerateDonutCatalogs tasks.
 * **CutOutDonutsScienceSensorTaskConnections**: Connections setup for CutOutDonutsScienceSensorTask.
 * **CutOutDonutsScienceSensorTaskConfig**: Configuration setup for CutOutDonutsScienceSensorTask.
+
+.. _WEP_API:
+
+Python API reference
+====================
+
+This section is autogenerated from docstrings.
+
+.. automodapi:: lsst.ts.wep
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.cwfs
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.deblend
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.task
+    :no-inheritance-diagram:
+
+.. _WEP_contributing:
+
+Contributing
+============
+
+To contribute, please start a new pull request on `GitHub <https://github.com/lsst-ts/ts_wep>`_.
+Feature requests shall be filled in JIRA with *ts_aos* as the component and *AOS* as the label.
+In all cases, reaching out to the :ref:`contacts for this CSC <Contact_Personnel>` is recommended.
