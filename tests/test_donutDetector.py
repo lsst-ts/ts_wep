@@ -23,9 +23,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from lsst.ts.wep.DonutDetector import DonutDetector
-from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.Utility import DonutTemplateType, DefocalType
+from lsst.ts.wep.donutDetector import DonutDetector
+from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.utility import DonutTemplateType, DefocalType
 
 
 class TestDonutDetector(unittest.TestCase):

@@ -3,7 +3,7 @@ instrument: lsst.obs.lsst.LsstCam
 
 tasks:
   cutOutDonutsCwfsTask:
-    class: lsst.ts.wep.task.CutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
       # Obscuration (inner_radius / outer_radius of M1M3)
       instObscuration: 0.61
@@ -18,7 +18,7 @@ tasks:
       # Camera pixel size in m
       instPixelSize: 10.0e-6
   calcZernikesTask:
-    class: lsst.ts.wep.task.CalcZernikesTask.CalcZernikesTask
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       # Obscuration (inner_radius / outer_radius of M1M3)
       instObscuration: 0.61

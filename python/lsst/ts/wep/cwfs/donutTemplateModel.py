@@ -22,10 +22,10 @@
 __all__ = ["DonutTemplateModel"]
 
 import numpy as np
-from lsst.ts.wep.Utility import getConfigDir, readPhoSimSettingData, CamType
-from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
-from lsst.ts.wep.cwfs.Instrument import Instrument
-from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
+from lsst.ts.wep.utility import getConfigDir, readPhoSimSettingData, CamType
+from lsst.ts.wep.cwfs.donutTemplateDefault import DonutTemplateDefault
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 import lsst.obs.lsst as obs_lsst
 import lsst.afw.cameraGeom as cameraGeom
 

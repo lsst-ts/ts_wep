@@ -21,7 +21,7 @@
 
 import unittest
 
-from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
+from lsst.ts.wep.cwfs.donutTemplateDefault import DonutTemplateDefault
 
 
 class TestDonutTemplateDefault(unittest.TestCase):

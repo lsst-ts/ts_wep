@@ -23,11 +23,11 @@ import os
 
 import lsst.utils.tests
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.CutOutDonutsCwfsTask import (
+from lsst.ts.wep.task.cutOutDonutsCwfsTask import (
     CutOutDonutsCwfsTask,
     CutOutDonutsCwfsTaskConfig,
 )
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.utility import (
     getModulePath,
     runProgram,
     DefocalType,

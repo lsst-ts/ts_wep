@@ -3,12 +3,12 @@ import unittest
 import numpy as np
 import pandas as pd
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.task.GenerateDonutDirectDetectTask import (
+from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.task.generateDonutDirectDetectTask import (
     GenerateDonutDirectDetectTask,
     GenerateDonutDirectDetectTaskConfig,
 )
-from lsst.ts.wep.Utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
+from lsst.ts.wep.utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
 
 
 class TestGenerateDonutDirectDetectTask(unittest.TestCase):

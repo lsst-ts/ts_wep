@@ -24,10 +24,10 @@ __all__ = ["BaseCwfsTestCase"]
 import os
 import numpy as np
 
-from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
-from lsst.ts.wep.cwfs.Instrument import Instrument
-from lsst.ts.wep.cwfs.Algorithm import Algorithm
-from lsst.ts.wep.Utility import getConfigDir, DefocalType
+from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.cwfs.algorithm import Algorithm
+from lsst.ts.wep.utility import getConfigDir, DefocalType
 
 
 class BaseCwfsTestCase(object):

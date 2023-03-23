@@ -61,12 +61,12 @@ from lsst.afw.cameraGeom import DetectorType
 
 
 class FilterType(IntEnum):
-    U = 1
-    G = auto()
-    R = auto()
-    I = auto()
-    Z = auto()
-    Y = auto()
+    LSST_U = 1
+    LSST_G = auto()
+    LSST_R = auto()
+    LSST_I = auto()
+    LSST_Z = auto()
+    LSST_Y = auto()
     REF = auto()
 
 
@@ -332,7 +332,7 @@ def mapFilterRefToG(filterType):
     """
 
     if filterType == FilterType.REF:
-        return FilterType.G
+        return FilterType.LSST_G
     else:
         return filterType
 

@@ -29,16 +29,16 @@ import lsst.pex.config as pexConfig
 from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
 
-from lsst.ts.wep.task.DonutStamps import DonutStamps
-from lsst.ts.wep.WfEstimator import WfEstimator
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.wfEstimator import WfEstimator
+from lsst.ts.wep.utility import (
     getConfigDir,
     DefocalType,
     getCamTypeFromButlerName,
     createInstDictFromConfig,
     rotMatrix,
 )
-from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from scipy.ndimage import rotate
 
 

@@ -19,36 +19,37 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["CentroidOtsu"]
+__all__ = ["DeblendDonutFactory"]
 
-from skimage.filters import threshold_otsu
+from lsst.ts.wep.utility import DeblendDonutType
+from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
 
-from lsst.ts.wep.cwfs.CentroidDefault import CentroidDefault
 
+class DeblendDonutFactory(object):
+    """Factory for creating the deblend donut object to deblend the bright star
+    donut from neighboring stars."""
 
-class CentroidOtsu(CentroidDefault):
-    """CentroidDefault child class to get the centroid of donut by the
-    Otsu's method."""
-
-    def __init__(self):
-        # Number of bins in the histogram
-        self.numOfBins = 256
-
-    def getImgBinary(self, imgDonut):
-        """Get the binary image.
+    @staticmethod
+    def createDeblendDonut(deblendDonutType):
+        """Create the concrete deblend donut object.
 
         Parameters
         ----------
-        imgDonut : numpy.ndarray
-            Donut image to do the analysis.
+        deblendDonutType : enum 'DeblendDonutType'
+            Algorithm to deblend the donut.
 
         Returns
         -------
-        numpy.ndarray [int]
-            Binary image of donut.
+        DeblendAdapt
+            Deblend donut object.
+
+        Raises
+        ------
+        ValueError
+            The deblend donut type is not supported.
         """
 
-        threshold = threshold_otsu(imgDonut, nbins=self.numOfBins)
-        imgBinary = (imgDonut > threshold).astype(int)
-
-        return imgBinary
+        if deblendDonutType == DeblendDonutType.Adapt:
+            return DeblendAdapt()
+        else:
+            raise ValueError("The %s is not supported." % deblendDonutType)

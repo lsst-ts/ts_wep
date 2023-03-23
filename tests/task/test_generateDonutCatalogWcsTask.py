@@ -27,12 +27,12 @@ import pandas as pd
 import lsst.geom
 from lsst.daf import butler as dafButler
 from lsst.obs.base import createInitialSkyWcsFromBoresight
-from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.task.GenerateDonutCatalogWcsTask import (
+from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
 )
-from lsst.ts.wep.Utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
+from lsst.ts.wep.utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
 
 
 class TestGenerateDonutCatalogWcsTask(unittest.TestCase):

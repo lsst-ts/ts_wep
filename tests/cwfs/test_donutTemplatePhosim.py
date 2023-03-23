@@ -24,8 +24,8 @@ import os
 import shutil
 import numpy as np
 
-from lsst.ts.wep.cwfs.DonutTemplatePhosim import DonutTemplatePhosim
-from lsst.ts.wep.Utility import DefocalType, getModulePath
+from lsst.ts.wep.cwfs.donutTemplatePhosim import DonutTemplatePhosim
+from lsst.ts.wep.utility import DefocalType, getModulePath
 
 
 class TestTemplatePhosim(unittest.TestCase):

@@ -26,11 +26,11 @@ from scipy.signal import correlate
 import lsst.utils.tests
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.CutOutDonutsBase import (
+from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
 )
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.utility import (
     getModulePath,
     runProgram,
     DefocalType,

@@ -33,7 +33,7 @@ from lsst.meas.algorithms import (
     ReferenceObjectLoader,
 )
 
-from lsst.ts.wep.task.DonutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
 
 class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):

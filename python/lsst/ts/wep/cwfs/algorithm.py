@@ -35,16 +35,16 @@ from scipy.ndimage import (
 )
 from scipy.signal import convolve2d
 
-from lsst.ts.wep.ParamReader import ParamReader
-from lsst.ts.wep.cwfs.Instrument import Instrument
-from lsst.ts.wep.cwfs.Tool import (
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.cwfs.tool import (
     padArray,
     extractArray,
     ZernikeAnnularEval,
     ZernikeMaskedFit,
 )
-from lsst.ts.wep.Utility import DefocalType
-from lsst.ts.wep.PlotUtil import plotZernike
+from lsst.ts.wep.utility import DefocalType
+from lsst.ts.wep.plotUtil import plotZernike
 
 
 class Algorithm(object):

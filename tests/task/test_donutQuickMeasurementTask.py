@@ -25,8 +25,8 @@ import numpy as np
 import pandas as pd
 
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.utility import (
     DonutTemplateType,
     DefocalType,
     getModulePath,
@@ -34,7 +34,7 @@ from lsst.ts.wep.Utility import (
     runProgram,
     writeCleanUpRepoCmd,
 )
-from lsst.ts.wep.task.DonutQuickMeasurementTask import (
+from lsst.ts.wep.task.donutQuickMeasurementTask import (
     DonutQuickMeasurementTaskConfig,
     DonutQuickMeasurementTask,
 )
