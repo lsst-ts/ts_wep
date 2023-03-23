@@ -129,7 +129,9 @@ butler query-collections $path_of_ts_wep/tests/testData/gen3TestRepo/
 
 ## Using butler to access `donutStamps` created with `ts_wep` versions < 6.0.0
 
-In `ts_wep` release 6.0.0 we updated the module names to start with a lower case letter in order to bring them in line with LSST Data Management convention and enable batch processing of the WEP Gen 3 pipeline. This will lead to errors when attempting to load `donutStamps` created with older versions of `ts_wep`. However adding symlinks in the following way will enable loading the older `donutStamps` through the LSST Science Pipelines butler once again.
+In `ts_wep` release 6.0.0 we updated the module names to start with a lower case letter in order to bring them in line with LSST Data Management convention and enable batch processing of the WEP Gen 3 pipeline.
+This will lead to errors when attempting to load `donutStamps` created with older versions of `ts_wep`.
+However adding symlinks in the following way will enable loading the older `donutStamps` through the LSST Science Pipelines butler once again.
 
 ```bash
 cd $path_of_ts_wep/python/lsst/ts/wep/task/
@@ -137,7 +139,8 @@ ln -s donutStamp.py DonutStamp.py
 ln -s donutStamps.py DonutStamps.py
 ```
 
-Note that adding these symbolic links might make the `git` workspace dirty. Please be careful not to add these file locations when making commits.
+Note that adding these symbolic links might make the `git` workspace dirty.
+Please be careful not to add these file locations when making commits.
 
 ## Diagram of the Corner Wavefront Sensor Geometry
 
