@@ -23,10 +23,10 @@ import os
 import numpy as np
 import unittest
 
-from lsst.ts.wep.cwfs.Instrument import Instrument
-from lsst.ts.wep.cwfs.CompensableImage import CompensableImage
-from lsst.ts.wep.cwfs.Algorithm import Algorithm
-from lsst.ts.wep.Utility import getModulePath, getConfigDir, DefocalType, CamType
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+from lsst.ts.wep.cwfs.algorithm import Algorithm
+from lsst.ts.wep.utility import getModulePath, getConfigDir, DefocalType, CamType
 
 
 class TestAlgorithm(unittest.TestCase):

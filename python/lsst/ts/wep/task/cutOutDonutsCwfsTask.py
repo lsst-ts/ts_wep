@@ -31,9 +31,9 @@ import lsst.afw.image as afwImage
 import lsst.obs.lsst as obs_lsst
 from lsst.utils.timer import timeMethod
 
-from lsst.ts.wep.Utility import DefocalType
-from lsst.ts.wep.task.DonutStamps import DonutStamps
-from lsst.ts.wep.task.CutOutDonutsBase import (
+from lsst.ts.wep.utility import DefocalType
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTaskConnections,
     CutOutDonutsBaseTaskConfig,
     CutOutDonutsBaseTask,

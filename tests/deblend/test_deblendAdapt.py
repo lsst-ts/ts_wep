@@ -23,8 +23,8 @@ import os
 import unittest
 import numpy as np
 
-from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.deblend.DeblendAdapt import DeblendAdapt
+from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
 
 
 class TestDeblendAdapt(unittest.TestCase):

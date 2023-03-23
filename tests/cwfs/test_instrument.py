@@ -23,8 +23,8 @@ import os
 import numpy as np
 import unittest
 
-from lsst.ts.wep.cwfs.Instrument import Instrument
-from lsst.ts.wep.Utility import getConfigDir, CamType, getModulePath
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.utility import getConfigDir, CamType, getModulePath
 
 
 class TestInstrument(unittest.TestCase):

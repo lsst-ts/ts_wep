@@ -24,7 +24,7 @@ import unittest
 import numpy as np
 from enum import IntEnum
 
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.utility import (
     mapFilterRefToG,
     FilterType,
     getModulePath,
@@ -52,7 +52,7 @@ from lsst.ts.wep.Utility import (
     rotMatrix,
 )
 from lsst.afw.cameraGeom import DetectorType
-from lsst.ts.wep.task.CalcZernikesTask import CalcZernikesTaskConfig
+from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTaskConfig
 
 
 class TestUtility(unittest.TestCase):
@@ -90,11 +90,11 @@ class TestUtility(unittest.TestCase):
 
     def testMapFilterRefToG(self):
         mappedFilterType = mapFilterRefToG(FilterType.REF)
-        self.assertEqual(mappedFilterType, FilterType.G)
+        self.assertEqual(mappedFilterType, FilterType.LSST_G)
 
     def testMapFilterRefToGForFilterU(self):
-        mappedFilterType = mapFilterRefToG(FilterType.U)
-        self.assertEqual(mappedFilterType, FilterType.U)
+        mappedFilterType = mapFilterRefToG(FilterType.LSST_U)
+        self.assertEqual(mappedFilterType, FilterType.LSST_U)
 
     def testGetConfigDir(self):
         ansConfigDir = os.path.join(getModulePath(), "policy")

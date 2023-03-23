@@ -22,7 +22,7 @@
 import unittest
 import numpy as np
 
-from lsst.ts.wep.cwfs.CentroidConvolveTemplate import CentroidConvolveTemplate
+from lsst.ts.wep.cwfs.centroidConvolveTemplate import CentroidConvolveTemplate
 
 
 class TestCentroidConvolveTemplate(unittest.TestCase):

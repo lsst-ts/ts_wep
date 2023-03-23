@@ -23,11 +23,11 @@ __all__ = ["DonutTemplatePhosim"]
 
 import os
 import numpy as np
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.utility import (
     getConfigDir,
     DefocalType,
 )
-from lsst.ts.wep.cwfs.DonutTemplateDefault import DonutTemplateDefault
+from lsst.ts.wep.cwfs.donutTemplateDefault import DonutTemplateDefault
 
 
 class DonutTemplatePhosim(DonutTemplateDefault):

@@ -25,9 +25,9 @@ import numpy as np
 from astropy import units
 
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.Utility import getModulePath
-from lsst.ts.wep.task.RefCatalogInterface import RefCatalogInterface
-from lsst.ts.wep.task.GenerateDonutCatalogOnlineTask import (
+from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.task.refCatalogInterface import RefCatalogInterface
+from lsst.ts.wep.task.generateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTask,
     GenerateDonutCatalogOnlineTaskConfig,
 )

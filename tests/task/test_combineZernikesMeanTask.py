@@ -24,7 +24,7 @@ import numbers
 import numpy as np
 
 import lsst.pipe.base as pipeBase
-from lsst.ts.wep.task.CombineZernikesMeanTask import (
+from lsst.ts.wep.task.combineZernikesMeanTask import (
     CombineZernikesMeanTask,
 )
 

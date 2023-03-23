@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.0.0:
+
+-------------
+6.0.0
+-------------
+
+* Rename all modules to start with lowercase in order to align with DM convention.
+* Add information into documentation about how this new change breaks repositories with data processed with older versions of ts_wep and how to fix it.
+
 .. _lsst.ts.wep-5.1.0:
 
 -------------

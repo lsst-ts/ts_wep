@@ -32,15 +32,15 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.utils.timer import timeMethod
 from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.utility import (
     DefocalType,
     DonutTemplateType,
     getCamTypeFromButlerName,
     createInstDictFromConfig,
 )
-from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.task.DonutSourceSelectorTask import DonutSourceSelectorTask
-from lsst.ts.wep.task.DonutQuickMeasurementTask import DonutQuickMeasurementTask
+from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 
 
 class GenerateDonutDirectDetectTaskConnections(

@@ -21,10 +21,10 @@
 
 import unittest
 
-from lsst.ts.wep.Utility import DonutTemplateType
-from lsst.ts.wep.cwfs.DonutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.cwfs.DonutTemplateModel import DonutTemplateModel
-from lsst.ts.wep.cwfs.DonutTemplatePhosim import DonutTemplatePhosim
+from lsst.ts.wep.utility import DonutTemplateType
+from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.cwfs.donutTemplateModel import DonutTemplateModel
+from lsst.ts.wep.cwfs.donutTemplatePhosim import DonutTemplatePhosim
 
 
 class TestTemplateMakerFactory(unittest.TestCase):

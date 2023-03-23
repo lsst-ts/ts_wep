@@ -23,8 +23,8 @@ import os
 import numpy as np
 import unittest
 
-from lsst.ts.wep.cwfs.CentroidOtsu import CentroidOtsu
-from lsst.ts.wep.Utility import getModulePath
+from lsst.ts.wep.cwfs.centroidOtsu import CentroidOtsu
+from lsst.ts.wep.utility import getModulePath
 
 
 class TestCentroidOtsu(unittest.TestCase):

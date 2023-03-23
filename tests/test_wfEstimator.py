@@ -23,8 +23,8 @@ import os
 import numpy as np
 import unittest
 
-from lsst.ts.wep.WfEstimator import WfEstimator
-from lsst.ts.wep.Utility import getModulePath, getConfigDir, DefocalType, CamType
+from lsst.ts.wep.wfEstimator import WfEstimator
+from lsst.ts.wep.utility import getModulePath, getConfigDir, DefocalType, CamType
 
 
 class TestWfEstimator(unittest.TestCase):

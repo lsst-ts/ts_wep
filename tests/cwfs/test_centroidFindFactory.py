@@ -21,11 +21,11 @@
 
 import unittest
 
-from lsst.ts.wep.Utility import CentroidFindType
-from lsst.ts.wep.cwfs.CentroidFindFactory import CentroidFindFactory
-from lsst.ts.wep.cwfs.CentroidRandomWalk import CentroidRandomWalk
-from lsst.ts.wep.cwfs.CentroidOtsu import CentroidOtsu
-from lsst.ts.wep.cwfs.CentroidConvolveTemplate import CentroidConvolveTemplate
+from lsst.ts.wep.utility import CentroidFindType
+from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
+from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
+from lsst.ts.wep.cwfs.centroidOtsu import CentroidOtsu
+from lsst.ts.wep.cwfs.centroidConvolveTemplate import CentroidConvolveTemplate
 
 
 class TestCentroidFindFactory(unittest.TestCase):

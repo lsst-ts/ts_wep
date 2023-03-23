@@ -35,15 +35,15 @@ from scipy.ndimage import (
 from scipy.interpolate import RectBivariateSpline
 from scipy.signal import correlate
 
-from lsst.ts.wep.ParamReader import ParamReader
-from lsst.ts.wep.cwfs.Tool import (
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.cwfs.tool import (
     padArray,
     extractArray,
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
 )
-from lsst.ts.wep.cwfs.Image import Image
-from lsst.ts.wep.Utility import DefocalType, CentroidFindType, rotMatrix
+from lsst.ts.wep.cwfs.image import Image
+from lsst.ts.wep.utility import DefocalType, CentroidFindType, rotMatrix
 from galsim.utilities import horner2d
 
 
@@ -488,14 +488,14 @@ class CompensableImage(object):
         # Get the radius: R = D/2
         R = inst.apertureDiameter / 2
 
-        # Calculate C = -f(f-l)/l/R^2. This is for the calculation of reduced
-        # coordinate.
+        # Calculate C = -f(f-offset)/offset/R^2.
+        # This is for the calculation of reduced coordinate.
         if self.defocalType == DefocalType.Intra:
-            l = inst.defocalDisOffsetInM
+            offset = inst.defocalDisOffsetInM
         elif self.defocalType == DefocalType.Extra:
-            l = -inst.defocalDisOffsetInM
+            offset = -inst.defocalDisOffsetInM
 
-        myC = -inst.focalLength * (inst.focalLength - l) / l / R**2
+        myC = -inst.focalLength * (inst.focalLength - offset) / offset / R**2
 
         # Get the functions to do the off-axis correction by numerical fitting
         # Order to do the off-axis correction. The order is 10 now.
@@ -567,18 +567,18 @@ class CompensableImage(object):
             # Get the coefficient of polynomials for off-axis correction
             tt = self.offAxisOffset
 
-            cx = (self.offAxisCoeff[0, :] - self.offAxisCoeff[2, :]) * (tt + l) / (
+            cx = (self.offAxisCoeff[0, :] - self.offAxisCoeff[2, :]) * (tt + offset) / (
                 2 * tt
             ) + self.offAxisCoeff[2, :]
-            cy = (self.offAxisCoeff[1, :] - self.offAxisCoeff[3, :]) * (tt + l) / (
+            cy = (self.offAxisCoeff[1, :] - self.offAxisCoeff[3, :]) * (tt + offset) / (
                 2 * tt
             ) + self.offAxisCoeff[3, :]
 
             # This will be inverted back by typesign later on.
             # We do the inversion here to make the (x,y)->(x',y') equations has
             # the same form as the paraxial case.
-            cx = np.sign(l) * cx
-            cy = np.sign(l) * cy
+            cx = np.sign(offset) * cx
+            cy = np.sign(offset) * cy
 
             # Do the orthogonalization: x'=1/sqrt(2)*(x+y), y'=1/sqrt(2)*(x-y)
             # Calculate the rotation angle for the orthogonalization

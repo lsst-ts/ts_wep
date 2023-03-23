@@ -24,13 +24,13 @@ import numpy as np
 
 import lsst.utils.tests
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.CalcZernikesTask import (
+from lsst.ts.wep.task.calcZernikesTask import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
 )
-from lsst.ts.wep.task.CombineZernikesMeanTask import CombineZernikesMeanTask
-from lsst.ts.wep.task.CombineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
-from lsst.ts.wep.Utility import (
+from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
+from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.utility import (
     getModulePath,
     runProgram,
     writePipetaskCmd,

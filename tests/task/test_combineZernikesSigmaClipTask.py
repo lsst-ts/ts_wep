@@ -24,7 +24,7 @@ import numbers
 import numpy as np
 
 import lsst.pipe.base as pipeBase
-from lsst.ts.wep.task.CombineZernikesSigmaClipTask import (
+from lsst.ts.wep.task.combineZernikesSigmaClipTask import (
     CombineZernikesSigmaClipTaskConfig,
     CombineZernikesSigmaClipTask,
 )

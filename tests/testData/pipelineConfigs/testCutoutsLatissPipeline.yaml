@@ -30,13 +30,13 @@ tasks:
       doOverscan: True
       python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN_PER_ROW'
   generateDonutDirectDetectTask:
-    class: lsst.ts.wep.task.GenerateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutTemplateSize: 200
       removeBlends: True
       opticalModel: 'onAxis'
   cutOutDonutsScienceSensorTask:
-    class: lsst.ts.wep.task.CutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings
       donutTemplateSize: 200

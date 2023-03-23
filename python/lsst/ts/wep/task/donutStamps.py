@@ -23,7 +23,7 @@ __all__ = ["DonutStamps"]
 
 import numpy as np
 from lsst.meas.algorithms.stamps import StampsBase, readFitsWithOptions
-from lsst.ts.wep.task.DonutStamp import DonutStamp
+from lsst.ts.wep.task.donutStamp import DonutStamp
 
 
 class DonutStamps(StampsBase):

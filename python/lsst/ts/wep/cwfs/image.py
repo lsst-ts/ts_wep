@@ -26,8 +26,8 @@ import numpy as np
 from astropy.io import fits
 import warnings
 
-from lsst.ts.wep.Utility import CentroidFindType
-from lsst.ts.wep.cwfs.CentroidFindFactory import CentroidFindFactory
+from lsst.ts.wep.utility import CentroidFindType
+from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
 
 
 class Image(object):
