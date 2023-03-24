@@ -113,4 +113,5 @@ See Also
     :titlesonly:
     :glob:
 
-    ../phosimDonutTemplates.rst
+    phosimDonutTemplates.rst
+    wepBatchProcessing.rst
