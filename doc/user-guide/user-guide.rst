@@ -29,7 +29,7 @@ Install the LSST Packages and ts_wep
 1. Setup the LSST environment by ``source $LSST_DIR/loadLSST.bash``.
    The ``LSST_DIR`` is the directory of scientific pipeline.
 2. Install the ``lsst_distrib`` by ``eups distrib install lsst_distrib -t $TAG``.
-   The ``TAG`` is the weekly built version such as ``w_2020_52``.
+   The ``TAG`` is the weekly built version such as ``w_latest``.
 3. Fix the path by:
 
 .. code:: bash
@@ -52,7 +52,7 @@ Using WEP
 
 .. code:: bash
 
-    source $path_of_lsst_scientific_pipeline/loadLSST.bash
+    source $LSST_DIR/loadLSST.bash
 
 2. Setup the WEP environment.
 

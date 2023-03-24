@@ -165,5 +165,5 @@ Contributing
 ============
 
 To contribute, please start a new pull request on `GitHub <https://github.com/lsst-ts/ts_wep>`_.
-Feature requests shall be filled in JIRA with *ts_aos* as the component and *AOS* as the label.
-In all cases, reaching out to the :ref:`contacts for this CSC <Contact_Personnel>` is recommended.
+Feature requests shall be filled in JIRA with *ts_aos* as the component.
+In all cases, reaching out to the :ref:`contacts for this module <Contact_Personnel>` is recommended.

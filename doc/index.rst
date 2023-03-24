@@ -1,5 +1,5 @@
-.. |CSC_developer| replace:: *Bryce Kalmbach <brycek@uw.edu>* and *Chris Suberlak <suberlak@uw.edu>*
-.. |CSC_product_owner| replace:: *Sandrine Thomas <sthomas@lsst.org>*
+.. |developer| replace:: *Bryce Kalmbach <brycek@uw.edu>* and *Chris Suberlak <suberlak@uw.edu>*
+.. |product_owner| replace:: *Sandrine Thomas <sthomas@lsst.org>*
 
 .. Note that the ts_ prefix is omitted from the title
 
@@ -17,9 +17,8 @@ WEP
 Overview
 ========
 
-The wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials up to 22 terms based
-on the intra- and extra-focal donut images. The wavefront error is determined by solving the transport of intensity equation
-(TIE) that approximates the change of intensity mainly comes from the wavefront error.
+The wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the intra- and extra-focal donut images.
+The wavefront error is determined by solving the transport of intensity equation (TIE) that approximates the change of intensity mainly comes from the wavefront error.
 
 In automatic operation, WEP will be run as part of the Main Telescope Active Optics System (`MTAOS <https://ts-mtaos.lsst.io/index.html>`_).
 
@@ -76,7 +75,7 @@ The released version is `here <https://github.com/lsst-ts/ts_wep/releases>`_.
 Contact Personnel
 =================
 
-For questions not covered in the documentation, emails should be addressed to the developers: |CSC_developer|.
-The product owner is |CSC_product_owner|.
+For questions not covered in the documentation, emails should be addressed to the developers: |developer|.
+The product owner is |product_owner|.
 
 This page was last modified |today|.

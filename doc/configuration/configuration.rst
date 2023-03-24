@@ -8,83 +8,8 @@ Configuration File
 ==================
 
 The WEP pipeline uses ``yaml`` configuration files to define the tasks it will run on a set of intra and extra-focal images.
-The following is a sample configuration that can be used to run a pair of intra and extra-focal images taken with the LSSTCam Corner Wavefront Sensors (CWFS).
-
-.. code:: yaml
-
-    # This yaml file is used to define the tasks and configuration of
-    # a Gen 3 pipeline used for testing in ts_wep.
-    description: wep basic processing test pipeline
-    # Here we specify the corresponding instrument for the data we
-    # will be using.
-    instrument: lsst.obs.lsst.LsstCam
-    # Then we can specify each task in our pipeline by a name
-    # and then specify the class name corresponding to that task
-    tasks:
-      isr:
-        class: lsst.ip.isr.isrTask.IsrTask
-        # Below we specify the configuration settings we want to use
-        # when running the task in this pipeline. Since our data doesn't
-        # include bias or flats we only want to use doApplyGains and
-        # doOverscan in our isr task.
-        config:
-          connections.outputExposure: 'postISRCCD'
-          doBias: False
-          doVariance: False
-          doLinearize: False
-          doCrosstalk: False
-          doDefect: False
-          doNanMasking: False
-          doInterpolate: False
-          doBrighterFatter: False
-          doDark: False
-          doFlat: False
-          doApplyGains: True
-          doFringe: False
-          doOverscan: True
-          python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
-      generateDonutCatalogWcsTask:
-        class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
-        config:
-          donutSelector.unblendedSeparation: 160
-      cutOutDonutsCwfsTask:
-        class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
-        config:
-          # And here we specify the configuration settings originally defined in
-          # CutOutDonutsCwfsTaskConfig.
-          # Test with default instrument configuration parameters
-          donutTemplateSize: 160
-          donutStampSize: 160
-          initialCutoutPadding: 40
-          # Obscuration (inner_radius / outer_radius of M1M3)
-          instObscuration: 0.61
-          # Focal length in m
-          instFocalLength: 10.312
-          # Aperture diameter in m
-          instApertureDiameter: 8.36
-          # Defocal distance offset in mm
-          # Set to 0.0 when running CWFS because
-          # focal plane offset is 0.
-          instDefocalOffset: 0.0
-          # Camera pixel size in m
-          instPixelSize: 10.0e-6
-      calcZernikesTask:
-        class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
-        config:
-          # Obscuration (inner_radius / outer_radius of M1M3)
-          instObscuration: 0.61
-          # Focal length in m
-          instFocalLength: 10.312
-          # Aperture diameter in m
-          instApertureDiameter: 8.36
-          # Defocal distance offset in mm
-          # Set to 0.0 when running CWFS because
-          # focal plane offset is 0.
-          instDefocalOffset: 0.0
-          # Camera pixel size in m
-          instPixelSize: 10.0e-6
-
-The WEP pipeline itself begins after the ISR and consists of three steps with different versions of each step available to configure your pipeline.
+An example configuration that can be used to run a pair of intra and extra-focal images taken with the LSSTCam Corner Wavefront Sensors (CWFS) can be found `here <https://github.com/lsst-ts/ts_wep/blob/develop/tests/testData/pipelineConfigs/testCalcZernikesCwfsPipeline.yaml>`_.
+The WEP pipeline itself begins after the Instrument Signature Removal (ISR) task and consists of three steps with different versions of each step available to configure your pipeline.
 The three basic steps are:
 
 1. Generate a donut source catalog for intra and extra-focal images.
@@ -103,7 +28,7 @@ WEP Pipeline Outline
 
    - ``GenerateDonutCatalogsWcsTask``
 
-     - This task creates the donut catalog from a specified reference catalog using the image's WCS information.
+     - This task creates the donut catalog from a specified reference catalog using the image's World Coordinate System (WCS) information.
 
    - ``GenerateDonutDirectDetectTask``
 
@@ -151,6 +76,7 @@ WEP Pipeline Outline
    - ``zernikeEstimateRaw``
 
      - The Zernike coefficients for the estimated wavefront error for each donut pair in a pair of images.
+
    - ``zernikeEstimateAvg``
 
      - A single set of Zernike coefficients averaged over the set of coefficients from all donut pairs.
