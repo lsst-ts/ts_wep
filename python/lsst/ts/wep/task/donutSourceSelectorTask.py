@@ -259,8 +259,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
             raise ValueError(errMsg)
 
         maxBlended = self.config.maxBlended
-        blendCentersX = list()
-        blendCentersY = list()
+        blendCentersX = [list() for _ in range(len(magSortedDf))]
+        blendCentersY = [list() for _ in range(len(magSortedDf))]
         sourcesKept = 0
         # Go through catalog with nearest neighbor information
         # and keep sources that match our configuration settings
@@ -288,8 +288,6 @@ class DonutSourceSelectorTask(pipeBase.Task):
             # the source and move on to next
             if len(idxList) == 1:
                 index.append(groupIndices[srcOn])
-                blendCentersX.append([])
-                blendCentersY.append([])
                 sourcesKept += 1
             # In this case there is at least one overlapping source
             else:
@@ -306,10 +304,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     continue
                 # If this source overlaps but is brighter than all its
                 # overlapping sources by minMagDiff then keep it
-                elif (maxBlended == 0) and (np.min(magDiff) >= minMagDiff):
+                elif np.min(magDiff) >= minMagDiff:
                     index.append(groupIndices[srcOn])
-                    blendCentersX.append([])
-                    blendCentersY.append([])
                     sourcesKept += 1
                 # If the centers of any blended objects with a magnitude
                 # within minMagDiff of the source magnitude
@@ -320,8 +316,12 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # maxBlended then keep this source
                 elif len(magDiff) <= maxBlended:
                     index.append(groupIndices[srcOn])
-                    blendCentersX.append(magSortedDf["x"].iloc[idxList[1:]].values)
-                    blendCentersY.append(magSortedDf["y"].iloc[idxList[1:]].values)
+                    blendCentersX[groupIndices[srcOn]] = (
+                        magSortedDf["x"].iloc[idxList[1:]].values
+                    )
+                    blendCentersY[groupIndices[srcOn]] = (
+                        magSortedDf["y"].iloc[idxList[1:]].values
+                    )
                     sourcesKept += 1
                 # Keep the source if it is blended with up to maxBlended
                 # number of sources. To check this we look at the maxBlended+1
@@ -331,11 +331,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # or fewer sources.
                 elif np.partition(magDiff, maxBlended)[maxBlended] > minMagDiff:
                     index.append(groupIndices[srcOn])
-                    blendCentersX.append(
-                        magSortedDf["x"].iloc[idxList[1:maxBlended]].values
+                    blendCentersX[groupIndices[srcOn]] = (
+                        magSortedDf["x"].iloc[idxList[1 : maxBlended + 1]].values
                     )
-                    blendCentersY.append(
-                        magSortedDf["y"].iloc[idxList[1:maxBlended]].values
+                    blendCentersY[groupIndices[srcOn]] = (
+                        magSortedDf["y"].iloc[idxList[1 : maxBlended + 1]].values
                     )
                     sourcesKept += 1
                 else:
@@ -351,9 +351,14 @@ class DonutSourceSelectorTask(pipeBase.Task):
         magIndex = magSelected.nonzero()[0]
         finalIndex = magIndex[index]
         selected[finalIndex] = True
+        sortedIndex = np.sort(index)
+        selectedBlendCentersX = [blendCentersX[idx] for idx in sortedIndex]
+        selectedBlendCentersY = [blendCentersY[idx] for idx in sortedIndex]
 
         self.log.info("Selected %d/%d references", selected.sum(), len(sourceCat))
 
         return pipeBase.Struct(
-            selected=selected, blendCentersX=blendCentersX, blendCentersY=blendCentersY
+            selected=selected,
+            blendCentersX=selectedBlendCentersX,
+            blendCentersY=selectedBlendCentersY,
         )
