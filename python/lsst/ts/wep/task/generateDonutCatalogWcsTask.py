@@ -291,8 +291,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         fieldObjects["blend_centroid_x"] = blendCX
         fieldObjects["blend_centroid_y"] = blendCY
 
-        print(fieldObjects)
-
         fieldObjects = fieldObjects.sort_values(
             "source_flux", ascending=False
         ).reset_index(drop=True)

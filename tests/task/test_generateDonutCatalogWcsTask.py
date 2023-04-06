@@ -217,16 +217,16 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             list(fieldObjects["blend_centroid_y"]), [list()] * len(donutCatSmall)
         )
 
-        blendXVals = [
+        blendValsX = [
             donutCatSmall['centroid_x'][0] + 10.,
             donutCatSmall['centroid_x'][1] + 15.
         ]
-        blendYVals = [
+        blendValsY = [
             donutCatSmall['centroid_y'][0] + 10.,
             donutCatSmall['centroid_y'][1] + 15.
         ]
-        blendCentersX[0].append(blendXVals[0])
-        blendCentersY[0].append(blendYVals[0])
+        blendCentersX[0].append(blendValsX[0])
+        blendCentersY[0].append(blendValsY[0])
         fieldObjectsOneBlend = self.task.donutCatalogToDataFrame(
             donutCatSmall,
             "g",
@@ -235,15 +235,15 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         )
         np.testing.assert_array_equal(
             list(fieldObjectsOneBlend["blend_centroid_x"]),
-            [[blendXVals[0]], [], [], []]
+            [[blendValsX[0]], [], [], []]
         )
         np.testing.assert_array_equal(
             list(fieldObjectsOneBlend["blend_centroid_y"]),
-            [[blendYVals[0]], [], [], []]
+            [[blendValsY[0]], [], [], []]
         )
 
-        blendCentersX[1].append(blendXVals[1])
-        blendCentersY[1].append(blendYVals[1])
+        blendCentersX[1].append(blendValsX[1])
+        blendCentersY[1].append(blendValsY[1])
         fieldObjectsTwoBlends = self.task.donutCatalogToDataFrame(
             donutCatSmall,
             "g",
@@ -252,11 +252,11 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
         )
         np.testing.assert_array_equal(
             list(fieldObjectsTwoBlends["blend_centroid_x"]),
-            [[blendXVals[0]], [], [blendXVals[1]], []]
+            [[blendValsX[0]], [], [blendValsX[1]], []]
         )
         np.testing.assert_array_equal(
             list(fieldObjectsTwoBlends["blend_centroid_y"]),
-            [[blendYVals[0]], [], [blendYVals[1]], []]
+            [[blendValsY[0]], [], [blendValsY[1]], []]
         )
 
     def testDonutCatalogToDataFrameErrors(self):
