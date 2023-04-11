@@ -198,6 +198,67 @@ class TestGenerateDonutCatalogWcsTask(unittest.TestCase):
             fieldObjectsBlends["blend_centroid_y"], [[], [3], [], []]
         )
 
+    def testDonutCatalogToDataFrameWithBlendCenters(self):
+        donutCatSmall = self._createTestDonutCat()
+        donutCatSmall['g_flux'][1] -= 0.1
+        blendCentersX = [list() for _ in range(len(donutCatSmall))]
+        blendCentersY = [list() for _ in range(len(donutCatSmall))]
+
+        fieldObjects = self.task.donutCatalogToDataFrame(
+            donutCatSmall,
+            "g",
+            blendCentersX=blendCentersX,
+            blendCentersY=blendCentersY
+        )
+        np.testing.assert_array_equal(
+            list(fieldObjects["blend_centroid_x"]), [list()] * len(donutCatSmall)
+        )
+        np.testing.assert_array_equal(
+            list(fieldObjects["blend_centroid_y"]), [list()] * len(donutCatSmall)
+        )
+
+        blendValsX = [
+            donutCatSmall['centroid_x'][0] + 10.,
+            donutCatSmall['centroid_x'][1] + 15.
+        ]
+        blendValsY = [
+            donutCatSmall['centroid_y'][0] + 10.,
+            donutCatSmall['centroid_y'][1] + 15.
+        ]
+        blendCentersX[0].append(blendValsX[0])
+        blendCentersY[0].append(blendValsY[0])
+        fieldObjectsOneBlend = self.task.donutCatalogToDataFrame(
+            donutCatSmall,
+            "g",
+            blendCentersX=blendCentersX,
+            blendCentersY=blendCentersY
+        )
+        np.testing.assert_array_equal(
+            list(fieldObjectsOneBlend["blend_centroid_x"]),
+            [[blendValsX[0]], [], [], []]
+        )
+        np.testing.assert_array_equal(
+            list(fieldObjectsOneBlend["blend_centroid_y"]),
+            [[blendValsY[0]], [], [], []]
+        )
+
+        blendCentersX[1].append(blendValsX[1])
+        blendCentersY[1].append(blendValsY[1])
+        fieldObjectsTwoBlends = self.task.donutCatalogToDataFrame(
+            donutCatSmall,
+            "g",
+            blendCentersX=blendCentersX,
+            blendCentersY=blendCentersY
+        )
+        np.testing.assert_array_equal(
+            list(fieldObjectsTwoBlends["blend_centroid_x"]),
+            [[blendValsX[0]], [], [blendValsX[1]], []]
+        )
+        np.testing.assert_array_equal(
+            list(fieldObjectsTwoBlends["blend_centroid_y"]),
+            [[blendValsY[0]], [], [blendValsY[1]], []]
+        )
+
     def testDonutCatalogToDataFrameErrors(self):
         columnList = [
             "coord_ra",

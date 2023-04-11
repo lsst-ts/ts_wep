@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.0.2:
+
+-------------
+6.0.2
+-------------
+
+* Fix assignment of blend_centroid_x and blend_centroid_y in donut catalogs.
+
 .. _lsst.ts.wep-6.0.1:
 
 -------------
