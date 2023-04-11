@@ -96,6 +96,10 @@ class GenerateDonutCatalogWcsTaskConfig(
     doDonutSelection = pexConfig.Field(
         doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
+    # When matching photometric filters are not available in
+    # the reference catalog (e.g. Gaia) use anyFilterMapsToThis
+    # to get sources out of the catalog.
+    anyFilterMapsToThis = LoadReferenceObjectsConfig.anyFilterMapsToThis
 
 
 class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
@@ -138,7 +142,9 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         refObjLoader = ReferenceObjectLoader(
             dataIds=[ref.dataId for ref in refCatalogList],
             refCats=refCatalogList,
-            config=LoadReferenceObjectsConfig(),
+            config=LoadReferenceObjectsConfig(
+                anyFilterMapsToThis=self.config.anyFilterMapsToThis
+            ),
         )
         # This removes the padding around the border of detector BBox when
         # matching to reference catalog.
@@ -307,7 +313,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         detector = exposure.getDetector()
         detectorWcs = exposure.getWcs()
-        filterName = exposure.filter.bandLabel
+        anyFilterMapsToThis = self.config.anyFilterMapsToThis
+        filterName = (
+            exposure.filter.bandLabel
+            if anyFilterMapsToThis is None
+            else anyFilterMapsToThis
+        )
 
         try:
             # Match detector layout to reference catalog
