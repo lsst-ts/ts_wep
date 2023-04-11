@@ -800,8 +800,8 @@ class Algorithm(object):
                     )
                     sys.exit()
 
-                # Check for blends
-                if (np.sum(np.isnan(I1.blendOffsetX)) == 0) and (
+                # Check for blends in either image
+                if (np.sum(np.isnan(I1.blendOffsetX)) == 0) or (
                     np.sum(np.isnan(I2.blendOffsetX)) == 0
                 ):
                     self.blend_exists = True
