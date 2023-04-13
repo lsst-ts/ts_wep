@@ -213,8 +213,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # Make sure the one that gets through selection is
         # the brightest one.
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
-        self.assertListEqual(list(testCatStruct.blendCentersX), [[140.], []])
-        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.], []])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
 
         # Lower unblendedSeparation so that the first two donuts
         # are the only blended ones. Test that the brighter of the
@@ -230,8 +230,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # Make sure the first accepted donut is the one with the
         # correct entries in blendCentersX and blendCentersY.
         self.assertListEqual(list(testCatSelected), [False, True, True, True])
-        self.assertListEqual(list(testCatStruct.blendCentersX), [[100.], [], []])
-        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.], [], []])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], [], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [], []])
 
         # If we increase unblendedSeparation back to 50 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
