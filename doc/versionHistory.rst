@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.1.0:
+
+-------------
+6.1.0
+-------------
+
+* Add optional ability to specify filter in GenerateDonutCatalogWcsTask.
+
 .. _lsst.ts.wep-6.0.2:
 
 -------------
