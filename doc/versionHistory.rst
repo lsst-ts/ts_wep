@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.1.1:
+
+-------------
+6.1.1
+-------------
+
+* Fix blend_centroid_x and blend_centroid_y to only return donuts bright enough to count as blended when maxBlended is greater than the total number of donuts.
+
 .. _lsst.ts.wep-6.1.0:
 
 -------------
