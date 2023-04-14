@@ -316,11 +316,18 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # maxBlended then keep this source
                 elif len(magDiff) <= maxBlended:
                     index.append(groupIndices[srcOn])
+                    # Only include sources bright enough to count as
+                    # blended based upon isolatedMagDiff. Otherwise
+                    # masks for deblending will include footprints of
+                    # all the faint sources that we don't care about
+                    # when deblending. Add one to index because
+                    # magDiff is all sources in magSortedDf after index=0.
+                    maxIdx = np.where(magDiff < minMagDiff)[0] + 1
                     blendCentersX[groupIndices[srcOn]] = (
-                        magSortedDf["x"].iloc[idxList[1:]].values
+                        magSortedDf["x"].iloc[idxList[maxIdx]].values
                     )
                     blendCentersY[groupIndices[srcOn]] = (
-                        magSortedDf["y"].iloc[idxList[1:]].values
+                        magSortedDf["y"].iloc[idxList[maxIdx]].values
                     )
                     sourcesKept += 1
                 # Keep the source if it is blended with up to maxBlended

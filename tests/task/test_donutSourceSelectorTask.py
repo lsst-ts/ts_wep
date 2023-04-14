@@ -59,6 +59,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         defaultFilterKey = f"filter{self.filterName.upper()}"
         self.magMax = magPolicyDefaults[defaultFilterKey]["high"]
         self.magMin = magPolicyDefaults[defaultFilterKey]["low"]
+        self.magRange = self.magMax - self.magMin
         magArray = [
             self.magMax + 1.0,
             self.magMax - 0.1,
@@ -233,7 +234,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], [], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [], []])
 
-        # If we increase unblendedSeparation back to 50 then our group of
+        # If we increase unblendedSeparation back to 100 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
         # maxBlended set to one should not allow the brightest donut
         # through since it is blended with two objects.
@@ -244,20 +245,48 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[]])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[]])
 
-        # If we increase unblendedSeparation back to 50 then our group of
-        # 3 donuts should all be overlapping and blended. Therefore,
-        # maxBlended set to one should not allow the brightest donut
-        # through since it is blended with two objects.
-        self.config.isolatedMagDiff = 10.0
+        # Decrease isolatedMagDiff so that only one of the donuts
+        # blended with the brightest donut falls within the range.
+        # Even though two fainter donuts fall within the range of
+        # unblendedSeparation and 3 donuts are allowed to be blended
+        # the returned results of blendCenters should only include
+        # the donut that falls within the blended magnitude range.
+        # Since the fainter donut should not affect Zernike calculation
+        # we don't want to include its footprint in the deblending
+        # masks which are created based upon results in blendCenters.
+        self.config.isolatedMagDiff = self.magRange + 1.5
         self.config.unblendedSeparation = 100
-        self.config.maxBlended = 2
+        self.config.maxBlended = 3
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
+
+        # If we increase isolatedMagDiff to once again include
+        # both sources overlapping the brightest donut as blended
+        # then we should have both sources in the blendCenters lists.
+        self.config.isolatedMagDiff = self.magRange + 2.5
+        self.config.unblendedSeparation = 100
+        self.config.maxBlended = 3
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         # Make sure the one that gets through selection is
         # the brightest one.
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        blendCentersX = testCatStruct.blendCentersX
+        blendCentersY = testCatStruct.blendCentersY
+        self.assertEqual(len(blendCentersX), 2)
+        self.assertEqual(len(blendCentersY), 2)
+        for bX, trueBX in zip(blendCentersX, [[140.0, 100.0], []]):
+            self.assertListEqual(list(bX), trueBX)
+        for bY, trueBY in zip(blendCentersY, [[100.0, 100.0], []]):
+            self.assertListEqual(list(bY), trueBY)
 
         # Donut furthest from center is over 0.15 degrees from field center
         # and should get cut out when setting maxFieldDist to 0.15
