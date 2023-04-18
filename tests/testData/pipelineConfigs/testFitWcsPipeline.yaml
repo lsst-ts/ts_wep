@@ -1,0 +1,59 @@
+# This yaml file is used to define the tasks and configuration of
+# a Gen 3 pipeline used for testing in ts_wep.
+description: wep basic processing test pipeline
+# Here we specify the corresponding instrument for the data we
+# will be using.
+instrument: lsst.obs.lsst.LsstCam
+# Then we can specify each task in our pipeline by a name
+# and then specify the class name corresponding to that task
+tasks:
+  isr:
+    class: lsst.ip.isr.isrTask.IsrTask
+    # Below we specify the configuration settings we want to use
+    # when running the task in this pipeline. Since our data doesn't
+    # include bias or flats we only want to use doApplyGains and
+    # doOverscan in our isr task.
+    config:
+      connections.outputExposure: 'preFitPostISRCCD'
+      doBias: False
+      doVariance: False
+      doLinearize: False
+      doCrosstalk: False
+      doDefect: False
+      doNanMasking: False
+      doInterpolate: False
+      doBrighterFatter: False
+      doDark: False
+      doFlat: False
+      doApplyGains: True
+      doFringe: False
+      doOverscan: True
+      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      connections.donutCatalog: 'directDetectDonutCatalog'
+      connections.exposure: 'preFitPostISRCCD'
+      instObscuration: 0.61
+      instFocalLength: 10.312
+      instApertureDiameter: 8.36
+      instDefocalOffset: 1.5
+      instPixelSize: 10.0e-6
+  fitWcsTask:
+    class: lsst.ts.wep.task.fitWcsFromDetectedTask.FitWcsFromDetectedTask
+    config:
+      connections.astromRefCat: 'cal_ref_cat'
+      astromTask.referenceSelector.doMagLimit: False
+  generateDonutCatalogWcsTask:
+    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
+    config:
+      donutSelector.unblendedSeparation: 1
+  cutOutDonutsScienceSensorTask:
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      # Test with default instrument configuration parameters
+      donutTemplateSize: 160
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
