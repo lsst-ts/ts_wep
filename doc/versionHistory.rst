@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.1.2:
+
+-------------
+6.1.2
+-------------
+
+* Import MaskedImage directly from afw.image to fix errors from change in w_2023_16.
+
 .. _lsst.ts.wep-6.1.1:
 
 -------------
