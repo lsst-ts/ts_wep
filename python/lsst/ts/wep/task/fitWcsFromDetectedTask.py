@@ -32,7 +32,6 @@ import lsst.meas.base as measBase
 from lsst.utils.timer import timeMethod
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.meas.algorithms import (
-    LoadReferenceObjectsTask,
     MagnitudeLimit,
     ReferenceObjectLoader,
 )
@@ -88,19 +87,25 @@ class FitWcsFromDetectedTaskConfig(
     that run to do the source selection.
     """
 
-    astromRefObjLoader = pexConfig.ConfigurableField(
-        target=LoadReferenceObjectsTask,
-        doc="Reference object loader for astrometric calibration",
-    )
     astromTask = pexConfig.ConfigurableField(
         target=AstrometryTask, doc="Task for WCS fitting."
+    )
+    anyFilterMapsToThis = pexConfig.Field(
+        doc=(
+            "Always use this reference catalog filter, no matter whether or what filter name is "
+            "supplied to the loader. Effectively a trivial filterMap: map all filter names to this filter."
+            " This can be set for purely-astrometric catalogs (e.g. Gaia DR2) where there is only one "
+            "reasonable choice for every camera filter->refcat mapping, but not for refcats used for "
+            "photometry, which need a filterMap and/or colorterms/transmission corrections."
+        ),
+        dtype=str,
+        default=None,
+        optional=True,
     )
 
     # Took these defaults from atmospec/centroiding
     def setDefaults(self):
         super().setDefaults()
-        self.astromRefObjLoader.pixelMargin = 1000
-
         self.astromTask.wcsFitter.retarget(FitAffineWcsTask)
         self.astromTask.referenceSelector.doMagLimit = True
         magLimit = MagnitudeLimit()
@@ -110,7 +115,6 @@ class FitWcsFromDetectedTaskConfig(
         self.astromTask.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
         self.astromTask.matcher.maxRotationDeg = 5.99
         self.astromTask.matcher.maxOffsetPix = 3000
-        # self.astromTask.sourceSelector['matcher'].minSnr = 10
 
 
 class FitWcsFromDetectedTask(pipeBase.PipelineTask):
@@ -227,6 +231,9 @@ class FitWcsFromDetectedTask(pipeBase.PipelineTask):
             refCats=astromRefCat,
         )
         self.astromTask.setRefObjLoader(refObjLoader)
+        self.astromTask.refObjLoader.config.anyFilterMapsToThis = (
+            self.config.anyFilterMapsToThis
+        )
         exposure = self.fitWcs(fitDonutCatalog, inputExposure)
 
         return pipeBase.Struct(outputExposure=exposure)

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.2.0:
+
+-------------
+6.2.0
+-------------
+
+* Add optional pipeline task to fit WCS from direct detect donut catalogs.
+
 .. _lsst.ts.wep-6.1.3:
 
 -------------

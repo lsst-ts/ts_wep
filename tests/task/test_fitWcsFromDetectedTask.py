@@ -25,7 +25,7 @@ import unittest
 import numpy as np
 from copy import copy
 
-import lsst.afw.image.exposure
+import lsst.afw.image as afwImage
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.utility import (
     getModulePath,
@@ -217,8 +217,8 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
             collections=[f"{self.runName}"],
         )
         self.assertTrue(isinstance(directDetectCat, pandas.DataFrame))
-        self.assertTrue(isinstance(preFitExp_S11, lsst.afw.image.exposure.ExposureF))
-        self.assertTrue(isinstance(finalExp_S11, lsst.afw.image.exposure.ExposureF))
+        self.assertTrue(isinstance(preFitExp_S11, afwImage.ExposureF))
+        self.assertTrue(isinstance(finalExp_S11, afwImage.ExposureF))
         self.assertTrue(isinstance(donutStampsExtra_S11, DonutStamps))
         self.assertTrue(isinstance(donutStampsIntra_S11, DonutStamps))
         self.assertTrue(isinstance(zernOutAvg_S11, np.ndarray))
