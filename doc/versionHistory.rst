@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.3.0:
+
+-------------
+6.3.0
+-------------
+
+* Add filterLabel property to CompensableImage.
+
 .. _lsst.ts.wep-6.2.0:
 
 -------------
@@ -13,14 +21,6 @@ Version History
 -------------
 
 * Add optional pipeline task to fit WCS from direct detect donut catalogs and generate new donut catalog from reference catalogs with fit WCS.
-
-.. _lsst.ts.wep-6.1.3:
-
--------------
-6.1.3
--------------
-
-* Add license information to test_generateDonutDirectDetectTask.
 
 .. _lsst.ts.wep-6.1.3:
 
