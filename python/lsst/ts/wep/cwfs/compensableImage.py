@@ -43,7 +43,7 @@ from lsst.ts.wep.cwfs.tool import (
     ZernikeAnnularJacobian,
 )
 from lsst.ts.wep.cwfs.image import Image
-from lsst.ts.wep.utility import DefocalType, CentroidFindType, rotMatrix
+from lsst.ts.wep.utility import DefocalType, CentroidFindType, FilterType, rotMatrix
 from galsim.utilities import horner2d
 
 
@@ -64,6 +64,9 @@ class CompensableImage(object):
         # Field coordinate in degree
         self.fieldX = 0
         self.fieldY = 0
+
+        # Add filter information
+        self.filterLabel = FilterType.REF
 
         # Blended coordinates in pixels relative
         # to central donut
@@ -204,8 +207,25 @@ class CompensableImage(object):
 
         return self.fieldX, self.fieldY
 
+    def getFilterLabel(self):
+        """Get the filter label.
+
+        Returns
+        -------
+        enum `FilterType`
+            Filter from exposure.
+        """
+
+        return self.filterLabel
+
     def setImg(
-        self, fieldXY, defocalType, blendOffsets=None, image=None, imageFile=None
+        self,
+        fieldXY,
+        defocalType,
+        filterLabel=FilterType.REF,
+        blendOffsets=None,
+        image=None,
+        imageFile=None,
     ):
         """Set the wavefront image.
 
@@ -215,6 +235,8 @@ class CompensableImage(object):
             Position of donut on the focal plane in degree (field x, field y).
         defocalType : enum 'DefocalType'
             Defocal type of image.
+        filterLabel : enum `FilterType`, optional
+            Filter for the exposure. (the default is FilterType.REF)
         blendOffsets : list or None, optional
             Positions of blended donuts relative to location of center donut.
             Enter as [xCoordList, yCoordList].
@@ -240,6 +262,7 @@ class CompensableImage(object):
 
         self.fieldX, self.fieldY = fieldXY
         self.defocalType = defocalType
+        self.filterLabel = filterLabel
         self.blendOffsetX = blendOffsets[0]
         self.blendOffsetY = blendOffsets[1]
         if len(self.blendOffsetX) != len(self.blendOffsetY):

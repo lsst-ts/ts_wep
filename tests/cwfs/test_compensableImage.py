@@ -27,7 +27,13 @@ from lsst.ts.wep.cwfs.image import Image
 from lsst.ts.wep.cwfs.instrument import Instrument
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
-from lsst.ts.wep.utility import getModulePath, getConfigDir, DefocalType, CamType
+from lsst.ts.wep.utility import (
+    getModulePath,
+    getConfigDir,
+    DefocalType,
+    CamType,
+    FilterType,
+)
 
 
 class TempAlgo(object):
@@ -94,6 +100,9 @@ class TestCompensableImage(unittest.TestCase):
         # This is the position of donut on the focal plane in degree
         self.fieldXY = (1.185, 1.185)
 
+        # Set the filter
+        self.filterLabel = FilterType.LSST_G
+
         # Define the optical model: "paraxial", "onAxis", "offAxis"
         self.opticalModel = "offAxis"
 
@@ -156,6 +165,16 @@ class TestCompensableImage(unittest.TestCase):
         self.assertEqual(fieldX, 0)
         self.assertEqual(fieldY, 0)
 
+    def testGetFilterLabel(self):
+        # Test default
+        filterLabel = self.wfsImg.getFilterLabel()
+        self.assertEqual(filterLabel, FilterType.REF)
+
+        # Test setting it explicitly
+        self._setIntraImg()
+        filterLabel = self.wfsImg.getFilterLabel()
+        self.assertEqual(filterLabel, FilterType.LSST_G)
+
     def testSetImg(self):
         self._setIntraImg()
         self.assertEqual(self.wfsImg.getImg().shape, (120, 120))
@@ -167,6 +186,7 @@ class TestCompensableImage(unittest.TestCase):
         self.wfsImg.setImg(
             self.fieldXY,
             DefocalType.Intra,
+            self.filterLabel,
             blendOffsets=blendOffsets,
             imageFile=self.imgFilePathIntra,
         )
@@ -208,10 +228,14 @@ class TestCompensableImage(unittest.TestCase):
         wfsImgIntra.setImg(
             self.fieldXY,
             DefocalType.Intra,
+            self.filterLabel,
             imageFile=self.imgFilePathIntra,
         )
         wfsImgExtra.setImg(
-            self.fieldXY, DefocalType.Extra, imageFile=self.imgFilePathExtra
+            self.fieldXY,
+            DefocalType.Extra,
+            self.filterLabel,
+            imageFile=self.imgFilePathExtra,
         )
 
         for wfsImg in [wfsImgIntra, wfsImgExtra]:

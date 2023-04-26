@@ -32,7 +32,7 @@ import lsst.obs.lsst as obs_lsst
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.stamps import AbstractStamp
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
-from lsst.ts.wep.utility import DefocalType
+from lsst.ts.wep.utility import DefocalType, getFilterTypeFromBandLabel, FilterType
 
 
 @dataclass
@@ -227,9 +227,17 @@ class DonutStamp(AbstractStamp):
             # CompensableImage understands empty lists mean no blend
             blendOffsets = self.blend_centroid_positions
 
+        # If no bandpass set then use reference filter as
+        # default when creating a compensableImage instance
+        if self.bandpass == "":
+            filterLabel = FilterType.REF
+        else:
+            filterLabel = getFilterTypeFromBandLabel(self.bandpass)
+
         self.comp_im.setImg(
             field_xy,
             DefocalType(self.defocal_type),
+            filterLabel=filterLabel,
             blendOffsets=blendOffsets.tolist(),
             image=self.stamp_im.getImage().getArray(),
         )

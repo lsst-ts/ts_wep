@@ -22,7 +22,7 @@
 __all__ = ["DonutTemplateModel"]
 
 import numpy as np
-from lsst.ts.wep.utility import getConfigDir, readPhoSimSettingData, CamType
+from lsst.ts.wep.utility import getConfigDir, readPhoSimSettingData, CamType, FilterType
 from lsst.ts.wep.cwfs.donutTemplateDefault import DonutTemplateDefault
 from lsst.ts.wep.cwfs.instrument import Instrument
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
@@ -38,6 +38,7 @@ class DonutTemplateModel(DonutTemplateDefault):
         sensorName,
         defocalType,
         imageSize,
+        filterLabel=FilterType.REF,
         camType=CamType.LsstCam,
         opticalModel="offAxis",
         pixelScale=0.2,
@@ -54,6 +55,8 @@ class DonutTemplateModel(DonutTemplateDefault):
             The defocal state of the sensor.
         imageSize : int
             Size of template in pixels. The template will be a square.
+        filterLabel : enum `FilterType`, optional
+            Filter for the exposure. (The default is FilterType.REF)
         camType : enum 'CamType', optional
             Camera type. (The default is CamType.LsstCam)
         opticalModel : str, optional
@@ -141,7 +144,9 @@ class DonutTemplateModel(DonutTemplateDefault):
         # Define position of donut at center of current sensor in degrees
         boundaryT = 0
         maskScalingFactorLocal = 1
-        img.setImg(fieldXY, defocalType, image=np.zeros((imageSize, imageSize)))
+        img.setImg(
+            fieldXY, defocalType, filterLabel, image=np.zeros((imageSize, imageSize))
+        )
         img.makeMask(inst, opticalModel, boundaryT, maskScalingFactorLocal)
 
         return img.getNonPaddedMask()
