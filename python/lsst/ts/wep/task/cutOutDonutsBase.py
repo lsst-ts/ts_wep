@@ -375,7 +375,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         -------
         DonutStamps
             Collection of postage stamps as
-            lsst.afw.image.maskedImage.MaskedImage with additional metadata.
+            lsst.afw.image.MaskedImage with additional metadata.
         """
 
         detectorName = exposure.getDetector().getName()

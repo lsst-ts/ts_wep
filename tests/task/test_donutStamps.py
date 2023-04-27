@@ -43,7 +43,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         stampList = []
 
         for idx in range(nStamps):
-            stamp = afwImage.maskedImage.MaskedImageF(stampSize, stampSize)
+            stamp = afwImage.MaskedImageF(stampSize, stampSize)
             stamp.image.array += randState.rand(stampSize, stampSize)
             stamp.mask.array += 10
             stamp.variance.array += 100

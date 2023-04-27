@@ -77,7 +77,7 @@ class DonutStamp(AbstractStamp):
         initialized in the __post_init__ stage of the dataclass.
     """
 
-    stamp_im: afwImage.maskedImage.MaskedImageF
+    stamp_im: afwImage.MaskedImageF
     sky_position: lsst.geom.SpherePoint
     centroid_position: lsst.geom.Point2D
     blend_centroid_positions: np.ndarray
