@@ -43,10 +43,8 @@ tasks:
     class: lsst.ts.wep.task.fitWcsFromDetectedTask.FitWcsFromDetectedTask
     config:
       connections.astromRefCat: 'cal_ref_cat'
+      connections.photoRefCat: 'cal_ref_cat'
       astromTask.referenceSelector.doMagLimit: False
-  generateDonutCatalogWcsTask:
-    class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
-    config:
       donutSelector.unblendedSeparation: 1
   cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask

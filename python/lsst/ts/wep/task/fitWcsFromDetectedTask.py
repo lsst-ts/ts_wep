@@ -21,6 +21,7 @@
 
 import typing
 import pandas as pd
+from copy import copy
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -29,11 +30,16 @@ import lsst.geom
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
 import lsst.meas.base as measBase
+from lsst.pipe.base.task import TaskError
 from lsst.utils.timer import timeMethod
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.meas.algorithms import (
     MagnitudeLimit,
     ReferenceObjectLoader,
+)
+from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
+    GenerateDonutCatalogWcsTask,
+    GenerateDonutCatalogWcsTaskConfig,
 )
 
 
@@ -45,7 +51,7 @@ class FitWcsFromDetectedTaskConnections(
     for FitDonutWcsTask.
     """
 
-    inputExposure = connectionTypes.Input(
+    exposure = connectionTypes.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
@@ -69,16 +75,34 @@ class FitWcsFromDetectedTaskConnections(
         deferLoad=True,
         multiple=True,
     )
+    photoRefCat = connectionTypes.PrerequisiteInput(
+        doc="Reference catalog to use for donut selection",
+        name="ps1_pv3_3pi_20170110",
+        storageClass="SimpleCatalog",
+        dimensions=("htm7",),
+        deferLoad=True,
+        multiple=True,
+    )
     outputExposure = connectionTypes.Output(
         doc="Output exposure with new WCS",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
         name="postISRCCD",
     )
+    donutCatalog = connectionTypes.Output(
+        doc="Donut Locations",
+        dimensions=(
+            "visit",
+            "detector",
+            "instrument",
+        ),
+        storageClass="DataFrame",
+        name="donutCatalog",
+    )
 
 
 class FitWcsFromDetectedTaskConfig(
-    pipeBase.PipelineTaskConfig,
+    GenerateDonutCatalogWcsTaskConfig,
     pipelineConnections=FitWcsFromDetectedTaskConnections,
 ):
     """
@@ -90,20 +114,15 @@ class FitWcsFromDetectedTaskConfig(
     astromTask = pexConfig.ConfigurableField(
         target=AstrometryTask, doc="Task for WCS fitting."
     )
-    anyFilterMapsToThis = pexConfig.Field(
-        doc=(
-            "Always use this reference catalog filter, no matter whether or what filter name is "
-            "supplied to the loader. Effectively a trivial filterMap: map all filter names to this filter."
-            " This can be set for purely-astrometric catalogs (e.g. Gaia DR2) where there is only one "
-            "reasonable choice for every camera filter->refcat mapping, but not for refcats used for "
-            "photometry, which need a filterMap and/or colorterms/transmission corrections."
-        ),
-        dtype=str,
-        default=None,
-        optional=True,
+    maxFitScatter = pexConfig.Field(
+        doc="Maximum allowed scatter for a successful fit (in arcseconds.)",
+        dtype=float,
+        default=1.0,
     )
 
-    # Took these defaults from atmospec/centroiding
+    # Took these defaults from atmospec/centroiding which I used
+    # as a template for implementing WCS fitting in a task.
+    # https://github.com/lsst/atmospec/blob/main/python/lsst/atmospec/centroiding.py
     def setDefaults(self):
         super().setDefaults()
         self.astromTask.wcsFitter.retarget(FitAffineWcsTask)
@@ -117,7 +136,7 @@ class FitWcsFromDetectedTaskConfig(
         self.astromTask.matcher.maxOffsetPix = 3000
 
 
-class FitWcsFromDetectedTask(pipeBase.PipelineTask):
+class FitWcsFromDetectedTask(GenerateDonutCatalogWcsTask):
     """
     Fit a new WCS to the image from a direct detect Donut
     Catalog and return the input exposure with the new
@@ -190,50 +209,84 @@ class FitWcsFromDetectedTask(pipeBase.PipelineTask):
 
         return sourceCat
 
-    def fitWcs(self, catalog, exposure):
-        """
-        Perform the WCS fit and return the exposure
-        with the new WCS attached.
-
-        Parameters
-        ----------
-        catalog : `lsst.afw.table.SimpleCatalog`
-            Catalog of donut sources directly detected
-            on the exposure.
-        exposure : `lsst.afw.image.Exposure`
-            Exposure with the donut images and an
-            included WCS.
-
-        Returns
-        -------
-        `lsst.afw.image.Exposure`
-            The same as the input exposure except with
-            a newly fit WCS attached overwriting the old WCS.
-        """
-
-        afwCat = self.formatDonutCatalog(catalog)
-        self.astromTask.run(
-            sourceCat=afwCat,
-            exposure=exposure,
-        )
-
-        return exposure
-
     @timeMethod
     def run(
         self,
         astromRefCat: typing.List[afwTable.SimpleCatalog],
-        inputExposure: afwImage.Exposure,
+        exposure: afwImage.Exposure,
         fitDonutCatalog: pd.DataFrame,
+        photoRefCat: typing.List[afwTable.SimpleCatalog],
     ) -> pipeBase.Struct:
-        refObjLoader = ReferenceObjectLoader(
+        astromRefObjLoader = ReferenceObjectLoader(
             dataIds=[ref.dataId for ref in astromRefCat],
             refCats=astromRefCat,
         )
-        self.astromTask.setRefObjLoader(refObjLoader)
+        self.astromTask.setRefObjLoader(astromRefObjLoader)
         self.astromTask.refObjLoader.config.anyFilterMapsToThis = (
             self.config.anyFilterMapsToThis
         )
-        exposure = self.fitWcs(fitDonutCatalog, inputExposure)
+        afwCat = self.formatDonutCatalog(fitDonutCatalog)
+        originalWcs = copy(exposure.wcs)
 
-        return pipeBase.Struct(outputExposure=exposure)
+        successfulFit = False
+        # Set a parameter in the metadata to
+        # easily check whether the task ran WCS
+        # fitting successfully or not. This will
+        # give us information on our donut catalog output.
+        self.metadata["wcsFitSuccess"] = False
+        try:
+            astromResult = self.astromTask.run(
+                sourceCat=afwCat,
+                exposure=exposure,
+            )
+            scatter = astromResult.scatterOnSky.asArcseconds()
+            if scatter < self.config.maxFitScatter:
+                successfulFit = True
+                self.metadata["wcsFitSuccess"] = True
+        except (RuntimeError, TaskError, IndexError, ValueError, AttributeError) as e:
+            # IndexError raised for low source counts:
+            # index 0 is out of bounds for axis 0 with size 0
+
+            # ValueError: negative dimensions are not allowed
+            # seen when refcat source count is low (but non-zero)
+
+            # AttributeError: 'NoneType' object has no attribute 'asArcseconds'
+            # when the result is a failure as the wcs is set to None on failure
+            self.log.warn(f"Solving for WCS failed: {e}")
+            exposure.setWcs(
+                originalWcs
+            )  # this is set to None when the fit fails, so restore it
+            donutCatalog = fitDonutCatalog
+            self.log.warning(
+                "Returning original exposure and WCS and direct detect catalog as output."
+            )
+
+        if successfulFit:
+            photoRefObjLoader = ReferenceObjectLoader(
+                dataIds=[ref.dataId for ref in photoRefCat],
+                refCats=photoRefCat,
+            )
+            detector = exposure.getDetector()
+            filterName = exposure.filter.bandLabel
+
+            try:
+                # Match detector layout to reference catalog
+                refSelection, blendCentersX, blendCentersY = self.runSelection(
+                    photoRefObjLoader, detector, exposure.wcs, filterName
+                )
+
+            # Except RuntimeError caused when no reference catalog
+            # available for the region covered by detector
+            except RuntimeError:
+                self.log.warning(
+                    "No catalogs cover this detector. Returning empty catalog."
+                )
+                refSelection = None
+                blendCentersX = None
+                blendCentersY = None
+
+            donutCatalog = self.donutCatalogToDataFrame(
+                refSelection, filterName, blendCentersX, blendCentersY
+            )
+
+        return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)

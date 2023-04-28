@@ -139,6 +139,9 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **CutOutDonutsScienceSensorTask**: Gen 3 middleware task to cut out donut stamps on science sensors from donut catalogs produced by GenerateDonutCatalogs tasks.
 * **CutOutDonutsScienceSensorTaskConnections**: Connections setup for CutOutDonutsScienceSensorTask.
 * **CutOutDonutsScienceSensorTaskConfig**: Configuration setup for CutOutDonutsScienceSensorTask.
+* **FitWcsFromDetectedTask**: Optional pipeline task to take a catalog of detected donuts from GenerateDonutDirectDetectTask and fit a WCS to the input exposure and return a donut catalog using the new WCS and a reference catalog.
+* **FitWcsFromDetectedTaskConnections**: Connections setup for FitWcsFromDetectedTask.
+* **FitWcsFromDetectedTaskConfig**: Configuration setup for FitWcsFromDetectedTask.
 
 .. _WEP_API:
 

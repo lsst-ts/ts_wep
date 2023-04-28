@@ -97,21 +97,7 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
             "visit": 4021123106009,
         }
 
-    def testValidateConfigs(self):
-        # Test some defaults
-        self.assertEqual(self.config.astromTask.referenceSelector.magLimit.maximum, 15)
-        self.assertEqual(self.config.astromTask.matcher.maxOffsetPix, 3000)
-
-        # Change up config
-        self.config.astromTask.referenceSelector.magLimit.maximum = 18
-        self.config.astromTask.matcher.maxOffsetPix = 2500
-
-        # Test new settings
-        task = FitWcsFromDetectedTask(config=self.config)
-        self.assertEqual(task.config.astromTask.referenceSelector.magLimit.maximum, 18)
-        self.assertEqual(task.config.astromTask.matcher.maxOffsetPix, 2500)
-
-    def testTaskFit(self):
+    def _getInputData(self):
         preFitExp_S11 = self.butler.get(
             "preFitPostISRCCD",
             dataId=self.dataIdExtra,
@@ -143,22 +129,45 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
             htmIds, self.butler, catalogName, collections
         )
 
+        return preFitExp_S11, directDetectCat, dataRefs
+
+    def testValidateConfigs(self):
+        # Test some defaults
+        self.assertEqual(self.config.astromTask.referenceSelector.magLimit.maximum, 15)
+        self.assertEqual(self.config.astromTask.matcher.maxOffsetPix, 3000)
+
+        # Change up config
+        self.config.astromTask.referenceSelector.magLimit.maximum = 18
+        self.config.astromTask.matcher.maxOffsetPix = 2500
+
+        # Test new settings
+        task = FitWcsFromDetectedTask(config=self.config)
+        self.assertEqual(task.config.astromTask.referenceSelector.magLimit.maximum, 18)
+        self.assertEqual(task.config.astromTask.matcher.maxOffsetPix, 2500)
+
+    def testTaskFit(self):
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
         self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
         task = FitWcsFromDetectedTask(config=self.config)
 
         # Fit the WCS with the task since Phosim fit will be off
-        fitWcs = task.run(
-            dataRefs, copy(preFitExp_S11), directDetectCat
-        ).outputExposure.wcs
+        fitWcsOutput = task.run(
+            dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs
+        )
+        fitWcs = fitWcsOutput.outputExposure.wcs
+        fitCatalog = fitWcsOutput.donutCatalog
 
         # Shift the WCS by a known amount
         truePixelShift = 5
         directDetectCat["centroid_x"] += truePixelShift
         directDetectCat["centroid_y"] += truePixelShift
-        shiftedWcs = task.run(
-            dataRefs, copy(preFitExp_S11), directDetectCat
-        ).outputExposure.wcs
+        shiftedOutput = task.run(
+            dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs
+        )
+        shiftedWcs = shiftedOutput.outputExposure.wcs
+        shiftedCatalog = shiftedOutput.donutCatalog
 
         # Get the shifts out of the new WCS
         fitRa = fitWcs.getSkyOrigin().getRa().asArcseconds()
@@ -176,6 +185,49 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
             truePixelShift * np.sqrt(2),
             np.sqrt(raPixelShift**2.0 + decPixelShift**2.0),
             delta=1e-3,
+        )
+
+        # Test the catalog
+        np.testing.assert_array_almost_equal(
+            fitCatalog["centroid_x"] + 5, shiftedCatalog["centroid_x"], decimal=3
+        )
+        np.testing.assert_array_almost_equal(
+            fitCatalog["centroid_y"] + 5, shiftedCatalog["centroid_y"], decimal=3
+        )
+
+    def testWcsFailure(self):
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+
+        # Set cutoff so there will be no sources and fit will fail
+        self.config.astromTask.referenceSelector.magLimit.maximum = 8.0
+        self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
+        task = FitWcsFromDetectedTask(config=self.config)
+
+        # Fit the WCS with the task since Phosim fit will be off
+        fitWcsOutput = task.run(
+            dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs
+        )
+        fitWcs = fitWcsOutput.outputExposure.wcs
+        fitCatalog = fitWcsOutput.donutCatalog
+
+        # Test the WCS is the same
+        np.testing.assert_array_equal(
+            fitWcs.getCdMatrix(), preFitExp_S11.wcs.getCdMatrix()
+        )
+        self.assertEqual(
+            fitWcs.getSkyOrigin().getRa().asDegrees(),
+            preFitExp_S11.wcs.getSkyOrigin().getRa().asDegrees(),
+        )
+        self.assertEqual(
+            fitWcs.getSkyOrigin().getDec().asDegrees(),
+            preFitExp_S11.wcs.getSkyOrigin().getDec().asDegrees(),
+        )
+        # Test that catalog is the same
+        np.testing.assert_array_equal(
+            fitCatalog["centroid_x"], directDetectCat["centroid_x"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["centroid_y"], directDetectCat["centroid_y"]
         )
 
     def testPipelineOutputsInButler(self):
@@ -223,3 +275,12 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
         self.assertTrue(isinstance(donutStampsIntra_S11, DonutStamps))
         self.assertTrue(isinstance(zernOutAvg_S11, np.ndarray))
         self.assertTrue(isinstance(zernOutRaw_S11, np.ndarray))
+
+    def testLogError(self):
+        wcsTaskMetadata = self.butler.get(
+            "fitWcsTask_metadata",
+            dataId=self.dataIdExtra,
+            collections=[f"{self.runName}"],
+        )
+        # This should be true when the pipeline is successful.
+        self.assertTrue(wcsTaskMetadata["fitWcsTask"]["wcsFitSuccess"])
