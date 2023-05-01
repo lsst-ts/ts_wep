@@ -39,8 +39,8 @@ tasks:
       instApertureDiameter: 8.36
       instDefocalOffset: 1.5
       instPixelSize: 10.0e-6
-  fitWcsTask:
-    class: lsst.ts.wep.task.fitWcsFromDetectedTask.FitWcsFromDetectedTask
+  generateDonutFromRefitWcsTask:
+    class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
     config:
       connections.astromRefCat: 'cal_ref_cat'
       connections.photoRefCat: 'cal_ref_cat'

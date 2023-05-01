@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+import logging
 import pandas
 import unittest
 import numpy as np
@@ -33,11 +34,14 @@ from lsst.ts.wep.utility import (
     writePipetaskCmd,
     writeCleanUpRepoCmd,
 )
-from lsst.ts.wep.task import FitWcsFromDetectedTaskConfig, FitWcsFromDetectedTask
+from lsst.ts.wep.task import (
+    GenerateDonutFromRefitWcsTaskConfig,
+    GenerateDonutFromRefitWcsTask,
+)
 from lsst.ts.wep.task import RefCatalogInterface, DonutStamps
 
 
-class TestFitWcsFromDetectedTask(unittest.TestCase):
+class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -62,7 +66,9 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
         collections = "refcats/largeCatSingleCCD,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
-        pipelineYaml = os.path.join(testPipelineConfigDir, "testFitWcsPipeline.yaml")
+        pipelineYaml = os.path.join(
+            testPipelineConfigDir, "testDonutFromRefitWcsPipeline.yaml"
+        )
         exposureId = 4021123106008  # Exposure ID for test extra-focal image
 
         pipeCmd = writePipetaskCmd(
@@ -78,8 +84,9 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
         runProgram(cleanUpCmd)
 
     def setUp(self):
-        self.config = FitWcsFromDetectedTaskConfig()
-        self.task = FitWcsFromDetectedTask(config=self.config)
+        self.config = GenerateDonutFromRefitWcsTaskConfig()
+        self.task = GenerateDonutFromRefitWcsTask(config=self.config)
+        self.logger = logging.getLogger("lsst.generateDonutFromRefitWcsTask")
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -141,7 +148,7 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
         self.config.astromTask.matcher.maxOffsetPix = 2500
 
         # Test new settings
-        task = FitWcsFromDetectedTask(config=self.config)
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
         self.assertEqual(task.config.astromTask.referenceSelector.magLimit.maximum, 18)
         self.assertEqual(task.config.astromTask.matcher.maxOffsetPix, 2500)
 
@@ -150,7 +157,7 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
 
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
         self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
-        task = FitWcsFromDetectedTask(config=self.config)
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
 
         # Fit the WCS with the task since Phosim fit will be off
         fitWcsOutput = task.run(
@@ -201,11 +208,17 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
         # Set cutoff so there will be no sources and fit will fail
         self.config.astromTask.referenceSelector.magLimit.maximum = 8.0
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
-        task = FitWcsFromDetectedTask(config=self.config)
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
 
         # Fit the WCS with the task since Phosim fit will be off
-        fitWcsOutput = task.run(
-            dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs
+        with self.assertLogs(self.logger.name, level="WARNING") as context:
+            fitWcsOutput = task.run(
+                dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs
+            )
+        self.assertIn("Solving for WCS failed", context[1][1])
+        self.assertIn(
+            "Returning original exposure and WCS and direct detect catalog as output.",
+            context[1][2],
         )
         fitWcs = fitWcsOutput.outputExposure.wcs
         fitCatalog = fitWcsOutput.donutCatalog
@@ -229,6 +242,68 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
         np.testing.assert_array_equal(
             fitCatalog["centroid_y"], directDetectCat["centroid_y"]
         )
+        np.testing.assert_array_equal(
+            fitCatalog["coord_ra"], directDetectCat["coord_ra"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["coord_dec"], directDetectCat["coord_dec"]
+        )
+        # Test metadata flag
+        self.assertFalse(task.metadata["wcsFitSuccess"])
+        self.assertFalse(task.metadata["refCatalogSuccess"])
+
+    def testRefCatalogFailure(self):
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+
+        # Set up task
+        self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
+        self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
+
+        # Shift the WCS by a known amount
+        truePixelShift = 5
+        directDetectCat["centroid_x"] += truePixelShift
+        directDetectCat["centroid_y"] += truePixelShift
+
+        # Give incomplete list of reference catalogs
+        with self.assertLogs(self.logger.name, level="WARNING") as context:
+            fitWcsOutput = task.run(dataRefs, copy(preFitExp_S11), directDetectCat, [])
+        self.assertIn(
+            "No catalogs cover this detector.",
+            context.output[0],
+        )
+        self.assertIn(
+            "Returning new WCS but original direct detect catalog as donutCatalog.",
+            context.output[1],
+        )
+        fitWcs = fitWcsOutput.outputExposure.wcs
+        fitCatalog = fitWcsOutput.donutCatalog
+
+        # Test that WCS is different
+        self.assertNotAlmostEqual(
+            fitWcs.getSkyOrigin().getRa().asDegrees(),
+            preFitExp_S11.wcs.getSkyOrigin().getRa().asDegrees(),
+        )
+        self.assertNotAlmostEqual(
+            fitWcs.getSkyOrigin().getDec().asDegrees(),
+            preFitExp_S11.wcs.getSkyOrigin().getDec().asDegrees(),
+        )
+        # But that catalog is the same
+        np.testing.assert_array_equal(
+            fitCatalog["centroid_x"], directDetectCat["centroid_x"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["centroid_y"], directDetectCat["centroid_y"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["coord_ra"], directDetectCat["coord_ra"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["coord_dec"], directDetectCat["coord_dec"]
+        )
+        # Test metadata flags
+        self.assertTrue(task.metadata["wcsFitSuccess"])
+        self.assertFalse(task.metadata["refCatalogSuccess"])
 
     def testPipelineOutputsInButler(self):
         """Verify that outputs with given names are stored in butler."""
@@ -276,11 +351,20 @@ class TestFitWcsFromDetectedTask(unittest.TestCase):
         self.assertTrue(isinstance(zernOutAvg_S11, np.ndarray))
         self.assertTrue(isinstance(zernOutRaw_S11, np.ndarray))
 
-    def testLogError(self):
+    def testMetadataFlags(self):
+        """Test that flags for successful WCS fit and successful
+        donut catalog generation from reference catalog are recorded."""
         wcsTaskMetadata = self.butler.get(
-            "fitWcsTask_metadata",
+            "generateDonutFromRefitWcsTask_metadata",
             dataId=self.dataIdExtra,
             collections=[f"{self.runName}"],
         )
         # This should be true when the pipeline is successful.
-        self.assertTrue(wcsTaskMetadata["fitWcsTask"]["wcsFitSuccess"])
+        self.assertTrue(
+            wcsTaskMetadata["generateDonutFromRefitWcsTask"]["wcsFitSuccess"]
+        )
+
+        # This should be true when the pipeline is successful.
+        self.assertTrue(
+            wcsTaskMetadata["generateDonutFromRefitWcsTask"]["refCatalogSuccess"]
+        )

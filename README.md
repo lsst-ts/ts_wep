@@ -146,15 +146,16 @@ Please be careful not to add these file locations when making commits.
 
 When running the WEP pipeline and generating donut catalogs with `GenerateDonutDirectDetectTask` it is now possible to use the directly detected donut catalogs as input for WCS fitting and catalog generation from a reference catalog.
 This allows the user to use donuts selected for Zernike estimation from available reference catalogs that are more complete and have accurate astrometry and photometry rather than the directly detected donut catalogs.
-To add this functionality into the WEP pipeline the user can add `FitWcsFromDetectedTask` to their pipeline configuration after `GenerateDonutDirectDetectTask`.
+To add this functionality into the WEP pipeline the user can add `GenerateDonutFromRefitWcsTask` to their pipeline configuration after `GenerateDonutDirectDetectTask`.
 Thus the pipeline steps shown in [Example Running with Gen3 Middleware (Pipeline Task Framework)](#example-running-with-gen3-middleware-pipeline-task-framework) require adding in the new task after direct detection of the donuts and the complete pipeline steps in this case would be:
 - `lsst.ip.isr.isrTask.IsrTask`
 - `lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask`
-- `lsst.ts.wep.task.fitWcsFromDetectedTask.FitWcsFromDetectedTask`
+- `lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask`
 - `lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask`
 - `lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask`
-Note that because the `FitWcsFromDetectedTask` saves a new output catalog and exposure with a corrected WCS there is a required additional change in the names of connections between the tasks that can be specified in the pipeline configuration file.
-For an example see the [pipeline configuration file](tests/testData/pipelineConfigs/testFitWcsPipeline.yaml) for the tests of `FitWcsFromDetectedTask`.
+
+Note that because the `GenerateDonutFromRefitWcsTask` saves a new output catalog and exposure with a corrected WCS there is a required additional change in the names of connections between the tasks that can be specified in the pipeline configuration file.
+For an example see the [pipeline configuration file](tests/testData/pipelineConfigs/testDonutFromRefitWcsPipeline.yaml) for the tests of `GenerateDonutFromRefitWcsTask`.
 
 ## Diagram of the Corner Wavefront Sensor Geometry
 

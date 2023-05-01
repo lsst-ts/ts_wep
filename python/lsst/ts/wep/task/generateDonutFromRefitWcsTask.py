@@ -43,7 +43,7 @@ from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
 )
 
 
-class FitWcsFromDetectedTaskConnections(
+class GenerateDonutFromRefitWcsTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("instrument", "visit", "detector")
 ):
     """
@@ -101,9 +101,9 @@ class FitWcsFromDetectedTaskConnections(
     )
 
 
-class FitWcsFromDetectedTaskConfig(
+class GenerateDonutFromRefitWcsTaskConfig(
     GenerateDonutCatalogWcsTaskConfig,
-    pipelineConnections=FitWcsFromDetectedTaskConnections,
+    pipelineConnections=GenerateDonutFromRefitWcsTaskConnections,
 ):
     """
     Configuration settings for GenerateDonutCatalogWcsTask.
@@ -136,15 +136,15 @@ class FitWcsFromDetectedTaskConfig(
         self.astromTask.matcher.maxOffsetPix = 3000
 
 
-class FitWcsFromDetectedTask(GenerateDonutCatalogWcsTask):
+class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
     """
     Fit a new WCS to the image from a direct detect Donut
     Catalog and return the input exposure with the new
     WCS attached.
     """
 
-    ConfigClass = FitWcsFromDetectedTaskConfig
-    _DefaultName = "fitWcsFromDetectedTask"
+    ConfigClass = GenerateDonutFromRefitWcsTaskConfig
+    _DefaultName = "generateDonutFromRefitWcsTask"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -252,15 +252,15 @@ class FitWcsFromDetectedTask(GenerateDonutCatalogWcsTask):
 
             # AttributeError: 'NoneType' object has no attribute 'asArcseconds'
             # when the result is a failure as the wcs is set to None on failure
-            self.log.warn(f"Solving for WCS failed: {e}")
-            exposure.setWcs(
-                originalWcs
-            )  # this is set to None when the fit fails, so restore it
+            self.log.warning(f"Solving for WCS failed: {e}")
+            # this is set to None when the fit fails, so restore it
+            exposure.setWcs(originalWcs)
             donutCatalog = fitDonutCatalog
             self.log.warning(
                 "Returning original exposure and WCS and direct detect catalog as output."
             )
 
+        self.metadata["refCatalogSuccess"] = False
         if successfulFit:
             photoRefObjLoader = ReferenceObjectLoader(
                 dataIds=[ref.dataId for ref in photoRefCat],
@@ -275,18 +275,18 @@ class FitWcsFromDetectedTask(GenerateDonutCatalogWcsTask):
                     photoRefObjLoader, detector, exposure.wcs, filterName
                 )
 
+                donutCatalog = self.donutCatalogToDataFrame(
+                    refSelection, filterName, blendCentersX, blendCentersY
+                )
+                self.metadata["refCatalogSuccess"] = True
+
             # Except RuntimeError caused when no reference catalog
             # available for the region covered by detector
             except RuntimeError:
+                self.log.warning("No catalogs cover this detector.")
+                donutCatalog = fitDonutCatalog
                 self.log.warning(
-                    "No catalogs cover this detector. Returning empty catalog."
+                    "Returning new WCS but original direct detect catalog as donutCatalog."
                 )
-                refSelection = None
-                blendCentersX = None
-                blendCentersY = None
-
-            donutCatalog = self.donutCatalogToDataFrame(
-                refSelection, filterName, blendCentersX, blendCentersY
-            )
 
         return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
