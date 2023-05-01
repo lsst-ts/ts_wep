@@ -574,6 +574,8 @@ class Algorithm(object):
             - pupilMask - pupil mask that is applied before zernike calculation
             - maskedI1 - the masked version of the compensated I1
             - maskedI2 - the masked version of the compensated I2
+            - dI/dz - z derivative of the image: +/- (I1 - I2) / (2 * deltaZ)
+            - I0 - the mean central image: (I1 + I2) / 2
             - residZk - the estimated residual zernikes (units: nm)
             - residWf - the estimated residual wavefront (units: nm)
             - totZk - the current best estimate of the zernikes (units: nm)
@@ -967,7 +969,8 @@ class Algorithm(object):
             Intra- or extra-focal image.
         iOutItr : int, optional
             ith number of outer loop iteration which is important in "fft"
-            algorithm. (the default is 0.)
+            algorithm, and in saving dI/dz and I0 to the algorithm history.
+            (the default is 0.)
 
         Returns
         -------
@@ -985,6 +988,13 @@ class Algorithm(object):
 
         # Calculate the differential Omega
         dOmega = aperturePixelSize**2
+
+        # Calculate partialI=dI/dz and I0
+        partialI, I0 = self._getPartialIandI0(I1, I2)
+
+        # Record the image gradient and mean central image
+        self._recordItem(partialI.copy(), "dI/dz", iOutItr, debugLevel=1)
+        self._recordItem(I0.copy(), "I0", iOutItr, debugLevel=1)
 
         # Solve the Poisson's equation based on the type of algorithm
         numTerms = self.getNumOfZernikes()
@@ -1027,7 +1037,7 @@ class Algorithm(object):
             u2v2[ctrIdx, ctrIdx] = np.inf
 
             # Calculate the wavefront signal
-            Sini = self._createSignal(I1, I2, cliplevel)
+            Sini = self._createSignal(partialI, I0, cliplevel)
 
             # Find the just-outside and just-inside indices of a ring in pixels
             # This is for the use in setting dWdn = 0
@@ -1124,15 +1134,12 @@ class Algorithm(object):
             # Use the integration method by serial expansion to solve the
             # Poisson's equation
 
-            # Calculate dI and I0
-            dI, I0 = self._getdIandI0(I1, I2)
-
             # Get the x, y coordinate in mask. The element outside mask is 0.
             xSensor, ySensor = self._inst.getSensorCoor()
             xSensor = xSensor * self.mask_comp
             ySensor = ySensor * self.mask_comp
 
-            # Create the F matrix and Zernike-related matrixes
+            # Create the vector F and matrix M
 
             # Get Zernike and gradient bases from cache.  These are each
             # (nzk, npix, npix) arrays, with the first dimension indicating
@@ -1140,8 +1147,8 @@ class Algorithm(object):
             zk, dzkdx, dzkdy = self._zernikeBasisCache()
 
             # Eqn. (19) from Xin et al., Appl. Opt. 54, 9045-9054 (2015).
-            # F_j = \int (d_z I) Z_j d_Omega
-            F = np.tensordot(dI, zk, axes=((0, 1), (1, 2))) * dOmega
+            # F_j = \int (dI/dz) Z_j d_Omega
+            F = np.tensordot(partialI, zk, axes=((0, 1), (1, 2))) * dOmega
             # Eqn. (20) from Xin et al., Appl. Opt. 54, 9045-9054 (2015).
             # M_ij = \int I (grad Z_j) . (grad Z_i) d_Omega
             #      =   \int I (dZ_i/dx) (dZ_j/dx) d_Omega
@@ -1150,14 +1157,6 @@ class Algorithm(object):
             Mij += np.einsum("ab,iab,jab->ij", I0, dzkdy, dzkdy)
             Mij *= dOmega / (self._inst.apertureDiameter / 2.0) ** 2
 
-            # Calculate dz
-            dz = (
-                2
-                * self._inst.focalLength
-                * (self._inst.focalLength - self._inst.defocalDisOffsetInM)
-                / self._inst.defocalDisOffsetInM
-            )
-
             # Define zc
             zc = np.zeros(numTerms)
 
@@ -1165,7 +1164,7 @@ class Algorithm(object):
             idx = self.getZernikeTerms()
 
             # Solve the equation: M*W = F => W = M^(-1)*F
-            zc_tmp = np.linalg.lstsq(Mij[:, idx][idx], F[idx], rcond=None)[0] / dz
+            zc_tmp = np.linalg.lstsq(Mij[:, idx][idx], F[idx], rcond=None)[0]
             zc[idx] = zc_tmp
 
             # Estimate the wavefront surface based on z4 - z22
@@ -1176,7 +1175,7 @@ class Algorithm(object):
 
         return zc, West
 
-    def _createSignal(self, I1, I2, cliplevel):
+    def _createSignal(self, partialI, I0, cliplevel):
         """Calculate the wavefront singal for "fft" to use in solving the
         Poisson's equation.
 
@@ -1186,10 +1185,10 @@ class Algorithm(object):
 
         Parameters
         ----------
-        I1 : CompensableImage
-            Intra- or extra-focal image.
-        I2 : CompensableImage
-            Intra- or extra-focal image.
+        partialI : numpy.ndarray
+            The partial derivative of the image with respect to z, dI/dz.
+        I0 : numpy.ndarray
+            The mean central image.
         cliplevel : float
             Parameter to determine the threshold of calculating I0.
 
@@ -1199,14 +1198,9 @@ class Algorithm(object):
             Approximated wavefront signal.
         """
 
-        # Calculate I0 and dI
-        dI, I0 = self._getdIandI0(I1, I2)
-
-        # Wavefront signal S=-(1/I0)*(dI/dz) is approximated to be
-        # -(1/I0) * dI/(2 * delta z) = (-dI)/(2 * I0) * (1/delta z)
-        # we will ignore the (1/delta z) until later in this method
-        num = -dI
-        den = 2 * I0
+        # Wavefront signal S=-(1/I0)*(dI/dz)=-(dI/dz)/I0
+        num = -partialI
+        den = I0
 
         # Define the effective minimum central signal element by the threshold
         # ( I0=(I1+I2)/2 )
@@ -1222,20 +1216,12 @@ class Algorithm(object):
         # Define the effective minimum central signal element
         den[den < medianThreshold * cliplevel] = 1.5 * medianThreshold
 
-        # Calculate delta z = f(f-l)/l, f: focal length, l: defocus distance of
-        # the image planes
-        deltaZ = (
-            self._inst.focalLength
-            * (self._inst.focalLength - self._inst.defocalDisOffsetInM)
-            / self._inst.defocalDisOffsetInM
-        )
-
         # Calculate the wavefront signal. Enforce the element outside the mask
         # to be 0.
         den[den == 0] = np.inf
 
         # Calculate the wavefront signal
-        S = num / den / deltaZ
+        S = num / den
 
         # Extend the dimension of signal to the order of 2 for "fft" to use
         padDim = self.getFftDimension()
@@ -1243,8 +1229,13 @@ class Algorithm(object):
 
         return Sout
 
-    def _getdIandI0(self, I1, I2):
-        """Calculate the differential image and central image.
+    def _getPartialIandI0(self, I1, I2):
+        """Calculate dI/dz and I.
+
+        The TIE solvers rely on dI/dz and I, which we approximate as follows:
+            dI/dz = partialI = (Extra - Intra) / (2 * deltaZ)
+            I = I0 = (Extra + Intra) / 2
+        partialI and I0 are then the inputs to the "exp" and "fft" algorithms.
 
         It is noted that the images are assumed to be co-center already, and
         that the images have already been compensated, so that the orientation
@@ -1260,7 +1251,7 @@ class Algorithm(object):
         Returns
         -------
         numpy.ndarray
-            Differential image, dI = Extra - Intra
+            partialI = (Extra - Intra) / (2 * dz)
         numpy.ndarray
             I0 = (Extra + Intra) / 2
         """
@@ -1268,15 +1259,23 @@ class Algorithm(object):
         # Check the image dimensions
         self._checkImageDim(I1, I2)
 
-        # Calculate the central image and differential image
-        dI = I1.getImg() - I2.getImg()
+        # calculate deltaZ = f(f-l)/l
+        # where f = focal length; l = defocus distance of image planes
+        deltaZ = (
+            self._inst.focalLength
+            * (self._inst.focalLength - self._inst.defocalDisOffsetInM)
+            / self._inst.defocalDisOffsetInM
+        )
+
+        # Calculate the image gradient and mean image
+        partialI = (I1.getImg() - I2.getImg()) / (2 * deltaZ)
         I0 = (I1.getImg() + I2.getImg()) / 2
 
-        # if I2 is extrafocal, flip the sign of dI
+        # if I2 is extrafocal, flip the sign of dI/dz
         if I2.defocalType == DefocalType.Extra:
-            dI = -dI
+            partialI = -partialI
 
-        return dI, I0
+        return partialI, I0
 
     def _checkImageDim(self, I1, I2):
         """Check the dimension of images.

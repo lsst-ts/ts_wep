@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.3.1:
+
+-------------
+6.3.1
+-------------
+
+* Directly calculate dI/dz in Algorithm, without the intermediate dI.
+* Save dI/dz and I0 in Algorithm history when debugLevel>=1.
+
 .. _lsst.ts.wep-6.3.0:
 
 -------------
