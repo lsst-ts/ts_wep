@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.1.3:
+
+-------------
+6.1.3
+-------------
+
+* Add license information to test_generateDonutDirectDetectTask.
+
 .. _lsst.ts.wep-6.1.2:
 
 -------------
