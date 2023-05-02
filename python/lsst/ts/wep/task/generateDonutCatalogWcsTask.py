@@ -37,7 +37,6 @@ import lsst.afw.table as afwTable
 import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms import ReferenceObjectLoader, LoadReferenceObjectsConfig
-from lsst.meas.algorithms.sourceSelector import ReferenceSourceSelectorTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
 
@@ -87,9 +86,6 @@ class GenerateDonutCatalogWcsTaskConfig(
     that run to do the source selection.
     """
 
-    referenceSelector = pexConfig.ConfigurableField(
-        target=ReferenceSourceSelectorTask, doc="How to select reference objects."
-    )
     donutSelector = pexConfig.ConfigurableField(
         target=DonutSourceSelectorTask, doc="How to select donut targets."
     )
@@ -114,8 +110,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # The filter in the reference catalog we want to use to find sources.
-        self.makeSubtask("referenceSelector")
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 

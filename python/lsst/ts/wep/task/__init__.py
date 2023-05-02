@@ -9,6 +9,7 @@ from .donutQuickMeasurementTask import *
 from .donutSourceSelectorTask import *
 from .donutStamp import *
 from .donutStamps import *
+from .generateDonutFromRefitWcsTask import *
 from .generateDonutCatalogOnlineTask import *
 from .generateDonutCatalogWcsTask import *
 from .generateDonutDirectDetectTask import *
