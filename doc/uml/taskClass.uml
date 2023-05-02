@@ -38,4 +38,8 @@ CalcZernikesTaskConfig *-- CombineZernikesSigmaClipTask
 CalcZernikesTaskConfig *-- CalcZernikesTaskConnections
 CalcZernikesTask *-- CalcZernikesTaskConfig
 CalcZernikesTask ..> DonutStamps
+GenerateDonutFromRefitWcsTaskConfig *-- GenerateDonutFromRefitWcsTaskConnections
+GenerateDonutCatalogWcsTaskConfig <|-- GenerateDonutFromRefitWcsTaskConfig
+GenerateDonutFromRefitWcsTask *-- GenerateDonutFromRefitWcsTaskConfig
+GenerateDonutCatalogWcsTask <|-- GenerateDonutFromRefitWcsTask
 @enduml
