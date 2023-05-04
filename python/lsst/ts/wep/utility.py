@@ -672,6 +672,31 @@ def getCamTypeFromButlerName(instName, detectorType):
         raise ValueError(f"Detector Type ({detectorType.name}) is not supported.")
 
 
+def getFilterTypeFromBandLabel(bandLabel):
+    """Get the FilterType associated with the name of the bandpass
+    accessed in an exposure using `exposure.filter.bandLabel`.
+
+    Parameters
+    ----------
+    bandLabel : str
+        Bandpass label of the exposure.
+
+    Returns
+    -------
+    filterType : enum `FilterType`
+        Filter type.
+    """
+    filterLabelDict = {}
+    filterLabelDict["u"] = FilterType.LSST_U
+    filterLabelDict["g"] = FilterType.LSST_G
+    filterLabelDict["r"] = FilterType.LSST_R
+    filterLabelDict["i"] = FilterType.LSST_I
+    filterLabelDict["z"] = FilterType.LSST_Z
+    filterLabelDict["y"] = FilterType.LSST_Y
+
+    return filterLabelDict[bandLabel]
+
+
 def getDefocalDisInMm(instName):
     """
     Get the defocal distance for the instrument

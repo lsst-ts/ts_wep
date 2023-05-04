@@ -28,6 +28,7 @@ from lsst.ts.wep.utility import (
     DefocalType,
     CamType,
     CentroidFindType,
+    FilterType,
 )
 
 
@@ -196,7 +197,13 @@ class WfEstimator(object):
         self.imgExtra = CompensableImage(centroidFindType=centroidFindType)
 
     def setImg(
-        self, fieldXY, defocalType, blendOffsets=None, image=None, imageFile=None
+        self,
+        fieldXY,
+        defocalType,
+        filterLabel=FilterType.REF,
+        blendOffsets=None,
+        image=None,
+        imageFile=None,
     ):
         """Set the wavefront image.
 
@@ -207,6 +214,8 @@ class WfEstimator(object):
             extra-focal images.
         defocalType : enum 'DefocalType'
             Defocal type of image.
+        filterLabel : enum `FilterType`, optional
+            Filter of the exposure. (the default is FilterType.REF)
         blendOffsets : list or None, optional
             Positions of blended donuts relative to location of center donut.
             Enter as [xCoordList, yCoordList].
@@ -226,6 +235,7 @@ class WfEstimator(object):
         img.setImg(
             fieldXY,
             defocalType,
+            filterLabel,
             blendOffsets=blendOffsets,
             image=image,
             imageFile=imageFile,
