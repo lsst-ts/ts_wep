@@ -155,10 +155,10 @@ class TestTemplateModel(unittest.TestCase):
                 "RXX_S00",
                 DefocalType.Extra,
                 imageSize,
-                CamType.AuxTel,
-                opticalModel,
-                pixelScale,
-                self.auxTelInstParams,
+                camType=CamType.AuxTel,
+                opticalModel=opticalModel,
+                pixelScale=pixelScale,
+                instParams=self.auxTelInstParams,
             )
         self.assertEqual(
             str(
@@ -174,10 +174,10 @@ class TestTemplateModel(unittest.TestCase):
                 "RXX_S00",
                 DefocalType.Extra,
                 imageSize,
-                CamType.AuxTel,
-                opticalModel,
-                pixelScale,
-                self.auxTelInstParams,
+                camType=CamType.AuxTel,
+                opticalModel=opticalModel,
+                pixelScale=pixelScale,
+                instParams=self.auxTelInstParams,
             )
         self.assertEqual(
             str(
@@ -197,10 +197,10 @@ class TestTemplateModel(unittest.TestCase):
             "RXX_S00",
             DefocalType.Extra,
             imageSize,
-            CamType.AuxTel,
-            opticalModel,
-            pixelScale,
-            self.auxTelInstParams,
+            camType=CamType.AuxTel,
+            opticalModel=opticalModel,
+            pixelScale=pixelScale,
+            instParams=self.auxTelInstParams,
         )
 
         self.assertTrue(isinstance(templateArray, np.ndarray))

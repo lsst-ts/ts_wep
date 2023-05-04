@@ -35,6 +35,7 @@ from lsst.ts.wep.utility import (
     getConfigDir,
     DefocalType,
     getCamTypeFromButlerName,
+    getFilterTypeFromBandLabel,
     createInstDictFromConfig,
     rotMatrix,
 )
@@ -257,12 +258,14 @@ class CalcZernikesTask(pipeBase.PipelineTask):
             wfEsti.setImg(
                 fieldXYExtra,
                 DefocalType.Extra,
+                filterLabel=getFilterTypeFromBandLabel(donutExtra.bandpass),
                 image=imageExtra,
                 blendOffsets=blendOffsetsExtra.tolist(),
             )
             wfEsti.setImg(
                 fieldXYIntra,
                 DefocalType.Intra,
+                filterLabel=getFilterTypeFromBandLabel(donutIntra.bandpass),
                 image=imageIntra,
                 blendOffsets=blendOffsetsIntra.tolist(),
             )

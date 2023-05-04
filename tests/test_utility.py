@@ -47,6 +47,7 @@ from lsst.ts.wep.utility import (
     getCamType,
     getDefocalDisInMm,
     getCamTypeFromButlerName,
+    getFilterTypeFromBandLabel,
     getCamNameFromCamType,
     createInstDictFromConfig,
     rotMatrix,
@@ -274,6 +275,15 @@ class TestUtility(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             getCamTypeFromButlerName(instName, detType)
         self.assertTrue(detAssertMsg in str(context.exception))
+
+    def testGetFilterTypeFromBandLabel(self):
+        # Test allowable filter band labels
+        self.assertEqual(getFilterTypeFromBandLabel("u"), FilterType.LSST_U)
+        self.assertEqual(getFilterTypeFromBandLabel("g"), FilterType.LSST_G)
+        self.assertEqual(getFilterTypeFromBandLabel("r"), FilterType.LSST_R)
+        self.assertEqual(getFilterTypeFromBandLabel("i"), FilterType.LSST_I)
+        self.assertEqual(getFilterTypeFromBandLabel("z"), FilterType.LSST_Z)
+        self.assertEqual(getFilterTypeFromBandLabel("y"), FilterType.LSST_Y)
 
     def testGetCamNameFromCamType(self):
         # Test allowable CamType values
