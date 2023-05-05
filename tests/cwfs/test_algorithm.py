@@ -372,6 +372,8 @@ class TestAlgorithm(unittest.TestCase):
             "pupilMask",
             "maskedI1",
             "maskedI2",
+            "dI/dz",
+            "I0",
             "residZk",
             "residWf",
             "totZk",
