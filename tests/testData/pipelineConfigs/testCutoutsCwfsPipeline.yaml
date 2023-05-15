@@ -45,5 +45,5 @@ tasks:
       instObscuration: 0.61
       instFocalLength: 10.312
       instApertureDiameter: 8.36
-      instDefocalOffset: 0.0
+      instDefocalOffset: 1.5
       instPixelSize: 10.0e-6
