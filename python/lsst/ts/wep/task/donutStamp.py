@@ -270,7 +270,7 @@ class DonutStamp(AbstractStamp):
             Padded mask for use at the offset planes.
         """
 
-        self.comp_im.makeBlendedMask(inst, model, boundaryT, maskScalingFactorLocal, blendPadding=6)
+        self.comp_im.makeBlendedMask(inst, model, boundaryT, maskScalingFactorLocal)
 
         # 0 flag in mask is part of image that is not donut
         # 1 flag in mask means it is part of the model donut

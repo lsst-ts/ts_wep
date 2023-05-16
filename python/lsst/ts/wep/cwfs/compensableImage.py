@@ -1544,12 +1544,16 @@ class CompensableImage(object):
 
         # Add blended donuts if they exist
         if np.sum(np.isnan(self.blendOffsetX)) == 0:
-            newMaskPupil = self.createBlendedCoadd(self.mask_pupil,blendPadding=blendPadding)
-            newMaskComp = self.createBlendedCoadd(self.mask_comp, blendPadding=blendPadding)
+            if blendPadding is None:
+                newMaskPupil, iterNum = self.autoDilateBlendMask(self.mask_pupil)
+                newMaskComp = self.createBlendedCoadd(self.mask_comp, blendPadding=iterNum)
+            else:
+                newMaskPupil = self.createBlendedCoadd(self.mask_pupil, blendPadding=blendPadding)
+                newMaskComp = self.createBlendedCoadd(self.mask_comp, blendPadding=blendPadding)
             self.mask_pupil = newMaskPupil
             self.mask_comp = newMaskComp
 
-    def createBlendedCoadd(self, maskArray, blendPadding=None):
+    def createBlendedCoadd(self, maskArray, blendPadding=0):
         """Cut out regions of the input mask where blended donuts
         overlap with the original donut.
 
@@ -1576,8 +1580,8 @@ class CompensableImage(object):
             blendPadding must be None or an integer >= 1.
         """
 
-        if blendPadding is not None:
-            assert blendPadding > 1, "blendPadding must be None or an integer >= 1."
+        # if blendPadding is not None:
+        #     assert blendPadding >= 1, "blendPadding must be None or an integer >= 1."
 
         # Switch x,y order because x,y locations in the catalogs and the
         # LSST Science Pipeline objects are consistent with each other but
@@ -1590,13 +1594,11 @@ class CompensableImage(object):
         for xShift, yShift in pixelShift:
             shiftVector = np.array([xShift, yShift], dtype=int)
             # Rotate extrafocal donut position 180 degrees
-            if self.defocalType == DefocalType.Extra:
-                theta = np.degrees(np.pi)
-                shiftVector = np.dot(rotMatrix(theta), shiftVector)
+            # if self.defocalType == DefocalType.Extra:
+            #     theta = np.degrees(np.pi)
+            #     shiftVector = np.dot(rotMatrix(theta), shiftVector)
             shiftedMask = shift(copy(maskArray), shiftVector)
-            if blendPadding is None:
-                shiftedMask = self.dilateBlendMask(self.getImg(), shiftedMask)
-            else:
+            if blendPadding > 0:
                 shiftedMask = binary_dilation(shiftedMask, iterations=blendPadding)
             maskBlends.append(shiftedMask)
 
@@ -1615,7 +1617,7 @@ class CompensableImage(object):
 
         return maskFinal
 
-    def dilateBlendMask(self, imageArray, shiftedMask):
+    def autoDilateBlendMask(self, maskArray):
         """Automatically expand the mask footprint
         of a blended set of donuts by removing a second
         non-zero peak from a histogram of the pixel values.
@@ -1624,7 +1626,7 @@ class CompensableImage(object):
         ----------
         imageArray: numpy.ndarray
             Input image postage stamp.
-        shiftedMask: numpy.ndarray
+        maskArray: numpy.ndarray
             Model mask array centered on the donut that is
             blended with the central source.
 
@@ -1634,17 +1636,23 @@ class CompensableImage(object):
             Model mask array with an expanded footprint.
         """
 
-        def calcNumPeaks(imageArray, shiftedMask):
+        def calcNumPeaks(imageArray, blendMask):
             """Helper function to find number of peaks in masked area."""
             # Invert the mask to find the values of the pixels in the masked area
-            maskedPixelVals = (shiftedMask) * imageArray
-            maskedPixelHist = np.histogram(maskedPixelVals, bins=20, range=(0, np.max(maskedPixelVals)))
+            maskedPixelVals = blendMask * imageArray
+            maskedPixelHist = np.histogram(maskedPixelVals, bins=15, range=(0, np.max(maskedPixelVals)))
+            print(argrelmax(maskedPixelHist[0]))
+            print(maskedPixelHist)
             numHistPeaks = len(argrelmax(maskedPixelHist[0])[0])
             return numHistPeaks
 
-        numMaskedPeaks = calcNumPeaks(imageArray, shiftedMask)
+        blendMask = self.createBlendedCoadd(copy(maskArray), blendPadding=0)
+        numMaskedPeaks = calcNumPeaks(self.getImg(), blendMask)
+        paddingIter = 0
         while numMaskedPeaks > 1:
-            shiftedMask = binary_dilation(shiftedMask, iterations=1)
-            numMaskedPeaks = calcNumPeaks(imageArray, shiftedMask)
+            paddingIter += 1
+            blendMask = self.createBlendedCoadd(maskArray, blendPadding=paddingIter)
+            numMaskedPeaks = calcNumPeaks(self.getImg(), blendMask)
+            print(numMaskedPeaks)
 
-        return shiftedMask
+        return blendMask, paddingIter
