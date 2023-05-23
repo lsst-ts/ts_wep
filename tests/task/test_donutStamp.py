@@ -37,7 +37,7 @@ from lsst.ts.wep.utility import getConfigDir, CamType, DefocalType
 class TestDonutStamp(unittest.TestCase):
     def setUp(self):
         self.nStamps = 3
-        self.stampSize = 32
+        self.stampSize = 126
         self.testStamps, self.testMetadata = self._makeStamps(
             self.nStamps, self.stampSize
         )
@@ -226,7 +226,7 @@ class TestDonutStamp(unittest.TestCase):
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
-            np.array([[], []]).T,
+            np.array([[np.nan], [np.nan]]).T,
             DefocalType.Extra.value,
             1.5e-3,
             "R22_S11",
@@ -241,7 +241,7 @@ class TestDonutStamp(unittest.TestCase):
         )
         maskConfigFile = os.path.join(instDataPath, "lsstfam", "maskMigrate.yaml")
         inst = Instrument()
-        donutWidth = 126
+        donutWidth = self.stampSize
         inst.configFromFile(
             donutWidth, CamType.LsstFamCam, instConfigFile, maskConfigFile
         )
@@ -267,11 +267,11 @@ class TestDonutStamp(unittest.TestCase):
         maskC = donutStamp.mask_comp.getArray()
         maskP = donutStamp.mask_pupil.getArray()
         # Donut should match
-        self.assertEqual(np.shape(maskC), (126, 126))
-        self.assertEqual(np.shape(maskP), (126, 126))
+        self.assertEqual(np.shape(maskC), (self.stampSize, self.stampSize))
+        self.assertEqual(np.shape(maskP), (self.stampSize, self.stampSize))
         # Make sure not just an empty array
         self.assertTrue(np.sum(maskC) > 0.0)
         self.assertTrue(np.sum(maskP) > 0.0)
         # Donut at center of focal plane should be symmetric
-        np.testing.assert_array_equal(maskC[:63], maskC[-63:][::-1])
-        np.testing.assert_array_equal(maskP[:63], maskP[-63:][::-1])
+        np.testing.assert_array_equal(maskC[:int(self.stampSize/2)], maskC[-int(self.stampSize/2):][::-1])
+        np.testing.assert_array_equal(maskP[:int(self.stampSize/2)], maskP[-int(self.stampSize/2):][::-1])

@@ -144,9 +144,11 @@ class CutOutDonutsBaseTaskConfig(
         default=False,
     )
     maskGrowthIter = pexConfig.Field(
-        doc="How many iterations of binary dilation to run on the mask model.",
+        doc="How many iterations of binary dilation to run on the mask model. \
+        If None then will run cwfs/compensable/autoDilateBlendMask to grow mask.",
         dtype=int,
-        default=6,
+        default=None,
+        optional=True,
     )
 
 
@@ -499,7 +501,11 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             boundaryT = 1
             maskScalingFactorLocal = 1
             donutStamp.makeMasks(
-                inst, self.opticalModel, boundaryT, maskScalingFactorLocal
+                inst,
+                self.opticalModel,
+                boundaryT,
+                maskScalingFactorLocal,
+                blendPadding=self.maskGrowthIter,
             )
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
@@ -508,21 +514,24 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 donutStamp.comp_im.makeMask(
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal
                 )
-                shiftedMask = shift(
+                if self.maskGrowthIter is None:
+                    (
+                        dilatedMask,
+                        numPaddingIter,
+                    ) = donutStamp.comp_im.autoDilateBlendMask(
+                        donutStamp.comp_im.mask_pupil
+                    )
+                else:
+                    numPaddingIter = self.maskGrowthIter
+                finalMask, shiftedMask = donutStamp.comp_im.createBlendedCoadd(
                     donutStamp.comp_im.mask_pupil,
-                    np.array(
-                        [
-                            donutStamp.comp_im.blendOffsetY,
-                            donutStamp.comp_im.blendOffsetX,
-                        ]
-                    ),
+                    blendPadding=numPaddingIter,
+                    returnShiftedMask=True,
                 )
-                shiftedMask = binary_dilation(
-                    shiftedMask, iterations=self.maskGrowthIter
-                ).astype(int)
-                shiftedMask[shiftedMask == 0] += 2
-                shiftedMask -= 1
-                donutStamp.stamp_im.image.array *= shiftedMask
+                # Mask only blended areas in final stamp
+                donutStamp.stamp_im.image.array *= np.invert(
+                    np.array(shiftedMask, dtype=bool)
+                )
 
             finalStamps.append(donutStamp)
 

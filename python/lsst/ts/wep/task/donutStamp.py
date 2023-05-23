@@ -244,7 +244,9 @@ class DonutStamp(AbstractStamp):
         self.mask_pupil = afwImage.Mask()
         self.mask_comp = afwImage.Mask()
 
-    def makeMasks(self, inst, model, boundaryT, maskScalingFactorLocal):
+    def makeMasks(
+        self, inst, model, boundaryT, maskScalingFactorLocal, blendPadding=None
+    ):
         """Get the binary mask which considers the obscuration and off-axis
         correction.
 
@@ -261,6 +263,12 @@ class DonutStamp(AbstractStamp):
             zero.
         maskScalingFactorLocal : `float`
             Mask scaling factor (for fast beam) for local correction.
+        blendPadding : int or None, optional
+            Number of pixels to increase the radius and expand the
+            footprint of the blended source. If None then the
+            amount of expansion to cover the blended source will be
+            calculated automatically with `autoDilateBlendMask`. If an integer
+            it must be >= 0. (the default is None.)
 
         Returns
         -------
@@ -270,7 +278,9 @@ class DonutStamp(AbstractStamp):
             Padded mask for use at the offset planes.
         """
 
-        self.comp_im.makeBlendedMask(inst, model, boundaryT, maskScalingFactorLocal)
+        self.comp_im.makeBlendedMask(
+            inst, model, boundaryT, maskScalingFactorLocal, blendPadding=blendPadding
+        )
 
         # 0 flag in mask is part of image that is not donut
         # 1 flag in mask means it is part of the model donut

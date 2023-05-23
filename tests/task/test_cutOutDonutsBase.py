@@ -77,7 +77,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         runProgram(cleanUpCmd)
 
     def setUp(self):
-        self.config = CutOutDonutsBaseTaskConfig(instDefocalOffset=1.5)
+        self.config = CutOutDonutsBaseTaskConfig(
+            instDefocalOffset=1.5,
+            maskGrowthIter=6
+        )
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -157,12 +160,14 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.config.opticalModel = "onAxis"
+        self.config.maskGrowthIter = None
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
         self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
         self.assertEqual(self.task.opticalModel, "onAxis")
+        self.assertEqual(self.task.maskGrowthIter, None)
 
     def testCreateInstDictFromConfig(self):
         self.config.instObscuration = 0.1
@@ -306,7 +311,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
         # Test that turning on multiply mask includes mask in stamp image
         multiplyConfig = CutOutDonutsBaseTaskConfig(
-            instDefocalOffset=1.5, multiplyMask=True
+            instDefocalOffset=1.5, multiplyMask=True, maskGrowthIter=6
         )
         maskedTask = CutOutDonutsBaseTask(config=multiplyConfig, name="Masked Task")
         exposure = self.butler.get(
