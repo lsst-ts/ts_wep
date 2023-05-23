@@ -33,7 +33,7 @@ from scipy.ndimage import (
     shift,
 )
 from scipy.interpolate import RectBivariateSpline
-from scipy.signal import correlate, argrelmax, find_peaks
+from scipy.signal import correlate, argrelmax
 
 from lsst.ts.wep.paramReader import ParamReader
 from lsst.ts.wep.cwfs.tool import (
@@ -1665,13 +1665,15 @@ class CompensableImage(object):
             )
             # Find the highest bins
             binRanking = np.argsort(maskedPixelHist[0])
-            # The highest bin will be the one around 0, the second highest should be the main donut
+            # The highest bin will be the one around 0,
+            # the second highest should be the main donut
             maxNonZeroBin = binRanking[-2]
             # Find the peaks
             histPeaks = argrelmax(maskedPixelHist[0])  # [0]
             # Count the number of peaks beyond the main donut peak
             peaksBeyondMax = np.where(histPeaks > maxNonZeroBin)[0]
-            # Any peaks beyond the main donut peak are the ones we want to remove
+            # Any peaks beyond the main donut peak are
+            # the ones we want to remove
             numHistPeaksBeyond = len(peaksBeyondMax)
             return numHistPeaksBeyond
 

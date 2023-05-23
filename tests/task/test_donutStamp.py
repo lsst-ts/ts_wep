@@ -273,5 +273,9 @@ class TestDonutStamp(unittest.TestCase):
         self.assertTrue(np.sum(maskC) > 0.0)
         self.assertTrue(np.sum(maskP) > 0.0)
         # Donut at center of focal plane should be symmetric
-        np.testing.assert_array_equal(maskC[:int(self.stampSize/2)], maskC[-int(self.stampSize/2):][::-1])
-        np.testing.assert_array_equal(maskP[:int(self.stampSize/2)], maskP[-int(self.stampSize/2):][::-1])
+        np.testing.assert_array_equal(
+            maskC[: int(self.stampSize / 2)], maskC[-int(self.stampSize / 2) :][::-1]
+        )
+        np.testing.assert_array_equal(
+            maskP[: int(self.stampSize / 2)], maskP[-int(self.stampSize / 2) :][::-1]
+        )

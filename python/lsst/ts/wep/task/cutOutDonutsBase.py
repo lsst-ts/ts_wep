@@ -44,7 +44,6 @@ from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from scipy.signal import correlate
-from scipy.ndimage import shift, binary_dilation
 
 
 class CutOutDonutsBaseTaskConnections(
