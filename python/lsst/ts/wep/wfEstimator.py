@@ -46,7 +46,6 @@ class WfEstimator(object):
     """
 
     def __init__(self, algoDir):
-
         self.algoDir = algoDir
         self.inst = Instrument()
 
@@ -150,12 +149,12 @@ class WfEstimator(object):
     def config(
         self,
         instParams=None,
-        algo="exp",
+        algo="ml",
         camType=CamType.LsstCam,
         opticalModel="offAxis",
         sizeInPix=120,
         centroidFindType=CentroidFindType.RandomWalk,
-        mlFile="/phys/users/jfc20/ml-aos/LsstCam-ML-AOS-Model.pt",
+        mlFile="/phys/users/jfc20/mlaos2/ml-aos/models/v20_2023-05-15_21:12:57.pt",
         mlReshape="pad",
         units="nm",
         debugLevel=0,

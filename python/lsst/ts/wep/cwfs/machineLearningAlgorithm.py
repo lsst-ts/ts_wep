@@ -42,7 +42,6 @@ class MachineLearningAlgorithm(object):
     """
 
     def __init__(self, algoDir):
-
         self.algoDir = algoDir
         self.algoParamFile = ParamReader()
 
@@ -329,21 +328,24 @@ class MachineLearningAlgorithm(object):
         focalFlag : bool
             Boolean indicating whether the image is intrafocal (True) or
             extrafocal (False)
+        bandIdx: int
+            Band index in the string "ugrizy". I.e., 0="u", ..., 5="y".
 
         Returns
         -------
         numpy.ndarray
             Coefficients of Zernike polynomials (z4 - z22), in nm.
         """
-        # Put the values into Pytorch Tensors
-        img = torch.from_numpy(img[None, None, :, :]).float()
+        # Put values into Pytorch Tensors, including a batch axis
+        img = torch.from_numpy(img[None, :, :]).float()
         fx = torch.FloatTensor([[fx]])
         fy = torch.FloatTensor([[fy]])
         focalFlag = torch.FloatTensor([[focalFlag]])
+        bandIdx = torch.IntTensor([[1]])
 
         # Predict Zernikes
         with torch.no_grad():
-            zk = self._model.tswep_predict(img, fx, fy, focalFlag)
+            zk = self._model(img, fx, fy, focalFlag, bandIdx)
 
         # Move the Zernikes to the CPU (just in case it was on a GPU),
         # convert to a numpy array, and remove extraneous dimensions
@@ -427,7 +429,7 @@ class MachineLearningAlgorithm(object):
 
         if I1 is None and I2 is None:
             raise ValueError("You must provide either I1 or I2.")
-        if I1 is not None and I1 is not None and I1.defocalType == I2.defocalType:
+        if I1 is not None and I2 is not None and I1.defocalType == I2.defocalType:
             raise ValueError(
                 "I1 and I2 must be on opposite sides of focus. "
                 f"Currently, they are both {I2.defocalType.name}focal."
@@ -449,8 +451,9 @@ class MachineLearningAlgorithm(object):
             self._recordItem(zk, "zk", 1)
             if self.debugLevel >= 2:
                 print(f"Zernikes_Avg (nm) = {zk:.3f}")
+        elif zk1 is not None:
+            zk = zk1
         else:
-            # Return whichever is not None
-            zk = zk1 or zk2
+            zk = zk2
 
         return zk
