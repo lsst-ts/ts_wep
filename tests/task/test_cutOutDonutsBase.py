@@ -78,8 +78,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CutOutDonutsBaseTaskConfig(
-            instDefocalOffset=1.5,
-            maskGrowthIter=6
+            instDefocalOffset=1.5, maskGrowthIter=6
         )
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
