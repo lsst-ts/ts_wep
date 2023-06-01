@@ -1544,17 +1544,17 @@ class CompensableImage(object):
 
         # Add blended donuts if they exist
         if np.sum(np.isnan(self.blendOffsetX)) == 0:
+            newMaskPupil, iterNum = self.autoDilateBlendMask(self.mask_pupil)
             if blendPadding is None:
-                newMaskPupil, iterNum = self.autoDilateBlendMask(self.mask_pupil)
                 newMaskComp = self.createBlendedCoadd(
                     self.mask_comp, blendPadding=iterNum
                 )
             else:
                 newMaskPupil = self.createBlendedCoadd(
-                    self.mask_pupil, blendPadding=blendPadding
+                    self.mask_pupil, blendPadding=blendPadding + iterNum
                 )
                 newMaskComp = self.createBlendedCoadd(
-                    self.mask_comp, blendPadding=blendPadding
+                    self.mask_comp, blendPadding=blendPadding + iterNum
                 )
             self.mask_pupil = newMaskPupil
             self.mask_comp = newMaskComp
@@ -1604,7 +1604,7 @@ class CompensableImage(object):
             shiftVector = np.array([xShift, yShift], dtype=int)
             shiftedMask = shift(copy(maskArray), shiftVector)
             # Only pad if blendPadding is an int greater than 0
-            if blendPadding is not None and blendPadding > 0:
+            if blendPadding is not None:
                 shiftedMask = binary_dilation(shiftedMask, iterations=blendPadding)
             maskBlends.append(shiftedMask)
 
@@ -1677,7 +1677,7 @@ class CompensableImage(object):
             numHistPeaksBeyond = len(peaksBeyondMax)
             return numHistPeaksBeyond
 
-        blendMask = self.createBlendedCoadd(copy(shiftedMask), blendPadding=0)
+        blendMask = self.createBlendedCoadd(copy(shiftedMask), blendPadding=None)
         numMaskedPeaks = calcNumPeaks(self.getImg(), blendMask)
         paddingIter = 0
         while numMaskedPeaks > 0:

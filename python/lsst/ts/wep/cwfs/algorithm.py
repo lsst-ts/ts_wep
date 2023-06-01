@@ -812,8 +812,8 @@ class Algorithm(object):
                 boundaryT = self.getBoundaryThickness()
                 # If the compensable image has no blended centroids
                 # this function will just create a single masked donut
-                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)
-                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)
+                I1.makeBlendedMask(self._inst, model, boundaryT, 1, blendPadding=4, compensated=True)
+                I2.makeBlendedMask(self._inst, model, boundaryT, 1, blendPadding=4, compensated=True)
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
                 # Load the offAxis correction coefficients
