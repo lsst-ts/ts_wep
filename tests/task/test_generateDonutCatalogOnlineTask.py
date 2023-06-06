@@ -24,6 +24,7 @@ import unittest
 import numpy as np
 from astropy import units
 
+import lsst.geom
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.utility import getModulePath
 from lsst.ts.wep.task.refCatalogInterface import RefCatalogInterface
@@ -55,61 +56,57 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
             shardIds, self.butler, self.catalogName, self.collections
         )
         self.dataRefs = dataRefs
-        self.dataIds = dataIds
 
         self.config = GenerateDonutCatalogOnlineTaskConfig()
+        self.task = GenerateDonutCatalogOnlineTask(config=self.config)
 
         self.camera = self.butler.get(
             "camera", instrument="LSSTCam", collections=["LSSTCam/calib/unbounded"]
         )
 
+    def _getRefCat(self):
+        refCatList = []
+        datasetGenerator = self.registry.queryDatasets(
+            datasetType="cal_ref_cat", collections=["refcats/gen2"]
+        ).expanded()
+        for ref in datasetGenerator:
+            refCatList.append(
+                self.butler.getDeferred(ref, collections=["refcats/gen2"])
+            )
+
+        return refCatList
+
     def testValidateConfigs(self):
         self.config.filterName = "r"
-        self.config.doReferenceSelection = False
         self.config.doDonutSelection = False
-        task = GenerateDonutCatalogOnlineTask(
-            self.dataIds[0], self.dataRefs[0], config=self.config
-        )
+        task = GenerateDonutCatalogOnlineTask(config=self.config)
 
-        self.assertEqual(task.filterName, "r")
-        self.assertEqual(task.config.doReferenceSelection, False)
+        self.assertEqual(task.config.filterName, "r")
         self.assertEqual(task.config.doDonutSelection, False)
 
-    def testFormatCatalog(self):
-        detectorName = "R22_S01"
-        detector = self.camera[detectorName]
-        detWcs = self.refCatInterface.getDetectorWcs(detector)
-        dataRefs, dataIds = self.refCatInterface.getDataRefs(
-            [131072], self.butler, self.catalogName, self.collections
-        )
-        task = GenerateDonutCatalogOnlineTask(
-            dataIds=dataIds, refCats=dataRefs, config=self.config
-        )
-        cat = task.refObjLoader.loadPixelBox(
-            detector.getBBox(), detWcs, filterName=task.filterName
-        )
-        pandasRefCat = task._formatCatalog(cat.refCat, detector)
+    def testGetRefObjLoader(self):
+        refCatList = self._getRefCat()
+        refObjLoader = self.task.getRefObjLoader(refCatList)
 
-        self.assertEqual(len(cat.refCat), 2)
-        self.assertEqual(len(pandasRefCat), 2)
-        self.assertCountEqual(
-            pandasRefCat.columns,
-            ["coord_ra", "coord_dec", "centroid_x", "centroid_y", "source_flux"],
+        # Check that our refObjLoader loads the available objects
+        # within a given search radius
+        donutCatSmall = refObjLoader.loadSkyCircle(
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            lsst.geom.Angle(0.5, lsst.geom.degrees),
+            filterName="g",
         )
-        self.assertCountEqual(pandasRefCat["coord_ra"], cat.refCat["coord_ra"])
-        self.assertCountEqual(pandasRefCat["coord_dec"], cat.refCat["coord_dec"])
-        self.assertCountEqual(pandasRefCat["centroid_x"], cat.refCat["centroid_x"])
-        self.assertCountEqual(pandasRefCat["centroid_y"], cat.refCat["centroid_y"])
-        refFluxes = 15.0 * units.ABmag
-        np.testing.assert_almost_equal(
-            pandasRefCat["source_flux"], [refFluxes.to_value(units.nJy)] * 2
+        self.assertEqual(len(donutCatSmall.refCat), 8)
+
+        donutCatFull = refObjLoader.loadSkyCircle(
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            lsst.geom.Angle(2.5, lsst.geom.degrees),
+            filterName="g",
         )
+        self.assertEqual(len(donutCatFull.refCat), 24)
 
     def testTaskRun(self):
         self.config.doDonutSelection = False
-        task = GenerateDonutCatalogOnlineTask(
-            self.dataIds, self.dataRefs, config=self.config
-        )
+        task = GenerateDonutCatalogOnlineTask(config=self.config)
 
         detectorName = "R22_S01"
         detector = self.camera[detectorName]
@@ -121,13 +118,21 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         cat1 = self.butler.get(
             self.catalogName, dataId={"htm7": dataIds[1]}, collections=self.collections
         )[2:]
-        taskCat = task.run(detector, detWcs)
+        taskCat = task.run(self.dataRefs, detector, detWcs)
         donutCatalog = taskCat.donutCatalog
 
         self.assertEqual(len(donutCatalog), 4)
         self.assertCountEqual(
             donutCatalog.columns,
-            ["coord_ra", "coord_dec", "centroid_x", "centroid_y", "source_flux"],
+            [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "source_flux",
+                "blend_centroid_x",
+                "blend_centroid_y",
+            ],
         )
         self.assertCountEqual(
             donutCatalog["coord_ra"], np.ravel([cat0["coord_ra"], cat1["coord_ra"]])
@@ -140,4 +145,10 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
         np.testing.assert_almost_equal(
             donutCatalog["source_flux"], refFluxes, decimal=5
+        )
+        np.testing.assert_array_equal(
+            [[]] * 4, list(donutCatalog["blend_centroid_x"].values)
+        )
+        np.testing.assert_array_equal(
+            [[]] * 4, list(donutCatalog["blend_centroid_y"].values)
         )

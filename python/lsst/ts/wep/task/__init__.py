@@ -13,4 +13,5 @@ from .generateDonutFromRefitWcsTask import *
 from .generateDonutCatalogOnlineTask import *
 from .generateDonutCatalogWcsTask import *
 from .generateDonutDirectDetectTask import *
+from .generateDonutCatalogUtils import *
 from .refCatalogInterface import *
