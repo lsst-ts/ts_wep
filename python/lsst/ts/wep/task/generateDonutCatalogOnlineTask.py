@@ -21,15 +21,13 @@
 
 __all__ = ["GenerateDonutCatalogOnlineTaskConfig", "GenerateDonutCatalogOnlineTask"]
 
-import numpy as np
+import warnings
 import pandas as pd
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms import (
-    LoadReferenceObjectsTask,
-    ReferenceSourceSelectorTask,
     ReferenceObjectLoader,
 )
 
@@ -39,19 +37,6 @@ from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
     """Configuration for GenerateDonutCatalogOnlineTask."""
 
-    refObjLoader = pexConfig.ConfigurableField(
-        target=LoadReferenceObjectsTask,
-        doc="Reference object loader for photometry",
-    )
-    referenceSelector = pexConfig.ConfigurableField(
-        target=ReferenceSourceSelectorTask,
-        doc="Selection of reference sources",
-    )
-    doReferenceSelection = pexConfig.Field(
-        doc="Run the reference selector on the reference catalog?",
-        dtype=bool,
-        default=True,
-    )
     filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
     donutSelector = pexConfig.ConfigurableField(
         target=DonutSourceSelectorTask, doc="How to select donut targets."
@@ -80,126 +65,217 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
     ConfigClass = GenerateDonutCatalogOnlineTaskConfig
     _DefaultName = "generateDonutCatalogOnlineTask"
 
-    def __init__(self, dataIds, refCats, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        refConfig = self.config.refObjLoader
-        # refObjLoader handles the interaction with the butler repository
-        # needed to get the pieces of the reference catalogs we need.
-        self.refObjLoader = ReferenceObjectLoader(
-            dataIds=dataIds, refCats=refCats, config=refConfig, log=self.log
-        )
 
-        if self.config.doReferenceSelection:
-            self.makeSubtask("referenceSelector")
-
-        self.filterName = self.config.filterName
-        self.config.refObjLoader.pixelMargin = 0
-        self.config.refObjLoader.anyFilterMapsToThis = self.filterName
-        self.config.referenceSelector.magLimit.fluxField = f"{self.filterName}_flux"
-        self.config.referenceSelector.signalToNoise.fluxField = (
-            f"{self.filterName}_flux"
-        )
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
-    @timeMethod
-    def run(self, detector, wcs):
-        """Get the data from the reference catalog only from the
-        shards of the reference catalogs that overlap our pointing.
+    def getRefObjLoader(self, refCatalogList):
+        """
+        Create a `ReferenceObjectLoader` from available reference catalogs
+        in the repository.
 
         Parameters
         ----------
+        refCatalogList : `list`
+            List of deferred butler references for the reference catalogs.
+
+        Returns
+        -------
+        `lsst.meas.algorithms.ReferenceObjectsLoader`
+            Object to conduct spatial searches through the reference catalogs
+        """
+
+        refObjLoader = ReferenceObjectLoader(
+            dataIds=[ref.dataId for ref in refCatalogList],
+            refCats=refCatalogList,
+        )
+        # This removes the padding around the border of detector BBox when
+        # matching to reference catalog.
+        # We remove this since we only want sources within detector.
+        refObjLoader.config.pixelMargin = 0
+
+        return refObjLoader
+
+    def runSelection(self, refObjLoader, detector, wcs, filterName):
+        """
+        Match the detector area to the reference catalog
+        and then run the LSST DM reference selection task.
+        For configuration parameters on the reference selector
+        see `lsst.meas.algorithms.ReferenceSourceSelectorConfig`.
+
+        Parameters
+        ----------
+        refObjLoader : `meas.algorithms.ReferenceObjectLoader`
+            Reference object loader to use in getting reference objects.
         detector : `lsst.afw.cameraGeom.Detector`
             Detector object from the camera.
         wcs : `lsst.afw.geom.SkyWcs`
             Wcs object defining the pixel to sky (and inverse) transform for
             the supplied ``bbox``.
+        filterName : `str`
+            Name of camera filter.
 
         Returns
         -------
-        struct : `lsst.pipe.base.Struct`
-            The struct contains the following data:
-                - DonutCatalog: `pandas.DataFrame`
-                    The final donut source catalog for the region.
+        referenceCatalog : `lsst.afw.table.SimpleCatalog`
+            Catalog containing reference objects inside the specified bounding
+            box and with properties within the bounds set by the
+            `referenceSelector`.
         """
+
         bbox = detector.getBBox()
-        # Get the refcatalog shard
-        skyBox = self.refObjLoader.loadPixelBox(
-            bbox, wcs, filterName=self.filterName, bboxToSpherePadding=0
-        )
-
-        if not skyBox.refCat.isContiguous():
-            refCat = skyBox.refCat.copy(deep=True)
-        else:
-            refCat = skyBox.refCat
-
-        donutCatalog = self._formatCatalog(refCat, detector)
-
-        return pipeBase.Struct(donutCatalog=donutCatalog)
-
-    def _formatCatalog(self, refCat, detector):
-        """Format a reference afw table into the final format.
-
-        Parameters
-        ----------
-        refCat : `lsst.afw.table.SourceCatalog`
-            Reference catalog in afw format.
-        detector : `lsst.afw.cameraGeom.Detector`
-            Detector object from the camera.
-
-        Returns
-        -------
-        refCat : `pandas.DataFrame`
-            Reference catalog.
-        """
-
-        if self.config.doReferenceSelection:
-            goodSources = self.referenceSelector.selectSources(refCat)
-            refSelected = goodSources.selected
-        else:
-            refSelected = np.ones(len(refCat), dtype=bool)
+        donutCatalog = refObjLoader.loadPixelBox(bbox, wcs, filterName).refCat
 
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(refCat, detector, self.filterName)
-            donutSelected = donutSelection.selected
+            donutSelection = self.donutSelector.run(donutCatalog, detector, filterName)
+            return (
+                donutCatalog[donutSelection.selected],
+                donutSelection.blendCentersX,
+                donutSelection.blendCentersY,
+            )
         else:
-            donutSelected = np.ones(len(refCat), dtype=bool)
+            return donutCatalog, [[]] * len(donutCatalog), [[]] * len(donutCatalog)
 
-        selected = refSelected & donutSelected
+    def donutCatalogToDataFrame(
+        self, donutCatalog=None, filterName=None, blendCentersX=None, blendCentersY=None
+    ):
+        """
+        Reformat afwCatalog into a pandas dataframe sorted by flux with
+        the brightest objects at the top.
 
-        npRefCat = np.zeros(
-            np.sum(selected),
-            dtype=[
-                ("coord_ra", "f8"),
-                ("coord_dec", "f8"),
-                ("centroid_x", "f8"),
-                ("centroid_y", "f8"),
-                ("source_flux", "f8"),
-            ],
+        Parameters
+        ----------
+        donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`, optional
+            lsst.afw.table.SimpleCatalog object returned by the
+            ReferenceObjectLoader search over the detector footprint.
+            If None then it will return an empty dataframe.
+            (the default is None.)
+        filterName : `str` or `None`, optional
+            Name of camera filter. If donutCatalog is not None then
+            this cannot be None. (the default is None.)
+        blendCentersX : `list` or `None`, optional
+             X pixel position of centroids for blended objects. List
+             should be the same length as the donutCatalog. If
+             blendCentersY is not None then this cannot be None. (the default
+             is None.)
+        blendCentersY : `list` or `None`, optional
+             Y pixel position of centroids for blended objects. List
+             should be the same length as the donutCatalog. If
+             blendCentersX is not None then this cannot be None. (the default
+             is None.)
+
+        Returns
+        -------
+        `pandas.DataFrame`
+            Complete catalog of reference sources in the pointing.
+
+        Raises
+        ------
+        `ValueError`
+            Raised if filterName is None when donutCatalog is not None.
+        `ValueError`
+            Raised if blendCentersX and blendCentersY are not the same length.
+        `ValueError`
+            Raised if blendCentersX and blendCentersY are not both
+            a list or are not both None.
+        """
+
+        ra = []
+        dec = []
+        centroidX = []
+        centroidY = []
+        sourceFlux = []
+        blendCX = []
+        blendCY = []
+
+        if donutCatalog is not None:
+            filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
+            if filterName is None:
+                raise ValueError(filterErrMsg)
+            ra = donutCatalog["coord_ra"]
+            dec = donutCatalog["coord_dec"]
+            centroidX = donutCatalog["centroid_x"]
+            centroidY = donutCatalog["centroid_y"]
+            sourceFlux = donutCatalog[f"{filterName}_flux"]
+
+            if (blendCentersX is None) and (blendCentersY is None):
+                blendCX = list()
+                blendCY = list()
+                for idx in range(len(donutCatalog)):
+                    blendCX.append(list())
+                    blendCY.append(list())
+            elif isinstance(blendCentersX, list) and isinstance(blendCentersY, list):
+                lengthErrMsg = (
+                    "blendCentersX and blendCentersY need "
+                    + "to be same length as donutCatalog."
+                )
+                if (len(blendCentersX) != len(donutCatalog)) or (
+                    len(blendCentersY) != len(donutCatalog)
+                ):
+                    raise ValueError(lengthErrMsg)
+                xyMismatchErrMsg = (
+                    "Each list in blendCentersX must have the same "
+                    + "length as the list in blendCentersY at the "
+                    + "same index."
+                )
+                for xList, yList in zip(blendCentersX, blendCentersY):
+                    if len(xList) != len(yList):
+                        raise ValueError(xyMismatchErrMsg)
+                blendCX = blendCentersX
+                blendCY = blendCentersY
+            else:
+                blendErrMsg = (
+                    "blendCentersX and blendCentersY must be"
+                    + " both be None or both be a list."
+                )
+                raise ValueError(blendErrMsg)
+
+        fieldObjects = pd.DataFrame([])
+        fieldObjects["coord_ra"] = ra
+        fieldObjects["coord_dec"] = dec
+        fieldObjects["centroid_x"] = centroidX
+        fieldObjects["centroid_y"] = centroidY
+        fieldObjects["source_flux"] = sourceFlux
+        fieldObjects["blend_centroid_x"] = blendCX
+        fieldObjects["blend_centroid_y"] = blendCY
+
+        fieldObjects = fieldObjects.sort_values(
+            "source_flux", ascending=False
+        ).reset_index(drop=True)
+
+        return fieldObjects
+
+    @timeMethod
+    def run(self, refCatalogs, detector, detectorWcs) -> pipeBase.Struct:
+        # refObjLoader handles the interaction with the butler repository
+        # needed to get the pieces of the reference catalogs we need.
+        refObjLoader = self.getRefObjLoader(refCatalogs)
+
+        filterName = self.config.filterName
+
+        try:
+            # Match detector layout to reference catalog
+            refSelection, blendCentersX, blendCentersY = self.runSelection(
+                refObjLoader, detector, detectorWcs, filterName
+            )
+
+        # Except RuntimeError caused when no reference catalog
+        # available for the region covered by detector
+        except RuntimeError:
+            warnings.warn(
+                "No catalogs cover this detector. Returning empty catalog. " + \
+                f"Double check that filterName: '{filterName}' is in catalog.",
+                RuntimeWarning,
+            )
+            refSelection = None
+            blendCentersX = None
+            blendCentersY = None
+
+        fieldObjects = self.donutCatalogToDataFrame(
+            refSelection, filterName, blendCentersX, blendCentersY
         )
 
-        if npRefCat.size == 0:
-            # Return an empty catalog if we don't have any selected sources.
-            return npRefCat
-
-        # Natively "coord_ra" and "coord_dec" are stored in radians.
-        # Doing this as an array rather than by row with the coord access is
-        # approximately 600x faster.
-        npRefCat["coord_ra"] = refCat["coord_ra"][selected]
-        npRefCat["coord_dec"] = refCat["coord_dec"][selected]
-
-        npRefCat["centroid_x"] = refCat["centroid_x"][selected]
-        npRefCat["centroid_y"] = refCat["centroid_y"][selected]
-
-        fluxField = f"{self.filterName}_flux"
-
-        # nan_to_num replaces nans with zeros, and this ensures that
-        # we select fluxes that both filter out nans and are positive.
-        (good,) = np.where(
-            (np.nan_to_num(refCat[fluxField][selected]) > 0.0)
-            & (np.nan_to_num(refCat[fluxField + "Err"][selected]) > 0.0)
-        )
-        npRefCat["source_flux"][good] = refCat[fluxField][selected][good]
-
-        return pd.DataFrame.from_records(npRefCat)
+        return pipeBase.Struct(donutCatalog=fieldObjects)
