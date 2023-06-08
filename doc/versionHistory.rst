@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.3.5:
+
+-------------
+6.3.5
+-------------
+
+* Make sure output from empty catalogs match that expected from catalogs with sources in donutSourceSelectorTask.
+* Add tests for run method in donutSourceSelectorTask.
+
 .. _lsst.ts.wep-6.3.4:
 
 -------------
