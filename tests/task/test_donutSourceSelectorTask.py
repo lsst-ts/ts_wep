@@ -21,6 +21,7 @@
 
 import os
 import unittest
+import numpy as np
 import pandas as pd
 import astropy.units as u
 
@@ -143,6 +144,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[]] * 4)
 
         # The first three donuts overlap but none are more than
         # isolatedMagDiff brighter than the rest so none are chosen
@@ -152,6 +155,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[]])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[]])
 
         # Will now take the brightest of the three donuts
         # for a total of 2 selected donuts
@@ -161,6 +166,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[], []])
 
         # Test that number of sources in catalog limited by sourceLimit
         # and that the brightest of the allowed donuts is chosen
@@ -314,3 +321,53 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
+
+        # Test output if we have an empty catalog. Make sure that
+        # all parts of the Struct are returned as expected.
+        self.config.isolatedMagDiff = 10.0
+        self.config.unblendedSeparation = 400
+        self.config.maxBlended = 0
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        emptyCat = pd.DataFrame(columns=minimalCat.columns)
+        testCatStruct = self.task.selectSources(emptyCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [])
+        self.assertEqual(testCatStruct.blendCentersX, None)
+        self.assertEqual(testCatStruct.blendCentersY, None)
+
+    def testTaskRun(self):
+        minimalCat, detector = self._createTestCat()
+
+        # All donuts should pass since default mag limit is (-99.0, 99.0)
+        self.config.useCustomMagLimit = True
+        self.config.unblendedSeparation = 30
+        self.config.isolatedMagDiff = 2
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.run(minimalCat, detector, self.filterName)
+        np.testing.assert_array_equal(testCatStruct.sourceCat, minimalCat)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [True, True, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[]] * 4)
+
+        # Will now take the brightest of the three donuts that overlap
+        # for a total of 2 selected donuts
+        self.config.unblendedSeparation = 100
+        self.config.isolatedMagDiff = 0.0
+        self.config.minBlendedSeparation = 0
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.run(minimalCat, detector, self.filterName)
+        np.testing.assert_array_equal(testCatStruct.sourceCat, minimalCat.iloc[2:])
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[], []])
+
+        # Test output if we have an empty catalog. Make sure that
+        # all parts of the Struct are returned as expected.
+        emptyCat = pd.DataFrame(columns=minimalCat.columns)
+        testCatStruct = self.task.run(emptyCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [])
+        self.assertEqual(testCatStruct.blendCentersX, None)
+        self.assertEqual(testCatStruct.blendCentersY, None)
