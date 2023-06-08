@@ -195,7 +195,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
         selected = np.zeros(len(sourceCat), dtype=bool)
         if len(selected) == 0:
-            return pipeBase.Struct(selected=selected)
+            return pipeBase.Struct(
+                selected=selected,
+                blendCentersX=None,
+                blendCentersY=None,
+            )
 
         fluxField = f"{filterName}_flux"
         flux = _getFieldFromCatalog(sourceCat, fluxField)
