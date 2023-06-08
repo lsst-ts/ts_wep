@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.3.4:
+
+-------------
+6.3.4
+-------------
+
+* Patch refCatalogInterface to eliminate warnings from latest version of daf_butler.
+
 .. _lsst.ts.wep-6.3.3:
 
 -------------

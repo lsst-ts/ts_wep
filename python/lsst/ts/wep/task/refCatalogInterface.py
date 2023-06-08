@@ -120,7 +120,7 @@ class RefCatalogInterface(object):
             )
             if len(dataRef) == 0:
                 continue
-            deferredList.append(butler.getDeferred(dataRef[0], collections=collections))
+            deferredList.append(butler.getDeferred(dataRef[0]))
             dataIds.append(dataRef[0].dataId)
         return deferredList, dataIds
 
