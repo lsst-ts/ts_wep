@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.3.3:
+
+-------------
+6.3.3
+-------------
+
+* Change filter name in testData/gen3TestRepo camera fits files to comply with new obs_lsst convention.
+
 .. _lsst.ts.wep-6.3.2:
 
 -------------
