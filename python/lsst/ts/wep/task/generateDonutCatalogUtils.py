@@ -53,6 +53,10 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
         Catalog containing reference objects inside the specified bounding
         box and with properties within the bounds set by the
         `referenceSelector`.
+    list
+        X pixel location of centroids of blended donuts.
+    list
+        Y pixel location of centroids of blended donuts.
     """
 
     bbox = detector.getBBox()
@@ -113,13 +117,13 @@ def donutCatalogToDataFrame(
         a list or are not both None.
     """
 
-    ra = []
-    dec = []
-    centroidX = []
-    centroidY = []
-    sourceFlux = []
-    blendCX = []
-    blendCY = []
+    ra = list()
+    dec = list()
+    centroidX = list()
+    centroidY = list()
+    sourceFlux = list()
+    blendCX = list()
+    blendCY = list()
 
     if donutCatalog is not None:
         filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
@@ -151,8 +155,8 @@ def donutCatalogToDataFrame(
                 + "length as the list in blendCentersY at the "
                 + "same index."
             )
-            for xList, yList in zip(blendCentersX, blendCentersY):
-                if len(xList) != len(yList):
+            for listX, listY in zip(blendCentersX, blendCentersY):
+                if len(listX) != len(listY):
                     raise ValueError(xyMismatchErrMsg)
             blendCX = blendCentersX
             blendCY = blendCentersY

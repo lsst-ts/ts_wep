@@ -49,7 +49,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         self.registry = self.butler.registry
 
     def _getRefCat(self):
-        refCatList = []
+        refCatList = list()
         datasetGenerator = self.registry.queryDatasets(
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()

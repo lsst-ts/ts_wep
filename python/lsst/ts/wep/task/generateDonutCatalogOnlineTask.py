@@ -84,7 +84,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         Returns
         -------
         `lsst.meas.algorithms.ReferenceObjectsLoader`
-            Object to conduct spatial searches through the reference catalogs
+            Object to conduct spatial searches through the reference catalogs.
         """
 
         refObjLoader = ReferenceObjectLoader(

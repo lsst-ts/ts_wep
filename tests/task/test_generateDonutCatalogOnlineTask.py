@@ -65,7 +65,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
 
     def _getRefCat(self):
-        refCatList = []
+        refCatList = list()
         datasetGenerator = self.registry.queryDatasets(
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
