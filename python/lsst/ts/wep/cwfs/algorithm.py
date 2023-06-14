@@ -117,6 +117,7 @@ class Algorithm(object):
 
         # True if at least one of images has a blended object
         self.blend_exists = False
+        self.mask_growth_iter = None
 
     def reset(self):
         """Reset the calculation for the new input images with the same
@@ -812,8 +813,37 @@ class Algorithm(object):
                 boundaryT = self.getBoundaryThickness()
                 # If the compensable image has no blended centroids
                 # this function will just create a single masked donut
-                I1.makeBlendedMask(self._inst, model, boundaryT, 1, blendPadding=4, compensated=True)
-                I2.makeBlendedMask(self._inst, model, boundaryT, 1, blendPadding=4, compensated=True)
+                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)#, blendPadding=1)
+                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)#, blendPadding=1)
+
+                # Create shifted mask from non-blended mask
+                if self.blend_exists:
+                    for compIm in [I1, I2]:
+                        compIm.makeMask(
+                            self._inst, model, boundaryT, 1
+                        )
+                        if self.mask_growth_iter is None:
+                            (
+                                dilatedMask,
+                                numPaddingIter,
+                            ) = compIm.autoDilateBlendMask(
+                                compIm.mask_pupil
+                            )
+                        else:
+                            numPaddingIter = self.mask_growth_iter
+
+                        finalMask, shiftedMask = compIm.createBlendedCoadd(
+                            compIm.mask_pupil,
+                            blendPadding=numPaddingIter,
+                            returnShiftedMask=True,
+                        )
+                        # Mask only blended areas in final stamp
+                        compIm.updateImage(
+                            compIm.getImg() * np.invert(
+                                np.array(shiftedMask, dtype=bool)
+                            )
+                        )
+
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
                 # Load the offAxis correction coefficients

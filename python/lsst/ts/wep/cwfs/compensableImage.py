@@ -1586,11 +1586,11 @@ class CompensableImage(object):
         Raises
         ------
         AssertionError
-            blendPadding must be None or an integer >= 0.
+            blendPadding must be None or an integer > 0.
         """
 
         if blendPadding is not None:
-            assert blendPadding >= 0, "blendPadding must be None or an integer >= 0."
+            assert blendPadding > 0, "blendPadding must be None or an integer > 0."
 
         # Switch x,y order because x,y locations in the catalogs and the
         # LSST Science Pipeline objects are consistent with each other but
@@ -1660,14 +1660,18 @@ class CompensableImage(object):
             medianPixel = np.median(
                 maskedPixelVals[np.where(maskedPixelVals > maskedPixelHist[1][1])]
             )
+            binEdges = np.linspace(0.5 * medianPixel, 1.5*medianPixel, num=11)
+            binEdges[-1] = 2.5 * medianPixel
+            binEdges = np.append(binEdges, 3.0 * medianPixel)
             maskedPixelHist = np.histogram(
-                maskedPixelVals, bins=12, range=(0, 2.5 * medianPixel)
+                maskedPixelVals, bins=binEdges, # range=(0.5 * medianPixel, 2.5 * medianPixel)
             )
+            print(maskedPixelHist)
             # Find the highest bins
             binRanking = np.argsort(maskedPixelHist[0])
             # The highest bin will be the one around 0,
             # the second highest should be the main donut
-            maxNonZeroBin = binRanking[-2]
+            maxNonZeroBin = binRanking[-1]
             # Find the peaks
             histPeaks = argrelmax(maskedPixelHist[0])  # [0]
             # Count the number of peaks beyond the main donut peak
@@ -1679,6 +1683,11 @@ class CompensableImage(object):
 
         blendMask = self.createBlendedCoadd(copy(shiftedMask), blendPadding=None)
         numMaskedPeaks = calcNumPeaks(self.getImg(), blendMask)
+
+        # Return if no need to pad mask
+        if numMaskedPeaks == 0:
+            return blendMask, None
+
         paddingIter = 0
         while numMaskedPeaks > 0:
             paddingIter += 1
