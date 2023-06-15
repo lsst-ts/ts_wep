@@ -811,10 +811,6 @@ class Algorithm(object):
                 # These will be applied to compensated images, so we will
                 # create the masks with compensated=True
                 boundaryT = self.getBoundaryThickness()
-                # If the compensable image has no blended centroids
-                # this function will just create a single masked donut
-                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)#, blendPadding=1)
-                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)#, blendPadding=1)
 
                 # Create shifted mask from non-blended mask
                 for compIm in [I1, I2]:
@@ -844,6 +840,11 @@ class Algorithm(object):
                             np.array(shiftedMask, dtype=bool)
                         )
                     )
+
+                # If the compensable image has no blended centroids
+                # this function will just create a single masked donut
+                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=4)
+                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=4)
 
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 

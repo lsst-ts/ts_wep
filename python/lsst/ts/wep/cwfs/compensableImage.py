@@ -1550,6 +1550,7 @@ class CompensableImage(object):
                     self.mask_comp, blendPadding=iterNum
                 )
             else:
+                iterNum = 0
                 newMaskPupil = self.createBlendedCoadd(
                     self.mask_pupil, blendPadding=blendPadding + iterNum
                 )
