@@ -818,7 +818,7 @@ class Algorithm(object):
 
                 # Create shifted mask from non-blended mask
                 for compIm in [I1, I2]:
-                    if np.sum(np.isnan(compIm.blendOffsetX)) == 0:
+                    if np.sum(np.isnan(compIm.blendOffsetX)) > 0:
                         continue
                     compIm.makeMask(
                         self._inst, model, boundaryT, 1
