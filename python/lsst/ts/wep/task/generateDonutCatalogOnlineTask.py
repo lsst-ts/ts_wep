@@ -21,37 +21,22 @@
 
 __all__ = ["GenerateDonutCatalogOnlineTaskConfig", "GenerateDonutCatalogOnlineTask"]
 
-import numpy as np
-import pandas as pd
+import warnings
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.utils.timer import timeMethod
 from lsst.meas.algorithms import (
-    LoadReferenceObjectsTask,
-    ReferenceSourceSelectorTask,
     ReferenceObjectLoader,
 )
 
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.generateDonutCatalogUtils import donutCatalogToDataFrame, runSelection
 
 
 class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
     """Configuration for GenerateDonutCatalogOnlineTask."""
 
-    refObjLoader = pexConfig.ConfigurableField(
-        target=LoadReferenceObjectsTask,
-        doc="Reference object loader for photometry",
-    )
-    referenceSelector = pexConfig.ConfigurableField(
-        target=ReferenceSourceSelectorTask,
-        doc="Selection of reference sources",
-    )
-    doReferenceSelection = pexConfig.Field(
-        doc="Run the reference selector on the reference catalog?",
-        dtype=bool,
-        default=True,
-    )
     filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
     donutSelector = pexConfig.ConfigurableField(
         target=DonutSourceSelectorTask, doc="How to select donut targets."
@@ -80,126 +65,68 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
     ConfigClass = GenerateDonutCatalogOnlineTaskConfig
     _DefaultName = "generateDonutCatalogOnlineTask"
 
-    def __init__(self, dataIds, refCats, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        refConfig = self.config.refObjLoader
-        # refObjLoader handles the interaction with the butler repository
-        # needed to get the pieces of the reference catalogs we need.
-        self.refObjLoader = ReferenceObjectLoader(
-            dataIds=dataIds, refCats=refCats, config=refConfig, log=self.log
-        )
 
-        if self.config.doReferenceSelection:
-            self.makeSubtask("referenceSelector")
-
-        self.filterName = self.config.filterName
-        self.config.refObjLoader.pixelMargin = 0
-        self.config.refObjLoader.anyFilterMapsToThis = self.filterName
-        self.config.referenceSelector.magLimit.fluxField = f"{self.filterName}_flux"
-        self.config.referenceSelector.signalToNoise.fluxField = (
-            f"{self.filterName}_flux"
-        )
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
+    def getRefObjLoader(self, refCatalogList):
+        """
+        Create a `ReferenceObjectLoader` from available reference catalogs
+        in the repository.
+
+        Parameters
+        ----------
+        refCatalogList : `list`
+            List of deferred butler references for the reference catalogs.
+
+        Returns
+        -------
+        `lsst.meas.algorithms.ReferenceObjectsLoader`
+            Object to conduct spatial searches through the reference catalogs.
+        """
+
+        refObjLoader = ReferenceObjectLoader(
+            dataIds=[ref.dataId for ref in refCatalogList],
+            refCats=refCatalogList,
+        )
+        # This removes the padding around the border of detector BBox when
+        # matching to reference catalog.
+        # We remove this since we only want sources within detector.
+        refObjLoader.config.pixelMargin = 0
+
+        return refObjLoader
+
     @timeMethod
-    def run(self, detector, wcs):
-        """Get the data from the reference catalog only from the
-        shards of the reference catalogs that overlap our pointing.
+    def run(self, refCatalogs, detector, detectorWcs) -> pipeBase.Struct:
+        # refObjLoader handles the interaction with the butler repository
+        # needed to get the pieces of the reference catalogs we need.
+        refObjLoader = self.getRefObjLoader(refCatalogs)
 
-        Parameters
-        ----------
-        detector : `lsst.afw.cameraGeom.Detector`
-            Detector object from the camera.
-        wcs : `lsst.afw.geom.SkyWcs`
-            Wcs object defining the pixel to sky (and inverse) transform for
-            the supplied ``bbox``.
+        filterName = self.config.filterName
 
-        Returns
-        -------
-        struct : `lsst.pipe.base.Struct`
-            The struct contains the following data:
-                - DonutCatalog: `pandas.DataFrame`
-                    The final donut source catalog for the region.
-        """
-        bbox = detector.getBBox()
-        # Get the refcatalog shard
-        skyBox = self.refObjLoader.loadPixelBox(
-            bbox, wcs, filterName=self.filterName, bboxToSpherePadding=0
-        )
-
-        if not skyBox.refCat.isContiguous():
-            refCat = skyBox.refCat.copy(deep=True)
-        else:
-            refCat = skyBox.refCat
-
-        donutCatalog = self._formatCatalog(refCat, detector)
-
-        return pipeBase.Struct(donutCatalog=donutCatalog)
-
-    def _formatCatalog(self, refCat, detector):
-        """Format a reference afw table into the final format.
-
-        Parameters
-        ----------
-        refCat : `lsst.afw.table.SourceCatalog`
-            Reference catalog in afw format.
-        detector : `lsst.afw.cameraGeom.Detector`
-            Detector object from the camera.
-
-        Returns
-        -------
-        refCat : `pandas.DataFrame`
-            Reference catalog.
-        """
-
-        if self.config.doReferenceSelection:
-            goodSources = self.referenceSelector.selectSources(refCat)
-            refSelected = goodSources.selected
-        else:
-            refSelected = np.ones(len(refCat), dtype=bool)
-
-        if self.config.doDonutSelection:
+        try:
             self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(refCat, detector, self.filterName)
-            donutSelected = donutSelection.selected
-        else:
-            donutSelected = np.ones(len(refCat), dtype=bool)
+            donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
+            refSelection, blendCentersX, blendCentersY = runSelection(
+                refObjLoader, detector, detectorWcs, filterName, donutSelectorTask
+            )
 
-        selected = refSelected & donutSelected
+        # Except RuntimeError caused when no reference catalog
+        # available for the region covered by detector
+        except RuntimeError:
+            warnings.warn(
+                "No catalogs cover this detector. Returning empty catalog. "
+                + f"Double check that filterName: '{filterName}' is in catalog.",
+                RuntimeWarning,
+            )
+            refSelection = None
+            blendCentersX = None
+            blendCentersY = None
 
-        npRefCat = np.zeros(
-            np.sum(selected),
-            dtype=[
-                ("coord_ra", "f8"),
-                ("coord_dec", "f8"),
-                ("centroid_x", "f8"),
-                ("centroid_y", "f8"),
-                ("source_flux", "f8"),
-            ],
+        fieldObjects = donutCatalogToDataFrame(
+            refSelection, filterName, blendCentersX, blendCentersY
         )
 
-        if npRefCat.size == 0:
-            # Return an empty catalog if we don't have any selected sources.
-            return npRefCat
-
-        # Natively "coord_ra" and "coord_dec" are stored in radians.
-        # Doing this as an array rather than by row with the coord access is
-        # approximately 600x faster.
-        npRefCat["coord_ra"] = refCat["coord_ra"][selected]
-        npRefCat["coord_dec"] = refCat["coord_dec"][selected]
-
-        npRefCat["centroid_x"] = refCat["centroid_x"][selected]
-        npRefCat["centroid_y"] = refCat["centroid_y"][selected]
-
-        fluxField = f"{self.filterName}_flux"
-
-        # nan_to_num replaces nans with zeros, and this ensures that
-        # we select fluxes that both filter out nans and are positive.
-        (good,) = np.where(
-            (np.nan_to_num(refCat[fluxField][selected]) > 0.0)
-            & (np.nan_to_num(refCat[fluxField + "Err"][selected]) > 0.0)
-        )
-        npRefCat["source_flux"][good] = refCat[fluxField][selected][good]
-
-        return pd.DataFrame.from_records(npRefCat)
+        return pipeBase.Struct(donutCatalog=fieldObjects)

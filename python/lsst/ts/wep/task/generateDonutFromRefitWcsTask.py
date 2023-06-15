@@ -41,6 +41,13 @@ from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
 )
+from lsst.ts.wep.task.generateDonutCatalogUtils import donutCatalogToDataFrame, runSelection
+
+__all__ = [
+    "GenerateDonutFromRefitWcsTaskConnections",
+    "GenerateDonutFromRefitWcsTaskConfig",
+    "GenerateDonutFromRefitWcsTask",
+]
 
 
 class GenerateDonutFromRefitWcsTaskConnections(
@@ -271,11 +278,13 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
             try:
                 # Match detector layout to reference catalog
-                refSelection, blendCentersX, blendCentersY = self.runSelection(
-                    photoRefObjLoader, detector, exposure.wcs, filterName
+                self.log.info("Running Donut Selector")
+                donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
+                refSelection, blendCentersX, blendCentersY = runSelection(
+                    photoRefObjLoader, detector, exposure.wcs, filterName, donutSelectorTask
                 )
 
-                donutCatalog = self.donutCatalogToDataFrame(
+                donutCatalog = donutCatalogToDataFrame(
                     refSelection, filterName, blendCentersX, blendCentersY
                 )
                 self.metadata["refCatalogSuccess"] = True

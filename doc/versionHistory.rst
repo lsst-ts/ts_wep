@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.0:
+
+-------------
+6.4.0
+-------------
+
+* Create generateDonutCatalogUtils to store common methods.
+* Update generateDonutCatalogOnlineTask to match output of other generateDonutCatalog...Tasks.
+
 .. _lsst.ts.wep-6.3.5:
 
 -------------
