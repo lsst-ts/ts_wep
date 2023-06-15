@@ -817,32 +817,33 @@ class Algorithm(object):
                 I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)#, blendPadding=1)
 
                 # Create shifted mask from non-blended mask
-                if self.blend_exists:
-                    for compIm in [I1, I2]:
-                        compIm.makeMask(
-                            self._inst, model, boundaryT, 1
+                for compIm in [I1, I2]:
+                    if np.sum(np.isnan(compIm.blendOffsetX)) == 0:
+                        continue
+                    compIm.makeMask(
+                        self._inst, model, boundaryT, 1
+                    )
+                    if self.mask_growth_iter is None:
+                        (
+                            dilatedMask,
+                            numPaddingIter,
+                        ) = compIm.autoDilateBlendMask(
+                            compIm.mask_pupil
                         )
-                        if self.mask_growth_iter is None:
-                            (
-                                dilatedMask,
-                                numPaddingIter,
-                            ) = compIm.autoDilateBlendMask(
-                                compIm.mask_pupil
-                            )
-                        else:
-                            numPaddingIter = self.mask_growth_iter
+                    else:
+                        numPaddingIter = self.mask_growth_iter
 
-                        finalMask, shiftedMask = compIm.createBlendedCoadd(
-                            compIm.mask_pupil,
-                            blendPadding=numPaddingIter,
-                            returnShiftedMask=True,
+                    finalMask, shiftedMask = compIm.createBlendedCoadd(
+                        compIm.mask_pupil,
+                        blendPadding=numPaddingIter,
+                        returnShiftedMask=True,
+                    )
+                    # Mask only blended areas in final stamp
+                    compIm.updateImage(
+                        compIm.getImg() * np.invert(
+                            np.array(shiftedMask, dtype=bool)
                         )
-                        # Mask only blended areas in final stamp
-                        compIm.updateImage(
-                            compIm.getImg() * np.invert(
-                                np.array(shiftedMask, dtype=bool)
-                            )
-                        )
+                    )
 
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
