@@ -142,6 +142,7 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutFromRefitWcsTask**: Optional pipeline task to take a catalog of detected donuts from GenerateDonutDirectDetectTask and fit a WCS to the input exposure and return a donut catalog using the new WCS and a reference catalog.
 * **GenerateDonutFromRefitWcsTaskConnections**: Connections setup for GenerateDonutFromRefitWcsTask.
 * **GenerateDonutFromRefitWcsTaskConfig**: Configuration setup for GenerateDonutFromRefitWcsTask.
+* **GenerateDonutCatalogUtils**: Common utility functions for the GenerateDonutCatalog...Tasks.
 
 .. _WEP_API:
 
