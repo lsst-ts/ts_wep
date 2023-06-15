@@ -117,7 +117,7 @@ class Algorithm(object):
 
         # True if at least one of images has a blended object
         self.blend_exists = False
-        self.mask_growth_iter = None
+        self.mask_growth_iter = 4
 
     def reset(self):
         """Reset the calculation for the new input images with the same
@@ -819,15 +819,9 @@ class Algorithm(object):
                     compIm.makeMask(
                         self._inst, model, boundaryT, 1
                     )
-                    if self.mask_growth_iter is None:
-                        (
-                            dilatedMask,
-                            numPaddingIter,
-                        ) = compIm.autoDilateBlendMask(
-                            compIm.mask_pupil
-                        )
-                    else:
-                        numPaddingIter = self.mask_growth_iter
+                    dilatedMask, numPaddingIter = compIm.autoDilateBlendMask(
+                        compIm.mask_pupil
+                    )
 
                     finalMask, shiftedMask = compIm.createBlendedCoadd(
                         compIm.mask_pupil,
@@ -843,8 +837,8 @@ class Algorithm(object):
 
                 # If the compensable image has no blended centroids
                 # this function will just create a single masked donut
-                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=4)
-                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=4)
+                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=self.mask_growth_iter)
+                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=self.mask_growth_iter)
 
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
