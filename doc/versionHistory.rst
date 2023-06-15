@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.2:
+
+-------------
+6.4.2
+-------------
+
+* Move fits files to git-lfs.
+
 .. _lsst.ts.wep-6.4.1:
 
 -------------
