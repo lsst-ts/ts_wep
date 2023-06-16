@@ -46,7 +46,7 @@ pipeline {
         stage('Cloning Repos') {
             steps {
                 dir(env.WORKSPACE + '/ts_wep') {
-                    checkout scm
+                    checkout scmGit(branches: [[name: ${env.BRANCH_NAME}]], extensions: [lfs()], userRemoteConfigs: [[url: 'https://github.com/lsst-ts/ts_wep.git']])
                 }
             }
         }
