@@ -11,6 +11,9 @@ pipeline {
           image 'lsstts/develop-env:develop'
           args "--entrypoint=''"
           alwaysPull true
+          // Specify the nodes that have the git-lfs tool installed.
+          // If run on nodes without git-lfs the tests will fail.
+          label 'Node3_4CPU  || CSC_Conda_Node'
         }
     }
 
@@ -46,7 +49,7 @@ pipeline {
         stage('Cloning Repos') {
             steps {
                 dir(env.WORKSPACE + '/ts_wep') {
-                    checkout scm
+                    checkout scmGit(branches: [[name: 'refs/heads/'+env.CHANGE_BRANCH]], extensions: [lfs()], userRemoteConfigs: [[credentialsId: '14e4c262-1fb1-4b73-b395-5fe617420c85', url: 'https://github.com/lsst-ts/ts_wep.git']])
                 }
             }
         }
