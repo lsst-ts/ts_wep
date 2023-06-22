@@ -1661,11 +1661,12 @@ class CompensableImage(object):
             medianPixel = np.median(
                 maskedPixelVals[np.where(maskedPixelVals > maskedPixelHist[1][1])]
             )
-            binEdges = np.linspace(0.5 * medianPixel, 1.5*medianPixel, num=11)
+            binEdges = np.linspace(0.5 * medianPixel, 1.5 * medianPixel, num=11)
             binEdges[-1] = 2.5 * medianPixel
             binEdges = np.append(binEdges, 3.0 * medianPixel)
             maskedPixelHist = np.histogram(
-                maskedPixelVals, bins=binEdges, # range=(0.5 * medianPixel, 2.5 * medianPixel)
+                maskedPixelVals,
+                bins=binEdges,  # range=(0.5 * medianPixel, 2.5 * medianPixel)
             )
             print(maskedPixelHist)
             # Find the highest bins

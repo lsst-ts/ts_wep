@@ -816,9 +816,7 @@ class Algorithm(object):
                 for compIm in [I1, I2]:
                     if np.sum(np.isnan(compIm.blendOffsetX)) > 0:
                         continue
-                    compIm.makeMask(
-                        self._inst, model, boundaryT, 1
-                    )
+                    compIm.makeMask(self._inst, model, boundaryT, 1)
                     dilatedMask, numPaddingIter = compIm.autoDilateBlendMask(
                         compIm.mask_pupil
                     )
@@ -830,15 +828,27 @@ class Algorithm(object):
                     )
                     # Mask only blended areas in final stamp
                     compIm.updateImage(
-                        compIm.getImg() * np.invert(
-                            np.array(shiftedMask, dtype=bool)
-                        )
+                        compIm.getImg() * np.invert(np.array(shiftedMask, dtype=bool))
                     )
 
                 # If the compensable image has no blended centroids
                 # this function will just create a single masked donut
-                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=self.mask_growth_iter)
-                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True, blendPadding=self.mask_growth_iter)
+                I1.makeBlendedMask(
+                    self._inst,
+                    model,
+                    boundaryT,
+                    1,
+                    compensated=True,
+                    blendPadding=self.mask_growth_iter,
+                )
+                I2.makeBlendedMask(
+                    self._inst,
+                    model,
+                    boundaryT,
+                    1,
+                    compensated=True,
+                    blendPadding=self.mask_growth_iter,
+                )
 
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
