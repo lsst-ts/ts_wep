@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.1:
+
+-------------
+6.4.1
+-------------
+
+* Add documentation explaining how to run the WEP pipeline on the USDF batch system.
+
 .. _lsst.ts.wep-6.4.0:
 
 -------------
