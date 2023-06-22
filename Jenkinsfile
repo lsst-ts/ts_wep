@@ -11,6 +11,8 @@ pipeline {
           image 'lsstts/develop-env:develop'
           args "--entrypoint=''"
           alwaysPull true
+          // Specify the nodes that have the git-lfs tool installed.
+          // If run on nodes without git-lfs the tests will fail.
           label 'Node3_4CPU  || CSC_Conda_Node'
         }
     }
