@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.3:
+
+-------------
+6.4.3
+-------------
+
+* Fix error in Jenkinsfile that caused git-lfs to fail when running on develop branch.
+
 .. _lsst.ts.wep-6.4.2:
 
 -------------
