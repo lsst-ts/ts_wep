@@ -50,7 +50,7 @@ pipeline {
             steps {
                 dir(env.WORKSPACE + '/ts_wep') {
                     script {
-                        if (env.BRANCH_NAME == 'develop') {
+                        if (env.BRANCH_NAME == ('develop' || 'main')) {
                             SCM_BRANCH = env.BRANCH_NAME
                         }
                         else {
