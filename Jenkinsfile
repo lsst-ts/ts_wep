@@ -49,7 +49,15 @@ pipeline {
         stage('Cloning Repos') {
             steps {
                 dir(env.WORKSPACE + '/ts_wep') {
-                    checkout scmGit(branches: [[name: 'refs/heads/'+env.CHANGE_BRANCH]], extensions: [lfs()], userRemoteConfigs: [[credentialsId: '14e4c262-1fb1-4b73-b395-5fe617420c85', url: 'https://github.com/lsst-ts/ts_wep.git']])
+                    script {
+                        if (env.BRANCH_NAME == ('develop' || 'main')) {
+                            SCM_BRANCH = env.BRANCH_NAME
+                        }
+                        else {
+                            SCM_BRANCH = env.CHANGE_BRANCH
+                        }
+                    }
+                    checkout scmGit(branches: [[name: "refs/heads/${SCM_BRANCH}"]], extensions: [lfs()], userRemoteConfigs: [[credentialsId: '14e4c262-1fb1-4b73-b395-5fe617420c85', url: 'https://github.com/lsst-ts/ts_wep.git']])
                 }
             }
         }
