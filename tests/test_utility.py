@@ -284,6 +284,7 @@ class TestUtility(unittest.TestCase):
         self.assertEqual(getFilterTypeFromBandLabel("i"), FilterType.LSST_I)
         self.assertEqual(getFilterTypeFromBandLabel("z"), FilterType.LSST_Z)
         self.assertEqual(getFilterTypeFromBandLabel("y"), FilterType.LSST_Y)
+        self.assertEqual(getFilterTypeFromBandLabel("SomeFilter"), FilterType.REF)
 
     def testGetCamNameFromCamType(self):
         # Test allowable CamType values
