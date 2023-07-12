@@ -694,7 +694,7 @@ def getFilterTypeFromBandLabel(bandLabel):
     filterLabelDict["z"] = FilterType.LSST_Z
     filterLabelDict["y"] = FilterType.LSST_Y
 
-    return filterLabelDict[bandLabel]
+    return filterLabelDict.get(bandLabel, FilterType.REF)
 
 
 def getDefocalDisInMm(instName):

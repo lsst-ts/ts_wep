@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.4:
+
+-------------
+6.4.4
+-------------
+
+* In ``utility``, update ``getFilterTypeFromBandLabel`` to return ``FilterType.REF`` if the ``bandLabel`` is not recognized.
+
 .. _lsst.ts.wep-6.4.3:
 
 -------------
