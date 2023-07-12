@@ -117,6 +117,7 @@ class Algorithm(object):
 
         # True if at least one of images has a blended object
         self.blend_exists = False
+        self.mask_growth_iter = 4
 
     def reset(self):
         """Reset the calculation for the new input images with the same
@@ -800,8 +801,8 @@ class Algorithm(object):
                     )
                     sys.exit()
 
-                # Check for blends
-                if (np.sum(np.isnan(I1.blendOffsetX)) == 0) and (
+                # Check for blends in either image
+                if (np.sum(np.isnan(I1.blendOffsetX)) == 0) or (
                     np.sum(np.isnan(I2.blendOffsetX)) == 0
                 ):
                     self.blend_exists = True
@@ -810,10 +811,45 @@ class Algorithm(object):
                 # These will be applied to compensated images, so we will
                 # create the masks with compensated=True
                 boundaryT = self.getBoundaryThickness()
+
+                # Create shifted mask from non-blended mask
+                for compIm in [I1, I2]:
+                    if np.sum(np.isnan(compIm.blendOffsetX)) > 0:
+                        continue
+                    compIm.makeMask(self._inst, model, boundaryT, 1)
+                    dilatedMask, numPaddingIter = compIm.autoDilateBlendMask(
+                        compIm.mask_pupil
+                    )
+
+                    finalMask, shiftedMask = compIm.createBlendedCoadd(
+                        compIm.mask_pupil,
+                        blendPadding=numPaddingIter,
+                        returnShiftedMask=True,
+                    )
+                    # Mask only blended areas in final stamp
+                    compIm.updateImage(
+                        compIm.getImg() * np.invert(np.array(shiftedMask, dtype=bool))
+                    )
+
                 # If the compensable image has no blended centroids
                 # this function will just create a single masked donut
-                I1.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)
-                I2.makeBlendedMask(self._inst, model, boundaryT, 1, compensated=True)
+                I1.makeBlendedMask(
+                    self._inst,
+                    model,
+                    boundaryT,
+                    1,
+                    compensated=True,
+                    blendPadding=self.mask_growth_iter,
+                )
+                I2.makeBlendedMask(
+                    self._inst,
+                    model,
+                    boundaryT,
+                    1,
+                    compensated=True,
+                    blendPadding=self.mask_growth_iter,
+                )
+
                 self._makeMasterMask(I1, I2, self.getPoissonSolverName())
 
                 # Load the offAxis correction coefficients

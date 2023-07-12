@@ -22,17 +22,21 @@
 import os
 import numpy as np
 import unittest
+from copy import copy
+from scipy.ndimage import binary_dilation, shift
 
 from lsst.ts.wep.cwfs.image import Image
 from lsst.ts.wep.cwfs.instrument import Instrument
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
+from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.utility import (
     getModulePath,
     getConfigDir,
     DefocalType,
     CamType,
     FilterType,
+    DonutTemplateType,
 )
 
 
@@ -381,6 +385,59 @@ class TestCompensableImage(unittest.TestCase):
         # cancels out original donut
         blendedCoadd = self.wfsImg.createBlendedCoadd(self.wfsImg.mask_pupil, 0)
         self.assertEqual(np.sum(blendedCoadd), 0)
+
+    def testCreateBlendedCoaddRaiseError(self):
+        errMsg = "blendPadding must be None or an integer >= 0."
+        with self.assertRaises(AssertionError) as context:
+            self.wfsImg.createBlendedCoadd(np.zeros(1), -1)
+        self.assertEqual(str(context.exception), errMsg)
+
+    def testAutoDilateBlendMask(self):
+        fieldXY = (0.0, 0.0)
+        templateMaker = DonutTemplateFactory.createDonutTemplate(
+            DonutTemplateType.Model
+        )
+        self.inst.instParams["offset"] = 1.5
+
+        template = templateMaker.makeTemplate(
+            "R22_S11",
+            DefocalType.Extra,
+            160,
+            instParams=self.inst.instParams,
+        )
+        blendedImage = copy(template)
+        blendOffset = [75, 75]
+        shiftedTemplate = shift(blendedImage, blendOffset)
+        trueNumIter = 8
+        shiftedTemplate = binary_dilation(shiftedTemplate, iterations=trueNumIter)
+        blendedImage += shiftedTemplate
+
+        self.wfsImg.setImg(
+            fieldXY,
+            DefocalType.Intra,
+            self.filterLabel,
+            blendOffsets=[[blendOffset[0]], [blendOffset[1]]],
+            image=blendedImage,
+        )
+
+        blendMask, paddingIter = self.wfsImg.autoDilateBlendMask(template)
+        self.assertEqual(paddingIter, 8)
+
+        blendedImage = copy(template)
+        blendOffset = [75, 75]
+        shiftedTemplate = shift(blendedImage, blendOffset)
+        blendedImage += shiftedTemplate
+
+        self.wfsImg.setImg(
+            fieldXY,
+            DefocalType.Intra,
+            self.filterLabel,
+            blendOffsets=[[blendOffset[0]], [blendOffset[1]]],
+            image=blendedImage,
+        )
+
+        blendMask, paddingIter = self.wfsImg.autoDilateBlendMask(template)
+        self.assertEqual(paddingIter, 0)
 
 
 if __name__ == "__main__":
