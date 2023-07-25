@@ -20,22 +20,19 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 
 import lsst.utils.tests
+import numpy as np
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.calcZernikesTask import (
-    CalcZernikesTask,
-    CalcZernikesTaskConfig,
-)
+from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utility import (
     getModulePath,
     runProgram,
-    writePipetaskCmd,
     writeCleanUpRepoCmd,
+    writePipetaskCmd,
 )
 
 

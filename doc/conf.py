@@ -4,8 +4,9 @@ This configuration only affects single-package Sphinx documentation builds.
 """
 
 import os.path
-from documenteer.conf.pipelinespkg import *
+
 import lsst.ts.wep
+from documenteer.conf.pipelinespkg import *
 
 project = "ts_wep"
 html_theme_options["logotext"] = project

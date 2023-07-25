@@ -22,7 +22,6 @@
 __all__ = ["CentroidRandomWalk"]
 
 import numpy as np
-
 from lsst.ts.wep.cwfs.centroidDefault import CentroidDefault
 
 

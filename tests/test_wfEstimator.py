@@ -20,11 +20,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 import unittest
 
+import numpy as np
+from lsst.ts.wep.utility import CamType, DefocalType, getConfigDir, getModulePath
 from lsst.ts.wep.wfEstimator import WfEstimator
-from lsst.ts.wep.utility import getModulePath, getConfigDir, DefocalType, CamType
 
 
 class TestWfEstimator(unittest.TestCase):

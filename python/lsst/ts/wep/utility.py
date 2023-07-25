@@ -50,14 +50,14 @@ __all__ = [
 ]
 
 import os
-import subprocess
 import re
-import numpy as np
-from scipy.ndimage import center_of_mass
+import subprocess
 from enum import IntEnum, auto
 
-from lsst.utils import getPackageDir
+import numpy as np
 from lsst.afw.cameraGeom import DetectorType
+from lsst.utils import getPackageDir
+from scipy.ndimage import center_of_mass
 
 
 class FilterType(IntEnum):

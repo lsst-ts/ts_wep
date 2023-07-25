@@ -26,22 +26,21 @@ __all__ = [
 ]
 
 import typing
-import numpy as np
-import pandas as pd
 
 import lsst.afw.cameraGeom
-import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
-from lsst.utils.timer import timeMethod
+import lsst.pipe.base as pipeBase
+import numpy as np
+import pandas as pd
 from lsst.pipe.base import connectionTypes
-
-from lsst.ts.wep.utility import DefocalType
-from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.cutOutDonutsBase import (
-    CutOutDonutsBaseTaskConnections,
-    CutOutDonutsBaseTaskConfig,
     CutOutDonutsBaseTask,
+    CutOutDonutsBaseTaskConfig,
+    CutOutDonutsBaseTaskConnections,
 )
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.utility import DefocalType
+from lsst.utils.timer import timeMethod
 
 
 class CutOutDonutsScienceSensorTaskConnections(

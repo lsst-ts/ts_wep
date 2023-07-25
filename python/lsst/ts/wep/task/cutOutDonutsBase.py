@@ -25,26 +25,24 @@ __all__ = [
     "CutOutDonutsBaseTask",
 ]
 
-import numpy as np
-
 import lsst.afw.cameraGeom
-import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+import numpy as np
+from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 from lsst.daf.base import PropertyList
 from lsst.pipe.base import connectionTypes
-from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
-
+from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.task.donutStamp import DonutStamp
+from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utility import (
     DonutTemplateType,
     createInstDictFromConfig,
     getCamTypeFromButlerName,
 )
-from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.task.donutStamp import DonutStamp
-from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from scipy.ndimage import binary_dilation, shift
 from scipy.signal import correlate
-from scipy.ndimage import shift, binary_dilation
 
 
 class CutOutDonutsBaseTaskConnections(

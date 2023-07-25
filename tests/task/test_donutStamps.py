@@ -20,12 +20,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import tempfile
-import numpy as np
 from copy import copy
 
+import lsst.afw.image as afwImage
 import lsst.geom
 import lsst.utils.tests
-import lsst.afw.image as afwImage
+import numpy as np
 from lsst.daf.base import PropertyList
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps

@@ -19,11 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import unittest
 import os
 import shutil
-import numpy as np
+import unittest
 
+import numpy as np
 from lsst.ts.wep.cwfs.donutTemplatePhosim import DonutTemplatePhosim
 from lsst.ts.wep.utility import DefocalType, getModulePath
 

@@ -23,9 +23,19 @@ __all__ = ["Algorithm"]
 
 import os
 import sys
-import numpy as np
-import galsim
 
+import galsim
+import numpy as np
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.cwfs.tool import (
+    ZernikeAnnularEval,
+    ZernikeMaskedFit,
+    extractArray,
+    padArray,
+)
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.plotUtil import plotZernike
+from lsst.ts.wep.utility import DefocalType
 from scipy.ndimage import (
     binary_dilation,
     binary_erosion,
@@ -34,17 +44,6 @@ from scipy.ndimage import (
     laplace,
 )
 from scipy.signal import convolve2d
-
-from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.cwfs.tool import (
-    padArray,
-    extractArray,
-    ZernikeAnnularEval,
-    ZernikeMaskedFit,
-)
-from lsst.ts.wep.utility import DefocalType
-from lsst.ts.wep.plotUtil import plotZernike
 
 
 class Algorithm(object):

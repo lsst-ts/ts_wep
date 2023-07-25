@@ -22,9 +22,10 @@
 __all__ = ["ParamReader"]
 
 import os
+import warnings
+
 import numpy as np
 import yaml
-import warnings
 
 
 class ParamReader(object):

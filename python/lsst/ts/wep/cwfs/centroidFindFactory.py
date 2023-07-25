@@ -21,10 +21,10 @@
 
 __all__ = ["CentroidFindFactory"]
 
-from lsst.ts.wep.utility import CentroidFindType
-from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
-from lsst.ts.wep.cwfs.centroidOtsu import CentroidOtsu
 from lsst.ts.wep.cwfs.centroidConvolveTemplate import CentroidConvolveTemplate
+from lsst.ts.wep.cwfs.centroidOtsu import CentroidOtsu
+from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
+from lsst.ts.wep.utility import CentroidFindType
 
 
 class CentroidFindFactory(object):

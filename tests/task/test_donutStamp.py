@@ -21,17 +21,17 @@
 
 import os
 import unittest
-import numpy as np
 
-import lsst.geom
 import lsst.afw.image as afwImage
+import lsst.geom
 import lsst.obs.lsst as obs_lsst
-from lsst.daf.base import PropertyList
+import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE
-from lsst.ts.wep.task.donutStamp import DonutStamp
+from lsst.daf.base import PropertyList
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.utility import getConfigDir, CamType, DefocalType
+from lsst.ts.wep.task.donutStamp import DonutStamp
+from lsst.ts.wep.utility import CamType, DefocalType, getConfigDir
 
 
 class TestDonutStamp(unittest.TestCase):

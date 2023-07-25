@@ -19,26 +19,27 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import logging
-import pandas
+import os
 import unittest
-import numpy as np
 from copy import copy
 
 import lsst.afw.image as afwImage
+import numpy as np
+import pandas
 from lsst.daf import butler as dafButler
+from lsst.ts.wep.task import (
+    DonutStamps,
+    GenerateDonutFromRefitWcsTask,
+    GenerateDonutFromRefitWcsTaskConfig,
+    RefCatalogInterface,
+)
 from lsst.ts.wep.utility import (
     getModulePath,
     runProgram,
-    writePipetaskCmd,
     writeCleanUpRepoCmd,
+    writePipetaskCmd,
 )
-from lsst.ts.wep.task import (
-    GenerateDonutFromRefitWcsTaskConfig,
-    GenerateDonutFromRefitWcsTask,
-)
-from lsst.ts.wep.task import RefCatalogInterface, DonutStamps
 
 
 class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):

@@ -20,22 +20,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
-from scipy.integrate import nquad
-from astropy.io import fits
 import unittest
 
+import numpy as np
+from astropy.io import fits
 from lsst.ts.wep.cwfs.tool import (
     ZernikeAnnularEval,
+    ZernikeAnnularFit,
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
-    ZernikeAnnularFit,
     ZernikeMaskedFit,
-    padArray,
     extractArray,
+    padArray,
 )
 from lsst.ts.wep.utility import getModulePath
 from lsst.utils.tests import TestCase
+from scipy.integrate import nquad
 
 
 class TestTool(TestCase):

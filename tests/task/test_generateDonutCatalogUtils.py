@@ -21,21 +21,19 @@
 
 import os
 import unittest
-import numpy as np
-import pandas as pd
 
 import lsst.geom
+import numpy as np
+import pandas as pd
 from lsst.daf import butler as dafButler
-from lsst.meas.algorithms import (
-    ReferenceObjectLoader,
-)
+from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.obs.base import createInitialSkyWcsFromBoresight
-from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.task import DonutSourceSelectorTask, DonutSourceSelectorTaskConfig
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
     donutCatalogToDataFrame,
     runSelection,
 )
-from lsst.ts.wep.task import DonutSourceSelectorTask, DonutSourceSelectorTaskConfig
+from lsst.ts.wep.utility import getModulePath
 
 
 class TestGenerateDonutCatalogUtils(unittest.TestCase):
