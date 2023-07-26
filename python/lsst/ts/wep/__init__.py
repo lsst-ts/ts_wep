@@ -4,9 +4,9 @@ from .utility import *
 # This class needs the scons to build the cython code. In the Jenkins test,
 # this will be a problem to import.
 try:
-    from .wfEstimator import WfEstimator
-    from .paramReader import ParamReader
     from .donutDetector import DonutDetector
+    from .paramReader import ParamReader
+    from .wfEstimator import WfEstimator
 except ImportError:
     pass
 

@@ -22,7 +22,6 @@
 __all__ = ["CombineZernikesMeanTask"]
 
 import numpy as np
-
 from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
 
 

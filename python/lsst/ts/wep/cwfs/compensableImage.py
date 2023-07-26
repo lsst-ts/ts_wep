@@ -23,28 +23,28 @@ __all__ = ["CompensableImage"]
 
 import os
 import re
-import numpy as np
 from copy import copy
 
-from scipy.ndimage import generate_binary_structure, iterate_structure
+import numpy as np
+from galsim.utilities import horner2d
+from lsst.ts.wep.cwfs.image import Image
+from lsst.ts.wep.cwfs.tool import (
+    ZernikeAnnularGrad,
+    ZernikeAnnularJacobian,
+    extractArray,
+    padArray,
+)
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.utility import CentroidFindType, DefocalType, FilterType, rotMatrix
+from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import (
     binary_dilation,
     binary_erosion,
+    generate_binary_structure,
+    iterate_structure,
     shift,
 )
-from scipy.interpolate import RectBivariateSpline
 from scipy.signal import correlate
-
-from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.cwfs.tool import (
-    padArray,
-    extractArray,
-    ZernikeAnnularGrad,
-    ZernikeAnnularJacobian,
-)
-from lsst.ts.wep.cwfs.image import Image
-from lsst.ts.wep.utility import DefocalType, CentroidFindType, FilterType, rotMatrix
-from galsim.utilities import horner2d
 
 
 class CompensableImage(object):

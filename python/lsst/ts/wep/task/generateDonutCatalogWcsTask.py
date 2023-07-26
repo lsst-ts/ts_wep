@@ -29,15 +29,18 @@ import os
 import typing
 import warnings
 
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-from lsst.utils.timer import timeMethod
-from lsst.meas.algorithms import ReferenceObjectLoader, LoadReferenceObjectsConfig
+from lsst.meas.algorithms import LoadReferenceObjectsConfig, ReferenceObjectLoader
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
-from lsst.ts.wep.task.generateDonutCatalogUtils import donutCatalogToDataFrame, runSelection
+from lsst.ts.wep.task.generateDonutCatalogUtils import (
+    donutCatalogToDataFrame,
+    runSelection,
+)
+from lsst.utils.timer import timeMethod
 
 
 class GenerateDonutCatalogWcsTaskConnections(
@@ -167,7 +170,9 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         try:
             # Match detector layout to reference catalog
             self.log.info("Running Donut Selector")
-            donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
+            donutSelectorTask = (
+                self.donutSelector if self.config.doDonutSelection is True else None
+            )
             refSelection, blendCentersX, blendCentersY = runSelection(
                 refObjLoader, detector, detectorWcs, filterName, donutSelectorTask
             )

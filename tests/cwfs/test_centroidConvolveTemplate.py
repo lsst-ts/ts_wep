@@ -20,8 +20,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-import numpy as np
 
+import numpy as np
 from lsst.ts.wep.cwfs.centroidConvolveTemplate import CentroidConvolveTemplate
 
 

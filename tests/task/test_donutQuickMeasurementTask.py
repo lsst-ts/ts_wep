@@ -21,22 +21,22 @@
 
 import os
 import unittest
+
 import numpy as np
 import pandas as pd
-
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.task.donutQuickMeasurementTask import (
+    DonutQuickMeasurementTask,
+    DonutQuickMeasurementTaskConfig,
+)
 from lsst.ts.wep.utility import (
-    DonutTemplateType,
     DefocalType,
+    DonutTemplateType,
     getModulePath,
-    writePipetaskCmd,
     runProgram,
     writeCleanUpRepoCmd,
-)
-from lsst.ts.wep.task.donutQuickMeasurementTask import (
-    DonutQuickMeasurementTaskConfig,
-    DonutQuickMeasurementTask,
+    writePipetaskCmd,
 )
 
 

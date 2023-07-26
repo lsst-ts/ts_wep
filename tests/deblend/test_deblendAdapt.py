@@ -21,10 +21,10 @@
 
 import os
 import unittest
-import numpy as np
 
-from lsst.ts.wep.utility import getModulePath
+import numpy as np
 from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
+from lsst.ts.wep.utility import getModulePath
 
 
 class TestDeblendAdapt(unittest.TestCase):

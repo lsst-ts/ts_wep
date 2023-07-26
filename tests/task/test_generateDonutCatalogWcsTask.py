@@ -21,17 +21,21 @@
 
 import os
 import unittest
-import numpy as np
-import pandas as pd
 
 import lsst.geom
+import numpy as np
+import pandas as pd
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.utility import getModulePath
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
 )
-from lsst.ts.wep.utility import runProgram, writePipetaskCmd, writeCleanUpRepoCmd
+from lsst.ts.wep.utility import (
+    getModulePath,
+    runProgram,
+    writeCleanUpRepoCmd,
+    writePipetaskCmd,
+)
 
 
 class TestGenerateDonutCatalogWcsTask(unittest.TestCase):

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.5:
+
+-------------
+6.4.5
+-------------
+
+* Update setup files with pre-commit hooks, run black and isort.
+
 .. _lsst.ts.wep-6.4.4:
 
 -------------

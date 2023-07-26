@@ -21,13 +21,13 @@
 
 __all__ = ["DonutTemplateModel"]
 
+import lsst.afw.cameraGeom as cameraGeom
+import lsst.obs.lsst as obs_lsst
 import numpy as np
-from lsst.ts.wep.utility import getConfigDir, readPhoSimSettingData, CamType, FilterType
+from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.donutTemplateDefault import DonutTemplateDefault
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
-import lsst.obs.lsst as obs_lsst
-import lsst.afw.cameraGeom as cameraGeom
+from lsst.ts.wep.utility import CamType, FilterType, getConfigDir, readPhoSimSettingData
 
 
 class DonutTemplateModel(DonutTemplateDefault):

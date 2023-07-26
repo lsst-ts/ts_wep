@@ -21,13 +21,12 @@
 
 __all__ = ["CombineZernikesSigmaClipTaskConfig", "CombineZernikesSigmaClipTask"]
 
+import lsst.pex.config as pexConfig
 import numpy as np
 from astropy.stats import sigma_clip
-
-import lsst.pex.config as pexConfig
 from lsst.ts.wep.task.combineZernikesBase import (
-    CombineZernikesBaseTask,
     CombineZernikesBaseConfig,
+    CombineZernikesBaseTask,
 )
 
 

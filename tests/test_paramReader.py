@@ -20,10 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 import tempfile
 import unittest
 
+import numpy as np
 from lsst.ts.wep.paramReader import ParamReader
 from lsst.ts.wep.utility import getModulePath
 

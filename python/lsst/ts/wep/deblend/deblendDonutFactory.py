@@ -21,8 +21,8 @@
 
 __all__ = ["DeblendDonutFactory"]
 
-from lsst.ts.wep.utility import DeblendDonutType
 from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
+from lsst.ts.wep.utility import DeblendDonutType
 
 
 class DeblendDonutFactory(object):

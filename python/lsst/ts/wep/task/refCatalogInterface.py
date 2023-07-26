@@ -22,8 +22,8 @@
 __all__ = ["RefCatalogInterface"]
 
 import lsst.geom
-from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.meas.algorithms.htmIndexer import HtmIndexer
+from lsst.obs.base import createInitialSkyWcsFromBoresight
 
 
 class RefCatalogInterface(object):

@@ -23,10 +23,10 @@ __all__ = ["CombineZernikesBaseConfig", "CombineZernikesBaseTask"]
 
 import abc
 import logging
-import numpy as np
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
+import numpy as np
 
 
 class CombineZernikesBaseConfig(pexConfig.Config):
