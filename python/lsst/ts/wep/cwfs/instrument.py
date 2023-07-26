@@ -22,10 +22,10 @@
 __all__ = ["Instrument"]
 
 import os
-import numpy as np
 
+import numpy as np
 from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.utility import CamType, getConfigDir, getCamNameFromCamType
+from lsst.ts.wep.utility import CamType, getCamNameFromCamType, getConfigDir
 
 
 class Instrument(object):

@@ -20,28 +20,28 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import typing
-import pandas as pd
 from copy import copy
 
+import lsst.afw.image as afwImage
+import lsst.afw.table as afwTable
+import lsst.geom
+import lsst.meas.base as measBase
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-import lsst.geom
-import lsst.afw.image as afwImage
-import lsst.afw.table as afwTable
-import lsst.meas.base as measBase
-from lsst.pipe.base.task import TaskError
-from lsst.utils.timer import timeMethod
+import pandas as pd
+from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
-from lsst.meas.algorithms import (
-    MagnitudeLimit,
-    ReferenceObjectLoader,
+from lsst.pipe.base.task import TaskError
+from lsst.ts.wep.task.generateDonutCatalogUtils import (
+    donutCatalogToDataFrame,
+    runSelection,
 )
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
 )
-from lsst.ts.wep.task.generateDonutCatalogUtils import donutCatalogToDataFrame, runSelection
+from lsst.utils.timer import timeMethod
 
 __all__ = [
     "GenerateDonutFromRefitWcsTaskConnections",
@@ -279,9 +279,15 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             try:
                 # Match detector layout to reference catalog
                 self.log.info("Running Donut Selector")
-                donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
+                donutSelectorTask = (
+                    self.donutSelector if self.config.doDonutSelection is True else None
+                )
                 refSelection, blendCentersX, blendCentersY = runSelection(
-                    photoRefObjLoader, detector, exposure.wcs, filterName, donutSelectorTask
+                    photoRefObjLoader,
+                    detector,
+                    exposure.wcs,
+                    filterName,
+                    donutSelectorTask,
                 )
 
                 donutCatalog = donutCatalogToDataFrame(

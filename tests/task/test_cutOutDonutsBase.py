@@ -20,10 +20,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
-from scipy.signal import correlate
 
 import lsst.utils.tests
+import numpy as np
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.cutOutDonutsBase import (
@@ -31,13 +30,14 @@ from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTaskConfig,
 )
 from lsst.ts.wep.utility import (
+    CamType,
+    DefocalType,
     getModulePath,
     runProgram,
-    DefocalType,
-    CamType,
-    writePipetaskCmd,
     writeCleanUpRepoCmd,
+    writePipetaskCmd,
 )
+from scipy.signal import correlate
 
 
 class TestCutOutDonutsBase(lsst.utils.tests.TestCase):

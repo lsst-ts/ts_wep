@@ -20,13 +20,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 import unittest
 
-from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+import numpy as np
 from lsst.ts.wep.cwfs.algorithm import Algorithm
-from lsst.ts.wep.utility import getModulePath, getConfigDir, DefocalType, CamType
+from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.utility import CamType, DefocalType, getConfigDir, getModulePath
 
 
 class TestAlgorithm(unittest.TestCase):

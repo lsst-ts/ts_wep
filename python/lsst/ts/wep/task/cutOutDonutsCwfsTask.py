@@ -22,22 +22,21 @@
 __all__ = ["CutOutDonutsCwfsTaskConfig", "CutOutDonutsCwfsTask"]
 
 import typing
-import numpy as np
-import pandas as pd
 
 import lsst.afw.cameraGeom
-import lsst.pipe.base as pipeBase
 import lsst.afw.image as afwImage
 import lsst.obs.lsst as obs_lsst
-from lsst.utils.timer import timeMethod
-
-from lsst.ts.wep.utility import DefocalType
-from lsst.ts.wep.task.donutStamps import DonutStamps
+import lsst.pipe.base as pipeBase
+import numpy as np
+import pandas as pd
 from lsst.ts.wep.task.cutOutDonutsBase import (
-    CutOutDonutsBaseTaskConnections,
-    CutOutDonutsBaseTaskConfig,
     CutOutDonutsBaseTask,
+    CutOutDonutsBaseTaskConfig,
+    CutOutDonutsBaseTaskConnections,
 )
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.utility import DefocalType
+from lsst.utils.timer import timeMethod
 
 
 class CutOutDonutsCwfsTaskConfig(

@@ -20,19 +20,19 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 import unittest
 
+import numpy as np
+from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
+from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.image import Image
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
-from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
 from lsst.ts.wep.utility import (
-    getModulePath,
-    getConfigDir,
-    DefocalType,
     CamType,
+    DefocalType,
     FilterType,
+    getConfigDir,
+    getModulePath,
 )
 
 

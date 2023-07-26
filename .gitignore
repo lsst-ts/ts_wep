@@ -28,6 +28,10 @@ pytest_session.txt
 
 # Mac metadata
 .DS_Store
+.pre-commit-config.yaml
+.flake8
+.isort.cfg
+.mypy.ini
 
 # Existing Phosim Donut Templates
 policy/cwfs/donutTemplateData/phosimTemplates/

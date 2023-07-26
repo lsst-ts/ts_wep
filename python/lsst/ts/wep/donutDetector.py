@@ -21,15 +21,14 @@
 
 __all__ = ["DonutDetector"]
 
-import numpy as np
-import pandas as pd
 from copy import copy
 
-from lsst.ts.wep.utility import CentroidFindType
+import numpy as np
+import pandas as pd
 from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
-from scipy.spatial.distance import cdist
-
 from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
+from lsst.ts.wep.utility import CentroidFindType
+from scipy.spatial.distance import cdist
 
 
 class DonutDetector(object):

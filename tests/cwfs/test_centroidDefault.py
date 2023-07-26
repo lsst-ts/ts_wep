@@ -20,10 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-import numpy as np
-from scipy.ndimage import generate_binary_structure, iterate_structure
 
+import numpy as np
 from lsst.ts.wep.cwfs.centroidDefault import CentroidDefault
+from scipy.ndimage import generate_binary_structure, iterate_structure
 
 
 class TestCentroidDefault(unittest.TestCase):

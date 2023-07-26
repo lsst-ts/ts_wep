@@ -21,39 +21,39 @@
 
 import os
 import unittest
-import numpy as np
 from enum import IntEnum
 
-from lsst.ts.wep.utility import (
-    mapFilterRefToG,
-    FilterType,
-    getModulePath,
-    getConfigDir,
-    getObsLsstCmdTaskConfigDir,
-    ImageType,
-    getImageType,
-    getBscDbType,
-    BscDbType,
-    getCentroidFindType,
-    CentroidFindType,
-    getDeblendDonutType,
-    DeblendDonutType,
-    getDonutTemplateType,
-    DonutTemplateType,
-    getAmpImagesFromDir,
-    writePipetaskCmd,
-    writeCleanUpRepoCmd,
-    CamType,
-    getCamType,
-    getDefocalDisInMm,
-    getCamTypeFromButlerName,
-    getFilterTypeFromBandLabel,
-    getCamNameFromCamType,
-    createInstDictFromConfig,
-    rotMatrix,
-)
+import numpy as np
 from lsst.afw.cameraGeom import DetectorType
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTaskConfig
+from lsst.ts.wep.utility import (
+    BscDbType,
+    CamType,
+    CentroidFindType,
+    DeblendDonutType,
+    DonutTemplateType,
+    FilterType,
+    ImageType,
+    createInstDictFromConfig,
+    getAmpImagesFromDir,
+    getBscDbType,
+    getCamNameFromCamType,
+    getCamType,
+    getCamTypeFromButlerName,
+    getCentroidFindType,
+    getConfigDir,
+    getDeblendDonutType,
+    getDefocalDisInMm,
+    getDonutTemplateType,
+    getFilterTypeFromBandLabel,
+    getImageType,
+    getModulePath,
+    getObsLsstCmdTaskConfigDir,
+    mapFilterRefToG,
+    rotMatrix,
+    writeCleanUpRepoCmd,
+    writePipetaskCmd,
+)
 
 
 class TestUtility(unittest.TestCase):

@@ -28,11 +28,11 @@ from lsst.ts.wep.task.cutOutDonutsCwfsTask import (
     CutOutDonutsCwfsTaskConfig,
 )
 from lsst.ts.wep.utility import (
+    DefocalType,
     getModulePath,
     runProgram,
-    DefocalType,
-    writePipetaskCmd,
     writeCleanUpRepoCmd,
+    writePipetaskCmd,
 )
 
 

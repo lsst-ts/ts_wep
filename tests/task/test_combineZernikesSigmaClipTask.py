@@ -19,14 +19,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import unittest
 import numbers
-import numpy as np
+import unittest
 
 import lsst.pipe.base as pipeBase
+import numpy as np
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import (
-    CombineZernikesSigmaClipTaskConfig,
     CombineZernikesSigmaClipTask,
+    CombineZernikesSigmaClipTaskConfig,
 )
 
 

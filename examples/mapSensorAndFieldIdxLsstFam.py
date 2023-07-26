@@ -20,11 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 
+import numpy as np
 from lsst.ts.wep.utility import getModulePath
 from mapSensorAndFieldIdx import getMappingFromFieldXY
-
 
 if __name__ == "__main__":
     # Set the 189 field points

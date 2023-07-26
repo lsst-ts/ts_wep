@@ -20,22 +20,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import pytest
 import tempfile
-import pandas as pd
 
 import lsst.utils.tests
+import pandas as pd
+import pytest
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
 )
 from lsst.ts.wep.utility import (
+    DefocalType,
     getModulePath,
     runProgram,
-    DefocalType,
-    writePipetaskCmd,
     writeCleanUpRepoCmd,
+    writePipetaskCmd,
 )
 
 

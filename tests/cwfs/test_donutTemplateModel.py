@@ -20,10 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-import numpy as np
 
+import numpy as np
 from lsst.ts.wep.cwfs.donutTemplateModel import DonutTemplateModel
-from lsst.ts.wep.utility import DefocalType, CamType
+from lsst.ts.wep.utility import CamType, DefocalType
 
 
 class TestTemplateModel(unittest.TestCase):

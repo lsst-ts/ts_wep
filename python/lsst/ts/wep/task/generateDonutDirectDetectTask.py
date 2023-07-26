@@ -25,22 +25,22 @@ __all__ = [
     "GenerateDonutDirectDetectTask",
 ]
 
-import numpy as np
-import pandas as pd
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-from lsst.utils.timer import timeMethod
+import numpy as np
+import pandas as pd
 from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
+from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.utility import (
     DefocalType,
     DonutTemplateType,
-    getCamTypeFromButlerName,
     createInstDictFromConfig,
+    getCamTypeFromButlerName,
 )
-from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
-from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
+from lsst.utils.timer import timeMethod
 
 
 class GenerateDonutDirectDetectTaskConnections(

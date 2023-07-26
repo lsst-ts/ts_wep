@@ -21,12 +21,13 @@
 
 __all__ = ["CentroidConvolveTemplate"]
 
-import numpy as np
 from copy import copy
+
+import numpy as np
 from lsst.ts.wep.cwfs.centroidDefault import CentroidDefault
 from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
 from scipy.signal import correlate
-from sklearn.cluster import KMeans, DBSCAN
+from sklearn.cluster import DBSCAN, KMeans
 
 
 class CentroidConvolveTemplate(CentroidDefault):

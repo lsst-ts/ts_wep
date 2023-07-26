@@ -21,9 +21,8 @@
 
 __all__ = ["CentroidOtsu"]
 
-from skimage.filters import threshold_otsu
-
 from lsst.ts.wep.cwfs.centroidDefault import CentroidDefault
+from skimage.filters import threshold_otsu
 
 
 class CentroidOtsu(CentroidDefault):

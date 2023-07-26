@@ -20,9 +20,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 import unittest
 
+import numpy as np
 from lsst.ts.wep.cwfs.centroidOtsu import CentroidOtsu
 from lsst.ts.wep.utility import getModulePath
 

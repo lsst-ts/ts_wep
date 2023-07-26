@@ -22,24 +22,23 @@
 __all__ = ["CalcZernikesTaskConnections", "CalcZernikesTaskConfig", "CalcZernikesTask"]
 
 import os
-import numpy as np
 
-import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+import numpy as np
 from lsst.pipe.base import connectionTypes
-from lsst.utils.timer import timeMethod
-
+from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.wfEstimator import WfEstimator
 from lsst.ts.wep.utility import (
-    getConfigDir,
     DefocalType,
-    getCamTypeFromButlerName,
-    getFilterTypeFromBandLabel,
     createInstDictFromConfig,
+    getCamTypeFromButlerName,
+    getConfigDir,
+    getFilterTypeFromBandLabel,
     rotMatrix,
 )
-from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.wfEstimator import WfEstimator
+from lsst.utils.timer import timeMethod
 from scipy.ndimage import rotate
 
 

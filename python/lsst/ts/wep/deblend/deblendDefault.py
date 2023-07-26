@@ -22,9 +22,8 @@
 __all__ = ["DeblendDefault"]
 
 import numpy as np
-
-from lsst.ts.wep.utility import CentroidFindType
 from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
+from lsst.ts.wep.utility import CentroidFindType
 
 
 class DeblendDefault(object):

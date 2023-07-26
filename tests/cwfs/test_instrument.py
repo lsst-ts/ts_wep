@@ -20,11 +20,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import numpy as np
 import unittest
 
+import numpy as np
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.utility import getConfigDir, CamType, getModulePath
+from lsst.ts.wep.utility import CamType, getConfigDir, getModulePath
 
 
 class TestInstrument(unittest.TestCase):

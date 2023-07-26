@@ -21,18 +21,18 @@
 
 import os
 import unittest
+
+import astropy.units as u
 import numpy as np
 import pandas as pd
-import astropy.units as u
-
 from lsst.daf import butler as dafButler
 from lsst.pex.config import FieldValidationError
-from lsst.ts.wep.utility import getModulePath, getConfigDir
 from lsst.ts.wep.paramReader import ParamReader
 from lsst.ts.wep.task.donutSourceSelectorTask import (
     DonutSourceSelectorTask,
     DonutSourceSelectorTaskConfig,
 )
+from lsst.ts.wep.utility import getConfigDir, getModulePath
 
 
 class TestDonutSourceSelectorTask(unittest.TestCase):

@@ -21,11 +21,11 @@
 
 import os
 import time
-import numpy as np
 import unittest
 
+import numpy as np
 from lsst.ts.wep.cwfs.baseCwfsTestCase import BaseCwfsTestCase
-from lsst.ts.wep.utility import getModulePath, CamType, CentroidFindType
+from lsst.ts.wep.utility import CamType, CentroidFindType, getModulePath
 
 
 class TestWepWithMultiImgs(BaseCwfsTestCase, unittest.TestCase):

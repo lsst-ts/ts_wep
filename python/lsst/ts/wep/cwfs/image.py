@@ -22,12 +22,12 @@
 __all__ = ["Image"]
 
 import os
-import numpy as np
-from astropy.io import fits
 import warnings
 
-from lsst.ts.wep.utility import CentroidFindType
+import numpy as np
+from astropy.io import fits
 from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
+from lsst.ts.wep.utility import CentroidFindType
 
 
 class Image(object):
