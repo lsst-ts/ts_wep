@@ -178,20 +178,14 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         shiftedCatalog = shiftedOutput.donutCatalog
 
         # Get the shifts out of the new WCS
-        fitRa = fitWcs.getSkyOrigin().getRa().asArcseconds()
-        shiftedRa = shiftedWcs.getSkyOrigin().getRa().asArcseconds()
-        raPixelShift = (fitRa - shiftedRa) / shiftedWcs.getPixelScale().asArcseconds()
-
-        fitDec = fitWcs.getSkyOrigin().getDec().asArcseconds()
-        shiftedDec = shiftedWcs.getSkyOrigin().getDec().asArcseconds()
-        decPixelShift = (
-            fitDec - shiftedDec
-        ) / shiftedWcs.getPixelScale().asArcseconds()
+        fitPixelOrigin = np.array(fitWcs.getPixelOrigin())
+        shiftedPixelOrigin = np.array(shiftedWcs.getPixelOrigin())
+        pixelShift = fitPixelOrigin - shiftedPixelOrigin
 
         # Test the fit WCS shifts against the input
         self.assertAlmostEqual(
             truePixelShift * np.sqrt(2),
-            np.sqrt(raPixelShift**2.0 + decPixelShift**2.0),
+            np.sqrt(np.sum(pixelShift**2.0)),
             delta=1e-3,
         )
 
@@ -281,13 +275,11 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         fitCatalog = fitWcsOutput.donutCatalog
 
         # Test that WCS is different
-        self.assertNotAlmostEqual(
-            fitWcs.getSkyOrigin().getRa().asDegrees(),
-            preFitExp_S11.wcs.getSkyOrigin().getRa().asDegrees(),
-        )
-        self.assertNotAlmostEqual(
-            fitWcs.getSkyOrigin().getDec().asDegrees(),
-            preFitExp_S11.wcs.getSkyOrigin().getDec().asDegrees(),
+        self.assertFalse(
+            np.array_equal(
+                np.array(fitWcs.getPixelOrigin()),
+                np.array(preFitExp_S11.wcs.getPixelOrigin()),
+            )
         )
         # But that catalog is the same
         np.testing.assert_array_equal(
