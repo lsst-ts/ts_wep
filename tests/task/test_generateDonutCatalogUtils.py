@@ -192,11 +192,11 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         fieldObjectsBlends.at[1, "blend_centroid_x"].append(5)
         fieldObjectsBlends.at[1, "blend_centroid_y"].append(3)
-        np.testing.assert_array_equal(
-            fieldObjectsBlends["blend_centroid_x"], [[], [5], [], []]
+        self.assertListEqual(
+            fieldObjectsBlends["blend_centroid_x"].values.tolist(), [[], [5], [], []]
         )
-        np.testing.assert_array_equal(
-            fieldObjectsBlends["blend_centroid_y"], [[], [3], [], []]
+        self.assertListEqual(
+            fieldObjectsBlends["blend_centroid_y"].values.tolist(), [[], [3], [], []]
         )
 
     def testDonutCatalogToDataFrameWithBlendCenters(self):
@@ -208,10 +208,10 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         fieldObjects = donutCatalogToDataFrame(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
-        np.testing.assert_array_equal(
+        self.assertListEqual(
             list(fieldObjects["blend_centroid_x"]), [list()] * len(donutCatSmall)
         )
-        np.testing.assert_array_equal(
+        self.assertListEqual(
             list(fieldObjects["blend_centroid_y"]), [list()] * len(donutCatSmall)
         )
 
@@ -228,11 +228,11 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         fieldObjectsOneBlend = donutCatalogToDataFrame(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
-        np.testing.assert_array_equal(
+        self.assertListEqual(
             list(fieldObjectsOneBlend["blend_centroid_x"]),
             [[blendValsX[0]], [], [], []],
         )
-        np.testing.assert_array_equal(
+        self.assertListEqual(
             list(fieldObjectsOneBlend["blend_centroid_y"]),
             [[blendValsY[0]], [], [], []],
         )
@@ -242,11 +242,11 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         fieldObjectsTwoBlends = donutCatalogToDataFrame(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
-        np.testing.assert_array_equal(
+        self.assertListEqual(
             list(fieldObjectsTwoBlends["blend_centroid_x"]),
             [[blendValsX[0]], [], [blendValsX[1]], []],
         )
-        np.testing.assert_array_equal(
+        self.assertListEqual(
             list(fieldObjectsTwoBlends["blend_centroid_y"]),
             [[blendValsY[0]], [], [blendValsY[1]], []],
         )

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.6:
+
+-------------
+6.4.6
+-------------
+
+* Fix tests that failed due to changes in numpy testing methods and WCS output.
+
 .. _lsst.ts.wep-6.4.5:
 
 -------------
