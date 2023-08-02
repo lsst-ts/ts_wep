@@ -5,6 +5,13 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-6.4.7:
+
+-------------
+6.4.7
+-------------
+
+* Set default optical model for comCam to onAxis.
 
 .. _lsst.ts.wep-6.4.6:
 
