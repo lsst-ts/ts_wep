@@ -16,6 +16,8 @@ tasks:
       instDefocalOffset: 1.5225
       # Camera pixel size in m
       instPixelSize: 10.0e-6
+      # Set the optical model for comCam
+      opticalModel: 'onAxis'
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -30,3 +32,5 @@ tasks:
       instDefocalOffset: 1.5225
       # Camera pixel size in m
       instPixelSize: 10.0e-6
+      # Set the optical model for comCam
+      opticalModel: 'onAxis'
