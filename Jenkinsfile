@@ -57,7 +57,7 @@ pipeline {
                             SCM_BRANCH = env.CHANGE_BRANCH
                         }
                     }
-                    checkout scmGit(branches: [[name: "refs/heads/${SCM_BRANCH}"]], extensions: [lfs()], userRemoteConfigs: [[credentialsId: '14e4c262-1fb1-4b73-b395-5fe617420c85', url: 'https://github.com/lsst-ts/ts_wep.git']])
+                    checkout scm
                 }
             }
         }
@@ -71,6 +71,9 @@ pipeline {
                     sh """
                         source ${env.LSST_STACK}/loadLSST.bash
                         cd ts_wep/
+                        git lfs install || echo  git lfs install FAILED
+                        git lfs fetch --all || echo git lfs fetch FAILED
+                        git lfs checkout || echo git lfs checkout FAILED
                         setup -k -r .
                         scons python
                     """
