@@ -23,7 +23,6 @@ import os
 import unittest
 
 import lsst.geom
-import numpy as np
 import pandas as pd
 from lsst.daf import butler as dafButler
 from lsst.meas.algorithms import ReferenceObjectLoader
