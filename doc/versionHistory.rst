@@ -5,6 +5,17 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-6.4.8:
+
+-------------
+6.4.8
+-------------
+
+* Add github actions to check version history was updated and linting.
+* Fix black and flake8 violations.
+* Fix Jenkinfile.
+
 .. _lsst.ts.wep-6.4.7:
 
 -------------
