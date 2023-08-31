@@ -5,6 +5,7 @@
 setupRequired(sconsUtils)
 setupRequired(utils)
 setupRequired(obs_lsst)
+setupRequired(fgcmcal)
 setupRequired(afw)
 setupRequired(ctrl_mpexec)
 setupRequired(cp_pipe)

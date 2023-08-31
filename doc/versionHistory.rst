@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.9:
+
+-------------
+6.4.9
+-------------
+
+* Replacing lookUpCalibrations function to use the one in lsst.fgcmcal.utilities
+
 .. _lsst.ts.wep-6.4.8:
 
 -------------
