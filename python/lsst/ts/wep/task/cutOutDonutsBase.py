@@ -29,8 +29,8 @@ import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-from lsst.cp.pipe._lookupStaticCalibration import lookupStaticCalibration
 from lsst.daf.base import PropertyList
+from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.cwfs.instrument import Instrument
@@ -72,7 +72,7 @@ class CutOutDonutsBaseTaskConnections(
         doc="Input camera to construct complete exposures.",
         dimensions=["instrument"],
         isCalibration=True,
-        lookupFunction=lookupStaticCalibration,
+        lookupFunction=lookupStaticCalibrations,
     )
     donutStampsExtra = connectionTypes.Output(
         doc="Extra-focal Donut Postage Stamp Images",
