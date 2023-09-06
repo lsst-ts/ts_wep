@@ -31,9 +31,29 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      donutTemplateSize: 200
-      removeBlends: True
+      # Obscuration (inner_radius / outer_radius of primary mirror)
+      instObscuration: 0.3525
+      # Focal length in m
+      instFocalLength: 21.6
+      # Aperture diameter in m
+      instApertureDiameter: 1.2
+      # Move the M2 to fake the move of focal plane dz
+      # Move the M2 by 0.8 mm = move the focal plane by 32.8 mm  (magnification of 41)
+      # Defocal distance offset in mm
+      instDefocalOffset: 32.8
+      # Camera pixel size in m
+      instPixelSize: 10.0e-6
+      # Set the optical model for LATISS
       opticalModel: 'onAxis'
+      # Set configuration for donutSelector. The customMagLimit
+      # must be used because otherwise magnitude limits
+      # are checked in policy/task/magLimitStar.yaml file,
+      # and auxTel filter names tend to fluctuate (currently 'white',
+      # but several other have been observed due to rapid development)
+      donutSelector.useCustomMagLimit: True
+      donutSelector.magMin: 4.
+      donutSelector.magMax: 15.
+      donutSelector.sourceLimit: 1
   cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
