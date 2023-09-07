@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.10:
+
+-------------
+6.4.10
+-------------
+
+* Update calcZernikesLatissPipeline yaml with instrument-specific setup for generateDonutDirectDetectTask.
+
 .. _lsst.ts.wep-6.4.9:
 
 -------------
