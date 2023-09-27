@@ -34,7 +34,7 @@ from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     DefocalType,
     DonutTemplateType,
     createInstDictFromConfig,

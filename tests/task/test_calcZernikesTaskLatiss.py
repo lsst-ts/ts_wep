@@ -29,7 +29,7 @@ from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,

@@ -29,7 +29,7 @@ import numpy as np
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     DefocalType,
     createInstDictFromConfig,
     getCamTypeFromButlerName,

@@ -23,7 +23,7 @@ import os
 import unittest
 
 import numpy as np
-from lsst.ts.wep.utility import CamType, DefocalType, getConfigDir, getModulePath
+from lsst.ts.wep.utils import CamType, DefocalType, getConfigDir, getModulePath
 from lsst.ts.wep.wfEstimator import WfEstimator
 
 

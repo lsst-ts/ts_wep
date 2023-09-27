@@ -30,7 +30,7 @@ from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
 )
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,

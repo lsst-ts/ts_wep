@@ -32,7 +32,7 @@ from lsst.ts.wep.task.generateDonutCatalogUtils import (
     donutCatalogToDataFrame,
     runSelection,
 )
-from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.utils import getModulePath
 
 
 class TestGenerateDonutCatalogUtils(unittest.TestCase):

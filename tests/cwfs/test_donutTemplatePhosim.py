@@ -25,7 +25,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.cwfs.donutTemplatePhosim import DonutTemplatePhosim
-from lsst.ts.wep.utility import DefocalType, getModulePath
+from lsst.ts.wep.utils import DefocalType, getModulePath
 
 
 class TestTemplatePhosim(unittest.TestCase):

@@ -27,7 +27,7 @@ from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.image import Image
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     CamType,
     DefocalType,
     FilterType,

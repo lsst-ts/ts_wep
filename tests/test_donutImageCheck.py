@@ -24,7 +24,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
-from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.utils import getModulePath
 
 
 class TestDonutImageCheck(unittest.TestCase):

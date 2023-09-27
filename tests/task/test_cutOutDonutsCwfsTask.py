@@ -27,7 +27,7 @@ from lsst.ts.wep.task.cutOutDonutsCwfsTask import (
     CutOutDonutsCwfsTask,
     CutOutDonutsCwfsTaskConfig,
 )
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     DefocalType,
     getModulePath,
     runProgram,

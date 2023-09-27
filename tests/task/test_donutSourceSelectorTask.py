@@ -32,7 +32,7 @@ from lsst.ts.wep.task.donutSourceSelectorTask import (
     DonutSourceSelectorTask,
     DonutSourceSelectorTaskConfig,
 )
-from lsst.ts.wep.utility import getConfigDir, getModulePath
+from lsst.ts.wep.utils import getConfigDir, getModulePath
 
 
 class TestDonutSourceSelectorTask(unittest.TestCase):

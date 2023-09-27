@@ -27,7 +27,7 @@ import numpy as np
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.donutTemplateDefault import DonutTemplateDefault
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.utility import CamType, FilterType, getConfigDir, readPhoSimSettingData
+from lsst.ts.wep.utils import CamType, FilterType, getConfigDir, readPhoSimSettingData
 
 
 class DonutTemplateModel(DonutTemplateDefault):
