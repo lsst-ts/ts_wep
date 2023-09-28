@@ -32,10 +32,10 @@ import numpy as np
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.pipe.base import connectionTypes
-from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
-from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.templates import DonutTemplateFactory
 from lsst.ts.wep.utils import (
     DonutTemplateType,
     createInstDictFromConfig,

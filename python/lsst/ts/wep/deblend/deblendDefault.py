@@ -22,7 +22,7 @@
 __all__ = ["DeblendDefault"]
 
 import numpy as np
-from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
+from lsst.ts.wep.centroid import CentroidFindFactory
 from lsst.ts.wep.utils import CentroidFindType
 
 

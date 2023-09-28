@@ -31,7 +31,7 @@ import lsst.obs.lsst as obs_lsst
 import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.stamps import AbstractStamp
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+from lsst.ts.wep.estimation import CompensableImage
 from lsst.ts.wep.utils import DefocalType, FilterType, getFilterTypeFromBandLabel
 
 

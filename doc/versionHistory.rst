@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.0.0:
+
+-------------
+8.0.0
+-------------
+
+* Split the ``cwfs`` modules into ``centroid``, ``templates``, and ``estimation``.
+
 .. _lsst.ts.wep-7.0.0:
 
 -------------

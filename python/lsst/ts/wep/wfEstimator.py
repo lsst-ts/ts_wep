@@ -21,9 +21,8 @@
 
 __all__ = ["WfEstimator"]
 
-from lsst.ts.wep.cwfs.algorithm import Algorithm
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
-from lsst.ts.wep.cwfs.instrument import Instrument
+from lsst.ts.wep.estimation import Algorithm, CompensableImage
+from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils import CamType, CentroidFindType, DefocalType, FilterType
 
 
