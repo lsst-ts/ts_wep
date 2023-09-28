@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+from copy import copy
 
 import lsst.utils.tests
 import pandas as pd
@@ -200,7 +201,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra],
+            [copy(exposureIntra), copy(exposureExtra)],
             [donutCatalogExtra, donutCatalogIntra],
             camera,
         )

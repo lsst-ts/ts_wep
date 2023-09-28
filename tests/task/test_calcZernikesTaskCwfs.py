@@ -23,6 +23,7 @@ import os
 
 import lsst.utils.tests
 import numpy as np
+from scipy.ndimage import rotate
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
@@ -149,9 +150,13 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         donutStampsExtra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
         )
+        for stamp in donutStampsExtra:
+            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, 90).T
         donutStampsIntra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
         )
+        for stamp in donutStampsIntra:
+            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, -90).T
         zernCoeffAllR04 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
         zernCoeffAvgR04 = self.task.combineZernikes.run(
             zernCoeffAllR04
@@ -189,9 +194,13 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         donutStampsExtra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R40_SW0_donutStamps.fits")
         )
+        for stamp in donutStampsExtra:
+            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, -90).T
         donutStampsIntra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R40_SW1_donutStamps.fits")
         )
+        for stamp in donutStampsIntra:
+            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, 90).T
         zernCoeffAllR40 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
         zernCoeffAvgR40 = self.task.combineZernikes.run(
             zernCoeffAllR40

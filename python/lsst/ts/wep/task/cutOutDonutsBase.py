@@ -28,6 +28,7 @@ __all__ = [
 import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
+import lsst.obs.lsst as obs_lsst
 import numpy as np
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
@@ -40,8 +41,9 @@ from lsst.ts.wep.utils import (
     DonutTemplateType,
     createInstDictFromConfig,
     getCamTypeFromButlerName,
+    getCameraFromButlerName,
 )
-from scipy.ndimage import binary_dilation, shift
+from scipy.ndimage import binary_dilation, shift, rotate
 from scipy.signal import correlate
 
 
@@ -146,7 +148,6 @@ class CutOutDonutsBaseTaskConfig(
         dtype=int,
         default=6,
     )
-
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
     """
@@ -478,6 +479,17 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             else:
                 blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
 
+            camera = getCameraFromButlerName(cameraName)
+            detectorInfo = camera.get(detectorName)
+
+            # Rotate any sensors that are not lined up with the focal plane.
+            # Mostly just for the corner wavefront sensors. The negative sign
+            # creates the correct rotation based upon closed loop tests
+            # with R04 and R40 corner sensors.
+            eulerZ = -detectorInfo.getOrientation().getYaw().asDegrees()
+
+            finalStamp.image.array = rotate(finalStamp.image.array, eulerZ)
+
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
                 sky_position=lsst.geom.SpherePoint(
@@ -499,7 +511,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             donutStamp.makeMasks(
                 inst, self.opticalModel, boundaryT, maskScalingFactorLocal
             )
-            donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             # Create shifted mask from non-blended mask
             if (self.multiplyMask is True) and blendExists:
@@ -521,6 +532,13 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 shiftedMask[shiftedMask == 0] += 2
                 shiftedMask -= 1
                 donutStamp.stamp_im.image.array *= shiftedMask
+
+            # NOTE: TS_WEP expects these images to be transposed
+            # TODO: Look into this
+            if self.transposeImages:
+                donutStamp.stamp_im.image.array = donutStamp.stamp_im.image.array.T
+                donutStamp.mask_comp.array = donutStamp.mask_comp.array.T
+            donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             finalStamps.append(donutStamp)
 

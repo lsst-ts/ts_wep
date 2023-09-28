@@ -39,7 +39,6 @@ from lsst.ts.wep.utils import (
 )
 from lsst.ts.wep.wfEstimator import WfEstimator
 from lsst.utils.timer import timeMethod
-from scipy.ndimage import rotate
 
 
 class CalcZernikesTaskConnections(
@@ -110,13 +109,6 @@ class CalcZernikesTaskConfig(
     instPixelSize = pexConfig.Field(
         doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
-    transposeImages = pexConfig.Field(
-        doc="Specify whether to transpose the intra- and extra-focal images. \
-        (The default is to do the transpose).",
-        dtype=bool,
-        default=True,
-        optional=True,
-    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask):
@@ -135,8 +127,6 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         # for the detector.
         self.combineZernikes = self.config.combineZernikes
         self.makeSubtask("combineZernikes")
-        # Specify whether to transpose images
-        self.transposeImages = self.config.transposeImages
         # Specify optical model
         self.opticalModel = self.config.opticalModel
         # Set up instrument configuration dict
@@ -239,33 +229,18 @@ class CalcZernikesTask(pipeBase.PipelineTask):
             blendOffsetsExtra = self.calcBlendOffsets(donutExtra, eulerZExtra)
             blendOffsetsIntra = self.calcBlendOffsets(donutIntra, eulerZIntra)
 
-            if self.transposeImages:
-                imageExtra = rotate(
-                    donutExtra.stamp_im.getImage().getArray(), eulerZExtra
-                ).T
-                imageIntra = rotate(
-                    donutIntra.stamp_im.getImage().getArray(), eulerZIntra
-                ).T
-            else:
-                imageExtra = rotate(
-                    donutExtra.stamp_im.getImage().getArray(), eulerZExtra
-                )
-                imageIntra = rotate(
-                    donutIntra.stamp_im.getImage().getArray(), eulerZIntra
-                )
-
             wfEsti.setImg(
                 fieldXYExtra,
                 DefocalType.Extra,
                 filterLabel=getFilterTypeFromBandLabel(donutExtra.bandpass),
-                image=imageExtra,
+                image=donutExtra.stamp_im.image.array,
                 blendOffsets=blendOffsetsExtra.tolist(),
             )
             wfEsti.setImg(
                 fieldXYIntra,
                 DefocalType.Intra,
                 filterLabel=getFilterTypeFromBandLabel(donutIntra.bandpass),
-                image=imageIntra,
+                image=donutIntra.stamp_im.image.array,
                 blendOffsets=blendOffsetsIntra.tolist(),
             )
             wfEsti.reset()
