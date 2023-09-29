@@ -361,3 +361,104 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertTrue(
             wcsTaskMetadata["generateDonutFromRefitWcsTask"]["refCatalogSuccess"]
         )
+
+    def testFormatDonutCatalog(self):
+        """Test the formatDonutCatalog function that creates
+        an intermediate afwTable from donut catalog."""
+
+        # create a test donut catalog
+        catalogDic = {
+            "coord_ra": [6.28, 6.30],
+            "coord_dec": [-0.01, 0.01],
+            "centroid_x": [500, 1000],
+            "centroid_y": [600, 800],
+            "detector": ["R22_S11", "R22_S11"],
+            "source_flux": [3.44e6, 3.36e5],
+        }
+        # one catalog without coordinate error
+        catalogNoErr = pandas.DataFrame(catalogDic)
+
+        # one catalog with coordinate error
+        catalogDicErr = copy(catalogDic)
+        catalogDicErr["coord_raErr"] = [0.01, 0.02]
+        catalogDicErr["coord_decErr"] = [0.03, 0.04]
+        catalogWithErr = pandas.DataFrame(catalogDicErr)
+
+        # Create an afwTable
+        # from donut catalog without coordinate error present
+        aft1 = self.task.formatDonutCatalog(catalogNoErr)
+        aft1_table = aft1.asAstropy()
+
+        # from donut catalog with coordinate error present
+        aft2 = self.task.formatDonutCatalog(catalogWithErr)
+        aft2_table = aft2.asAstropy()
+
+        for c in ["ra", "dec"]:
+            # check that before there is no error column
+            # in the first catalog
+            self.assertNotIn(f"coord_{c}Err", catalogNoErr.columns)
+
+            # check that there is an error column
+            # in the second catalog
+            self.assertIn(f"coord_{c}Err", catalogWithErr.columns)
+
+            # first, ensure that the coordinate values were
+            # inherited from the original columns
+            # this is true for both donut catalog
+            # with or without coordinate error present
+            np.testing.assert_array_almost_equal(
+                catalogNoErr[f"coord_{c}"], aft1_table[f"coord_{c}"].data
+            )
+            np.testing.assert_array_almost_equal(
+                catalogWithErr[f"coord_{c}"], aft2_table[f"coord_{c}"].data
+            )
+
+            # second, ensure that the coordinate error
+            # values were correctly calculated
+            # In the first case, the calculated error
+            # should be at least
+            # less than 5% of the coordinate value
+            f = 0.05  # set percentage of coord_ra, coord_dec
+            np.testing.assert_array_less(
+                aft1_table[f"coord_{c}Err"].data,
+                f * np.abs(catalogNoErr[f"coord_{c}"].values),
+            )
+
+            # In the second case, the inherited error should
+            # be identical as in the
+            # original donut catalog
+            np.testing.assert_array_almost_equal(
+                catalogWithErr[f"coord_{c}Err"], aft2_table[f"coord_{c}Err"].data
+            )
+
+        # check the values of source_flux  --> slot_ApFlux_instFlux
+        # original donut catalog
+        np.testing.assert_array_almost_equal(
+            catalogNoErr["source_flux"], aft1_table["slot_ApFlux_instFlux"].data
+        )
+        np.testing.assert_array_almost_equal(
+            catalogWithErr["source_flux"], aft2_table["slot_ApFlux_instFlux"].data
+        )
+
+        # check the calculation of the slot_ApFlux_instFluxErr
+        # as 1% of the source_flux
+        f = 0.05
+        np.testing.assert_array_less(
+            aft1_table["slot_ApFlux_instFluxErr"].data,
+            f * np.abs(catalogNoErr["source_flux"].values),
+        )
+
+        np.testing.assert_array_less(
+            aft2_table["slot_ApFlux_instFluxErr"].data,
+            f * np.abs(catalogWithErr["source_flux"].values),
+        )
+
+        # check that indeed centroid_x, centroid_y translate to
+        # slot_Centroid_x , slot_Centroid_y
+        for c in ["x", "y"]:
+            np.testing.assert_array_almost_equal(
+                catalogNoErr[f"centroid_{c}"], aft1_table[f"slot_Centroid_{c}"].data
+            )
+            np.testing.assert_array_almost_equal(
+                catalogWithErr[f"centroid_{c}"], aft2_table[f"slot_Centroid_{c}"].data
+            )
