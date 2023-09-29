@@ -440,7 +440,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             )
             xCornerList.append(xCorner)
             yCornerList.append(yCorner)
-            finalCutout = exposure[finalBBox]
+            finalCutout = exposure[finalBBox].clone()
 
             # Save MaskedImage to stamp
             finalStamp = finalCutout.getMaskedImage()
@@ -478,17 +478,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 blendExists = True
             else:
                 blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
-
-            camera = getCameraFromButlerName(cameraName)
-            detectorInfo = camera.get(detectorName)
-
-            # Rotate any sensors that are not lined up with the focal plane.
-            # Mostly just for the corner wavefront sensors. The negative sign
-            # creates the correct rotation based upon closed loop tests
-            # with R04 and R40 corner sensors.
-            eulerZ = -detectorInfo.getOrientation().getYaw().asDegrees()
-
-            finalStamp.image.array = rotate(finalStamp.image.array, eulerZ)
 
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
@@ -533,11 +522,21 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 shiftedMask -= 1
                 donutStamp.stamp_im.image.array *= shiftedMask
 
+            camera = getCameraFromButlerName(cameraName)
+            detectorInfo = camera.get(detectorName)
+
+            # Rotate any sensors that are not lined up with the focal plane.
+            # Mostly just for the corner wavefront sensors. The negative sign
+            # creates the correct rotation based upon closed loop tests
+            # with R04 and R40 corner sensors.
+            eulerZ = -detectorInfo.getOrientation().getYaw().asDegrees()
+            donutStamp.stamp_im.image.array = rotate(donutStamp.stamp_im.image.array, eulerZ)
+
             # NOTE: TS_WEP expects these images to be transposed
             # TODO: Look into this
-            if self.transposeImages:
-                donutStamp.stamp_im.image.array = donutStamp.stamp_im.image.array.T
-                donutStamp.mask_comp.array = donutStamp.mask_comp.array.T
+            # if self.transposeImages:
+            #     finalStamp.image.array = finalStamp.image.array.T
+
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             finalStamps.append(donutStamp)

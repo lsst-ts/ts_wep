@@ -224,23 +224,24 @@ class CalcZernikesTask(pipeBase.PipelineTask):
             eulerZExtra = -detectorExtra.getOrientation().getYaw().asDegrees()
             eulerZIntra = -detectorIntra.getOrientation().getYaw().asDegrees()
 
-            # NOTE: TS_WEP expects these images to be transposed
-            # TODO: Look into this
             blendOffsetsExtra = self.calcBlendOffsets(donutExtra, eulerZExtra)
             blendOffsetsIntra = self.calcBlendOffsets(donutIntra, eulerZIntra)
 
+            # Transform image and coordinates from DVCS
+            # (Data Visualization Coordinate System)
+            # to ZCS (Zemax Coordinate System).
             wfEsti.setImg(
-                fieldXYExtra,
+                np.array([-fieldXYExtra[1], fieldXYExtra[0]]),
                 DefocalType.Extra,
                 filterLabel=getFilterTypeFromBandLabel(donutExtra.bandpass),
-                image=donutExtra.stamp_im.image.array,
+                image=np.fliplr(donutExtra.stamp_im.image.array.T),
                 blendOffsets=blendOffsetsExtra.tolist(),
             )
             wfEsti.setImg(
-                fieldXYIntra,
+                np.array([-fieldXYIntra[1], fieldXYIntra[0]]),
                 DefocalType.Intra,
                 filterLabel=getFilterTypeFromBandLabel(donutIntra.bandpass),
-                image=donutIntra.stamp_im.image.array,
+                image=np.fliplr(donutIntra.stamp_im.image.array.T),
                 blendOffsets=blendOffsetsIntra.tolist(),
             )
             wfEsti.reset()
