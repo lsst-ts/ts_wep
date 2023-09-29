@@ -178,6 +178,19 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
         sourceSchema = afwTable.SourceTable.makeMinimalSchema()
         measBase.SingleFrameMeasurementTask(schema=sourceSchema)  # expand the schema
+        # add coord_raErr,  coord_decErr to the schema
+        sourceSchema.addField(
+            afwTable.Field["F"](
+                name="coord_raErr", doc="position err in ra", units="rad"
+            ),
+        )
+        sourceSchema.addField(
+            afwTable.Field["F"](
+                name="coord_decErr", doc="position err in dec", units="rad"
+            ),
+        )
+
+        # create a catalog with that schema
         sourceCat = afwTable.SourceCatalog(sourceSchema)
 
         sourceCentroidKey = afwTable.Point2DKey(sourceSchema["slot_Centroid"])
@@ -186,6 +199,19 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         sourceDecKey = sourceSchema["coord_dec"].asKey()
         sourceInstFluxKey = sourceSchema["slot_ApFlux_instFlux"].asKey()
         sourceInstFluxErrKey = sourceSchema["slot_ApFlux_instFluxErr"].asKey()
+        sourceRaErrKey = sourceSchema["coord_raErr"].asKey()
+        sourceDecErrKey = sourceSchema["coord_decErr"].asKey()
+
+        # decide if error needs to be computed based on the
+        # value of coord_ra, coord_dec, or can we use
+        # existing columns
+        colnames = list(catalog.columns)
+        make_new_raErr = True
+        make_new_decErr = True
+        if "coord_raErr" in colnames:
+            make_new_raErr = False
+        if "coord_decErr" in colnames:
+            make_new_decErr = False
 
         Nrows = len(catalog)
         sourceCat.reserve(Nrows)
@@ -201,6 +227,27 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             dec = lsst.geom.Angle(catalog["coord_dec"].iloc[i], lsst.geom.radians)
             src.set(sourceDecKey, dec)
 
+            # set raErr, decErr
+            if make_new_raErr:
+                # set default 1% for raErr
+                raErr = abs(ra) * 0.01
+            else:
+                # use the existing coord_raErr column
+                raErr = lsst.geom.Angle(
+                    catalog["coord_raErr"].iloc[i], lsst.geom.radians
+                )
+            src.set(sourceRaErrKey, raErr)
+
+            if make_new_decErr:
+                # set default 1% for raErr
+                decErr = abs(dec) * 0.01
+            else:
+                # use the existing coord_decErr column
+                decErr = lsst.geom.Angle(
+                    catalog["coord_decErr"].iloc[i], lsst.geom.radians
+                )
+            src.set(sourceDecErrKey, decErr)
+
             # set the x,y centroid
             x = catalog["centroid_x"].iloc[i]
             y = catalog["centroid_y"].iloc[i]
@@ -211,7 +258,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             flux = catalog["source_flux"].iloc[i]
             src.set(sourceInstFluxKey, flux)
 
-            fluxErr = flux / 100.0
+            fluxErr = abs(flux / 100.0)  # ensure positive error
             src.set(sourceInstFluxErrKey, fluxErr)
 
         return sourceCat
@@ -264,7 +311,8 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             exposure.setWcs(originalWcs)
             donutCatalog = fitDonutCatalog
             self.log.warning(
-                "Returning original exposure and WCS and direct detect catalog as output."
+                "Returning original exposure and WCS \
+and direct detect catalog as output."
             )
 
         self.metadata["refCatalogSuccess"] = False
@@ -301,7 +349,8 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 self.log.warning("No catalogs cover this detector.")
                 donutCatalog = fitDonutCatalog
                 self.log.warning(
-                    "Returning new WCS but original direct detect catalog as donutCatalog."
+                    "Returning new WCS but original direct \
+detect catalog as donutCatalog."
                 )
 
         return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)

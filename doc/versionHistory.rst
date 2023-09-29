@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-6.4.11:
+
+-------------
+6.4.11
+-------------
+
+* Fix GenerateDonutFromRefitWcsTask adding coord_raErr, coord_decErr fields.
+
 .. _lsst.ts.wep-6.4.10:
 
 -------------
