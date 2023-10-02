@@ -5,6 +5,13 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-6.4.12:
+
+-------------
+6.4.12
+-------------
+
+* Update  ts_pre_commit_config with ruff.
 
 .. _lsst.ts.wep-6.4.11:
 

@@ -191,6 +191,7 @@ class CentroidConvolveTemplate(CentroidDefault):
         assert ((nDonuts >= 1) | (nDonuts == -1)) & (
             type(nDonuts) is int
         ), nDonutsAssertStr
+        # ruff: noqa
 
         # We set the mode to be "same" because we need to return the same
         # size image to the code.
