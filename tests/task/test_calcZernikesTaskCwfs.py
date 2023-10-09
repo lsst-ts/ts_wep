@@ -23,7 +23,6 @@ import os
 
 import lsst.utils.tests
 import numpy as np
-from scipy.ndimage import rotate
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
@@ -150,38 +149,34 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         donutStampsExtra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
         )
-        for stamp in donutStampsExtra:
-            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, 90).T
         donutStampsIntra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
         )
-        for stamp in donutStampsIntra:
-            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, -90).T
         zernCoeffAllR04 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
         zernCoeffAvgR04 = self.task.combineZernikes.run(
             zernCoeffAllR04
         ).combinedZernikes
         trueZernCoeffR04 = np.array(
             [
-                -0.71201408,
-                1.12248525,
-                0.77794367,
-                -0.04085477,
-                -0.05272933,
-                0.16054277,
-                0.081405,
-                -0.04382461,
-                -0.04830676,
-                -0.06218882,
-                0.10246469,
-                0.0197683,
-                0.007953,
-                0.00668697,
-                -0.03570788,
-                -0.03020376,
-                0.0039522,
-                0.04793133,
-                -0.00804605,
+                -0.35353452,
+                -0.07365128,
+                0.62222451,
+                -0.06206281,
+                -0.09065757,
+                0.21722746,
+                -0.20491936,
+                0.00849322,
+                -0.01150489,
+                0.02599147,
+                -0.00150702,
+                -0.14100845,
+                0.02294787,
+                0.02284791,
+                0.02116483,
+                -0.02537743,
+                0.01866772,
+                0.01653037,
+                -0.00552862,
             ]
         )
         # Make sure the total rms error is less than 0.35 microns off
@@ -194,38 +189,34 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         donutStampsExtra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R40_SW0_donutStamps.fits")
         )
-        for stamp in donutStampsExtra:
-            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, -90).T
         donutStampsIntra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R40_SW1_donutStamps.fits")
         )
-        for stamp in donutStampsIntra:
-            stamp.stamp_im.image.array = rotate(stamp.stamp_im.image.array, 90).T
         zernCoeffAllR40 = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
         zernCoeffAvgR40 = self.task.combineZernikes.run(
             zernCoeffAllR40
         ).combinedZernikes
         trueZernCoeffR40 = np.array(
             [
-                -0.6535694,
-                1.00838499,
-                0.55968811,
-                -0.08899825,
-                0.00173607,
-                0.04133107,
-                -0.10913093,
-                -0.04363778,
-                -0.03149601,
-                -0.04941225,
-                0.09980538,
-                0.03704486,
-                -0.00210766,
-                0.01737253,
-                0.01727539,
-                0.01278011,
-                0.01212878,
-                0.03876888,
-                -0.00559142,
+                -3.83610201e-01,
+                -2.06528254e-01,
+                5.42893431e-01,
+                7.74255848e-02,
+                3.40529812e-02,
+                5.45565149e-02,
+                8.65849308e-02,
+                1.75029212e-02,
+                -1.40149246e-04,
+                4.11223127e-02,
+                -2.42644902e-03,
+                -1.52392233e-01,
+                -1.24547354e-02,
+                -2.33075716e-02,
+                7.35477674e-04,
+                1.93518814e-02,
+                -3.65768735e-03,
+                4.12718699e-02,
+                -6.93386734e-03,
             ]
         )
         # Make sure the total rms error is less than 0.35 microns off

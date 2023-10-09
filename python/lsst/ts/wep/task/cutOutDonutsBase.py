@@ -28,7 +28,6 @@ __all__ = [
 import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-import lsst.obs.lsst as obs_lsst
 import numpy as np
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
@@ -40,10 +39,10 @@ from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
     DonutTemplateType,
     createInstDictFromConfig,
-    getCamTypeFromButlerName,
     getCameraFromButlerName,
+    getCamTypeFromButlerName,
 )
-from scipy.ndimage import binary_dilation, shift, rotate
+from scipy.ndimage import binary_dilation, rotate, shift
 from scipy.signal import correlate
 
 
@@ -148,6 +147,7 @@ class CutOutDonutsBaseTaskConfig(
         dtype=int,
         default=6,
     )
+
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
     """
@@ -525,17 +525,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             camera = getCameraFromButlerName(cameraName)
             detectorInfo = camera.get(detectorName)
 
-            # Rotate any sensors that are not lined up with the focal plane.
-            # Mostly just for the corner wavefront sensors. The negative sign
-            # creates the correct rotation based upon closed loop tests
-            # with R04 and R40 corner sensors.
+            # Rotate sensors to line up with the science sensors in the
+            # focal plane.
             eulerZ = -detectorInfo.getOrientation().getYaw().asDegrees()
-            donutStamp.stamp_im.image.array = rotate(donutStamp.stamp_im.image.array, eulerZ)
-
-            # NOTE: TS_WEP expects these images to be transposed
-            # TODO: Look into this
-            # if self.transposeImages:
-            #     finalStamp.image.array = finalStamp.image.array.T
+            donutStamp.stamp_im.image.array = rotate(
+                donutStamp.stamp_im.image.array, eulerZ
+            )
 
             donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
