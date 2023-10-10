@@ -5,6 +5,14 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-7.0.1:
+
+-------------
+7.0.1
+-------------
+
+* Fix generateDonutDirectDetect when doDonutSelection is not run.
+
 
 .. _lsst.ts.wep-7.0.0:
 
