@@ -24,7 +24,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.deblend.deblendDefault import DeblendDefault
-from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.utils import getModulePath
 
 
 class TestDeblendDefault(unittest.TestCase):

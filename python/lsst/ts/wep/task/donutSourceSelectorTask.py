@@ -32,7 +32,7 @@ import pandas as pd
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.sourceSelector import _getFieldFromCatalog
 from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.utility import getConfigDir
+from lsst.ts.wep.utils import getConfigDir
 from lsst.utils.timer import timeMethod
 from sklearn.neighbors import NearestNeighbors
 

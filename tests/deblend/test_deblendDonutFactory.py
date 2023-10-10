@@ -23,7 +23,7 @@ import unittest
 
 from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
 from lsst.ts.wep.deblend.deblendDonutFactory import DeblendDonutFactory
-from lsst.ts.wep.utility import DeblendDonutType
+from lsst.ts.wep.utils import DeblendDonutType
 
 
 class TestDeblendDonutFactory(unittest.TestCase):

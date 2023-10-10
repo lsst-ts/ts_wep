@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
 from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
-from lsst.ts.wep.utility import CentroidFindType
+from lsst.ts.wep.utils import CentroidFindType
 from scipy.spatial.distance import cdist
 
 

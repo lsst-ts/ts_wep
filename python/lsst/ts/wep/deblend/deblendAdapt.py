@@ -25,7 +25,7 @@ import numpy as np
 from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
 from lsst.ts.wep.deblend.deblendDefault import DeblendDefault
 from lsst.ts.wep.deblend.nelderMeadModify import nelderMeadModify
-from lsst.ts.wep.utility import CentroidFindType
+from lsst.ts.wep.utils import CentroidFindType
 from scipy.ndimage import (
     binary_closing,
     binary_erosion,

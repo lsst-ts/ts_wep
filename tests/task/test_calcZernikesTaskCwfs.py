@@ -28,7 +28,7 @@ from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTask
 from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,

@@ -29,7 +29,7 @@ import numpy as np
 from lsst.daf.base import PropertyList
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utility import DefocalType
+from lsst.ts.wep.utils import DefocalType
 
 
 class TestDonutStamps(lsst.utils.tests.TestCase):

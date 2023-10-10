@@ -29,7 +29,7 @@ from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
 )
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     CamType,
     DefocalType,
     getModulePath,

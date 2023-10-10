@@ -31,7 +31,7 @@ from lsst.daf.base import PropertyList
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
-from lsst.ts.wep.utility import CamType, DefocalType, getConfigDir
+from lsst.ts.wep.utils import CamType, DefocalType, getConfigDir
 
 
 class TestDonutStamp(unittest.TestCase):

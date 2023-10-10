@@ -24,7 +24,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
-from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.utils import getModulePath
 
 
 class TestCentroidRandomWalk(unittest.TestCase):
