@@ -285,6 +285,10 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             donutCatSelected["blend_centroid_x"] = donutSelection.blendCentersX
             donutCatSelected["blend_centroid_y"] = donutSelection.blendCentersY
         else:
+            # if donut selector was not run,
+            # set the required columns to be empty
+            donutDf["blend_centroid_x"] = ""
+            donutDf["blend_centroid_y"] = ""
             donutCatSelected = donutDf
 
         donutCatSelected.rename(
