@@ -25,7 +25,7 @@ from lsst.ts.wep.cwfs.centroidConvolveTemplate import CentroidConvolveTemplate
 from lsst.ts.wep.cwfs.centroidFindFactory import CentroidFindFactory
 from lsst.ts.wep.cwfs.centroidOtsu import CentroidOtsu
 from lsst.ts.wep.cwfs.centroidRandomWalk import CentroidRandomWalk
-from lsst.ts.wep.utility import CentroidFindType
+from lsst.ts.wep.utils import CentroidFindType
 
 
 class TestCentroidFindFactory(unittest.TestCase):

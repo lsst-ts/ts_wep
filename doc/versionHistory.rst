@@ -5,6 +5,15 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-7.0.0:
+
+-------------
+7.0.0
+-------------
+
+* Organize all utility functions inside the ``utils`` module.
+
 .. _lsst.ts.wep-6.4.12:
 
 -------------

@@ -29,8 +29,6 @@ __all__ = [
     "ZernikeEval",
     "ZernikeFit",
     "ZernikeMaskedFit",
-    "padArray",
-    "extractArray",
 ]
 
 import numpy as np
@@ -320,94 +318,3 @@ def ZernikeMaskedFit(s, x, y, numTerms, mask, e):
 
     # Calculate coefficients of normal/ spherical Zernike polynomials
     return ZernikeAnnularFit(s, x, y, numTerms, e)
-
-
-def padArray(inArray, dim):
-    """Extend the boundary of image.
-
-    For example, the input image is 120x120 matrix. This function will create
-    an image such as 140x140 (dim x dim) matrix and put the input image in the
-    center of new image.
-
-    Parameters
-    ----------
-    inArray : numpy.ndarray
-        Input central image.
-    dim : int
-        Dimension of new extended image.
-
-    Returns
-    -------
-    numpy.ndarray
-        Extended image from the dimension of inArray to dim x dim.
-
-    Raises
-    ------
-    Exception
-        Check the dimension of inArray is n by n or not.
-    Exception
-        Check the extending dimension is bigger than the dimension of inArray
-        or not.
-    """
-
-    # Check the conditions
-    m, n = inArray.shape
-    if m != n:
-        raise Exception("padArray: array is not square.")
-
-    if m > dim:
-        raise Exception("padArray: array is larger than dimension.")
-
-    # Extend the boundary of image by creating a bigger matrix and putting the
-    # input image in the center
-    out = np.zeros([dim, dim])
-    ii = int(np.floor((dim - m) / 2))
-
-    # Put the original image in the center of extended image
-    out[ii : ii + m, ii : ii + m] = inArray
-
-    return out
-
-
-def extractArray(inArray, dim):
-    """Extract the central image.
-
-    For example, the input image is a 140x140 matrix. This function will
-    extract the central matrix with the dimension of 120x120 (dim x dim).
-
-    Parameters
-    ----------
-    inArray : numpy.ndarray
-        Input image.
-    dim : int
-        Dimension of extracted image.
-
-    Returns
-    -------
-    numpy.ndarray
-        Extracted central image from the dimension of inArray to dim x dim.
-
-    Raises
-    ------
-    Exception
-        Check the dimension of inArray is n by n or not.
-    Exception
-        Check the extracted dimension is smaller than the dimension of inArray
-        or not.
-    """
-
-    # Check the conditions
-    m, n = inArray.shape
-    if m != n:
-        raise Exception("extractArray: array is not square.")
-
-    if m < dim:
-        raise Exception("extractArray: array is smaller than dimension")
-
-    # Calculate the begining index to extract the central image
-    ii = int(np.floor((m - dim) / 2))
-
-    # Extract the central image
-    out = inArray[ii : ii + dim, ii : ii + dim]
-
-    return out

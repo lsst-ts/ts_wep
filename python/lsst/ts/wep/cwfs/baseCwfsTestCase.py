@@ -27,7 +27,7 @@ import numpy as np
 from lsst.ts.wep.cwfs.algorithm import Algorithm
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.utility import DefocalType, getConfigDir
+from lsst.ts.wep.utils import DefocalType, getConfigDir
 
 
 class BaseCwfsTestCase(object):

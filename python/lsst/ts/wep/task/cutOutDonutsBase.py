@@ -36,7 +36,7 @@ from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.cwfs.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     DonutTemplateType,
     createInstDictFromConfig,
     getCamTypeFromButlerName,

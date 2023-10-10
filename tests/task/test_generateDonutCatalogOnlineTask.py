@@ -31,7 +31,7 @@ from lsst.ts.wep.task.generateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTaskConfig,
 )
 from lsst.ts.wep.task.refCatalogInterface import RefCatalogInterface
-from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.utils import getModulePath
 
 
 class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):

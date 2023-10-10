@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from .utility import *
 
 # This class needs the scons to build the cython code. In the Jenkins test,
 # this will be a problem to import.

@@ -28,14 +28,17 @@ from copy import copy
 import numpy as np
 from galsim.utilities import horner2d
 from lsst.ts.wep.cwfs.image import Image
-from lsst.ts.wep.cwfs.tool import (
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.utils import (
+    CentroidFindType,
+    DefocalType,
+    FilterType,
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
     extractArray,
     padArray,
+    rotMatrix,
 )
-from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.utility import CentroidFindType, DefocalType, FilterType, rotMatrix
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import (
     binary_dilation,

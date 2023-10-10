@@ -35,7 +35,7 @@ from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTaskConnections,
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utility import DefocalType
+from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
 
 

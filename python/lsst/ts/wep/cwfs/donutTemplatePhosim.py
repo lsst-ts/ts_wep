@@ -25,7 +25,7 @@ import os
 
 import numpy as np
 from lsst.ts.wep.cwfs.donutTemplateDefault import DonutTemplateDefault
-from lsst.ts.wep.utility import DefocalType, getConfigDir
+from lsst.ts.wep.utils import DefocalType, getConfigDir
 
 
 class DonutTemplatePhosim(DonutTemplateDefault):

@@ -29,7 +29,7 @@ from lsst.ts.wep.task.generateDonutDirectDetectTask import (
     GenerateDonutDirectDetectTask,
     GenerateDonutDirectDetectTaskConfig,
 )
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,

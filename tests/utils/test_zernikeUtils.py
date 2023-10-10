@@ -24,22 +24,20 @@ import unittest
 
 import numpy as np
 from astropy.io import fits
-from lsst.ts.wep.cwfs.tool import (
+from lsst.ts.wep.utils import (
     ZernikeAnnularEval,
     ZernikeAnnularFit,
     ZernikeAnnularGrad,
     ZernikeAnnularJacobian,
     ZernikeMaskedFit,
-    extractArray,
-    padArray,
+    getModulePath,
 )
-from lsst.ts.wep.utility import getModulePath
 from lsst.utils.tests import TestCase
 from scipy.integrate import nquad
 
 
-class TestTool(TestCase):
-    """Test the functions in Tool."""
+class TestZernikeUtils(TestCase):
+    """Test the Zernike utility functions."""
 
     def setUp(self):
         self.testDataDir = os.path.join(
@@ -221,29 +219,6 @@ class TestTool(TestCase):
         zr = ZernikeMaskedFit(surface, xx, yy, nc, mask, e)
 
         self.assertLess(np.sum(np.abs(zr - self.zerCoef[0:nc]) ** 2), 1e-10)
-
-    def testPadArray(self):
-        imgDim = 10
-        padPixelSize = 20
-
-        img, imgPadded = self._padRandomImg(imgDim, padPixelSize)
-
-        self.assertEqual(imgPadded.shape[0], imgDim + padPixelSize)
-
-    def _padRandomImg(self, imgDim, padPixelSize):
-        img = np.random.rand(imgDim, imgDim)
-        imgPadded = padArray(img, imgDim + padPixelSize)
-
-        return img, imgPadded
-
-    def testExtractArray(self):
-        imgDim = 10
-        padPixelSize = 20
-        img, imgPadded = self._padRandomImg(imgDim, padPixelSize)
-
-        imgExtracted = extractArray(imgPadded, imgDim)
-
-        self.assertEqual(imgExtracted.shape[0], imgDim)
 
 
 if __name__ == "__main__":

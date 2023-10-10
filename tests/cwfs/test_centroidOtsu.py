@@ -24,7 +24,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.cwfs.centroidOtsu import CentroidOtsu
-from lsst.ts.wep.utility import getModulePath
+from lsst.ts.wep.utils import getModulePath
 
 
 class TestCentroidOtsu(unittest.TestCase):

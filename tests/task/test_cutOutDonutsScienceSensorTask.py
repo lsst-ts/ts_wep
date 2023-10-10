@@ -28,7 +28,7 @@ from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
 )
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     DefocalType,
     getModulePath,
     runProgram,

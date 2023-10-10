@@ -27,15 +27,15 @@ import sys
 import galsim
 import numpy as np
 from lsst.ts.wep.cwfs.instrument import Instrument
-from lsst.ts.wep.cwfs.tool import (
+from lsst.ts.wep.paramReader import ParamReader
+from lsst.ts.wep.utils import (
+    DefocalType,
     ZernikeAnnularEval,
     ZernikeMaskedFit,
     extractArray,
     padArray,
+    plotZernike,
 )
-from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.plotUtil import plotZernike
-from lsst.ts.wep.utility import DefocalType
 from scipy.ndimage import (
     binary_dilation,
     binary_erosion,

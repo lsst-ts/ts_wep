@@ -25,7 +25,7 @@ import unittest
 import numpy as np
 from lsst.ts.wep.cwfs.baseCwfsTestCase import BaseCwfsTestCase
 from lsst.ts.wep.cwfs.image import Image
-from lsst.ts.wep.utility import CamType, CentroidFindType, getModulePath
+from lsst.ts.wep.utils import CamType, CentroidFindType, getModulePath
 
 
 class TestImgsAuxTelZWO(BaseCwfsTestCase, unittest.TestCase):

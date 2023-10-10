@@ -30,7 +30,7 @@ from lsst.ts.wep.task.donutQuickMeasurementTask import (
     DonutQuickMeasurementTask,
     DonutQuickMeasurementTaskConfig,
 )
-from lsst.ts.wep.utility import (
+from lsst.ts.wep.utils import (
     DefocalType,
     DonutTemplateType,
     getModulePath,
