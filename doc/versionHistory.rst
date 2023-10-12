@@ -5,14 +5,6 @@
 ##################
 Version History
 ##################
-.. _lsst.ts.wep-7.0.1:
-
--------------
-7.0.1
--------------
-
-* Fix generateDonutDirectDetect when doDonutSelection is not run.
-
 
 .. _lsst.ts.wep-8.0.0:
 
@@ -22,6 +14,15 @@ Version History
 
 * Save all DonutStamps with images aligned with focal plane science sensors.
 * This version will break compatibility in the closed loop with Phosim and ts_phosim going forward.
+
+
+.. _lsst.ts.wep-7.0.1:
+
+-------------
+7.0.1
+-------------
+
+* Fix generateDonutDirectDetect when doDonutSelection is not run.
 
 .. _lsst.ts.wep-7.0.0:
 

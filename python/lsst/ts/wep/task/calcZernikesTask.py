@@ -109,6 +109,14 @@ class CalcZernikesTaskConfig(
     instPixelSize = pexConfig.Field(
         doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
+    transposeImages = pexConfig.Field(
+        doc="Specify whether to transpose the intra- and extra-focal images. \
+        (The default is to do the transpose).",
+        dtype=bool,
+        default=True,
+        optional=True,
+        deprecated="This field is no longer used. Will be removed after the end of October 2023.",
+    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask):
@@ -227,9 +235,26 @@ class CalcZernikesTask(pipeBase.PipelineTask):
             blendOffsetsExtra = self.calcBlendOffsets(donutExtra, eulerZExtra)
             blendOffsetsIntra = self.calcBlendOffsets(donutIntra, eulerZIntra)
 
-            # Transform image and coordinates from DVCS
-            # (Data Visualization Coordinate System)
-            # to ZCS (Zemax Coordinate System).
+            # Below we transform the image array and coordinates from the DVCS
+            # (Data Visualization Coordinate System) to the
+            # ZCS (Zemax Coordinate System). More information about these
+            # coordinate systems is available here: sitcomtn-003.lsst.io.
+            # This transformation below incorporates two different coordinate
+            # conversions: 1) DVCS to CCS is a transpose and 2) CCS to ZCS is
+            # an x -> -x conversion that we can apply as a left-right flip.
+            # In a future update to ts_ofc we will update the sensitivity
+            # matrix to use the CCS and we can then remove the left-right
+            # flip. That is why the current version keeps this as a
+            # two part transformation.
+            #
+            #        DVCS               CCS                 ZCS
+            #   x                   y                               y
+            #   ^                   ^                               ^
+            #   |                   |                               |
+            #   |                   |                               |
+            #   |                   |                               |
+            #   |----------> y      |----------> x     x <----------|
+
             wfEsti.setImg(
                 np.array([-fieldXYExtra[1], fieldXYExtra[0]]),
                 DefocalType.Extra,
