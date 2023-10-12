@@ -5,5 +5,5 @@ class ParamReader
 class WfEstimator
 class Image
 class Instrument
-ParamReader *-- Instrument
+Instrument *-- ParamReader 
 @enduml
