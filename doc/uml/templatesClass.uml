@@ -1,0 +1,6 @@
+@startuml
+DonutTemplateDefault <|-- DonutTemplateModel
+DonutTemplateDefault <|-- DonutTemplatePhosim
+DonutTemplateFactory ..> DonutTemplateModel
+DonutTemplateFactory ..> DonutTemplatePhosim
+@enduml

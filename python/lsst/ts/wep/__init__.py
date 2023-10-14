@@ -4,6 +4,7 @@
 # this will be a problem to import.
 try:
     from .donutDetector import DonutDetector
+    from .image import Image
     from .paramReader import ParamReader
     from .wfEstimator import WfEstimator
 except ImportError:

@@ -1,0 +1,9 @@
+@startuml
+CentroidDefault <|-- CentroidRandomWalk
+CentroidDefault <|-- CentroidOtsu
+CentroidDefault <|-- CentroidConvolveTemplate
+CentroidFindFactory ..> CentroidRandomWalk
+CentroidFindFactory ..> CentroidOtsu
+CentroidFindFactory ..> CentroidConvolveTemplate
+CentroidConvolveTemplate *-- CentroidRandomWalk
+@enduml

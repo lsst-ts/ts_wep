@@ -274,6 +274,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         fitWcs = fitWcsOutput.outputExposure.wcs
         fitCatalog = fitWcsOutput.donutCatalog
 
+        print(fitWcs.getPixelOrigin(), preFitExp_S11.wcs.getPixelOrigin())
         # Test that WCS is different
         self.assertFalse(
             np.array_equal(

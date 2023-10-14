@@ -23,8 +23,8 @@ import unittest
 
 import numpy as np
 import pandas as pd
-from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.donutDetector import DonutDetector
+from lsst.ts.wep.templates import DonutTemplateFactory
 from lsst.ts.wep.utils import DefocalType, DonutTemplateType
 
 

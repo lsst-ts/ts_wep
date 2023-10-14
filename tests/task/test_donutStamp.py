@@ -27,7 +27,7 @@ import lsst.obs.lsst as obs_lsst
 import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE
 from lsst.daf.base import PropertyList
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+from lsst.ts.wep.estimation import CompensableImage
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.utils import DefocalType
 
