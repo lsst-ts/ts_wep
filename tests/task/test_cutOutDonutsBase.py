@@ -265,7 +265,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             lsst.geom.Extent2I(160),
         )
         expCutOut = exposure[stampBBox].image.array
-        np.testing.assert_array_equal(donutStamps[0].stamp_im.image.array, expCutOut)
+        np.testing.assert_array_almost_equal(
+            donutStamps[0].stamp_im.image.array, expCutOut
+        )
 
     def testCutOutStampsBlended(self):
         exposure = self.butler.get(

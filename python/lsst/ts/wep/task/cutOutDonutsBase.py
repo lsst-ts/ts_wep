@@ -39,9 +39,10 @@ from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
     DonutTemplateType,
     createInstDictFromConfig,
+    getCameraFromButlerName,
     getCamTypeFromButlerName,
 )
-from scipy.ndimage import binary_dilation, shift
+from scipy.ndimage import binary_dilation, rotate, shift
 from scipy.signal import correlate
 
 
@@ -439,7 +440,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             )
             xCornerList.append(xCorner)
             yCornerList.append(yCorner)
-            finalCutout = exposure[finalBBox]
+            finalCutout = exposure[finalBBox].clone()
 
             # Save MaskedImage to stamp
             finalStamp = finalCutout.getMaskedImage()
@@ -499,7 +500,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             donutStamp.makeMasks(
                 inst, self.opticalModel, boundaryT, maskScalingFactorLocal
             )
-            donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             # Create shifted mask from non-blended mask
             if (self.multiplyMask is True) and blendExists:
@@ -521,6 +521,18 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 shiftedMask[shiftedMask == 0] += 2
                 shiftedMask -= 1
                 donutStamp.stamp_im.image.array *= shiftedMask
+
+            camera = getCameraFromButlerName(cameraName)
+            detectorInfo = camera.get(detectorName)
+
+            # Rotate sensors to line up with the science sensors in the
+            # focal plane.
+            eulerZ = -detectorInfo.getOrientation().getYaw().asDegrees()
+            donutStamp.stamp_im.image.array = rotate(
+                donutStamp.stamp_im.image.array, eulerZ
+            )
+
+            donutStamp.stamp_im.setMask(donutStamp.mask_comp)
 
             finalStamps.append(donutStamp)
 

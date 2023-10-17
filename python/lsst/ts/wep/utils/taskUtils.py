@@ -23,10 +23,13 @@ __all__ = [
     "runProgram",
     "writePipetaskCmd",
     "writeCleanUpRepoCmd",
+    "getCameraFromButlerName",
 ]
 
 import os
 import subprocess
+
+import lsst.obs.lsst as obs_lsst
 
 
 def runProgram(command, binDir=None, argstring=None):
@@ -131,3 +134,34 @@ def writeCleanUpRepoCmd(repoDir, runName):
     cleanUpCmd += f"{repoDir} {runName} --no-confirm"
 
     return cleanUpCmd
+
+
+def getCameraFromButlerName(camName):
+    """
+    Get the proper camera object for the donuts.
+
+    Parameters
+    ----------
+    camName : str
+        Name of instrument using butler convention. Available instruments
+        are LSSTCam, LSSTComCam, and LATISS.
+
+    Returns
+    -------
+    `lsst.afw.cameraGeom.Camera`
+        Camera object for the exposures.
+
+    Raises
+    ------
+    `ValueError`
+        The camera is not supported.
+    """
+
+    if camName == "LSSTCam":
+        return obs_lsst.LsstCam().getCamera()
+    elif camName == "LSSTComCam":
+        return obs_lsst.LsstComCam().getCamera()
+    elif camName == "LATISS":
+        return obs_lsst.Latiss.getCamera()
+    else:
+        raise ValueError(f"Camera {camName} is not supported.")

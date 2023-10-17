@@ -73,6 +73,12 @@ setup -k -r .
 
 To learn more about how to run the pipeline tasks associated with WEP we have a series of Jupyter Notebooks available in the AOS section of the `ts_analysis_notebooks` [repository](https://github.com/lsst-ts/ts_analysis_notebooks).
 
+## Deprecation of support for Phosim and ts_phosim
+
+Starting with v8.0 running the AOS closed loop with Phosim and `ts_phosim` will no longer work.
+We are moving to support imSim and `ts_imsim` exclusively moving forward.
+There are changes in the orientation of the DonutStamps in v8.0+ that will not work with the `ts_phosim` closed loop.
+
 ## Test Gen 3 Repository
 
 In the folder `tests/testData/` there is a test repository for tasks that run with the Gen 3 DM middleware.

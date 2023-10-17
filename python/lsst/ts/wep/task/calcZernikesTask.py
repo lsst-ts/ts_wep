@@ -39,7 +39,6 @@ from lsst.ts.wep.utils import (
 )
 from lsst.ts.wep.wfEstimator import WfEstimator
 from lsst.utils.timer import timeMethod
-from scipy.ndimage import rotate
 
 
 class CalcZernikesTaskConnections(
@@ -116,6 +115,7 @@ class CalcZernikesTaskConfig(
         dtype=bool,
         default=True,
         optional=True,
+        deprecated="This field is no longer used. Will be removed after the end of October 2023.",
     )
 
 
@@ -135,8 +135,6 @@ class CalcZernikesTask(pipeBase.PipelineTask):
         # for the detector.
         self.combineZernikes = self.config.combineZernikes
         self.makeSubtask("combineZernikes")
-        # Specify whether to transpose images
-        self.transposeImages = self.config.transposeImages
         # Specify optical model
         self.opticalModel = self.config.opticalModel
         # Set up instrument configuration dict
@@ -234,38 +232,41 @@ class CalcZernikesTask(pipeBase.PipelineTask):
             eulerZExtra = -detectorExtra.getOrientation().getYaw().asDegrees()
             eulerZIntra = -detectorIntra.getOrientation().getYaw().asDegrees()
 
-            # NOTE: TS_WEP expects these images to be transposed
-            # TODO: Look into this
             blendOffsetsExtra = self.calcBlendOffsets(donutExtra, eulerZExtra)
             blendOffsetsIntra = self.calcBlendOffsets(donutIntra, eulerZIntra)
 
-            if self.transposeImages:
-                imageExtra = rotate(
-                    donutExtra.stamp_im.getImage().getArray(), eulerZExtra
-                ).T
-                imageIntra = rotate(
-                    donutIntra.stamp_im.getImage().getArray(), eulerZIntra
-                ).T
-            else:
-                imageExtra = rotate(
-                    donutExtra.stamp_im.getImage().getArray(), eulerZExtra
-                )
-                imageIntra = rotate(
-                    donutIntra.stamp_im.getImage().getArray(), eulerZIntra
-                )
+            # Below we transform the image array and coordinates from the DVCS
+            # (Data Visualization Coordinate System) to the
+            # ZCS (Zemax Coordinate System). More information about these
+            # coordinate systems is available here: sitcomtn-003.lsst.io.
+            # This transformation below incorporates two different coordinate
+            # conversions: 1) DVCS to CCS is a transpose and 2) CCS to ZCS is
+            # an x -> -x conversion that we can apply as a left-right flip.
+            # In a future update to ts_ofc we will update the sensitivity
+            # matrix to use the CCS and we can then remove the left-right
+            # flip. That is why the current version keeps this as a
+            # two part transformation.
+            #
+            #        DVCS               CCS                 ZCS
+            #   x                   y                               y
+            #   ^                   ^                               ^
+            #   |                   |                               |
+            #   |                   |                               |
+            #   |                   |                               |
+            #   |----------> y      |----------> x     x <----------|
 
             wfEsti.setImg(
-                fieldXYExtra,
+                np.array([-fieldXYExtra[1], fieldXYExtra[0]]),
                 DefocalType.Extra,
                 filterLabel=getFilterTypeFromBandLabel(donutExtra.bandpass),
-                image=imageExtra,
+                image=np.fliplr(donutExtra.stamp_im.image.array.T),
                 blendOffsets=blendOffsetsExtra.tolist(),
             )
             wfEsti.setImg(
-                fieldXYIntra,
+                np.array([-fieldXYIntra[1], fieldXYIntra[0]]),
                 DefocalType.Intra,
                 filterLabel=getFilterTypeFromBandLabel(donutIntra.bandpass),
-                image=imageIntra,
+                image=np.fliplr(donutIntra.stamp_im.image.array.T),
                 blendOffsets=blendOffsetsIntra.tolist(),
             )
             wfEsti.reset()

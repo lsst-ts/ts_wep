@@ -21,7 +21,12 @@
 
 import unittest
 
-from lsst.ts.wep.utils import writeCleanUpRepoCmd, writePipetaskCmd
+import lsst.obs.lsst as obs_lsst
+from lsst.ts.wep.utils import (
+    getCameraFromButlerName,
+    writeCleanUpRepoCmd,
+    writePipetaskCmd,
+)
 
 
 class TestTaskUtils(unittest.TestCase):
@@ -96,3 +101,21 @@ class TestTaskUtils(unittest.TestCase):
 
         testCmd = self._writeCleanUpCmd(repoName, runName)
         self.assertEqual(testCmd, writeCleanUpRepoCmd(repoName, runName))
+
+    def testGetCameraFromButlerName(self):
+        # Test camera loading
+        self.assertEqual(
+            obs_lsst.LsstCam().getCamera(), getCameraFromButlerName("LSSTCam")
+        )
+        self.assertEqual(
+            obs_lsst.LsstComCam().getCamera(), getCameraFromButlerName("LSSTComCam")
+        )
+        self.assertEqual(
+            obs_lsst.Latiss().getCamera(), getCameraFromButlerName("LATISS")
+        )
+        # Test error
+        badCamType = "badCam"
+        errMsg = f"Camera {badCamType} is not supported."
+        with self.assertRaises(ValueError) as context:
+            getCameraFromButlerName(badCamType)
+        self.assertEqual(str(context.exception), errMsg)
