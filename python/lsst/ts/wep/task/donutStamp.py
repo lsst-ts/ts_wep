@@ -27,12 +27,16 @@ from typing import Optional
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
 import lsst.geom
-import lsst.obs.lsst as obs_lsst
 import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.stamps import AbstractStamp
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
-from lsst.ts.wep.utils import DefocalType, FilterType, getFilterTypeFromBandLabel
+from lsst.ts.wep.utils import (
+    DefocalType,
+    FilterType,
+    getCameraFromButlerName,
+    getFilterTypeFromBandLabel,
+)
 
 
 @dataclass
@@ -185,14 +189,7 @@ class DonutStamp(AbstractStamp):
             The camera is not supported.
         """
 
-        if self.cam_name == "LSSTCam":
-            return obs_lsst.LsstCam().getCamera()
-        elif self.cam_name == "LSSTComCam":
-            return obs_lsst.LsstComCam().getCamera()
-        elif self.cam_name == "LATISS":
-            return obs_lsst.Latiss.getCamera()
-        else:
-            raise ValueError(f"Camera {self.cam_name} is not supported.")
+        return getCameraFromButlerName(self.cam_name)
 
     def calcFieldXY(self):
         """
