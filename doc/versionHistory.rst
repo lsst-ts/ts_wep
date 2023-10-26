@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.0.2:
+
+-------------
+8.0.2
+-------------
+
+* Adds support for MacOS.
+
 .. _lsst.ts.wep-8.0.1:
 
 -------------

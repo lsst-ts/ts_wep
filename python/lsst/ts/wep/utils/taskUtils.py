@@ -27,12 +27,14 @@ __all__ = [
 ]
 
 import os
+import shlex
 import subprocess
+from contextlib import ExitStack
 
 import lsst.obs.lsst as obs_lsst
 
 
-def runProgram(command, binDir=None, argstring=None):
+def runProgram(command, binDir=None, argstring=None, stdout=None, stderr=None):
     """Run the program w/o arguments.
 
     Parameters
@@ -43,6 +45,8 @@ def runProgram(command, binDir=None, argstring=None):
         Directory of binary application. (the default is None.)
     argstring : str, optional
         Arguments of program. (the default is None.)
+    stdout, stderr : str or _io.TextIOWrapper, optional
+        Buffered text output/error streams or filenames
 
     Raises
     ------
@@ -58,9 +62,26 @@ def runProgram(command, binDir=None, argstring=None):
     if argstring is not None:
         command += " " + argstring
 
-    # Call the program w/o arguments
-    if subprocess.call(command, shell=True) != 0:
-        raise RuntimeError("Error running: %s" % command)
+    with ExitStack() as stack:
+        if isinstance(stdout, str):
+            stdout = stack.enter_context(open(stdout, "w"))
+            # Don't open competing filehandles on the same file
+            if isinstance(stderr, str) and (stderr == stdout.name):
+                stderr = stdout
+        if isinstance(stderr, str):
+            stderr = stack.enter_context(open(stderr, "w"))
+
+        # Call the program w/o arguments
+        if (
+            subprocess.run(
+                shlex.split(command),
+                shell=False,
+                stdout=stdout,
+                stderr=stderr,
+            ).returncode
+            != 0
+        ):
+            raise RuntimeError("Error running: %s" % command)
 
 
 def writePipetaskCmd(
