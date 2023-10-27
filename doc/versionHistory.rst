@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.0.1:
+
+-------------
+8.0.1
+-------------
+
+* Add convertZernikesToPsfWidth to zernikeUtils.
+
 .. _lsst.ts.wep-8.0.0:
 
 -------------
