@@ -24,7 +24,11 @@ import unittest
 
 import numpy as np
 from astropy.io import fits
+from lsst.ts.wep.cwfs import Instrument
 from lsst.ts.wep.utils import (
+    CamType,
+    ConvertZernikesToPsfWidth,
+    GetPsfGradPerZernike,
     ZernikeAnnularEval,
     ZernikeAnnularFit,
     ZernikeAnnularGrad,
@@ -219,6 +223,52 @@ class TestZernikeUtils(TestCase):
         zr = ZernikeMaskedFit(surface, xx, yy, nc, mask, e)
 
         self.assertLess(np.sum(np.abs(zr - self.zerCoef[0:nc]) ** 2), 1e-10)
+
+    def testConvertZernikesToPsfWidthLsstCam(self):
+        """Test that the LsstCam values match the expected values."""
+        # Calculate and compare conversion factors
+        conversion_factors = GetPsfGradPerZernike(jmax=37)
+        expected_factors = np.genfromtxt(
+            os.path.join(self.testDataDir, "psfGradientsPerZernike", "lsstcam.txt")
+        )
+        self.assertTrue(np.allclose(conversion_factors, expected_factors, atol=1e-3))
+
+        # Perform the comparison using convertZernikesToPsfWidth
+        converted_amplitudes = ConvertZernikesToPsfWidth(np.ones(34))
+        self.assertTrue(np.allclose(converted_amplitudes, expected_factors, atol=1e-3))
+
+    def testConvertZernikesToPsfWidthAuxTel(self):
+        """Test that the AuxTel values match the expected values.
+
+        For AuxTel, we will use jmin=1.
+        """
+        # Setup the AuxTel instrument
+        # Note the donut dimension shouldn't matter for this computation
+        inst = Instrument()
+        inst.configFromFile(160, CamType.AuxTel)
+        R_outer = inst.apertureDiameter / 2
+        R_inner = R_outer * inst.obscuration
+
+        # Calculate and compare conversion factors
+        conversion_factors = GetPsfGradPerZernike(
+            jmin=1,
+            jmax=37,
+            R_outer=R_outer,
+            R_inner=R_inner,
+        )
+        expected_factors = np.genfromtxt(
+            os.path.join(self.testDataDir, "psfGradientsPerZernike", "auxtel.txt")
+        )
+        self.assertTrue(np.allclose(conversion_factors, expected_factors, atol=1e-3))
+
+        # Perform the comparison using convertZernikesToPsfWidth
+        converted_amplitudes = ConvertZernikesToPsfWidth(
+            np.ones(37),
+            jmin=1,
+            R_outer=R_outer,
+            R_inner=R_inner,
+        )
+        self.assertTrue(np.allclose(converted_amplitudes, expected_factors, atol=1e-3))
 
 
 if __name__ == "__main__":
