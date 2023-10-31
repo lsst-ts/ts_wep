@@ -269,6 +269,23 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             donutStamps[0].stamp_im.image.array, expCutOut
         )
 
+        # Check that local linear WCS in archive element is consistent with the
+        # original exposure WCS.
+        exposure_wcs = exposure.wcs
+        for stamp in donutStamps:
+            stamp_wcs = stamp.getLinearWCS()
+            pt = stamp.centroid_position
+            for offset in [(0, 0), (10, -20), (-30, 40), (50, 60)]:
+                pt_offset = pt + lsst.geom.Extent2D(*offset)
+                self.assertFloatsAlmostEqual(
+                    exposure_wcs.pixelToSky(pt_offset)
+                    .separation(stamp_wcs.pixelToSky(pt_offset))
+                    .asArcseconds(),
+                    0.0,
+                    rtol=0.0,
+                    atol=10e-6,  # 10 microarcsecond accurate over stamp region
+                )
+
     def testCutOutStampsBlended(self):
         exposure = self.butler.get(
             "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
