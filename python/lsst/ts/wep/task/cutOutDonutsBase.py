@@ -29,8 +29,10 @@ import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from lsst.afw.geom import makeSkyWcs
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.cwfs.instrument import Instrument
@@ -479,6 +481,17 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             else:
                 blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
 
+            # Get the local linear WCS for the donut stamp
+            # Be careful to get the cd matrix from the linearized WCS instead
+            # of the one from the full WCS.
+            wcs = exposure.wcs
+            centroid_position = Point2D(finalDonutX, finalDonutY)
+            linearTransform = wcs.linearizePixelToSky(centroid_position, degrees)
+            cdMatrix = linearTransform.getLinear().getMatrix()
+            linear_wcs = makeSkyWcs(
+                centroid_position, wcs.pixelToSky(centroid_position), cdMatrix
+            )
+
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
                 sky_position=lsst.geom.SpherePoint(
@@ -486,7 +499,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                     donutRow["coord_dec"],
                     lsst.geom.radians,
                 ),
-                centroid_position=lsst.geom.Point2D(finalDonutX, finalDonutY),
+                centroid_position=centroid_position,
                 blend_centroid_positions=blendCentroidPositions,
                 detector_name=detectorName,
                 cam_name=cameraName,
@@ -494,6 +507,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 # Save defocal offset in mm.
                 defocal_distance=self.instParams["offset"],
                 bandpass=bandpass,
+                archive_element=linear_wcs,
             )
             boundaryT = 1
             maskScalingFactorLocal = 1
@@ -556,4 +570,4 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["X0"] = np.array(xCornerList)
         stampsMetadata["Y0"] = np.array(yCornerList)
 
-        return DonutStamps(finalStamps, metadata=stampsMetadata)
+        return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)

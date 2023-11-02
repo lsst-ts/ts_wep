@@ -165,8 +165,8 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         extraCatalog, intraCatalog = donutCatalogs
 
         # Get the donut stamps from extra and intra focal images
-        donutStampsExtra = DonutStamps([])
-        donutStampsIntra = DonutStamps([])
+        donutStampsExtra = DonutStamps([], use_archive=True)
+        donutStampsIntra = DonutStamps([], use_archive=True)
 
         for exposure in exposures:
             focusZ = exposure.visitInfo.focusZ

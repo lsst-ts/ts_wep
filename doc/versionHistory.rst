@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.0.3:
+
+-------------
+8.0.3
+-------------
+
+* Attach locally linear WCSs to DonutStamps.
+
 .. _lsst.ts.wep-8.0.2:
 
 -------------

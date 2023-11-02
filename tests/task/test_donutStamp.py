@@ -180,6 +180,15 @@ class TestDonutStamp(unittest.TestCase):
         with self.assertRaises(ValueError, msg=errMessage):
             donutStamp.getCamera()
 
+    def testGetLinearWCS(self):
+        wcs = lsst.afw.geom.makeSkyWcs(
+            lsst.geom.Point2D(0.0, 0.0),
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            np.eye(2),
+        )
+        donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0, wcs)
+        self.assertEqual(wcs, donutStamp.getLinearWCS())
+
     def testCalcFieldXY(self):
         donutStamp = DonutStamp(
             self.testStamps[0],
