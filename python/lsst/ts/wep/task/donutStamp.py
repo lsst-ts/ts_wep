@@ -281,3 +281,15 @@ class DonutStamp(AbstractStamp):
         self.mask_pupil = afwImage.Mask(
             np.array(self.comp_im.mask_pupil, dtype=np.int32)
         )
+
+    def getLinearWCS(self):
+        """
+        Get the linear WCS for the stamp.
+
+        Returns
+        -------
+        `lsst.afw.geom.SkyWcs`
+            Linear WCS for the stamp.
+        """
+
+        return self.archive_element
