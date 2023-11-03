@@ -20,17 +20,17 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
-    "FilterType",
-    "CamType",
+    "BandLabel",
     "BscDbType",
     "DefocalType",
+    "PlaneType",
     "ImageType",
     "CentroidFindType",
     "DonutTemplateType",
     "DeblendDonutType",
+    "WfAlgorithmName",
     "getFilterTypeFromBandLabel",
     "mapFilterRefToG",
-    "getCamType",
     "getCamNameFromCamType",
     "getCamTypeFromButlerName",
     "getBscDbType",
@@ -40,27 +40,19 @@ __all__ = [
     "getDeblendDonutType",
 ]
 
-from enum import IntEnum, auto
+from enum import Enum, IntEnum, auto
 
 from lsst.afw.cameraGeom import DetectorType
 
 
-class FilterType(IntEnum):
-    LSST_U = 1
-    LSST_G = auto()
-    LSST_R = auto()
-    LSST_I = auto()
-    LSST_Z = auto()
-    LSST_Y = auto()
-    REF = auto()
-
-
-class CamType(IntEnum):
-    LsstCam = 1
-    LsstFamCam = auto()
-    ComCam = auto()
-    AuxTel = auto()
-    AuxTelZWO = auto()
+class BandLabel(Enum):
+    LSST_U = "u"
+    LSST_G = "g"
+    LSST_R = "r"
+    LSST_I = "i"
+    LSST_Z = "z"
+    LSST_Y = "y"
+    REF = "ref"
 
 
 class BscDbType(IntEnum):
@@ -68,14 +60,25 @@ class BscDbType(IntEnum):
     LocalDbForStarFile = auto()
 
 
-class DefocalType(IntEnum):
-    Intra = 1
-    Extra = auto()
+class DefocalType(Enum):
+    Intra = "intra"
+    Extra = "extra"
+
+
+class PlaneType(Enum):
+    """Specifies whether the image is on the image or pupil plane."""
+
+    Image = "image"
+    Pupil = "pupil"
 
 
 class ImageType(IntEnum):
     Amp = 1
     Eimg = auto()
+
+
+class WfAlgorithmName(Enum):
+    TIE = "tie"
 
 
 class CentroidFindType(IntEnum):

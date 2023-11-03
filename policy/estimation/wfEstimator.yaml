@@ -1,0 +1,8 @@
+# Default parameters for WfEstimator
+# see the docstring for definitions of parameters
+
+algoName: tie
+algoConfig: null
+instConfig: policy/instruments/LsstCam.yaml
+jmax: 28
+units: m

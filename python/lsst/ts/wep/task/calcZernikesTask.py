@@ -37,8 +37,9 @@ from lsst.ts.wep.utils import (
     getFilterTypeFromBandLabel,
     rotMatrix,
 )
-from lsst.ts.wep.wfEstimator import WfEstimator
 from lsst.utils.timer import timeMethod
+
+from python.lsst.ts.wep.estimation.wfEstimator import WfEstimator
 
 
 class CalcZernikesTaskConnections(

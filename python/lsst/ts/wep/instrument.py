@@ -21,399 +21,698 @@
 
 __all__ = ["Instrument"]
 
-import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional, Tuple, Union
 
+import batoid
 import numpy as np
-from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.utils import CamType, getCamNameFromCamType, getConfigDir
+from lsst.ts.wep.utils import BandLabel, DefocalType, mergeConfigWithFile
 
 
-class Instrument(object):
+class Instrument:
+    """Object with relevant geometry of the primary mirror and focal plane.
+
+    Parameters
+    ----------
+    configFile: Path or str, optional
+        Path to file specifying values for the other parameters. If the
+        path starts with "policy/", it will look in the policy directory.
+        Any explicitly passed parameters override values found in this file
+        (the default is policy/instruments/LsstCam.yaml)
+    name: str, optional
+        The name of the instrument.
+    diameter : float, optional
+        The diameter of the primary mirror in meters.
+    obscuration : float, optional
+        The fractional obscuration of the primary mirror.
+    focalLength : float, optional
+        The effective focal length in meters.
+    defocalOffset : float, optional
+        The defocal offset of the images in meters.
+    pixelSize : float, optional
+        The pixel size in meters.
+    wavelength : float or dict, optional
+        The effective wavelength of the instrument in meters. Can be a float, or
+        a dictionary that corresponds to different bands. The keys in this
+        dictionary are expected to correspond to the strings specified in the
+        BandLabel enum in jf_wep.utils.enums.
+    batoidModelName : str, optional
+        The name used to load the Batoid model, via
+        batoid.Optic.fromYaml(batoidModelName). If the string contains "{band}",
+        then it is assumed there are different Batoid models for different
+        photometric bands, and the names of these bands will be filled in at
+        runtime using the strings specified in the BandLabel enum in
+        jf_wep.utils.enums.
+    batoidRefBand : BandLabel or str, optional
+        When loading the Batoid model, use this value in place of BandLabel.REF.
+        It should be a BandLabel Enum, or one of the corresponding strings.
+        If set to None, this value defaults to BandLabel.REF. Note this only
+        matters if batoidModelName contains "{band}".
+    maskParams : dict, optional
+        Dictionary of mask parameters. Each key in this dictionary corresponds
+        to a different mask element. The corresponding values are dictionaries
+        that define circles with different centers and radii. The key, value
+        pairs are
+            - thetaMin: the minimum field angle in degrees for which this mask
+            element is relevant
+            - center: list of polynomial coefficients (in meters) for np.polyval
+            to determine the center of the circle
+            - radius: list of polynomial coefficients (in meters) for np.polyval
+            to determine the radius of the circle
     """
-    Instrument class to have the instrument information
-    used in the Algorithm class to solve the TIE.
-    """
 
-    def __init__(self):
-        # Set initial parameters
-        self._dimOfDonutImg = 0
-
-        # Keys that should be set in configuration file
-        paramKeys = [
-            "obscuration",
-            "focalLength",
-            "apertureDiameter",
-            "offset",
-            "pixelSize",
-        ]
-        self._instParams = {key: "" for key in paramKeys}
-        self._instName = None
-
-        self.maskParamReader = ParamReader()
-        self._maskOffAxisCorr = []
-
-        self.xSensor = np.array([])
-        self.ySensor = np.array([])
-
-        self.xoSensor = np.array([])
-        self.yoSensor = np.array([])
-
-    def configFromDict(
-        self, configDict, dimOfDonutImgOnSensor, camType, maskConfigFile=None
-    ):
-        """Configure the instrument class from a dictionary.
-
-        Parameters
-        ----------
-        configDict : dict
-            Instrument parameter configuration dictionary. Keys needed are:
-            "obscuration", "focalLength", "apertureDiameter",
-            "offset", "pixelSize". Dimensions for "offset" are mm, the
-            rest use meters.
-        dimOfDonutImgOnSensor : int
-            Dimension of donut image on sensor in pixel.
-        camType : enum 'CamType'
-            Camera type.
-        maskConfigFile : str or None, optional
-            Mask migration (off-axis correction) file path.
-            If None will load the default from policy/cwfs folder.
-            (The default is None.)
-
-        Raises
-        ------
-        AssertionError
-            ConfigDict keys do not match required keys in self._instParams.
-        ValueError
-            Mask migrate file does not exist.
-        """
-
-        self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
-        self._instName = self._getInstName(camType)
-
-        # Check that dictionary keys match
-        assert (
-            self._instParams.keys() == configDict.keys()
-        ), f"Config Dict Keys: {configDict.keys()} do not match required \
-            instParamKeys: {self._instParams.keys()}"
-
-        # Set configuration parameters
-        for key in configDict.keys():
-            self._instParams[key] = configDict[key]
-
-        # Load mask configuration file for instrument
-        if maskConfigFile is not None:
-            if not os.path.exists(maskConfigFile):
-                raise ValueError(
-                    f"Mask migrate file at {maskConfigFile} does not exist."
-                )
-            self.maskParamReader.setFilePath(maskConfigFile)
-            self._maskOffAxisCorr = self.maskParamReader.getMatContent()
-        else:
-            # Load default
-            self.setDefaultMaskParams(camType)
-
-        self._setSensorCoor()
-        self._setSensorCoorAnnular()
-
-    def configFromFile(
-        self, dimOfDonutImgOnSensor, camType, instConfigFile=None, maskConfigFile=None
-    ):
-        """Configure the instrument class from a configuration file.
-
-        Parameters
-        ----------
-        dimOfDonutImgOnSensor : int
-            Dimension of donut image on sensor in pixel.
-        camType : enum 'CamType'
-            Camera type.
-        instConfigFile : str or None, optional
-            Instrument parameter configuration file path. This should be an
-            LSST Science Pipelines pipeline task configuration file for
-            one of the WEP pipeline tasks (see defaults in
-            policy/cwfs/instData folder). If set to None will load the
-            default from policy/cwfs folder. (The default is None.)
-        maskConfigFile : str or None, optional
-            Mask migration (off-axis correction) file path.
-            If None will load the default from policy/cwfs folder.
-            (The default is None.)
-
-        Raises
-        ------
-        ValueError
-            Instrument configuration file does not exist.
-        ValueError
-            Instrument configuration file does not have expected format.
-        ValueError
-            Mask migrate file does not exist.
-        """
-
-        self._dimOfDonutImg = int(dimOfDonutImgOnSensor)
-        self._instName = self._getInstName(camType)
-
-        # Load instrument configuration file
-        if instConfigFile is None:
-            camName = getCamNameFromCamType(camType)
-            instFileDir = os.path.join(getConfigDir(), "cwfs", "instData", camName)
-            instParamFileName = "instParamPipeConfig.yaml"
-            instConfigFilePath = os.path.join(instFileDir, instParamFileName)
-        else:
-            instConfigFilePath = instConfigFile
-
-        if not os.path.exists(instConfigFilePath):
-            raise ValueError(
-                f"Instrument configuration file at {instConfigFilePath} does not exist."
-            )
-        instParamReader = ParamReader()
-        instParamReader.setFilePath(instConfigFilePath)
-
-        # Expect instrument configurations to be found
-        # in one of the task configurations
-        instConfigDict = None
-        for taskDict in instParamReader.getContent()["tasks"].values():
-            if "config" not in taskDict.keys():
-                continue
-            elif "instObscuration" in taskDict["config"].keys():
-                instConfigDict = taskDict["config"]
-
-        invalidFormatMsg = str(
-            "Instrument configuration file does not have expected format. "
-            + "See examples in policy/cwfs/instData."
-        )
-        if instConfigDict is None:
-            raise ValueError(invalidFormatMsg)
-
-        # Translate between task configuration parameter names
-        # and cwfs expected parameter names
-        taskConfigTranslator = {
-            "instObscuration": "obscuration",
-            "instFocalLength": "focalLength",
-            "instApertureDiameter": "apertureDiameter",
-            "instDefocalOffset": "offset",
-            "instPixelSize": "pixelSize",
-        }
-
-        # Assign configurations to instParams dictionary
-        for key, val in taskConfigTranslator.items():
-            self._instParams[val] = instConfigDict[key]
-
-        # Load mask configuration file
-        if maskConfigFile is not None:
-            if not os.path.exists(maskConfigFile):
-                raise ValueError(
-                    f"Mask migrate file at {maskConfigFile} does not exist."
-                )
-            self.maskParamReader.setFilePath(maskConfigFile)
-            self._maskOffAxisCorr = self.maskParamReader.getMatContent()
-        else:
-            # Load default
-            self.setDefaultMaskParams(camType)
-
-        self._setSensorCoor()
-        self._setSensorCoorAnnular()
-
-    def setDefaultMaskParams(self, camType, maskParamFileName="maskMigrate.yaml"):
-        """Load the default mask off-axis corrections. Note that there
-        is no such file for auxiliary telescope.
-
-        Parameters
-        ----------
-        camType : enum 'CamType'
-            Camera type.
-        maskParamFileName : str, optional
-            Mask parameter file name in the policy/cwfs/instData/`instName`
-            directory. (The default is "maskMigrate.yaml".)
-        """
-
-        # Path of mask off-axis correction file
-        if camType not in [CamType.AuxTel, CamType.AuxTelZWO]:
-            self._instName = self._getInstName(camType)
-            instFileDir = self.getInstFileDir()
-            maskParamFilePath = os.path.join(instFileDir, maskParamFileName)
-            self.maskParamReader.setFilePath(maskParamFilePath)
-            self._maskOffAxisCorr = self.maskParamReader.getMatContent()
-
-    def _getInstName(self, camType):
-        """Get the instrument name.
-
-        Parameters
-        ----------
-        camType : enum 'CamType'
-            Camera type.
-
-        Returns
-        -------
-        str
-            Instrument name.
-
-        Raises
-        ------
-        ValueError
-            Camera type is not supported.
-        """
-
-        if camType == CamType.LsstCam:
-            return "lsst"
-        elif camType == CamType.LsstFamCam:
-            return "lsstfam"
-        elif camType == CamType.ComCam:
-            return "comcam"
-        elif camType == CamType.AuxTel:
-            return "auxTel"
-        elif camType == CamType.AuxTelZWO:
-            return "auxTelZWO"
-        else:
-            raise ValueError("Camera type (%s) is not supported." % camType)
-
-    def getInstFileDir(self):
-        """Get the instrument parameter file directory.
-
-        Returns
-        -------
-        str
-            Instrument parameter file directory.
-        """
-
-        return os.path.join(getConfigDir(), "cwfs", "instData", self._instName)
-
-    def _setSensorCoor(self):
-        """Set the sensor coordinate."""
-
-        # 0.5 is the half of single pixel
-        ySensorGrid, xSensorGrid = np.mgrid[
-            -(self.dimOfDonutImg / 2 - 0.5) : (self.dimOfDonutImg / 2 + 0.5),
-            -(self.dimOfDonutImg / 2 - 0.5) : (self.dimOfDonutImg / 2 + 0.5),
-        ]
-
-        sensorFactor = self.getSensorFactor()
-        denominator = self.dimOfDonutImg / 2 / sensorFactor
-
-        self.xSensor = xSensorGrid / denominator
-        self.ySensor = ySensorGrid / denominator
-
-    def _setSensorCoorAnnular(self):
-        """Set the sensor coordinate with the annular aperature."""
-
-        self.xoSensor = self.xSensor.copy()
-        self.yoSensor = self.ySensor.copy()
-
-        # Get the position index that is out of annular aperature range
-        r2Sensor = self.xSensor**2 + self.ySensor**2
-        idx = (r2Sensor > 1) | (r2Sensor < self.obscuration**2)
-
-        # Define the value to be NaN if it is not in pupul
-        self.xoSensor[idx] = np.nan
-        self.yoSensor[idx] = np.nan
-
-    @property
-    def instParams(self):
-        """Dictionary of the instrument configuration parameters."""
-        return self._instParams
-
-    @property
-    def obscuration(self):
-        """Obscuration (inner_radius / outer_radius of primary mirror)."""
-        return self.instParams["obscuration"]
-
-    @property
-    def focalLength(self):
-        """The focal length of telescope in meters."""
-        return self.instParams["focalLength"]
-
-    @property
-    def apertureDiameter(self):
-        """The aperture diameter in meters."""
-        return self.instParams["apertureDiameter"]
-
-    @property
-    def defocalDisOffsetInM(self):
-        """The defocal distance offset in meters."""
-        return self.instParams["offset"] * 1e-3
-
-    @property
-    def pixelSize(self):
-        """The camera pixel size in meters."""
-        return self.instParams["pixelSize"]
-
-    @property
-    def maskOffAxisCorr(self):
-        """The mask off-axis correction."""
-        return self._maskOffAxisCorr
-
-    @property
-    def dimOfDonutImg(self):
-        """The dimension of the donut image size on the sensor in pixels."""
-        return self._dimOfDonutImg
-
-    def getMarginalFocalLength(self):
-        """Get the marginal focal length in meter.
-
-        Marginal_focal_length = sqrt(f^2 - (D/2)^2)
-
-        Returns
-        -------
-        float
-            Marginal focal length in meter.
-        """
-
-        marginalFL = np.sqrt(self.focalLength**2 - (self.apertureDiameter / 2) ** 2)
-
-        return marginalFL
-
-    def getSensorFactor(self):
-        """Get the sensor factor.
-
-        Returns
-        -------
-        float
-            Sensor factor.
-        """
-
-        sensorFactor = self.dimOfDonutImg / (
-            self.defocalDisOffsetInM
-            * self.apertureDiameter
-            / self.focalLength
-            / self.pixelSize
+    def __init__(
+        self,
+        configFile: Union[Path, str, None] = "policy/instruments/LsstCam.yaml",
+        name: Optional[str] = None,
+        diameter: Optional[float] = None,
+        obscuration: Optional[float] = None,
+        focalLength: Optional[float] = None,
+        defocalOffset: Optional[float] = None,
+        pixelSize: Optional[float] = None,
+        wavelength: Union[float, dict, None] = None,
+        batoidModelName: Optional[str] = None,
+        batoidRefBand: Union[BandLabel, str, None] = None,
+        maskParams: Optional[dict] = None,
+    ) -> None:
+        # Merge keyword arguments with defaults from configFile
+        params = mergeConfigWithFile(
+            configFile,
+            name=name,
+            diameter=diameter,
+            obscuration=obscuration,
+            focalLength=focalLength,
+            defocalOffset=defocalOffset,
+            pixelSize=pixelSize,
+            wavelength=wavelength,
+            batoidModelName=batoidModelName,
+            batoidRefBand=batoidRefBand,
+            maskParams=maskParams,
         )
 
-        return sensorFactor
+        # Set each parameter
+        for key, value in params.items():
+            setattr(self, key, value)
 
-    def getSensorCoor(self):
-        """Get the sensor coordinate.
+    @property
+    def name(self) -> str:
+        """The name of the instrument."""
+        return self._name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        """Set the name of the instrument.
+
+        Parameters
+        ----------
+        value : str
+            The name of the instrument.
+        """
+        self._name = str(value)
+
+    @property
+    def diameter(self) -> float:
+        """The primary mirror diameter in meters."""
+        return self._diameter
+
+    @diameter.setter
+    def diameter(self, value: float) -> None:
+        """Set the mirror diameter.
+
+        Parameters
+        ----------
+        value : float
+            The mirror diameter in meters.
+
+        Raises
+        ------
+        ValueError
+            If the diameter is not positive
+        """
+        value = float(value)
+        if value <= 0:
+            raise ValueError("diameter must be positive.")
+        self._diameter = value
+
+    @property
+    def radius(self) -> float:
+        """The primary mirror radius in meters."""
+        return self.diameter / 2
+
+    @property
+    def area(self) -> float:
+        """The primary mirror area in square meters."""
+        return np.pi * self.radius**2 * (1 - self.obscuration**2)
+
+    @property
+    def obscuration(self) -> float:
+        """The fractional obscuration."""
+        return self._obscuration
+
+    @obscuration.setter
+    def obscuration(self, value: float) -> None:
+        """Set the fractional obscuration.
+
+        Parameters
+        ----------
+        value : float
+            The fractional obscuration
+
+        Raises
+        ------
+        ValueError
+            If the fractional obscuration is not between 0 and 1 (inclusive)
+        """
+        value = float(value)
+        if value < 0 or value > 1:
+            raise ValueError("The obscuration must be between 0 and 1 (inclusive).")
+        self._obscuration = value
+
+    @property
+    def focalLength(self) -> float:
+        """The focal length in meters."""
+        return self._focalLength
+
+    @focalLength.setter
+    def focalLength(self, value: float) -> None:
+        """Set the focal length.
+
+        Parameters
+        ----------
+        value : float
+            The focal length in meters
+
+        Raises
+        ------
+        ValueError
+            If the focal length is not positive
+        """
+        value = float(value)
+        if value <= 0:
+            raise ValueError("focalLength must be positive.")
+        self._focalLength = value
+
+    @property
+    def focalRatio(self) -> float:
+        """The f-number."""
+        return self.focalLength / self.diameter
+
+    @property
+    def defocalOffset(self) -> float:
+        """The defocal offset in meters."""
+        return self._defocalOffset  # type: ignore
+
+    @defocalOffset.setter
+    def defocalOffset(self, value: float) -> None:
+        """Set the defocal offset.
+
+        Parameters
+        ----------
+        value : float
+            The defocal offset in meters.
+        """
+        value = np.abs(float(value))
+        self._defocalOffset = value
+
+    @property
+    def pupilOffset(self) -> float:
+        """The pupil offset in meters."""
+        return self.focalLength**2 / self.defocalOffset
+
+    @property
+    def pixelSize(self) -> float:
+        """The pixel size in meters."""
+        return self._pixelSize
+
+    @pixelSize.setter
+    def pixelSize(self, value: float) -> None:
+        """Set the pixel size.
+
+        Parameters
+        ----------
+        value : float
+            The pixel size in meters.
+
+        Raises
+        ------
+        ValueError
+            If the pixel size is not positive
+        """
+        value = float(value)
+        if value <= 0:
+            raise ValueError("pixelSize must be positive.")
+        self._pixelSize = value
+
+    @property
+    def donutRadius(self) -> float:
+        """The expected donut radius in pixels."""
+        rMeters = self.defocalOffset / np.sqrt(4 * self.focalRatio**2 - 1)
+        rPixels = rMeters / self.pixelSize
+        return rPixels
+
+    @property
+    def donutDiameter(self) -> float:
+        """The expected donut diameter in pixels."""
+        return 2 * self.donutRadius
+
+    @property
+    def wavelength(self) -> Union[float, dict]:
+        """Return the effective wavelength(s) in meters."""
+        return self._wavelength
+
+    @wavelength.setter
+    def wavelength(self, value: Union[float, dict]) -> None:
+        """Set the effective wavelength(s).
+
+        Parameters
+        ----------
+        value : float or dict
+            The effective wavelength(s) in meters. Can either be a single float,
+            or a dictionary mapping BandLabels to floats.
+
+        Raises
+        ------
+        TypeError
+            If the provided value is not a float or dictionary
+        """
+        # Make sure the value is a float or dictionary
+        if not isinstance(value, float) and not isinstance(value, dict):
+            raise TypeError("wavelength must be a float or a dictionary.")
+
+        # Convert the wavelength dictionary to use BandLabels and floats
+        if isinstance(value, dict):
+            value = {BandLabel(key): float(val) for key, val in value.items()}
+
+        # Set the new value
+        self._wavelength = value
+
+        # Also clear the caches for the functions that use this value
+        self._getIntrinsicZernikesCached.cache_clear()
+        self._getOffAxisCoeffCached.cache_clear()
+
+    @property
+    def batoidModelName(self) -> Union[str, None]:
+        """The Batoid model name."""
+        return self._batoidModelName
+
+    @batoidModelName.setter
+    def batoidModelName(self, value: Optional[str]) -> None:
+        """Set the Batoid model name.
+
+        The name should match one of the yaml files in the batoid/data directory:
+        https://github.com/jmeyers314/batoid/tree/main/batoid/data
+        You can use "{band}" in the name, and this will be replaced with a band
+        name when loading the batoid model.
+
+        E.g. Setting the name to "LSST_{band}" allows one to load the Batoid
+        models corresponding to "LSST_u.yaml", "LSST_g.yaml", etc. using the
+        getBatoidModel() method below.
+
+        Parameters
+        ----------
+        value : str or None
+            The name of the Batoid model.
+
+        Raises
+        ------
+        ValueError
+            If value is not a string or None
+        """
+        # Make sure the value is a string or None
+        if not isinstance(value, str) and value is not None:
+            raise ValueError("batoidModelName must be a string, or None.")
+
+        # Set the new value
+        self._batoidModelName = value
+
+        # Also clear the caches for the functions that use this value
+        self.getBatoidModel.cache_clear()
+        self._getIntrinsicZernikesCached.cache_clear()
+        self._getOffAxisCoeffCached.cache_clear()
+
+    @property
+    def batoidRefBand(self) -> BandLabel:
+        """The band to use with Batoid when band == BandLabel.REF"""
+        return self._batoidRefBand
+
+    @batoidRefBand.setter
+    def batoidRefBand(self, value: Union[BandLabel, str]) -> None:
+        """Set the band to use with Batoid when band == BandLabel.REF.
+
+        Parameters
+        ----------
+        value : BandLabel or str
+            When loading the Batoid model, use this value in place of BandLabel.REF.
+            It should be a BandLabel Enum, or one of the corresponding strings.
+            If set to None, this value defaults to BandLabel.REF. Note this only
+            matters if batoidModelName contains "{band}".
+        """
+        if value is None:
+            self._batoidRefBand = BandLabel.REF
+        else:
+            self._batoidRefBand = BandLabel(value)
+
+    @lru_cache(10)
+    def getBatoidModel(
+        self, band: Union[BandLabel, str] = BandLabel.REF
+    ) -> batoid.Optic:
+        """Return the Batoid model for the instrument and the requested band.
+
+        Parameters
+        ----------
+        band : BandLabel or str, optional
+            The BandLabel Enum or corresponding string, specifying which Batoid
+            model to load. Only relevant if self.batoidModelName contains
+            "{band}". (the default is BandLabel.REF)
+        """
+        # If batoidModelName is None, we can't load a model, so return None
+        if self.batoidModelName is None:
+            return None
+
+        # Make sure the band is a BandLabel
+        band = BandLabel(band)
+
+        # Replace the reference band
+        band = self.batoidRefBand if band == BandLabel.REF else band
+
+        # Fill any occurrence of "{band}" with the band string
+        batoidModelName = self.batoidModelName.format(band=band.value)
+
+        # Load the Batoid model
+        return batoid.Optic.fromYaml(batoidModelName)
+
+    @lru_cache(100)
+    def _getIntrinsicZernikesCached(
+        self,
+        xAngle: float,
+        yAngle: float,
+        band: Union[BandLabel, str],
+        jmax: int,
+    ) -> np.ndarray:
+        """Cached interior function for the getIntrinsicZernikes method.
+
+        We need to do this because numpy arrays are mutable.
+
+        Parameters
+        ----------
+        xAngle : float
+            The x-component of the field angle in degrees.
+        yAngle : float
+            The y-component of the field angle in degrees.
+        band : BandLabel or str, optional
+            The BandLabel Enum or corresponding string, specifying which batoid
+            model to load. Only relevant if self.batoidModelName contains
+            "{band}".
+        jmax : int, optional
+            The maximum Noll index of the intrinsic Zernikes.
 
         Returns
         -------
-        numpy.ndarray
-            X coordinate.
-        numpy.ndarray
-            Y coordinate.
+        np.ndarray
+            The Zernike coefficients in meters, for Noll indices >= 4
         """
-        # Set each time with current instParams
-        self._setSensorCoor()
-        return self.xSensor, self.ySensor
+        # Get the band enum
+        band = BandLabel(band)
 
-    def getSensorCoorAnnular(self):
-        """Get the sensor coordinate with the annular aperature.
+        # Get the batoid model
+        batoidModel = self.getBatoidModel(band)
+
+        # If there is no batoid model, just return zeros
+        if batoidModel is None:
+            return np.zeros(jmax - 3)
+
+        # Get the wavelength
+        if isinstance(self.wavelength, dict):
+            wavelength = self.wavelength[band]
+        else:
+            wavelength = self.wavelength
+
+        # Get the intrinsic Zernikes in wavelengths
+        zkIntrinsic = batoid.zernike(
+            batoidModel,
+            *np.deg2rad([xAngle, yAngle]),
+            wavelength,
+            jmax=jmax,
+            eps=batoidModel.pupilObscuration,
+        )
+
+        # Multiply by wavelength to get Zernikes in meters
+        zkIntrinsic *= wavelength
+
+        # Keep only Noll indices >= 4
+        zkIntrinsic = zkIntrinsic[4:]
+
+        return zkIntrinsic.copy()
+
+    def getIntrinsicZernikes(
+        self,
+        xAngle: float,
+        yAngle: float,
+        band: Union[BandLabel, str] = BandLabel.REF,
+        jmax: int = 66,
+    ) -> np.ndarray:
+        """Return the intrinsic Zernikes associated with the optical design.
+
+        Parameters
+        ----------
+        xAngle : float
+            The x-component of the field angle in degrees.
+        yAngle : float
+            The y-component of the field angle in degrees.
+        band : BandLabel or str, optional
+            The BandLabel Enum or corresponding string, specifying which batoid
+            model to load. Only relevant if self.batoidModelName contains
+            "{band}". (the default is BandLabel.REF)
+        jmax : int, optional
+            The maximum Noll index of the intrinsic Zernikes.
+            (the default is 66)
 
         Returns
         -------
-        numpy.ndarray
-            X coordinate.
-        numpy.ndarray
-            Y coordinate.
+        np.ndarray
+            The Zernike coefficients in meters, for Noll indices >= 4
         """
-        # Set each time with current instParams
-        self._setSensorCoorAnnular()
-        return self.xoSensor, self.yoSensor
+        return self._getIntrinsicZernikesCached(xAngle, yAngle, band, jmax).copy()
 
-    def calcSizeOfDonutExpected(self):
-        """Calculate the size of expected donut (diameter).
+    @lru_cache(100)
+    def _getOffAxisCoeffCached(
+        self,
+        xAngle: float,
+        yAngle: float,
+        defocalType: DefocalType,
+        band: Union[BandLabel, str],
+        jmax: int,
+    ) -> np.ndarray:
+        """Cached interior function for the getOffAxisCoeff method.
+
+        We need to do this because numpy arrays are mutable.
+
+        Parameters
+        ----------
+        xAngle : float
+            The x-component of the field angle in degrees.
+        yAngle : float
+            The y-component of the field angle in degrees.
+        defocalType : DefocalType or str
+            The DefocalType Enum or corresponding string, specifying which side
+            of focus to model.
+        band : BandLabel or str
+            The BandLabel Enum or corresponding string, specifying which batoid
+            model to load. Only relevant if self.batoidModelName contains "{band}".
+        jmax : int, optional
+            The maximum Noll index of the off-axis model Zernikes.
 
         Returns
         -------
-        float
-            Size of expected donut (diameter) in pixel.
+        np.ndarray
+            The Zernike coefficients in meters, for Noll indices >= 4
         """
+        # Get the band enum
+        band = BandLabel(band)
 
-        fNumber = self.focalLength / self.apertureDiameter
+        # Get the batoid model
+        batoidModel = self.getBatoidModel(band)
 
-        return self.defocalDisOffsetInM / fNumber / self.pixelSize
+        # If there is no batoid model, just return zeros
+        if batoidModel is None:
+            return np.zeros(jmax - 3)
+
+        # Offset the focal plane
+        defocalType = DefocalType(defocalType)
+        defocalSign = +1 if defocalType == DefocalType.Extra else -1
+        offset = defocalSign * self.defocalOffset
+        batoidModel = batoidModel.withGloballyShiftedOptic("Detector", [0, 0, offset])
+
+        # Get the wavelength
+        if isinstance(self.wavelength, dict):
+            wavelength = self.wavelength[band]
+        else:
+            wavelength = self.wavelength
+
+        # Get the off-axis model Zernikes in wavelengths
+        zkIntrinsic = batoid.zernikeTA(
+            batoidModel,
+            *np.deg2rad([xAngle, yAngle]),
+            wavelength,
+            jmax=jmax,
+            eps=batoidModel.pupilObscuration,
+            nrad=200,
+            naz=20,
+        )
+
+        # Multiply by wavelength to get Zernikes in meters
+        zkIntrinsic *= wavelength
+
+        # Keep only Noll indices >= 4
+        zkIntrinsic = zkIntrinsic[4:]
+
+        return zkIntrinsic
+
+    def getOffAxisCoeff(
+        self,
+        xAngle: float,
+        yAngle: float,
+        defocalType: DefocalType,
+        band: Union[BandLabel, str] = BandLabel.REF,
+        jmax: int = 66,
+    ) -> np.ndarray:
+        """Return the Zernike coefficients associated with the off-axis model.
+
+        Parameters
+        ----------
+        xAngle : float
+            The x-component of the field angle in degrees.
+        yAngle : float
+            The y-component of the field angle in degrees.
+        defocalType : DefocalType or str
+            The DefocalType Enum or corresponding string, specifying which side
+            of focus to model.
+        band : BandLabel or str, optional
+            The BandLabel Enum or corresponding string, specifying which batoid
+            model to load. Only relevant if self.batoidModelName contains "{band}".
+            (the default is BandLabel.REF)
+        jmax : int, optional
+            The maximum Noll index of the off-axis model Zernikes.
+            (the default is 66)
+
+        Returns
+        -------
+        np.ndarray
+            The Zernike coefficients in meters, for Noll indices >= 4
+        """
+        return self._getOffAxisCoeffCached(
+            xAngle, yAngle, defocalType, band, jmax
+        ).copy()
+
+    @property
+    def maskParams(self) -> dict:
+        """The mask parameter dictionary."""
+        # Get the parameters if they exist
+        params = getattr(self, "_maskParams", None)
+
+        # If they don't exist, use the primary inner and outer radii
+        if params is None:
+            params = {
+                "pupilOuter": {
+                    "thetaMin": 0,
+                    "center": [0],
+                    "radius": [self.radius],
+                },
+                "pupilInner": {
+                    "thetaMin": 0,
+                    "center": [0],
+                    "radius": [self.obscuration],
+                },
+            }
+
+        return params
+
+    @maskParams.setter
+    def maskParams(self, value: Optional[dict]) -> None:
+        """Set the mask parameters.
+
+        Parameters
+        ----------
+        value : dict or None
+            Dictionary of mask parameters. Each key in this dictionary corresponds
+            to a different mask element. The corresponding values are dictionaries
+            that define circles with different centers and radii. The key, value
+            pairs are
+                - thetaMin: the minimum field angle in degrees for which this mask
+                element is relevant
+                - center: list of polynomial coefficients (in meters) for np.polyval
+                to determine the center of the circle
+                - radius: list of polynomial coefficients (in meters) for np.polyval
+                to determine the radius of the circle
+        Raises
+        ------
+        TypeError
+            If value is not a dictionary or None
+
+        """
+        if isinstance(value, dict) or value is None:
+            self._maskParams = value
+        else:
+            raise TypeError("maskParams must be a dictionary or None.")
+
+    def createPupilGrid(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Create a grid for the pupil.
+
+        The coordinates of the grid are in normalized pupil coordinates.
+        These coordinates are defined such that u^2 + v^2 = 1 is the outer
+        edge of the pupil, and u^2 + v^2 = obscuration^2 is the inner edge.
+
+        The number of pixels is chosen to match the resolution of the image.
+
+        Returns
+        -------
+        np.ndarray
+            The 2D u-grid on the pupil plane
+        np.ndarray
+            The 2D v-grid on the pupil plane
+        """
+        # Set the resolution equal to the resolution of the image
+        nPixels = np.ceil(self.donutDiameter).astype(int)
+
+        # Create a 1D array with the correct number of pixels
+        grid = np.linspace(-1.01, 1.01, nPixels)
+
+        # Create u and v grids
+        uPupil, vPupil = np.meshgrid(grid, grid)
+
+        return uPupil, vPupil
+
+    def createImageGrid(self, nPixels: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Create an (nPixel x nPixel) grid for the image.
+
+        The coordinates of the grid are in normalized image coordinates.
+        These coordinates are defined such that u^2 + v^2 = 1 is the outer
+        edge of the unaberrated donut, and u^2 + v^2 = obscuration^2 is the
+        inner edge.
+
+        Parameters
+        ----------
+        nPixels : int
+            The number of pixels on a side.
+
+        Returns
+        -------
+        np.ndarray
+            The 2D u-grid on the image plane
+        np.ndarray
+            The 2D v-grid on the image plane
+        """
+        # Create a 1D array with the correct number of pixels
+        grid = np.arange(nPixels, dtype=float)
+
+        # Center the grid
+        grid -= grid.mean()
+
+        # Convert to pupil normalized coordinates
+        grid /= self.donutRadius
+
+        # Create u and v grids
+        uImage, vImage = np.meshgrid(grid, grid)
+
+        return uImage, vImage

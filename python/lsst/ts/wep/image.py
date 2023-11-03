@@ -21,182 +21,260 @@
 
 __all__ = ["Image"]
 
-import os
-import warnings
+from copy import deepcopy
+from typing import Optional, Union
 
 import numpy as np
-from astropy.io import fits
-from lsst.ts.wep.centroid import CentroidFindFactory
-from lsst.ts.wep.utils import CentroidFindType
+from lsst.ts.wep.utils import BandLabel, DefocalType, PlaneType
+from typing_extensions import Self
 
 
 class Image(object):
-    """Image class for wavefront estimation.
+    """Class to hold a donut image along with metadata.
 
     Parameters
     ----------
-    centroidFindType : enum 'CentroidFindType', optional
-        Algorithm to find the centroid of donut. (the default is
-        CentroidFindType.RandomWalk.)
+    image : np.ndarray
+        The square numpy array containing the donut image.
+    fieldAngle : np.ndarray or tuple or list
+        The field angle of the donut, in degrees. The field angle
+        is the angle to the source, measured from the optical axis.
+    defocalType : DefocalType or str
+        Whether the image is intra- or extra-focal.
+        Can be specified using a DefocalType Enum or the corresponding string.
+    bandLabel : BandLabel or str
+        Photometric band for the exposure.
+        Can be specified using a BandLabel Enum or the corresponding string.
+    planeType : PlaneType or str, optional
+        Whether the image is on the image plane or the pupil plane.
+        Can be specified using a PlaneType Enum, or the corresponding string.
+        (the default is PlaneType.Image)
+    blendOffsets : np.ndarray or tuple or list, optional
+        Positions of blended donuts relative to location of center donut,
+        in pixels. Must be provided in the format [dxList, dyList].
+        The lengths of dxList and dyList must be the same.
+        (the default is an empty array, i.e. no blends)
+    mask : np.ndarray, optional
+        The mask for the image. Mask creation is meant to be handled by the
+        ImageMapper class.
     """
 
-    def __init__(self, centroidFindType=CentroidFindType.RandomWalk):
-        self.image = np.array([])
-        self.imageFilePath = ""
+    def __init__(
+        self,
+        image: np.ndarray,
+        fieldAngle: Union[np.ndarray, tuple, list],
+        defocalType: Union[DefocalType, str],
+        bandLabel: Union[BandLabel, str],
+        planeType: Union[PlaneType, str] = PlaneType.Image,
+        blendOffsets: Union[np.ndarray, tuple, list] = np.zeros((2, 0)),
+        mask: Optional[np.ndarray] = None,
+    ) -> None:
+        self.image = image
+        self.fieldAngle = fieldAngle  # type: ignore
+        self.defocalType = defocalType  # type: ignore
+        self.bandLabel = bandLabel  # type: ignore
+        self.planeType = planeType  # type: ignore
+        self.blendOffsets = blendOffsets  # type: ignore
+        self.mask = mask
 
-        self._centroidFind = CentroidFindFactory.createCentroidFind(centroidFindType)
+    @property
+    def image(self) -> np.ndarray:
+        """The donut image array."""
+        return self._image
 
-    def getCentroidFind(self):
-        """Get the centroid find object.
-
-        Returns
-        -------
-        CentroidRandomWalk, CentroidOtsu
-            Centroid find object.
-        """
-
-        return self._centroidFind
-
-    def getImg(self):
-        """Get the image.
-
-        Returns
-        -------
-        numpy.ndarray
-            Image.
-        """
-
-        return self.image
-
-    def getImgFilePath(self):
-        """Get the image file path.
-
-        Returns
-        -------
-        str
-            Image file path.
-        """
-
-        return self.imageFilePath
-
-    def setImg(self, image=None, imageFile=None):
-        """Set the wavefront image.
+    @image.setter
+    def image(self, value: np.ndarray) -> None:
+        """Set the donut image array.
 
         Parameters
         ----------
-        image : numpy.ndarray, optional
-            Array of image. (the default is None.)
-        imageFile : str, optional
-            Path of image file. (the default is None.)
-        """
+        value : np.ndarray
+            The square numpy array containing the donut image.
 
-        # Read the file if there is no input image
-        if image is not None:
-            self.image = image
-            self.imageFilePath = ""
+        Raises
+        ------
+        TypeError
+            If the image is not a numpy array
+        ValueError
+            If the array is not square
+        """
+        if not isinstance(value, np.ndarray):
+            raise TypeError("image must be a numpy array.")
+        if len(value.shape) != 2 or value.shape[0] != value.shape[1]:
+            raise ValueError("The image array must be square.")
+        self._image = value
+
+    @property
+    def fieldAngle(self) -> np.ndarray:
+        """The field angle in degrees."""
+        return self._fieldAngle
+
+    @fieldAngle.setter
+    def fieldAngle(self, value: Union[np.ndarray, tuple, list]) -> None:
+        """Set the field angle.
+
+        Parameters
+        ----------
+        value : np.ndarray, tuple, or list
+            The field angle of the donut, in degrees. The field angle
+            is the angle to the source, measured from the optical axis.
+
+        Raises
+        ------
+        ValueError
+            The provided value is not an iterable with 2 values
+        """
+        value = np.array(value, dtype=float).squeeze()
+        if value.shape != (2,):
+            raise ValueError("Field angle must have shape (2,).")
+        self._fieldAngle = value
+
+    @property
+    def defocalType(self) -> DefocalType:
+        """Return the DefocalType Enum of the image."""
+        return self._defocalType
+
+    @defocalType.setter
+    def defocalType(self, value: Union[DefocalType, str]) -> None:
+        """Set the defocal type.
+
+        Parameters
+        ----------
+        value : DefocalType or str
+            Whether the image is intra- or extra-focal.
+            Can be specified using a DefocalType Enum or the corresponding string.
+
+        Raises
+        ------
+        TypeError
+            The provided value is not a DefocalType Enum or string.
+        """
+        if isinstance(value, str) or isinstance(value, DefocalType):
+            self._defocalType = DefocalType(value)
         else:
-            if imageFile is not None:
-                self.image = self._readImgFile(imageFile)
-                self.imageFilePath = imageFile
-
-    def _readImgFile(self, imageFile):
-        """Read the donut image.
-
-        Parameters
-        ----------
-        imageFile : str
-            Path of image file.
-
-        Returns
-        -------
-        numpy.ndarray
-            Image data.
-        """
-
-        if os.path.isfile(imageFile):
-            if imageFile.endswith((".fits", ".fits.gz")):
-                image = fits.getdata(imageFile)
-            else:
-                image = np.loadtxt(imageFile)
-                # This assumes this "txt" file is in the format
-                # I[0,0]   I[0,1]
-                # I[1,0]   I[1,1]
-                image = image[::-1, :]
-        else:
-            image = np.array([])
-
-        return image
-
-    def updateImage(self, image):
-        """Update the image of donut.
-
-        Parameters
-        ----------
-        image : numpy.ndarray
-            Donut image.
-        """
-
-        # Update the image
-        if len(self.image) == 0:
-            warnings.warn(
-                "No 'image' is hold. Use setImg() instead.", category=UserWarning
+            raise TypeError(
+                "defocalType must be a DefocalType Enum, "
+                "or one of the corresponding strings."
             )
-        else:
-            self.image = image
 
-    def getCenterAndR(self, image=None):
-        """Get the centroid data.
+    @property
+    def bandLabel(self) -> BandLabel:
+        """The BandLabel Enum of the image."""
+        return self._bandLabel
+
+    @bandLabel.setter
+    def bandLabel(self, value: Union[BandLabel, str]) -> None:
+        """Set the band label.
 
         Parameters
         ----------
-        image : numpy.ndarray, optional
-            Image to do the analysis. (the default is None.)
+        value : BandLabel or str
+            Photometric band for the exposure.
+            Can be specified using a BandLabel Enum or the corresponding string.
 
-        Returns
-        -------
-        float
-            Centroid x.
-        float
-            Centroid y.
-        float
-            Effective weighting radius.
+        Raises
+        ------
+        TypeError
+            The provided value is not a BandLabel Enum or string.
         """
-
-        if image is not None:
-            imgDonut = image
+        if isinstance(value, str) or isinstance(value, BandLabel):
+            self._bandLabel = BandLabel(value)
         else:
-            imgDonut = self.image
+            raise TypeError(
+                "bandLabel must be a BandLabel Enum, "
+                "or one of the corresponding strings."
+            )
 
-        return self._centroidFind.getCenterAndR(imgDonut)
+    @property
+    def planeType(self) -> PlaneType:
+        """The PlaneType Enum of the image."""
+        return self._planeType
 
-    def getSNR(self):
-        """Get the signal to noise ratio of donut.
+    @planeType.setter
+    def planeType(self, value: Union[PlaneType, str]) -> None:
+        """Set the plane type.
+
+        Parameters
+        ----------
+        value : PlaneType or str
+            A PlaneType Enum or one of the corresponding strings.
+
+        Raises
+        ------
+        TypeError
+            The provided value is not a PlaneType Enum or string.
+        """
+        if isinstance(value, str) or isinstance(value, PlaneType):
+            self._planeType = PlaneType(value)
+        else:
+            raise TypeError(
+                "planeType must be a PlaneType Enum, "
+                "or one of the corresponding strings."
+            )
+
+    @property
+    def blendOffsets(self) -> Union[np.ndarray, None]:
+        """The blend offsets array for the image."""
+        return self._blendOffsets
+
+    @blendOffsets.setter
+    def blendOffsets(self, value: Union[np.ndarray, tuple, list]) -> None:
+        """Set the blend offsets array for the image.
+
+        Parameters
+        ----------
+        value : np.ndarray or tuple or list
+            Positions of blended donuts relative to location of center donut,
+            in pixels. Must be provided in the format [dxList, dyList].
+            The lengths of dxList and dyList must be the same.
+
+        Raises
+        ------
+        ValueError
+            If the provided value does not have the correct shape
+        """
+        value = np.array(value, dtype=float)
+        if value.shape[0] != 2 or len(value.shape) != 2:
+            raise ValueError(
+                "blendOffsets must have shape (2, N), "
+                "where N is the number of blends you wish to mask."
+            )
+        self._blendOffsets = value
+
+    @property
+    def mask(self) -> Union[np.ndarray, None]:
+        """The image mask."""
+        return self._mask
+
+    @mask.setter
+    def mask(self, value: Optional[np.ndarray]) -> None:
+        """Set the image mask.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            The mask for the image. Mask creation is meant to be handled by the
+            ImageMapper class.
+
+        Raises
+        ------
+        TypeError
+            If the mask is not an array, or None
+        ValueError
+            If the mask is an array and does not match the shape of the image
+        """
+        if value is not None and not isinstance(value, np.ndarray):
+            raise TypeError("mask must be an array, or None.")
+        elif isinstance(value, np.ndarray) and value.shape != self.image.shape:
+            raise ValueError("mask must have the same shape as self.image.")
+        self._mask = value
+
+    def copy(self) -> Self:
+        """Return a copy of the DonutImage object.
 
         Returns
         -------
-        float
-            Signal to noise ratio.
+        DonutImage
+            A deep copy of self.
         """
-
-        # Get the signal binary image
-        imgBinary = self._centroidFind.getImgBinary(self.image)
-        realcx, realcy, realR = self._centroidFind.getCenterAndRfromImgBinary(imgBinary)
-
-        # Get the background binary img
-        bgBinary = 1 - imgBinary
-
-        # Get the donut image signal and calculate the intensity
-        signal = self.image * imgBinary
-        signal = np.mean(signal[signal != 0])
-
-        # Get the background signal
-        bg = self.image * bgBinary
-        bg = bg[bg != 0]
-
-        # Calculate the noise
-        noise = np.std(bg - np.mean(bg))
-
-        # Calculate SNR
-        snr = signal / noise
-
-        return snr
+        return deepcopy(self)
