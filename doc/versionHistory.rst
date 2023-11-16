@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.1.0:
+
+-------------
+8.1.0
+-------------
+
+* Remove Zemax Coordinate System (ZCS) conversions now that ts_ofc works exclusively in Camera Coordinate System (CCS).
+
 .. _lsst.ts.wep-8.0.4:
 
 -------------
