@@ -24,9 +24,12 @@ import os
 import lsst.utils.tests
 import numpy as np
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
-from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
-from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task import (
+    CalcZernikesTaskConfig,
+    CalcZernikesTieTask,
+    CombineZernikesMeanTask,
+    CombineZernikesSigmaClipTask,
+)
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -35,7 +38,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
+class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -60,7 +63,7 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesScienceSensorPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesTieScienceSensorPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
@@ -78,7 +81,7 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
-        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -100,7 +103,7 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
-        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 

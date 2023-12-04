@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TIEAlgorithm"]
+__all__ = ["TieAlgorithm"]
 
 import warnings
 from typing import Iterable, Optional, Union
@@ -30,7 +30,7 @@ from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import DefocalType, createZernikeBasis, createZernikeGradBasis
 
 
-class TIEAlgorithm(WfAlgorithm):
+class TieAlgorithm(WfAlgorithm):
     """Wavefront estimation algorithm class for the TIE solver.
 
     Parameters
@@ -70,10 +70,6 @@ class TIEAlgorithm(WfAlgorithm):
     centerBinary : bool, optional
         Whether to use a binary template when centering the image.
         Using a binary template is typically less accurate, but faster.
-    centerSubPixel : bool, optional
-        Whether to center the images with sub-pixel resolution.
-        In good conditions (i.e. low noise and good seeing), using a binary
-        template is typically less accurate, but faster.
     convergeTol : float, optional
         The maximum absolute change in any Zernike amplitude (in meters) between
         subsequent TIE iterations below which convergence is declared and iteration
@@ -94,7 +90,6 @@ class TIEAlgorithm(WfAlgorithm):
         compGain: Optional[float] = None,
         centerTol: Optional[float] = None,
         centerBinary: Optional[bool] = None,
-        centerSubPixel: Optional[bool] = None,
         convergeTol: Optional[float] = None,
         saveHistory: Optional[bool] = None,
     ) -> None:
@@ -107,7 +102,6 @@ class TIEAlgorithm(WfAlgorithm):
             compGain=compGain,
             centerTol=centerTol,
             centerBinary=centerBinary,
-            centerSubPixel=centerSubPixel,
             convergeTol=convergeTol,
             saveHistory=saveHistory,
         )
@@ -307,32 +301,6 @@ class TIEAlgorithm(WfAlgorithm):
         self._centerBinary = value
 
     @property
-    def centerSubPixel(self) -> bool:
-        """Whether to center the donut with sub-pixel resolution."""
-        return self._centerSubPixel
-
-    @centerSubPixel.setter
-    def centerSubPixel(self, value: bool) -> None:
-        """Set whether to center the donut with sub-pixel resolution.
-
-        Parameters
-        ----------
-        value : bool
-            Whether to center the images with sub-pixel resolution.
-            In good conditions (i.e. low noise and good seeing), using a binary
-            template is typically less accurate, but faster.
-
-        Raises
-        ------
-        TypeError
-            If the value is not a boolean
-        """
-        if not isinstance(value, bool):
-            raise TypeError("centerSubPixel must be a boolean.")
-
-        self._centerSubPixel = value
-
-    @property
     def convergeTol(self) -> float:
         """Mean abs. deviation in Zernikes (meters) at which the TIE loop terminates."""
         return self._convergeTol
@@ -497,7 +465,7 @@ class TIEAlgorithm(WfAlgorithm):
         # TODO: Implement the fft solver
         raise NotImplementedError("The fft solver is not yet implemented.")
 
-    def estimateWf(
+    def estimateZk(
         self,
         I1: Image,
         I2: Image,  # type: ignore[override]
@@ -585,13 +553,11 @@ class TIEAlgorithm(WfAlgorithm):
                     intra,
                     zkCenter,
                     binary=self.centerBinary,
-                    subPixel=self.centerSubPixel,
                 )
                 extraCent = imageMapper.centerOnProjection(
                     extra,
                     zkCenter,
                     binary=self.centerBinary,
-                    subPixel=self.centerSubPixel,
                 )
 
             # Compensate images using the Zernikes

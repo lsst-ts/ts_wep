@@ -57,9 +57,6 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Set size (in pixels) of donut template image used for
-        # final centroiding by convolution of initial cutout with template
-        self.donutTemplateSize = self.config.donutTemplateSize
         # Set final size (in pixels) of postage stamp images returned as
         # DonutStamp objects
         self.donutStampSize = self.config.donutStampSize
@@ -175,9 +172,7 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
                 # LSST extrafocal chips are offset -1.5 mm
                 # when LSST camera defocus is at 0.
                 if self.config.instDefocalOffset is None:
-                    self.instParams["offset"] = np.abs(focusZ - 1.5)
-                else:
-                    self.config.instDefocalOffset
+                    self.instDefocalOffset = np.abs(focusZ - 1.5)
                 donutStampsExtraExp = self.cutOutStamps(
                     exposure, extraCatalog, DefocalType.Extra, cameraName
                 )
@@ -186,9 +181,7 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
                 # LSST intrafocal chips are offset +1.5 mm
                 # when LSST camera defocus is at 0.
                 if self.config.instDefocalOffset is None:
-                    self.instParams["offset"] = np.abs(focusZ + 1.5)
-                else:
-                    self.config.instDefocalOffset
+                    self.instDefocalOffset = np.abs(focusZ + 1.5)
                 donutStampsIntraExp = self.cutOutStamps(
                     exposure, intraCatalog, DefocalType.Intra, cameraName
                 )

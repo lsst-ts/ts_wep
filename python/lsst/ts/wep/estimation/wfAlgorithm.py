@@ -108,7 +108,7 @@ class WfAlgorithm(ABC):
             raise TypeError("instrument must be an Instrument.")
 
     @abstractmethod
-    def estimateWf(
+    def estimateZk(
         self,
         I1: Image,
         I2: Optional[Image],

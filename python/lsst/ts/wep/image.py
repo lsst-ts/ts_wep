@@ -42,17 +42,18 @@ class Image(object):
     defocalType : DefocalType or str
         Whether the image is intra- or extra-focal.
         Can be specified using a DefocalType Enum or the corresponding string.
-    bandLabel : BandLabel or str
-        Photometric band for the exposure.
-        Can be specified using a BandLabel Enum or the corresponding string.
+    bandLabel : BandLabel or str, optional
+            Photometric band for the exposure. Can be specified using a
+            BandLabel Enum or the corresponding string. If None, BandLabel.REF
+            is used. The empty string "" also maps to BandLabel.REF.
+        (the default is BandLabel.REF)
     planeType : PlaneType or str, optional
         Whether the image is on the image plane or the pupil plane.
         Can be specified using a PlaneType Enum, or the corresponding string.
         (the default is PlaneType.Image)
     blendOffsets : np.ndarray or tuple or list, optional
-        Positions of blended donuts relative to location of center donut,
-        in pixels. Must be provided in the format [dxList, dyList].
-        The lengths of dxList and dyList must be the same.
+        Positions of blended donuts relative to central donut, in pixels.
+        Must be provided in the format [[dx1, dy1], [dx2, dy2], ...].
         (the default is an empty array, i.e. no blends)
     mask : np.ndarray, optional
         The mask for the image. Mask creation is meant to be handled by the
@@ -64,9 +65,9 @@ class Image(object):
         image: np.ndarray,
         fieldAngle: Union[np.ndarray, tuple, list],
         defocalType: Union[DefocalType, str],
-        bandLabel: Union[BandLabel, str],
+        bandLabel: Union[BandLabel, str] = BandLabel.REF,
         planeType: Union[PlaneType, str] = PlaneType.Image,
-        blendOffsets: Union[np.ndarray, tuple, list] = np.zeros((2, 0)),
+        blendOffsets: Union[np.ndarray, tuple, list, None] = None,
         mask: Optional[np.ndarray] = None,
     ) -> None:
         self.image = image
@@ -102,7 +103,7 @@ class Image(object):
             raise TypeError("image must be a numpy array.")
         if len(value.shape) != 2 or value.shape[0] != value.shape[1]:
             raise ValueError("The image array must be square.")
-        self._image = value
+        self._image = value.copy()
 
     @property
     def fieldAngle(self) -> np.ndarray:
@@ -163,21 +164,24 @@ class Image(object):
         return self._bandLabel
 
     @bandLabel.setter
-    def bandLabel(self, value: Union[BandLabel, str]) -> None:
+    def bandLabel(self, value: Union[BandLabel, str, None]) -> None:
         """Set the band label.
 
         Parameters
         ----------
-        value : BandLabel or str
-            Photometric band for the exposure.
-            Can be specified using a BandLabel Enum or the corresponding string.
+        value : BandLabel or str or None
+            Photometric band for the exposure. Can be specified using a
+            BandLabel Enum or the corresponding string. If None, BandLabel.REF
+            is used. The empty string "" also maps to BandLabel.REF.
 
         Raises
         ------
         TypeError
             The provided value is not a BandLabel Enum or string.
         """
-        if isinstance(value, str) or isinstance(value, BandLabel):
+        if value is None or value == "":
+            self._bandLabel = BandLabel.REF
+        elif isinstance(value, str) or isinstance(value, BandLabel):
             self._bandLabel = BandLabel(value)
         else:
             raise TypeError(
@@ -218,27 +222,35 @@ class Image(object):
         return self._blendOffsets
 
     @blendOffsets.setter
-    def blendOffsets(self, value: Union[np.ndarray, tuple, list]) -> None:
+    def blendOffsets(self, value: Union[np.ndarray, tuple, list, None]) -> None:
         """Set the blend offsets array for the image.
 
         Parameters
         ----------
-        value : np.ndarray or tuple or list
-            Positions of blended donuts relative to location of center donut,
-            in pixels. Must be provided in the format [dxList, dyList].
-            The lengths of dxList and dyList must be the same.
+        value : np.ndarray or tuple or list or None
+            Positions of blended donuts relative to central donut, in pixels.
+            Must be provided in the format [[dx1, dy1], [dx2, dy2], ...].
+            If None, an empty array is populated for you.
 
         Raises
         ------
         ValueError
             If the provided value does not have the correct shape
         """
-        value = np.array(value, dtype=float)
-        if value.shape[0] != 2 or len(value.shape) != 2:
+        # If None, populate an empty array with the correct shape
+        if value is None:
+            value = np.zeros((0, 2))
+
+        # Convert to float array
+        value = np.atleast_2d(value).astype(float)
+
+        # Check shape
+        if value.shape[1] != 2 or len(value.shape) != 2:
             raise ValueError(
-                "blendOffsets must have shape (2, N), "
+                "blendOffsets must have shape (N, 2), "
                 "where N is the number of blends you wish to mask."
             )
+
         self._blendOffsets = value
 
     @property
@@ -250,11 +262,12 @@ class Image(object):
     def mask(self, value: Optional[np.ndarray]) -> None:
         """Set the image mask.
 
+        Note that mask creation is meant to be handled by the ImageMapper class.
+
         Parameters
         ----------
         mask : np.ndarray
-            The mask for the image. Mask creation is meant to be handled by the
-            ImageMapper class.
+            The mask for the image.
 
         Raises
         ------
@@ -264,9 +277,11 @@ class Image(object):
             If the mask is an array and does not match the shape of the image
         """
         if value is not None and not isinstance(value, np.ndarray):
-            raise TypeError("mask must be an array, or None.")
+            raise TypeError("mask must be an array or None.")
         elif isinstance(value, np.ndarray) and value.shape != self.image.shape:
             raise ValueError("mask must have the same shape as self.image.")
+        elif isinstance(value, np.ndarray):
+            value = value.copy()
         self._mask = value
 
     def copy(self) -> Self:

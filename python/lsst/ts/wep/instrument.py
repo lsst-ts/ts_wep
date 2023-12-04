@@ -27,7 +27,7 @@ from typing import Optional, Tuple, Union
 
 import batoid
 import numpy as np
-from lsst.ts.wep.utils import BandLabel, DefocalType, mergeConfigWithFile
+from lsst.ts.wep.utils import BandLabel, DefocalType, EnumDict, mergeConfigWithFile
 
 
 class Instrument:
@@ -52,6 +52,10 @@ class Instrument:
         The defocal offset of the images in meters.
     pixelSize : float, optional
         The pixel size in meters.
+    refBand : BandLabel or str, optional
+        When getting the wavelength or loading the Batoid model, use this value
+        in place of BandLabel.REF. It should be a BandLabel Enum, or one of the
+        corresponding strings. If set to None, this value defaults to BandLabel.REF.
     wavelength : float or dict, optional
         The effective wavelength of the instrument in meters. Can be a float, or
         a dictionary that corresponds to different bands. The keys in this
@@ -64,11 +68,6 @@ class Instrument:
         photometric bands, and the names of these bands will be filled in at
         runtime using the strings specified in the BandLabel enum in
         jf_wep.utils.enums.
-    batoidRefBand : BandLabel or str, optional
-        When loading the Batoid model, use this value in place of BandLabel.REF.
-        It should be a BandLabel Enum, or one of the corresponding strings.
-        If set to None, this value defaults to BandLabel.REF. Note this only
-        matters if batoidModelName contains "{band}".
     maskParams : dict, optional
         Dictionary of mask parameters. Each key in this dictionary corresponds
         to a different mask element. The corresponding values are dictionaries
@@ -91,9 +90,9 @@ class Instrument:
         focalLength: Optional[float] = None,
         defocalOffset: Optional[float] = None,
         pixelSize: Optional[float] = None,
+        refBand: Union[BandLabel, str, None] = None,
         wavelength: Union[float, dict, None] = None,
         batoidModelName: Optional[str] = None,
-        batoidRefBand: Union[BandLabel, str, None] = None,
         maskParams: Optional[dict] = None,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
@@ -105,9 +104,9 @@ class Instrument:
             focalLength=focalLength,
             defocalOffset=defocalOffset,
             pixelSize=pixelSize,
+            refBand=refBand,
             wavelength=wavelength,
             batoidModelName=batoidModelName,
-            batoidRefBand=batoidRefBand,
             maskParams=maskParams,
         )
 
@@ -265,6 +264,11 @@ class Instrument:
         self._pixelSize = value
 
     @property
+    def pixelScale(self) -> float:
+        """The pixel scale in arcseconds per pixel."""
+        return np.rad2deg(self.pixelSize / self.focalLength) * 3600
+
+    @property
     def donutRadius(self) -> float:
         """The expected donut radius in pixels."""
         rMeters = self.defocalOffset / np.sqrt(4 * self.focalRatio**2 - 1)
@@ -277,7 +281,29 @@ class Instrument:
         return 2 * self.donutRadius
 
     @property
-    def wavelength(self) -> Union[float, dict]:
+    def refBand(self) -> BandLabel:
+        """The band to use with Batoid and wavelength when band == BandLabel.REF"""
+        return self._refBand
+
+    @refBand.setter
+    def refBand(self, value: Union[BandLabel, str]) -> None:
+        """Set the reference band to use with Batoid and wavelength.
+
+        Parameters
+        ----------
+        value : BandLabel or str
+            When loading the Batoid model, use this value in place of BandLabel.REF.
+            It should be a BandLabel Enum, or one of the corresponding strings.
+            If set to None, this value defaults to BandLabel.REF. Note this only
+            matters if batoidModelName contains "{band}".
+        """
+        if value is None:
+            self._refBand = BandLabel.REF
+        else:
+            self._refBand = BandLabel(value)
+
+    @property
+    def wavelength(self) -> EnumDict:
         """Return the effective wavelength(s) in meters."""
         return self._wavelength
 
@@ -295,14 +321,30 @@ class Instrument:
         ------
         TypeError
             If the provided value is not a float or dictionary
+        ValueError
+            If the provided value is a dictionary, and the dictionary does not
+            contain a wavelength for the reference band,
         """
         # Make sure the value is a float or dictionary
-        if not isinstance(value, float) and not isinstance(value, dict):
+        if (
+            not isinstance(value, float)
+            and not isinstance(value, dict)
+            and not isinstance(value, EnumDict)
+        ):
             raise TypeError("wavelength must be a float or a dictionary.")
 
-        # Convert the wavelength dictionary to use BandLabels and floats
-        if isinstance(value, dict):
-            value = {BandLabel(key): float(val) for key, val in value.items()}
+        # Save wavelength info in a BandLabel EnumDict
+        if isinstance(value, dict) or isinstance(value, EnumDict):
+            value = EnumDict(BandLabel, value)
+            try:
+                value[BandLabel.REF] = value[self.refBand]
+            except KeyError:
+                raise ValueError(
+                    "The wavelength dictionary must contain a wavelength "
+                    "for the reference band."
+                )
+        else:
+            value = EnumDict(BandLabel, {BandLabel.REF: value, self.refBand: value})
 
         # Set the new value
         self._wavelength = value
@@ -336,12 +378,12 @@ class Instrument:
 
         Raises
         ------
-        ValueError
+        TypeError
             If value is not a string or None
         """
         # Make sure the value is a string or None
         if not isinstance(value, str) and value is not None:
-            raise ValueError("batoidModelName must be a string, or None.")
+            raise TypeError("batoidModelName must be a string, or None.")
 
         # Set the new value
         self._batoidModelName = value
@@ -350,28 +392,6 @@ class Instrument:
         self.getBatoidModel.cache_clear()
         self._getIntrinsicZernikesCached.cache_clear()
         self._getOffAxisCoeffCached.cache_clear()
-
-    @property
-    def batoidRefBand(self) -> BandLabel:
-        """The band to use with Batoid when band == BandLabel.REF"""
-        return self._batoidRefBand
-
-    @batoidRefBand.setter
-    def batoidRefBand(self, value: Union[BandLabel, str]) -> None:
-        """Set the band to use with Batoid when band == BandLabel.REF.
-
-        Parameters
-        ----------
-        value : BandLabel or str
-            When loading the Batoid model, use this value in place of BandLabel.REF.
-            It should be a BandLabel Enum, or one of the corresponding strings.
-            If set to None, this value defaults to BandLabel.REF. Note this only
-            matters if batoidModelName contains "{band}".
-        """
-        if value is None:
-            self._batoidRefBand = BandLabel.REF
-        else:
-            self._batoidRefBand = BandLabel(value)
 
     @lru_cache(10)
     def getBatoidModel(
@@ -390,11 +410,11 @@ class Instrument:
         if self.batoidModelName is None:
             return None
 
-        # Make sure the band is a BandLabel
+        # Get the band enum
         band = BandLabel(band)
 
         # Replace the reference band
-        band = self.batoidRefBand if band == BandLabel.REF else band
+        band = self.refBand if band == BandLabel.REF else band
 
         # Fill any occurrence of "{band}" with the band string
         batoidModelName = self.batoidModelName.format(band=band.value)
@@ -442,23 +462,17 @@ class Instrument:
         if batoidModel is None:
             return np.zeros(jmax - 3)
 
-        # Get the wavelength
-        if isinstance(self.wavelength, dict):
-            wavelength = self.wavelength[band]
-        else:
-            wavelength = self.wavelength
-
         # Get the intrinsic Zernikes in wavelengths
         zkIntrinsic = batoid.zernike(
             batoidModel,
             *np.deg2rad([xAngle, yAngle]),
-            wavelength,
+            self.wavelength[band],
             jmax=jmax,
             eps=batoidModel.pupilObscuration,
         )
 
         # Multiply by wavelength to get Zernikes in meters
-        zkIntrinsic *= wavelength
+        zkIntrinsic *= self.wavelength[band]
 
         # Keep only Noll indices >= 4
         zkIntrinsic = zkIntrinsic[4:]
@@ -544,17 +558,11 @@ class Instrument:
         offset = defocalSign * self.defocalOffset
         batoidModel = batoidModel.withGloballyShiftedOptic("Detector", [0, 0, offset])
 
-        # Get the wavelength
-        if isinstance(self.wavelength, dict):
-            wavelength = self.wavelength[band]
-        else:
-            wavelength = self.wavelength
-
         # Get the off-axis model Zernikes in wavelengths
         zkIntrinsic = batoid.zernikeTA(
             batoidModel,
             *np.deg2rad([xAngle, yAngle]),
-            wavelength,
+            self.wavelength[band],
             jmax=jmax,
             eps=batoidModel.pupilObscuration,
             nrad=200,
@@ -562,7 +570,7 @@ class Instrument:
         )
 
         # Multiply by wavelength to get Zernikes in meters
-        zkIntrinsic *= wavelength
+        zkIntrinsic *= self.wavelength[band]
 
         # Keep only Noll indices >= 4
         zkIntrinsic = zkIntrinsic[4:]

@@ -30,13 +30,9 @@ import lsst.geom
 import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.stamps import AbstractStamp
-from lsst.ts.wep.estimation import CompensableImage
-from lsst.ts.wep.utils import (
-    DefocalType,
-    FilterType,
-    getCameraFromButlerName,
-    getFilterTypeFromBandLabel,
-)
+from lsst.ts.wep.image import Image
+from lsst.ts.wep.imageMapper import ImageMapper
+from lsst.ts.wep.utils import getCameraFromButlerName
 
 
 @dataclass
@@ -70,15 +66,12 @@ class DonutStamp(AbstractStamp):
     archive_element : `afwTable.io.Persistable`, optional
         Archive element (e.g. Transform or WCS) associated with this stamp.
         (the default is None.)
-    comp_im : `CompensableImage`, init=False
-        CompensableImage object to create masks for the stamp. This is
-        initialized in the __post_init__ stage of the dataclass.
-    mask_comp : `afwImage.Mask`, init=False
-        Padded Mask for use at the offset planes. This is
-        initialized in the __post_init__ stage of the dataclass.
-    mask_pupil : `afwImage.Mask`, init=False
-        Non-padded mask corresponding to aperture. This is
-        initialized in the __post_init__ stage of the dataclass.
+    wep_im : `lsst.ts.wep.image.Image`
+        ts.wep Image object used for mask creation, wavefront estimation, etc.
+        The information contained in this object has been transformed to the
+        camera coordinate system (CCS), with the CWFSs rotated to the same
+        orientation as the science sensors. It is this object that will be used
+        to interface with the wavefront estimator.
     """
 
     stamp_im: afwImage.MaskedImageF
@@ -91,14 +84,14 @@ class DonutStamp(AbstractStamp):
     cam_name: str
     bandpass: str
     archive_element: Optional[afwTable.io.Persistable] = None
-    comp_im: CompensableImage = field(default_factory=CompensableImage)
+    wep_im: Image = field(init=False)
 
     def __post_init__(self):
         """
-        This method sets up the CompensableImage after initialization
+        This method sets up the WEP Image after initialization
         because we need to use the parameters set in the original `__init__`.
         """
-        self._setCompensableImage()
+        self._setWepImage()
 
     @classmethod
     def factory(cls, stamp_im, metadata, index, archive_element=None):
@@ -212,34 +205,134 @@ class DonutStamp(AbstractStamp):
 
         return np.degrees(field_x), np.degrees(field_y)
 
-    def _setCompensableImage(self):
-        """
-        Set up the compensable image object in the dataclass.
-        """
+    def _setWepImage(self):
+        """Return a ts.wep.image.Image object for the stamp.
 
-        field_xy = self.calcFieldXY()
-        if np.shape(self.blend_centroid_positions)[1] > 0:
+        Note that the information from the butler is in the data visualization
+        coordinate system (DVCS), but the WEP Image is in the camera coordinate
+        system (CCS). These coordinate systems are related by a transpose. See
+        sitcomtn-003.lsst.io for more information.
+
+        Furthermore, CWFS images that arrive from the butler are rotated with
+        respect to the science sensors. The info in the WEP Images has been
+        de-rotated so that everything aligns with the science sensors.
+
+        Returns
+        -------
+        ts.wep.image.Image
+
+        Raises
+        ------
+        RuntimeError
+            If the rotation angle of the detector with respect to the science
+            sensors is not an integer multiple of 90 degrees.
+        """
+        # Get the camera and detector
+        camera = self.getCamera()
+        detector = camera.get(self.detector_name)
+
+        # Get the rotation with respect to the science sensors
+        eulerZ = -detector.getOrientation().getYaw().asDegrees()
+        nRot = int(eulerZ // 90)
+        if not np.isclose(eulerZ % 90, 0):
+            raise RuntimeError(
+                f"The detector is rotated {-eulerZ} deg with respect to the science "
+                "sensors, but _setWepImage() only works for sensors whose rotations "
+                "are an integer multiple of 90 deg."
+            )
+
+        # Rotate to orientation of science sensors
+        image = np.rot90(self.stamp_im.getImage().getArray(), nRot)
+
+        # Transpose the image (DVCS -> CCS)
+        image = image.T
+
+        # Get the field angle, and transpose (DVCS -> CCS)
+        fieldAngle = self.calcFieldXY()
+        fieldAngle = (fieldAngle[1], fieldAngle[0])
+
+        # Determine the blend offsets
+        if self.blend_centroid_positions.size > 0:
+            # Get the offsets in the original pixel coordinates
             blendOffsets = self.blend_centroid_positions - self.centroid_position
-            blendOffsets = blendOffsets.T
-        else:
-            # If empty array then just pass this as the offset since
-            # CompensableImage understands empty lists mean no blend
-            blendOffsets = self.blend_centroid_positions
 
-        # If no bandpass set then use reference filter as
-        # default when creating a compensableImage instance
-        if self.bandpass == "":
-            filterLabel = FilterType.REF
-        else:
-            filterLabel = getFilterTypeFromBandLabel(self.bandpass)
+            # Rotate the coordinates to match the science sensors
+            rotMat = np.array([[0, -1], [1, 0]])
+            rotMat = np.linalg.matrix_power(rotMat, nRot)
+            blendOffsets = np.transpose(rotMat @ blendOffsets.T)
 
-        self.comp_im.setImg(
-            field_xy,
-            DefocalType(self.defocal_type),
-            filterLabel=filterLabel,
-            blendOffsets=blendOffsets.tolist(),
-            image=self.stamp_im.getImage().getArray(),
+            # Transpose the coordinates (DVCS -> CCS)
+            blendOffsets = blendOffsets[:, ::-1]
+
+        else:
+            blendOffsets = None
+
+        # Package everything in an Image object
+        wepImage = Image(
+            image=image,
+            fieldAngle=fieldAngle,
+            defocalType=self.defocal_type,
+            bandLabel=self.bandpass,
+            blendOffsets=blendOffsets,
         )
+
+        self.wep_im = wepImage
+
+    def makeMask(self, instrument, opticalModel="offAxis", dilate=0, maskBlends=True):
+        """Create the mask for the image.
+
+        Note the mask is returned in the original coordinate system of the info
+        that came from the butler (i.e. the DVCS, and the CWFSs are rotated
+        with respect to the science sensors). See sitcomtn-003.lsst.io for more
+        information.
+
+        Parameters
+        ----------
+        instrument : Instrument
+            Instrument to use.
+        opticalModel : str, optional
+            The optical model for the ImageMapper. Can be "paraxial", "onAxis",
+            or "offAxis". (the default is "offAxis")
+        dilate : int, optional
+            How many times to dilate the mask. This adds a boundary of that
+            many pixels to the mask. (the default is 0)
+        maskBlends : bool, optional
+            Whether to mask the blends (i.e. the blended regions are masked
+            out). (the default is True)
+        """
+        # Create the image mapper
+        imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
+
+        # Create the mask
+        mask = imageMapper.createImageMask(
+            self.wep_im,
+            binary=True,
+            dilate=dilate,
+            maskBlends=maskBlends,
+        )
+
+        # Save this mask in the WEP image
+        self.wep_im.mask = mask
+
+        # This mask is in the CCS with the CWFSs de-rotated (see the docstring
+        # for self._setWepImage()). We need to put it back in the coordinate
+        # system of the info in the butler
+
+        # Transpose the mask (DVCS -> CCS)
+        mask = mask.T
+
+        # Rotate to sensor orientation
+        camera = self.getCamera()
+        detector = camera.get(self.detector_name)
+        eulerZ = -detector.getOrientation().getYaw().asDegrees()
+        nRot = int(eulerZ // 90)
+        mask = np.rot90(mask, -nRot)
+
+        # Set the mask
+        mask = afwImage.Mask(mask.astype(np.int32).copy())
+        self.stamp_im.setMask(mask)
+        self.stamp_im.mask.clearMaskPlaneDict()
+        self.stamp_im.mask.conformMaskPlanes({"BKGRD": 0, "DONUT": 1})
 
     def getLinearWCS(self):
         """

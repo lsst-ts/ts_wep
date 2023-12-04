@@ -8,6 +8,5 @@ compSequence: [4, 4, 6, 6, 13, 13, 13, 13, 22, 22, 22, 22, 22, 22]
 compGain: 0.6
 centerTol: 10.0e-9
 centerBinary: True
-centerSubPixel: False
 convergeTol: 10.0e-9
 saveHistory: False

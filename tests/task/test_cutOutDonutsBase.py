@@ -25,13 +25,14 @@ import lsst.utils.tests
 import numpy as np
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
 )
 from lsst.ts.wep.utils import (
-    CamType,
     DefocalType,
+    createTemplateForDetector,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
@@ -98,18 +99,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def _generateTestExposures(self):
         # Generate donut template
-        template = self.task.getTemplate(
-            "R22_S11", DefocalType.Extra, self.task.donutTemplateSize, CamType.LsstCam
-        )
+        camera = LsstCam.getCamera()
+        template = createTemplateForDetector(camera.get("R22_S11"), "extra")
+        template = np.pad(template, (self.task.donutStampSize - len(template)) // 2)
         correlatedImage = correlate(template, template)
         maxIdx = np.argmax(correlatedImage)
         maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
-        templateCenter = np.array(maxLoc) - self.task.donutTemplateSize / 2
+        templateCenter = np.array(maxLoc) - len(template) / 2
 
         # Make donut centered in exposure
-        initCutoutSize = (
-            self.task.donutTemplateSize + self.task.initialCutoutPadding * 2
-        )
+        initCutoutSize = len(template) + self.task.initialCutoutPadding * 2
         centeredArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
         centeredArr[
             self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
@@ -127,9 +126,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Make new donut that needs to be shifted by 20 pixels
         # from the edge of the exposure
         offCenterArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
-        offCenterArr[
-            : self.task.donutTemplateSize - 20, : self.task.donutTemplateSize - 20
-        ] = template[20:, 20:]
+        offCenterArr[: len(template) - 20, : len(template) - 20] = template[20:, 20:]
         offCenterImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
         offCenterImage.array = offCenterArr
         offCenterExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
@@ -141,72 +138,36 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
     def testValidateConfigs(self):
-        self.assertEqual(self.task.donutTemplateSize, 160)
         self.assertEqual(self.task.donutStampSize, 160)
         self.assertEqual(self.task.initialCutoutPadding, 5)
         self.assertEqual(self.task.opticalModel, "offAxis")
-        self.assertEqual(self.task.instParams["obscuration"], 0.61)
-        self.assertEqual(self.task.instParams["focalLength"], 10.312)
-        self.assertEqual(self.task.instParams["apertureDiameter"], 8.36)
-        self.assertEqual(self.task.instParams["offset"], 1.5)
-        self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
+        self.assertEqual(self.task.instObscuration, 0.61)
+        self.assertEqual(self.task.instFocalLength, 10.312)
+        self.assertEqual(self.task.instApertureDiameter, 8.36)
+        self.assertEqual(self.task.instDefocalOffset, 1.5)
+        self.assertEqual(self.task.instPixelSize, 10.0e-6)
         self.assertFalse(self.task.multiplyMask)
         self.assertEqual(self.task.maskGrowthIter, 6)
 
-        self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.config.opticalModel = "onAxis"
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
-        self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
         self.assertEqual(self.task.opticalModel, "onAxis")
 
-    def testCreateInstDictFromConfig(self):
-        self.config.instObscuration = 0.1
-        self.config.instFocalLength = 10.0
-        self.config.instApertureDiameter = 10.0
-        self.config.instDefocalOffset = 0.01
-        self.config.instPixelSize = 0.1
-        task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
-
-        testDict = {
-            "obscuration": 0.1,
-            "focalLength": 10.0,
-            "apertureDiameter": 10.0,
-            "offset": 0.01,
-            "pixelSize": 0.1,
-        }
-
-        self.assertDictEqual(testDict, task.instParams)
-
     def testCheckAndSetOffset(self):
         # If offset is already set then no change
-        self.assertEqual(self.task.instParams["offset"], 1.5)
+        self.assertEqual(self.task.instDefocalOffset, 1.5)
         self.task._checkAndSetOffset(30.0)
-        self.assertEqual(self.task.instParams["offset"], 1.5)
+        self.assertEqual(self.task.instDefocalOffset, 1.5)
 
         # If offset is None then change to incoming value
-        self.task.instParams["offset"] = None
+        self.task.instDefocalOffset = None
         self.task._checkAndSetOffset(30.0)
-        self.assertEqual(self.task.instParams["offset"], 30.0)
-
-    def testGetTemplate(self):
-        extra_template = self.task.getTemplate(
-            "R22_S11", DefocalType.Extra, self.task.donutTemplateSize, CamType.LsstCam
-        )
-        self.assertEqual(
-            np.shape(extra_template),
-            (self.config.donutTemplateSize, self.config.donutTemplateSize),
-        )
-        self.config.donutTemplateSize = 180
-        self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
-        intra_template = self.task.getTemplate(
-            "R22_S11", DefocalType.Intra, self.task.donutTemplateSize, CamType.LsstCam
-        )
-        self.assertEqual(np.shape(intra_template), (180, 180))
+        self.assertEqual(self.task.instDefocalOffset, 30.0)
 
     def testShiftCenter(self):
         centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)

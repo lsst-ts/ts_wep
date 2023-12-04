@@ -24,9 +24,12 @@ import os
 import lsst.utils.tests
 import numpy as np
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
-from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
-from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task import (
+    CalcZernikesTaskConfig,
+    CalcZernikesTieTask,
+    CombineZernikesMeanTask,
+    CombineZernikesSigmaClipTask,
+)
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -36,7 +39,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
+class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -61,7 +64,7 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesCwfsPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesTieCwfsPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
@@ -77,7 +80,7 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
-        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -105,30 +108,9 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
-        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
-
-    def testCalcBlendOffsets(self):
-        # Test with no blend centroid
-        donutStampExtra = self.donutStampsExtra[0]
-        eulerAngle = 0
-        blendOffsetsNone = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
-        np.testing.assert_array_almost_equal(
-            blendOffsetsNone, np.array([["nan"], ["nan"]], dtype=float)
-        )
-        # Test with blend centroid present
-        trueOffset = np.array([[10.0], [10.0]])
-        eulerAngle = 0
-        centroidPos = donutStampExtra.centroid_position
-        centroid10PixOffset = np.array([[centroidPos.x], [centroidPos.y]]) + trueOffset
-        donutStampExtra.blend_centroid_positions = centroid10PixOffset.T
-        blendOffsetsCentroid = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
-        np.testing.assert_array_almost_equal(blendOffsetsCentroid, trueOffset)
-        # Test with euler angle non-zero
-        eulerAngle = 180
-        blendOffsetsCentroid = self.task.calcBlendOffsets(donutStampExtra, eulerAngle)
-        np.testing.assert_array_almost_equal(blendOffsetsCentroid, -1.0 * trueOffset)
 
     def testEstimateZernikes(self):
         zernCoeff = self.task.estimateZernikes(
@@ -209,13 +191,13 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
                 -1.40149246e-04,
                 -4.11223127e-02,
                 -2.42644902e-03,
-                -1.52392233e-01,
+                1.52392233e-01,
                 1.24547354e-02,
-                2.33075716e-02,
-                7.35477674e-04,
-                -1.93518814e-02,
-                -3.65768735e-03,
-                -4.12718699e-02,
+                -2.33075716e-02,
+                -7.35477674e-04,
+                1.93518814e-02,
+                3.65768735e-03,
+                4.12718699e-02,
                 -6.93386734e-03,
             ]
         )

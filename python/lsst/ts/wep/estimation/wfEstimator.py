@@ -141,12 +141,12 @@ class WfEstimator:
             )
         self._units = value
 
-    def estimateWf(
+    def estimateZk(
         self,
         I1: Image,
         I2: Optional[Image] = None,
     ) -> np.ndarray:
-        """Estimate the wavefront from the stamp or pair of stamps.
+        """Estimate Zernike coefficients of the wavefront from the stamp(s).
 
         Parameters
         ----------
@@ -168,8 +168,8 @@ class WfEstimator:
         ValueError
             If I1 and I2 are on the same side of focus.
         """
-        # Estimated wavefront (in meters)
-        zk = self.algo.estimateWf(I1, I2, self.jmax, self.instrument)
+        # Estimate wavefront Zernike coefficients (in meters)
+        zk = self.algo.estimateZk(I1, I2, self.jmax, self.instrument)
 
         # Convert to desired units
         if self.units == "m":

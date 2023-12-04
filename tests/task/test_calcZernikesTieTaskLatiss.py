@@ -26,9 +26,12 @@ import lsst.utils.tests
 import numpy as np
 import pytest
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
-from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
-from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task import (
+    CalcZernikesTaskConfig,
+    CalcZernikesTieTask,
+    CombineZernikesMeanTask,
+    CombineZernikesSigmaClipTask,
+)
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -76,7 +79,7 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         instrument = "lsst.obs.lsst.Latiss"
         cls.cameraName = "LATISS"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesLatissPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesTieLatissPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
@@ -93,7 +96,7 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
         self.config.opticalModel = "onAxis"
-        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -115,7 +118,7 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
-        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 

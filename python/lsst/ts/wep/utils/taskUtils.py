@@ -24,14 +24,23 @@ __all__ = [
     "writePipetaskCmd",
     "writeCleanUpRepoCmd",
     "getCameraFromButlerName",
+    "getInstrumentFromButlerName",
+    "createTemplateForDetector",
 ]
 
 import os
 import shlex
 import subprocess
 from contextlib import ExitStack
+from typing import Union
 
 import lsst.obs.lsst as obs_lsst
+import numpy as np
+from lsst.afw.cameraGeom import FIELD_ANGLE, Detector
+from lsst.ts.wep.image import Image
+from lsst.ts.wep.imageMapper import ImageMapper
+from lsst.ts.wep.instrument import Instrument
+from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType
 
 
 def runProgram(command, binDir=None, argstring=None, stdout=None, stderr=None):
@@ -186,3 +195,113 @@ def getCameraFromButlerName(camName):
         return obs_lsst.Latiss.getCamera()
     else:
         raise ValueError(f"Camera {camName} is not supported.")
+
+
+def getInstrumentFromButlerName(camName: str) -> Instrument:
+    """Load the default instrument using the butler info.
+
+    Parameters
+    ----------
+    camName : str
+        Name of instrument using butler convention. Available instruments
+        are LSSTCam, LSSTComCam, and LATISS.
+
+    Returns
+    -------
+    Instrument
+        The default ts.wep Instrument corresponding to butler camera name.
+
+    Raises
+    ------
+    ValueError
+        If the butler camera name doesn't have a default instrument configuration.
+    """
+    if camName == "LSSTCam":
+        configFile = "policy/instruments/LsstCam.yaml"
+    elif camName == "LSSTComCam":
+        configFile = "policy/instruments/ComCam.yaml"
+    elif camName == "LATISS":
+        configFile = "policy/instruments/AuxTel.yaml"
+    else:
+        raise ValueError(f"No default instrument for camera {camName}")
+
+    return Instrument(configFile=configFile)
+
+
+def createTemplateForDetector(
+    detector: Detector,
+    defocalType: DefocalType,
+    bandLabel: Union[BandLabel, str] = BandLabel.REF,
+    instrument: Instrument = Instrument(),
+    opticalModel: str = "offAxis",
+    padding: int = 5,
+    binary: bool = True,
+    ccs: bool = False,
+) -> np.ndarray:
+    """Create a donut template for the given detector.
+
+    Parameters
+    ----------
+    detector : lsst.afw.cameraGeom.Detector
+        The detector object for which the template is created
+    defocalType : DefocalType or str
+        The DefocalType enum (or corresponding string) specifying whether to
+        create an intra- or extra-focal template.
+    bandLabel : BandLabel or str, optional
+        The BandLabel enum (or corresponding string) specifying the band for
+        which the template is created. Note it is not expected that this
+        will matter much for template creation. (the default is BandLabel.REF)
+    instrument : Instrument, optional
+        The ts.wep Instrument object. (the default is the default Instrument)
+    opticalModel : str, optional
+        The optical model for the ImageMapper. (the default is "offAxis")
+    padding : int, optional
+        Padding, in pixels, on each side of the template. (the default is 5)
+    binary : bool, optional
+        Whether to return a binary template. (the default is True)
+    ccs : bool, optional
+        Whether to return a template that is in the camera coordinate system
+        (CCS). For templates on the CWFSs, this also includes de-rotation so
+        they are in the same orientation as the science sensors. When using for
+        butler data, set this to False. (the default is False)
+
+    Returns
+    -------
+    np.ndarray
+        The donut template array.
+    """
+    # Get the field angle for the center of the detector
+    # Notice we swap the x and y coords here
+    # so that the angle is in the camera coordinate system (CCS)
+    detYDeg, detXDeg = np.rad2deg(detector.getCenter(FIELD_ANGLE))
+
+    # Create a dummy Image for template creation
+    nPixels = np.ceil(instrument.donutDiameter + 2 * padding).astype(int)
+    dummyImage = Image(
+        image=np.zeros((nPixels, nPixels)),
+        fieldAngle=(detXDeg, detYDeg),
+        defocalType=defocalType,
+        bandLabel=bandLabel,
+    )
+
+    # Create the Image mapper
+    imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
+
+    # Create the Donut template
+    if binary:
+        template = imageMapper.createImageMask(dummyImage, binary=True).astype(int)
+    else:
+        template = imageMapper.mapPupilToImage(dummyImage)
+
+    # The template is created in the CCS, with CWFSs templates de-rotated to
+    # account for the rotation of the CWFSs with respect to the science sensor
+
+    # Do we want to transform the template back to the original data
+    # visualization coordinate system (DVCS), which is the coordinate system in
+    # which data comes out of the butler?
+    if not ccs:
+        eulerZ = detector.getOrientation().getYaw().asDegrees()
+        nRot = int(eulerZ // 90)
+        template = np.rot90(template, nRot)
+
+    return template

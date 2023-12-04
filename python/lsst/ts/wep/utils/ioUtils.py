@@ -129,6 +129,11 @@ def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
     -------
     dict
         Config dictionary
+
+    Raises
+    ------
+    KeyError
+        If configFile contains keywords not present in kwargs
     """
     # Get the default values from the file
     if configFile is None:
@@ -139,7 +144,7 @@ def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
     # Determine if the configFile contains keywords not present in kwargs
     extraKeys = set(fileConfig.keys()) - set(kwargs.keys())
     if len(extraKeys) > 0:
-        raise ValueError(f"configFile contains unrecognized keys {extraKeys}")
+        raise KeyError(f"configFile contains unrecognized keys {extraKeys}")
 
     # Merge the two dictionaries
     mergedConfig = {}

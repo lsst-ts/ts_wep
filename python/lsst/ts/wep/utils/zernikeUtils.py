@@ -27,8 +27,10 @@ __all__ = [
     "zernikeGradEval",
     "getPsfGradPerZernike",
     "convertZernikesToPsfWidth",
+    "getZernikeParity",
 ]
 
+import re
 from typing import Tuple
 
 import galsim
@@ -73,6 +75,7 @@ def createZernikeBasis(
     the pupil, and u^2 + v^2 = obscuration^2 is the edge of the central
     obscuration.
     """
+    # Create the basis
     return galsim.zernike.zernikeBasis(jmax, u, v, R_inner=obscuration)[4:]
 
 
@@ -143,7 +146,7 @@ def zernikeEval(
     # Create the Galsim Zernike object
     galsimZernike = createGalsimZernike(zkCoeff, obscuration)
 
-    # And evaluate on the grid
+    # Evaluate on the grid
     return galsimZernike(u, v)
 
 
@@ -194,7 +197,7 @@ def zernikeGradEval(
     for _ in range(vOrder):
         galsimZernike = galsimZernike.gradY
 
-    # And evaluate on the grid
+    # Evaluate on the grid
     return galsimZernike(u, v)
 
 
@@ -202,8 +205,8 @@ def getPsfGradPerZernike(
     *,
     jmin: int = 4,
     jmax: int = 22,
-    R_outer: float = 4.18,
-    R_inner: float = 2.5498,
+    diameter: float = 8.36,
+    obscuration: float = 0.612,
 ) -> np.ndarray:
     """Get the gradient of the PSF FWHM with respect to each Zernike.
 
@@ -217,12 +220,12 @@ def getPsfGradPerZernike(
         (the default, 4, ignores piston, x & y offsets, and tilt.)
     jmax : int
         The max Zernike Noll index, inclusive. (the default is 22.)
-    R_outer : float
-        The outer radius of the telescope aperture, in meters.
-        (the default, 4.18, corresponds to the LSST primary mirror.)
-    R_inner : float
-        The inner radius of the telescope aperture, in meters.
-        (the default, 2.5498, corresponds to the LSST primary mirror.)
+    diameter : float
+        The diameter of the telescope aperture, in meters.
+        (the default, 8.36, corresponds to the LSST primary mirror)
+    obscuration : float
+        The central obscuration of the telescope aperture (i.e. R_outer / R_inner).
+        (the default, 0.612, corresponds to the LSST primary mirror)
 
     Returns
     -------
@@ -239,6 +242,8 @@ def getPsfGradPerZernike(
         coefs = [0] * i + [1]
 
         # Create the Zernike polynomial with these coefficients
+        R_outer = diameter / 2
+        R_inner = R_outer * obscuration
         Z = galsim.zernike.Zernike(coefs, R_outer=R_outer, R_inner=R_inner)
 
         # We can calculate the size of the PSF from the RMS of the gradient of
@@ -264,8 +269,8 @@ def getPsfGradPerZernike(
 def convertZernikesToPsfWidth(
     zernikes: np.ndarray,
     jmin: int = 4,
-    R_outer: float = 4.18,
-    R_inner: float = 2.5498,
+    diameter: float = 8.36,
+    obscuration: float = 0.612,
 ) -> np.ndarray:
     """Convert Zernike amplitudes to quadrature contribution to the PSF FWHM.
 
@@ -279,12 +284,12 @@ def convertZernikesToPsfWidth(
         The minimum Zernike Noll index, inclusive. The maximum Noll index is
         inferred from `jmin` and the length of `zernikes`.
         (the default is 4, which ignores piston, x & y offsets, and tilt.)
-    R_outer : float
-        The outer radius of the telescope aperture, in meters.
-        (the default, 4.18, corresponds to the LSST primary mirror.)
-    R_inner : float
-        The inner radius of the telescope aperture, in meters.
-        (the default, 2.5498, corresponds to the LSST primary mirror.)
+    diameter : float
+        The diameter of the telescope aperture, in meters.
+        (the default, 8.36, corresponds to the LSST primary mirror)
+    obscuration : float
+        The central obscuration of the telescope aperture (i.e. R_outer / R_inner).
+        (the default, 0.612, corresponds to the LSST primary mirror)
 
     Returns
     -------
@@ -332,8 +337,8 @@ def convertZernikesToPsfWidth(
     conversion_factors = getPsfGradPerZernike(
         jmin=jmin,
         jmax=jmax,
-        R_outer=R_outer,
-        R_inner=R_inner,
+        diameter=diameter,
+        obscuration=obscuration,
     )
 
     # Convert the Zernike amplitudes from microns to their quadrature
@@ -341,3 +346,52 @@ def convertZernikesToPsfWidth(
     dFWHM = conversion_factors * zernikes
 
     return dFWHM
+
+
+def getZernikeParity(jmax, axis="x"):
+    """Return the parity of the Zernike polynomials (Noll index >= 4).
+
+    Parameters
+    ----------
+    jmax : int
+        The maximum Noll index
+    axis : str, optional
+        The axis for which to return the parity. Can be "x" or "y".
+
+    Returns
+    -------
+    np.ndarray
+        The numpy array of parities, starting with Noll index 4.
+        +1 corresponds to even parity, while -1 corresponds to odd parity.
+
+    Raises
+    ------
+    ValueError
+        If axis is not one of "x" or "y"
+    ValueError
+        If one of the Noll indices <= jmax has mixed parity
+    """
+    if axis not in ["x", "y"]:
+        raise ValueError("axis must be either 'x' or 'y'.")
+
+    parity = []
+    for j in range(4, jmax + 1):
+        # Get the cartesian string
+        zkStr = galsim.zernike.describe_zernike(j)
+
+        # Get all exponents
+        exponents = re.findall(f"(?<={axis}\^)[0-9]+|{axis}(?!\^)", zkStr) or [0]
+        exponents = np.array([1 if num == axis else int(num) for num in exponents])
+
+        # Get the remainders mod 2
+        remainder = exponents % 2
+
+        # Check they all match
+        allMatch = all(remainder) or all(~remainder)
+        if not allMatch:
+            raise ValueError(f"Noll index {j} has mixed parity")
+
+        # Get the parity: +1 = even, -1 = odd
+        parity.append(-2 * int(all(remainder)) + 1)
+
+    return np.array(parity)

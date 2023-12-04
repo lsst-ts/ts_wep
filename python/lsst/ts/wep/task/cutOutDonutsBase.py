@@ -26,7 +26,6 @@ __all__ = [
 ]
 
 import lsst.afw.cameraGeom
-import lsst.afw.image as afwImage
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
@@ -35,17 +34,9 @@ from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
-from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.templates import DonutTemplateFactory
-from lsst.ts.wep.utils import (
-    DonutTemplateType,
-    createInstDictFromConfig,
-    getCameraFromButlerName,
-    getCamTypeFromButlerName,
-)
-from scipy.ndimage import binary_dilation, rotate, shift
+from lsst.ts.wep.utils import createTemplateForDetector, getInstrumentFromButlerName
 from scipy.signal import correlate
 
 
@@ -98,17 +89,15 @@ class CutOutDonutsBaseTaskConfig(
     pipeBase.PipelineTaskConfig, pipelineConnections=CutOutDonutsBaseTaskConnections
 ):
     # Config setting for pipeline task with defaults
-    donutTemplateSize = pexConfig.Field(
-        doc="Size of Template in pixels", dtype=int, default=160
-    )
     donutStampSize = pexConfig.Field(
         doc="Size of donut stamps in pixels", dtype=int, default=160
     )
     initialCutoutPadding = pexConfig.Field(
         doc=str(
-            "Additional padding in pixels on each side of initial "
-            + "postage stamp of donutStampSize "
-            + "to make sure we have a stamp of donutStampSize after recentroiding donut"
+            "Additional padding in pixels on each side of the initial "
+            + "postage stamp of donutStampSize to make sure we have a "
+            + "stamp of donutStampSize after recentroiding donut. Also "
+            + "used as the padding of the donut template for centroiding."
         ),
         dtype=int,
         default=5,
@@ -169,9 +158,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Set size (in pixels) of donut template image used for
-        # final centroiding by convolution of initial cutout with template
-        self.donutTemplateSize = self.config.donutTemplateSize
         # Set final size (in pixels) of postage stamp images returned as
         # DonutStamp objects
         self.donutStampSize = self.config.donutStampSize
@@ -185,8 +171,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.initialCutoutPadding = self.config.initialCutoutPadding
         # Specify optical model
         self.opticalModel = self.config.opticalModel
-        # Set up instrument configuration dict
-        self.instParams = createInstDictFromConfig(self.config)
+        # Set instrument configuration info
+        self.instObscuration = self.config.instObscuration
+        self.instFocalLength = self.config.instFocalLength
+        self.instApertureDiameter = self.config.instApertureDiameter
+        self.instDefocalOffset = self.config.instDefocalOffset
+        self.instPixelSize = self.config.instPixelSize
         # Parameters for mask multiplication (for deblending)
         self.multiplyMask = self.config.multiplyMask
         self.maskGrowthIter = self.config.maskGrowthIter
@@ -194,8 +184,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.makeSubtask("subtractBackground")
 
     def _checkAndSetOffset(self, dataOffsetValue):
-        """Check offset in instParams dictionary and if it
-        is not yet defined set to data defined value.
+        """Check the defocal offset and set to provided value if not yet defined.
 
         Parameters
         ----------
@@ -204,58 +193,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             data. (An exposure or donutStamp).
         """
 
-        if self.instParams["offset"] is None:
-            self.instParams["offset"] = dataOffsetValue
-
-    def getTemplate(
-        self,
-        detectorName,
-        defocalType,
-        donutTemplateSize,
-        camType,
-        opticalModel="offAxis",
-        pixelScale=0.2,
-    ):
-        """
-        Get the templates for the detector.
-
-        Parameters
-        ----------
-        detectorName : str
-            Name of the CCD (e.g. 'R22_S11').
-        defocalType : enum 'DefocalType'
-            Defocal type of the donut image.
-        donutTemplateSize : int
-            Size of Template in pixels
-        camType : enum 'CamType'
-            Camera type.
-        opticalModel : str, optional
-            Optical model. It can be "paraxial", "onAxis", or "offAxis".
-            (The default is "offAxis")
-        pixelScale : float, optional
-            The pixels to arcseconds conversion factor. (The default is 0.2)
-
-        Returns
-        -------
-        numpy.ndarray
-            Template donut for the detector and defocal type.
-        """
-
-        templateMaker = DonutTemplateFactory.createDonutTemplate(
-            DonutTemplateType.Model
-        )
-
-        template = templateMaker.makeTemplate(
-            detectorName,
-            defocalType,
-            donutTemplateSize,
-            camType=camType,
-            opticalModel=opticalModel,
-            pixelScale=pixelScale,
-            instParams=self.instParams,
-        )
-
-        return template
+        if self.instDefocalOffset is None:
+            self.instDefocalOffset = dataOffsetValue
 
     def shiftCenter(self, center, boundary, distance):
         """Shift the center if its distance to boundary is less than required.
@@ -345,7 +284,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # The actual donut location is at the center of the template
         # But the peak of correlation will correspond to the [0, 0]
         # corner of the template
-        templateHalfWidth = int(self.donutTemplateSize / 2)
+        templateHalfWidth = int(len(template) / 2)
         newX = maxLoc[1] - templateHalfWidth
         newY = maxLoc[0] - templateHalfWidth
         finalDonutX = xCent + (newX - initialHalfWidth)
@@ -385,32 +324,36 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             Collection of postage stamps as
             lsst.afw.image.MaskedImage with additional metadata.
         """
-
-        detectorName = exposure.getDetector().getName()
-        detectorType = exposure.getDetector().getType()
-        pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
-        camType = getCamTypeFromButlerName(cameraName, detectorType)
-        bandpass = exposure.filter.bandLabel
+        detector = exposure.getDetector()
+        detectorName = detector.getName()
+        bandLabel = exposure.filter.bandLabel
 
         # Run background subtraction
         self.subtractBackground.run(exposure=exposure).background
 
-        # Get template
-        template = self.getTemplate(
-            detectorName,
-            defocalType,
-            self.donutTemplateSize,
-            camType,
-            self.opticalModel,
-            pixelScale,
-        )
-
         # If offset not yet set then use exposure value.
         self._checkAndSetOffset(np.abs(exposure.visitInfo.focusZ))
 
-        # Set up instrument for masks
-        inst = Instrument()
-        inst.configFromDict(self.instParams, self.donutTemplateSize, camType)
+        # Load default instrument corresponding to the butler camera name
+        instrument = getInstrumentFromButlerName(cameraName)
+
+        # Update the instrument with the values from the butler
+        instrument.obscuration = self.instObscuration
+        instrument.focalLength = self.instFocalLength
+        instrument.diameter = self.instApertureDiameter
+        instrument.defocalOffset = self.instDefocalOffset * 1e-3
+        instrument.pixelSize = self.instPixelSize
+
+        # Create the image template for the detector
+        template = createTemplateForDetector(
+            detector=detector,
+            defocalType=defocalType,
+            bandLabel=bandLabel,
+            instrument=instrument,
+            opticalModel=self.opticalModel,
+            padding=self.initialCutoutPadding,
+            binary=True,
+        )
 
         # Final list of DonutStamp objects
         finalStamps = list()
@@ -516,59 +459,15 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 cam_name=cameraName,
                 defocal_type=defocalType.value,
                 # Save defocal offset in mm.
-                defocal_distance=self.instParams["offset"],
-                bandpass=bandpass,
+                defocal_distance=self.instDefocalOffset,
+                bandpass=bandLabel,
                 archive_element=linear_wcs,
             )
-            maskScalingFactorLocal = 1
-            # Just put 1 for boundaryT. Only going to save pupil mask anyway.
-            boundaryT = 1
-            donutStamp.comp_im.makeBlendedMask(
-                inst, self.opticalModel, boundaryT, maskScalingFactorLocal
-            )
 
-            # Create shifted mask from non-blended mask
+            donutStamp.makeMask(instrument, self.opticalModel)
+
             if (self.multiplyMask is True) and blendExists:
-                donutStamp.comp_im.makeMask(
-                    inst, self.opticalModel, boundaryT, maskScalingFactorLocal
-                )
-                shiftedMask = shift(
-                    donutStamp.comp_im.mask_pupil,
-                    np.array(
-                        [
-                            donutStamp.comp_im.blendOffsetY,
-                            donutStamp.comp_im.blendOffsetX,
-                        ]
-                    ),
-                )
-                shiftedMask = binary_dilation(
-                    shiftedMask, iterations=self.maskGrowthIter
-                ).astype(int)
-                shiftedMask[shiftedMask == 0] += 2
-                shiftedMask -= 1
-                donutStamp.stamp_im.image.array *= shiftedMask
-
-            camera = getCameraFromButlerName(cameraName)
-            detectorInfo = camera.get(detectorName)
-
-            # Rotate sensors to line up with the science sensors in the
-            # focal plane.
-            eulerZ = -detectorInfo.getOrientation().getYaw().asDegrees()
-            donutStamp.stamp_im.image.array = rotate(
-                donutStamp.stamp_im.image.array, eulerZ
-            )
-
-            # Set masks
-            afwImage.Mask.addMaskPlane("DONUT")
-            donutMaskVal = afwImage.Mask.getPlaneBitMask("DONUT")
-            # Save pupil mask so that other tasks that use the mask can
-            # expand mask borders different amounts to better fit needs.
-            donutStamp.stamp_im.setMask(
-                afwImage.MaskX(
-                    np.array(donutStamp.comp_im.mask_pupil, dtype=np.int32)
-                    * donutMaskVal
-                )
-            )
+                donutStamp.stamp_im.image.array *= donutStamp.stamp_im.mask.array
 
             finalStamps.append(donutStamp)
 
@@ -578,10 +477,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"].values)
         stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
-        stampsMetadata["DFC_TYPE"] = np.array([defocalType.value] * catalogLength)
-        stampsMetadata["DFC_DIST"] = np.array(
-            [self.instParams["offset"]] * catalogLength
+        stampsMetadata["DFC_TYPE"] = np.array(
+            [defocalType.value] * catalogLength, dtype=str
         )
+        stampsMetadata["DFC_DIST"] = np.array([self.instDefocalOffset] * catalogLength)
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)

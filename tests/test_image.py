@@ -19,85 +19,70 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import unittest
 
 import numpy as np
-from lsst.ts.wep.centroid import CentroidRandomWalk
 from lsst.ts.wep.image import Image
-from lsst.ts.wep.utils import getModulePath
 
 
 class TestImage(unittest.TestCase):
     """Test the Image class."""
 
-    def setUp(self):
-        self.testDataDir = os.path.join(getModulePath(), "tests", "testData")
-        self.imgFile = os.path.join(
-            self.testDataDir, "testImages", "LSST_NE_SN25", "z11_0.25_intra.txt"
-        )
+    @staticmethod
+    def _get_good_inputs():
+        return {
+            "image": np.zeros((160, 160)),
+            "fieldAngle": (1, 2),
+            "defocalType": "intra",
+        }
 
-        self.img = Image()
-        self.img.setImg(imageFile=self.imgFile)
+    def testBadImage(self):
+        with self.assertRaises(TypeError):
+            Image(None, (0, 0), "intra")
+        with self.assertRaises(ValueError):
+            Image(np.zeros((1, 1, 1)), (0, 0), "intra")
+        with self.assertRaises(ValueError):
+            Image(np.zeros((2, 4)), (0, 0), "intra")
 
-    def testGetCentroidFind(self):
-        centroidFind = self.img.getCentroidFind()
-        self.assertTrue(isinstance(centroidFind, CentroidRandomWalk))
+    def testBadFieldAngle(self):
+        with self.assertRaises(ValueError):
+            Image(np.zeros((160, 160)), (1, 2, 3), "intra")
 
-    def testGetImg(self):
-        img = self.img.getImg()
-        self.assertEqual(img.shape, (120, 120))
+    def testBadDefocalType(self):
+        with self.assertRaises(TypeError):
+            Image(np.zeros((160, 160)), (0, 0), 1)
 
-    def testGetImgFilePath(self):
-        imgFilePath = self.img.getImgFilePath()
-        self.assertEqual(imgFilePath, self.imgFile)
+    def testBadBandLabel(self):
+        with self.assertRaises(TypeError):
+            Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel=1)
 
-    def testSetImgByImageArray(self):
-        newImg = np.random.rand(5, 5)
-        self.img.setImg(image=newImg)
+    def testBadPlaneType(self):
+        with self.assertRaises(TypeError):
+            Image(np.zeros((160, 160)), (0, 0), "intra", planeType=1)
 
-        self.assertTrue(np.all(self.img.getImg() == newImg))
-        self.assertEqual(self.img.getImgFilePath(), "")
+    def testBadBlendOffsets(self):
+        with self.assertRaises(ValueError):
+            Image(np.zeros((160, 160)), (0, 0), "intra", blendOffsets=[1])
+        with self.assertRaises(ValueError):
+            Image(np.zeros((160, 160)), (0, 0), "intra", blendOffsets=[[1], [1], [1]])
 
-    def testSetImgByFitsFile(self):
-        opdFitsFile = os.path.join(
-            self.testDataDir, "opdOutput", "9006000", "opd_9006000_0.fits.gz"
-        )
-        self.img.setImg(imageFile=opdFitsFile)
+    def testBadMask(self):
+        with self.assertRaises(TypeError):
+            Image(np.zeros((160, 160)), (0, 0), "intra", mask=1)
+        with self.assertRaises(ValueError):
+            Image(np.zeros((160, 160)), (0, 0), "intra", mask=np.zeros((1, 1)))
 
-        img = self.img.getImg()
-        self.assertEqual(img.shape, (255, 255))
+    def testCopy(self):
+        rng = np.random.default_rng(0)
+        image1 = Image(rng.normal(size=(160, 160)), (1, 2), "extra")
+        image2 = image1.copy()
 
-        imgFilePath = self.img.getImgFilePath()
-        self.assertEqual(imgFilePath, opdFitsFile)
+        # Make sure they contain the same image
+        self.assertTrue(np.allclose(image1.image, image2.image))
 
-    def testUpdateImage(self):
-        newImg = np.random.rand(5, 5)
-        self.img.updateImage(newImg)
-
-        self.assertTrue(np.all(self.img.getImg() == newImg))
-
-    def testUpdateImageWithNoHoldImage(self):
-        img = Image()
-
-        newImg = np.random.rand(5, 5)
-        self.assertWarns(UserWarning, img.updateImage, newImg)
-
-    def testGetCenterAndR_ef(self):
-        realcx, realcy, realR = self.img.getCenterAndR()
-        self.assertEqual(int(realcx), 61)
-        self.assertEqual(int(realcy), 61)
-        self.assertGreater(int(realR), 35)
-
-    def testGetSNR(self):
-        # Add the noise to the image
-        image = self.img.getImg()
-        noisedImg = image + np.random.random(image.shape) * 0.1
-
-        self.img.setImg(image=noisedImg)
-        snr = self.img.getSNR()
-
-        self.assertGreater(snr, 15)
+        # Now change image 2 and make sure image 1 doesn't change with it
+        image2.image += 2
+        self.assertTrue(np.all(~np.isclose(image1.image, image2.image)))
 
 
 if __name__ == "__main__":

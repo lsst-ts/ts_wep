@@ -1,4 +1,5 @@
-from .calcZernikesTask import *
+from .calcZernikesBase import *
+from .calcZernikesTieTask import *
 from .combineZernikesBase import *
 from .combineZernikesMeanTask import *
 from .combineZernikesSigmaClipTask import *

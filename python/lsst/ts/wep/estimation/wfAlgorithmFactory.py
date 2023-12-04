@@ -23,7 +23,7 @@ __all__ = ["WfAlgorithmFactory"]
 
 from typing import Union
 
-from lsst.ts.wep.estimation.tie import TIEAlgorithm
+from lsst.ts.wep.estimation.tie import TieAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import WfAlgorithmName, configClass
 
@@ -56,6 +56,6 @@ class WfAlgorithmFactory:
 
         # Return the configured algorithm
         if algoName == WfAlgorithmName.TIE:
-            return configClass(algoConfig, TIEAlgorithm)
+            return configClass(algoConfig, TieAlgorithm)
         else:
             raise ValueError(f"{algoName} not supported.")

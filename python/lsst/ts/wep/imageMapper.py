@@ -25,16 +25,12 @@ import galsim
 import numpy as np
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.instrument import Instrument
-from lsst.ts.wep.utils import (
-    DefocalType,
-    PlaneType,
-    centerWithTemplate,
-    configClass,
-    mergeConfigWithFile,
-    polygonContains,
-    zernikeGradEval,
-)
+from lsst.ts.wep.utils.enumUtils import DefocalType, PlaneType
+from lsst.ts.wep.utils.ioUtils import configClass, mergeConfigWithFile
+from lsst.ts.wep.utils.miscUtils import centerWithTemplate, polygonContains
+from lsst.ts.wep.utils.zernikeUtils import zernikeGradEval
 from scipy.interpolate import interpn
+from scipy.ndimage import binary_dilation
 
 
 class ImageMapper:
@@ -51,17 +47,18 @@ class ImageMapper:
         (the default is policy/imageMapper.yaml)
     instConfig : str or dict or Instrument, optional
         Instrument configuration. If a string, it is assumed this points to a
-        config file, which is used to configure the Instrument. If a dictionary,
-        it is assumed to hold keywords for configuration. If an Instrument object,
-        that object is just used.
+        config file, which is used to configure the Instrument. If a
+        dictionary, it is assumed to hold keywords for configuration. If an
+        Instrument object, that object is just used.
     opticalModel : str, optional
-        The optical model to use for mapping between the image and pupil planes.
-        Can be "paraxial", "onAxis", or "offAxis". Paraxial and onAxis are both
-        analytic models, appropriate for donuts near the optical axis. The former
-        is only valid for slow optical systems, while the latter is also valid
-        for fast optical systems. The offAxis model is a numerically-fit model
-        that is valid for fast optical systems at wide field angles. offAxis
-        requires an accurate Batoid model.
+        The optical model to use for mapping between the image and pupil
+        planes. Can be "paraxial", "onAxis", or "offAxis". Paraxial and
+        onAxis are both analytic models, appropriate for donuts near the
+        optical axis. The former is only valid for slow optical systems,
+        while the latter is also valid for fast optical systems. The
+        offAxis model is a numerically-fit model that is valid for fast
+        optical systems at wide field angles. offAxis requires an accurate
+        Batoid model.
     """
 
     def __init__(
@@ -98,13 +95,14 @@ class ImageMapper:
         Parameters
         ----------
         value : str
-            The optical model to use for mapping between the image and pupil planes.
-            Can be "paraxial", "onAxis", or "offAxis". Paraxial and onAxis are both
-            analytic models, appropriate for donuts near the optical axis. The former
-            is only valid for slow optical systems, while the latter is also valid
-            for fast optical systems. The offAxis model is a numerically-fit model
-            that is valid for fast optical systems at wide field angles. offAxis
-            requires an accurate Batoid model.
+            The optical model to use for mapping between the image and pupil
+            planes. Can be "paraxial", "onAxis", or "offAxis". Paraxial and
+            onAxis are both analytic models, appropriate for donuts near the
+            optical axis. The former is only valid for slow optical systems,
+            while the latter is also valid for fast optical systems. The
+            offAxis model is a numerically-fit model that is valid for fast
+            optical systems at wide field angles. offAxis requires an accurate
+            Batoid model.
 
         Raises
         ------
@@ -357,7 +355,7 @@ class ImageMapper:
             image,
         )
 
-        # Use test points to fit Zernike coefficients for image -> pupil mapping
+        # Use test points to fit Zernike coeff for image -> pupil mapping
         rImageMax = np.sqrt(uImageTest**2 + vImageTest**2).max()
         invCoeff, *_ = np.linalg.lstsq(
             galsim.zernike.zernikeBasis(
@@ -443,7 +441,7 @@ class ImageMapper:
         zkCoeff: np.ndarray,
         image: Image,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Return the image grid and a mask for which pixels are inside the pupil.
+        """Return image grid and mask for which pixels are inside the pupil.
 
         Note the pupil considered is the pupil mapped to the image plane.
 
@@ -581,8 +579,8 @@ class ImageMapper:
             return out
 
         # Calculate coefficients for the line (y = m*x + b) that is tangent to
-        # the circle where the ray that passes through each point intersects the
-        # circle (in pupil coordinates)
+        # the circle where the ray that passes through each point intersects
+        # the circle (in pupil coordinates)
         uPupilCen, vPupilCen = uPupilCen[border], vPupilCen[border]
         m = -uPupilCen / vPupilCen  # slope
         b = (
@@ -601,7 +599,7 @@ class ImageMapper:
             m = a1 / a3
             b = (a2 - a1 * uImageCen) / a3 + vImageCen
 
-        # Use symmetry to map everything onto the situation where -1 <= mImage <= 0
+        # Use symmetry to map everything onto situation where -1 <= mImage <= 0
         mask = m > 0
         uImageCen[mask] = -uImageCen[mask]
         m[mask] = -m[mask]
@@ -613,7 +611,7 @@ class ImageMapper:
         # Calculate the v intercept on the right side of the pixel
         vStar = m * (uImageCen + pixelScale / 2) + b
 
-        # Calculate the fractional distance of intercept from the top of the pixel
+        # Calculate fractional distance of intercept from top of pixel
         gamma = (vImageCen + pixelScale / 2 - vStar) / pixelScale
 
         # Now determine illumination for border pixels
@@ -660,7 +658,8 @@ class ImageMapper:
         Parameters
         ----------
         image : Image
-            A stamp object containing the metadata required for constructing the mask.
+            A stamp object containing the metadata required for constructing
+            the mask.
         uPupil : np.ndarray
             Normalized x coordinates on the pupil plane
         vPupil : np.ndarray
@@ -747,23 +746,45 @@ class ImageMapper:
         self,
         image: Image,
         *,
-        binary: bool = False,
+        binary: bool = True,
+        dilate: int = 0,
+        maskBlends: bool = True,
     ) -> np.ndarray:
         """Create the pupil mask for the stamp.
 
         Parameters
         ----------
         image : Image
-            A stamp object containing the metadata required for constructing the mask.
+            A stamp object containing the metadata required for constructing
+            the mask.
         binary : bool, optional
-            Whether to return a binary mask. If False, a fractional mask is returned
-            instead. (the default is False)
+            Whether to return a binary mask. If False, a fractional mask is
+            returned instead. (the default is True)
+        dilate : int, optional
+            How many times to dilate the mask. This adds a boundary of
+            that many pixels to the mask. Note this is not an option if
+            binary==False. (the default is 0)
+        maskBlends : bool, optional
+            Whether to mask the blends (i.e. the blended regions are masked
+            out). (the default is True)
 
         Returns
         -------
         np.ndarray
             The pupil mask
+
+        Raises
+        ------
+        ValueError
+            Invalid dilate value.
         """
+        # Check the dilate value
+        dilate = int(dilate)
+        if dilate < 0:
+            raise ValueError("Dilate must be a non-negative integer.")
+        if dilate > 0 and not binary:
+            raise ValueError("If dilate is greater than zero, binary must be True.")
+
         # Get the pupil grid
         uPupil, vPupil = self.instrument.createPupilGrid()
 
@@ -778,8 +799,17 @@ class ImageMapper:
         # Restore the mask shape
         mask = mask.reshape(uPupil.shape)
 
+        # Set the mask to binary?
         if binary:
-            mask = mask > 0.5
+            mask = (mask > 0.5).astype(int)
+
+        # Dilate the mask?
+        if dilate > 0:
+            mask = binary_dilation(mask, iterations=dilate)
+
+        # Mask the blends?
+        if maskBlends and image.blendOffsets.size > 0:
+            raise NotImplementedError
 
         return mask
 
@@ -788,24 +818,31 @@ class ImageMapper:
         image: Image,
         zkCoeff: np.ndarray = np.zeros(1),
         *,
-        binary: bool = False,
+        binary: bool = True,
+        dilate: int = 0,
+        maskBlends: bool = True,
         _invMap: Optional[tuple] = None,
     ) -> np.ndarray:
         """Create the image mask for the stamp.
 
-        Note the uImage and vImage arrays must be regular 2D grids, like what is
-        be returned by np.meshgrid.
-
         Parameters
         ----------
         image : Image
-            A stamp object containing the metadata required for constructing the mask.
+            A stamp object containing the metadata required for constructing
+            the mask.
         zkCoeff : np.ndarray
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
         binary : bool, optional
-            Whether to return a binary mask. If False, a fractional mask is returned
-            instead. (the default is False)
+            Whether to return a binary mask. If False, a fractional mask is
+            returned instead. (the default is True)
+        dilate : int, optional
+            How many times to dilate the mask. This adds a boundary of
+            that many pixels to the mask. Note this is not an option if
+            binary==False. (the default is 0)
+        maskBlends : bool, optional
+            Whether to mask the blends (i.e. the blended regions are masked
+            out). (the default is True)
 
         Returns
         -------
@@ -848,8 +885,17 @@ class ImageMapper:
             fwdMap=fwdMap,
         )
 
+        # Set the mask to binary?
         if binary:
-            mask = mask > 0.5
+            mask = (mask > 0.5).astype(int)
+
+        # Dilate the mask?
+        if dilate > 0:
+            mask = binary_dilation(mask, iterations=dilate)
+
+        # Mask the blends?
+        if maskBlends and image.blendOffsets.size > 0:
+            raise NotImplementedError
 
         return mask
 
@@ -858,7 +904,6 @@ class ImageMapper:
         image: Image,
         zkCoeff: np.ndarray = np.zeros(1),
         binary: bool = True,
-        subPixel: bool = True,
         rMax: float = 10,
     ) -> Image:
         """Center the stamp on a projection of the pupil.
@@ -868,15 +913,14 @@ class ImageMapper:
         image : Image
             A stamp object containing the metadata needed for the mapping.
         zkCoeff : np.ndarray, optional
-            The wavefront deviation at the pupil, represented as Zernike coefficients
-            in meters, for Noll indices >= 4. (the default is zero)
+            The wavefront deviation at the pupil, represented as Zernike
+            coefficients in meters, for Noll indices >= 4.
+            (the default is zero)
         binary : bool, optional
             If True, a binary mask is used to estimate the center of the image,
             otherwise a forward model of the image is used. The latter will
             likely result in a more accurate center, but takes longer to
             calculate. (the default is True)
-        subPixel : bool, optional
-            Whether to center with sub-pixel resolution. (the default is True)
         rMax : float, optional
             The maximum pixel distance the image can be shifted.
             (the default is 10)
@@ -891,7 +935,7 @@ class ImageMapper:
             template = self.mapPupilToImage(stamp, zkCoeff).image
 
         # Center the image
-        stamp.image = centerWithTemplate(stamp.image, template, subPixel, rMax)
+        stamp.image = centerWithTemplate(stamp.image, template, rMax)
 
         return stamp
 
@@ -909,8 +953,9 @@ class ImageMapper:
             It is assumed that mapping the pupil to the image plane is meant
             to model the image contained in this stamp.
         zkCoeff : np.ndarray, optional
-            The wavefront deviation at the pupil, represented as Zernike coefficients
-            in meters, for Noll indices >= 4. (the default is zero)
+            The wavefront deviation at the pupil, represented as Zernike
+            coefficients in meters, for Noll indices >= 4.
+            (the default is zero)
 
         Returns
         -------

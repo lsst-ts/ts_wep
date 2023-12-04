@@ -91,7 +91,6 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
     def setUp(self):
         self.config = CutOutDonutsScienceSensorTaskConfig()
         self.config.donutStampSize = 200
-        self.config.donutTemplateSize = 200
         self.config.opticalModel = "onAxis"
         self.config.initialCutoutPadding = 40
         self.config.instObscuration = 0.3525
