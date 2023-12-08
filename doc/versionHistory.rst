@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.0.4:
+
+-------------
+8.0.4
+-------------
+
+* Update default config on GenerateDonutFromRefitWcsTask after updates in meas_astrom.
+
 .. _lsst.ts.wep-8.0.3:
 
 -------------
