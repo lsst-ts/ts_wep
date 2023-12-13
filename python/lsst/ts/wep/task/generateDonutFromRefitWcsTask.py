@@ -133,6 +133,7 @@ class GenerateDonutFromRefitWcsTaskConfig(
     def setDefaults(self):
         super().setDefaults()
         self.astromTask.wcsFitter.retarget(FitAffineWcsTask)
+        self.astromTask.doMagnitudeOutlierRejection = False
         self.astromTask.referenceSelector.doMagLimit = True
         magLimit = MagnitudeLimit()
         magLimit.minimum = 1
@@ -141,6 +142,9 @@ class GenerateDonutFromRefitWcsTaskConfig(
         self.astromTask.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
         self.astromTask.matcher.maxRotationDeg = 5.99
         self.astromTask.matcher.maxOffsetPix = 3000
+        self.astromTask.sourceSelector["science"].doRequirePrimary = False
+        self.astromTask.sourceSelector["science"].doIsolated = False
+        self.astromTask.sourceSelector["science"].doSignalToNoise = False
 
 
 class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):

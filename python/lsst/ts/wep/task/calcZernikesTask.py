@@ -237,36 +237,31 @@ class CalcZernikesTask(pipeBase.PipelineTask):
 
             # Below we transform the image array and coordinates from the DVCS
             # (Data Visualization Coordinate System) to the
-            # ZCS (Zemax Coordinate System). More information about these
+            # CCS (Camera Coordinate System). More information about these
             # coordinate systems is available here: sitcomtn-003.lsst.io.
-            # This transformation below incorporates two different coordinate
-            # conversions: 1) DVCS to CCS is a transpose and 2) CCS to ZCS is
-            # an x -> -x conversion that we can apply as a left-right flip.
-            # In a future update to ts_ofc we will update the sensitivity
-            # matrix to use the CCS and we can then remove the left-right
-            # flip. That is why the current version keeps this as a
-            # two part transformation.
+            # This transformation below incorporates the DVCS to CCS
+            # conversion as a transpose.
             #
-            #        DVCS               CCS                 ZCS
-            #   x                   y                               y
-            #   ^                   ^                               ^
-            #   |                   |                               |
-            #   |                   |                               |
-            #   |                   |                               |
-            #   |----------> y      |----------> x     x <----------|
+            #        DVCS               CCS
+            #   x                   y
+            #   ^                   ^
+            #   |                   |
+            #   |                   |
+            #   |                   |
+            #   |----------> y      |----------> x
 
             wfEsti.setImg(
-                np.array([-fieldXYExtra[1], fieldXYExtra[0]]),
+                np.array([fieldXYExtra[1], fieldXYExtra[0]]),
                 DefocalType.Extra,
                 filterLabel=getFilterTypeFromBandLabel(donutExtra.bandpass),
-                image=np.fliplr(donutExtra.stamp_im.image.array.T),
+                image=donutExtra.stamp_im.image.array.T,
                 blendOffsets=blendOffsetsExtra.tolist(),
             )
             wfEsti.setImg(
-                np.array([-fieldXYIntra[1], fieldXYIntra[0]]),
+                np.array([fieldXYIntra[1], fieldXYIntra[0]]),
                 DefocalType.Intra,
                 filterLabel=getFilterTypeFromBandLabel(donutIntra.bandpass),
-                image=np.fliplr(donutIntra.stamp_im.image.array.T),
+                image=donutIntra.stamp_im.image.array.T,
                 blendOffsets=blendOffsetsIntra.tolist(),
             )
             wfEsti.reset()
