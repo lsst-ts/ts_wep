@@ -129,20 +129,19 @@ class TieAlgorithm(WfAlgorithm):
         Parameters
         ----------
         value : str
-            The optical model to use for mapping between the image and pupil planes.
-            Can be "paraxial", "onAxis", or "offAxis". Paraxial and onAxis are both
-            analytic models, appropriate for donuts near the optical axis. The former
-            is only valid for slow optical systems, while the latter is also valid
-            for fast optical systems. The offAxis model is a numerically-fit model
-            that is valid for fast optical systems at wide field angles. offAxis
-            requires an accurate Batoid model.
+            The optical model to use for mapping between the image and pupil
+            planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
+            appropriate for donuts near the optical axis. It is valid for both
+            slow and fast optical systems. The offAxis model is a numerically-fit
+            model that is valid for fast optical systems at wide field angles.
+            offAxis requires an accurate Batoid model.
 
         Raises
         ------
         ValueError
             If the value is not one of the allowed values
         """
-        allowedModels = ["paraxial", "onAxis", "offAxis"]
+        allowedModels = ["onAxis", "offAxis"]
         if value not in allowedModels:
             raise ValueError(f"opticalModel must be one of {str(allowedModels)[1:-1]}.")
 
@@ -556,6 +555,10 @@ class TieAlgorithm(WfAlgorithm):
         intra = I1.copy() if I1.defocalType == DefocalType.Intra else I2.copy()
         extra = I1.copy() if I1.defocalType == DefocalType.Extra else I2.copy()
 
+        # Initialize the variables for intra and extrafocal pupil masks
+        intraPupilMask = None
+        extraPupilMask = None
+
         if self.saveHistory:
             # Save the initial images in the history
             self._history[0] = {
@@ -610,18 +613,20 @@ class TieAlgorithm(WfAlgorithm):
             intraComp = imageMapper.mapImageToPupil(
                 intraCent,
                 zkComp,
+                mask=intraPupilMask,
                 **self.maskKwargs,
             )
             extraComp = imageMapper.mapImageToPupil(
                 extraCent,
                 zkComp,
+                mask=extraPupilMask,
                 **self.maskKwargs,
             )
 
-            # Apply a common mask to each
-            intraMask = intraComp.mask
-            extraMask = extraComp.mask
-            mask = (intraMask >= 1) & (extraMask >= 1)  # type: ignore
+            # Apply a common pupil mask to each
+            intraPupilMask = intraComp.mask
+            extraPupilMask = extraComp.mask
+            mask = (intraPupilMask >= 1) & (extraPupilMask >= 1)  # type: ignore
             intraComp.image *= mask
             extraComp.image *= mask
 

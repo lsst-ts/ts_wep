@@ -103,7 +103,7 @@ class CutOutDonutsBaseTaskConfig(
         default=5,
     )
     opticalModel = pexConfig.Field(
-        doc="Specify the optical model (offAxis, paraxial, onAxis).",
+        doc="Specify the optical model (offAxis, onAxis).",
         dtype=str,
         default="offAxis",
     )

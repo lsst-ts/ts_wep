@@ -52,13 +52,11 @@ class ImageMapper:
         Instrument object, that object is just used.
     opticalModel : str, optional
         The optical model to use for mapping between the image and pupil
-        planes. Can be "paraxial", "onAxis", or "offAxis". Paraxial and
-        onAxis are both analytic models, appropriate for donuts near the
-        optical axis. The former is only valid for slow optical systems,
-        while the latter is also valid for fast optical systems. The
-        offAxis model is a numerically-fit model that is valid for fast
-        optical systems at wide field angles. offAxis requires an accurate
-        Batoid model.
+        planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
+        appropriate for donuts near the optical axis. It is valid for both
+        slow and fast optical systems. The offAxis model is a numerically-fit
+        model that is valid for fast optical systems at wide field angles.
+        offAxis requires an accurate Batoid model.
     """
 
     def __init__(
@@ -96,13 +94,11 @@ class ImageMapper:
         ----------
         value : str
             The optical model to use for mapping between the image and pupil
-            planes. Can be "paraxial", "onAxis", or "offAxis". Paraxial and
-            onAxis are both analytic models, appropriate for donuts near the
-            optical axis. The former is only valid for slow optical systems,
-            while the latter is also valid for fast optical systems. The
-            offAxis model is a numerically-fit model that is valid for fast
-            optical systems at wide field angles. offAxis requires an accurate
-            Batoid model.
+            planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
+            appropriate for donuts near the optical axis. It is valid for both
+            slow and fast optical systems. The offAxis model is a numerically-fit
+            model that is valid for fast optical systems at wide field angles.
+            offAxis requires an accurate Batoid model.
 
         Raises
         ------
@@ -111,7 +107,7 @@ class ImageMapper:
         ValueError
             If the value is not one of the allowed values
         """
-        allowedModels = ["paraxial", "onAxis", "offAxis"]
+        allowedModels = ["onAxis", "offAxis"]
         if not isinstance(value, str):
             raise TypeError("optical model must be a string.")
         elif value not in allowedModels:
@@ -152,7 +148,7 @@ class ImageMapper:
             The determinant of the Jacobian
         """
         # Get the reference Zernikes
-        if self.opticalModel == "paraxial" or self.opticalModel == "onAxis":
+        if self.opticalModel == "onAxis":
             zkRef = self.instrument.getIntrinsicZernikes(  # type: ignore
                 *image.fieldAngle,
                 image.bandLabel,
@@ -238,12 +234,6 @@ class ImageMapper:
         l = self.instrument.defocalOffset  # noqa: E741
 
         # Calculate the mapping determined by the optical model
-        if self.opticalModel == "paraxial":
-            # The paraxial model is analytic and intended for slow optical
-            # systems, near the optical axis
-
-            raise NotImplementedError("paraxial is not yet implemented.")
-
         if self.opticalModel == "onAxis":
             # The onAxis model is analytic and intended for fast optical
             # systems, near the optical axis
@@ -981,6 +971,63 @@ class ImageMapper:
 
         return totalMask
 
+    def getProjectionSize(
+        self,
+        fieldAngle: Union[np.ndarray, tuple, list],
+        defocalType: Union[DefocalType, str],
+        zkCoeff: np.ndarray = np.zeros(1),
+    ) -> int:
+        """Return size of the pupil projected onto the image plane (in pixels).
+
+        The returned number is the number of pixels per side needed to contain
+        the image template in a square array.
+
+        Note this function returns a conservative estimate, as it does
+        not account for vignetting.
+
+        Parameters
+        ----------
+        fieldAngle : np.ndarray or tuple or list
+            The field angle in degrees.
+        defocalType : DefocalType or str
+            Whether the image is intra- or extra-focal. Can be specified
+            using a DefocalType Enum or the corresponding string.
+        zkCoeff : np.ndarray, optional
+            The wavefront deviation at the pupil, represented as Zernike
+            coefficients in meters, for Noll indices >= 4.
+            (the default is zero)
+
+        Returns
+        -------
+        int
+            Number of pixels on a side needed to contain the pupil projection.
+        """
+        # Create a dummy Image
+        dummyImage = Image(
+            image=np.zeros((0, 0)),
+            fieldAngle=fieldAngle,
+            defocalType=defocalType,
+        )
+
+        # Project the pupil onto the image plane
+        theta = np.linspace(0, 2 * np.pi, 100)
+        uPupil, vPupil = np.cos(theta), np.sin(theta)
+        uImageEdge, vImageEdge, *_ = self._constructForwardMap(
+            uPupil,
+            vPupil,
+            zkCoeff,
+            dummyImage,
+        )
+
+        # What is the max u or v coordinate
+        maxCoord = np.max(np.abs(np.concatenate((uImageEdge, vImageEdge))))
+
+        # Convert this to a pixel number
+        width = 2 * maxCoord * self.instrument.donutRadius + 2
+        nPixels = np.ceil(width).astype(int)
+
+        return nPixels
+
     def centerOnProjection(
         self,
         image: Image,
@@ -1030,13 +1077,15 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: np.ndarray = np.zeros(1),
+        mask: Optional[np.ndarray] = None,
         **maskKwargs,
     ) -> Image:
         """Map the pupil to the image plane.
 
         In addition to the parameters listed below, you can provide any
         keyword argument for mask creation, and these will be passed to
-        self.createPupilMask() when the image is masked.
+        self.createPupilMask() when the image is masked. Note this only
+        happens if mask=None.
 
         Parameters
         ----------
@@ -1048,8 +1097,10 @@ class ImageMapper:
             The wavefront deviation at the pupil, represented as Zernike
             coefficients in meters, for Noll indices >= 4.
             (the default is zero)
-        maskBlends : bool, optional
-            Whether to mask blends. (the default is False)
+        mask : np.ndarray, optional
+            You can provide an image mask if you have already computed one.
+            This is just to speed up computation. If not provided, the image
+            mask will be computed from scratch.
 
         Returns
         -------
@@ -1071,14 +1122,15 @@ class ImageMapper:
         )
 
         # Create the image mask
-        if "binary" not in maskKwargs:
-            maskKwargs["binary"] = False
-        mask = self.createImageMask(
-            stamp,
-            zkCoeff,
-            **maskKwargs,
-            _invMap=(uPupil, vPupil, jac, jacDet),
-        )
+        if mask is None:
+            if "binary" not in maskKwargs:
+                maskKwargs["binary"] = False
+            mask = self.createImageMask(
+                stamp,
+                zkCoeff,
+                **maskKwargs,
+                _invMap=(uPupil, vPupil, jac, jacDet),
+            )
 
         # Fill the image (this assumes that, except for vignetting,
         # the pupil is uniformly illuminated)
@@ -1097,13 +1149,15 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: np.ndarray = np.zeros(1),
+        mask: Optional[np.ndarray] = None,
         **maskKwargs,
     ) -> Image:
         """Map a stamp from the image to the pupil plane.
 
         In addition to the parameters listed below, you can provide any
         keyword argument for mask creation, and these will be passed to
-        self.createPupilMask() when the image is masked.
+        self.createPupilMask() when the image is masked. Note this only
+        happens if mask=None.
 
         Parameters
         ----------
@@ -1114,6 +1168,10 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default is zero)
+        mask : np.ndarray, optional
+            You can provide a pupil mask if you have already computed one.
+            This is just to speed up computation. If not provided, the pupil
+            mask will be computed from scratch.
 
         Returns
         -------
@@ -1149,9 +1207,10 @@ class ImageMapper:
         pupil = np.nan_to_num(pupil)
 
         # Mask the pupil
-        if "binary" not in maskKwargs:
-            maskKwargs["binary"] = True
-        mask = self.createPupilMask(stamp, **maskKwargs)
+        if mask is None:
+            if "binary" not in maskKwargs:
+                maskKwargs["binary"] = True
+            mask = self.createPupilMask(stamp, **maskKwargs)
         pupil *= mask
 
         # Update the stamp with the new pupil image

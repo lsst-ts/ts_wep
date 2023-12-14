@@ -237,6 +237,7 @@ def createTemplateForDetector(
     padding: int = 5,
     binary: bool = True,
     ccs: bool = False,
+    nPixels: int = None,
 ) -> np.ndarray:
     """Create a donut template for the given detector.
 
@@ -262,30 +263,40 @@ def createTemplateForDetector(
     ccs : bool, optional
         Whether to return a template that is in the camera coordinate system
         (CCS). For templates on the CWFSs, this also includes de-rotation so
-        they are in the same orientation as the science sensors. When using for
-        butler data, set this to False. (the default is False)
+        they are in the same orientation as the science sensors. When False,
+        the data is in the DVCS, and the CWFSs are in original orientation.
+        This matches the data from the butler.
+        (the default is False)
+    nPixels : int, optional
+        The number of pixels on a side of the template. Typically this number
+        is calculated dynamically, but if supplied here, this number is used
+        as an override. Note the padding is not applied if this is provided.
 
     Returns
     -------
     np.ndarray
         The donut template array.
     """
+    # Create the Image mapper
+    imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
+
     # Get the field angle for the center of the detector
     # Notice we swap the x and y coords here
     # so that the angle is in the camera coordinate system (CCS)
     detYDeg, detXDeg = np.rad2deg(detector.getCenter(FIELD_ANGLE))
 
+    # Determine the template size
+    if nPixels is None:
+        nPixels = imageMapper.getProjectionSize((detXDeg, detYDeg), defocalType)
+        nPixels += 2 * padding
+
     # Create a dummy Image for template creation
-    nPixels = np.ceil(instrument.donutDiameter + 2 * padding).astype(int)
     dummyImage = Image(
         image=np.zeros((nPixels, nPixels)),
         fieldAngle=(detXDeg, detYDeg),
         defocalType=defocalType,
         bandLabel=bandLabel,
     )
-
-    # Create the Image mapper
-    imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
 
     # Create the Donut template
     if binary:
@@ -296,10 +307,15 @@ def createTemplateForDetector(
     # The template is created in the CCS, with CWFSs templates de-rotated to
     # account for the rotation of the CWFSs with respect to the science sensor
 
-    # Do we want to transform the template back to the original data
-    # visualization coordinate system (DVCS), which is the coordinate system in
-    # which data comes out of the butler?
+    # if not ccs
+    # we want to transform back to DVCS (i.e. transpose)
+    # and then rotate back to original orientation of CWFS
+    # this will match the orientation of data from the butler
     if not ccs:
+        # Transpose: CCS -> DVCS
+        template = template.T
+
+        # Rotate to original orientation of CWFS
         eulerZ = detector.getOrientation().getYaw().asDegrees()
         nRot = int(eulerZ // 90)
         template = np.rot90(template, nRot)

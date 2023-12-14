@@ -22,11 +22,16 @@
 import unittest
 
 import lsst.obs.lsst as obs_lsst
+import numpy as np
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.utils import (
+    createTemplateForDetector,
     getCameraFromButlerName,
+    getInstrumentFromButlerName,
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+from scipy.ndimage import binary_opening
 
 
 class TestTaskUtils(unittest.TestCase):
@@ -119,3 +124,41 @@ class TestTaskUtils(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             getCameraFromButlerName(badCamType)
         self.assertEqual(str(context.exception), errMsg)
+
+    def testGetInstrumentFromButlerName(self):
+        self.assertEqual(getInstrumentFromButlerName("LSSTCam"), Instrument())
+        self.assertEqual(
+            getInstrumentFromButlerName("LSSTComCam"),
+            Instrument(configFile="policy/instruments/ComCam.yaml"),
+        )
+        self.assertEqual(
+            getInstrumentFromButlerName("LATISS"),
+            Instrument(configFile="policy/instruments/AuxTel.yaml"),
+        )
+        with self.assertRaises(ValueError):
+            getCameraFromButlerName("fake")
+
+    def testCreateTemplateForDetector(self):
+        # Get the LSST camera
+        camera = obs_lsst.LsstCam().getCamera()
+
+        # Create a reference template
+        templateRef = createTemplateForDetector(
+            camera.get("R00_SW1"), "intra", nPixels=180
+        )
+
+        # Check that the butler orientations are all the same
+        for raft in ["R00", "R40", "R44", "R04"]:
+            for sensor in ["SW0", "SW1"]:
+                # Get detector info
+                detName = f"{raft}_{sensor}"
+                detector = camera.get(detName)
+                defocalType = "intra" if "1" in sensor else "extra"
+
+                # Check that butler orientation all matches reference
+                # (binary_opening removes small artifacts from centering)
+                template = createTemplateForDetector(
+                    detector, defocalType, nPixels=len(templateRef)
+                )
+                diff = binary_opening(template - templateRef, iterations=2)
+                assert np.allclose(diff, 0)

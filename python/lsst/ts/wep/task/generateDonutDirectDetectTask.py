@@ -92,7 +92,7 @@ class GenerateDonutDirectDetectTaskConfig(
         doc="How to run source detection and measurement.",
     )
     opticalModel = pexConfig.Field(
-        doc="Specify the optical model (offAxis, paraxial, onAxis).",
+        doc="Specify the optical model (offAxis, onAxis).",
         dtype=str,
         default="offAxis",
     )

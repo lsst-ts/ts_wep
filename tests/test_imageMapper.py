@@ -293,7 +293,7 @@ class TestImageMapper(unittest.TestCase):
         rng = np.random.default_rng(0)
 
         for opticalModel, fieldAngle, defocalType, zk in itertools.product(
-            ["paraxial", "onAxis", "offAxis"],
+            ["onAxis", "offAxis"],
             [(0, 0), (1.2, -0.7)],
             ["intra", "extra"],
             [np.zeros(1), rng.normal(scale=50e-9, size=19)],
@@ -429,3 +429,12 @@ class TestImageMapper(unittest.TestCase):
             mapper.createPupilMask(image, maskBlends=True, dilateBlends=1).sum(),
             mapper.createPupilMask(image, maskBlends=True).sum(),
         )
+
+    def testGetProjectionSize(self):
+        mapper = ImageMapper()
+
+        # Check against tested values
+        self.assertEqual(mapper.getProjectionSize((0, 0), "intra"), 135)
+        self.assertEqual(mapper.getProjectionSize((0, 0), "extra"), 136)
+        self.assertEqual(mapper.getProjectionSize((1.2, 0.3), "intra"), 143)
+        self.assertEqual(mapper.getProjectionSize((1.2, 0.3), "extra"), 146)
