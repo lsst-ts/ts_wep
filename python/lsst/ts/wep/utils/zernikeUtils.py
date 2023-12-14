@@ -202,11 +202,10 @@ def zernikeGradEval(
 
 
 def getPsfGradPerZernike(
-    *,
-    jmin: int = 4,
-    jmax: int = 22,
     diameter: float = 8.36,
     obscuration: float = 0.612,
+    jmin: int = 4,
+    jmax: int = 22,
 ) -> np.ndarray:
     """Get the gradient of the PSF FWHM with respect to each Zernike.
 
@@ -215,17 +214,17 @@ def getPsfGradPerZernike(
 
     Parameters
     ----------
-    jmin : int
-        The minimum Zernike Noll index, inclusive.
-        (the default, 4, ignores piston, x & y offsets, and tilt.)
-    jmax : int
-        The max Zernike Noll index, inclusive. (the default is 22.)
     diameter : float
         The diameter of the telescope aperture, in meters.
         (the default, 8.36, corresponds to the LSST primary mirror)
     obscuration : float
         The central obscuration of the telescope aperture (i.e. R_outer / R_inner).
         (the default, 0.612, corresponds to the LSST primary mirror)
+    jmin : int
+        The minimum Zernike Noll index, inclusive.
+        (the default, 4, ignores piston, x & y offsets, and tilt.)
+    jmax : int
+        The max Zernike Noll index, inclusive. (the default is 22.)
 
     Returns
     -------
@@ -268,9 +267,9 @@ def getPsfGradPerZernike(
 
 def convertZernikesToPsfWidth(
     zernikes: np.ndarray,
-    jmin: int = 4,
     diameter: float = 8.36,
     obscuration: float = 0.612,
+    jmin: int = 4,
 ) -> np.ndarray:
     """Convert Zernike amplitudes to quadrature contribution to the PSF FWHM.
 
@@ -280,16 +279,16 @@ def convertZernikesToPsfWidth(
         Zernike amplitudes (in microns), starting with Noll index `jmin`.
         Either a 1D array of zernike amplitudes, or a 2D array, where each row
         corresponds to a different set of amplitudes.
-    jmin : int
-        The minimum Zernike Noll index, inclusive. The maximum Noll index is
-        inferred from `jmin` and the length of `zernikes`.
-        (the default is 4, which ignores piston, x & y offsets, and tilt.)
     diameter : float
         The diameter of the telescope aperture, in meters.
         (the default, 8.36, corresponds to the LSST primary mirror)
     obscuration : float
         The central obscuration of the telescope aperture (i.e. R_outer / R_inner).
         (the default, 0.612, corresponds to the LSST primary mirror)
+    jmin : int
+        The minimum Zernike Noll index, inclusive. The maximum Noll index is
+        inferred from `jmin` and the length of `zernikes`.
+        (the default is 4, which ignores piston, x & y offsets, and tilt.)
 
     Returns
     -------

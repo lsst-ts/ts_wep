@@ -4,5 +4,5 @@
 algoName: tie
 algoConfig: null
 instConfig: policy/instruments/LsstCam.yaml
-jmax: 28
-units: m
+jmax: 22
+units: um

@@ -79,6 +79,13 @@ class WfAlgorithm(ABC):
         instrument : Instrument, optional
             The Instrument object associated with the DonutStamps.
             (the default is the default Instrument)
+
+        Raises
+        ------
+        TypeError
+            If any input is the wrong type
+        ValueError
+            If I1 or I2 are not square arrays, or if jmax < 4
         """
         # Validate I1
         if not isinstance(I1, Image):

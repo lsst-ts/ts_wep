@@ -180,9 +180,9 @@ class WfEstimator:
             zk *= 1e9
         elif self.units == "arcsecs":
             zk = convertZernikesToPsfWidth(
-                zk,
-                self.instrument.diameter,
-                self.instrument.obscuration,
+                zernikes=zk,
+                diameter=self.instrument.diameter,
+                obscuration=self.instrument.obscuration,
             )
         else:
             raise RuntimeError(f"Conversion to unit '{self.units}' not supported.")

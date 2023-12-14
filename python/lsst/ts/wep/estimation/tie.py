@@ -139,15 +139,11 @@ class TieAlgorithm(WfAlgorithm):
 
         Raises
         ------
-        TypeError
-            If the value is not a string
         ValueError
             If the value is not one of the allowed values
         """
         allowedModels = ["paraxial", "onAxis", "offAxis"]
-        if not isinstance(value, str):
-            raise TypeError("optical model must be a string.")
-        elif value not in allowedModels:
+        if value not in allowedModels:
             raise ValueError(f"opticalModel must be one of {str(allowedModels)[1:-1]}.")
 
         self._opticalModel = value
@@ -170,15 +166,11 @@ class TieAlgorithm(WfAlgorithm):
 
         Raises
         ------
-        TypeError
-            If value is not a string
         ValueError
             If the value is not one of the allowed values
         """
         allowedSolvers = ["exp", "fft"]
-        if not isinstance(value, str):
-            raise TypeError("solver must be a string.")
-        elif value not in allowedSolvers:
+        if value not in allowedSolvers:
             raise ValueError(f"solver must be one of {str(allowedSolvers)[1:-1]}.")
 
         self._solver = value
@@ -521,7 +513,7 @@ class TieAlgorithm(WfAlgorithm):
         self,
         I1: Image,
         I2: Image,  # type: ignore[override]
-        jmax: int = 28,
+        jmax: int = 22,
         instrument: Instrument = Instrument(),
     ) -> np.ndarray:
         """Return the wavefront Zernike coefficients in meters.
@@ -534,7 +526,7 @@ class TieAlgorithm(WfAlgorithm):
             A second image, on the opposite side of focus from I1.
         jmax : int, optional
             The maximum Zernike Noll index to estimate.
-            (the default is 28)
+            (the default is 22)
         instrument : Instrument, optional
             The Instrument object associated with the DonutStamps.
             (the default is the default Instrument)
@@ -682,7 +674,7 @@ class TieAlgorithm(WfAlgorithm):
             if self.saveHistory:
                 # Save the images and Zernikes from this iteration
                 self._history[i + 1] = {
-                    "recenter": recenter,
+                    "recenter": bool(recenter),
                     "intraCent": intraCent.image.copy(),
                     "extraCent": extraCent.image.copy(),
                     "intraComp": intraComp.image.copy(),
@@ -693,8 +685,8 @@ class TieAlgorithm(WfAlgorithm):
                     "zkComp": zkComp.copy(),
                     "zkResid": zkResid.copy(),
                     "zkBest": zkBest.copy(),
-                    "converged": converged,
-                    "caustic": caustic,
+                    "converged": bool(converged),
+                    "caustic": bool(caustic),
                 }
 
                 # If we are using the FFT solver, save the inner loop as well
