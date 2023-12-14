@@ -30,7 +30,7 @@ from lsst.ts.wep.utils.ioUtils import configClass, mergeConfigWithFile
 from lsst.ts.wep.utils.miscUtils import centerWithTemplate, polygonContains
 from lsst.ts.wep.utils.zernikeUtils import zernikeGradEval
 from scipy.interpolate import interpn
-from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_dilation, shift
 
 
 class ImageMapper:
@@ -742,13 +742,53 @@ class ImageMapper:
 
         return mask
 
+    def _maskBlends(
+        self,
+        centralMask: np.ndarray,
+        blendMask: np.ndarray,
+        blendOffsets: np.ndarray,
+        binary: bool,
+    ) -> np.ndarray:
+        """Shift the central mask to mask the blends.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            The central mask
+        blendOffsets : np.ndarray
+            The blend offsets
+        binary : bool
+            Whether to return a binary mask
+
+        Returns
+        -------
+        np.ndarray
+            The mask with the blends masked
+        """
+        # If no blends, just return the original mask
+        if blendOffsets.size == 0:
+            return centralMask
+
+        # Shift blend mask to each offset and subtract from the central mask
+        for offset in blendOffsets:
+            centralMask -= shift(blendMask, offset)
+
+        # Clip negative pixels
+        centralMask = np.clip(centralMask, 0, 1)
+
+        if binary:
+            centralMask = (centralMask > 0.5).astype(int)
+
+        return centralMask
+
     def createPupilMask(
         self,
         image: Image,
         *,
         binary: bool = True,
         dilate: int = 0,
-        maskBlends: bool = True,
+        dilateBlends: int = 0,
+        maskBlends: bool = False,
     ) -> np.ndarray:
         """Create the pupil mask for the stamp.
 
@@ -761,12 +801,16 @@ class ImageMapper:
             Whether to return a binary mask. If False, a fractional mask is
             returned instead. (the default is True)
         dilate : int, optional
-            How many times to dilate the mask. This adds a boundary of
-            that many pixels to the mask. Note this is not an option if
+            How many times to dilate the central mask. This adds a boundary
+            of that many pixels to the mask. Note this is not an option if
             binary==False. (the default is 0)
+        dilateBlends : int, optional
+            How many times to dilate the blended masks. Note this only matters
+            if maskBlends==True, and is not an option if binary==False.
+            (the default is 0)
         maskBlends : bool, optional
             Whether to mask the blends (i.e. the blended regions are masked
-            out). (the default is True)
+            out). (the default is False)
 
         Returns
         -------
@@ -778,11 +822,13 @@ class ImageMapper:
         ValueError
             Invalid dilate value.
         """
-        # Check the dilate value
-        dilate = int(dilate)
+        # Check the dilate values
+        dilate, dilateBlends = int(dilate), int(dilateBlends)
         if dilate < 0:
-            raise ValueError("Dilate must be a non-negative integer.")
-        if dilate > 0 and not binary:
+            raise ValueError("dilate must be a non-negative integer.")
+        elif dilateBlends < 0:
+            raise ValueError("dilateBlends must be a non-negative integer.")
+        elif dilate > 0 and not binary:
             raise ValueError("If dilate is greater than zero, binary must be True.")
 
         # Get the pupil grid
@@ -804,14 +850,25 @@ class ImageMapper:
             mask = (mask > 0.5).astype(int)
 
         # Dilate the mask?
+        centralMask = mask.copy()
+        blendMask = mask.copy()
         if dilate > 0:
-            mask = binary_dilation(mask, iterations=dilate)
+            centralMask = binary_dilation(centralMask, iterations=dilate).astype(int)
+        if dilateBlends > 0:
+            blendMask = binary_dilation(blendMask, iterations=dilateBlends).astype(int)
 
         # Mask the blends?
         if maskBlends and image.blendOffsets.size > 0:
-            raise NotImplementedError
+            totalMask = self._maskBlends(
+                centralMask,
+                blendMask,
+                image.blendOffsets,
+                binary,
+            )
+        else:
+            totalMask = centralMask
 
-        return mask
+        return totalMask
 
     def createImageMask(
         self,
@@ -820,7 +877,8 @@ class ImageMapper:
         *,
         binary: bool = True,
         dilate: int = 0,
-        maskBlends: bool = True,
+        dilateBlends: int = 0,
+        maskBlends: bool = False,
         _invMap: Optional[tuple] = None,
     ) -> np.ndarray:
         """Create the image mask for the stamp.
@@ -837,17 +895,30 @@ class ImageMapper:
             Whether to return a binary mask. If False, a fractional mask is
             returned instead. (the default is True)
         dilate : int, optional
-            How many times to dilate the mask. This adds a boundary of
-            that many pixels to the mask. Note this is not an option if
+            How many times to dilate the central mask. This adds a boundary
+            of that many pixels to the mask. Note this is not an option if
             binary==False. (the default is 0)
+        dilateBlends : int, optional
+            How many times to dilate the blended masks. Note this only matters
+            if maskBlends==True, and is not an option if binary==False.
+            (the default is 0)
         maskBlends : bool, optional
             Whether to mask the blends (i.e. the blended regions are masked
-            out). (the default is True)
+            out). (the default is False)
 
         Returns
         -------
         np.ndarray
         """
+        # Check the dilate values
+        dilate, dilateBlends = int(dilate), int(dilateBlends)
+        if dilate < 0:
+            raise ValueError("dilate must be a non-negative integer.")
+        elif dilateBlends < 0:
+            raise ValueError("dilateBlends must be a non-negative integer.")
+        elif dilate > 0 and not binary:
+            raise ValueError("If dilate is greater than zero, binary must be True.")
+
         # Get the image grid inside the pupil
         uImage, vImage, inside = self._getImageGridInsidePupil(zkCoeff, image)
 
@@ -890,14 +961,25 @@ class ImageMapper:
             mask = (mask > 0.5).astype(int)
 
         # Dilate the mask?
+        centralMask = mask.copy()
+        blendMask = mask.copy()
         if dilate > 0:
-            mask = binary_dilation(mask, iterations=dilate)
+            centralMask = binary_dilation(centralMask, iterations=dilate).astype(int)
+        if dilateBlends > 0:
+            blendMask = binary_dilation(blendMask, iterations=dilateBlends).astype(int)
 
         # Mask the blends?
         if maskBlends and image.blendOffsets.size > 0:
-            raise NotImplementedError
+            totalMask = self._maskBlends(
+                centralMask,
+                blendMask,
+                image.blendOffsets,
+                binary,
+            )
+        else:
+            totalMask = centralMask
 
-        return mask
+        return totalMask
 
     def centerOnProjection(
         self,
@@ -905,8 +987,13 @@ class ImageMapper:
         zkCoeff: np.ndarray = np.zeros(1),
         binary: bool = True,
         rMax: float = 10,
+        **maskKwargs,
     ) -> Image:
         """Center the stamp on a projection of the pupil.
+
+        In addition to the parameters listed below, you can provide any
+        keyword argument for mask creation, and these will be passed for
+        creating the masks for the projection.
 
         Parameters
         ----------
@@ -930,9 +1017,9 @@ class ImageMapper:
 
         # Create the image template
         if binary:
-            template = self.createImageMask(stamp, zkCoeff, binary=True)
+            template = self.createImageMask(stamp, zkCoeff, binary=True, **maskKwargs)
         else:
-            template = self.mapPupilToImage(stamp, zkCoeff).image
+            template = self.mapPupilToImage(stamp, zkCoeff, **maskKwargs).image
 
         # Center the image
         stamp.image = centerWithTemplate(stamp.image, template, rMax)
@@ -943,8 +1030,13 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: np.ndarray = np.zeros(1),
+        **maskKwargs,
     ) -> Image:
         """Map the pupil to the image plane.
+
+        In addition to the parameters listed below, you can provide any
+        keyword argument for mask creation, and these will be passed to
+        self.createPupilMask() when the image is masked.
 
         Parameters
         ----------
@@ -956,6 +1048,8 @@ class ImageMapper:
             The wavefront deviation at the pupil, represented as Zernike
             coefficients in meters, for Noll indices >= 4.
             (the default is zero)
+        maskBlends : bool, optional
+            Whether to mask blends. (the default is False)
 
         Returns
         -------
@@ -977,9 +1071,12 @@ class ImageMapper:
         )
 
         # Create the image mask
+        if "binary" not in maskKwargs:
+            maskKwargs["binary"] = False
         mask = self.createImageMask(
             stamp,
             zkCoeff,
+            **maskKwargs,
             _invMap=(uPupil, vPupil, jac, jacDet),
         )
 
@@ -1000,8 +1097,13 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: np.ndarray = np.zeros(1),
+        **maskKwargs,
     ) -> Image:
         """Map a stamp from the image to the pupil plane.
+
+        In addition to the parameters listed below, you can provide any
+        keyword argument for mask creation, and these will be passed to
+        self.createPupilMask() when the image is masked.
 
         Parameters
         ----------
@@ -1047,7 +1149,9 @@ class ImageMapper:
         pupil = np.nan_to_num(pupil)
 
         # Mask the pupil
-        mask = self.createPupilMask(stamp)
+        if "binary" not in maskKwargs:
+            maskKwargs["binary"] = True
+        mask = self.createPupilMask(stamp, **maskKwargs)
         pupil *= mask
 
         # Update the stamp with the new pupil image

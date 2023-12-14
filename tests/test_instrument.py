@@ -141,6 +141,34 @@ class TestInstrument(unittest.TestCase):
 
         self.assertTrue(np.allclose(uImage, vImage.T))
 
+    def testRadius(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.radius, 4.18, rtol=1e-3))
+
+    def testArea(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.area, 34.33, rtol=1e-3))
+
+    def testFocalRatio(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.focalRatio, 1.234, rtol=1e-3))
+
+    def testPupilOffset(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.pupilOffset, 10.312**2 / 1.5e-3, rtol=1e-3))
+
+    def testPixelScale(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.pixelScale, 0.2, rtol=1e-3))
+
+    def testDonutRadius(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.donutRadius, 66.512, rtol=1e-3))
+
+    def testDonutDiameter(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.donutDiameter, 2 * 66.512, rtol=1e-3))
+
 
 if __name__ == "__main__":
     # Do the unit test

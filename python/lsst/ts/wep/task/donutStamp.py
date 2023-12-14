@@ -278,7 +278,14 @@ class DonutStamp(AbstractStamp):
 
         self.wep_im = wepImage
 
-    def makeMask(self, instrument, opticalModel="offAxis", dilate=0, maskBlends=True):
+    def makeMask(
+        self,
+        instrument,
+        opticalModel="offAxis",
+        dilate=0,
+        dilateBlends=0,
+        maskBlends=True,
+    ):
         """Create the mask for the image.
 
         Note the mask is returned in the original coordinate system of the info
@@ -294,8 +301,13 @@ class DonutStamp(AbstractStamp):
             The optical model for the ImageMapper. Can be "paraxial", "onAxis",
             or "offAxis". (the default is "offAxis")
         dilate : int, optional
-            How many times to dilate the mask. This adds a boundary of that
-            many pixels to the mask. (the default is 0)
+            How many times to dilate the central mask. This adds a boundary
+            of that many pixels to the mask. Note this is not an option if
+            binary==False. (the default is 0)
+        dilateBlends : int, optional
+            How many times to dilate the blended masks. Note this only matters
+            if maskBlends==True, and is not an option if binary==False.
+            (the default is 0)
         maskBlends : bool, optional
             Whether to mask the blends (i.e. the blended regions are masked
             out). (the default is True)
@@ -308,6 +320,7 @@ class DonutStamp(AbstractStamp):
             self.wep_im,
             binary=True,
             dilate=dilate,
+            dilateBlends=dilateBlends,
             maskBlends=maskBlends,
         )
 

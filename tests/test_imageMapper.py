@@ -321,3 +321,111 @@ class TestImageMapper(unittest.TestCase):
 
             self.assertLess(diff.sum() / pupil.sum(), 0.02)
             self.assertLess(diff.max(), 1)
+
+    def testMaskBlends(self):
+        # Create a dummy image
+        image = Image(
+            np.zeros((160, 160)),
+            (0, 0),
+            "intra",
+        )
+
+        # Create the image mapper
+        mapper = ImageMapper()
+
+        # Replace the image with the image model
+        image.image = mapper.mapPupilToImage(image).image
+
+        # Test that a blend offset of 0 removes all the flux
+        image.blendOffsets = [[0, 0]]
+        self.assertTrue(np.allclose(mapper.createImageMask(image, maskBlends=True), 0))
+        self.assertTrue(np.allclose(mapper.createPupilMask(image, maskBlends=True), 0))
+        self.assertTrue(
+            np.allclose(mapper.mapImageToPupil(image, maskBlends=True).image, 0)
+        )
+        self.assertTrue(
+            np.allclose(mapper.mapPupilToImage(image, maskBlends=True).image, 0)
+        )
+
+        # Non-zero blend offset removes a portion of the flux
+        image.blendOffsets = [[50, 50]]
+        self.assertTrue(
+            0
+            < mapper.createImageMask(image, maskBlends=True).sum()
+            < mapper.createImageMask(image, maskBlends=False).sum()
+        )
+        self.assertTrue(
+            0
+            < mapper.createPupilMask(image, maskBlends=True).sum()
+            < mapper.createPupilMask(image, maskBlends=False).sum()
+        )
+        self.assertTrue(
+            0
+            < mapper.mapImageToPupil(image, maskBlends=True).image.sum()
+            < mapper.mapPupilToImage(image, maskBlends=False).image.sum()
+        )
+
+    def testDilate(self):
+        # Create a dummy image
+        image = Image(
+            np.zeros((160, 160)),
+            (0, 0),
+            "intra",
+        )
+
+        # Create the image mapper
+        mapper = ImageMapper()
+
+        # Test error with negative dilate
+        with self.assertRaises(ValueError):
+            mapper.createImageMask(image, dilate=-1)
+        with self.assertRaises(ValueError):
+            mapper.createPupilMask(image, dilate=-1)
+
+        # Test that you can only dilate a binary mask
+        with self.assertRaises(ValueError):
+            mapper.createImageMask(image, binary=False, dilate=1)
+        with self.assertRaises(ValueError):
+            mapper.createPupilMask(image, binary=False, dilate=1)
+
+        # Test that the dilated mask is bigger
+        self.assertGreater(
+            mapper.createImageMask(image, binary=True, dilate=1).sum(),
+            mapper.createImageMask(image, binary=True).sum(),
+        )
+        self.assertGreater(
+            mapper.createPupilMask(image, binary=True, dilate=1).sum(),
+            mapper.createPupilMask(image, binary=True).sum(),
+        )
+
+    def testDilateBlends(self):
+        # Create a dummy image
+        image = Image(
+            np.zeros((160, 160)),
+            (0, 0),
+            "intra",
+            blendOffsets=[[-20, 30]],
+        )
+
+        # Create the image mapper
+        mapper = ImageMapper()
+
+        # Test error with negative dilate
+        with self.assertRaises(ValueError):
+            mapper.createImageMask(image, dilateBlends=-1)
+        with self.assertRaises(ValueError):
+            mapper.createPupilMask(image, dilateBlends=-1)
+
+        # Test that you CAN dilate blends for a fractional binary mask
+        mapper.createImageMask(image, binary=False, dilateBlends=1, maskBlends=True)
+        mapper.createPupilMask(image, binary=False, dilateBlends=1, maskBlends=True)
+
+        # Test that the mask with dilated blends is smaller
+        self.assertLess(
+            mapper.createImageMask(image, maskBlends=True, dilateBlends=1).sum(),
+            mapper.createImageMask(image, maskBlends=True).sum(),
+        )
+        self.assertLess(
+            mapper.createPupilMask(image, maskBlends=True, dilateBlends=1).sum(),
+            mapper.createPupilMask(image, maskBlends=True).sum(),
+        )
