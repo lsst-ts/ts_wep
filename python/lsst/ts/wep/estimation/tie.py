@@ -21,6 +21,7 @@
 
 __all__ = ["TieAlgorithm"]
 
+import inspect
 import warnings
 from typing import Iterable, Optional, Union
 
@@ -74,6 +75,11 @@ class TieAlgorithm(WfAlgorithm):
         The maximum absolute change in any Zernike amplitude (in meters) between
         subsequent TIE iterations below which convergence is declared and iteration
         is stopped.
+    maskKwargs : dict, optional
+        Dictionary of mask keyword arguments to pass to mask creation.
+        To see possibilities, see the docstring for
+        lsst.ts.wep.imageMapper.ImageMapper.createPupilMask().
+        (the default is an empty dictionary)
     saveHistory : bool, optional
         Whether to save the algorithm history in the self.history attribute.
         If True, then self.history contains information about the most recent
@@ -91,6 +97,7 @@ class TieAlgorithm(WfAlgorithm):
         centerTol: Optional[float] = None,
         centerBinary: Optional[bool] = None,
         convergeTol: Optional[float] = None,
+        maskKwargs: Optional[dict] = None,
         saveHistory: Optional[bool] = None,
     ) -> None:
         super().__init__(
@@ -103,6 +110,7 @@ class TieAlgorithm(WfAlgorithm):
             centerTol=centerTol,
             centerBinary=centerBinary,
             convergeTol=convergeTol,
+            maskKwargs=maskKwargs,
             saveHistory=saveHistory,
         )
 
@@ -326,6 +334,50 @@ class TieAlgorithm(WfAlgorithm):
             raise ValueError("convergeTol must be greater than or equal to zero.")
 
         self._convergeTol = value
+
+    @property
+    def maskKwargs(self) -> dict:
+        """Mask keyword arguments to pass to ImageMapper.createPupilMask()."""
+        return self._maskKwargs
+
+    @maskKwargs.setter
+    def maskKwargs(self, value: Union[dict, None]) -> None:
+        """Set dictionary of keyword arguments passed to ImageMapper.createPupilMask().
+
+        Parameters
+        ----------
+        value : dict or None
+            Dictionary of mask keyword arguments to pass to mask creation.
+            To see possibilities, see the docstring for
+            lsst.ts.wep.imageMapper.ImageMapper.createPupilMask().
+
+        Raises
+        ------
+        TypeError
+            If you do not pass a dictionary or None
+        ValueError
+            If the dictionary contains keys that are not allowed
+        """
+        if value is None:
+            value = dict()
+        if not isinstance(value, dict):
+            raise TypeError("maskKwargs must be a dictionary or None.")
+
+        # Get the set of allowed keyword arguments
+        sig = inspect.signature(ImageMapper.createPupilMask)
+        allowedKeys = set(sig.parameters)
+        allowedKeys.remove("self")
+        allowedKeys.remove("image")
+
+        # Check that the passed keys are a subset of the allowed set
+        keys = set(value.keys())
+        if not keys.issubset(allowedKeys):
+            raise ValueError(
+                f"maskKwargs key(s) {keys - allowedKeys} are not allowed. "
+                f"The allowed keys are {allowedKeys}."
+            )
+
+        self._maskKwargs = value
 
     @property
     def saveHistory(self) -> bool:
@@ -553,16 +605,26 @@ class TieAlgorithm(WfAlgorithm):
                     intra,
                     zkCenter,
                     binary=self.centerBinary,
+                    **self.maskKwargs,
                 )
                 extraCent = imageMapper.centerOnProjection(
                     extra,
                     zkCenter,
                     binary=self.centerBinary,
+                    **self.maskKwargs,
                 )
 
             # Compensate images using the Zernikes
-            intraComp = imageMapper.mapImageToPupil(intraCent, zkComp)
-            extraComp = imageMapper.mapImageToPupil(extraCent, zkComp)
+            intraComp = imageMapper.mapImageToPupil(
+                intraCent,
+                zkComp,
+                **self.maskKwargs,
+            )
+            extraComp = imageMapper.mapImageToPupil(
+                extraCent,
+                zkComp,
+                **self.maskKwargs,
+            )
 
             # Apply a common mask to each
             intraMask = intraComp.mask
