@@ -9,6 +9,8 @@ defocalOffset: 32.8e-3 # defocal offset in meters
 pixelSize: 10.0e-6 # pixel size in meters
 wavelength: 677.0e-9 # effective wavelength, in meters
 batoidModelName: AuxTel.yaml # name used to load the Batoid model
+batoidOffsetValue: 0.8e-3 # batoid offset in meter (default = defocalOffset)
+batoidOffsetOptic: M2 # the name of the batoid element to offset (default = Detector)
 
 maskParams:
   BaffleM2cInner:

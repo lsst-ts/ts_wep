@@ -1,0 +1,28 @@
+# LSST ComCam Parameters
+# lsst.obs.lsst.LsstComCam
+
+name: LsstComCam
+diameter: 8.36 # aperture diameter in meters
+obscuration: 0.612 # fractional obscuration
+focalLength: 10.3034 # effective focal length in meters
+defocalOffset: 1.5225e-3 # defocal offset in meters
+pixelSize: 10.0e-6 # pixel size in meters
+refBand: r # band to use for BandLabel.REF
+wavelength: # effective wavelength per band, in meters
+  u: 367.1e-9
+  g: 482.7e-9
+  r: 622.3e-9
+  i: 754.6e-9
+  z: 869.1e-9
+  y: 971.0e-9
+batoidModelName: LSST_{band}.yaml # name used to load the Batoid model
+
+maskParams: # center and radius are in meters, theta in degrees
+  M1Outer:
+    thetaMin: 0.0
+    center: [-7.88971e-17, 2.01334e-16, 1.76752e-10, 2.97835e-17]
+    radius: [-1.09847e-16, -2.65166e-15, 5.96051e-15, 4.18000e+00]
+  M1Inner:
+    thetaMin: 0.0
+    center: [-1.83436e-17, 1.31384e-16, -4.79254e-03, 8.01445e-17]
+    radius: [-1.18085e-15, 2.58188e-15, -1.02954e-15, 2.55800e+00]

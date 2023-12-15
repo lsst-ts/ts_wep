@@ -88,6 +88,30 @@ class TestInstrument(unittest.TestCase):
         batoidModel = Instrument().getBatoidModel()
         self.assertIsInstance(batoidModel, CompoundOptic)
 
+    def testBadBatoidOffsetOptic(self):
+        with self.assertRaises(RuntimeError):
+            inst = Instrument()
+            inst.batoidModelName = None
+            inst.batoidOffsetOptic = "Detector"
+        with self.assertRaises(TypeError):
+            Instrument(batoidOffsetOptic=1)
+        with self.assertRaises(ValueError):
+            Instrument(batoidOffsetOptic="fake")
+
+    def testDefaultBatoidOffsetOptic(self):
+        inst = Instrument(batoidOffsetOptic=None)
+        self.assertEqual(inst.batoidOffsetOptic, "Detector")
+
+    def testBadBatoidOffsetValue(self):
+        with self.assertRaises(RuntimeError):
+            inst = Instrument()
+            inst.batoidModelName = None
+            inst.batoidOffsetValue = 1
+
+    def testDefaultBatoidOffsetValue(self):
+        inst = Instrument(batoidOffsetValue=None)
+        self.assertEqual(inst.batoidOffsetValue, inst.defocalOffset)
+
     def testGetIntrinsicZernikes(self):
         inst = Instrument()
 
@@ -121,8 +145,7 @@ class TestInstrument(unittest.TestCase):
     def testDefaultMaskParams(self):
         inst = Instrument()
         inst.maskParams = None
-        self.assertIsInstance(inst.maskParams, dict)
-        self.assertListEqual(list(inst.maskParams), ["pupilOuter", "pupilInner"])
+        self.assertEqual(inst.maskParams, dict())
 
     def testCreatePupilGrid(self):
         uImage, vImage = Instrument().createPupilGrid()

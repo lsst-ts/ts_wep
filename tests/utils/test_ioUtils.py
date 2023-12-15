@@ -80,7 +80,7 @@ class TestIoUtils(unittest.TestCase):
         mergedConfig = mergeConfigWithFile(configFile, **config, extraKey=123)
         self.assertEqual(mergedConfig["extraKey"], 123)
 
-        # Test that load fails when there is an unrecognized key in the config file
+        # Test load fails when there is unrecognized key in config file
         with self.assertRaises(KeyError):
             mergeConfigWithFile(configFile, **{key: None for key in keys[:-1]})
 

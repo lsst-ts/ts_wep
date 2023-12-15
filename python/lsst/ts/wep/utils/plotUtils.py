@@ -68,8 +68,8 @@ def plotPupilMaskElements(
 ) -> None:
     """Plot the mask elements as circles.
 
-    Outer and inner elements have the same color, with the inner elements dashed.
-    The pupil is highlighted in yellow.
+    Outer and inner elements have the same color, with the inner elements
+    dashed. The pupil is highlighted in yellow.
 
     Parameters
     ----------
@@ -126,7 +126,7 @@ def plotPupilMaskElements(
         yCenter = 0 if rTheta == 0 else rCenter * fieldAngle[1] / rTheta
 
         # Calculate x and y of circle
-        # Using the polar equation of a circle so that points are gridded on theta
+        # Using polar equation of a circle so points are gridded on theta
         A = xCenter * np.cos(theta) + yCenter * np.sin(theta)
         B = radius**2 - (xCenter**2 + yCenter**2) + A**2
         with np.errstate(invalid="ignore"):
@@ -203,7 +203,7 @@ def plotPupilMaskElements(
         xlabel="meters",
         ylabel="meters",
         aspect="equal",
-        title=f"$\\theta\,=\,${rTheta:.2f}$\!^\circ$",
+        title=rf"$\theta\,=\,${rTheta:.2f}$\!^\circ$",
     )
 
     # Draw the legend?

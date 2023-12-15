@@ -60,20 +60,21 @@ class TestImageMapper(unittest.TestCase):
 
         # Get the Batoid model from the instrument
         defocalSign = +1 if defocalType == "extra" else -1
-        offset = defocalSign * instrument.defocalOffset
-        optic = instrument.getBatoidModel()
-        optic = optic.withGloballyShiftedOptic("Detector", [0, 0, offset])
+        offset = defocalSign * instrument.batoidOffsetValue
+        optic = instrument.batoidOffsetOptic
+        model = instrument.getBatoidModel()
+        model = model.withGloballyShiftedOptic(optic, [0, 0, offset])
 
         # We need to get the image position of the chief ray
         rays = RayVector.fromStop(
             x=0,
             y=0,
-            optic=optic,
+            optic=model,
             wavelength=instrument.wavelength["ref"],
             theta_x=np.deg2rad(fieldAngle)[0],
             theta_y=np.deg2rad(fieldAngle)[1],
         )
-        optic.trace(rays)
+        model.trace(rays)
         x0 = rays.x
         y0 = rays.y
 
@@ -81,12 +82,12 @@ class TestImageMapper(unittest.TestCase):
         rays = RayVector.fromStop(
             x=x.flatten(),
             y=y.flatten(),
-            optic=optic,
+            optic=model,
             wavelength=instrument.wavelength["ref"],
             theta_x=np.deg2rad(fieldAngle)[0],
             theta_y=np.deg2rad(fieldAngle)[1],
         )
-        optic.trace(rays)
+        model.trace(rays)
 
         # Now we need to bin the unvignetted rays in the image grid
         # Get the image grid from the instrument and convert to meters
@@ -175,7 +176,7 @@ class TestImageMapper(unittest.TestCase):
         # Get the difference in the masks
         diff = maskPupilBatoid.astype(float) - maskPupilModel.astype(float)
 
-        # Apply binary opening once to remove small artifacts at the edges of masks
+        # Apply binary opening once to remove small artifacts at edges of masks
         diff = binary_opening(diff)
 
         self.assertTrue(np.allclose(diff, 0))

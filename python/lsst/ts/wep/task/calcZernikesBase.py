@@ -110,7 +110,7 @@ class CalcZernikesTaskConfig(
 
 
 class CalcZernikesBaseTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
-    """Base class for calculating Zernike coefficients from pairs of DonutStamps."""
+    """Base class for calculating Zernike coeffs from pairs of DonutStamps."""
 
     ConfigClass = CalcZernikesTaskConfig
     _DefaultName = "calcZernikesBaseTask"
@@ -201,7 +201,7 @@ class CalcZernikesBaseTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         return np.array(zkList)
 
     def getCombinedZernikes(self, zernikeArray: np.ndarray) -> np.ndarray:
-        """Combine Zernike coefficients from all pairs to create single estimate.
+        """Combine Zernike coeffs from all pairs to create single estimate.
 
         Parameters
         ----------

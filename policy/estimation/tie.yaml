@@ -9,4 +9,5 @@ compGain: 0.6
 centerTol: 10.0e-9
 centerBinary: True
 convergeTol: 10.0e-9
+maskKwargs: null
 saveHistory: False

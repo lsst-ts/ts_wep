@@ -53,21 +53,28 @@ class Instrument:
     pixelSize : float, optional
         The pixel size in meters.
     refBand : BandLabel or str, optional
-        When getting the wavelength or loading the Batoid model, use this value
-        in place of BandLabel.REF. It should be a BandLabel Enum, or one of the
-        corresponding strings. If set to None, this value defaults to BandLabel.REF.
+        When getting the wavelength or loading the Batoid model, use this
+        value in place of BandLabel.REF. It should be a BandLabel Enum, or
+        one of the corresponding strings. If set to None, this value defaults
+        to BandLabel.REF.
     wavelength : float or dict, optional
-        The effective wavelength of the instrument in meters. Can be a float, or
-        a dictionary that corresponds to different bands. The keys in this
+        The effective wavelength of the instrument in meters. Can be a float,
+        or a dictionary that corresponds to different bands. The keys in this
         dictionary are expected to correspond to the strings specified in the
         BandLabel enum in jf_wep.utils.enums.
     batoidModelName : str, optional
-        The name used to load the Batoid model, via
-        batoid.Optic.fromYaml(batoidModelName). If the string contains "{band}",
-        then it is assumed there are different Batoid models for different
-        photometric bands, and the names of these bands will be filled in at
-        runtime using the strings specified in the BandLabel enum in
-        jf_wep.utils.enums.
+        Name of Batoid model (used via batoid.Optic.fromYaml(batoidModelName))
+        If the string contains "{band}", it is assumed there are different
+        Batoid models for different photometric bands, and the names of these
+        bands will be filled in at runtime using the strings specified in the
+        BandLabel enum in jf_wep.utils.enums.
+    batoidOffsetOptic : str, optional
+        The optic to offset in the Batoid model in order to simulate
+        defocal images. When this is None, it defaults to "Detector".
+    batoidOffsetValue : float, optional
+        The value, in meters, to offset the optic in the Batoid model to
+        simulate defocal images. When this is None, it defaults to the
+        defocalOffset.
     maskParams : dict, optional
         Dictionary of mask parameters. Each key in this dictionary corresponds
         to a different mask element. The corresponding values are dictionaries
@@ -75,10 +82,11 @@ class Instrument:
         pairs are
             - thetaMin: the minimum field angle in degrees for which this mask
             element is relevant
-            - center: list of polynomial coefficients (in meters) for np.polyval
+            - center: list of polynomial coeffs (in meters) for np.polyval()
             to determine the center of the circle
-            - radius: list of polynomial coefficients (in meters) for np.polyval
+            - radius: list of polynomial coeffs (in meters) for np.polyval()
             to determine the radius of the circle
+        None defaults to an empty dictionary.
     """
 
     def __init__(
@@ -93,6 +101,8 @@ class Instrument:
         refBand: Union[BandLabel, str, None] = None,
         wavelength: Union[float, dict, None] = None,
         batoidModelName: Optional[str] = None,
+        batoidOffsetOptic: Optional[str] = None,
+        batoidOffsetValue: Optional[float] = None,
         maskParams: Optional[dict] = None,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
@@ -107,6 +117,8 @@ class Instrument:
             refBand=refBand,
             wavelength=wavelength,
             batoidModelName=batoidModelName,
+            batoidOffsetOptic=batoidOffsetOptic,
+            batoidOffsetValue=batoidOffsetValue,
             maskParams=maskParams,
         )
 
@@ -282,20 +294,19 @@ class Instrument:
 
     @property
     def refBand(self) -> BandLabel:
-        """The band to use with Batoid and wavelength when band == BandLabel.REF"""
+        """Band to use with Batoid and wavelength when band == BandLabel.REF"""
         return self._refBand
 
     @refBand.setter
     def refBand(self, value: Union[BandLabel, str]) -> None:
-        """Set the reference band to use with Batoid and wavelength.
+        """Set reference band for loading Batoid model and getting wavelength.
 
         Parameters
         ----------
         value : BandLabel or str
-            When loading the Batoid model, use this value in place of BandLabel.REF.
-            It should be a BandLabel Enum, or one of the corresponding strings.
-            If set to None, this value defaults to BandLabel.REF. Note this only
-            matters if batoidModelName contains "{band}".
+            The reference band. Should be a BandLabel Enum, or one of the
+            corresponding strings. If set to None, this value defaults to
+            BandLabel.REF.
         """
         if value is None:
             self._refBand = BandLabel.REF
@@ -314,8 +325,8 @@ class Instrument:
         Parameters
         ----------
         value : float or dict
-            The effective wavelength(s) in meters. Can either be a single float,
-            or a dictionary mapping BandLabels to floats.
+            The effective wavelength(s) in meters. Can either be a single
+            float, or a dictionary mapping BandLabels to floats.
 
         Raises
         ------
@@ -362,7 +373,10 @@ class Instrument:
     def batoidModelName(self, value: Optional[str]) -> None:
         """Set the Batoid model name.
 
-        The name should match one of the yaml files in the batoid/data directory:
+        The Batoid model name is used to load the Batoid model via
+        batoid.Optic.fromYaml(batoidModelName)
+
+        The name must match one of the yaml files in the batoid/data directory:
         https://github.com/jmeyers314/batoid/tree/main/batoid/data
         You can use "{band}" in the name, and this will be replaced with a band
         name when loading the batoid model.
@@ -392,6 +406,78 @@ class Instrument:
         self.getBatoidModel.cache_clear()
         self._getIntrinsicZernikesCached.cache_clear()
         self._getOffAxisCoeffCached.cache_clear()
+
+    @property
+    def batoidOffsetOptic(self) -> Union[str, None]:
+        """The optic that is offset in the Batoid model."""
+        if self.batoidModelName is None:
+            return None
+        elif self._batoidOffsetOptic is None:
+            return "Detector"
+        else:
+            return self._batoidOffsetOptic
+
+    @batoidOffsetOptic.setter
+    def batoidOffsetOptic(self, value: Union[str, None]) -> None:
+        """Set the optic that is offset in the Batoid model.
+
+        This is the optic to offset in the Batoid model in order to simulate
+        defocal images. When this is None, it defaults to "Detector".
+
+        Parameters
+        ----------
+        value : str or None
+            The name of the optic to be offset in the Batoid model.
+
+        Raises
+        ------
+        RuntimeError
+            If no Batoid model is set
+        TypeError
+            If value is not a string or None
+        ValueError
+            If the optic is not found in the Batoid model
+        """
+        if value is not None and self.batoidModelName is None:
+            raise RuntimeError("There is no Batoid model set.")
+        elif value is not None and not isinstance(value, str):
+            raise TypeError("batoidOffsetOptic must be a string or None.")
+        elif value is not None and value not in self.getBatoidModel()._names:
+            raise ValueError(f"Optic {value} not found in the Batoid model.")
+
+        self._batoidOffsetOptic = value
+
+    @property
+    def batoidOffsetValue(self) -> Union[float, None]:
+        """Amount in meters the optic is offset in the Batoid model."""
+        if self.batoidModelName is None:
+            return None
+        elif self._batoidOffsetValue is None:
+            return self.defocalOffset
+        else:
+            return self._batoidOffsetValue
+
+    @batoidOffsetValue.setter
+    def batoidOffsetValue(self, value: Union[str, None]) -> None:
+        """Set amount in meters the optic is offset in the batoid model.
+
+        Parameters
+        ----------
+        value : float or None
+            The offset value. If None, this value is defaulted to
+            self.defocalOffset.
+
+        Raises
+        ------
+        RuntimeError
+            If no Batoid model is set
+        """
+        if value is not None and self.batoidModelName is None:
+            raise RuntimeError("There is no Batoid model set.")
+        elif value is None:
+            self._batoidOffsetValue = value
+        else:
+            self._batoidOffsetValue = np.abs(float(value))
 
     @lru_cache(10)
     def getBatoidModel(
@@ -532,8 +618,9 @@ class Instrument:
             The DefocalType Enum or corresponding string, specifying which side
             of focus to model.
         band : BandLabel or str
-            The BandLabel Enum or corresponding string, specifying which batoid
-            model to load. Only relevant if self.batoidModelName contains "{band}".
+            The BandLabel Enum or corresponding string, specifying which
+            batoid model to load. Only relevant if self.batoidModelName
+            contains "{band}".
         jmax : int, optional
             The maximum Noll index of the off-axis model Zernikes.
 
@@ -555,8 +642,9 @@ class Instrument:
         # Offset the focal plane
         defocalType = DefocalType(defocalType)
         defocalSign = +1 if defocalType == DefocalType.Extra else -1
-        offset = defocalSign * self.defocalOffset
-        batoidModel = batoidModel.withGloballyShiftedOptic("Detector", [0, 0, offset])
+        optic = self.batoidOffsetOptic
+        offset = defocalSign * self.batoidOffsetValue
+        batoidModel = batoidModel.withGloballyShiftedOptic(optic, [0, 0, offset])
 
         # Get the off-axis model Zernikes in wavelengths
         zkIntrinsic = batoid.zernikeTA(
@@ -597,9 +685,9 @@ class Instrument:
             The DefocalType Enum or corresponding string, specifying which side
             of focus to model.
         band : BandLabel or str, optional
-            The BandLabel Enum or corresponding string, specifying which batoid
-            model to load. Only relevant if self.batoidModelName contains "{band}".
-            (the default is BandLabel.REF)
+            The BandLabel Enum or corresponding string, specifying which
+            batoid model to load. Only relevant if self.batoidModelName
+            contains "{band}". (the default is BandLabel.REF)
         jmax : int, optional
             The maximum Noll index of the off-axis model Zernikes.
             (the default is 66)
@@ -643,24 +731,28 @@ class Instrument:
         Parameters
         ----------
         value : dict or None
-            Dictionary of mask parameters. Each key in this dictionary corresponds
-            to a different mask element. The corresponding values are dictionaries
-            that define circles with different centers and radii. The key, value
-            pairs are
-                - thetaMin: the minimum field angle in degrees for which this mask
-                element is relevant
-                - center: list of polynomial coefficients (in meters) for np.polyval
-                to determine the center of the circle
-                - radius: list of polynomial coefficients (in meters) for np.polyval
-                to determine the radius of the circle
+            Dictionary of mask parameters. Each key in this dictionary
+            corresponds to a different mask element. The corresponding
+            values are dictionaries that define circles with different
+            centers and radii. The key, value pairs are
+                - thetaMin: the minimum field angle in degrees for which
+                this mask element is relevant
+                - center: list of polynomial coefficients (in meters) for
+                np.polyval() to determine the center of the circle
+                - radius: list of polynomial coefficients (in meters) for
+                np.polyval() to determine the radius of the circle
+            None defaults to an empty dictionary.
+
         Raises
         ------
         TypeError
             If value is not a dictionary or None
 
         """
-        if isinstance(value, dict) or value is None:
+        if isinstance(value, dict):
             self._maskParams = value
+        elif value is None:
+            self._maskParams = dict()
         else:
             raise TypeError("maskParams must be a dictionary or None.")
 

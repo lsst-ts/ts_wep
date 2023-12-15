@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import inspect
 import unittest
 
 import lsst.obs.lsst as obs_lsst
@@ -126,15 +127,29 @@ class TestTaskUtils(unittest.TestCase):
         self.assertEqual(str(context.exception), errMsg)
 
     def testGetInstrumentFromButlerName(self):
-        self.assertEqual(getInstrumentFromButlerName("LSSTCam"), Instrument())
-        self.assertEqual(
+        # def a function to compare two instruments
+        def assertInstEqual(inst1, inst2):
+            # Get the attributes to test
+            sig = inspect.signature(Instrument)
+            attributes = list(sig.parameters.keys())
+            attributes.remove("configFile")
+
+            # Loop over the attributes
+            for attr in attributes:
+                val1 = getattr(inst1, attr)
+                val2 = getattr(inst2, attr)
+                self.assertEqual(val1, val2)
+
+        assertInstEqual(getInstrumentFromButlerName("LSSTCam"), Instrument())
+        assertInstEqual(
             getInstrumentFromButlerName("LSSTComCam"),
             Instrument(configFile="policy/instruments/ComCam.yaml"),
         )
-        self.assertEqual(
+        assertInstEqual(
             getInstrumentFromButlerName("LATISS"),
             Instrument(configFile="policy/instruments/AuxTel.yaml"),
         )
+
         with self.assertRaises(ValueError):
             getCameraFromButlerName("fake")
 

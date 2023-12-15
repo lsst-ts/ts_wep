@@ -21,9 +21,9 @@
 
 import unittest
 
-from lsst.ts.wep.estimation import TieAlgorithm
-from lsst.ts.wep import Image, ImageMapper
 import numpy as np
+from lsst.ts.wep import Image, ImageMapper
+from lsst.ts.wep.estimation import TieAlgorithm
 
 
 class TestTieAlgorithm(unittest.TestCase):

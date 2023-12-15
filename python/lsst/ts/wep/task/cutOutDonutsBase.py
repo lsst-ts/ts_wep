@@ -184,7 +184,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.makeSubtask("subtractBackground")
 
     def _checkAndSetOffset(self, dataOffsetValue):
-        """Check the defocal offset and set to provided value if not yet defined.
+        """Check defocal offset and set to provided value if not yet defined.
 
         Parameters
         ----------

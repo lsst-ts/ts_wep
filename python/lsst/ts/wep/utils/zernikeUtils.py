@@ -218,7 +218,7 @@ def getPsfGradPerZernike(
         The diameter of the telescope aperture, in meters.
         (the default, 8.36, corresponds to the LSST primary mirror)
     obscuration : float
-        The central obscuration of the telescope aperture (i.e. R_outer / R_inner).
+        Central obscuration of telescope aperture (i.e. R_outer / R_inner).
         (the default, 0.612, corresponds to the LSST primary mirror)
     jmin : int
         The minimum Zernike Noll index, inclusive.
@@ -283,7 +283,7 @@ def convertZernikesToPsfWidth(
         The diameter of the telescope aperture, in meters.
         (the default, 8.36, corresponds to the LSST primary mirror)
     obscuration : float
-        The central obscuration of the telescope aperture (i.e. R_outer / R_inner).
+        Central obscuration of telescope aperture (i.e. R_outer / R_inner).
         (the default, 0.612, corresponds to the LSST primary mirror)
     jmin : int
         The minimum Zernike Noll index, inclusive. The maximum Noll index is
@@ -379,7 +379,7 @@ def getZernikeParity(jmax, axis="x"):
         zkStr = galsim.zernike.describe_zernike(j)
 
         # Get all exponents
-        exponents = re.findall(f"(?<={axis}\^)[0-9]+|{axis}(?!\^)", zkStr) or [0]
+        exponents = re.findall(rf"(?<={axis}\^)[0-9]+|{axis}(?!\^)", zkStr) or [0]
         exponents = np.array([1 if num == axis else int(num) for num in exponents])
 
         # Get the remainders mod 2

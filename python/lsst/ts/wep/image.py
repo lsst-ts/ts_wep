@@ -143,7 +143,7 @@ class Image(object):
         ----------
         value : DefocalType or str
             Whether the image is intra- or extra-focal.
-            Can be specified using a DefocalType Enum or the corresponding string.
+            Can be specified using DefocalType Enum or corresponding string.
 
         Raises
         ------
@@ -262,7 +262,7 @@ class Image(object):
     def mask(self, value: Optional[np.ndarray]) -> None:
         """Set the image mask.
 
-        Note that mask creation is meant to be handled by the ImageMapper class.
+        Note mask creation is meant to be handled by the ImageMapper class.
 
         Parameters
         ----------

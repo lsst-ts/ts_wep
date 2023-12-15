@@ -68,7 +68,7 @@ def getConfigDir() -> str:
 def resolveRelativeConfigPath(path: str) -> str:
     """Resolve a relative config path into an absolute path.
 
-    Note this does not check whether the absolute path actually points to a file.
+    This does not check whether the absolute path actually points to a file.
 
     Parameters
     ----------
@@ -117,13 +117,15 @@ def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
     Parameters
     ----------
     configFile : str, optional
-        Path to the config yaml file. Can be an absolute or relative path, but
-        if the path starts with "policy/", the path will be understood to be
-        relative to the ts_wep policy directory. This file can only contain keys
-        that match keywords in kwargs, but it need not contain all the keywords.
+        Path to the config yaml file. Can be an absolute or relative path,
+        but if the path starts with "policy/", the path will be understood
+        to be relative to the ts_wep policy directory. This file can only
+        contain keys that match keywords in kwargs, but it need not contain
+        all the keywords.
     kwargs : Any
-        Keyword arguments with which to replace the values from the file. Note
-        that None values are always ignored in favor of the value in configFile.
+        Keyword arguments with which to replace the values from the file.
+        Note that None values are always ignored in favor of the value in
+        configFile.
 
     Returns
     -------
@@ -160,15 +162,16 @@ def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
 def configClass(config: Union[str, dict, None, Any], classObj: Any) -> Any:
     """Configure the class.
 
-    This function is a generic wrapper around the process of passing a config
-    to the __init__ function of a class, so that the passed config can take on
-    a variety of types.
+    This function is a generic wrapper around the process of passing a
+    config to the __init__ function of a class, so that the passed config
+    can take on a variety of types.
 
-    If config is a string, it is assumed to be the path to a config file, and
-    this path is passed to the configFile argument of the class constructor.
-    If config is a dictionary, then the contents are passed as keyword arguments.
-    If config is an instance of the class, the instance is returned unchanged.
-    If config is None, then the class is instantiated using its defaults.
+    If config is a string, it is assumed to be the path to a config
+    file, and this path is passed to the configFile argument of the
+    class constructor. If config is a dictionary, then the contents
+    are passed as keyword arguments. If config is an instance of the
+    class, the instance is returned unchanged. If config is None, then
+    the class is instantiated using its defaults.
 
     Parameters
     ----------

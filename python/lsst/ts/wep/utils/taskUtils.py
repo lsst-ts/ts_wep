@@ -214,7 +214,7 @@ def getInstrumentFromButlerName(camName: str) -> Instrument:
     Raises
     ------
     ValueError
-        If the butler camera name doesn't have a default instrument configuration.
+        If the butler camera name doesn't have a default instrument config.
     """
     if camName == "LSSTCam":
         configFile = "policy/instruments/LsstCam.yaml"

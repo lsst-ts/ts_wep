@@ -102,7 +102,7 @@ class TestMiscUtils(unittest.TestCase):
         recentered = centerWithTemplate(decentered, template)
 
         # Compare the centers of mass
-        # For this test, we will just require the final decenter is less than 0.5
+        # For this test, just require the final decenter is less than 0.5
         # in each dimension, since it is impossible to get 100% correct
         dx = (x * image).sum() / image.sum() - (x * recentered).sum() / recentered.sum()
         dy = (y * image).sum() / image.sum() - (y * recentered).sum() / recentered.sum()

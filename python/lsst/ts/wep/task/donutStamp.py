@@ -298,12 +298,13 @@ class DonutStamp(AbstractStamp):
         instrument : Instrument
             Instrument to use.
         opticalModel : str, optional
-            The optical model to use for mapping between the image and pupil
-            planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
-            appropriate for donuts near the optical axis. It is valid for both
-            slow and fast optical systems. The offAxis model is a numerically-fit
-            model that is valid for fast optical systems at wide field angles.
-            offAxis requires an accurate Batoid model.
+            The optical model to use for mapping between the image and
+            pupil planes. Can be "onAxis", or "offAxis". onAxis is an
+            analytic model appropriate for donuts near the optical axis.
+            It is valid for both slow and fast optical systems. The offAxis
+            model is a numerically-fit model that is valid for fast optical
+            systems at wide field angles. offAxis requires an accurate Batoid
+            model.
         dilate : int, optional
             How many times to dilate the central mask. This adds a boundary
             of that many pixels to the mask. Note this is not an option if

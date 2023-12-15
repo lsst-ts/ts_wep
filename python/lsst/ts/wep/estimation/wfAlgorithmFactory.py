@@ -44,12 +44,13 @@ class WfAlgorithmFactory:
             A WfAlgorithmName enum or the corresponding string, indicating
             which WfAlgorithm to use.
         algoConfig : str or dict or WfAlgorithm, optional
-            Algorithm configuration. If a string, it is assumed this points to a
-            config file, which is used to configure the algorithm. If the path
-            begins with "policy/", then it is assumed the path is relative to the
-            policy directory. If a dictionary, it is assumed to hold keywords for
-            configuration. If a WfAlgorithm object, that object is just used.
-            If None, the algorithm defaults are used.
+            Algorithm configuration. If a string, it is assumed this points
+            to a config file, which is used to configure the algorithm. If the
+            path begins with "policy/", then it is assumed the path is relative
+            to the policy directory. If a dictionary, it is assumed to hold
+            keywords for configuration. If a WfAlgorithm object, that object is
+            just used. If None, the algorithm defaults are used.
+            (the default is None)
         """
         # Convert to enum
         algoName = WfAlgorithmName(algoName)

@@ -65,16 +65,17 @@ class TieAlgorithm(WfAlgorithm):
     compGain : float, optional
         The gain used to update the Zernikes for image compensation.
     centerTol : float, optional
-        The maximum absolute change in any Zernike amplitude (in meters) for which
-        the images need to be recentered. A smaller value causes the images to
-        be recentered more often. If 0, images are recentered on every iteration.
+        The maximum absolute change in any Zernike amplitude (in meters) for
+        which the images need to be recentered. A smaller value causes the
+        images to be recentered more often. If 0, images are recentered on
+        every iteration.
     centerBinary : bool, optional
         Whether to use a binary template when centering the image.
         Using a binary template is typically less accurate, but faster.
     convergeTol : float, optional
-        The maximum absolute change in any Zernike amplitude (in meters) between
-        subsequent TIE iterations below which convergence is declared and iteration
-        is stopped.
+        The maximum absolute change in any Zernike amplitude (in meters)
+        between subsequent TIE iterations below which convergence is declared
+        and iteration is stopped.
     maskKwargs : dict, optional
         Dictionary of mask keyword arguments to pass to mask creation.
         To see possibilities, see the docstring for
@@ -129,12 +130,13 @@ class TieAlgorithm(WfAlgorithm):
         Parameters
         ----------
         value : str
-            The optical model to use for mapping between the image and pupil
-            planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
-            appropriate for donuts near the optical axis. It is valid for both
-            slow and fast optical systems. The offAxis model is a numerically-fit
-            model that is valid for fast optical systems at wide field angles.
-            offAxis requires an accurate Batoid model.
+            The optical model to use for mapping between the image and
+            pupil planes. Can be "onAxis", or "offAxis". onAxis is an
+            analytic model appropriate for donuts near the optical axis.
+            It is valid for both slow and fast optical systems. The offAxis
+            model is a numerically-fit model that is valid for fast optical
+            systems at wide field angles. offAxis requires an accurate Batoid
+            model.
 
         Raises
         ------
@@ -214,11 +216,12 @@ class TieAlgorithm(WfAlgorithm):
         Parameters
         ----------
         value : iterable
-            An iterable that determines the maximum Noll index to compensate on
-            each iteration of the TIE loop. For example, if compSequence = [4, 10],
-            then on the first iteration, only Zk4 is used in image compensation and
-            on iteration 2, Zk4-Zk10 are used. Once the end of the sequence has
-            been reached, all Zernike coefficients are used during compensation.
+            An iterable that determines the maximum Noll index to
+            compensate on each iteration of the TIE loop. For example,
+            if compSequence = [4, 10], then on the first iteration,
+            only Zk4 is used in image compensation and on iteration 2,
+            Zk4-Zk10 are used. Once the end of the sequence has been
+            reached, all Zernike coefficients are used during compensation.
 
         Raises
         ------
@@ -258,19 +261,20 @@ class TieAlgorithm(WfAlgorithm):
 
     @property
     def centerTol(self) -> float:
-        """Maximum abs. deviation in Zernike coefficients that requires re-centering."""
+        """Max abs. deviation in Zernike coeff. that requires re-centering."""
         return self._centerTol
 
     @centerTol.setter
     def centerTol(self, value: float) -> None:
-        """Set max abs. deviation in Zernike coefficients that requires re-centering.
+        """Set max abs. deviation in Zernike coeff that requires re-centering.
 
         Parameters
         ----------
         value : float
-            The maximum absolute change in any Zernike amplitude (in meters) for which
-            the images need to be recentered. A smaller value causes the images to
-            be recentered more often. If 0, images are recentered on every iteration.
+            The maximum absolute change in any Zernike amplitude (in meters)
+            for which the images need to be recentered. A smaller value causes
+            the images to be recentered more often. If 0, images are recentered
+            on every iteration.
         """
         self._centerTol = float(value)
 
@@ -301,7 +305,7 @@ class TieAlgorithm(WfAlgorithm):
 
     @property
     def convergeTol(self) -> float:
-        """Mean abs. deviation in Zernikes (meters) at which the TIE loop terminates."""
+        """Mean abs. deviation in Zernikes (meters) at which TIE terminates."""
         return self._convergeTol
 
     @convergeTol.setter
@@ -333,7 +337,7 @@ class TieAlgorithm(WfAlgorithm):
 
     @maskKwargs.setter
     def maskKwargs(self, value: Union[dict, None]) -> None:
-        """Set dictionary of keyword arguments passed to ImageMapper.createPupilMask().
+        """Set dict of keyword args passed to ImageMapper.createPupilMask().
 
         Parameters
         ----------
@@ -377,7 +381,7 @@ class TieAlgorithm(WfAlgorithm):
 
     @saveHistory.setter
     def saveHistory(self, value: bool) -> None:
-        """Set the boolean that determines whether the algorithm history is saved.
+        """Set boolean that determines whether algorithm history is saved.
 
         Parameters
         ----------
@@ -594,7 +598,7 @@ class TieAlgorithm(WfAlgorithm):
             # Center the images
             recenter = (i == 0) or (np.max(np.abs(zkComp - zkCenter)) > self.centerTol)
             if recenter:
-                # Zernikes have changed enough that we should recenter the images
+                # Zernikes have changed enough that we should recenter images
                 zkCenter = zkComp.copy()
                 intraCent = imageMapper.centerOnProjection(
                     intra,

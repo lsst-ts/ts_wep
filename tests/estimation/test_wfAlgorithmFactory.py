@@ -19,9 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from lsst.ts.wep.estimation import WfAlgorithmFactory, TieAlgorithm
-from lsst.ts.wep.utils import WfAlgorithmName
 import unittest
+
+from lsst.ts.wep.estimation import TieAlgorithm, WfAlgorithmFactory
+from lsst.ts.wep.utils import WfAlgorithmName
 
 
 class TestWfAlgorithmFactory(unittest.TestCase):

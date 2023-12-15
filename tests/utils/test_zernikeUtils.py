@@ -118,7 +118,7 @@ class TestZernikeUtils(TestCase):
         expected = np.genfromtxt(os.path.join(testDataDir, "auxtel.txt"))
         self.assertTrue(np.allclose(calculated, expected, atol=1e-3))
 
-        # Finally check that converting an array of 1's returns the coefficients
+        # Finally check converting array of 1's returns the coefficients
         coeffs = convertZernikesToPsfWidth(np.ones(19))
         self.assertTrue(np.allclose(coeffs, getPsfGradPerZernike()))
 
