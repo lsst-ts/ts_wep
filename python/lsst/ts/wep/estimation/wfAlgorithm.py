@@ -21,6 +21,7 @@
 
 __all__ = ["WfAlgorithm"]
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
@@ -38,6 +39,10 @@ class WfAlgorithm(ABC):
         Path to file specifying values for the other parameters. If the
         path starts with "policy/", it will look in the policy directory.
         Any explicitly passed parameters override values found in this file
+    saveHistory : bool, optional
+        Whether to save the algorithm history in the self.history attribute.
+        If True, then self.history contains information about the most recent
+        time the algorithm was run.
 
     ...
 
@@ -46,17 +51,76 @@ class WfAlgorithm(ABC):
     def __init__(
         self,
         configFile: Optional[str] = None,
+        saveHistory: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
         params = mergeConfigWithFile(
             configFile,
+            saveHistory=saveHistory,
             **kwargs,
         )
 
         # Configure parameters
         for key, value in params.items():
             setattr(self, key, value)
+
+        # Instantiate an empty history
+        self._history = {}  # type: ignore
+
+    def __init_subclass__(self) -> None:
+        """This is called when you subclass.
+
+        I am using this to force you to write a docstring
+        for the history property.
+        """
+        if self.history.__doc__ is None:
+            raise AttributeError(
+                "You must write a docstring for the history property. "
+                "Please use this to describe the contents of the history dict."
+            )
+
+    @property
+    def saveHistory(self) -> bool:
+        """Whether the algorithm history is saved."""
+        return self._saveHistory
+
+    @saveHistory.setter
+    def saveHistory(self, value: bool) -> None:
+        """Set boolean that determines whether algorithm history is saved.
+
+        Parameters
+        ----------
+        value : bool
+            Boolean that determines whether the algorithm history is saved.
+
+        Raises
+        ------
+        TypeError
+            If the value is not a boolean
+        """
+        if not isinstance(value, bool):
+            raise TypeError("saveHistory must be a boolean.")
+
+        self._saveHistory = value
+
+        # If we are turning history-saving off, delete any old history
+        # This is to avoid confusion
+        if value is False:
+            self._history = {}
+
+    @property
+    def history(self) -> dict:
+        # Return the algorithm history
+        # Note I have not written a real docstring here, so that I can force
+        # subclasses to write a new docstring for this method
+        if not self._saveHistory:
+            warnings.warn(
+                "saveHistory is False. If you want the history to be saved, "
+                "run self.config(saveHistory=True)."
+            )
+
+        return self._history
 
     @staticmethod
     def _validateInputs(

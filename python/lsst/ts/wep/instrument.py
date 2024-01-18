@@ -536,7 +536,7 @@ class Instrument:
         Returns
         -------
         np.ndarray
-            The Zernike coefficients in meters, for Noll indices >= 4
+            The Zernike coefficients in meters
         """
         # Get the band enum
         band = BandLabel(band)
@@ -546,7 +546,7 @@ class Instrument:
 
         # If there is no batoid model, just return zeros
         if batoidModel is None:
-            return np.zeros(jmax - 3)
+            return np.zeros(jmax + 1)
 
         # Get the intrinsic Zernikes in wavelengths
         zkIntrinsic = batoid.zernike(
@@ -560,10 +560,7 @@ class Instrument:
         # Multiply by wavelength to get Zernikes in meters
         zkIntrinsic *= self.wavelength[band]
 
-        # Keep only Noll indices >= 4
-        zkIntrinsic = zkIntrinsic[4:]
-
-        return zkIntrinsic.copy()
+        return zkIntrinsic
 
     def getIntrinsicZernikes(
         self,
@@ -571,6 +568,7 @@ class Instrument:
         yAngle: float,
         band: Union[BandLabel, str] = BandLabel.REF,
         jmax: int = 66,
+        return4Up: bool = True,
     ) -> np.ndarray:
         """Return the intrinsic Zernikes associated with the optical design.
 
@@ -587,13 +585,22 @@ class Instrument:
         jmax : int, optional
             The maximum Noll index of the intrinsic Zernikes.
             (the default is 66)
+        return4Up : bool, optional
+            Whether to only return the coefficients for Noll indices >= 4.
+            (the default is True)
 
         Returns
         -------
         np.ndarray
-            The Zernike coefficients in meters, for Noll indices >= 4
+            The Zernike coefficients in meters
         """
-        return self._getIntrinsicZernikesCached(xAngle, yAngle, band, jmax).copy()
+        zk = self._getIntrinsicZernikesCached(xAngle, yAngle, band, jmax).copy()
+
+        if return4Up:
+            # Keep only Noll indices >= 4
+            zk = zk[4:]
+
+        return zk
 
     @lru_cache(100)
     def _getOffAxisCoeffCached(
@@ -621,13 +628,13 @@ class Instrument:
             The BandLabel Enum or corresponding string, specifying which
             batoid model to load. Only relevant if self.batoidModelName
             contains "{band}".
-        jmax : int, optional
+        jmax : int
             The maximum Noll index of the off-axis model Zernikes.
 
         Returns
         -------
         np.ndarray
-            The Zernike coefficients in meters, for Noll indices >= 4
+            The Zernike coefficients in meters
         """
         # Get the band enum
         band = BandLabel(band)
@@ -637,7 +644,7 @@ class Instrument:
 
         # If there is no batoid model, just return zeros
         if batoidModel is None:
-            return np.zeros(jmax - 3)
+            return np.zeros(jmax + 1)
 
         # Offset the focal plane
         defocalType = DefocalType(defocalType)
@@ -660,9 +667,6 @@ class Instrument:
         # Multiply by wavelength to get Zernikes in meters
         zkIntrinsic *= self.wavelength[band]
 
-        # Keep only Noll indices >= 4
-        zkIntrinsic = zkIntrinsic[4:]
-
         return zkIntrinsic
 
     def getOffAxisCoeff(
@@ -672,6 +676,7 @@ class Instrument:
         defocalType: DefocalType,
         band: Union[BandLabel, str] = BandLabel.REF,
         jmax: int = 66,
+        return4Up: bool = True,
     ) -> np.ndarray:
         """Return the Zernike coefficients associated with the off-axis model.
 
@@ -691,15 +696,28 @@ class Instrument:
         jmax : int, optional
             The maximum Noll index of the off-axis model Zernikes.
             (the default is 66)
+        return4Up : bool, optional
+            Whether to only return the coefficients for Noll indices >= 4.
+            (the default is True)
 
         Returns
         -------
         np.ndarray
             The Zernike coefficients in meters, for Noll indices >= 4
         """
-        return self._getOffAxisCoeffCached(
-            xAngle, yAngle, defocalType, band, jmax
+        zk = self._getOffAxisCoeffCached(
+            xAngle,
+            yAngle,
+            defocalType,
+            band,
+            jmax,
         ).copy()
+
+        if return4Up:
+            # Keep only Noll indices >= 4
+            zk = zk[4:]
+
+        return zk
 
     @property
     def maskParams(self) -> dict:

@@ -43,9 +43,9 @@ class Image(object):
         Whether the image is intra- or extra-focal.
         Can be specified using a DefocalType Enum or the corresponding string.
     bandLabel : BandLabel or str, optional
-            Photometric band for the exposure. Can be specified using a
-            BandLabel Enum or the corresponding string. If None, BandLabel.REF
-            is used. The empty string "" also maps to BandLabel.REF.
+        Photometric band for the exposure. Can be specified using a
+        BandLabel Enum or the corresponding string. If None, BandLabel.REF
+        is used. The empty string "" also maps to BandLabel.REF.
         (the default is BandLabel.REF)
     planeType : PlaneType or str, optional
         Whether the image is on the image plane or the pupil plane.

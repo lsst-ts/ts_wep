@@ -22,7 +22,6 @@
 __all__ = ["TieAlgorithm"]
 
 import inspect
-import warnings
 from typing import Iterable, Optional, Union
 
 import numpy as np
@@ -80,7 +79,6 @@ class TieAlgorithm(WfAlgorithm):
         Dictionary of mask keyword arguments to pass to mask creation.
         To see possibilities, see the docstring for
         lsst.ts.wep.imageMapper.ImageMapper.createPupilMask().
-        (the default is an empty dictionary)
     saveHistory : bool, optional
         Whether to save the algorithm history in the self.history attribute.
         If True, then self.history contains information about the most recent
@@ -115,12 +113,9 @@ class TieAlgorithm(WfAlgorithm):
             saveHistory=saveHistory,
         )
 
-        # Instantiate an empty history
-        self._history = {}  # type: ignore
-
     @property
     def opticalModel(self) -> str:
-        """The optical model to use for"""
+        """The optical model to use for mapping the image to the pupil."""
         return self._opticalModel
 
     @opticalModel.setter
@@ -375,35 +370,6 @@ class TieAlgorithm(WfAlgorithm):
         self._maskKwargs = value
 
     @property
-    def saveHistory(self) -> bool:
-        """Whether the algorithm history is saved."""
-        return self._saveHistory
-
-    @saveHistory.setter
-    def saveHistory(self, value: bool) -> None:
-        """Set boolean that determines whether algorithm history is saved.
-
-        Parameters
-        ----------
-        value : bool
-            Boolean that determines whether the algorithm history is saved.
-
-        Raises
-        ------
-        TypeError
-            If the value is not a boolean
-        """
-        if not isinstance(value, bool):
-            raise TypeError("saveHistory must be a boolean.")
-
-        self._saveHistory = value
-
-        # If we are turning history-saving off, delete any old history
-        # This is to avoid confusion
-        if value is False:
-            self._history = {}
-
-    @property
     def history(self) -> dict:
         """The algorithm history.
 
@@ -426,13 +392,7 @@ class TieAlgorithm(WfAlgorithm):
         Note the units for all Zernikes are in meters, and the z-derivative
         in dIdz is also in meters.
         """
-        if not self._saveHistory:
-            warnings.warn(
-                "saveHistory is False. If you want the history to be saved, "
-                "run self.config(saveHistory=True)."
-            )
-
-        return self._history
+        return super().history
 
     def _expSolve(
         self,
