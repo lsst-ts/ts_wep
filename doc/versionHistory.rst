@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.1.1:
+
+-------------
+8.1.1
+-------------
+
+* Replace calls to removed pipeBase.ButlerQuantumContext with pipeBase.QuantumContext.
+
 .. _lsst.ts.wep-8.1.0:
 
 -------------

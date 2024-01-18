@@ -81,7 +81,7 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
 
     def runQuantum(
         self,
-        butlerQC: pipeBase.ButlerQuantumContext,
+        butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
     ):
