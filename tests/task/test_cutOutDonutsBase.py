@@ -151,7 +151,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.instParams["offset"], 1.5)
         self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
         self.assertFalse(self.task.multiplyMask)
-        self.assertEqual(self.task.maskGrowthIter, 6)
+        self.assertEqual(self.task.maskGrowthPixels, 6)
 
         self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120

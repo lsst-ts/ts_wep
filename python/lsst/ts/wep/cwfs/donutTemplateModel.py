@@ -43,6 +43,7 @@ class DonutTemplateModel(DonutTemplateDefault):
         opticalModel="offAxis",
         pixelScale=0.2,
         instParams=None,
+        compMaskGrowth=0
     ):
         """Make the donut template image.
 
@@ -70,6 +71,9 @@ class DonutTemplateModel(DonutTemplateDefault):
             "offset", "pixelSize". If None, then it will default to configure
             the instrument from the default policy file for the camType.
             (The default is None)
+        compMaskGrowth : int
+            Amount of pixels to grow the template beyond the pupil mask.
+            (The default is 0.)
 
         Returns
         -------
@@ -142,11 +146,11 @@ class DonutTemplateModel(DonutTemplateDefault):
         fieldXY = [sensorXDeg, sensorYDeg]
 
         # Define position of donut at center of current sensor in degrees
-        boundaryT = 0
+        boundaryT = compMaskGrowth
         maskScalingFactorLocal = 1
         img.setImg(
             fieldXY, defocalType, filterLabel, image=np.zeros((imageSize, imageSize))
         )
         img.makeMask(inst, opticalModel, boundaryT, maskScalingFactorLocal)
 
-        return img.getNonPaddedMask()
+        return img.getPaddedMask()

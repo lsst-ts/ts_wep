@@ -144,8 +144,8 @@ class CutOutDonutsBaseTaskConfig(
         dtype=bool,
         default=False,
     )
-    maskGrowthIter = pexConfig.Field(
-        doc="How many iterations of binary dilation to run on the mask model.",
+    maskGrowthPixels = pexConfig.Field(
+        doc="How many pixels to grow the computational mask beyond pupil mask.",
         dtype=int,
         default=6,
     )
@@ -184,7 +184,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.instParams = createInstDictFromConfig(self.config)
         # Parameters for mask multiplication (for deblending)
         self.multiplyMask = self.config.multiplyMask
-        self.maskGrowthIter = self.config.maskGrowthIter
+        self.maskGrowthPixels = self.config.maskGrowthPixels
 
     def _checkAndSetOffset(self, dataOffsetValue):
         """Check offset in instParams dictionary and if it
@@ -246,6 +246,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             opticalModel=opticalModel,
             pixelScale=pixelScale,
             instParams=self.instParams,
+            compMaskGrowth=self.maskGrowthPixels
         )
 
         return template
@@ -509,7 +510,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 bandpass=bandpass,
                 archive_element=linear_wcs,
             )
-            boundaryT = 1
+            boundaryT = self.maskGrowthPixels
             maskScalingFactorLocal = 1
             donutStamp.makeMasks(
                 inst, self.opticalModel, boundaryT, maskScalingFactorLocal
@@ -521,7 +522,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                     inst, self.opticalModel, boundaryT, maskScalingFactorLocal
                 )
                 shiftedMask = shift(
-                    donutStamp.comp_im.mask_pupil,
+                    donutStamp.comp_im.mask_comp,
                     np.array(
                         [
                             donutStamp.comp_im.blendOffsetY,
@@ -529,9 +530,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                         ]
                     ),
                 )
-                shiftedMask = binary_dilation(
-                    shiftedMask, iterations=self.maskGrowthIter
-                ).astype(int)
                 shiftedMask[shiftedMask == 0] += 2
                 shiftedMask -= 1
                 donutStamp.stamp_im.image.array *= shiftedMask

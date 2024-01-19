@@ -91,6 +91,40 @@ class TestTemplateModel(unittest.TestCase):
             templateArray[-1 : -1 * (int(imageSize / 2) + 1) : -1],
         )
 
+    def testMakeTemplateWithDict(self):
+        # Generate a test template on the center chip and specify instParams
+        imageSize = 160
+        templateArray = self.templateMaker.makeTemplate(
+            "R22_S11", DefocalType.Extra, imageSize, instParams=self.lsstInstParams
+        )
+
+        self.assertTrue(isinstance(templateArray, np.ndarray))
+        self.assertEqual(templateArray.dtype, int)
+        self.assertEqual(np.max(templateArray), 1)
+
+        # Center of donut should have hole in it
+        self.assertEqual(templateArray[int(imageSize / 2), int(imageSize / 2)], 0)
+
+        # Donut at center of focal plane should be symmetrical
+        np.testing.assert_array_equal(
+            templateArray[: int(imageSize / 2)],
+            templateArray[-1 : -1 * (int(imageSize / 2) + 1) : -1],
+        )
+
+    def testTemplateGrowth(self):
+        # Generate a test template on the center chip w/o specifying instParams
+        # This should load default instParams from file.
+        imageSize = 160
+        templateArray = self.templateMaker.makeTemplate(
+            "R22_S11", DefocalType.Extra, imageSize, camType=CamType.LsstFamCam
+        )
+        templateArrayPadded = self.templateMaker.makeTemplate(
+            "R22_S11", DefocalType.Extra, imageSize, camType=CamType.LsstFamCam, compMaskGrowth=6
+        )
+
+        # Padded Template should have more 1s.
+        self.assertGreater(np.sum(templateArrayPadded), np.sum(templateArray))
+
     def testMakeTemplateCheckCamTypes(self):
         # Generate a test template on the center chip
         imageSize = 160
