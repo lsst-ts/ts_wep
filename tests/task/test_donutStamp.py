@@ -267,12 +267,8 @@ class TestDonutStamp(unittest.TestCase):
         donutStamp.makeMasks(inst, "offAxis", 0, 1)
         self.assertEqual(afwImage.MaskX, type(donutStamp.mask_comp))
         self.assertEqual(afwImage.MaskX, type(donutStamp.mask_pupil))
-        self.assertDictEqual(
-            {"BKGRD": 0, "DONUT": 1}, donutStamp.mask_comp.getMaskPlaneDict()
-        )
-        self.assertDictEqual(
-            {"BKGRD": 0, "DONUT": 1}, donutStamp.mask_pupil.getMaskPlaneDict()
-        )
+        self.assertIn("DONUT", list(donutStamp.mask_comp.getMaskPlaneDict().keys()))
+        self.assertIn("DONUT", list(donutStamp.mask_pupil.getMaskPlaneDict().keys()))
         maskC = donutStamp.mask_comp.getArray()
         maskP = donutStamp.mask_pupil.getArray()
         # Donut should match
@@ -281,6 +277,15 @@ class TestDonutStamp(unittest.TestCase):
         # Make sure not just an empty array
         self.assertTrue(np.sum(maskC) > 0.0)
         self.assertTrue(np.sum(maskP) > 0.0)
+        # Make sure bits set are donut bits
+        self.assertCountEqual(
+            [0, afwImage.Mask.getPlaneBitMask("DONUT")],
+            list(np.unique(donutStamp.mask_comp.array)),
+        )
+        self.assertCountEqual(
+            [0, afwImage.Mask.getPlaneBitMask("DONUT")],
+            list(np.unique(donutStamp.mask_pupil.array)),
+        )
         # Donut at center of focal plane should be symmetric
         np.testing.assert_array_equal(maskC[:63], maskC[-63:][::-1])
         np.testing.assert_array_equal(maskP[:63], maskP[-63:][::-1])
