@@ -27,11 +27,7 @@ import numpy as np
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
-from lsst.ts.wep.utils import (
-    configClass,
-    convertZernikesToPsfWidth,
-    mergeConfigWithFile,
-)
+from lsst.ts.wep.utils import configClass, mergeConfigWithFile
 
 
 class WfEstimator:
@@ -63,9 +59,28 @@ class WfEstimator:
         If an Instrument object, that object is just used.
     jmax : int, optional
         The maximum Zernike Noll index to estimate.
+    startWithIntrinsic : bool, optional
+        Whether to start the Zernike estimation process from the intrinsic
+        Zernikes rather than zero.
+    returnWfDev : bool, optional
+        If False, the full OPD is returned. If True, the wavefront
+        deviation is returned. The wavefront deviation is defined as
+        the OPD - intrinsic Zernikes. (the default is False)
+    return4Up : bool, optional
+        If True, the returned Zernike coefficients start with
+        Noll index 4. If False, they follow the Galsim convention
+        of starting with index 0 (which is meaningless), so the
+        array index of the output corresponds to the Noll index.
+        In this case, indices 0-3 are always set to zero, because
+        they are not estimated by our pipeline.
     units : str, optional
         Units in which the Zernike amplitudes are returned.
         Options are "m", "nm", "um", or "arcsecs".
+    saveHistory : bool, optional
+        Whether to save the algorithm history in the self.history
+        attribute. If True, then self.history contains information
+        about the most recent time the algorithm was run.
+        (the default is False)
     """
 
     def __init__(
@@ -75,7 +90,11 @@ class WfEstimator:
         algoConfig: Union[str, dict, WfAlgorithm, None] = None,
         instConfig: Union[str, dict, Instrument, None] = None,
         jmax: Optional[int] = None,
+        startWithIntrinsic: Optional[bool] = None,
+        returnWfDev: Optional[bool] = None,
+        return4Up: Optional[bool] = None,
         units: Optional[str] = None,
+        saveHistory: Optional[bool] = None,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
         params = mergeConfigWithFile(
@@ -84,7 +103,11 @@ class WfEstimator:
             algoConfig=algoConfig,
             instConfig=instConfig,
             jmax=jmax,
+            startWithIntrinsic=startWithIntrinsic,
+            returnWfDev=returnWfDev,
+            return4Up=return4Up,
             units=units,
+            saveHistory=saveHistory,
         )
 
         # Set the algorithm
@@ -97,7 +120,14 @@ class WfEstimator:
 
         # Set the other parameters
         self.jmax = params["jmax"]
+        self.startWithIntrinsic = params["startWithIntrinsic"]
+        self.returnWfDev = params["returnWfDev"]
+        self.return4Up = params["return4Up"]
         self.units = params["units"]
+        self.saveHistory = params["saveHistory"]
+
+        # Copy the history docstring
+        self.__class__.history.__doc__ = self.algo.__class__.history.__doc__
 
     @property
     def algo(self) -> WfAlgorithm:
@@ -116,11 +146,99 @@ class WfEstimator:
 
     @jmax.setter
     def jmax(self, value: int) -> None:
-        """Set jmax"""
+        """Set jmax
+
+        Parameters
+        ----------
+        value : int
+            The maximum Zernike Noll index to estimate.
+
+        Raises
+        ------
+        ValueError
+            If jmax is < 4
+        """
         value = int(value)
         if value < 4:
             raise ValueError("jmax must be greater than or equal to 4.")
         self._jmax = value
+
+    @property
+    def startWithIntrinsic(self) -> bool:
+        """Whether to start Zernike estimation with the intrinsics."""
+        return self._startWithIntrinsic
+
+    @startWithIntrinsic.setter
+    def startWithIntrinsic(self, value: bool) -> None:
+        """Set startWithIntrinsic.
+
+        Parameters
+        ----------
+        value : bool
+            Whether to start the Zernike estimation process from the intrinsic
+            Zernikes rather than zero.
+
+        Raises
+        ------
+        TypeError
+            If the value is not a boolean
+        """
+        if not isinstance(value, bool):
+            raise TypeError("startWithIntrinsic must be a bool.")
+        self._startWithIntrinsic = value
+
+    @property
+    def returnWfDev(self) -> bool:
+        """Whether to return the wavefront deviation instead of the OPD."""
+        return self._returnWfDev
+
+    @returnWfDev.setter
+    def returnWfDev(self, value: bool) -> None:
+        """Set returnWfDev.
+
+        Parameters
+        ----------
+        value : bool
+            If False, the full OPD is returned. If True, the wavefront
+            deviation is returned. The wavefront deviation is defined as
+            the OPD - intrinsic Zernikes.
+
+        Raises
+        ------
+        TypeError
+            If the value is not a boolean
+        """
+        if not isinstance(value, bool):
+            raise TypeError("returnWfDev must be a bool.")
+        self._returnWfDev = value
+
+    @property
+    def return4Up(self) -> bool:
+        """Whether to return Zernikes starting with Noll index 4."""
+        return self._return4Up
+
+    @return4Up.setter
+    def return4Up(self, value: bool) -> None:
+        """Set return4Up.
+
+        Parameters
+        ----------
+        value : bool
+            If True, the returned Zernike coefficients start with
+            Noll index 4. If False, they follow the Galsim convention
+            of starting with index 0 (which is meaningless), so the
+            array index of the output corresponds to the Noll index.
+            In this case, indices 0-3 are always set to zero, because
+            they are not estimated by our pipeline.
+
+        Raises
+        ------
+        TypeError
+            If the value is not a boolean
+        """
+        if not isinstance(value, bool):
+            raise TypeError("return4Up must be a bool.")
+        self._return4Up = value
 
     @property
     def units(self) -> str:
@@ -140,6 +258,38 @@ class WfEstimator:
                 f"Please choose one of {str(allowed_units)[1:-1]}."
             )
         self._units = value
+
+    @property
+    def saveHistory(self) -> bool:
+        """Whether to save the algorithm history."""
+        return self._saveHistory
+
+    @saveHistory.setter
+    def saveHistory(self, value: bool) -> None:
+        """Set saveHistory.
+
+        Parameters
+        ----------
+        value : bool
+            Whether to save the algorithm history in the self.history
+            attribute. If True, then self.history contains information
+            about the most recent time the algorithm was run.
+
+        Raises
+        ------
+        TypeError
+            If the value is not a boolean
+        """
+        if not isinstance(value, bool):
+            raise TypeError("saveHistory must be a bool.")
+        self._saveHistory = value
+
+    @property
+    def history(self) -> dict:
+        # Return the algorithm history
+        # This does not have a real docstring, because the dosctring from
+        # the algorithm history is added during the class __init__ above
+        return self.algo.history
 
     def estimateZk(
         self,
@@ -168,23 +318,14 @@ class WfEstimator:
         ValueError
             If I1 and I2 are on the same side of focus.
         """
-        # Estimate wavefront Zernike coefficients (in meters)
-        zk = self.algo.estimateZk(I1, I2, self.jmax, self.instrument)
-
-        # Convert to desired units
-        if self.units == "m":
-            pass
-        elif self.units == "um":
-            zk *= 1e6
-        elif self.units == "nm":
-            zk *= 1e9
-        elif self.units == "arcsecs":
-            zk = convertZernikesToPsfWidth(
-                zernikes=zk,
-                diameter=self.instrument.diameter,
-                obscuration=self.instrument.obscuration,
-            )
-        else:
-            raise RuntimeError(f"Conversion to unit '{self.units}' not supported.")
-
-        return zk
+        return self.algo.estimateZk(
+            I1=I1,
+            I2=I2,
+            jmax=self.jmax,
+            instrument=self.instrument,
+            startWithIntrinsic=self.startWithIntrinsic,
+            returnWfDev=self.returnWfDev,
+            return4Up=self.return4Up,
+            units=self.units,
+            saveHistory=self.saveHistory,
+        )

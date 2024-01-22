@@ -5,4 +5,8 @@ algoName: tie
 algoConfig: null
 instConfig: policy/instruments/LsstCam.yaml
 jmax: 22
+startWithIntrinsic: true
+returnWfDev: false
+return4Up: true
 units: um
+saveHistory: false

@@ -25,7 +25,7 @@ import galsim
 import numpy as np
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.instrument import Instrument
-from lsst.ts.wep.utils.enumUtils import DefocalType, PlaneType
+from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, PlaneType
 from lsst.ts.wep.utils.ioUtils import configClass, mergeConfigWithFile
 from lsst.ts.wep.utils.miscUtils import centerWithTemplate, polygonContains
 from lsst.ts.wep.utils.zernikeUtils import zernikeGradEval
@@ -147,27 +147,31 @@ class ImageMapper:
             The Jacobian of the forward map
         np.ndarray
             The determinant of the Jacobian
+
+        Raises
+        ------
+        RuntimeWarning
+            If the optical model is not supported
         """
-        # Get the reference Zernikes
+        # Get the Zernikes for the mapping
         if self.opticalModel == "onAxis":
-            zkRef = self.instrument.getIntrinsicZernikes(  # type: ignore
-                *image.fieldAngle,
-                image.bandLabel,
-            )
-        else:
-            zkRef = self.instrument.getOffAxisCoeff(  # type: ignore
+            zkMap = zkCoeff
+        elif self.opticalModel == "offAxis":
+            # Get the off-axis coefficients
+            offAxisCoeff = self.instrument.getOffAxisCoeff(
                 *image.fieldAngle,
                 image.defocalType,
                 image.bandLabel,
+                jmaxIntrinsic=len(zkCoeff) + 3,
             )
 
-        # Create an array for the Zernike coefficients used for the mapping
-        size = max(zkCoeff.size, zkRef.size)
-        zkMap = np.zeros(size)
-
-        # Add the initial and reference Zernikes
-        zkMap[: zkCoeff.size] = zkCoeff
-        zkMap[: zkRef.size] += zkRef
+            # Add these coefficients to the input coefficients
+            size = max(zkCoeff.size, offAxisCoeff.size)
+            zkMap = np.zeros(size)
+            zkMap[: zkCoeff.size] = zkCoeff
+            zkMap[: offAxisCoeff.size] += offAxisCoeff
+        else:
+            raise RuntimeError(f"Optical model {self.opticalModel} not supported")
 
         # Calculate all 1st- and 2nd-order Zernike derivatives
         d1Wdu = zernikeGradEval(
@@ -864,7 +868,7 @@ class ImageMapper:
     def createImageMask(
         self,
         image: Image,
-        zkCoeff: np.ndarray = np.zeros(1),
+        zkCoeff: Optional[np.ndarray] = None,
         *,
         binary: bool = True,
         dilate: int = 0,
@@ -879,9 +883,10 @@ class ImageMapper:
         image : Image
             A stamp object containing the metadata required for constructing
             the mask.
-        zkCoeff : np.ndarray
+        zkCoeff : np.ndarray, optional
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
+            (the default are the intrinsic Zernikes at the donut position)
         binary : bool, optional
             Whether to return a binary mask. If False, a fractional mask is
             returned instead. (the default is True)
@@ -909,6 +914,13 @@ class ImageMapper:
             raise ValueError("dilateBlends must be a non-negative integer.")
         elif dilate > 0 and not binary:
             raise ValueError("If dilate is greater than zero, binary must be True.")
+
+        if zkCoeff is None:
+            # Get the intrinsic Zernikes
+            zkCoeff = self.instrument.getIntrinsicZernikes(
+                *image.fieldAngle,
+                image.bandLabel,
+            )
 
         # Get the image grid inside the pupil
         uImage, vImage, inside = self._getImageGridInsidePupil(zkCoeff, image)
@@ -976,7 +988,8 @@ class ImageMapper:
         self,
         fieldAngle: Union[np.ndarray, tuple, list],
         defocalType: Union[DefocalType, str],
-        zkCoeff: np.ndarray = np.zeros(1),
+        bandLabel: Union[BandLabel, str] = BandLabel.REF,
+        zkCoeff: Optional[np.ndarray] = None,
     ) -> int:
         """Return size of the pupil projected onto the image plane (in pixels).
 
@@ -993,10 +1006,15 @@ class ImageMapper:
         defocalType : DefocalType or str
             Whether the image is intra- or extra-focal. Can be specified
             using a DefocalType Enum or the corresponding string.
+        bandLabel : BandLabel or str
+            Photometric band for the exposure. Can be specified using a
+            BandLabel Enum or the corresponding string. If None, BandLabel.REF
+            is used. The empty string "" also maps to BandLabel.REF.
+            (the default is BandLabel.REF)
         zkCoeff : np.ndarray, optional
-            The wavefront deviation at the pupil, represented as Zernike
-            coefficients in meters, for Noll indices >= 4.
-            (the default is zero)
+            The wavefront at the pupil, represented as Zernike coefficients
+            in meters, for Noll indices >= 4.
+            (the default are the intrinsic Zernikes at the donut position)
 
         Returns
         -------
@@ -1008,7 +1026,15 @@ class ImageMapper:
             image=np.zeros((0, 0)),
             fieldAngle=fieldAngle,
             defocalType=defocalType,
+            bandLabel=bandLabel,
         )
+
+        if zkCoeff is None:
+            # Get the intrinsic Zernikes
+            zkCoeff = self.instrument.getIntrinsicZernikes(
+                *dummyImage.fieldAngle,
+                dummyImage.bandLabel,
+            )
 
         # Project the pupil onto the image plane
         theta = np.linspace(0, 2 * np.pi, 100)
@@ -1032,7 +1058,7 @@ class ImageMapper:
     def centerOnProjection(
         self,
         image: Image,
-        zkCoeff: np.ndarray = np.zeros(1),
+        zkCoeff: Optional[np.ndarray] = None,
         binary: bool = True,
         rMax: float = 10,
         **maskKwargs,
@@ -1048,9 +1074,9 @@ class ImageMapper:
         image : Image
             A stamp object containing the metadata needed for the mapping.
         zkCoeff : np.ndarray, optional
-            The wavefront deviation at the pupil, represented as Zernike
-            coefficients in meters, for Noll indices >= 4.
-            (the default is zero)
+            The wavefront at the pupil, represented as Zernike coefficients
+            in meters, for Noll indices >= 4.
+            (the default are the intrinsic Zernikes at the donut position)
         binary : bool, optional
             If True, a binary mask is used to estimate the center of the image,
             otherwise a forward model of the image is used. The latter will
@@ -1062,6 +1088,13 @@ class ImageMapper:
         """
         # Make a copy of the stamp
         stamp = image.copy()
+
+        if zkCoeff is None:
+            # Get the intrinsic Zernikes
+            zkCoeff = self.instrument.getIntrinsicZernikes(
+                *image.fieldAngle,
+                image.bandLabel,
+            )
 
         # Create the image template
         if binary:
@@ -1077,7 +1110,7 @@ class ImageMapper:
     def mapPupilToImage(
         self,
         image: Image,
-        zkCoeff: np.ndarray = np.zeros(1),
+        zkCoeff: Optional[np.ndarray] = None,
         mask: Optional[np.ndarray] = None,
         **maskKwargs,
     ) -> Image:
@@ -1095,9 +1128,9 @@ class ImageMapper:
             It is assumed that mapping the pupil to the image plane is meant
             to model the image contained in this stamp.
         zkCoeff : np.ndarray, optional
-            The wavefront deviation at the pupil, represented as Zernike
-            coefficients in meters, for Noll indices >= 4.
-            (the default is zero)
+            The wavefront at the pupil, represented as Zernike coefficients
+            in meters, for Noll indices >= 4.
+            (the default are the intrinsic Zernikes at the donut position)
         mask : np.ndarray, optional
             You can provide an image mask if you have already computed one.
             This is just to speed up computation. If not provided, the image
@@ -1110,6 +1143,13 @@ class ImageMapper:
         """
         # Make a copy of the stamp
         stamp = image.copy()
+
+        if zkCoeff is None:
+            # Get the intrinsic Zernikes
+            zkCoeff = self.instrument.getIntrinsicZernikes(
+                *image.fieldAngle,
+                image.bandLabel,
+            )
 
         # Get the image grid inside the pupil
         uImage, vImage, inside = self._getImageGridInsidePupil(zkCoeff, stamp)
@@ -1149,7 +1189,7 @@ class ImageMapper:
     def mapImageToPupil(
         self,
         image: Image,
-        zkCoeff: np.ndarray = np.zeros(1),
+        zkCoeff: Optional[np.ndarray] = None,
         mask: Optional[np.ndarray] = None,
         **maskKwargs,
     ) -> Image:
@@ -1168,7 +1208,7 @@ class ImageMapper:
         zkCoeff : np.ndarray, optional
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
-            (the default is zero)
+            (the default are the intrinsic Zernikes at the donut position)
         mask : np.ndarray, optional
             You can provide a pupil mask if you have already computed one.
             This is just to speed up computation. If not provided, the pupil
@@ -1185,6 +1225,13 @@ class ImageMapper:
         # Create regular pupil and image grids
         uPupil, vPupil = self.instrument.createPupilGrid()
         uImage, vImage = self.instrument.createImageGrid(stamp.image.shape[0])
+
+        if zkCoeff is None:
+            # Get the intrinsic Zernikes
+            zkCoeff = self.instrument.getIntrinsicZernikes(
+                *image.fieldAngle,
+                image.bandLabel,
+            )
 
         # Construct the forward mapping
         uImageMap, vImageMap, jac, jacDet = self._constructForwardMap(

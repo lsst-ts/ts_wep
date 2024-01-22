@@ -362,7 +362,7 @@ class Instrument:
 
         # Also clear the caches for the functions that use this value
         self._getIntrinsicZernikesCached.cache_clear()
-        self._getOffAxisCoeffCached.cache_clear()
+        self._getIntrinsicZernikesTACached.cache_clear()
 
     @property
     def batoidModelName(self) -> Union[str, None]:
@@ -405,7 +405,7 @@ class Instrument:
         # Also clear the caches for the functions that use this value
         self.getBatoidModel.cache_clear()
         self._getIntrinsicZernikesCached.cache_clear()
-        self._getOffAxisCoeffCached.cache_clear()
+        self._getIntrinsicZernikesTACached.cache_clear()
 
     @property
     def batoidOffsetOptic(self) -> Union[str, None]:
@@ -603,7 +603,7 @@ class Instrument:
         return zk
 
     @lru_cache(100)
-    def _getOffAxisCoeffCached(
+    def _getIntrinsicZernikesTACached(
         self,
         xAngle: float,
         yAngle: float,
@@ -611,9 +611,7 @@ class Instrument:
         band: Union[BandLabel, str],
         jmax: int,
     ) -> np.ndarray:
-        """Cached interior function for the getOffAxisCoeff method.
-
-        We need to do this because numpy arrays are mutable.
+        """Cached function for batoid.zernikeTA.
 
         Parameters
         ----------
@@ -676,6 +674,7 @@ class Instrument:
         defocalType: DefocalType,
         band: Union[BandLabel, str] = BandLabel.REF,
         jmax: int = 66,
+        jmaxIntrinsic: int = 66,
         return4Up: bool = True,
     ) -> np.ndarray:
         """Return the Zernike coefficients associated with the off-axis model.
@@ -696,6 +695,12 @@ class Instrument:
         jmax : int, optional
             The maximum Noll index of the off-axis model Zernikes.
             (the default is 66)
+        jmaxIntrinsic : int, optional
+            The off-axis coefficients are calculated by subtracting the
+            intrinsic Zernikes from batoid.zernikeTA. This value sets the
+            maximum Noll index of the intrinsic Zernikes that are subtracted
+            from batoid.zernikeTA. It is usually the jmax of the Zernikes
+            being estimated by the wavefront estimators.
         return4Up : bool, optional
             Whether to only return the coefficients for Noll indices >= 4.
             (the default is True)
@@ -705,19 +710,32 @@ class Instrument:
         np.ndarray
             The Zernike coefficients in meters, for Noll indices >= 4
         """
-        zk = self._getOffAxisCoeffCached(
+        # Get zernikeTA
+        zkTA = self._getIntrinsicZernikesTACached(
             xAngle,
             yAngle,
             defocalType,
             band,
             jmax,
-        ).copy()
+        )
+
+        # Get regular intrinsic zernikes
+        zk = self._getIntrinsicZernikesCached(
+            xAngle,
+            yAngle,
+            band,
+            min(jmax, jmaxIntrinsic),
+        )
+
+        # Subtract the intrinsics from zernikeTA
+        offAxisCoeff = zkTA.copy()
+        offAxisCoeff[: zk.size] -= zk
 
         if return4Up:
             # Keep only Noll indices >= 4
-            zk = zk[4:]
+            offAxisCoeff = offAxisCoeff[4:]
 
-        return zk
+        return offAxisCoeff
 
     @property
     def maskParams(self) -> dict:

@@ -27,7 +27,7 @@ from typing import Any, Optional
 
 import numpy as np
 from lsst.ts.wep import Image, Instrument
-from lsst.ts.wep.utils import mergeConfigWithFile
+from lsst.ts.wep.utils import convertZernikesToPsfWidth, mergeConfigWithFile
 
 
 class WfAlgorithm(ABC):
@@ -39,10 +39,6 @@ class WfAlgorithm(ABC):
         Path to file specifying values for the other parameters. If the
         path starts with "policy/", it will look in the policy directory.
         Any explicitly passed parameters override values found in this file
-    saveHistory : bool, optional
-        Whether to save the algorithm history in the self.history attribute.
-        If True, then self.history contains information about the most recent
-        time the algorithm was run.
 
     ...
 
@@ -51,13 +47,11 @@ class WfAlgorithm(ABC):
     def __init__(
         self,
         configFile: Optional[str] = None,
-        saveHistory: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
         params = mergeConfigWithFile(
             configFile,
-            saveHistory=saveHistory,
             **kwargs,
         )
 
@@ -66,7 +60,7 @@ class WfAlgorithm(ABC):
             setattr(self, key, value)
 
         # Instantiate an empty history
-        self._history = {}  # type: ignore
+        self._history = {}
 
     def __init_subclass__(self) -> None:
         """This is called when you subclass.
@@ -81,43 +75,14 @@ class WfAlgorithm(ABC):
             )
 
     @property
-    def saveHistory(self) -> bool:
-        """Whether the algorithm history is saved."""
-        return self._saveHistory
-
-    @saveHistory.setter
-    def saveHistory(self, value: bool) -> None:
-        """Set boolean that determines whether algorithm history is saved.
-
-        Parameters
-        ----------
-        value : bool
-            Boolean that determines whether the algorithm history is saved.
-
-        Raises
-        ------
-        TypeError
-            If the value is not a boolean
-        """
-        if not isinstance(value, bool):
-            raise TypeError("saveHistory must be a boolean.")
-
-        self._saveHistory = value
-
-        # If we are turning history-saving off, delete any old history
-        # This is to avoid confusion
-        if value is False:
-            self._history = {}
-
-    @property
     def history(self) -> dict:
         # Return the algorithm history
         # Note I have not written a real docstring here, so that I can force
         # subclasses to write a new docstring for this method
-        if not self._saveHistory:
+        if len(self._history) == 0:
             warnings.warn(
-                "saveHistory is False. If you want the history to be saved, "
-                "run self.config(saveHistory=True)."
+                "It looks like the history is empty. Perhaps you have not "
+                "yet run the algorithm with saveHistory=True?"
             )
 
         return self._history
@@ -126,8 +91,12 @@ class WfAlgorithm(ABC):
     def _validateInputs(
         I1: Image,
         I2: Optional[Image],
-        jmax: int = 28,
-        instrument: Instrument = Instrument(),
+        jmax: int,
+        instrument: Instrument,
+        startWithIntrinsic: bool,
+        returnWfDev: bool,
+        units: str,
+        saveHistory: bool,
     ) -> None:
         """Validate the inputs to estimateWf.
 
@@ -139,17 +108,26 @@ class WfAlgorithm(ABC):
             A second image, on the opposite side of focus from I1.
         jmax : int, optional
             The maximum Zernike Noll index to estimate.
-            (the default is 28)
         instrument : Instrument, optional
             The Instrument object associated with the DonutStamps.
-            (the default is the default Instrument)
+        startWithIntrinsic : bool, optional
+            Whether to start the Zernike estimation process from the intrinsic
+            Zernikes rather than zero.
+        returnWfDev : bool, optional
+            If False, the full OPD is returned. If True, the wavefront
+            deviation is returned. The wavefront deviation is defined as
+            the OPD - intrinsic Zernikes.
+        units : str, optional
+            Units in which the Zernike amplitudes are returned.
+            Options are "m", "nm", "um", or "arcsecs".
 
         Raises
         ------
         TypeError
             If any input is the wrong type
         ValueError
-            If I1 or I2 are not square arrays, or if jmax < 4
+            If I1 or I2 are not square arrays, or if jmax < 4,
+            or unsupported unit
         """
         # Validate I1
         if not isinstance(I1, Image):
@@ -178,13 +156,77 @@ class WfAlgorithm(ABC):
         if not isinstance(instrument, Instrument):
             raise TypeError("instrument must be an Instrument.")
 
+        # Validate startWithIntrinsic
+        if not isinstance(startWithIntrinsic, bool):
+            raise TypeError("startWithIntrinsic must be a bool.")
+
+        # Validate returnWfDev
+        if not isinstance(returnWfDev, bool):
+            raise TypeError("returnWfDev must be a bool.")
+
+        # Validate units
+        if not isinstance(units, str):
+            raise TypeError("units must be a str.")
+        allowedUnits = ["m", "nm", "um", "arcseconds"]
+        if units not in allowedUnits:
+            raise ValueError(f"units must be one of {allowedUnits}")
+
+        # Validate saveHistory
+        if not isinstance(saveHistory, bool):
+            raise TypeError("saveHistory must be a bool.")
+
     @abstractmethod
-    def estimateZk(
+    def _estimateZk(
         self,
         I1: Image,
         I2: Optional[Image],
-        jmax: int = 28,
+        zkStartI1: np.ndarray,
+        zkStartI2: Optional[np.ndarray],
+        instrument: Instrument,
+        saveHistory: bool,
+    ) -> np.ndarray:
+        """Private Zernike estimation method that should be subclassed.
+
+        Note that unlike the public method, this method MUST return the
+        coefficients for Noll indices >= 4 (in meters) corresponding to
+        the full OPD.
+
+        Parameters
+        ----------
+        I1 : DonutStamp
+            An Image object containing an intra- or extra-focal donut image.
+        I2 : DonutStamp or None
+            A second image, on the opposite side of focus from I1.
+        zkStartI1 : np.ndarray
+            The starting Zernikes for I1 (in meters, for Noll indices >= 4)
+        zkStartI2 : np.ndarray or None
+            The starting Zernikes for I2 (in meters, for Noll indices >= 4)
+        instrument : Instrument
+            The Instrument object associated with the DonutStamps.
+        saveHistory : bool
+            Whether to save the algorithm history in the self.history
+            attribute. If True, then self.history contains information
+            about the most recent time the algorithm was run.
+
+        Returns
+        -------
+        np.ndarray
+            Zernike coefficients representing the OPD in meters,
+            for Noll indices >= 4.
+        """
+        ...
+
+    def estimateZk(
+        self,
+        I1: Image,
+        I2: Optional[Image] = None,
+        jmax: int = 22,
         instrument: Instrument = Instrument(),
+        startWithIntrinsic: bool = True,
+        returnWfDev: bool = False,
+        return4Up: bool = True,
+        units: str = "m",
+        saveHistory: bool = False,
     ) -> np.ndarray:
         """Return the wavefront Zernike coefficients in meters.
 
@@ -194,17 +236,116 @@ class WfAlgorithm(ABC):
             An Image object containing an intra- or extra-focal donut image.
         I2 : DonutStamp, optional
             A second image, on the opposite side of focus from I1.
+            (the default is None)
         jmax : int, optional
             The maximum Zernike Noll index to estimate.
-            (the default is 28)
+            (the default is 22)
         instrument : Instrument, optional
             The Instrument object associated with the DonutStamps.
             (the default is the default Instrument)
+        startWithIntrinsic : bool, optional
+            Whether to start the Zernike estimation process from the intrinsic
+            Zernikes rather than zero. (the default is True)
+        returnWfDev : bool, optional
+            If False, the full OPD is returned. If True, the wavefront
+            deviation is returned. The wavefront deviation is defined as
+            the OPD - intrinsic Zernikes. (the default is False)
+        return4Up : bool, optional
+            If True, the returned Zernike coefficients start with
+            Noll index 4. If False, they follow the Galsim convention
+            of starting with index 0 (which is meaningless), so the
+            array index of the output corresponds to the Noll index.
+            In this case, indices 0-3 are always set to zero, because
+            they are not estimated by our pipeline.
+            (the default is True)
+        units : str, optional
+            Units in which the Zernike amplitudes are returned.
+            Options are "m", "nm", "um", or "arcsecs".
+            (the default is "m")
+        saveHistory : bool, optional
+            Whether to save the algorithm history in the self.history
+            attribute. If True, then self.history contains information
+            about the most recent time the algorithm was run.
+            (the default is False)
 
         Returns
         -------
         np.ndarray
-            Zernike coefficients (for Noll indices >= 4) estimated from
-            the image (or pair of images), in meters.
+            Zernike coefficients estimated from the image (or pair of images)
         """
-        ...
+        # Validate the inputs
+        self._validateInputs(
+            I1,
+            I2,
+            jmax,
+            instrument,
+            startWithIntrinsic,
+            returnWfDev,
+            units,
+            saveHistory,
+        )
+
+        # Get the intrinsic Zernikes?
+        if startWithIntrinsic or returnWfDev:
+            zkIntrinsicI1 = instrument.getIntrinsicZernikes(
+                *I1.fieldAngle,
+                I1.bandLabel,
+                jmax,
+            )
+            zkIntrinsicI2 = (
+                None
+                if I2 is None
+                else instrument.getIntrinsicZernikes(*I2.fieldAngle, I2.bandLabel, jmax)
+            )
+
+        # Determine the Zernikes to start with
+        if startWithIntrinsic:
+            zkStartI1 = zkIntrinsicI1
+            zkStartI2 = zkIntrinsicI2
+        else:
+            zkStartI1 = np.zeros(jmax - 3)
+            zkStartI2 = np.zeros(jmax - 3)
+
+        # Clear the algorithm history
+        self._history = {}
+
+        # Estimate the Zernikes
+        zk = self._estimateZk(
+            I1=I1,
+            I2=I2,
+            zkStartI1=zkStartI1,
+            zkStartI2=zkStartI2,
+            instrument=instrument,
+            saveHistory=saveHistory,
+        )
+
+        # Calculate the wavefront deviation?
+        if returnWfDev:
+            zkIntrinsic = (
+                zkIntrinsicI1
+                if I2 is None
+                else np.mean([zkIntrinsicI1, zkIntrinsicI2], axis=0)
+            )
+            zk -= zkIntrinsic
+
+        # Convert to desired units
+        if units == "m":
+            pass
+        elif units == "um":
+            zk *= 1e6
+        elif units == "nm":
+            zk *= 1e9
+        elif units == "arcsecs":
+            zk = convertZernikesToPsfWidth(
+                zernikes=zk,
+                diameter=self.instrument.diameter,
+                obscuration=self.instrument.obscuration,
+            )
+        else:
+            raise RuntimeError(f"Conversion to unit '{units}' not supported.")
+
+        # Pad array so that array index = Noll index?
+        if not return4Up:
+            zk = np.pad(zk, (4, 0))
+
+        return zk
