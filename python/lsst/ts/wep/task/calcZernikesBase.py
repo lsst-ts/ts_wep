@@ -107,6 +107,16 @@ class CalcZernikesTaskConfig(
         dtype=int,
         default=22,
     )
+    startWithIntrinsic = pexConfig.Field(
+        doc="Whether to start Zernike estimation from the intrinsic Zernikes.",
+        dtype=bool,
+        default=True,
+    )
+    returnWfDev = pexConfig.Field(
+        doc="If True, returns the wavefront deviation. If False, return the full OPD.",
+        dtype=bool,
+        default=False,
+    )
 
 
 class CalcZernikesBaseTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
@@ -131,8 +141,10 @@ class CalcZernikesBaseTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.instDefocalOffset = self.config.instDefocalOffset
         self.instPixelSize = self.config.instPixelSize
 
-        # Set the maximum Zernike Noll index estimated
+        # Unpack the WfEstimator config
         self.maxNollIndex = self.config.maxNollIndex
+        self.startWithIntrinsic = self.config.startWithIntrinsic
+        self.returnWfDev = self.config.returnWfDev
 
     @property
     @abc.abstractmethod
@@ -189,7 +201,11 @@ class CalcZernikesBaseTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             algoConfig=self.wfAlgo,
             instConfig=instrument,
             jmax=self.maxNollIndex,
-            units="um",  # Return Zernikes in microns
+            startWithIntrinsic=self.startWithIntrinsic,
+            returnWfDev=self.returnWfDev,
+            return4Up=True,
+            units="um",
+            saveHistory=False,
         )
 
         # Loop over donut stamps and estimate Zernikes
