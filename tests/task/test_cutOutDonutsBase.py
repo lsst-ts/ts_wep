@@ -247,13 +247,52 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(cornerX, 0)
         self.assertEqual(cornerY, 0)
 
-    def testCutOutStamps(self):
+    def _getExpAndCatalog(self, defocalType):
+        """
+        Helper function to get exposure and donutCatalog for
+        testing cutOutStamps.
+
+        Parameters
+        ----------
+        defocalType : lsst.ts.wep.utils.DefocalType
+            Defocal type of stamp to cut out.
+
+        Returns
+        -------
+        lsst.afw.image.Exposure
+            Exposure related to given defocal type
+        pandas.DataFrame
+            Donut Catalog for exposure
+        """
+
+        if defocalType is DefocalType.Extra:
+            dataId = self.dataIdExtra
+        else:
+            dataId = self.dataIdIntra
+
         exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+            "postISRCCD", dataId=dataId, collections=[self.runName]
         )
         donutCatalog = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutCatalog", dataId=dataId, collections=[self.runName]
         )
+
+        return exposure, donutCatalog
+
+    def testBackgroundSubtractionApplied(self):
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+        with self.assertRaises(KeyError):
+            exposure.getMetadata()["BGMEAN"]
+        self.task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+        # cutOutStamps runs background subtraction which is automatically
+        # applied to the exposure. Thus, BGMEAN should now exist in the
+        # exposure metadata.
+        self.assertIsInstance(exposure.getMetadata()["BGMEAN"], float)
+
+    def testCutOutStamps(self):
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
         donutStamps = self.task.cutOutStamps(
             exposure, donutCatalog, DefocalType.Extra, self.cameraName
         )
@@ -287,13 +326,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
                 )
 
     def testCutOutStampsBlended(self):
-        exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutCatalog = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
         donutStampsNoBlend = self.task.cutOutStamps(
             exposure, donutCatalog, DefocalType.Extra, self.cameraName
         )

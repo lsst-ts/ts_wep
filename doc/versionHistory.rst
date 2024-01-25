@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.2.0:
+
+-------------
+8.2.0
+-------------
+
+* Add background subtraction to cutOutDonutsBase.
+
 .. _lsst.ts.wep-8.1.1:
 
 -------------
