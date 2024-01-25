@@ -269,17 +269,14 @@ class DonutStamp(AbstractStamp):
 
         self.comp_im.makeBlendedMask(inst, model, boundaryT, maskScalingFactorLocal)
 
-        # 0 flag in mask is part of image that is not donut
-        # 1 flag in mask means it is part of the model donut
-        maskDict = {"BKGRD": 0, "DONUT": 1}
-
         # Set masks
-        self.mask_comp = afwImage.Mask(np.array(self.comp_im.mask_comp, dtype=np.int32))
-        self.mask_comp.clearMaskPlaneDict()
-        self.mask_comp.conformMaskPlanes(maskDict)
-        # Will inherit conformed MaskPlaneDict
+        afwImage.Mask.addMaskPlane("DONUT")
+        donutMaskVal = afwImage.Mask.getPlaneBitMask("DONUT")
+        self.mask_comp = afwImage.Mask(
+            np.array(self.comp_im.mask_comp, dtype=np.int32) * donutMaskVal
+        )
         self.mask_pupil = afwImage.Mask(
-            np.array(self.comp_im.mask_pupil, dtype=np.int32)
+            np.array(self.comp_im.mask_pupil, dtype=np.int32) * donutMaskVal
         )
 
     def getLinearWCS(self):

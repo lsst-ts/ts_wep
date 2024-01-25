@@ -149,6 +149,10 @@ class CutOutDonutsBaseTaskConfig(
         dtype=int,
         default=6,
     )
+    subtractBackground = pexConfig.ConfigurableField(
+        target=lsst.meas.algorithms.SubtractBackgroundTask,
+        doc="Task to perform background subtraction.",
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -185,6 +189,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Parameters for mask multiplication (for deblending)
         self.multiplyMask = self.config.multiplyMask
         self.maskGrowthIter = self.config.maskGrowthIter
+        # Set up background subtraction task
+        self.makeSubtask("subtractBackground")
 
     def _checkAndSetOffset(self, dataOffsetValue):
         """Check offset in instParams dictionary and if it
@@ -384,6 +390,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
         camType = getCamTypeFromButlerName(cameraName, detectorType)
         bandpass = exposure.filter.bandLabel
+
+        # Run background subtraction
+        self.subtractBackground.run(exposure=exposure).background
+
         # Get template
         template = self.getTemplate(
             detectorName,
