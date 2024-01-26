@@ -92,8 +92,6 @@ class DonutStamp(AbstractStamp):
     bandpass: str
     archive_element: Optional[afwTable.io.Persistable] = None
     comp_im: CompensableImage = field(default_factory=CompensableImage)
-    mask_comp: afwImage.Mask = field(init=False)
-    mask_pupil: afwImage.Mask = field(init=False)
 
     def __post_init__(self):
         """
@@ -237,46 +235,6 @@ class DonutStamp(AbstractStamp):
             filterLabel=filterLabel,
             blendOffsets=blendOffsets.tolist(),
             image=self.stamp_im.getImage().getArray(),
-        )
-        self.mask_pupil = afwImage.Mask()
-        self.mask_comp = afwImage.Mask()
-
-    def makeMasks(self, inst, model, boundaryT, maskScalingFactorLocal):
-        """Get the binary mask which considers the obscuration and off-axis
-        correction.
-
-        Parameters
-        ----------
-        inst : `Instrument`
-            Instrument to use.
-        model : `str`
-            Optical model. It can be "paraxial", "onAxis", or "offAxis".
-        boundaryT : `int`
-            Extended boundary in pixel. It defines how far the computation mask
-            extends beyond the pupil mask. And, in fft, it is also the width of
-            Neuman boundary where the derivative of the wavefront is set to
-            zero.
-        maskScalingFactorLocal : `float`
-            Mask scaling factor (for fast beam) for local correction.
-
-        Returns
-        -------
-        mask_pupil : `afwImage.Mask`
-            Non-padded mask for use at the offset planes.
-        mask_comp : `afwImage.Mask`
-            Padded mask for use at the offset planes.
-        """
-
-        self.comp_im.makeBlendedMask(inst, model, boundaryT, maskScalingFactorLocal)
-
-        # Set masks
-        afwImage.Mask.addMaskPlane("DONUT")
-        donutMaskVal = afwImage.Mask.getPlaneBitMask("DONUT")
-        self.mask_comp = afwImage.Mask(
-            np.array(self.comp_im.mask_comp, dtype=np.int32) * donutMaskVal
-        )
-        self.mask_pupil = afwImage.Mask(
-            np.array(self.comp_im.mask_pupil, dtype=np.int32) * donutMaskVal
         )
 
     def getLinearWCS(self):
