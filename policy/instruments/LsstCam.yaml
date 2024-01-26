@@ -15,7 +15,7 @@ wavelength: # effective wavelength per band, in meters
   i: 754.6e-9
   z: 869.1e-9
   y: 971.0e-9
-batoidModelName: LSST_{band}.yaml # name used to load the Batoid model
+batoidModelName: LSST_{band} # name used to load the Batoid model
 
 maskParams: # center and radius are in meters, theta in degrees
   M1Outer:

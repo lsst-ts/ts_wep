@@ -126,6 +126,14 @@ class Instrument:
         for key, value in params.items():
             setattr(self, key, value)
 
+    def clearCaches(self) -> None:
+        """Clear the Batoid caches."""
+        self.getBatoidModel.cache_clear()
+        self._getIntrinsicZernikesCached.cache_clear()
+        self._getIntrinsicZernikesTACached.cache_clear()
+        self._focalLengthBatoid = None
+        self._defocalOffsetBatoid = None
+
     @property
     def name(self) -> str:
         """The name of the instrument."""
@@ -145,22 +153,34 @@ class Instrument:
     @property
     def diameter(self) -> float:
         """The primary mirror diameter in meters."""
-        return self._diameter
+        if self._diameter is not None:
+            return self._diameter
+        elif self.batoidModelName is not None:
+            return self.getBatoidModel().pupilSize
+        else:
+            raise ValueError(
+                "There is currently no diameter set. "
+                "Please set either the diameter, or the batoidModelName."
+            )
 
     @diameter.setter
-    def diameter(self, value: float) -> None:
+    def diameter(self, value: Union[float, None]) -> None:
         """Set the mirror diameter.
 
         Parameters
         ----------
-        value : float
+        value : float or None
             The mirror diameter in meters.
 
         Raises
         ------
         ValueError
-            If the diameter is not positive
+            If the value is negative or zero
         """
+        if value is None:
+            self._diameter = None
+            return
+
         value = float(value)
         if value <= 0:
             raise ValueError("diameter must be positive.")
@@ -179,10 +199,18 @@ class Instrument:
     @property
     def obscuration(self) -> float:
         """The fractional obscuration."""
-        return self._obscuration
+        if self._obscuration is not None:
+            return self._obscuration
+        elif self.batoidModelName is not None:
+            return self.getBatoidModel().pupilObscuration
+        else:
+            raise ValueError(
+                "There is currently no obscuration set. "
+                "Please set either the obscuration, or the batoidModelName."
+            )
 
     @obscuration.setter
-    def obscuration(self, value: float) -> None:
+    def obscuration(self, value: Union[float, None]) -> None:
         """Set the fractional obscuration.
 
         Parameters
@@ -195,6 +223,10 @@ class Instrument:
         ValueError
             If the fractional obscuration is not between 0 and 1 (inclusive)
         """
+        if value is None:
+            self._obscuration = None
+            return
+
         value = float(value)
         if value < 0 or value > 1:
             raise ValueError("The obscuration must be between 0 and 1 (inclusive).")
@@ -203,10 +235,26 @@ class Instrument:
     @property
     def focalLength(self) -> float:
         """The focal length in meters."""
-        return self._focalLength
+        if self._focalLength is not None:
+            return self._focalLength
+        if self._focalLengthBatoid is not None:
+            return self._focalLengthBatoid
+        elif self.batoidModelName is not None:
+            self._focalLengthBatoid = batoid.analysis.focalLength(
+                self.getBatoidModel(),
+                0,
+                0,
+                self.wavelength[self.refBand],
+            )
+            return self._focalLengthBatoid
+        else:
+            raise ValueError(
+                "There is currently no focalLength set. "
+                "Please set either the focalLength, or the batoidModelName."
+            )
 
     @focalLength.setter
-    def focalLength(self, value: float) -> None:
+    def focalLength(self, value: Union[float, None]) -> None:
         """Set the focal length.
 
         Parameters
@@ -219,6 +267,10 @@ class Instrument:
         ValueError
             If the focal length is not positive
         """
+        if value is None:
+            self._focalLength = None
+            return
+
         value = float(value)
         if value <= 0:
             raise ValueError("focalLength must be positive.")
@@ -232,10 +284,68 @@ class Instrument:
     @property
     def defocalOffset(self) -> float:
         """The defocal offset in meters."""
-        return self._defocalOffset  # type: ignore
+        if self._defocalOffset is not None:
+            return self._defocalOffset
+        elif self._defocalOffsetBatoid is not None:
+            return self._defocalOffsetBatoid
+        elif self.batoidModelName is not None and self._batoidOffsetValue is not None:
+            # Load the model and wavelength info
+            batoidModel = self.getBatoidModel()
+            offsetOptic = self.batoidOffsetOptic
+            eps = batoidModel.pupilObscuration
+            wavelength = self.wavelength[BandLabel.REF]
+
+            # Calculate dZ4 ratios
+            shift = np.array([0, 0, +1e-3])
+            dZ4optic = np.mean(
+                np.abs(
+                    [
+                        batoid.analysis.zernike(
+                            batoidModel.withLocallyShiftedOptic(offsetOptic, +shift),
+                            *np.zeros(2),
+                            wavelength,
+                            eps=eps,
+                        )[4],
+                        batoid.analysis.zernike(
+                            batoidModel.withLocallyShiftedOptic(offsetOptic, -shift),
+                            *np.zeros(2),
+                            wavelength,
+                            eps=eps,
+                        )[4],
+                    ]
+                )
+            )
+            dZ4det = np.mean(
+                np.abs(
+                    [
+                        batoid.analysis.zernike(
+                            batoidModel.withLocallyShiftedOptic("Detector", +shift),
+                            *np.zeros(2),
+                            wavelength,
+                            eps=eps,
+                        )[4],
+                        batoid.analysis.zernike(
+                            batoidModel.withLocallyShiftedOptic("Detector", -shift),
+                            *np.zeros(2),
+                            wavelength,
+                            eps=eps,
+                        )[4],
+                    ]
+                )
+            )
+
+            # Calculate and save value calculated from Z4 ratio
+            self._defocalOffsetBatoid = dZ4optic / dZ4det * self.batoidOffsetValue
+            return self._defocalOffsetBatoid
+        else:
+            raise ValueError(
+                "There is currently no defocalOffset set. "
+                "Please set either the defocalOffset, OR the batoidModelName "
+                "and the batoidOffsetValue."
+            )
 
     @defocalOffset.setter
-    def defocalOffset(self, value: float) -> None:
+    def defocalOffset(self, value: Union[float, None]) -> None:
         """Set the defocal offset.
 
         Parameters
@@ -243,6 +353,10 @@ class Instrument:
         value : float
             The defocal offset in meters.
         """
+        if value is None:
+            self._defocalOffset = None
+            return
+
         value = np.abs(float(value))
         self._defocalOffset = value
 
@@ -298,7 +412,7 @@ class Instrument:
         return self._refBand
 
     @refBand.setter
-    def refBand(self, value: Union[BandLabel, str]) -> None:
+    def refBand(self, value: Union[BandLabel, str, None]) -> None:
         """Set reference band for loading Batoid model and getting wavelength.
 
         Parameters
@@ -316,10 +430,13 @@ class Instrument:
     @property
     def wavelength(self) -> EnumDict:
         """Return the effective wavelength(s) in meters."""
-        return self._wavelength
+        if self._wavelength is None:
+            return EnumDict(BandLabel, {BandLabel.REF: 500e-9, self.refBand: 500e-9})
+        else:
+            return self._wavelength
 
     @wavelength.setter
-    def wavelength(self, value: Union[float, dict]) -> None:
+    def wavelength(self, value: Union[float, dict, None]) -> None:
         """Set the effective wavelength(s).
 
         Parameters
@@ -341,8 +458,9 @@ class Instrument:
             not isinstance(value, float)
             and not isinstance(value, dict)
             and not isinstance(value, EnumDict)
+            and value is not None
         ):
-            raise TypeError("wavelength must be a float or a dictionary.")
+            raise TypeError("wavelength must be a float, dictionary, or None.")
 
         # Save wavelength info in a BandLabel EnumDict
         if isinstance(value, dict) or isinstance(value, EnumDict):
@@ -354,15 +472,14 @@ class Instrument:
                     "The wavelength dictionary must contain a wavelength "
                     "for the reference band."
                 )
-        else:
+        elif value is not None:
             value = EnumDict(BandLabel, {BandLabel.REF: value, self.refBand: value})
 
         # Set the new value
         self._wavelength = value
 
-        # Also clear the caches for the functions that use this value
-        self._getIntrinsicZernikesCached.cache_clear()
-        self._getIntrinsicZernikesTACached.cache_clear()
+        # Clear the caches, which all depend on wavelength
+        self.clearCaches()
 
     @property
     def batoidModelName(self) -> Union[str, None]:
@@ -374,7 +491,7 @@ class Instrument:
         """Set the Batoid model name.
 
         The Batoid model name is used to load the Batoid model via
-        batoid.Optic.fromYaml(batoidModelName)
+        batoid.Optic.fromYaml(batoidModelName + ".yaml")
 
         The name must match one of the yaml files in the batoid/data directory:
         https://github.com/jmeyers314/batoid/tree/main/batoid/data
@@ -400,12 +517,24 @@ class Instrument:
             raise TypeError("batoidModelName must be a string, or None.")
 
         # Set the new value
+        oldValue = getattr(self, "_batoidModelName", None)
         self._batoidModelName = value
 
-        # Also clear the caches for the functions that use this value
-        self.getBatoidModel.cache_clear()
-        self._getIntrinsicZernikesCached.cache_clear()
-        self._getIntrinsicZernikesTACached.cache_clear()
+        # Make sure the Batoid model can be found
+        try:
+            self.getBatoidModel()
+        except FileNotFoundError:
+            # Undo the change
+            self._batoidModelName = oldValue
+
+            # Raise the error
+            raise ValueError(
+                f"batoidModelName {value} does not match any of the models "
+                f"in Batoid version {batoid.__version__}."
+            )
+
+        # Clear the caches
+        self.clearCaches()
 
     @property
     def batoidOffsetOptic(self) -> Union[str, None]:
@@ -475,7 +604,7 @@ class Instrument:
         if value is not None and self.batoidModelName is None:
             raise RuntimeError("There is no Batoid model set.")
         elif value is None:
-            self._batoidOffsetValue = value
+            self._batoidOffsetValue = None
         else:
             self._batoidOffsetValue = np.abs(float(value))
 
@@ -506,7 +635,7 @@ class Instrument:
         batoidModelName = self.batoidModelName.format(band=band.value)
 
         # Load the Batoid model
-        return batoid.Optic.fromYaml(batoidModelName)
+        return batoid.Optic.fromYaml(batoidModelName + ".yaml")
 
     @lru_cache(100)
     def _getIntrinsicZernikesCached(
