@@ -61,4 +61,4 @@ tasks:
       donutStampSize: 200
       initialCutoutPadding: 40
   calcZernikesTask:
-    class: lsst.ts.wep.task.calcZernikesTieTask.CalcZernikesTieTask
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask

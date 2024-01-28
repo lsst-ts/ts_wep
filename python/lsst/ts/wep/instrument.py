@@ -33,6 +33,10 @@ from lsst.ts.wep.utils import BandLabel, DefocalType, EnumDict, mergeConfigWithF
 class Instrument:
     """Object with relevant geometry of the primary mirror and focal plane.
 
+    The value of every parameter is first pulled from the configFile, and
+    then overridden by any parameters explicitly passed as keyword arguments
+    to the class constructor.
+
     Parameters
     ----------
     configFile: Path or str, optional
@@ -42,39 +46,51 @@ class Instrument:
         (the default is policy/instruments/LsstCam.yaml)
     name: str, optional
         The name of the instrument.
+        (the default is None)
     diameter : float, optional
-        The diameter of the primary mirror in meters.
+        The diameter of the primary mirror in meters. If None, but
+        batoidModelName is set, this value will be pulled from the Batoid
+        model. (the default is None)
     obscuration : float, optional
-        The fractional obscuration of the primary mirror.
+        The fractional obscuration of the primary mirror. If None, but
+        batoidModelName is set, this value will be pulled from the Batoid
+        model. (the default is None)
     focalLength : float, optional
-        The effective focal length in meters.
+        The effective focal length in meters. If None, but batoidModelName
+        is set, this value will be pulled from the Batoid model.
+        (the default is None)
     defocalOffset : float, optional
-        The defocal offset of the images in meters.
+        The defocal offset of the images in meters. If None, but
+        batoidModelName, batoidOffsetOptic, and batoidOffsetValue are set,
+        this value will be calculated using the Batoid model.
+        (the default is None)
     pixelSize : float, optional
-        The pixel size in meters.
+        The pixel size in meters. (the default is None)
     refBand : BandLabel or str, optional
         When getting the wavelength or loading the Batoid model, use this
         value in place of BandLabel.REF. It should be a BandLabel Enum, or
         one of the corresponding strings. If set to None, this value defaults
-        to BandLabel.REF.
+        to BandLabel.REF. (the default is None)
     wavelength : float or dict, optional
         The effective wavelength of the instrument in meters. Can be a float,
         or a dictionary that corresponds to different bands. The keys in this
         dictionary are expected to correspond to the strings specified in the
-        BandLabel enum in jf_wep.utils.enums.
+        BandLabel enum in jf_wep.utils.enums. If set to None, this defaults
+        to {BandLabel.REF: 500e-9}. (the default is None)
     batoidModelName : str, optional
-        Name of Batoid model (used via batoid.Optic.fromYaml(batoidModelName))
-        If the string contains "{band}", it is assumed there are different
-        Batoid models for different photometric bands, and the names of these
-        bands will be filled in at runtime using the strings specified in the
-        BandLabel enum in jf_wep.utils.enums.
+        Name of Batoid model. If the string contains "{band}", it is assumed
+        there are different Batoid models for different photometric bands,
+        and the names of these bands will be filled in at runtime using the
+        strings specified in the BandLabel enum in jf_wep.utils.enums.
+        (the default is None)
     batoidOffsetOptic : str, optional
         The optic to offset in the Batoid model in order to simulate
         defocal images. When this is None, it defaults to "Detector".
+        (the default is None)
     batoidOffsetValue : float, optional
         The value, in meters, to offset the optic in the Batoid model to
         simulate defocal images. When this is None, it defaults to the
-        defocalOffset.
+        defocalOffset. (the default is None)
     maskParams : dict, optional
         Dictionary of mask parameters. Each key in this dictionary corresponds
         to a different mask element. The corresponding values are dictionaries
@@ -87,11 +103,25 @@ class Instrument:
             - radius: list of polynomial coeffs (in meters) for np.polyval()
             to determine the radius of the circle
         None defaults to an empty dictionary.
+
+    Notes
+    -----
+    The following parameters are required to instantiate the Instrument:
+        - diameter
+        - obscuration
+        - focalLength
+        - defocalOffset
+        - pixelSize
+    With the exception of pixelSize, if not explicitly set, these parameters
+    can be pulled from the Batoid model specified by batoidModelName.
+    Note that the calculation of defocalOffset also requires that
+    batoidOffsetOptic and batoidOffsetValue are set.
     """
 
     def __init__(
         self,
         configFile: Union[Path, str, None] = "policy/instruments/LsstCam.yaml",
+        *,
         name: Optional[str] = None,
         diameter: Optional[float] = None,
         obscuration: Optional[float] = None,
@@ -125,6 +155,15 @@ class Instrument:
         # Set each parameter
         for key, value in params.items():
             setattr(self, key, value)
+
+        # Check the config
+        self.checkConfig()
+
+    def checkConfig(self) -> None:
+        """Access every attribute to make sure no errors are thrown."""
+        for item in dir(self):
+            if item[0] != "_":
+                getattr(self, item)
 
     def clearCaches(self) -> None:
         """Clear the Batoid caches."""
@@ -384,7 +423,10 @@ class Instrument:
         ValueError
             If the pixel size is not positive
         """
-        value = float(value)
+        try:
+            value = float(value)
+        except TypeError:
+            raise TypeError("pixelSize must be a number.")
         if value <= 0:
             raise ValueError("pixelSize must be positive.")
         self._pixelSize = value
@@ -778,7 +820,7 @@ class Instrument:
         defocalSign = +1 if defocalType == DefocalType.Extra else -1
         optic = self.batoidOffsetOptic
         offset = defocalSign * self.batoidOffsetValue
-        batoidModel = batoidModel.withGloballyShiftedOptic(optic, [0, 0, offset])
+        batoidModel = batoidModel.withLocallyShiftedOptic(optic, [0, 0, offset])
 
         # Get the off-axis model Zernikes in wavelengths
         zkIntrinsic = batoid.zernikeTA(

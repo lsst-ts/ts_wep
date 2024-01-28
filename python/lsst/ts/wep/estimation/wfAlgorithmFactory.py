@@ -34,7 +34,7 @@ class WfAlgorithmFactory:
     @staticmethod
     def createWfAlgorithm(
         algoName: Union[WfAlgorithmName, str],
-        algoConfig: Union[str, dict, WfAlgorithm, None] = None,
+        algoConfig: Union[dict, WfAlgorithm, None] = None,
     ):
         """Return a configured WfAlgorithm.
 

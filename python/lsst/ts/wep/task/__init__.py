@@ -1,5 +1,4 @@
-from .calcZernikesBase import *
-from .calcZernikesTieTask import *
+from .calcZernikesTask import *
 from .combineZernikesBase import *
 from .combineZernikesMeanTask import *
 from .combineZernikesSigmaClipTask import *
@@ -10,6 +9,8 @@ from .donutQuickMeasurementTask import *
 from .donutSourceSelectorTask import *
 from .donutStamp import *
 from .donutStamps import *
+from .estimateZernikesBase import *
+from .estimateZernikesTieTask import *
 from .generateDonutCatalogOnlineTask import *
 from .generateDonutCatalogUtils import *
 from .generateDonutCatalogWcsTask import *

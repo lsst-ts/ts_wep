@@ -44,5 +44,5 @@ tasks:
       # Test Science Sensor pipeline works when specifying instrument configuration
       donutStampSize: 160
       initialCutoutPadding: 40
-  calcZernikesTieTask:
-    class: lsst.ts.wep.task.calcZernikesTieTask.CalcZernikesTieTask
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask

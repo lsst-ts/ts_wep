@@ -27,45 +27,44 @@ import numpy as np
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
-from lsst.ts.wep.utils import configClass, mergeConfigWithFile
+from lsst.ts.wep.utils import configClass
 
 
 class WfEstimator:
     """Class providing a high-level interface for wavefront estimation.
 
-    Any explicitly passed parameters override the values found in configFile.
-
     Parameters
     ----------
-    configFile : str, optional
-        Path to file specifying values for the other parameters. If the
-        path starts with "policy/", it will look in the policy directory.
-        Any explicitly passed parameters override values found in this file
-        (the default is policy/estimation/wfEstimator.yaml)
     algoName : WfAlgorithmName or str, optional
         Name of the algorithm to use. Can be specified using a WfAlgorithmName
         Enum or the corresponding string.
-    algoConfig : str or dict or WfAlgorithm, optional
+        (the default is "tie")
+    algoConfig : dict or WfAlgorithm, optional
         Algorithm configuration. If a string, it is assumed this points to a
         config file, which is used to configure the algorithm. If the path
         begins with "policy/", then it is assumed the path is relative to the
         policy directory. If a dictionary, it is assumed to hold keywords for
         configuration. If a WfAlgorithm object, that object is just used.
         If None, the algorithm defaults are used.
+        (The default is None)
     instConfig : str or dict or Instrument, optional
         Instrument configuration. If a Path or string, it is assumed this
         points to a config file, which is used to configure the Instrument.
         If a dictionary, it is assumed to hold keywords for configuration.
         If an Instrument object, that object is just used.
+        (the default is "policy/instrument/LsstCam.yaml")
     jmax : int, optional
         The maximum Zernike Noll index to estimate.
+        (the default is 22)
     startWithIntrinsic : bool, optional
         Whether to start the Zernike estimation process from the intrinsic
         Zernikes rather than zero.
+        (the default is True)
     returnWfDev : bool, optional
         If False, the full OPD is returned. If True, the wavefront
         deviation is returned. The wavefront deviation is defined as
-        the OPD - intrinsic Zernikes. (the default is False)
+        the OPD - intrinsic Zernikes.
+        (the default is False)
     return4Up : bool, optional
         If True, the returned Zernike coefficients start with
         Noll index 4. If False, they follow the Galsim convention
@@ -73,9 +72,11 @@ class WfEstimator:
         array index of the output corresponds to the Noll index.
         In this case, indices 0-3 are always set to zero, because
         they are not estimated by our pipeline.
+        (the default is True)
     units : str, optional
-        Units in which the Zernike amplitudes are returned.
-        Options are "m", "nm", "um", or "arcsecs".
+        Units in which the Zernike coefficients are returned.
+        Options are "m", "um", "nm", or "arcsecs".
+        (the default is "um")
     saveHistory : bool, optional
         Whether to save the algorithm history in the self.history
         attribute. If True, then self.history contains information
@@ -85,46 +86,29 @@ class WfEstimator:
 
     def __init__(
         self,
-        configFile: Optional[str] = "policy/estimation/wfEstimator.yaml",
-        algoName: Optional[str] = None,
-        algoConfig: Union[str, dict, WfAlgorithm, None] = None,
-        instConfig: Union[str, dict, Instrument, None] = None,
-        jmax: Optional[int] = None,
-        startWithIntrinsic: Optional[bool] = None,
-        returnWfDev: Optional[bool] = None,
-        return4Up: Optional[bool] = None,
-        units: Optional[str] = None,
-        saveHistory: Optional[bool] = None,
+        algoName: str = "tie",
+        algoConfig: Union[dict, WfAlgorithm, None] = None,
+        instConfig: Union[str, dict, Instrument] = "policy/instruments/LsstCam.yaml",
+        jmax: int = 22,
+        startWithIntrinsic: bool = True,
+        returnWfDev: bool = False,
+        return4Up: bool = True,
+        units: str = "um",
+        saveHistory: bool = False,
     ) -> None:
-        # Merge keyword arguments with defaults from configFile
-        params = mergeConfigWithFile(
-            configFile,
-            algoName=algoName,
-            algoConfig=algoConfig,
-            instConfig=instConfig,
-            jmax=jmax,
-            startWithIntrinsic=startWithIntrinsic,
-            returnWfDev=returnWfDev,
-            return4Up=return4Up,
-            units=units,
-            saveHistory=saveHistory,
-        )
-
         # Set the algorithm
-        self._algo = WfAlgorithmFactory.createWfAlgorithm(
-            params["algoName"], params["algoConfig"]
-        )
+        self._algo = WfAlgorithmFactory.createWfAlgorithm(algoName, algoConfig)
 
         # Set the instrument
         self._instrument = configClass(instConfig, Instrument)
 
         # Set the other parameters
-        self.jmax = params["jmax"]
-        self.startWithIntrinsic = params["startWithIntrinsic"]
-        self.returnWfDev = params["returnWfDev"]
-        self.return4Up = params["return4Up"]
-        self.units = params["units"]
-        self.saveHistory = params["saveHistory"]
+        self.jmax = jmax
+        self.startWithIntrinsic = startWithIntrinsic
+        self.returnWfDev = returnWfDev
+        self.return4Up = return4Up
+        self.units = units
+        self.saveHistory = saveHistory
 
         # Copy the history docstring
         self.__class__.history.__doc__ = self.algo.__class__.history.__doc__
@@ -309,9 +293,7 @@ class WfEstimator:
         Returns
         -------
         np.ndarray
-            Numpy array of the Zernike coefficients estimated from the stamp
-            or pair of stamp. The array contains Noll coefficients from
-            4 - self.jmax, inclusive. The unit is determined by self.units.
+            Zernike coefficients estimated from the stamp(s)
 
         Raises
         ------

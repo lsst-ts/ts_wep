@@ -1,0 +1,34 @@
+---
+
+# Limits of available star magnitude
+
+# A star will be considered as a bright star only if its magnitude is in the
+# range (low: saturation limit, high: faint limit). The ranges in each filter
+# might be different.
+
+# The values of dark sky in the following link is used (commit: 91ed8f6):
+# https://github.com/bxin/scratchBook/blob/master/saturation_limit/saturation_limit_donut.ipynb
+
+filterU:
+  low: 7.35
+  high: 14.96
+
+filterG:
+  low: 8.74
+  high: 15.90
+
+filterR:
+  low: 8.52
+  high: 15.42
+
+filterI:
+  low: 8.23
+  high: 14.97
+
+filterZ:
+  low: 7.83
+  high: 14.39
+
+filterY:
+  low: 7.04
+  high: 13.47

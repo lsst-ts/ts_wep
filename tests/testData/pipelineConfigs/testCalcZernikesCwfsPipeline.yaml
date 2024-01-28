@@ -44,5 +44,5 @@ tasks:
       # Test with default instrument configuration parameters
       donutStampSize: 160
       initialCutoutPadding: 40
-  calcZernikesTieTask:
-    class: lsst.ts.wep.task.calcZernikesTieTask.CalcZernikesTieTask
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask

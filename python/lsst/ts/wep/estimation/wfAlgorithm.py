@@ -23,11 +23,11 @@ __all__ = ["WfAlgorithm"]
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Optional
 
 import numpy as np
 from lsst.ts.wep import Image, Instrument
-from lsst.ts.wep.utils import convertZernikesToPsfWidth, mergeConfigWithFile
+from lsst.ts.wep.utils import convertZernikesToPsfWidth
 
 
 class WfAlgorithm(ABC):
@@ -43,24 +43,6 @@ class WfAlgorithm(ABC):
     ...
 
     """
-
-    def __init__(
-        self,
-        configFile: Optional[str] = None,
-        **kwargs: Any,
-    ) -> None:
-        # Merge keyword arguments with defaults from configFile
-        params = mergeConfigWithFile(
-            configFile,
-            **kwargs,
-        )
-
-        # Configure parameters
-        for key, value in params.items():
-            setattr(self, key, value)
-
-        # Instantiate an empty history
-        self._history = {}
 
     def __init_subclass__(self) -> None:
         """This is called when you subclass.
@@ -79,6 +61,8 @@ class WfAlgorithm(ABC):
         # Return the algorithm history
         # Note I have not written a real docstring here, so that I can force
         # subclasses to write a new docstring for this method
+        if getattr(self, "_history", None) is None:
+            self._history = dict()
         if len(self._history) == 0:
             warnings.warn(
                 "It looks like the history is empty. Perhaps you have not "

@@ -26,7 +26,7 @@ import numpy as np
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, PlaneType
-from lsst.ts.wep.utils.ioUtils import configClass, mergeConfigWithFile
+from lsst.ts.wep.utils.ioUtils import configClass
 from lsst.ts.wep.utils.miscUtils import centerWithTemplate, polygonContains
 from lsst.ts.wep.utils.zernikeUtils import zernikeGradEval
 from scipy.interpolate import interpn
@@ -40,16 +40,12 @@ class ImageMapper:
 
     Parameters
     ----------
-    configFile : str, optional
-        Path to file specifying values for the other parameters. If the
-        path starts with "policy/", it will look in the policy directory.
-        Any explicitly passed parameters override values found in this file
-        (the default is policy/imageMapper.yaml)
     instConfig : str or dict or Instrument, optional
-        Instrument configuration. If a string, it is assumed this points to a
-        config file, which is used to configure the Instrument. If a
-        dictionary, it is assumed to hold keywords for configuration. If an
-        Instrument object, that object is just used.
+        Instrument configuration. If a string, it is assumed this points
+        to a config file, which is used to configure the Instrument.
+        If a dictionary, it is assumed to hold keywords for configuration.
+        If an Instrument object, that object is just used.
+        (the default is "policy/instruments/LsstCam.yaml")
     opticalModel : str, optional
         The optical model to use for mapping between the image and pupil
         planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
@@ -57,24 +53,16 @@ class ImageMapper:
         slow and fast optical systems. The offAxis model is a numerically-fit
         model that is valid for fast optical systems at wide field angles.
         offAxis requires an accurate Batoid model.
+        (the default is offAxis)
     """
 
     def __init__(
         self,
-        configFile: Union[str, None] = "policy/imageMapper.yaml",
-        instConfig: Union[str, dict, Instrument, None] = None,
-        opticalModel: Optional[str] = None,
+        instConfig: Union[str, dict, Instrument] = "policy/instruments/LsstCam.yaml",
+        opticalModel: str = "offAxis",
     ) -> None:
-        # Merge keyword arguments with defaults from configFile
-        params = mergeConfigWithFile(
-            configFile,
-            instConfig=instConfig,
-            opticalModel=opticalModel,
-        )
-
-        # Set each parameter
-        self._instrument = configClass(params["instConfig"], Instrument)
-        self.opticalModel = params["opticalModel"]
+        self._instrument = configClass(instConfig, Instrument)
+        self.opticalModel = opticalModel
 
     @property
     def instrument(self) -> Instrument:

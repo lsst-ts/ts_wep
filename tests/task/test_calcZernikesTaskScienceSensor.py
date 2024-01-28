@@ -26,7 +26,7 @@ import numpy as np
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
-    CalcZernikesTieTask,
+    CalcZernikesTask,
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
 )
@@ -38,7 +38,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
+class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -63,7 +63,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesTieScienceSensorPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesScienceSensorPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
@@ -81,7 +81,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
-        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
@@ -103,7 +103,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
-        self.task = CalcZernikesTieTask(config=self.config, name="Base Task")
+        self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
@@ -118,14 +118,16 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        zernCoeff = self.task.estimateZernikes.run(
+            donutStampsExtra, donutStampsIntra
+        ).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
-        combinedZernikesStruct = self.task.getCombinedZernikes(testArr)
+        combinedZernikesStruct = self.task.combineZernikes.run(testArr)
         np.testing.assert_array_equal(
             combinedZernikesStruct.combinedZernikes, np.ones(19)
         )

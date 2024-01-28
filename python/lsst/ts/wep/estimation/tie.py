@@ -35,11 +35,6 @@ class TieAlgorithm(WfAlgorithm):
 
     Parameters
     ----------
-    configFile : str, optional
-        Path to file specifying values for the other parameters. If the
-        path starts with "policy/", it will look in the policy directory.
-        Any explicitly passed parameters override values found in this file
-        (the default is policy/estimation/tie.yaml)
     opticalModel : str, optional
         The optical model to use for mapping the images to the pupil plane.
         Can be either "onAxis" or "offAxis". It is recommended you use offAxis,
@@ -49,63 +44,67 @@ class TieAlgorithm(WfAlgorithm):
         a model, you can use the onAxis model, which is analytic, but is only
         appropriate near the optical axis. The field angle at which the onAxis
         model breaks down is telescope dependent.
+        (the default is "offAxis")
     solver : str, optional
         Method used to solve the TIE. If "exp", the TIE is solved via
         directly expanding the wavefront in a Zernike series. If "fft",
         the TIE is solved using fast Fourier transforms.
+        (the default is "exp")
     maxIter : int, optional
         The maximum number of iterations of the TIE loop.
+        (the default is 20)
     compSequence : iterable, optional
         An iterable that determines the maximum Noll index to compensate on
         each iteration of the TIE loop. For example, if compSequence = [4, 10],
         then on the first iteration, only Zk4 is used in image compensation and
         on iteration 2, Zk4-Zk10 are used. Once the end of the sequence has
         been reached, all Zernike coefficients are used during compensation.
+        (the default is (4, 4, 6, 6, 13, 13, 13, 13, 22, 22, 22, 22))
     compGain : float, optional
         The gain used to update the Zernikes for image compensation.
+        (the default is 0.6)
     centerTol : float, optional
         The maximum absolute change in any Zernike amplitude (in meters) for
         which the images need to be recentered. A smaller value causes the
         images to be recentered more often. If 0, images are recentered on
         every iteration.
+        (the default is 10e-9)
     centerBinary : bool, optional
         Whether to use a binary template when centering the image.
-        Using a binary template is typically less accurate, but faster.
+        (the default is True)
     convergeTol : float, optional
         The maximum absolute change in any Zernike amplitude (in meters)
         between subsequent TIE iterations below which convergence is declared
         and iteration is stopped.
-    maskKwargs : dict, optional
+        (the default is 10e-9)
+    maskKwargs : dict or None, optional
         Dictionary of mask keyword arguments to pass to mask creation.
         To see possibilities, see the docstring for
         lsst.ts.wep.imageMapper.ImageMapper.createPupilMask().
+        (the default is None)
     """
 
     def __init__(
         self,
-        configFile: Union[str, None] = "policy/estimation/tie.yaml",
-        opticalModel: Optional[str] = None,
-        solver: Optional[str] = None,
-        maxIter: Optional[int] = None,
-        compSequence: Optional[Iterable] = None,
-        compGain: Optional[float] = None,
-        centerTol: Optional[float] = None,
-        centerBinary: Optional[bool] = None,
-        convergeTol: Optional[float] = None,
+        opticalModel: Optional[str] = "offAxis",
+        solver: Optional[str] = "exp",
+        maxIter: Optional[int] = 20,
+        compSequence: Optional[Iterable] = 2 * (4,) + 2 * (6,) + 4 * (13,) + 4 * (22,),
+        compGain: Optional[float] = 0.6,
+        centerTol: Optional[float] = 10e-9,
+        centerBinary: Optional[bool] = True,
+        convergeTol: Optional[float] = 10e-9,
         maskKwargs: Optional[dict] = None,
     ) -> None:
-        super().__init__(
-            configFile=configFile,
-            opticalModel=opticalModel,
-            solver=solver,
-            maxIter=maxIter,
-            compSequence=compSequence,
-            compGain=compGain,
-            centerTol=centerTol,
-            centerBinary=centerBinary,
-            convergeTol=convergeTol,
-            maskKwargs=maskKwargs,
-        )
+        self.opticalModel = opticalModel
+        self.solver = solver
+        self.maxIter = maxIter
+        self.compSequence = compSequence
+        self.compGain = compGain
+        self.centerTol = centerTol
+        self.centerBinary = centerBinary
+        self.convergeTol = convergeTol
+        self.maskKwargs = maskKwargs
 
     @property
     def opticalModel(self) -> str:
@@ -528,11 +527,7 @@ class TieAlgorithm(WfAlgorithm):
             )
 
         # Create the ImageMapper for centering and image compensation
-        imageMapper = ImageMapper(
-            configFile=None,
-            instConfig=instrument,
-            opticalModel=self.opticalModel,
-        )
+        imageMapper = ImageMapper(instConfig=instrument, opticalModel=self.opticalModel)
 
         # Re-assign I1/I2 to intra/extra
         intra = I1.copy() if I1.defocalType == DefocalType.Intra else I2.copy()

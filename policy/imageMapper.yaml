@@ -1,5 +1,0 @@
-# Default parameters for ImageMapper
-# see the docstring for definitions of parameters
-
-instConfig: policy/instruments/LsstCam.yaml
-opticalModel: offAxis

@@ -54,7 +54,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         minimalCat = pd.DataFrame()
 
         # Set magnitudes to test with policy file values
-        magPolicyDefaults = readConfigYaml("policy/task/magLimitStar.yaml")
+        magPolicyDefaults = readConfigYaml("policy/magLimitStar.yaml")
         defaultFilterKey = f"filter{self.filterName.upper()}"
         self.magMax = magPolicyDefaults[defaultFilterKey]["high"]
         self.magMin = magPolicyDefaults[defaultFilterKey]["low"]
