@@ -37,6 +37,7 @@ import os
 import re
 from typing import Any, Union
 
+import numpy as np
 import yaml
 from lsst.utils import getPackageDir
 
@@ -87,7 +88,7 @@ def resolveRelativeConfigPath(path: str) -> str:
     return os.path.join(getConfigDir(), path)
 
 
-def readConfigYaml(path: str) -> dict:
+def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
     """Read the config yaml file and return the corresponding dictionary.
 
     Parameters
@@ -96,6 +97,23 @@ def readConfigYaml(path: str) -> dict:
         Path to the config yaml file. Can be an absolute or relative path, but
         if the path starts with "policy/", the path will be understood to be
         relative to the ts_wep policy directory.
+    recurseImports : str, optional
+        If True, and the config contains 'imports', open the file(s) provided
+        under that keyword and merge the resulting configurations. In the case
+        of overlapping keywords, each subsequent import overrides previous
+        imports, and the imported configs are all overridden by the top level
+        config. (the default is True)
+
+    Returns
+    -------
+    dict
+        Dictionary containing the configuration stored in the yaml file
+
+    Raises
+    ------
+    ValueError
+        If recurseImports is True and 'imports' doesn't map to a string
+        or 1D list of strings
     """
     # Is the path relative to the policy directory?
     if path.startswith("policy/"):
@@ -105,6 +123,20 @@ def readConfigYaml(path: str) -> dict:
     # Read the parameter file into a dictionary
     with open(path, "r") as file:
         config = yaml.safe_load(file)
+
+    if not recurseImports:
+        return config
+
+    # Iteratively load imports and merge configs
+    imports = np.atleast_1d(config.pop("imports", []))
+    importedConfig = dict()
+    if imports.size > 0 and (imports.ndim != 1 or imports.dtype.kind not in ["U", "S"]):
+        raise ValueError("'imports' must map to a string or list of strings")
+    for path in imports:
+        importedConfig = importedConfig | readConfigYaml(path)
+
+    # Apply the overrides to the imported config
+    config = importedConfig | config
 
     return config
 
