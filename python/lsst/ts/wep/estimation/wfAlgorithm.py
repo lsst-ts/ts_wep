@@ -35,11 +35,6 @@ class WfAlgorithm(ABC):
 
     Parameters
     ----------
-    configFile : str, optional
-        Path to file specifying values for the other parameters. If the
-        path starts with "policy/", it will look in the policy directory.
-        Any explicitly passed parameters override values found in this file
-
     ...
 
     """

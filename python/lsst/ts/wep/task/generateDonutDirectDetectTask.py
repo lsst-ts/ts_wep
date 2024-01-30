@@ -36,7 +36,8 @@ from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.utils import (
     DefocalType,
     createTemplateForDetector,
-    getInstrumentFromButlerName,
+    getOffsetFromExposure,
+    getTaskInstrument,
 )
 from lsst.utils.timer import timeMethod
 
@@ -96,27 +97,14 @@ class GenerateDonutDirectDetectTaskConfig(
         dtype=str,
         default="offAxis",
     )
-    instObscuration = pexConfig.Field(
-        doc="Obscuration (inner_radius / outer_radius of M1M3)",
-        dtype=float,
-        default=0.61,
-    )
-    instFocalLength = pexConfig.Field(
-        doc="Instrument Focal Length in m", dtype=float, default=10.312
-    )
-    instApertureDiameter = pexConfig.Field(
-        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
-    )
-    instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in mm. \
-        If None then will get this from the focusZ value in exposure visitInfo. \
-        (The default is None.)",
-        dtype=float,
-        default=None,
+    instConfigFile = pexConfig.Field(
+        doc="Path to a instrument configuration file to override the instrument "
+        + "configuration. If begins with 'policy:' the path will be understood as "
+        + "relative to the ts_wep policy directory. If not provided, the default "
+        + "instrument for the camera will be loaded, and the defocal offset will "
+        + "be determined from the focusZ value in the exposure header.",
+        dtype=str,
         optional=True,
-    )
-    instPixelSize = pexConfig.Field(
-        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
     initialCutoutPadding = pexConfig.Field(
         doc=str(
@@ -219,31 +207,19 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
     @timeMethod
     def run(self, exposure, camera):
+        camName = camera.getName()
         bandLabel = exposure.filter.bandLabel
-        defocalType = DefocalType.Extra  # we use one of the DefocalTypes
 
-        # Load default instrument corresponding to the butler camera name
-        instrument = getInstrumentFromButlerName(camera.getName())
+        # We can pick an arbitrary defocalType because the templates
+        # look the same for intra/extra images (note this is only
+        # true in the rotated DVCS coordinate system)
+        defocalType = DefocalType.Extra
 
-        # Get defocal distance from focusZ.
-        defocalOffset = self.config.instDefocalOffset
-        if defocalOffset is None:
-            defocalOffset = np.abs(exposure.visitInfo.focusZ)
-        # LSST CWFS are offset +/- 1.5 mm when LSST camera defocus is at 0.
-        if exposure.detector.getType().name == "WAVEFRONT":
-            if defocalType == DefocalType.Extra:
-                defocalOffset = np.abs(defocalOffset - 1.5)
-            elif defocalType == DefocalType.Intra:
-                defocalOffset = np.abs(defocalOffset + 1.5)
-            else:
-                raise ValueError(f"Defocal Type {defocalType} not valid.")
+        # Get the offset
+        offset = getOffsetFromExposure(exposure, camName, defocalType)
 
-        # Update the instrument with the values from the butler
-        instrument.obscuration = self.config.instObscuration
-        instrument.focalLength = self.config.instFocalLength
-        instrument.diameter = self.config.instApertureDiameter
-        instrument.defocalOffset = defocalOffset * 1e-3
-        instrument.pixelSize = self.config.instPixelSize
+        # Load the instrument
+        instrument = getTaskInstrument(camName, offset, self.config.instConfigFile)
 
         # Create the image template for the detector
         template = createTemplateForDetector(

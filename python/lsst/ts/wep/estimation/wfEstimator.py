@@ -42,7 +42,7 @@ class WfEstimator:
     algoConfig : dict or WfAlgorithm, optional
         Algorithm configuration. If a string, it is assumed this points to a
         config file, which is used to configure the algorithm. If the path
-        begins with "policy/", then it is assumed the path is relative to the
+        begins with "policy:", then it is assumed the path is relative to the
         policy directory. If a dictionary, it is assumed to hold keywords for
         configuration. If a WfAlgorithm object, that object is just used.
         If None, the algorithm defaults are used.
@@ -52,7 +52,7 @@ class WfEstimator:
         points to a config file, which is used to configure the Instrument.
         If a dictionary, it is assumed to hold keywords for configuration.
         If an Instrument object, that object is just used.
-        (the default is "policy/instrument/LsstCam.yaml")
+        (the default is "policy:instrument/LsstCam.yaml")
     jmax : int, optional
         The maximum Zernike Noll index to estimate.
         (the default is 22)
@@ -88,7 +88,7 @@ class WfEstimator:
         self,
         algoName: str = "tie",
         algoConfig: Union[dict, WfAlgorithm, None] = None,
-        instConfig: Union[str, dict, Instrument] = "policy/instruments/LsstCam.yaml",
+        instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
         jmax: int = 22,
         startWithIntrinsic: bool = True,
         returnWfDev: bool = False,

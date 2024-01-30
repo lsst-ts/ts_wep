@@ -36,7 +36,11 @@ from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import createTemplateForDetector, getInstrumentFromButlerName
+from lsst.ts.wep.utils import (
+    createTemplateForDetector,
+    getOffsetFromExposure,
+    getTaskInstrument,
+)
 from scipy.signal import correlate
 
 
@@ -107,27 +111,14 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         default="offAxis",
     )
-    instObscuration = pexConfig.Field(
-        doc="Obscuration (inner_radius / outer_radius of M1M3)",
-        dtype=float,
-        default=0.61,
-    )
-    instFocalLength = pexConfig.Field(
-        doc="Instrument Focal Length in m", dtype=float, default=10.312
-    )
-    instApertureDiameter = pexConfig.Field(
-        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
-    )
-    instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in mm. \
-        If None then will get this from the focusZ value in exposure visitInfo. \
-        (The default is None.)",
-        dtype=float,
-        default=None,
+    instConfigFile = pexConfig.Field(
+        doc="Path to a instrument configuration file to override the instrument "
+        + "configuration. If begins with 'policy:' the path will be understood as "
+        + "relative to the ts_wep policy directory. If not provided, the default "
+        + "instrument for the camera will be loaded, and the defocal offset will "
+        + "be determined from the focusZ value in the exposure header.",
+        dtype=str,
         optional=True,
-    )
-    instPixelSize = pexConfig.Field(
-        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
     multiplyMask = pexConfig.Field(
         doc="Multiply the mask with the postage stamp before saving.",
@@ -172,29 +163,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Specify optical model
         self.opticalModel = self.config.opticalModel
         # Set instrument configuration info
-        self.instObscuration = self.config.instObscuration
-        self.instFocalLength = self.config.instFocalLength
-        self.instApertureDiameter = self.config.instApertureDiameter
-        self.instDefocalOffset = self.config.instDefocalOffset
-        self.instPixelSize = self.config.instPixelSize
+        self.instConfigFile = self.config.instConfigFile
         # Parameters for mask multiplication (for deblending)
         self.multiplyMask = self.config.multiplyMask
         self.maskGrowthIter = self.config.maskGrowthIter
         # Set up background subtraction task
         self.makeSubtask("subtractBackground")
-
-    def _checkAndSetOffset(self, dataOffsetValue):
-        """Check defocal offset and set to provided value if not yet defined.
-
-        Parameters
-        ----------
-        dataOffsetValue : float
-            The defocal offset amount defined in the
-            data. (An exposure or donutStamp).
-        """
-
-        if self.instDefocalOffset is None:
-            self.instDefocalOffset = dataOffsetValue
 
     def shiftCenter(self, center, boundary, distance):
         """Shift the center if its distance to boundary is less than required.
@@ -331,18 +305,11 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Run background subtraction
         self.subtractBackground.run(exposure=exposure).background
 
-        # If offset not yet set then use exposure value.
-        self._checkAndSetOffset(np.abs(exposure.visitInfo.focusZ))
+        # Get the offset
+        offset = getOffsetFromExposure(exposure, cameraName, defocalType)
 
-        # Load default instrument corresponding to the butler camera name
-        instrument = getInstrumentFromButlerName(cameraName)
-
-        # Update the instrument with the values from the butler
-        instrument.obscuration = self.instObscuration
-        instrument.focalLength = self.instFocalLength
-        instrument.diameter = self.instApertureDiameter
-        instrument.defocalOffset = self.instDefocalOffset * 1e-3
-        instrument.pixelSize = self.instPixelSize
+        # Load the instrument
+        instrument = getTaskInstrument(cameraName, offset, self.instConfigFile)
 
         # Create the image template for the detector
         template = createTemplateForDetector(
@@ -459,7 +426,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 cam_name=cameraName,
                 defocal_type=defocalType.value,
                 # Save defocal offset in mm.
-                defocal_distance=self.instDefocalOffset,
+                defocal_distance=instrument.defocalOffset * 1e3,
                 bandpass=bandLabel,
                 archive_element=linear_wcs,
             )
@@ -480,7 +447,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DFC_TYPE"] = np.array(
             [defocalType.value] * catalogLength, dtype=str
         )
-        stampsMetadata["DFC_DIST"] = np.array([self.instDefocalOffset] * catalogLength)
+        stampsMetadata["DFC_DIST"] = np.array(
+            [instrument.defocalOffset * 1e3] * catalogLength
+        )
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)

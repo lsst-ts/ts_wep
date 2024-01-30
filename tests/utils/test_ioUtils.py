@@ -50,10 +50,8 @@ class TestIoUtils(unittest.TestCase):
         self.assertEqual(splitPath[0], getModulePath())
         self.assertEqual(splitPath[1], testPath)
 
-        # Check that adding "policy/" to the front returns the same result
-        self.assertEqual(resolvedPath, resolveRelativeConfigPath(f"policy/{testPath}"))
-
-        resolvedPath.split("policy")
+        # Check that adding "policy:" to the front returns the same result
+        self.assertEqual(resolvedPath, resolveRelativeConfigPath(f"policy:{testPath}"))
 
     def testMergeConfigWithFile(self):
         # Config file used for tests

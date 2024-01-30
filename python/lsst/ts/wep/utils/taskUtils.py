@@ -24,7 +24,8 @@ __all__ = [
     "writePipetaskCmd",
     "writeCleanUpRepoCmd",
     "getCameraFromButlerName",
-    "getInstrumentFromButlerName",
+    "getOffsetFromExposure",
+    "getTaskInstrument",
     "createTemplateForDetector",
 ]
 
@@ -37,6 +38,7 @@ from typing import Union
 import lsst.obs.lsst as obs_lsst
 import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, Detector
+from lsst.afw.image import Exposure
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.instrument import Instrument
@@ -197,35 +199,129 @@ def getCameraFromButlerName(camName):
         raise ValueError(f"Camera {camName} is not supported.")
 
 
-def getInstrumentFromButlerName(camName: str) -> Instrument:
-    """Load the default instrument using the butler info.
+def getOffsetFromExposure(
+    exposure: Exposure,
+    camName: str,
+    defocalType: Union[DefocalType, str],
+) -> float:
+    """Get the offset from the exposure.
+
+    For LSSTCam and ComCam this corresponds to the offset of the detector
+    where the donut was imaged, while for AuxTel it corresponds to the offset
+    of M2.
 
     Parameters
     ----------
+    exposure : lsst.afw.image.Exposure
+        The exposure
     camName : str
         Name of instrument using butler convention. Available instruments
         are LSSTCam, LSSTComCam, and LATISS.
+    defocalType : DefocalType, str, or None
+        The DefocalType enum, or corresponding string.
 
     Returns
     -------
-    Instrument
-        The default ts.wep Instrument corresponding to butler camera name.
+    float
+        The offset in mm
 
     Raises
     ------
     ValueError
-        If the butler camera name doesn't have a default instrument config.
+        If the detector/camera combo is not supported
     """
-    if camName == "LSSTCam":
-        configFile = "policy/instruments/LsstCam.yaml"
-    elif camName == "LSSTComCam":
-        configFile = "policy/instruments/ComCam.yaml"
-    elif camName == "LATISS":
-        configFile = "policy/instruments/AuxTel.yaml"
-    else:
-        raise ValueError(f"No default instrument for camera {camName}")
+    # Get the focus position from the exposure
+    focusZ = exposure.visitInfo.focusZ  # mm
 
-    return Instrument(configFile=configFile)
+    # Get the detector type
+    detectorType = exposure.detector.getType().name
+
+    print(defocalType, detectorType)
+
+    # If this isn't a wavefront sensor, we're done
+    if detectorType != "WAVEFRONT":
+        return focusZ
+
+    # Cast defocalType to a DefocalType enum
+    defocalType = DefocalType(defocalType)
+
+    # Wavefront sensors only supported for LsstCam
+    if camName != "LSSTCam":
+        raise ValueError(f"Wavefront sensors for camera {camName} are not supported.")
+
+    if defocalType == DefocalType.Extra:
+        offset = focusZ + 1.5
+    elif defocalType == DefocalType.Intra:
+        offset = focusZ - 1.5
+    else:
+        raise ValueError(f"defocalType {defocalType} not supported.")
+
+    return offset
+
+
+def getTaskInstrument(
+    camName: str,
+    offset: Union[float, None] = None,
+    instConfigFile: Union[str, None] = None,
+) -> Instrument:
+    """Get the instrument to use for the task.
+
+    The camera name is used to load a default instrument, and then the
+    defocalOffset is override using the offset value, if provided.
+    If instConfigFile is provided, that file is used instead of camName
+    to load the instrument, and offset is only used if instConfigFile
+    does not contain information for calculating the defocalOffset.
+
+    Parameters
+    ----------
+    camName : str
+        The name of the camera
+    offset : float or None, optional
+        The true offset for the exposure in mm. For LSSTCam this corresponds
+        to the offset of the detector, while for AuxTel it corresponds to the
+        offset of M2. (the default is None)
+    instConfigFile : str or None
+        An instrument config file to override the default instrument
+        for the camName. If begins with "policy:", this path is understood
+        as relative to the ts_wep policy directory.
+        (the default is None)
+
+    Returns
+    -------
+    Instrument
+        The instrument object
+    """
+    # Load the starting instrument
+    if instConfigFile is None:
+        if camName == "LSSTCam":
+            instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
+        elif camName == "LSSTComCam":
+            instrument = Instrument(configFile="policy:instruments/ComCam.yaml")
+        elif camName == "LATISS":
+            instrument = Instrument(configFile="policy:instruments/AuxTel.yaml")
+        else:
+            raise ValueError(f"No default instrument for camera {camName}")
+        overrideOffset = True
+    else:
+        instrument = Instrument(configFile=instConfigFile)
+        try:
+            instrument.defocalOffset
+        except ValueError:
+            overrideOffset = True
+        else:
+            overrideOffset = False
+
+    if offset is None or not overrideOffset:
+        # We're done!
+        return instrument
+
+    # Override the defocalOffset
+    if instrument.batoidOffsetOptic is None:
+        instrument.defocalOffset = offset / 1e3
+    else:
+        instrument.batoidOffsetValue = offset / 1e3
+
+    return instrument
 
 
 def createTemplateForDetector(

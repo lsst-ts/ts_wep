@@ -93,11 +93,6 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         self.config.donutStampSize = 200
         self.config.opticalModel = "onAxis"
         self.config.initialCutoutPadding = 40
-        self.config.instObscuration = 0.3525
-        self.config.instFocalLength = 21.6
-        self.config.instApertureDiameter = 1.2
-        self.config.instDefocalOffset = 32.8
-        self.config.instPixelSize = 10.0e-6
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
         self.butler = dafButler.Butler(self.repoDir)

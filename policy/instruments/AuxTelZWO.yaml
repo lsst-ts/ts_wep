@@ -2,10 +2,9 @@
 # lsst.obs.lsst.Latiss
 
 # Use settings from AuxTel
-imports: policy/instruments/AuxTel.yaml
+imports: policy:instruments/AuxTel.yaml
 
 # Apply these overrides
 name: AuxTelZWO
-defocalOffset: 20.5e-3
 pixelSize: 15.2e-6
 batoidOffsetValue: 0.5e-3

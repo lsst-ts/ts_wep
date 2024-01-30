@@ -2,9 +2,6 @@
 # a Gen 3 pipeline used for testing in ts_wep.
 description: wep basic processing test pipeline
 instrument: lsst.obs.lsst.Latiss
-# Use imported instrument configuration
-imports:
-  - location: $TS_WEP_DIR/policy/task/instConfig/auxTelPipeConfig.yaml
 tasks:
   isr:
     class: lsst.ip.isr.isrTask.IsrTask
@@ -47,7 +44,7 @@ tasks:
       opticalModel: "onAxis"
       # Set configuration for donutSelector. The customMagLimit
       # must be used because otherwise magnitude limits
-      # are checked in policy/task/magLimitStar.yaml file,
+      # are checked in policy:magLimitStar.yaml file,
       # and auxTel filter names tend to fluctuate (currently 'white',
       # but several other have been observed due to rapid development)
       donutSelector.useCustomMagLimit: True

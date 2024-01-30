@@ -74,15 +74,15 @@ def resolveRelativeConfigPath(path: str) -> str:
     Parameters
     ----------
     path : str
-        Path relative to the policy directory. Can start with "policy/" or not.
+        Path relative to the policy directory. Can start with "policy:" or not.
 
     Returns
     -------
     str
         Absolute path of config file in the policy directory
     """
-    # Remove policy/ prefix if present
-    path = path.removeprefix("policy/")
+    # Remove policy: prefix if present
+    path = path.removeprefix("policy:")
 
     # Return the absolute policy path
     return os.path.join(getConfigDir(), path)
@@ -95,7 +95,7 @@ def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
     ----------
     path : str
         Path to the config yaml file. Can be an absolute or relative path, but
-        if the path starts with "policy/", the path will be understood to be
+        if the path starts with "policy:", the path will be understood to be
         relative to the ts_wep policy directory.
     recurseImports : str, optional
         If True, and the config contains 'imports', open the file(s) provided
@@ -116,7 +116,7 @@ def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
         or 1D list of strings
     """
     # Is the path relative to the policy directory?
-    if path.startswith("policy/"):
+    if path.startswith("policy:"):
         # Get absolute path including the policy directory path
         path = resolveRelativeConfigPath(path)
 
@@ -150,7 +150,7 @@ def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
     ----------
     configFile : str, optional
         Path to the config yaml file. Can be an absolute or relative path,
-        but if the path starts with "policy/", the path will be understood
+        but if the path starts with "policy:", the path will be understood
         to be relative to the ts_wep policy directory. This file can only
         contain keys that match keywords in kwargs, but it need not contain
         all the keywords.

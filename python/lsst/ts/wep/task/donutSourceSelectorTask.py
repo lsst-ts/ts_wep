@@ -45,7 +45,7 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
         dtype=bool,
         default=False,
         doc="Apply user-defined magnitude limit? If this is False then the code"
-        + " will default to use the magnitude values in policy/magLimitStar.yaml.",
+        + " will default to use the magnitude values in policy:magLimitStar.yaml.",
     )
     magMax = pexConfig.Field(
         dtype=float,
@@ -209,7 +209,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
             magMin = self.config.magMin
             magMax = self.config.magMax
         else:
-            magPolicyDefaults = readConfigYaml("policy/magLimitStar.yaml")
+            magPolicyDefaults = readConfigYaml("policy:magLimitStar.yaml")
             defaultFilterKey = f"filter{filterName.upper()}"
             magMax = magPolicyDefaults[defaultFilterKey]["high"]
             magMin = magPolicyDefaults[defaultFilterKey]["low"]

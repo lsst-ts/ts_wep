@@ -3,7 +3,7 @@
 
 # Use settings from LsstCam
 imports:
-  - policy/instruments/LsstCam.yaml
+  - policy:instruments/LsstCam.yaml
 
 # Apply these overrides
 name: LsstComCam

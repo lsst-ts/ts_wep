@@ -42,9 +42,9 @@ class Instrument:
     ----------
     configFile: Path or str, optional
         Path to file specifying values for the other parameters. If the
-        path starts with "policy/", it will look in the policy directory.
+        path starts with "policy:", it will look in the policy directory.
         Any explicitly passed parameters override values found in this file
-        (the default is policy/instruments/LsstCam.yaml)
+        (the default is policy:instruments/LsstCam.yaml)
     name: str, optional
         The name of the instrument.
         (the default is None)
@@ -123,7 +123,7 @@ class Instrument:
 
     def __init__(
         self,
-        configFile: Union[Path, str, None] = "policy/instruments/LsstCam.yaml",
+        configFile: Union[Path, str, None] = "policy:instruments/LsstCam.yaml",
         *,
         name: Optional[str] = None,
         diameter: Optional[float] = None,

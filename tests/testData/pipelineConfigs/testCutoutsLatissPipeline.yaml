@@ -40,9 +40,3 @@ tasks:
       # And here we specify the configuration settings
       donutStampSize: 200
       initialCutoutPadding: 40
-      opticalModel: "onAxis"
-      instObscuration: 0.3525
-      instFocalLength: 21.6
-      instApertureDiameter: 1.2
-      instDefocalOffset: 32.8
-      instPixelSize: 10.0e-6

@@ -43,9 +43,11 @@ class ImageMapper:
     instConfig : str or dict or Instrument, optional
         Instrument configuration. If a string, it is assumed this points
         to a config file, which is used to configure the Instrument.
-        If a dictionary, it is assumed to hold keywords for configuration.
-        If an Instrument object, that object is just used.
-        (the default is "policy/instruments/LsstCam.yaml")
+        If the path begins with "policy:", then it is assumed the path is
+        relative to the policy directory. If a dictionary, it is assumed to
+        hold keywords for configuration. If an Instrument object, that object
+        is just used.
+        (the default is "policy:instruments/LsstCam.yaml")
     opticalModel : str, optional
         The optical model to use for mapping between the image and pupil
         planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
@@ -58,7 +60,7 @@ class ImageMapper:
 
     def __init__(
         self,
-        instConfig: Union[str, dict, Instrument] = "policy/instruments/LsstCam.yaml",
+        instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
         opticalModel: str = "offAxis",
     ) -> None:
         self._instrument = configClass(instConfig, Instrument)

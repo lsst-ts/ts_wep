@@ -40,9 +40,4 @@ tasks:
       # CutOutDonutsCwfsTaskConfig.
       # Test CWFS pipeline works when specifying instrument parameters.
       donutStampSize: 160
-      initialCutoutPadding: 5
-      instObscuration: 0.61
-      instFocalLength: 10.312
-      instApertureDiameter: 8.36
-      instDefocalOffset: 1.5
-      instPixelSize: 10.0e-6
+      initialCutoutPadding: 40

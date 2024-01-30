@@ -28,31 +28,18 @@ import lsst.pipe.base as pipeBase
 import numpy as np
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import WfAlgorithmName, getInstrumentFromButlerName
+from lsst.ts.wep.utils import WfAlgorithmName, getTaskInstrument
 
 
 class EstimateZernikesBaseConfig(pexConfig.Config):
-    instObscuration = pexConfig.Field(
-        doc="Obscuration (inner_radius / outer_radius of M1M3)",
-        dtype=float,
-        default=0.61,
-    )
-    instFocalLength = pexConfig.Field(
-        doc="Instrument Focal Length in m", dtype=float, default=10.312
-    )
-    instApertureDiameter = pexConfig.Field(
-        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
-    )
-    instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in mm. \
-        If None then will get this from the focusZ value in exposure visitInfo. \
-        (The default is None.)",
-        dtype=float,
-        default=None,
+    instConfigFile = pexConfig.Field(
+        doc="Path to a instrument configuration file to override the instrument "
+        + "configuration. If begins with 'policy:' the path will be understood as "
+        + "relative to the ts_wep policy directory. If not provided, the default "
+        + "instrument for the camera will be loaded, and the defocal offset will "
+        + "be determined from the focusZ value in the exposure header.",
+        dtype=str,
         optional=True,
-    )
-    instPixelSize = pexConfig.Field(
-        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
     maxNollIndex = pexConfig.Field(
         dtype=int,
@@ -100,13 +87,6 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        """# Set instrument configuration info
-        self.instObscuration = self.config.instObscuration
-        self.instFocalLength = self.config.instFocalLength
-        self.instApertureDiameter = self.config.instApertureDiameter
-        self.instDefocalOffset = self.config.instDefocalOffset
-        self.instPixelSize = self.config.instPixelSize"""
-
     @property
     @abc.abstractmethod
     def wfAlgoName(self) -> WfAlgorithmName:
@@ -144,22 +124,26 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             A struct containing "zernikes", which is a 2D numpy array,
             where the first axis indexes the pair of DonutStamps and the
             second axis indexes the Zernikes coefficients.
+
+        Raises
+        ------
+        ValueError
+            If not all stamps have same defocal offset
         """
-        # Load the default instrument for the camera
-        instrument = getInstrumentFromButlerName(donutStampsExtra[0].cam_name)
+        # Check that all the defocal offsets are the same
+        defocalOffsets = np.concatenate(
+            [
+                donutStampsExtra.getDefocalDistances(),
+                donutStampsIntra.getDefocalDistances(),
+            ]
+        )
+        if not np.allclose(defocalOffsets[0], defocalOffsets):
+            raise ValueError("Not all stamps have same defocal offset.")
 
-        """# Determine the defocal offset
-        if self.instDefocalOffset is None:
-            defocalOffset = donutStampsExtra.getDefocalDistances()[0]
-        else:
-            defocalOffset = self.instDefocalOffset"""
-
-        """# Update the instrument with the config values
-        instrument.obscuration = self.instObscuration
-        instrument.focalLength = self.instFocalLength
-        instrument.diameter = self.instApertureDiameter
-        instrument.defocalOffset = defocalOffset * 1e-3
-        instrument.pixelSize = self.instPixelSize"""
+        # Get the instrument
+        camName = donutStampsExtra[0].cam_name
+        instrument = getTaskInstrument(camName, None, self.config.instConfigFile)
+        instrument.defocalOffset = defocalOffsets[0] / 1e3
 
         # Create the wavefront estimator
         wfEst = WfEstimator(

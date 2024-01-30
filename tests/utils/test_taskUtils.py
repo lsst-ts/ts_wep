@@ -143,11 +143,11 @@ class TestTaskUtils(unittest.TestCase):
         assertInstEqual(getInstrumentFromButlerName("LSSTCam"), Instrument())
         assertInstEqual(
             getInstrumentFromButlerName("LSSTComCam"),
-            Instrument(configFile="policy/instruments/ComCam.yaml"),
+            Instrument(configFile="policy:instruments/ComCam.yaml"),
         )
         assertInstEqual(
             getInstrumentFromButlerName("LATISS"),
-            Instrument(configFile="policy/instruments/AuxTel.yaml"),
+            Instrument(configFile="policy:instruments/AuxTel.yaml"),
         )
 
         with self.assertRaises(ValueError):

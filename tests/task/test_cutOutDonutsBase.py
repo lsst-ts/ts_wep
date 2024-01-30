@@ -78,7 +78,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         runProgram(cleanUpCmd)
 
     def setUp(self):
-        self.config = CutOutDonutsBaseTaskConfig(instDefocalOffset=1.5)
+        self.config = CutOutDonutsBaseTaskConfig()
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -141,11 +141,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.donutStampSize, 160)
         self.assertEqual(self.task.initialCutoutPadding, 5)
         self.assertEqual(self.task.opticalModel, "offAxis")
-        self.assertEqual(self.task.instObscuration, 0.61)
-        self.assertEqual(self.task.instFocalLength, 10.312)
-        self.assertEqual(self.task.instApertureDiameter, 8.36)
-        self.assertEqual(self.task.instDefocalOffset, 1.5)
-        self.assertEqual(self.task.instPixelSize, 10.0e-6)
+        self.assertEqual(self.task.instConfigFile, None)
         self.assertFalse(self.task.multiplyMask)
         self.assertEqual(self.task.maskGrowthIter, 6)
 
@@ -157,17 +153,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
         self.assertEqual(self.task.opticalModel, "onAxis")
-
-    def testCheckAndSetOffset(self):
-        # If offset is already set then no change
-        self.assertEqual(self.task.instDefocalOffset, 1.5)
-        self.task._checkAndSetOffset(30.0)
-        self.assertEqual(self.task.instDefocalOffset, 1.5)
-
-        # If offset is None then change to incoming value
-        self.task.instDefocalOffset = None
-        self.task._checkAndSetOffset(30.0)
-        self.assertEqual(self.task.instDefocalOffset, 30.0)
 
     def testShiftCenter(self):
         centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)
@@ -327,9 +312,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         )
 
         # Test that turning on multiply mask includes mask in stamp image
-        multiplyConfig = CutOutDonutsBaseTaskConfig(
-            instDefocalOffset=1.5, multiplyMask=True
-        )
+        multiplyConfig = CutOutDonutsBaseTaskConfig(multiplyMask=True)
         maskedTask = CutOutDonutsBaseTask(config=multiplyConfig, name="Masked Task")
         exposure = self.butler.get(
             "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
