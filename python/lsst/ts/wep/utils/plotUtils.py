@@ -23,12 +23,14 @@ __all__ = ["plotZernike", "plotPupilMaskElements", "plotRoundTrip"]
 
 from typing import Optional, Union
 
+import batoid
 import matplotlib.pyplot as plt
 import numpy as np
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def plotZernike(zkIdx, zk, unit, saveFilePath=None):
@@ -283,3 +285,128 @@ def plotRoundTrip(
     axes[3].set(title="Abs Pupil difference")
 
     return fig, axes
+
+
+def plotMapperResiduals(
+    angle: tuple,
+    band: str = "ref",
+    defocalType: str = "intra",
+    instConfig: str = "policy:instruments/LsstCam.yaml",
+    opticalModel: str = "offAxis",
+) -> None:
+    """Plot the residuals between the ImageMapper and Batoid.
+
+    Note this
+
+    Parameters
+    ----------
+    angle : tuple
+        The field angle in degrees
+    band : str, optional
+        The LSST band label (the default is "ref")
+    defocalType : str, optional
+        "intra" or "extra" (the default is "intra")
+    instConfig : str or dict or Instrument, optional
+        Instrument configuration. If a string, it is assumed this points
+        to a config file, which is used to configure the Instrument.
+        If the path begins with "policy:", then it is assumed the path is
+        relative to the policy directory. If a dictionary, it is assumed to
+        hold keywords for configuration. If an Instrument object, that object
+        is just used.
+        (the default is "policy:instruments/LsstCam.yaml")
+    opticalModel : str, optional
+        The optical model to use for mapping between the image and pupil
+        planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
+        appropriate for donuts near the optical axis. It is valid for both
+        slow and fast optical systems. The offAxis model is a numerically-fit
+        model that is valid for fast optical systems at wide field angles.
+        offAxis requires an accurate Batoid model.
+        (the default is "offAxis")
+    """
+    # Load the models
+    mapper = ImageMapper(instConfig=instConfig, opticalModel=opticalModel)
+    instrument = mapper.instrument
+    optic = instrument.getBatoidModel(band)
+
+    # Determine the defocal offset
+    offset = -1 if defocalType == "intra" else +1
+    offset *= instrument.defocalOffset
+
+    # Create the Batoid RayVector
+    nrad = 50
+    naz = int(2 * np.pi * nrad)
+    dirCos = batoid.utils.fieldToDirCos(*np.deg2rad(angle))
+    rays = batoid.RayVector.asPolar(
+        optic=optic,
+        wavelength=mapper.instrument.wavelength[band],
+        dirCos=dirCos,
+        nrad=nrad,
+        naz=naz,
+    )
+
+    # Get the normalized pupil coordinates
+    uPupil = (rays.x - rays.x.mean()) / mapper.instrument.radius
+    vPupil = (rays.y - rays.y.mean()) / mapper.instrument.radius
+
+    # Map to focal plane using the offAxis model
+    uImage, vImage, *_ = mapper._constructForwardMap(
+        uPupil,
+        vPupil,
+        mapper.instrument.getIntrinsicZernikes(*angle, band, jmax=22),
+        Image(np.zeros((1, 1)), angle, defocalType, band),
+    )
+
+    # Convert normalized image coordinates to meters
+    xImage = uImage * mapper.instrument.donutRadius * mapper.instrument.pixelSize
+    yImage = vImage * mapper.instrument.donutRadius * mapper.instrument.pixelSize
+
+    # Trace to the focal plane with Batoid
+    optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(rays)
+
+    # Calculate the centered ray coordinates
+    chief = batoid.RayVector.fromStop(
+        0,
+        0,
+        optic,
+        wavelength=mapper.instrument.wavelength[band],
+        dirCos=dirCos,
+    )
+    optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(chief)
+    xRay = rays.x - chief.x
+    yRay = rays.y - chief.y
+
+    # Calculate the residuals
+    dx = xImage - xRay
+    dy = yImage - yRay
+    dr = np.sqrt(dx**2 + dy**2)
+
+    # Get the vignetting mask
+    mask = ~rays.vignetted
+
+    # Make the figure
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 4))
+
+    # Set all labels
+    settings = dict(aspect="equal", xticks=[], yticks=[])
+    ax1.set(**settings, title="Total residual")
+    ax2.set(**settings, title="x residuals")
+    ax3.set(**settings, title="y residuals")
+
+    # Total residuals on left
+    rResid = ax1.scatter(xImage[mask], yImage[mask], s=1, c=dr[mask])
+    cax = make_axes_locatable(ax1).append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(rResid, cax=cax)
+
+    # x residuals in middle
+    xResid = ax2.scatter(xImage[mask], yImage[mask], s=1, c=dx[mask])
+    cax = make_axes_locatable(ax2).append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(xResid, cax=cax)
+
+    # y residuals on right
+    yResid = ax3.scatter(xImage[mask], yImage[mask], s=1, c=dy[mask])
+    cax = make_axes_locatable(ax3).append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(yResid, cax=cax)
+
+    # Print info about total residuals
+    print(f"mean resid: {dr[mask].mean():.3e} m")
+    print(f"max resid: {dr[mask].max():.3e} m")

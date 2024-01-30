@@ -55,7 +55,7 @@ class ImageMapper:
         slow and fast optical systems. The offAxis model is a numerically-fit
         model that is valid for fast optical systems at wide field angles.
         offAxis requires an accurate Batoid model.
-        (the default is offAxis)
+        (the default is "offAxis")
     """
 
     def __init__(

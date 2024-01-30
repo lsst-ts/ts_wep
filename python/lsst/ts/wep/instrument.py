@@ -734,7 +734,7 @@ class Instrument:
         xAngle: float,
         yAngle: float,
         band: Union[BandLabel, str] = BandLabel.REF,
-        jmax: int = 66,
+        jmax: int = 78,
         return4Up: bool = True,
     ) -> np.ndarray:
         """Return the intrinsic Zernikes associated with the optical design.
@@ -751,7 +751,7 @@ class Instrument:
             "{band}". (the default is BandLabel.REF)
         jmax : int, optional
             The maximum Noll index of the intrinsic Zernikes.
-            (the default is 66)
+            (the default is 78)
         return4Up : bool, optional
             Whether to only return the coefficients for Noll indices >= 4.
             (the default is True)
@@ -824,8 +824,9 @@ class Instrument:
             self.wavelength[band],
             jmax=jmax,
             eps=batoidModel.pupilObscuration,
-            nrad=200,
-            naz=20,
+            focal_length=self.focalLength,
+            nrad=10,
+            naz=int(2 * np.pi * 10),
         )
 
         # Multiply by wavelength to get Zernikes in meters
@@ -839,8 +840,8 @@ class Instrument:
         yAngle: float,
         defocalType: DefocalType,
         band: Union[BandLabel, str] = BandLabel.REF,
-        jmax: int = 66,
-        jmaxIntrinsic: int = 66,
+        jmax: int = 78,
+        jmaxIntrinsic: int = 78,
         return4Up: bool = True,
     ) -> np.ndarray:
         """Return the Zernike coefficients associated with the off-axis model.
@@ -860,13 +861,14 @@ class Instrument:
             contains "{band}". (the default is BandLabel.REF)
         jmax : int, optional
             The maximum Noll index of the off-axis model Zernikes.
-            (the default is 66)
+            (the default is 78)
         jmaxIntrinsic : int, optional
             The off-axis coefficients are calculated by subtracting the
             intrinsic Zernikes from batoid.zernikeTA. This value sets the
             maximum Noll index of the intrinsic Zernikes that are subtracted
             from batoid.zernikeTA. It is usually the jmax of the Zernikes
             being estimated by the wavefront estimators.
+            (the default is 78)
         return4Up : bool, optional
             Whether to only return the coefficients for Noll indices >= 4.
             (the default is True)
