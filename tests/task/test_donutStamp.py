@@ -19,7 +19,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import unittest
 
 import lsst.afw.image as afwImage
@@ -29,9 +28,8 @@ import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE
 from lsst.daf.base import PropertyList
 from lsst.ts.wep.cwfs.compensableImage import CompensableImage
-from lsst.ts.wep.cwfs.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
-from lsst.ts.wep.utils import CamType, DefocalType, getConfigDir
+from lsst.ts.wep.utils import DefocalType
 
 
 class TestDonutStamp(unittest.TestCase):
@@ -126,8 +124,6 @@ class TestDonutStamp(unittest.TestCase):
             self.assertEqual(bandpass, "r")
 
             self.assertEqual(type(donutStamp.comp_im), CompensableImage)
-            self.assertEqual(type(donutStamp.mask_comp), afwImage.MaskX)
-            self.assertEqual(type(donutStamp.mask_pupil), afwImage.MaskX)
             np.testing.assert_array_equal(
                 donutStamp.comp_im.getImg(), donutStamp.stamp_im.image.array
             )
@@ -229,63 +225,3 @@ class TestDonutStamp(unittest.TestCase):
                 )
                 self.assertEqual(donutStamp.comp_im.fieldX, np.degrees(trueFieldAngleX))
                 self.assertEqual(donutStamp.comp_im.fieldY, np.degrees(trueFieldAngleY))
-
-    def testMakeMasks(self):
-        donutStamp = DonutStamp(
-            self.testStamps[0],
-            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
-            lsst.geom.Point2D(2047.5, 2001.5),
-            np.array([[], []]).T,
-            DefocalType.Extra.value,
-            1.5e-3,
-            "R22_S11",
-            "LSSTCam",
-            "r",
-        )
-
-        # Set up instrument
-        instDataPath = os.path.join(getConfigDir(), "cwfs", "instData")
-        instConfigFile = os.path.join(
-            instDataPath, "lsstfam", "instParamPipeConfig.yaml"
-        )
-        maskConfigFile = os.path.join(instDataPath, "lsstfam", "maskMigrate.yaml")
-        inst = Instrument()
-        donutWidth = 126
-        inst.configFromFile(
-            donutWidth, CamType.LsstFamCam, instConfigFile, maskConfigFile
-        )
-
-        # Check that masks are empty at start
-        np.testing.assert_array_equal(
-            np.empty(shape=(0, 0)), donutStamp.mask_comp.getArray()
-        )
-        np.testing.assert_array_equal(
-            np.empty(shape=(0, 0)), donutStamp.mask_pupil.getArray()
-        )
-
-        # Check masks after creation
-        donutStamp.makeMasks(inst, "offAxis", 0, 1)
-        self.assertEqual(afwImage.MaskX, type(donutStamp.mask_comp))
-        self.assertEqual(afwImage.MaskX, type(donutStamp.mask_pupil))
-        self.assertIn("DONUT", list(donutStamp.mask_comp.getMaskPlaneDict().keys()))
-        self.assertIn("DONUT", list(donutStamp.mask_pupil.getMaskPlaneDict().keys()))
-        maskC = donutStamp.mask_comp.getArray()
-        maskP = donutStamp.mask_pupil.getArray()
-        # Donut should match
-        self.assertEqual(np.shape(maskC), (126, 126))
-        self.assertEqual(np.shape(maskP), (126, 126))
-        # Make sure not just an empty array
-        self.assertTrue(np.sum(maskC) > 0.0)
-        self.assertTrue(np.sum(maskP) > 0.0)
-        # Make sure bits set are donut bits
-        self.assertCountEqual(
-            [0, afwImage.Mask.getPlaneBitMask("DONUT")],
-            list(np.unique(donutStamp.mask_comp.array)),
-        )
-        self.assertCountEqual(
-            [0, afwImage.Mask.getPlaneBitMask("DONUT")],
-            list(np.unique(donutStamp.mask_pupil.array)),
-        )
-        # Donut at center of focal plane should be symmetric
-        np.testing.assert_array_equal(maskC[:63], maskC[-63:][::-1])
-        np.testing.assert_array_equal(maskP[:63], maskP[-63:][::-1])

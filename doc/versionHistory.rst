@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.3.0:
+
+-------------
+8.3.0
+-------------
+
+* Remove mask_comp and mask_pupil from DonutStamp since they don't persist and mask is already contained in MaskedImage stamp.
+
 .. _lsst.ts.wep-8.2.0:
 
 -------------

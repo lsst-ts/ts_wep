@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 import lsst.afw.cameraGeom
+import lsst.afw.image as afwImage
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
@@ -519,9 +520,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 bandpass=bandpass,
                 archive_element=linear_wcs,
             )
-            boundaryT = 1
             maskScalingFactorLocal = 1
-            donutStamp.makeMasks(
+            # Just put 1 for boundaryT. Only going to save pupil mask anyway.
+            boundaryT = 1
+            donutStamp.comp_im.makeBlendedMask(
                 inst, self.opticalModel, boundaryT, maskScalingFactorLocal
             )
 
@@ -556,7 +558,17 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 donutStamp.stamp_im.image.array, eulerZ
             )
 
-            donutStamp.stamp_im.setMask(donutStamp.mask_comp)
+            # Set masks
+            afwImage.Mask.addMaskPlane("DONUT")
+            donutMaskVal = afwImage.Mask.getPlaneBitMask("DONUT")
+            # Save pupil mask so that other tasks that use the mask can
+            # expand mask borders different amounts to better fit needs.
+            donutStamp.stamp_im.setMask(
+                afwImage.MaskX(
+                    np.array(donutStamp.comp_im.mask_pupil, dtype=np.int32)
+                    * donutMaskVal
+                )
+            )
 
             finalStamps.append(donutStamp)
 
