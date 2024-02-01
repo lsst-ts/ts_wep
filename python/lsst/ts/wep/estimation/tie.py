@@ -36,14 +36,15 @@ class TieAlgorithm(WfAlgorithm):
     Parameters
     ----------
     opticalModel : str, optional
-        The optical model to use for mapping the images to the pupil plane.
-        Can be either "onAxis" or "offAxis". It is recommended you use offAxis,
-        as this model can account for wide-field distortion effects, and so
-        is appropriate for a wider range of field angles. However, the offAxis
-        model requires a Batoid model of the telescope. If you do not have such
-        a model, you can use the onAxis model, which is analytic, but is only
-        appropriate near the optical axis. The field angle at which the onAxis
-        model breaks down is telescope dependent.
+        The optical model to use for mapping between the image and pupil
+        planes. Can be "offAxis", "onAxis", or "paraxial". offAxis is a
+        numerical model that is valid for all optical systems, but requires
+        an accurate Batoid model. onAxis is an analytic model that is valid
+        for all optical systems near the optical axis. paraxial is an
+        analytic model that is valid for slow optical systems near the
+        optical axis. offAxis is recommended when you have a Batoid model
+        and onAxis is recommended when you do not. paraxial is primarily
+        meant for testing (the default is "offAxis")
         (the default is "offAxis")
     solver : str, optional
         Method used to solve the TIE. If "exp", the TIE is solved via
@@ -118,13 +119,15 @@ class TieAlgorithm(WfAlgorithm):
         Parameters
         ----------
         value : str
-            The optical model to use for mapping between the image and
-            pupil planes. Can be "onAxis", or "offAxis". onAxis is an
-            analytic model appropriate for donuts near the optical axis.
-            It is valid for both slow and fast optical systems. The offAxis
-            model is a numerically-fit model that is valid for fast optical
-            systems at wide field angles. offAxis requires an accurate Batoid
-            model.
+            The optical model to use for mapping between the image and pupil
+            planes. Can be "offAxis", "onAxis", or "paraxial". offAxis is a
+            numerical model that is valid for all optical systems, but requires
+            an accurate Batoid model. onAxis is an analytic model that is valid
+            for all optical systems near the optical axis. paraxial is an
+            analytic model that is valid for slow optical systems near the
+            optical axis. offAxis is recommended when you have a Batoid model
+            and onAxis is recommended when you do not. paraxial is primarily
+            meant for testing (the default is "offAxis")
 
         Raises
         ------

@@ -50,12 +50,14 @@ class ImageMapper:
         (the default is "policy:instruments/LsstCam.yaml")
     opticalModel : str, optional
         The optical model to use for mapping between the image and pupil
-        planes. Can be "onAxis", or "offAxis". onAxis is an analytic model
-        appropriate for donuts near the optical axis. It is valid for both
-        slow and fast optical systems. The offAxis model is a numerically-fit
-        model that is valid for fast optical systems at wide field angles.
-        offAxis requires an accurate Batoid model.
-        (the default is "offAxis")
+        planes. Can be "offAxis", "onAxis", or "paraxial". offAxis is a
+        numerical model that is valid for all optical systems, but requires
+        an accurate Batoid model. onAxis is an analytic model that is valid
+        for all optical systems near the optical axis. paraxial is an
+        analytic model that is valid for slow optical systems near the
+        optical axis. offAxis is recommended when you have a Batoid model
+        and onAxis is recommended when you do not. paraxial is primarily
+        meant for testing (the default is "offAxis")
     """
 
     def __init__(
@@ -83,13 +85,15 @@ class ImageMapper:
         Parameters
         ----------
         value : str
-            The optical model to use for mapping between the image and
-            pupil planes. Can be "onAxis", or "offAxis". onAxis is an
-            analytic model appropriate for donuts near the optical axis.
-            It is valid for both slow and fast optical systems. The offAxis
-            model is a numerically-fit model that is valid for fast optical
-            systems at wide field angles. offAxis requires an accurate Batoid
-            model.
+            The optical model to use for mapping between the image and pupil
+            planes. Can be "offAxis", "onAxis", or "paraxial". offAxis is a
+            numerical model that is valid for all optical systems, but requires
+            an accurate Batoid model. onAxis is an analytic model that is valid
+            for all optical systems near the optical axis. paraxial is an
+            analytic model that is valid for slow optical systems near the
+            optical axis. offAxis is recommended when you have a Batoid model
+            and onAxis is recommended when you do not. paraxial is primarily
+            meant for testing (the default is "offAxis")
 
         Raises
         ------
@@ -98,7 +102,7 @@ class ImageMapper:
         ValueError
             If the value is not one of the allowed values
         """
-        allowedModels = ["onAxis", "offAxis"]
+        allowedModels = ["offAxis", "onAxis", "paraxial"]
         if not isinstance(value, str):
             raise TypeError("optical model must be a string.")
         elif value not in allowedModels:
@@ -144,7 +148,7 @@ class ImageMapper:
             If the optical model is not supported
         """
         # Get the Zernikes for the mapping
-        if self.opticalModel == "onAxis":
+        if self.opticalModel == "onAxis" or self.opticalModel == "paraxial":
             zkMap = zkCoeff
         elif self.opticalModel == "offAxis":
             # Get the off-axis coefficients
@@ -229,33 +233,53 @@ class ImageMapper:
         l = self.instrument.defocalOffset  # noqa: E741
 
         # Calculate the mapping determined by the optical model
-        if self.opticalModel == "onAxis":
-            # The onAxis model is analytic and intended for fast optical
-            # systems, near the optical axis
+        if self.opticalModel == "paraxial":
+            # The paraxial model is analytic and intended for slow optical
+            # systems near the optical axis. This model is never recommended,
+            # but is here for testing purposes
 
             # Determine defocal sign from the image plane at z = f +/- l
             # I.e., the extrafocal image at z = f + l is associated with +1,
             # and the intrafocal image at z = f - l is associated with -1.
-            defocalSign = +1 if image.defocalType == DefocalType.Extra else -1
+            ds = +1 if image.defocalType == DefocalType.Extra else -1
 
-            # Calculate the prefactor
-            prefactor = np.sqrt(4 * N**2 - 1)
+            # Calculate the factor C
+            C = -4 * N**2 / l
 
-            # Calculate the factors F and C
-            rPupil = np.sqrt(uPupil**2 + vPupil**2)
-            with np.errstate(invalid="ignore"):
-                F = -defocalSign / np.sqrt(4 * N**2 - rPupil**2)
-            C = -2 * N / l
-
-            # Map the pupil points onto the image plane
-            uImage = prefactor * (F * uPupil + C * (d1Wdu - d1Wdu0))
-            vImage = prefactor * (F * vPupil + C * (d1Wdv - d1Wdv0))
+            # Map pupil points onto the image plane
+            uImage = -ds * uPupil + C * (d1Wdu - d1Wdu0)
+            vImage = -ds * vPupil + C * (d1Wdv - d1Wdv0)
 
             # Calculate the elements of the Jacobian
-            J00 = prefactor * (F + F**3 * uPupil**2 + C * d2Wdudu)
-            J01 = prefactor * (F**3 * uPupil * vPupil + C * d2Wdvdu)
-            J10 = prefactor * (F**3 * vPupil * uPupil + C * d2Wdudv)
-            J11 = prefactor * (F + F**3 * vPupil**2 + C * d2Wdvdv)
+            J00 = -ds + C * d2Wdudu
+            J01 = C * d2Wdudv
+            J10 = C * d2Wdvdu
+            J11 = -ds + C * d2Wdvdv
+
+        elif self.opticalModel == "onAxis":
+            # The onAxis model is analytic and intended for fast optical
+            # systems near the optical axis
+
+            # Determine defocal sign from the image plane at z = f +/- l
+            # I.e., the extrafocal image at z = f + l is associated with +1,
+            # and the intrafocal image at z = f - l is associated with -1.
+            ds = +1 if image.defocalType == DefocalType.Extra else -1
+
+            # Calculate the pieces we will use below
+            rPupil = np.sqrt(uPupil**2 + vPupil**2)
+            A = np.sqrt(4 * N**2 - 1)
+            B = np.sqrt(4 * N**2 - rPupil**2)
+            C = -2 * N / l
+
+            # Map pupil points onto the image plane
+            uImage = -ds * A / B * uPupil + A * C * (d1Wdu - d1Wdu0)
+            vImage = -ds * A / B * vPupil + A * C * (d1Wdv - d1Wdv0)
+
+            # Calculate the elements of the Jacobian
+            J00 = A / B * (-ds + uPupil**2 / B**2) + A * C * d2Wdudu
+            J01 = A / B * (uPupil * vPupil / B**2) + A * C * d2Wdudv
+            J10 = A / B * (vPupil * uPupil / B**2) + A * C * d2Wdvdu
+            J11 = A / B * (-ds + vPupil**2 / B**2) + A * C * d2Wdvdv
 
         else:
             # The offAxis model uses a numerically-fit model from Batoid
@@ -263,18 +287,19 @@ class ImageMapper:
             # in fast optical systems, however it is generally applicable to
             # all optical systems for which you have a good Batoid model
 
-            # Calculate the prefactor
-            prefactor = -2 * N * np.sqrt(4 * N**2 - 1) / l
+            # Calculate the pieces we will use below
+            A = np.sqrt(4 * N**2 - 1)
+            C = -2 * N / l
 
             # Map the pupil points onto the image plane
-            uImage = prefactor * (d1Wdu - d1Wdu0)
-            vImage = prefactor * (d1Wdv - d1Wdv0)
+            uImage = A * C * (d1Wdu - d1Wdu0)
+            vImage = A * C * (d1Wdv - d1Wdv0)
 
             # Calculate the elements of the Jacobian
-            J00 = prefactor * d2Wdudu
-            J01 = prefactor * d2Wdvdu
-            J10 = prefactor * d2Wdudv
-            J11 = prefactor * d2Wdvdv
+            J00 = A * C * d2Wdudu
+            J01 = A * C * d2Wdvdu
+            J10 = A * C * d2Wdudv
+            J11 = A * C * d2Wdvdv
 
         # Assemble the Jacobian
         jac = np.array(

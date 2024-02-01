@@ -35,14 +35,19 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
     opticalModel = pexConfig.ChoiceField(
         dtype=str,
         default="offAxis",
-        doc="The optical model to use for mapping images to pupil plane. "
-        + "Can be either 'onAxis' or 'offAxis'. It is recommended you use "
-        + "'offAxis' as this model can account for wide-field distortion if "
-        + "present. However, 'offAxis' requires a Batoid model of the "
-        + "telescope. (the default is 'offAxis')",
+        doc="The optical model to use for mapping between the image and pupil"
+        + "planes. Can be 'offAxis', 'onAxis', or 'paraxial'. offAxis is a"
+        + "numerical model that is valid for all optical systems, but requires"
+        + "an accurate Batoid model. onAxis is an analytic model that is valid"
+        + "for all optical systems near the optical axis. paraxial is an"
+        + "analytic model that is valid for slow optical systems near the"
+        + "optical axis. offAxis is recommended when you have a Batoid model"
+        + "and onAxis is recommended when you do not. paraxial is primarily"
+        + "meant for testing (the default is 'offAxis')",
         allowed={
             "offAxis": "Numerical model fit by Batoid telescope model.",
             "onAxis": "Analytic model only suitable for small field angles.",
+            "paraxial": "Analytic model only suitable for slow optical systems.",
         },
     )
     solver = pexConfig.ChoiceField(

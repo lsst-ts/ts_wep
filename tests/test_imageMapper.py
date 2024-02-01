@@ -60,10 +60,9 @@ class TestImageMapper(unittest.TestCase):
 
         # Get the Batoid model from the instrument
         defocalSign = +1 if defocalType == "extra" else -1
-        offset = defocalSign * instrument.batoidOffsetValue
-        optic = instrument.batoidOffsetOptic
+        offset = defocalSign * instrument.defocalOffset
         model = instrument.getBatoidModel()
-        model = model.withGloballyShiftedOptic(optic, [0, 0, offset])
+        model = model.withLocallyShiftedOptic("Detector", [0, 0, offset])
 
         # We need to get the image position of the chief ray
         rays = RayVector.fromStop(
@@ -294,7 +293,7 @@ class TestImageMapper(unittest.TestCase):
         rng = np.random.default_rng(0)
 
         for opticalModel, fieldAngle, defocalType, zk in itertools.product(
-            ["onAxis", "offAxis"],
+            ["paraxial", "onAxis", "offAxis"],
             [(0, 0), (1.2, -0.7)],
             ["intra", "extra"],
             [np.zeros(1), rng.normal(scale=50e-9, size=19)],
