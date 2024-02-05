@@ -46,11 +46,6 @@ class TieAlgorithm(WfAlgorithm):
         and onAxis is recommended when you do not. paraxial is primarily
         meant for testing (the default is "offAxis")
         (the default is "offAxis")
-    solver : str, optional
-        Method used to solve the TIE. If "exp", the TIE is solved via
-        directly expanding the wavefront in a Zernike series. If "fft",
-        the TIE is solved using fast Fourier transforms.
-        (the default is "exp")
     maxIter : int, optional
         The maximum number of iterations of the TIE loop.
         (the default is 20)
@@ -88,7 +83,6 @@ class TieAlgorithm(WfAlgorithm):
     def __init__(
         self,
         opticalModel: Optional[str] = "offAxis",
-        solver: Optional[str] = "exp",
         maxIter: Optional[int] = 20,
         compSequence: Optional[Iterable] = 2 * (4,) + 2 * (6,) + 4 * (13,) + 4 * (22,),
         compGain: Optional[float] = 0.6,
@@ -98,7 +92,6 @@ class TieAlgorithm(WfAlgorithm):
         maskKwargs: Optional[dict] = None,
     ) -> None:
         self.opticalModel = opticalModel
-        self.solver = solver
         self.maxIter = maxIter
         self.compSequence = compSequence
         self.compGain = compGain
@@ -443,45 +436,15 @@ class TieAlgorithm(WfAlgorithm):
         )
 
         # Calculate quantities for the linear equation
-        b = -np.einsum("ab,jab->j", dIdz, zk, optimize=True)
+        b = np.einsum("ab,jab->j", dIdz, zk, optimize=True)
         M = np.einsum("ab,jab,kab->jk", I0, dzkdu, dzkdu, optimize=True)
         M += np.einsum("ab,jab,kab->jk", I0, dzkdv, dzkdv, optimize=True)
-        M /= instrument.radius**2
+        M /= -instrument.radius**2
 
         # Invert to get Zernike coefficients in meters
         zkCoeff, *_ = np.linalg.lstsq(M, b, rcond=None)
 
         return zkCoeff
-
-    def _fftSolve(
-        self,
-        I0: np.ndarray,
-        dIdz: np.ndarray,
-        jmax: int,
-        instrument: Instrument,
-    ) -> np.ndarray:
-        """Solve the TIE using fast Fourier transforms.
-
-        Parameters
-        ----------
-        I0 : np.ndarray
-            The beam intensity at the exit pupil
-        dIdz : np.ndarray
-            The z-derivative of the beam intensity across the exit pupil
-        jmax : int
-            The maximum Zernike Noll index to estimate
-        instrument : Instrument, optional
-            The Instrument object associated with the DonutStamps.
-            (the default is the default Instrument)
-
-        Returns
-        -------
-        np.ndarray
-            Numpy array of the Zernike coefficients estimated from the image
-            or pair of images, in nm.
-        """
-        # TODO: Implement the fft solver
-        raise NotImplementedError("The fft solver is not yet implemented.")
 
     def _estimateZk(
         self,
@@ -650,19 +613,14 @@ class TieAlgorithm(WfAlgorithm):
                 intraComp.image /= intraComp.image.sum()  # type: ignore
                 extraComp.image /= extraComp.image.sum()  # type: ignore
 
-                # Approximate I0 = I(x, 0) and dI/dz = dI(x, z)/dz at z=0
+                # Approximate I0 = I(u, 0) and dI/dz = dI(u, z)/dz at z=0
                 I0 = (intraComp.image + extraComp.image) / 2  # type: ignore
                 dIdz = (intraComp.image - extraComp.image) / (  # type: ignore
                     2 * instrument.pupilOffset
                 )
 
                 # Estimate the Zernikes
-                if self.solver == "exp":
-                    zkResid = self._expSolve(I0, dIdz, jmax, instrument)
-                elif self.solver == "fft":
-                    zkResid = self._fftSolve(I0, dIdz, jmax, instrument)
-                else:
-                    raise RuntimeError(f"Solver {self.solver} is unsupported")
+                zkResid = self._expSolve(I0, dIdz, jmax, instrument)
 
                 # Check for convergence
                 # (1) The max absolute difference with the previous iteration
@@ -700,11 +658,6 @@ class TieAlgorithm(WfAlgorithm):
                     "converged": bool(converged),
                     "caustic": bool(caustic),
                 }
-
-                # If we are using the FFT solver, save the inner loop as well
-                if self.solver == "fft":
-                    # TODO: After implementing fft, add inner loop here
-                    self._history[i + 1]["innerLoop"] = None
 
             # If we've hit a caustic or converged, we will stop early
             if caustic or converged:

@@ -50,18 +50,6 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
             "paraxial": "Analytic model only suitable for slow optical systems.",
         },
     )
-    solver = pexConfig.ChoiceField(
-        dtype=str,
-        default="exp",
-        doc="Method used to solve the TIE. If 'exp' the TIE is solved via "
-        + "directly expanding the wavefront in a Zernike series. If 'fft', "
-        + "the TIE is solved using fast Fourier transforms. "
-        + "(the default is 'exp')",
-        allowed={
-            "exp": "Solve the TIE using a Zernike expansion.",
-            "fft": "Solve the TIE using fast Fourier transforms.",
-        },
-    )
     maxIter = pexConfig.Field(
         dtype=int,
         default=20,

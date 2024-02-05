@@ -25,13 +25,14 @@ __all__ = [
     "createZernikeGradBasis",
     "zernikeEval",
     "zernikeGradEval",
+    "zernikeFit",
     "getPsfGradPerZernike",
     "convertZernikesToPsfWidth",
     "getZernikeParity",
 ]
 
 import re
-from typing import Tuple
+from typing import Optional, Tuple
 
 import galsim
 import numpy as np
@@ -199,6 +200,46 @@ def zernikeGradEval(
 
     # Evaluate on the grid
     return galsimZernike(u, v)
+
+
+def zernikeFit(
+    u: np.ndarray,
+    v: np.ndarray,
+    z: np.ndarray,
+    jmax: int = 22,
+    obscuration: float = 0.61,
+    mask: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Fit Zernike polynomials to the surface.
+
+    Parameters
+    ----------
+    Parameters
+    ----------
+    u : np.ndarray
+        The x normalized pupil coordinate(s).
+    v : np.ndarray
+        The y normalized pupil coordinate(s). Must be same shape as u.
+    z : np.ndarray
+        The wavefront surface evaluated at the u, v points.
+    jmax : int
+        The maximum Noll index to fit (the default is 22)
+    obscuration : float, optional
+        The fractional obscuration.
+        (the default is 0.61, corresponding to the Simonyi Survey Telescope.)
+    mask : np.ndarray, optional
+        A mask for the surface. The Zernikes are only fit to the unmasked
+        points. (the default is None)
+    """
+    mask = mask if mask is not None else np.full_like(u, True, dtype=bool)
+
+    # Create a Zernike basis
+    zkBasis = createZernikeBasis(u[mask], v[mask], jmax, obscuration)
+
+    # Fit the Zernikes
+    coeffs, *_ = np.linalg.lstsq(zkBasis.T, z[mask], rcond=-1)
+
+    return coeffs
 
 
 def getPsfGradPerZernike(
