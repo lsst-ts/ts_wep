@@ -28,7 +28,11 @@ import lsst.pipe.base as pipeBase
 import numpy as np
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import WfAlgorithmName, getTaskInstrument
+from lsst.ts.wep.utils import (
+    WfAlgorithmName,
+    convertHistoryToMetadata,
+    getTaskInstrument,
+)
 
 
 class EstimateZernikesBaseConfig(pexConfig.Config):
@@ -75,6 +79,14 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
             "nm": "nanometers",
             "arcsecs": "quadrature contribution to the PSF FWHM in arcseconds",
         },
+    )
+    saveHistory = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Whether to save the algorithm history in the task metadata. "
+        + "Depending on the algorithm, saving the history might slow down "
+        + "estimation, but doing so will provide intermediate products from "
+        + "the estimation process.",
     )
 
 
@@ -155,13 +167,23 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             returnWfDev=self.config.returnWfDev,
             return4Up=self.config.return4Up,
             units=self.config.units,
-            saveHistory=False,
+            saveHistory=self.config.saveHistory,
         )
 
         # Loop over donut stamps and estimate Zernikes
         zkList = []
-        for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
+        histories = dict()
+        for i, (donutExtra, donutIntra) in enumerate(
+            zip(donutStampsExtra, donutStampsIntra)
+        ):
+            # Estimate Zernikes
             zk = wfEst.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
             zkList.append(zk)
+
+            # Save the history (note if self.config.saveHistory is False,
+            # this is just an empty dictionary)
+            histories[f"pair{i}"] = convertHistoryToMetadata(wfEst.history)
+
+        self.metadata["history"] = histories
 
         return pipeBase.Struct(zernikes=np.array(zkList))

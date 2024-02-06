@@ -27,6 +27,8 @@ __all__ = [
     "getOffsetFromExposure",
     "getTaskInstrument",
     "createTemplateForDetector",
+    "convertHistoryToMetadata",
+    "convertMetadataToHistory",
 ]
 
 import os
@@ -36,6 +38,7 @@ from contextlib import ExitStack
 from typing import Union
 
 import lsst.obs.lsst as obs_lsst
+import lsst.pipe.base as pipeBase
 import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, Detector
 from lsst.afw.image import Exposure
@@ -418,3 +421,81 @@ def createTemplateForDetector(
         template = np.rot90(template, nRot)
 
     return template
+
+
+def convertHistoryToMetadata(history: dict) -> pipeBase.TaskMetadata:
+    """Convert algorithm history to be saved in task metadata.
+
+    Parameters
+    ----------
+    history : dict
+        The nested dictionary representing the algorithm history.
+
+    Returns
+    -------
+    lsst.pipe.base.TaskMetadata
+        The reformatted history in a TaskMetadata object
+    """
+    if isinstance(history, dict):
+        history = {
+            str(key): convertHistoryToMetadata(val) for key, val in history.items()
+        }
+        history = pipeBase.TaskMetadata.from_dict(history)
+    elif isinstance(history, np.ndarray):
+        history = {
+            "shape": history.shape,
+            "dtype": history.dtype.name,
+            "values": history.flatten().tolist(),
+        }
+
+    return history
+
+
+def convertMetadataToHistory(metadata: pipeBase.TaskMetadata) -> dict:
+    """Convert the history from the metadata back to original format.
+
+    Parameters
+    ----------
+    metadata : pipeBase.TaskMetadata
+        The metadata containing the history. Note this is meant to
+        be only the nested Metadata that represents the algorithm
+        history and nothing else.
+
+    Returns
+    -------
+    dict
+        The history dictionary
+    """
+    # If this is a TaskMetadata object, convert to dict and recurse
+    if isinstance(metadata, pipeBase.TaskMetadata):
+        metadata = convertMetadataToHistory(metadata.to_dict())
+
+    # If this is a dict...
+    elif isinstance(metadata, dict):
+        # If these are the keys, convert to an array
+        if set(metadata.keys()) == {"shape", "dtype", "values"}:
+            metadata = np.array(
+                metadata["values"],
+                dtype=metadata["dtype"],
+            ).reshape(metadata["shape"])
+        # Otherwise, recures on keys and values
+        else:
+            metadata = {
+                convertMetadataToHistory(key): convertMetadataToHistory(val)
+                for key, val in metadata.items()
+            }
+
+    # Convert numeric strings back to floats and ints
+    elif isinstance(metadata, str):
+        if "." in metadata:
+            try:
+                metadata = float(metadata)
+            except:
+                pass
+        else:
+            try:
+                metadata = int(metadata)
+            except:
+                pass
+
+    return metadata

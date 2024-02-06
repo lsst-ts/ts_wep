@@ -21,7 +21,6 @@
 
 __all__ = ["WfAlgorithm"]
 
-import warnings
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -58,11 +57,6 @@ class WfAlgorithm(ABC):
         # subclasses to write a new docstring for this method
         if getattr(self, "_history", None) is None:
             self._history = dict()
-        if len(self._history) == 0:
-            warnings.warn(
-                "It looks like the history is empty. Perhaps you have not "
-                "yet run the algorithm with saveHistory=True?"
-            )
 
         return self._history
 
