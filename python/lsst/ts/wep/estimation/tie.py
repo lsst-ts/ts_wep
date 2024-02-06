@@ -76,7 +76,7 @@ class TieAlgorithm(WfAlgorithm):
     maskKwargs : dict or None, optional
         Dictionary of mask keyword arguments to pass to mask creation.
         To see possibilities, see the docstring for
-        lsst.ts.wep.imageMapper.ImageMapper.createPupilMask().
+        lsst.ts.wep.imageMapper.ImageMapper.createPupilMasks().
         (the default is None)
     """
 
@@ -316,19 +316,19 @@ class TieAlgorithm(WfAlgorithm):
 
     @property
     def maskKwargs(self) -> dict:
-        """Mask keyword arguments to pass to ImageMapper.createPupilMask()."""
+        """Mask keyword arguments to pass to ImageMapper.createPupilMasks()."""
         return self._maskKwargs
 
     @maskKwargs.setter
     def maskKwargs(self, value: Union[dict, None]) -> None:
-        """Set dict of keyword args passed to ImageMapper.createPupilMask().
+        """Set dict of keyword args passed to ImageMapper.createPupilMasks().
 
         Parameters
         ----------
         value : dict or None
             Dictionary of mask keyword arguments to pass to mask creation.
             To see possibilities, see the docstring for
-            lsst.ts.wep.imageMapper.ImageMapper.createPupilMask().
+            lsst.ts.wep.imageMapper.ImageMapper.createPupilMasks().
 
         Raises
         ------
@@ -343,7 +343,7 @@ class TieAlgorithm(WfAlgorithm):
             raise TypeError("maskKwargs must be a dictionary or None.")
 
         # Get the set of allowed keyword arguments
-        sig = inspect.signature(ImageMapper.createPupilMask)
+        sig = inspect.signature(ImageMapper.createPupilMasks)
         allowedKeys = set(sig.parameters)
         allowedKeys.remove("self")
         allowedKeys.remove("image")
@@ -512,10 +512,6 @@ class TieAlgorithm(WfAlgorithm):
         # Calculate the mean starting Zernikes
         zkStartMean = np.mean([zkStartIntra, zkStartExtra], axis=0)
 
-        # Initialize the variables for intra and extrafocal pupil masks
-        intraPupilMask = None
-        extraPupilMask = None
-
         if saveHistory:
             # Save the initial images and intrinsic Zernikes in the history
             self._history[0] = {
@@ -576,20 +572,18 @@ class TieAlgorithm(WfAlgorithm):
             intraComp = imageMapper.mapImageToPupil(
                 intraCent,
                 zkComp + zkStartIntra,
-                mask=intraPupilMask,
+                masks=None if i == 0 else intraComp.masks,  # noqa: F821
                 **self.maskKwargs,
             )
             extraComp = imageMapper.mapImageToPupil(
                 extraCent,
                 zkComp + zkStartExtra,
-                mask=extraPupilMask,
+                masks=None if i == 0 else extraComp.masks,  # noqa: F821
                 **self.maskKwargs,
             )
 
             # Apply a common pupil mask to each
-            intraPupilMask = intraComp.mask
-            extraPupilMask = extraComp.mask
-            mask = (intraPupilMask >= 1) & (extraPupilMask >= 1)  # type: ignore
+            mask = (intraComp.mask >= 1) & (extraComp.mask >= 1)
             intraComp.image *= mask
             extraComp.image *= mask
 

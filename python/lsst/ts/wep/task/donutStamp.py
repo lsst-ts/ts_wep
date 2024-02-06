@@ -293,6 +293,9 @@ class DonutStamp(AbstractStamp):
         with respect to the science sensors). See sitcomtn-003.lsst.io for more
         information.
 
+        Also note that technically the image masks depend on the optical
+        aberrations, but this function assumes the aberrations are zero.
+
         Parameters
         ----------
         instrument : Instrument
@@ -320,8 +323,8 @@ class DonutStamp(AbstractStamp):
         # Create the image mapper
         imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
 
-        # Create the mask
-        mask = imageMapper.createImageMask(
+        # Create the masks
+        imageMapper.createImageMasks(
             self.wep_im,
             binary=True,
             dilate=dilate,
@@ -329,28 +332,29 @@ class DonutStamp(AbstractStamp):
             maskBlends=maskBlends,
         )
 
-        # Save this mask in the WEP image
-        self.wep_im.mask = mask
+        # Create the stamp mask from the mask components
+        stampMask = self.wep_im.mask.copy()
+        stampMask[self.wep_im.maskBlends > 0] = -1
 
         # This mask is in the CCS with the CWFSs de-rotated (see the docstring
         # for self._setWepImage()). We need to put it back in the coordinate
         # system of the info in the butler
 
         # Transpose the mask (DVCS -> CCS)
-        mask = mask.T
+        stampMask = stampMask.T
 
         # Rotate to sensor orientation
         camera = self.getCamera()
         detector = camera.get(self.detector_name)
         eulerZ = -detector.getOrientation().getYaw().asDegrees()
         nRot = int(eulerZ // 90)
-        mask = np.rot90(mask, -nRot)
+        stampMask = np.rot90(stampMask, -nRot)
 
         # Set the mask
-        mask = afwImage.Mask(mask.astype(np.int32).copy())
+        mask = afwImage.Mask(stampMask.astype(np.int32).copy())
         self.stamp_im.setMask(mask)
         self.stamp_im.mask.clearMaskPlaneDict()
-        self.stamp_im.mask.conformMaskPlanes({"BKGRD": 0, "DONUT": 1})
+        self.stamp_im.mask.conformMaskPlanes({"BKGRD": 0, "DONUT": 1, "BLEND": -1})
 
     def getLinearWCS(self):
         """

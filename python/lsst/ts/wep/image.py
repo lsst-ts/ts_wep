@@ -255,12 +255,12 @@ class Image(object):
 
     @property
     def mask(self) -> Union[np.ndarray, None]:
-        """The image mask."""
+        """The image source mask."""
         return self._mask
 
     @mask.setter
     def mask(self, value: Optional[np.ndarray]) -> None:
-        """Set the image mask.
+        """Set the image source mask.
 
         Note mask creation is meant to be handled by the ImageMapper class.
 
@@ -283,6 +283,73 @@ class Image(object):
         elif isinstance(value, np.ndarray):
             value = value.copy()
         self._mask = value
+
+    @property
+    def maskBlends(self) -> Union[np.ndarray, None]:
+        """The image source mask."""
+        return self._maskBlends
+
+    @maskBlends.setter
+    def maskBlends(self, value: Optional[np.ndarray]) -> None:
+        """Set the image blend mask.
+
+        Note mask creation is meant to be handled by the ImageMapper class.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            The mask for the image.
+
+        Raises
+        ------
+        TypeError
+            If the mask is not an array, or None
+        ValueError
+            If the mask is an array and does not match the shape of the image
+        """
+        if value is not None and not isinstance(value, np.ndarray):
+            raise TypeError("mask must be an array or None.")
+        elif isinstance(value, np.ndarray) and value.shape != self.image.shape:
+            raise ValueError("mask must have the same shape as self.image.")
+        elif isinstance(value, np.ndarray):
+            value = value.copy()
+        self._maskBlends = value
+
+    @property
+    def maskBackground(self) -> Union[np.ndarray, None]:
+        """The image background mask."""
+        return self._maskBackground
+
+    @maskBackground.setter
+    def maskBackground(self, value: Optional[np.ndarray]) -> None:
+        """Set the image background mask.
+
+        Note mask creation is meant to be handled by the ImageMapper class.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            The mask for the image.
+
+        Raises
+        ------
+        TypeError
+            If the mask is not an array, or None
+        ValueError
+            If the mask is an array and does not match the shape of the image
+        """
+        if value is not None and not isinstance(value, np.ndarray):
+            raise TypeError("mask must be an array or None.")
+        elif isinstance(value, np.ndarray) and value.shape != self.image.shape:
+            raise ValueError("mask must have the same shape as self.image.")
+        elif isinstance(value, np.ndarray):
+            value = value.copy()
+        self._maskBackground = value
+
+    @property
+    def masks(self) -> tuple:
+        """Return (self.mask, self.maskBlends, self.maskBackground)."""
+        return (self.mask, self.maskBlends, self.maskBackground)
 
     def copy(self) -> Self:
         """Return a copy of the DonutImage object.

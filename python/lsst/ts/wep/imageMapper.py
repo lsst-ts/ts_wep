@@ -592,10 +592,8 @@ class ImageMapper:
         # the circle where the ray that passes through each point intersects
         # the circle (in pupil coordinates)
         uPupilCen, vPupilCen = uPupilCen[border], vPupilCen[border]
-        m = -uPupilCen / vPupilCen  # slope
-        b = (
-            np.sqrt(uPupilCen**2 + vPupilCen**2) * rPupilCirc / vPupilCen
-        )  # intercept
+        m = -uPupilCen / vPupilCen
+        b = np.sqrt(uPupilCen**2 + vPupilCen**2) * rPupilCirc / vPupilCen
 
         # Select the border image coordinates
         uImageCen, vImageCen = uImageCen[border], vImageCen[border]
@@ -739,9 +737,11 @@ class ImageMapper:
                 uPupilCirc=uCenter,
                 vPupilCirc=vCenter,
                 rPupilCirc=radius,  # type: ignore
-                fwdMap=None
-                if fwdMap is None
-                else (uImage[idx], vImage[idx], jac[..., idx], jacDet[idx]),
+                fwdMap=(
+                    None
+                    if fwdMap is None
+                    else (uImage[idx], vImage[idx], jac[..., idx], jacDet[idx])
+                ),
             )
 
             # Assign the mask values
@@ -791,7 +791,7 @@ class ImageMapper:
 
         return centralMask
 
-    def createPupilMask(
+    def createPupilMasks(
         self,
         image: Image,
         *,
@@ -799,8 +799,12 @@ class ImageMapper:
         dilate: int = 0,
         dilateBlends: int = 0,
         maskBlends: bool = False,
-    ) -> np.ndarray:
-        """Create the pupil mask for the stamp.
+        ignorePlane: bool = False,
+    ) -> None:
+        """Create source mask, blend mask, and background mask on pupil plane.
+
+        Note the masks are stored in image.mask, image.maskBlends, and
+        image.maskBackground.
 
         Parameters
         ----------
@@ -819,19 +823,25 @@ class ImageMapper:
             if maskBlends==True, and is not an option if binary==False.
             (the default is 0)
         maskBlends : bool, optional
-            Whether to mask the blends (i.e. the blended regions are masked
-            out). (the default is False)
-
-        Returns
-        -------
-        np.ndarray
-            The pupil mask
+            Whether to subtract the blend mask from the source mask.
+            (the default is False)
+        ignorePlane : bool, optional
+            If False, check that image.planeType == PlaneType.Pupil.
+            (the default is False)
 
         Raises
         ------
         ValueError
-            Invalid dilate value.
+            The image is not on the pupil plane or the dilate values are
+            invalid.
         """
+        # Check the image plane
+        if not ignorePlane and image.planeType != PlaneType.Pupil:
+            raise ValueError(
+                "The image is not on the pupil plane. "
+                "If you want to ignore this check, set ignorePlane=True."
+            )
+
         # Check the dilate values
         dilate, dilateBlends = int(dilate), int(dilateBlends)
         if dilate < 0:
@@ -860,27 +870,42 @@ class ImageMapper:
             mask = (mask > 0.5).astype(int)
 
         # Dilate the mask?
-        centralMask = mask.copy()
-        blendMask = mask.copy()
+        sourceMask = mask.copy()
+        blendMask0 = mask.copy()
         if dilate > 0:
-            centralMask = binary_dilation(centralMask, iterations=dilate).astype(int)
+            sourceMask = binary_dilation(sourceMask, iterations=dilate)
+            sourceMask = sourceMask.astype(int)
         if dilateBlends > 0:
-            blendMask = binary_dilation(blendMask, iterations=dilateBlends).astype(int)
+            blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
+            blendMask0 = blendMask0.astype(int)
 
-        # Mask the blends?
-        if maskBlends and image.blendOffsets.size > 0:
-            totalMask = self._maskBlends(
-                centralMask,
-                blendMask,
-                image.blendOffsets,
-                binary,
-            )
-        else:
-            totalMask = centralMask
+        # Mask the blends
+        blendMask = np.zeros_like(sourceMask)
+        if image.blendOffsets.size > 0:
+            # Add the blends
+            for offset in image.blendOffsets:
+                blendMask += shift(blendMask0, offset)
 
-        return totalMask
+                # Clip the values
+                blendMask = np.clip(blendMask, 0, 1)
 
-    def createImageMask(
+        # Subtract the blends from the source mask
+        if maskBlends:
+            sourceMask -= blendMask
+            sourceMask = np.clip(sourceMask, 0, 1)
+
+        # Create the background mask
+        backgroundMask = np.ones_like(sourceMask)
+        backgroundMask -= sourceMask
+        backgroundMask -= blendMask
+        backgroundMask = np.clip(backgroundMask, 0, 1)
+
+        # Set the masks
+        image.mask = sourceMask
+        image.maskBlends = blendMask
+        image.maskBackground = backgroundMask
+
+    def createImageMasks(
         self,
         image: Image,
         zkCoeff: Optional[np.ndarray] = None,
@@ -889,9 +914,13 @@ class ImageMapper:
         dilate: int = 0,
         dilateBlends: int = 0,
         maskBlends: bool = False,
+        ignorePlane: bool = False,
         _invMap: Optional[tuple] = None,
-    ) -> np.ndarray:
-        """Create the image mask for the stamp.
+    ) -> None:
+        """Create source mask, blend mask, and background mask on image plane.
+
+        Note the masks are stored in image.mask, image.maskBlends, and
+        image.maskBackground.
 
         Parameters
         ----------
@@ -914,13 +943,25 @@ class ImageMapper:
             if maskBlends==True, and is not an option if binary==False.
             (the default is 0)
         maskBlends : bool, optional
-            Whether to mask the blends (i.e. the blended regions are masked
-            out). (the default is False)
+            Whether to subtract the blend mask from the source mask.
+            (the default is False)
+        ignorePlane : bool, optional
+            If False, check that image.planeType == PlaneType.Pupil.
+            (the default is False)
 
-        Returns
-        -------
-        np.ndarray
+        Raises
+        ------
+        ValueError
+            The image is not on the image plane or the dilate values are
+            invalid.
         """
+        # Check the image plane
+        if not ignorePlane and image.planeType != PlaneType.Image:
+            raise ValueError(
+                "The image is not on the image plane. "
+                "If you want to ignore this check, set ignorePlane=True."
+            )
+
         # Check the dilate values
         dilate, dilateBlends = int(dilate), int(dilateBlends)
         if dilate < 0:
@@ -979,25 +1020,40 @@ class ImageMapper:
             mask = (mask > 0.5).astype(int)
 
         # Dilate the mask?
-        centralMask = mask.copy()
-        blendMask = mask.copy()
+        sourceMask = mask.copy()
+        blendMask0 = mask.copy()
         if dilate > 0:
-            centralMask = binary_dilation(centralMask, iterations=dilate).astype(int)
+            sourceMask = binary_dilation(sourceMask, iterations=dilate)
+            sourceMask = sourceMask.astype(int)
         if dilateBlends > 0:
-            blendMask = binary_dilation(blendMask, iterations=dilateBlends).astype(int)
+            blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
+            blendMask0 = blendMask0.astype(int)
 
-        # Mask the blends?
-        if maskBlends and image.blendOffsets.size > 0:
-            totalMask = self._maskBlends(
-                centralMask,
-                blendMask,
-                image.blendOffsets,
-                binary,
-            )
-        else:
-            totalMask = centralMask
+        # Mask the blends
+        blendMask = np.zeros_like(sourceMask)
+        if image.blendOffsets.size > 0:
+            # Add the blends
+            for offset in image.blendOffsets:
+                blendMask += shift(blendMask0, offset)
 
-        return totalMask
+                # Clip the values
+                blendMask = np.clip(blendMask, 0, 1)
+
+        # Subtract the blends from the source mask
+        if maskBlends:
+            sourceMask -= blendMask
+            sourceMask = np.clip(sourceMask, 0, 1)
+
+        # Create the background mask
+        backgroundMask = np.ones_like(sourceMask)
+        backgroundMask -= sourceMask
+        backgroundMask -= blendMask
+        backgroundMask = np.clip(backgroundMask, 0, 1)
+
+        # Set the masks
+        image.mask = sourceMask
+        image.maskBlends = blendMask
+        image.maskBackground = backgroundMask
 
     def getProjectionSize(
         self,
@@ -1084,6 +1140,8 @@ class ImageMapper:
         keyword argument for mask creation, and these will be passed for
         creating the masks for the projection.
 
+        Note this function also sets the masks for the image.
+
         Parameters
         ----------
         image : Image
@@ -1113,7 +1171,13 @@ class ImageMapper:
 
         # Create the image template
         if binary:
-            template = self.createImageMask(stamp, zkCoeff, binary=True, **maskKwargs)
+            self.createImageMasks(
+                stamp,
+                zkCoeff,
+                binary=True,
+                **maskKwargs,
+            )
+            template = stamp.mask.copy()
         else:
             template = self.mapPupilToImage(stamp, zkCoeff, **maskKwargs).image
 
@@ -1126,15 +1190,15 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: Optional[np.ndarray] = None,
-        mask: Optional[np.ndarray] = None,
+        masks: Optional[Tuple[np.ndarray]] = None,
         **maskKwargs,
     ) -> Image:
         """Map the pupil to the image plane.
 
         In addition to the parameters listed below, you can provide any
         keyword argument for mask creation, and these will be passed to
-        self.createPupilMask() when the image is masked. Note this only
-        happens if mask=None.
+        self.createPupilMasks() when the image is masked. Note this only
+        happens if masks=None.
 
         Parameters
         ----------
@@ -1146,10 +1210,10 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default are the intrinsic Zernikes at the donut position)
-        mask : np.ndarray, optional
-            You can provide an image mask if you have already computed one.
-            This is just to speed up computation. If not provided, the image
-            mask will be computed from scratch.
+        masks : np.ndarray, optional
+            You can provide the image masks if they have already been computed.
+            This is just to speed up computation. If not provided, the masks
+            are created after the mapping.
 
         Returns
         -------
@@ -1177,27 +1241,26 @@ class ImageMapper:
             stamp,
         )
 
+        # Set the plane type
+        stamp.planeType = PlaneType.Image
+
         # Create the image mask
-        if mask is None:
-            if "binary" not in maskKwargs:
-                maskKwargs["binary"] = False
-            mask = self.createImageMask(
+        if masks is None or all(item is None for item in masks):
+            self.createImageMasks(
                 stamp,
                 zkCoeff,
                 **maskKwargs,
                 _invMap=(uPupil, vPupil, jac, jacDet),
             )
+        else:
+            stamp.mask = masks[0]
+            stamp.maskBlends = masks[1]
+            stamp.maskBackground = masks[2]
 
         # Fill the image (this assumes that, except for vignetting,
         # the pupil is uniformly illuminated)
         stamp.image = np.zeros_like(stamp.image)
-        stamp.image[inside] = mask[inside] * jacDet
-
-        # Also save the mask
-        stamp.mask = mask
-
-        # And set the plane type
-        stamp.planeType = PlaneType.Image
+        stamp.image[inside] = stamp.mask[inside] * jacDet
 
         return stamp
 
@@ -1205,15 +1268,15 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: Optional[np.ndarray] = None,
-        mask: Optional[np.ndarray] = None,
+        masks: Optional[np.ndarray] = None,
         **maskKwargs,
     ) -> Image:
         """Map a stamp from the image to the pupil plane.
 
         In addition to the parameters listed below, you can provide any
         keyword argument for mask creation, and these will be passed to
-        self.createPupilMask() when the image is masked. Note this only
-        happens if mask=None.
+        self.createPupilMasks() when the image is masked. Note this only
+        happens if masks=None.
 
         Parameters
         ----------
@@ -1224,10 +1287,10 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default are the intrinsic Zernikes at the donut position)
-        mask : np.ndarray, optional
-            You can provide a pupil mask if you have already computed one.
-            This is just to speed up computation. If not provided, the pupil
-            mask will be computed from scratch.
+        masks : np.ndarray, optional
+            You can provide the image masks if they have already been computed.
+            This is just to speed up computation. If not provided, the masks
+            are created after the mapping.
 
         Returns
         -------
@@ -1257,32 +1320,29 @@ class ImageMapper:
         )
 
         # Interpolate the array onto the pupil plane
-        pupil = interpn(
+        stamp.image = interpn(
             (vImage[:, 0], uImage[0, :]),
             stamp.image,
             (vImageMap, uImageMap),
             method="linear",
             bounds_error=False,
         )
-        pupil *= jacDet
+        stamp.image *= jacDet
 
         # Set NaNs to zero
-        pupil = np.nan_to_num(pupil)
+        stamp.image = np.nan_to_num(stamp.image)
+
+        # Set the plane type
+        stamp.planeType = PlaneType.Pupil
 
         # Mask the pupil
-        if mask is None:
-            if "binary" not in maskKwargs:
-                maskKwargs["binary"] = True
-            mask = self.createPupilMask(stamp, **maskKwargs)
-        pupil *= mask
+        if masks is None or all(item is None for item in masks):
+            self.createPupilMasks(stamp, **maskKwargs)
+        else:
+            stamp.mask = masks[0]
+            stamp.maskBlends = masks[1]
+            stamp.maskBackground = masks[2]
 
-        # Update the stamp with the new pupil image
-        stamp.image = pupil
-
-        # Also save the mask
-        stamp.mask = mask
-
-        # And set the plane type
-        stamp.planeType = PlaneType.Pupil
+        stamp.image *= stamp.mask
 
         return stamp

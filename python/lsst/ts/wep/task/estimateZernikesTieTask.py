@@ -94,7 +94,7 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
         default=dict(),
         doc="Dictionary of mask keyword arguments to pass to mask creation. "
         + "To see possibilities, see docstring for "
-        + "lsst.ts.wep.imageMapper.ImageMapper.createPupilMask(). "
+        + "lsst.ts.wep.imageMapper.ImageMapper.createPupilMasks(). "
         + "(the default is an emtpy dictionary)",
     )
 
