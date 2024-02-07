@@ -101,6 +101,11 @@ class TieAlgorithm(WfAlgorithm):
         self.maskKwargs = maskKwargs
 
     @property
+    def requiresPairs(self) -> bool:
+        """Whether the algorithm requires pairs to estimate Zernikes."""
+        return True
+
+    @property
     def opticalModel(self) -> str:
         """The optical model to use for mapping the image to the pupil."""
         return self._opticalModel
@@ -485,13 +490,6 @@ class TieAlgorithm(WfAlgorithm):
         RuntimeError
             If the solver is not supported
         """
-        # Make sure we have been provided with two images
-        if I1 is None or I2 is None:
-            raise ValueError(
-                "TIEAlgorithm requires a pair of intrafocal and extrafocal "
-                "donuts to estimate Zernikes. Please provide both I1 and I2."
-            )
-
         # Create the ImageMapper for centering and image compensation
         imageMapper = ImageMapper(instConfig=instrument, opticalModel=self.opticalModel)
 

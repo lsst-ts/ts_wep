@@ -39,15 +39,19 @@ class WfAlgorithm(ABC):
     """
 
     def __init_subclass__(self) -> None:
-        """This is called when you subclass.
-
-        I am using this to force you to write a docstring
-        for the history property.
-        """
+        """This is called when you subclass."""
         if self.history.__doc__ is None:
             raise AttributeError(
-                "You must write a docstring for the history property. "
-                "Please use this to describe the contents of the history dict."
+                "When subclassing WfAlgorithm you must write a docstring for "
+                "the history property. Please use this to describe the contents "
+                "of the history dictionary."
+            )
+
+        if getattr(self, "requiresPairs", None) is None:
+            raise AttributeError(
+                "When subclassing WfAlgorithm you must define the requiresPairs "
+                "property. This indicates whether the algorithm can operate on "
+                "individual donuts or requires pairs of donuts."
             )
 
     @property
@@ -60,8 +64,8 @@ class WfAlgorithm(ABC):
 
         return self._history
 
-    @staticmethod
     def _validateInputs(
+        self,
         I1: Image,
         I2: Optional[Image],
         jmax: int,
@@ -102,6 +106,14 @@ class WfAlgorithm(ABC):
             If I1 or I2 are not square arrays, or if jmax < 4,
             or unsupported unit
         """
+        # Check if we require both images
+        if (I1 is None or I2 is None) and self.requiresPairs:
+            raise ValueError(
+                f"{self.__class__.__name__} requires a pair of "
+                "intrafocal and extrafocal donuts to estimate Zernikes. "
+                "Please provide both I1 and I2."
+            )
+
         # Validate I1
         if not isinstance(I1, Image):
             raise TypeError("I1 must be an Image object.")

@@ -19,7 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["plotZernike", "plotPupilMaskElements", "plotRoundTrip"]
+__all__ = [
+    "plotZernike",
+    "plotPupilMaskElements",
+    "plotRoundTrip",
+    "plotMapperResiduals",
+]
 
 from typing import Optional, Union
 
@@ -295,8 +300,6 @@ def plotMapperResiduals(
     opticalModel: str = "offAxis",
 ) -> None:
     """Plot the residuals between the ImageMapper and Batoid.
-
-    Note this
 
     Parameters
     ----------
