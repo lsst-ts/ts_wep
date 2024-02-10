@@ -12,7 +12,17 @@ batoidOffsetOptic: M2 # the name of the batoid element to offset (default = Dete
 batoidOffsetValue: 0.8e-3 # batoid offset in meter (default = defocalOffset)
 
 maskParams:
-  BaffleM2cInner:
-    thetaMin: 0.0
-    center: [4.7124e-2, 0.0]
-    radius: [0.2115]
+  Baffle_M2c:
+    outer:
+      clear: False
+      thetaMin: 0.000
+      thetaMax: 0.070
+      center: [1.76436e-02, -2.14325e-03, 7.62418e-05, -7.33609e-07]
+      radius: [-9.35307e-06, 5.25024e-03, 7.85571e-07, 2.11500e-01]
+  Baffle_M1:
+    outer:
+      clear: True
+      thetaMin: 0.000
+      thetaMax: 0.070
+      center: [5.17231e-02, -6.60999e-03, 2.58992e-04, -3.14404e-06]
+      radius: [-1.01508e-06, 7.02883e-07, 9.25226e-09, 6.00000e-01]

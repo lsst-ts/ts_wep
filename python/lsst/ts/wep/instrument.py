@@ -914,16 +914,22 @@ class Instrument:
         # If they don't exist, use the primary inner and outer radii
         if params is None:
             params = {
-                "pupilOuter": {
-                    "thetaMin": 0,
-                    "center": [0],
-                    "radius": [self.radius],
-                },
-                "pupilInner": {
-                    "thetaMin": 0,
-                    "center": [0],
-                    "radius": [self.obscuration],
-                },
+                "Pupil": {
+                    "outer": {
+                        "clear": True,
+                        "thetaMin": 0,
+                        "thetaMax": np.inf,
+                        "center": [0],
+                        "radius": [self.radius],
+                    },
+                    "inner": {
+                        "clear": False,
+                        "thetaMin": 0,
+                        "thetaMax": np.inf,
+                        "center": [0],
+                        "radius": [self.obscuration * self.radius],
+                    },
+                }
             }
 
         return params
@@ -960,6 +966,15 @@ class Instrument:
         else:
             raise TypeError("maskParams must be a dictionary or None.")
 
+    @property
+    def nPupilPixels(self) -> int:
+        """The number of pupil pixels (on a side).
+
+        This number is set so that the resolution of the pupil roughly
+        matches the resolution of the image.
+        """
+        return np.ceil(self.donutDiameter).astype(int)
+
     def createPupilGrid(self) -> Tuple[np.ndarray, np.ndarray]:
         """Create a grid for the pupil.
 
@@ -976,11 +991,8 @@ class Instrument:
         np.ndarray
             The 2D v-grid on the pupil plane
         """
-        # Set the resolution equal to the resolution of the image
-        nPixels = np.ceil(self.donutDiameter).astype(int)
-
         # Create a 1D array with the correct number of pixels
-        grid = np.linspace(-1.01, 1.01, nPixels)
+        grid = np.linspace(-1.01, 1.01, self.nPupilPixels)
 
         # Create u and v grids
         uPupil, vPupil = np.meshgrid(grid, grid)

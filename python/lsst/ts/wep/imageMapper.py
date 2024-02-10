@@ -706,49 +706,53 @@ class ImageMapper:
         mask = np.ones_like(uPupil)
 
         # Loop over each mask element
-        for key, val in maskParams.items():
-            # Get the indices of non-zero pixels
-            idx = np.nonzero(mask)[0]
+        for item in maskParams:
+            for edge in maskParams[item]:
+                # Get the params for this object
+                params = maskParams[item][edge]
 
-            # If all the pixels are zero, stop here
-            if not idx.any():
-                break
+                # Get the indices of non-zero pixels
+                idx = np.nonzero(mask)[0]
 
-            # Only apply this mask if we're past thetaMin
-            if rTheta < val["thetaMin"]:
-                continue
+                # If all the pixels are zero, stop here
+                if not idx.any():
+                    break
 
-            # Calculate the radius and center of the mask in meters
-            radius = np.polyval(val["radius"], rTheta)
-            rCenter = np.polyval(val["center"], rTheta)
+                # Only apply if we're in the theta range for this element
+                if rTheta < params["thetaMin"] or rTheta > params["thetaMax"]:
+                    continue
 
-            # Convert to normalized pupil coordinates
-            radius /= self.instrument.radius
-            rCenter /= self.instrument.radius
+                # Calculate the radius and center of the mask in meters
+                radius = np.polyval(params["radius"], rTheta)
+                rCenter = np.polyval(params["center"], rTheta)
 
-            # Use angle to convert radius to u and v components
-            uCenter = 0 if rTheta == 0 else rCenter * angle[0] / rTheta
-            vCenter = 0 if rTheta == 0 else rCenter * angle[1] / rTheta
+                # Convert to normalized pupil coordinates
+                radius /= self.instrument.radius
+                rCenter /= self.instrument.radius
 
-            # Calculate the mask values
-            maskVals = self._maskWithCircle(
-                uPupil=uPupil[idx],
-                vPupil=vPupil[idx],
-                uPupilCirc=uCenter,
-                vPupilCirc=vCenter,
-                rPupilCirc=radius,  # type: ignore
-                fwdMap=(
-                    None
-                    if fwdMap is None
-                    else (uImage[idx], vImage[idx], jac[..., idx], jacDet[idx])
-                ),
-            )
+                # Use angle to convert radius to u and v components
+                uCenter = 0 if rTheta == 0 else rCenter * angle[0] / rTheta
+                vCenter = 0 if rTheta == 0 else rCenter * angle[1] / rTheta
 
-            # Assign the mask values
-            if key.endswith("Inner"):
-                mask[idx] = np.minimum(mask[idx], 1 - maskVals)
-            else:
-                mask[idx] = np.minimum(mask[idx], maskVals)
+                # Calculate the mask values
+                maskVals = self._maskWithCircle(
+                    uPupil=uPupil[idx],
+                    vPupil=vPupil[idx],
+                    uPupilCirc=uCenter,
+                    vPupilCirc=vCenter,
+                    rPupilCirc=radius,  # type: ignore
+                    fwdMap=(
+                        None
+                        if fwdMap is None
+                        else (uImage[idx], vImage[idx], jac[..., idx], jacDet[idx])
+                    ),
+                )
+
+                # Assign the mask values
+                if params["clear"]:
+                    mask[idx] = np.minimum(mask[idx], maskVals)
+                else:
+                    mask[idx] = np.minimum(mask[idx], 1 - maskVals)
 
         return mask
 

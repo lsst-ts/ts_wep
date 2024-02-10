@@ -21,6 +21,7 @@
 
 __all__ = [
     "plotZernike",
+    "plotMaskFits",
     "plotPupilMaskElements",
     "plotRoundTrip",
     "plotMapperResiduals",
@@ -33,7 +34,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
-from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -66,8 +66,63 @@ def plotZernike(zkIdx, zk, unit, saveFilePath=None):
         plt.close()
 
 
+def plotMaskFits(fitDict: dict, dataDict: dict) -> None:
+    """Plot the results of the mask fitting.
+
+    This is meant to be used with the outputs of
+    lsst.ts.wep.utils.maskUtils.fitMaskModel.
+
+    Parameters
+    ----------
+    dict
+        The mask model dictionary created by fitMaskModel
+    dict
+        The mask data dictionary created by fitMaskModel
+    """
+    for item in dataDict:
+        for edge in dataDict[item]:
+            # Get the data and fit for this item
+            data = dataDict[item][edge]
+            fit = fitDict[item][edge]
+
+            # Create the figure
+            fig, (ax1, ax2) = plt.subplots(
+                1,
+                2,
+                constrained_layout=True,
+                figsize=(6, 3),
+            )
+
+            # Plot center on the left
+            ax1.scatter(data["theta"], data["center"], s=1)  # Data
+            ax1.plot(  # Fits
+                data["theta"],
+                np.polyval(fit["center"], data["theta"]),
+                ls="--",
+                c="C1",
+            )
+            ax1.set(xlabel="Angle (deg)", ylabel="Center (m)")
+
+            # Plot radius on the right
+            ax2.scatter(data["theta"], data["radius"], s=1)  # Data
+            ax2.plot(  # Fits
+                data["theta"],
+                np.polyval(fit["radius"], data["theta"]),
+                ls="--",
+                c="C1",
+            )
+            ax2.set(xlabel="Angle (deg)", ylabel="Radius (m)")
+
+            # Set the title
+            if len(dataDict[item]) > 1:
+                title = f"{item} {edge}"
+            else:
+                title = item
+            fig.suptitle(title)
+
+
 def plotPupilMaskElements(
-    instrument: Instrument,
+    maskParams: dict,
     fieldAngle: tuple,
     legend: bool = True,
     minimal: bool = True,
@@ -80,14 +135,15 @@ def plotPupilMaskElements(
 
     Parameters
     ----------
-    instrument : Instrument
-        The ts_wep instrument that contains the mask parameters.
+    maskParams : dict
+        The mask parameter dictionary. This can come from Instrument.maskParams,
+        or from the output of fitMaskModel.
     fieldAngle : tuple
         Tuple of x and y field angles in degrees.
     legend : bool, optional
         Whether to draw the legend. (the default is True)
     minimal : bool, optional
-        Whether to only draw the elements that presently determine the mask.
+        Whether to only draw the arcs that determine the pupil edge.
         (the default is True)
     ax : plt.Axes, optional
         A matplotlib axis to plot on. If None passed, plt.gca() is used.
@@ -103,56 +159,62 @@ def plotPupilMaskElements(
     innerR = []
     outerR = []
 
-    # Create an empty dictionary for the colors
-    colors = dict()
-
     # Make lists for plotting
-    keys = []
-    colorKeys = []
+    items = []
+    clear = []
+    colors = []
     xs = []
     ys = []
     rs = []
 
     # Loop over every mask element
-    for key, val in instrument.maskParams.items():
-        # Determine the color
-        colorKey = key.removesuffix("Outer").removesuffix("Inner")
-        if colorKey not in colors:
-            colors[colorKey] = f"C{len(colors)}"
+    for i, item in enumerate(maskParams):
+        for edge in maskParams[item]:
+            params = maskParams[item][edge]
 
-        # Skip elements for which we are not far enough out
-        if rTheta < val["thetaMin"]:
-            continue
+            # Skip elements for which we are not far enough out
+            if rTheta < 0.9 * params["thetaMin"]:
+                continue
 
-        # Calculate the radius and center of the mask in meters
-        radius = np.polyval(val["radius"], rTheta)
-        rCenter = np.polyval(val["center"], rTheta)
+            # Append the item name
+            if len(maskParams[item]) == 1:
+                items.append(item)
+            else:
+                items.append(f"{item} {edge}")
 
-        # Calculate x and y coordinates of the center
-        xCenter = 0 if rTheta == 0 else rCenter * fieldAngle[0] / rTheta
-        yCenter = 0 if rTheta == 0 else rCenter * fieldAngle[1] / rTheta
+            # Append whether the item is clear
+            clear.append(params["clear"])
 
-        # Calculate x and y of circle
-        # Using polar equation of a circle so points are gridded on theta
-        A = xCenter * np.cos(theta) + yCenter * np.sin(theta)
-        B = radius**2 - (xCenter**2 + yCenter**2) + A**2
-        with np.errstate(invalid="ignore"):
-            r = np.sqrt(B) + A
-        x = r * np.cos(theta)
-        y = r * np.sin(theta)
+            # Append the color
+            colors.append(f"C{i}")
 
-        # Save the radii to either the inner or outer lists
-        if "Inner" in key:
-            innerR.append(r)
-        else:
-            outerR.append(r)
+            # Calculate the radius and center of the mask in meters
+            radius = np.polyval(params["radius"], rTheta)
+            rCenter = np.polyval(params["center"], rTheta)
 
-        # Save the values for plotting
-        keys.append(key)
-        colorKeys.append(colorKey)
-        xs.append(x)
-        ys.append(y)
-        rs.append(r)
+            # Calculate x and y coordinates of the center
+            xCenter = 0 if rTheta == 0 else rCenter * fieldAngle[0] / rTheta
+            yCenter = 0 if rTheta == 0 else rCenter * fieldAngle[1] / rTheta
+
+            # Calculate x and y of circle
+            # Using polar equation of a circle so points are gridded on theta
+            A = xCenter * np.cos(theta) + yCenter * np.sin(theta)
+            B = radius**2 - (xCenter**2 + yCenter**2) + A**2
+            with np.errstate(invalid="ignore"):
+                r = np.sqrt(B) + A
+            x = r * np.cos(theta)
+            y = r * np.sin(theta)
+
+            # Save the radii to either the inner or outer lists
+            if params["clear"]:
+                outerR.append(r)
+            else:
+                innerR.append(r)
+
+            # Save the values for plotting
+            xs.append(x)
+            ys.append(y)
+            rs.append(r)
 
     # Fill dummy values if inner or outer radii are missing
     innerR = [np.full_like(theta, 0)] if len(innerR) == 0 else innerR
@@ -174,15 +236,12 @@ def plotPupilMaskElements(
     ax.fill(xIn, yIn, "w")
 
     # Loop over elements for plotting
-    for key, colorKey, x, y, r in zip(keys, colorKeys, xs, ys, rs):
-        # Determine the color
-        c = colors[colorKey]
-
+    for item, c, color, x, y, r in zip(items, clear, colors, xs, ys, rs):
         # Determine the line style
-        ls = "--" if "Inner" in key else "-"
+        ls = "-" if c else "--"
 
         if not minimal:
-            ax.plot(x, y, ls=ls, c=c, label=key)
+            ax.plot(x, y, ls=ls, c=color, label=item)
             continue
 
         # Determine which points to plot
@@ -194,10 +253,10 @@ def plotPupilMaskElements(
         cutPoints = np.where(np.diff(idx) != 1)[0] + 1
         splits = np.split(idx, cutPoints)
         for split in splits:
-            ax.plot(x[split], y[split], ls=ls, c=c)
+            ax.plot(x[split], y[split], ls=ls, c=color)
 
         # Add legend for this element
-        ax.plot([], [], ls=ls, c=c, label=key)
+        ax.plot([], [], ls=ls, c=color, label=item)
 
     # Set the limits, axis labels, and title
     rmax = np.abs(outerR).max()
