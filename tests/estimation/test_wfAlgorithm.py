@@ -36,10 +36,44 @@ class TestWfAlgorithm(unittest.TestCase):
         self.assertEquals(
             str(err.exception),
             "Can't instantiate abstract class WfAlgorithm with "
-            + "abstract method estimateZk",
+            + "abstract methods _estimateZk, requiresPairs",
+        )
+
+    def testHistDocstringRequired(self):
+        with self.assertRaises(AttributeError) as err:
+
+            class DummyWfAlg(WfAlgorithm):
+                @property
+                def requiresPairs(self) -> bool:
+                    return False
+
+                def _estimateZk(self, *args, **kwargs) -> np.ndarray:
+                    return np.zeros(19)
+
+        self.assertEquals(
+            str(err.exception),
+            "When subclassing WfAlgorithm you must write a docstring "
+            + "for the history property. Please use this to describe "
+            + "the contents of the history dictionary.",
         )
 
     def testValidateInputs(self):
+        # Create a dummy WfAlgorithm class
+        class DummyWfAlg(WfAlgorithm):
+            @property
+            def requiresPairs(self) -> bool:
+                return False
+
+            @property
+            def history(self) -> dict:
+                """Docstring"""
+                return super().history
+
+            def _estimateZk(self, *args, **kwargs) -> np.ndarray:
+                return np.zeros(19)
+
+        wfAlg = DummyWfAlg()
+
         # Create some dummy inputs
         intra = Image(
             image=np.zeros((180, 180)),
@@ -53,49 +87,110 @@ class TestWfAlgorithm(unittest.TestCase):
         )
 
         # Test good inputs
-        WfAlgorithm._validateInputs(intra, None, 28, Instrument())
-        WfAlgorithm._validateInputs(intra, extra, 28, Instrument())
+        goodSettings = {
+            "I1": intra,
+            "I2": extra,
+            "jmax": 28,
+            "instrument": Instrument(),
+            "startWithIntrinsic": True,
+            "returnWfDev": False,
+            "units": "m",
+            "saveHistory": True,
+        }
+        wfAlg._validateInputs(**goodSettings)
+
+        # Test that I2 can be None
+        testSettings = goodSettings.copy()
+        testSettings["I2"] = None
+        wfAlg._validateInputs(**testSettings)
 
         # Test I1 not an Image
+        testSettings = goodSettings.copy()
+        testSettings["I1"] = None
         with self.assertRaises(TypeError):
-            WfAlgorithm._validateInputs("fake", None, 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
 
         # Test bad I1 shape
         rect1 = intra.copy()
         rect1._image = np.zeros((10, 180))
+        testSettings = goodSettings.copy()
+        testSettings["I1"] = rect1
         with self.assertRaises(ValueError):
-            WfAlgorithm._validateInputs(rect1, None, 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
 
         rect2 = intra.copy()
         rect2._image = np.zeros((180, 180, 180))
+        testSettings = goodSettings.copy()
+        testSettings["I1"] = rect2
         with self.assertRaises(ValueError):
-            WfAlgorithm._validateInputs(rect2, None, 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
 
         # Test I2 not an image
+        testSettings = goodSettings.copy()
+        testSettings["I2"] = "fake"
         with self.assertRaises(TypeError):
-            WfAlgorithm._validateInputs(intra, "fake", 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
 
         # Test bad I2 shape
+        testSettings = goodSettings.copy()
+        testSettings["I2"] = rect1
         with self.assertRaises(ValueError):
-            WfAlgorithm._validateInputs(intra, rect1, 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
+        testSettings["I2"] = rect2
         with self.assertRaises(ValueError):
-            WfAlgorithm._validateInputs(intra, rect2, 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
 
         # Test I1 and I2 same side of focus
+        testSettings = goodSettings.copy()
+        testSettings["I2"] = intra
         with self.assertRaises(ValueError):
-            WfAlgorithm._validateInputs(intra, intra, 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
+        testSettings = goodSettings.copy()
+        testSettings["I1"] = extra
         with self.assertRaises(ValueError):
-            WfAlgorithm._validateInputs(extra, extra, 28, Instrument())
+            wfAlg._validateInputs(**testSettings)
 
         # Test bad jmax
+        testSettings = goodSettings.copy()
+        testSettings["jmax"] = "fake"
         with self.assertRaises(TypeError):
-            WfAlgorithm._validateInputs(intra, extra, "fake", Instrument())
+            wfAlg._validateInputs(**testSettings)
+        testSettings["jmax"] = 3
         with self.assertRaises(ValueError):
-            WfAlgorithm._validateInputs(intra, extra, 3, Instrument())
+            wfAlg._validateInputs(**testSettings)
 
         # Test bad instrument
+        testSettings = goodSettings.copy()
+        testSettings["instrument"] = "fake"
         with self.assertRaises(TypeError):
-            WfAlgorithm._validateInputs(intra, extra, 28, "fake")
+            wfAlg._validateInputs(**testSettings)
+
+        # Test bad startWithIntrinsic
+        testSettings = goodSettings.copy()
+        testSettings["startWithIntrinsic"] = "fake"
+        with self.assertRaises(TypeError):
+            wfAlg._validateInputs(**testSettings)
+
+        # Test bad returnWfDev
+        testSettings = goodSettings.copy()
+        testSettings["returnWfDev"] = "fake"
+        with self.assertRaises(TypeError):
+            wfAlg._validateInputs(**testSettings)
+
+        # Test bad units
+        testSettings = goodSettings.copy()
+        testSettings["units"] = -1
+        with self.assertRaises(TypeError):
+            wfAlg._validateInputs(**testSettings)
+        testSettings["units"] = "ergs"
+        with self.assertRaises(ValueError):
+            wfAlg._validateInputs(**testSettings)
+
+        # Test bad saveHistory
+        testSettings = goodSettings.copy()
+        testSettings["saveHistory"] = "fake"
+        with self.assertRaises(TypeError):
+            wfAlg._validateInputs(**testSettings)
 
 
 if __name__ == "__main__":

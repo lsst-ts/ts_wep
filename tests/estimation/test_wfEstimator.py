@@ -94,12 +94,6 @@ class TestWfEstimator(unittest.TestCase):
                 )
             )
 
-            # Test a bad unit
-            wfEst = WfEstimator(algoName=name)
-            wfEst._units = "fake"
-            with self.assertRaises(RuntimeError):
-                wfEst.estimateZk(intra, extra)
-
 
 if __name__ == "__main__":
     # Do the unit test

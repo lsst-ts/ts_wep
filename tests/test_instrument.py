@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 from batoid.optic import CompoundOptic
 from lsst.ts.wep.instrument import Instrument
-from lsst.ts.wep.utils import getConfigDir, getModulePath
+from lsst.ts.wep.utils import getConfigDir
 
 
 class TestInstrument(unittest.TestCase):
@@ -36,11 +36,10 @@ class TestInstrument(unittest.TestCase):
 
     def testCreateFromAllPolicyFiles(self):
         instConfigPath = Path(getConfigDir()) / "instruments"
-        paths = instConfigPath.glob("*")
+        paths = instConfigPath.glob("*.yaml")
 
         for path in paths:
-            path = str(path.relative_to(getModulePath()))
-            Instrument(path)
+            Instrument(str(path))
 
     def testBadDiameter(self):
         with self.assertRaises(ValueError):
@@ -98,19 +97,11 @@ class TestInstrument(unittest.TestCase):
         with self.assertRaises(ValueError):
             Instrument(batoidOffsetOptic="fake")
 
-    def testDefaultBatoidOffsetOptic(self):
-        inst = Instrument(batoidOffsetOptic=None)
-        self.assertEqual(inst.batoidOffsetOptic, "Detector")
-
     def testBadBatoidOffsetValue(self):
         with self.assertRaises(RuntimeError):
             inst = Instrument()
             inst.batoidModelName = None
             inst.batoidOffsetValue = 1
-
-    def testDefaultBatoidOffsetValue(self):
-        inst = Instrument(batoidOffsetValue=None)
-        self.assertEqual(inst.batoidOffsetValue, inst.defocalOffset)
 
     def testGetIntrinsicZernikes(self):
         inst = Instrument()
@@ -120,10 +111,10 @@ class TestInstrument(unittest.TestCase):
         self.assertEqual(inst.getIntrinsicZernikes(1, 2, jmax=22).shape, (19,))
 
         # Now check that in-place changes don't impact the cache
-        intrZk = inst.getIntrinsicZernikes(0, 0)
+        intrZk = inst.getIntrinsicZernikes(1, 1)
         intrZk *= 3.14159
-        close = np.isclose(inst.getIntrinsicZernikes(0, 0), intrZk, atol=0)
-        self.assertTrue(np.all(~close))
+        close = np.isclose(inst.getIntrinsicZernikes(1, 1), intrZk, atol=0)
+        self.assertFalse(np.any(close))
 
     def testGetOffAxisCoeff(self):
         inst = Instrument()

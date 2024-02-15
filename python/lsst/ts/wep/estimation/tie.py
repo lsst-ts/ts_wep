@@ -33,6 +33,10 @@ from lsst.ts.wep.utils import DefocalType, createZernikeBasis, createZernikeGrad
 class TieAlgorithm(WfAlgorithm):
     """Wavefront estimation algorithm class for the TIE solver.
 
+    The following sources discuss the details of the TIE algorithm:
+    - https://sitcomtn-111.lsst.io
+    - Xin (2015): http://arxiv.org/abs/1506.04839
+
     Parameters
     ----------
     opticalModel : str, optional
@@ -440,7 +444,8 @@ class TieAlgorithm(WfAlgorithm):
             instrument.obscuration,
         )
 
-        # Calculate quantities for the linear equation
+        # Calculate quantities for the linear system
+        # See Equations 43-45 of https://sitcomtn-111.lsst.io
         b = np.einsum("ab,jab->j", dIdz, zk, optimize=True)
         M = np.einsum("ab,jab,kab->jk", I0, dzkdu, dzkdu, optimize=True)
         M += np.einsum("ab,jab,kab->jk", I0, dzkdv, dzkdv, optimize=True)
@@ -525,6 +530,7 @@ class TieAlgorithm(WfAlgorithm):
         zkCenter = np.zeros_like(zkComp)  # Zernikes for centering the image
         zkResid = np.zeros_like(zkComp)  # Residual Zernikes after compensation
         zkBest = np.zeros_like(zkComp)  # Current best Zernike estimate
+        zkSum = np.zeros_like(zkComp)  # Current best + starting Zernikes
 
         # Get the compensation sequence
         compSequence = iter(self.compSequence)

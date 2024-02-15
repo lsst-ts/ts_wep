@@ -136,8 +136,8 @@ def plotPupilMaskElements(
     Parameters
     ----------
     maskParams : dict
-        The mask parameter dictionary. This can come from Instrument.maskParams,
-        or from the output of fitMaskModel.
+        The mask parameter dictionary. This can come from
+        Instrument.maskParams or from the output of fitMaskModel.
     fieldAngle : tuple
         Tuple of x and y field angles in degrees.
     legend : bool, optional

@@ -34,11 +34,6 @@ tasks:
     config:
       connections.donutCatalog: "directDetectDonutCatalog"
       connections.exposure: "preFitPostISRCCD"
-      instObscuration: 0.61
-      instFocalLength: 10.312
-      instApertureDiameter: 8.36
-      instDefocalOffset: 1.5
-      instPixelSize: 10.0e-6
   generateDonutFromRefitWcsTask:
     class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
     config:

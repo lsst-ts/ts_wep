@@ -72,10 +72,6 @@ class TestTieAlgorithm(unittest.TestCase):
         with self.assertRaises(ValueError):
             TieAlgorithm(opticalModel="fake")
 
-    def testBadSolver(self):
-        with self.assertRaises(ValueError):
-            TieAlgorithm(solver="fake")
-
     def testBadMaxIter(self):
         with self.assertRaises(TypeError):
             TieAlgorithm(maxIter=10.2)
@@ -102,10 +98,6 @@ class TestTieAlgorithm(unittest.TestCase):
         with self.assertRaises(TypeError):
             TieAlgorithm(maskKwargs="fake")
 
-    def testBadSaveHistory(self):
-        with self.assertRaises(TypeError):
-            TieAlgorithm(saveHistory="fake")
-
     def testAccuracy(self):
         # Get the test data
         zkTrue, intra, extra = self._createData()
@@ -130,16 +122,28 @@ class TestTieAlgorithm(unittest.TestCase):
         self.assertEqual(len(hist), 0)
 
         # Estimate again while saving the history
-        tie = TieAlgorithm(saveHistory=True)
-        tie.estimateZk(intra, extra)
+        tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         self.assertIsInstance(hist, dict)
 
         # Check contents of the first entry
         iter0 = hist.pop(0)
-        self.assertEqual(list(iter0.keys()), ["intraInit", "extraInit"])
+        self.assertEqual(
+            list(iter0.keys()),
+            [
+                "intraInit",
+                "extraInit",
+                "zkStartIntra",
+                "zkStartExtra",
+                "zkStartMean",
+            ],
+        )
+        # All entries should all be arrays
         self.assertIsInstance(iter0["intraInit"], np.ndarray)
         self.assertIsInstance(iter0["extraInit"], np.ndarray)
+        self.assertIsInstance(iter0["zkStartIntra"], np.ndarray)
+        self.assertIsInstance(iter0["zkStartExtra"], np.ndarray)
+        self.assertIsInstance(iter0["zkStartMean"], np.ndarray)
 
         # Check the subsequent iterations of the algorithm
         contents = {
@@ -151,9 +155,11 @@ class TestTieAlgorithm(unittest.TestCase):
             "mask": np.ndarray,
             "I0": np.ndarray,
             "dIdz": np.ndarray,
-            "zkComp": np.ndarray,
+            "zkCompIntra": np.ndarray,
+            "zkCompExtra": np.ndarray,
             "zkResid": np.ndarray,
             "zkBest": np.ndarray,
+            "zkSum": np.ndarray,
             "converged": bool,
             "caustic": bool,
         }
@@ -168,8 +174,8 @@ class TestTieAlgorithm(unittest.TestCase):
     def testRecenter(self):
         # Run the algorithm with no recenter tolerance
         zkTrue, intra, extra = self._createData()
-        tie = TieAlgorithm(centerTol=0, saveHistory=True)
-        tie.estimateZk(intra, extra)
+        tie = TieAlgorithm(centerTol=0)
+        tie.estimateZk(intra, extra, saveHistory=True)
 
         # Check that every iteration recentered
         hist = tie.history
@@ -179,8 +185,8 @@ class TestTieAlgorithm(unittest.TestCase):
             self.assertFalse(np.allclose(hist[i]["extraCent"], hist[1]["extraCent"]))
 
         # Run the algorithm with infinite recenter tolerance
-        tie = TieAlgorithm(centerTol=np.inf, saveHistory=True)
-        tie.estimateZk(intra, extra)
+        tie = TieAlgorithm(centerTol=np.inf)
+        tie.estimateZk(intra, extra, saveHistory=True)
 
         # Check that every iteration recentered
         hist = tie.history
@@ -193,8 +199,8 @@ class TestTieAlgorithm(unittest.TestCase):
         zkTrue, intra, extra = self._createData()
 
         # TIE with zero tolerance; check number of iterations matches maxIter
-        tie = TieAlgorithm(saveHistory=True, convergeTol=0)
-        tie.estimateZk(intra, extra)
+        tie = TieAlgorithm(convergeTol=0)
+        tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         self.assertEqual(len(hist), tie.maxIter + 1)
 
@@ -206,8 +212,8 @@ class TestTieAlgorithm(unittest.TestCase):
         # on compSequence, because the algorithm can't converge until all
         # Zernikes are being compensated, so we will have to search where jmax
         # lies in the compSequence
-        tie = TieAlgorithm(saveHistory=True, convergeTol=np.inf)
-        zkEst = tie.estimateZk(intra, extra)
+        tie = TieAlgorithm(convergeTol=np.inf)
+        zkEst = tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         jmax = len(zkEst) + 3
         compAll = np.where(tie.compSequence >= jmax)[0]
@@ -225,8 +231,8 @@ class TestTieAlgorithm(unittest.TestCase):
         zkTrue, intra, extra = self._createData()
 
         # Use a huge gain to force a caustic
-        tie = TieAlgorithm(saveHistory=True, compGain=10)
-        tie.estimateZk(intra, extra)
+        tie = TieAlgorithm(compGain=10)
+        tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         finalIter = hist[max(hist)]
 
@@ -247,14 +253,14 @@ class TestTieAlgorithm(unittest.TestCase):
         intra.blendOffsets = [[40, 50]]
 
         # Run TIE with no blend masking
-        tie = TieAlgorithm(saveHistory=True)
-        tie.estimateZk(intra, extra)
+        tie = TieAlgorithm()
+        tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         mask1 = hist[max(hist)]["mask"]
 
         # Run TIE with with blend masking
-        tie = TieAlgorithm(saveHistory=True, maskKwargs=dict(maskBlends=True))
-        tie.estimateZk(intra, extra)
+        tie = TieAlgorithm(maskKwargs=dict(maskBlends=True))
+        tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         mask2 = hist[max(hist)]["mask"]
 

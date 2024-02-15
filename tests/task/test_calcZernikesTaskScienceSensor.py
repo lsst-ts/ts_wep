@@ -25,8 +25,8 @@ import lsst.utils.tests
 import numpy as np
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task import (
-    CalcZernikesTaskConfig,
     CalcZernikesTask,
+    CalcZernikesTaskConfig,
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
 )

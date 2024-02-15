@@ -284,7 +284,6 @@ class DonutStamp(AbstractStamp):
         opticalModel="offAxis",
         dilate=0,
         dilateBlends=0,
-        maskBlends=True,
     ):
         """Create the mask for the image.
 
@@ -310,15 +309,9 @@ class DonutStamp(AbstractStamp):
             model.
         dilate : int, optional
             How many times to dilate the central mask. This adds a boundary
-            of that many pixels to the mask. Note this is not an option if
-            binary==False. (the default is 0)
+            of that many pixels to the mask. (the default is 0)
         dilateBlends : int, optional
-            How many times to dilate the blended masks. Note this only matters
-            if maskBlends==True, and is not an option if binary==False.
-            (the default is 0)
-        maskBlends : bool, optional
-            Whether to mask the blends (i.e. the blended regions are masked
-            out). (the default is True)
+            How many times to dilate the blend mask.
         """
         # Create the image mapper
         imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
@@ -329,12 +322,13 @@ class DonutStamp(AbstractStamp):
             binary=True,
             dilate=dilate,
             dilateBlends=dilateBlends,
-            maskBlends=maskBlends,
+            maskBlends=False,
         )
+        maskSource, maskBlends, maskBackground = self.wep_im.masks
 
-        # Create the stamp mask from the mask components
-        stampMask = self.wep_im.mask.copy()
-        stampMask[self.wep_im.maskBlends > 0] = -1
+        # Create a mask for the stamp with blended regions highlighted
+        stampMask = maskSource + 2 * maskBlends
+        stampMask = stampMask.astype(np.int32)
 
         # This mask is in the CCS with the CWFSs de-rotated (see the docstring
         # for self._setWepImage()). We need to put it back in the coordinate
@@ -351,10 +345,13 @@ class DonutStamp(AbstractStamp):
         stampMask = np.rot90(stampMask, -nRot)
 
         # Set the mask
-        mask = afwImage.Mask(stampMask.astype(np.int32).copy())
+        mask = afwImage.Mask(stampMask.copy())
+        mask.clearMaskPlaneDict()
+        mask.addMaskPlane("BKGRD")
+        mask.addMaskPlane("DONUT")
+        mask.addMaskPlane("OTHER")
+        mask.addMaskPlane("BLEND")
         self.stamp_im.setMask(mask)
-        self.stamp_im.mask.clearMaskPlaneDict()
-        self.stamp_im.mask.conformMaskPlanes({"BKGRD": 0, "DONUT": 1, "BLEND": -1})
 
     def getLinearWCS(self):
         """

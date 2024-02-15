@@ -490,12 +490,12 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata) -> dict:
         if "." in metadata:
             try:
                 metadata = float(metadata)
-            except:
+            except:  # noqa: E722
                 pass
         else:
             try:
                 metadata = int(metadata)
-            except:
+            except:  # noqa: E722
                 pass
 
     return metadata

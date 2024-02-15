@@ -38,6 +38,9 @@ class ImageMapper:
 
     This class also creates image masks.
 
+    Details mapping between the pupil and image planes are derived
+    and discussed in https://sitcomtn-111.lsst.io
+
     Parameters
     ----------
     instConfig : str or dict or Instrument, optional
@@ -238,6 +241,8 @@ class ImageMapper:
             # systems near the optical axis. This model is never recommended,
             # but is here for testing purposes
 
+            # See Equations 13 and 18 of https://sitcomtn-111.lsst.io
+
             # Determine defocal sign from the image plane at z = f +/- l
             # I.e., the extrafocal image at z = f + l is associated with +1,
             # and the intrafocal image at z = f - l is associated with -1.
@@ -259,6 +264,8 @@ class ImageMapper:
         elif self.opticalModel == "onAxis":
             # The onAxis model is analytic and intended for fast optical
             # systems near the optical axis
+
+            # See Equations 12 and 16 of https://sitcomtn-111.lsst.io
 
             # Determine defocal sign from the image plane at z = f +/- l
             # I.e., the extrafocal image at z = f + l is associated with +1,
@@ -286,6 +293,8 @@ class ImageMapper:
             # This model is able to account for wide field distortion effects
             # in fast optical systems, however it is generally applicable to
             # all optical systems for which you have a good Batoid model
+
+            # See Equation 21 of https://sitcomtn-111.lsst.io
 
             # Calculate the pieces we will use below
             A = np.sqrt(4 * N**2 - 1)
@@ -507,6 +516,13 @@ class ImageMapper:
         fwdMap: Optional[tuple] = None,
     ) -> np.ndarray:
         """Return a fractional mask for a single circle.
+
+        This is based on the masking model in Danish:
+        https://github.com/jmeyers314/danish
+        which is an improvement on the masking model from Janish (2012):
+        http://hdl.handle.net/1721.1/78543
+        These improvements are discussed in Section 2.1 of
+        https://sitcomtn-111.lsst.io
 
         Parameters
         ----------

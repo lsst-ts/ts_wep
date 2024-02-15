@@ -38,21 +38,20 @@ class WfAlgorithm(ABC):
 
     """
 
-    def __init_subclass__(self) -> None:
+    def __init_subclass__(cls) -> None:
         """This is called when you subclass."""
-        if self.history.__doc__ is None:
+        if cls.history.__doc__ is None:
             raise AttributeError(
                 "When subclassing WfAlgorithm you must write a docstring for "
                 "the history property. Please use this to describe the contents "
                 "of the history dictionary."
             )
 
-        if getattr(self, "requiresPairs", None) is None:
-            raise AttributeError(
-                "When subclassing WfAlgorithm you must define the requiresPairs "
-                "property. This indicates whether the algorithm can operate on "
-                "individual donuts or requires pairs of donuts."
-            )
+    @property
+    @abstractmethod
+    def requiresPairs(self) -> bool:
+        """Whether the algorithm requires pairs to estimate Zernikes."""
+        ...
 
     @property
     def history(self) -> dict:
@@ -152,7 +151,7 @@ class WfAlgorithm(ABC):
         # Validate units
         if not isinstance(units, str):
             raise TypeError("units must be a str.")
-        allowedUnits = ["m", "nm", "um", "arcseconds"]
+        allowedUnits = ["m", "nm", "um", "arcsecs"]
         if units not in allowedUnits:
             raise ValueError(f"units must be one of {allowedUnits}")
 
@@ -323,10 +322,10 @@ class WfAlgorithm(ABC):
         elif units == "arcsecs":
             zk = convertZernikesToPsfWidth(
                 zernikes=zk,
-                diameter=self.instrument.diameter,
-                obscuration=self.instrument.obscuration,
+                diameter=instrument.diameter,
+                obscuration=instrument.obscuration,
             )
-        else:
+        else:  # pragma: no cover
             raise RuntimeError(f"Conversion to unit '{units}' not supported.")
 
         # Pad array so that array index = Noll index?

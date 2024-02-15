@@ -28,7 +28,7 @@ from lsst.ts.wep import Instrument
 from lsst.ts.wep.utils import (
     createTemplateForDetector,
     getCameraFromButlerName,
-    getInstrumentFromButlerName,
+    getTaskInstrument,
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
@@ -126,7 +126,7 @@ class TestTaskUtils(unittest.TestCase):
             getCameraFromButlerName(badCamType)
         self.assertEqual(str(context.exception), errMsg)
 
-    def testGetInstrumentFromButlerName(self):
+    def testGetTaskInstrument(self):
         # def a function to compare two instruments
         def assertInstEqual(inst1, inst2):
             # Get the attributes to test
@@ -140,18 +140,35 @@ class TestTaskUtils(unittest.TestCase):
                 val2 = getattr(inst2, attr)
                 self.assertEqual(val1, val2)
 
-        assertInstEqual(getInstrumentFromButlerName("LSSTCam"), Instrument())
+        # Test the defaults
+        assertInstEqual(getTaskInstrument("LSSTCam"), Instrument())
         assertInstEqual(
-            getInstrumentFromButlerName("LSSTComCam"),
+            getTaskInstrument("LSSTComCam"),
             Instrument(configFile="policy:instruments/ComCam.yaml"),
         )
         assertInstEqual(
-            getInstrumentFromButlerName("LATISS"),
+            getTaskInstrument("LATISS"),
             Instrument(configFile="policy:instruments/AuxTel.yaml"),
         )
 
+        # Test override config file
+        assertInstEqual(
+            getTaskInstrument(
+                "LSSTCam", instConfigFile="policy:instruments/AuxTel.yaml"
+            ),
+            Instrument(configFile="policy:instruments/AuxTel.yaml"),
+        )
+
+        # Test override defocal offset (in mm)
+        inst = Instrument()
+        inst.defocalOffset = 1.234e-3
+        assertInstEqual(
+            getTaskInstrument("LSSTCam", offset=1.234),
+            inst,
+        )
+
         with self.assertRaises(ValueError):
-            getCameraFromButlerName("fake")
+            getTaskInstrument("fake")
 
     def testCreateTemplateForDetector(self):
         # Get the LSST camera

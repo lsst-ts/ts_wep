@@ -121,7 +121,7 @@ class CutOutDonutsBaseTaskConfig(
         optional=True,
     )
     multiplyMask = pexConfig.Field(
-        doc="Multiply the mask with the postage stamp before saving.",
+        doc="Multiply the stamp by the source donut mask before saving.",
         dtype=bool,
         default=False,
     )
@@ -434,8 +434,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             donutStamp.makeMask(instrument, self.opticalModel)
 
             if (self.multiplyMask is True) and blendExists:
-                donutStamp.stamp_im.image.array *= donutStamp.stamp_im.mask.array
-
+                stampMask = donutStamp.stamp_im.mask
+                sourceMask = stampMask.array == stampMask.getMaskPlane("DONUT")
+                donutStamp.stamp_im.image.array *= sourceMask
             finalStamps.append(donutStamp)
 
         catalogLength = len(donutCatalog)

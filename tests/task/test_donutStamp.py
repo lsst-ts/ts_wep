@@ -247,7 +247,10 @@ class TestDonutStamp(unittest.TestCase):
         # Check masks after creation
         donutStamp.makeMask(Instrument())
         mask = donutStamp.stamp_im.mask
-        self.assertDictEqual({"BKGRD": 0, "DONUT": 1}, mask.getMaskPlaneDict())
+        self.assertDictEqual(
+            {"BKGRD": 0, "DONUT": 1, "OTHER": 2, "BLEND": 3},
+            mask.getMaskPlaneDict(),
+        )
 
         # Make sure not just an empty array
         self.assertGreater(mask.array.sum(), 0)
@@ -302,13 +305,6 @@ class TestDonutStamp(unittest.TestCase):
                 donutStamp.stamp_im.image.array,
             )
             self.assertTrue(sameImage)
-
-            # And to the mask
-            sameMask = np.allclose(
-                rotate(wepImage.mask.T, eulerZ),
-                donutStamp.stamp_im.mask.array,
-            )
-            self.assertTrue(sameMask)
 
             # Check that the field angle is correct
             center = np.rad2deg(detector.getCenter(FIELD_ANGLE))
