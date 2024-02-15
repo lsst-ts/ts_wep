@@ -1,6 +1,5 @@
 @startuml
-Algorithm *-- Instrument
-Algorithm -- CompensableImage
-BaseCwfsTestCase ..> CompensableImage
-BaseCwfsTestCase ..> Algorithm
+WfAlgorithm <|-- TieAlgorithm
+WfAlgorithmFactory ..> TieAlgorithm
+WfEstimator *-- WfAlgorithmFactory
 @enduml
