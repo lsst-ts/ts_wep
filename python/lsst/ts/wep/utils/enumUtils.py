@@ -26,7 +26,6 @@ __all__ = [
     "CentroidFindType",
     "DeblendDonutType",
     "DefocalType",
-    "DonutTemplateType",
     "ImageType",
     "PlaneType",
     "WfAlgorithmName",
@@ -82,11 +81,6 @@ class DeblendDonutType(Enum):
 class DefocalType(Enum):
     Intra = "intra"
     Extra = "extra"
-
-
-class DonutTemplateType(Enum):
-    Model = "model"
-    Phosim = "phosim"
 
 
 class ImageType(Enum):
