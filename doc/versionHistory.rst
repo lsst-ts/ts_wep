@@ -26,6 +26,7 @@ This is a big backwards-incompatible refactor of WEP. The major changes are:
 * When estimating Zernikes, the maximum Noll index (jmax) is now a configurable parameter (``maxNollIndex`` in ``EstimateZernikesBaseConfig``). You can also toggle whether estimation starts from zero or from the telescope's instrinsic Zernikes. You can toggle whether the task returns the full optical path difference (OPD) or just the wavefront deviation (OPD - intrinsic Zernikes). You can toggle whether the returned Zernikes start with Noll index 4 (the previous standard), or with index 0 (matching the Galsim convention). You can also set the units of the returned Zernikes.
 * The algorithm history can now be saved at the Task level using the ``saveHistory`` option in ``EstimateZernikesBaseConfig``. The history is saved in the task metadata in a json-compatible format. To convert the history back to the native format, use `utils.convertMetadataToHistory`.
 * The AuxTel/LATISS unit tests have been fixed, and the LATISS Zernike calculation test has been explicitly switched to a regression test (rather than an accuracy test).
+* Enum's now map to strings instead of integers. This natural Enum-string connection replaces the various utils that previously existed to map between Enums and strings.
 
 .. _lsst.ts.wep-8.3.1:
 
