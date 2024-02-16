@@ -147,7 +147,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         )
         if not np.allclose(defocalOffsets[0], defocalOffsets):
             warnings.warn(
-                "Defocal offsets are not all the same. "
+                "Defocal offsets are not all the same. The mean is being used instead. "
                 f"Range is from {defocalOffsets.min()} to {defocalOffsets.max()} mm."
             )
 
