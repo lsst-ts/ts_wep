@@ -125,7 +125,7 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         """THIS DOES NOT TEST ZERNIKE ACCURACY!!!
 
         This only tests to see if software changes result in different
-        Zernikes. If that is expected and okay, you can change the test 
+        Zernikes. If that is expected and okay, you can change the test
         values below.
         """
         donutStampsExtra = self.butler.get(
@@ -145,27 +145,29 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         )
 
         # Previous Zernikes for regression test
-        zk = np.array([
-            -0.00283742,
-            0.12024323,
-            -0.05781533,
-            -0.00683463,
-            -0.01198631,
-            0.03911933,
-            -0.07739852,
-            -0.0307383,
-            0.0114996,
-            -0.00157382,
-            -0.00154171,
-            -0.00857287,
-            0.00426482,
-            -0.00160444,
-            0.01318693,
-            -0.00538555,
-            -0.02333674,
-            -0.02252251,
-            0.00943855,
-        ])
+        zk = np.array(
+            [
+                -0.00283742,
+                0.12024323,
+                -0.05781533,
+                -0.00683463,
+                -0.01198631,
+                0.03911933,
+                -0.07739852,
+                -0.0307383,
+                0.0114996,
+                -0.00157382,
+                -0.00154171,
+                -0.00857287,
+                0.00426482,
+                -0.00160444,
+                0.01318693,
+                -0.00538555,
+                -0.02333674,
+                -0.02252251,
+                0.00943855,
+            ]
+        )
 
         self.assertTrue(np.allclose(zk, zernCoeff.outputZernikesRaw[0]))
 
