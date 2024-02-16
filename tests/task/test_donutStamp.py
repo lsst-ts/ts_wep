@@ -247,10 +247,9 @@ class TestDonutStamp(unittest.TestCase):
         # Check masks after creation
         donutStamp.makeMask(Instrument())
         mask = donutStamp.stamp_im.mask
-        self.assertDictEqual(
-            {"BKGRD": 0, "DONUT": 1, "OTHER": 2, "BLEND": 3},
-            mask.getMaskPlaneDict(),
-        )
+
+        maskKeys = mask.getMaskPlaneDict().keys()
+        self.assertTrue({"BKGRD", "DONUT", "BLEND", "OTHER"} <= maskKeys)
 
         # Make sure not just an empty array
         self.assertGreater(mask.array.sum(), 0)

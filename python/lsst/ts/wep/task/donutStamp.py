@@ -327,6 +327,11 @@ class DonutStamp(AbstractStamp):
         maskSource, maskBlends, maskBackground = self.wep_im.masks
 
         # Create a mask for the stamp with blended regions highlighted
+        # In this array:
+        # 0 = background
+        # 1 = unblended regions of source donut
+        # 2 = unblended regions of other donuts
+        # 3 = blended regions of source & other donuts
         stampMask = maskSource + 2 * maskBlends
         stampMask = stampMask.astype(np.int32)
 
@@ -344,14 +349,29 @@ class DonutStamp(AbstractStamp):
         nRot = int(eulerZ // 90)
         stampMask = np.rot90(stampMask, -nRot)
 
-        # Set the mask
-        mask = afwImage.Mask(stampMask.copy())
-        mask.clearMaskPlaneDict()
-        mask.addMaskPlane("BKGRD")
-        mask.addMaskPlane("DONUT")
-        mask.addMaskPlane("OTHER")
-        mask.addMaskPlane("BLEND")
-        self.stamp_im.setMask(mask)
+        # Let's shift all the values to make sure we don't have issues
+        # when reassigning values below
+        # In this array:
+        # -1 = background
+        # -2 = unblended regions of source donut
+        # -3 = unblended regions of other donuts
+        # -4 = blended regions of source & other donuts
+        stampMask = -1 - stampMask
+
+        # Create the mask planes
+        afwImage.Mask.addMaskPlane("BKGRD")
+        afwImage.Mask.addMaskPlane("DONUT")
+        afwImage.Mask.addMaskPlane("BLEND")
+        afwImage.Mask.addMaskPlane("OTHER")
+
+        # Reassign values
+        stampMask[stampMask == -1] = afwImage.Mask.getPlaneBitMask("BKGRD")
+        stampMask[stampMask == -2] = afwImage.Mask.getPlaneBitMask("DONUT")
+        stampMask[stampMask == -4] = afwImage.Mask.getPlaneBitMask("BLEND")
+        stampMask[stampMask == -3] = afwImage.Mask.getPlaneBitMask("OTHER")
+
+        # Save mask
+        self.stamp_im.setMask(afwImage.Mask(stampMask.copy()))
 
     def getLinearWCS(self):
         """

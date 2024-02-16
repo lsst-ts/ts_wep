@@ -254,14 +254,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             donutStamps[0].stamp_im.image.array, expCutOut
         )
 
-        # Test MaskPlaneDict has DONUT and mask has donut mask
-        self.assertIn(
-            "DONUT", list(donutStamps[0].stamp_im.mask.getMaskPlaneDict().keys())
-        )
-        self.assertCountEqual(
-            [0, donutStamps[0].stamp_im.mask.getPlaneBitMask("DONUT")],
-            np.unique(donutStamps[0].stamp_im.mask.array),
-        )
+        # Test MaskPlaneDict has correct keys
+        maskKeys = donutStamps[0].stamp_im.mask.getMaskPlaneDict().keys()
+        self.assertTrue({"BKGRD", "DONUT", "BLEND", "OTHER"} <= maskKeys)
 
         # Check that local linear WCS in archive element is consistent with the
         # original exposure WCS.
