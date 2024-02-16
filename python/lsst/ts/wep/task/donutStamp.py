@@ -55,7 +55,8 @@ class DonutStamp(AbstractStamp):
         Defocal state of the stamp. "extra" or "intra" are
         allowed values.
     defocal_distance : `float`
-        Defocal offset of the instrument in mm.
+        Defocal offset of the detector in mm. If the detector was not
+        actually shifted, this should be the equivalent detector offset.
     detector_name : `str`
         CCD where the donut is found
     cam_name : `str`
