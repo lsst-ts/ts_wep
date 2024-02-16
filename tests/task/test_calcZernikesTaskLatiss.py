@@ -124,8 +124,9 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
     def testEstimateZernikesRegression(self):
         """THIS DOES NOT TEST ZERNIKE ACCURACY!!!
 
-        This only tests to see if software changes result in different Zernikes.
-        If that is expected and okay, you can change the test values below.
+        This only tests to see if software changes result in different
+        Zernikes. If that is expected and okay, you can change the test 
+        values below.
         """
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
