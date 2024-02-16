@@ -22,6 +22,7 @@
 __all__ = ["EstimateZernikesBaseConfig", "EstimateZernikesBaseTask"]
 
 import abc
+import warnings
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -136,11 +137,6 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             A struct containing "zernikes", which is a 2D numpy array,
             where the first axis indexes the pair of DonutStamps and the
             second axis indexes the Zernikes coefficients.
-
-        Raises
-        ------
-        ValueError
-            If not all stamps have same defocal offset
         """
         # Check that all the defocal offsets are the same
         defocalOffsets = np.concatenate(
@@ -150,12 +146,15 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             ]
         )
         if not np.allclose(defocalOffsets[0], defocalOffsets):
-            raise ValueError("Not all stamps have same defocal offset.")
+            warnings.warn(
+                "Defocal offsets are not all the same. "
+                f"Range is from {defocalOffsets.min()} to {defocalOffsets.max()} mm."
+            )
 
         # Get the instrument
         camName = donutStampsExtra[0].cam_name
         instrument = getTaskInstrument(camName, None, self.config.instConfigFile)
-        instrument.defocalOffset = defocalOffsets[0] / 1e3
+        instrument.defocalOffset = defocalOffsets.mean() / 1e3
 
         # Create the wavefront estimator
         wfEst = WfEstimator(

@@ -724,7 +724,6 @@ class Instrument:
             wavelength = self.wavelength[BandLabel.REF]
 
         # Get the intrinsic Zernikes in wavelengths
-        
         zkIntrinsic = batoid.zernike(
             batoidModel,
             *np.deg2rad([xAngle, yAngle]),
