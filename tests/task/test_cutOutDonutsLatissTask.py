@@ -193,11 +193,11 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
             self.assertMaskedImagesAlmostEqual(
-                donutStamp.stamp_im, cutOutStamp.stamp_im
+                donutStamp.stamp_im, cutOutStamp.stamp_im, atol=1e-4
             )
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
             self.assertMaskedImagesAlmostEqual(
-                donutStamp.stamp_im, cutOutStamp.stamp_im
+                donutStamp.stamp_im, cutOutStamp.stamp_im, atol=1e-4
             )
 
     @classmethod

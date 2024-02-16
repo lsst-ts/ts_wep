@@ -239,18 +239,16 @@ def getOffsetFromExposure(
     # Get the detector type
     detectorType = exposure.detector.getType().name
 
-    print(defocalType, detectorType)
-
     # If this isn't a wavefront sensor, we're done
     if detectorType != "WAVEFRONT":
         return focusZ
 
-    # Cast defocalType to a DefocalType enum
-    defocalType = DefocalType(defocalType)
-
     # Wavefront sensors only supported for LsstCam
     if camName != "LSSTCam":
         raise ValueError(f"Wavefront sensors for camera {camName} are not supported.")
+
+    # Cast defocalType to a DefocalType enum
+    defocalType = DefocalType(defocalType)
 
     if defocalType == DefocalType.Extra:
         offset = focusZ + 1.5

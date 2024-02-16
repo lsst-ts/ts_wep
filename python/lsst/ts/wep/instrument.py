@@ -331,20 +331,22 @@ class Instrument:
 
             # Calculate dZ4 for the optic
             shift = np.array([0, 0, batoidOffsetValue])
-            dZ4optic = batoid.analysis.zernike(
+            dZ4optic = batoid.zernike(
                 batoidModel.withLocallyShiftedOptic(offsetOptic, +shift),
                 *np.zeros(2),
                 wavelength,
                 eps=eps,
+                jmax=4,
             )[4]
 
             # Define a function to calculate dZ4 for an offset detector
             def dZ4det(offset):
-                return batoid.analysis.zernike(
+                return batoid.zernike(
                     batoidModel.withLocallyShiftedOptic("Detector", [0, 0, offset]),
                     *np.zeros(2),
                     wavelength,
                     eps=eps,
+                    jmax=4,
                 )[4]
 
             # Calculate the equivalent detector offset
@@ -715,17 +717,24 @@ class Instrument:
         if batoidModel is None:
             return np.zeros(jmax + 1)
 
+        # Get the wavelength
+        if len(self.wavelength) > 1:
+            wavelength = self.wavelength[band]
+        else:
+            wavelength = self.wavelength[BandLabel.REF]
+
         # Get the intrinsic Zernikes in wavelengths
+        
         zkIntrinsic = batoid.zernike(
             batoidModel,
             *np.deg2rad([xAngle, yAngle]),
-            self.wavelength[band],
+            wavelength,
             jmax=jmax,
             eps=batoidModel.pupilObscuration,
         )
 
         # Multiply by wavelength to get Zernikes in meters
-        zkIntrinsic *= self.wavelength[band]
+        zkIntrinsic *= wavelength
 
         return zkIntrinsic
 
@@ -817,11 +826,17 @@ class Instrument:
         offset = [0, 0, defocalSign * self.defocalOffset]
         batoidModel = batoidModel.withLocallyShiftedOptic("Detector", offset)
 
+        # Get the wavelength
+        if len(self.wavelength) > 1:
+            wavelength = self.wavelength[band]
+        else:
+            wavelength = self.wavelength[BandLabel.REF]
+
         # Get the off-axis model Zernikes in wavelengths
         zkIntrinsic = batoid.zernikeTA(
             batoidModel,
             *np.deg2rad([xAngle, yAngle]),
-            self.wavelength[band],
+            wavelength,
             jmax=jmax,
             eps=batoidModel.pupilObscuration,
             focal_length=self.focalLength,
@@ -830,7 +845,7 @@ class Instrument:
         )
 
         # Multiply by wavelength to get Zernikes in meters
-        zkIntrinsic *= self.wavelength[band]
+        zkIntrinsic *= wavelength
 
         return zkIntrinsic
 

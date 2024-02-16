@@ -95,7 +95,6 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
-        self.config.opticalModel = "onAxis"
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)

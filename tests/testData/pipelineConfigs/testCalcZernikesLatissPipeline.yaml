@@ -28,8 +28,6 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      # Set the optical model for LATISS
-      opticalModel: "onAxis"
       # Set configuration for donutSelector. The customMagLimit
       # must be used because otherwise magnitude limits
       # are checked in policy:magLimitStar.yaml file,
