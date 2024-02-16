@@ -190,7 +190,7 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
             # recorded values with possible changes from ISR pipeline, etc.
             self.assertLess(
                 np.sqrt(
-                    np.sum(np.square(zernCoeff.outputZernikesRaw[0][i] - zkList[i]))
+                    np.sum(np.square(zernCoeff.outputZernikesRaw[0] - zkList[i]))
                 ),
                 0.5,
             )
