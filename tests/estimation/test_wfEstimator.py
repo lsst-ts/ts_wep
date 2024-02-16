@@ -33,13 +33,43 @@ class TestWfEstimator(unittest.TestCase):
     def testCreateWithDefaults(self):
         WfEstimator()
 
+    def testBadAlgoName(self):
+        with self.assertRaises(ValueError):
+            WfEstimator(algoName="fake")
+
+    def testBadAlgoConfig(self):
+        with self.assertRaises(TypeError):
+            WfEstimator(algoConfig=1)
+
+    def testBadInstConfig(self):
+        with self.assertRaises(TypeError):
+            WfEstimator(instConfig=1)
+        with self.assertRaises(FileNotFoundError):
+            WfEstimator(instConfig="fake")
+
     def testBadJmax(self):
         with self.assertRaises(ValueError):
             WfEstimator(jmax=2)
 
+    def testBadStartWithIntrinsic(self):
+        with self.assertRaises(TypeError):
+            WfEstimator(startWithIntrinsic="fake")
+
+    def testBadReturnWfDev(self):
+        with self.assertRaises(TypeError):
+            WfEstimator(returnWfDev="fake")
+
+    def testBadReturn4Up(self):
+        with self.assertRaises(TypeError):
+            WfEstimator(return4Up="fake")
+
     def testBadUnits(self):
         with self.assertRaises(ValueError):
             WfEstimator(units="parsecs")
+
+    def testBadSaveHistory(self):
+        with self.assertRaises(TypeError):
+            WfEstimator(saveHistory="fake")
 
     def testDifferentJmax(self):
         # Create some dummy images
