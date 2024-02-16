@@ -19,13 +19,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import inspect
 import unittest
 from pathlib import Path
 
 import numpy as np
 from batoid.optic import CompoundOptic
 from lsst.ts.wep.instrument import Instrument
-from lsst.ts.wep.utils import getConfigDir
+from lsst.ts.wep.utils import getConfigDir, readConfigYaml
 
 
 class TestInstrument(unittest.TestCase):
@@ -182,6 +183,54 @@ class TestInstrument(unittest.TestCase):
     def testDonutDiameter(self):
         inst = Instrument()
         self.assertTrue(np.isclose(inst.donutDiameter, 2 * 66.512, rtol=1e-3))
+
+    def testPullFromBatoid(self):
+        inst = Instrument(
+            configFile=None,
+            diameter=None,
+            obscuration=None,
+            focalLength=None,
+            defocalOffset=None,
+            pixelSize=10e-6,
+            refBand="r",
+            wavelength={"r": 622.3e-9},
+            batoidModelName="LSST_r",
+            batoidOffsetOptic="Detector",
+            batoidOffsetValue=1.5e-3,
+        )
+        lsst = Instrument()
+
+        # Test that the values from Batoid are all correct
+        self.assertTrue(np.isclose(inst.diameter, lsst.diameter, rtol=1e-3))
+        self.assertTrue(np.isclose(inst.obscuration, lsst.obscuration, rtol=1e-3))
+        self.assertTrue(np.isclose(inst.focalLength, lsst.focalLength, rtol=1e-3))
+        self.assertTrue(np.isclose(inst.defocalOffset, lsst.defocalOffset, rtol=1e-3))
+
+    def testDefocalOffsetCalculation(self):
+        inst = Instrument("policy:instruments/AuxTel.yaml")
+        inst.batoidOffsetValue = 0.8e-3
+        self.assertTrue(np.isclose(inst.defocalOffset, 34.94e-3, rtol=1e-3))
+
+    def testImports(self):
+        # Get LSST and ComCam instruments
+        lsst = Instrument("policy:instruments/LsstCam.yaml")
+        comcam = Instrument("policy:instruments/ComCam.yaml")
+
+        # Get all the init arguments
+        keys = list(inspect.signature(Instrument).parameters.keys())
+
+        # Remove configFile
+        keys.remove("configFile")
+
+        # Remove keys that were present in the top level ComCam yaml
+        # because these override values in LsstCam
+        for key in readConfigYaml("policy:instruments/ComCam.yaml"):
+            if key in keys:
+                keys.remove(key)
+
+        # Iterate through the keys and make sure values are the same
+        for key in keys:
+            self.assertEqual(getattr(lsst, key), getattr(comcam, key))
 
 
 if __name__ == "__main__":
