@@ -96,11 +96,9 @@ class WfEstimator:
         units: str = "um",
         saveHistory: bool = False,
     ) -> None:
-        # Set the algorithm
-        self._algo = WfAlgorithmFactory.createWfAlgorithm(algoName, algoConfig)
-
-        # Set the instrument
-        self._instrument = configClass(instConfig, Instrument)
+        # Set the algorithm and instrument
+        self.algo = WfAlgorithmFactory.createWfAlgorithm(algoName, algoConfig)
+        self.instrument = configClass(instConfig, Instrument)
 
         # Set the other parameters
         self.jmax = jmax
@@ -118,10 +116,46 @@ class WfEstimator:
         """Return the WfAlgorithm object."""
         return self._algo
 
+    @algo.setter
+    def algo(self, value: WfAlgorithm) -> None:
+        """Set the wavefront algorithm.
+        
+        Parameters
+        ----------
+        value : WfAlgorithm
+            A WfAlgorithm object.
+
+        Raises
+        ------
+        TypeError
+            If the value is not a WfAlgorithm
+        """
+        if not isinstance(value, WfAlgorithm):
+            raise TypeError("algo must be an WfAlgorithm.")
+        self._algo = value
+
     @property
     def instrument(self) -> Instrument:
         """Return the Instrument object."""
         return self._instrument
+
+    @instrument.setter
+    def instrument(self, value: Instrument) -> None:
+        """Set the Instrument.
+
+        Parameters
+        ----------
+        value : Instrument
+            An Instument object.
+
+        Raises
+        ------
+        TypeError
+            If the value is not an Instrument object
+        """
+        if not isinstance(value, Instrument):
+            raise TypeError("instrument must be an Instrument object.")
+        self._instrument = value
 
     @property
     def jmax(self) -> int:

@@ -22,7 +22,6 @@
 __all__ = ["EstimateZernikesBaseConfig", "EstimateZernikesBaseTask"]
 
 import abc
-import warnings
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -138,23 +137,9 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             where the first axis indexes the pair of DonutStamps and the
             second axis indexes the Zernikes coefficients.
         """
-        # Check that all the defocal offsets are the same
-        defocalOffsets = np.concatenate(
-            [
-                donutStampsExtra.getDefocalDistances(),
-                donutStampsIntra.getDefocalDistances(),
-            ]
-        )
-        if not np.allclose(defocalOffsets[0], defocalOffsets):
-            warnings.warn(
-                "Defocal offsets are not all the same. The mean is being used instead. "
-                f"Range is from {defocalOffsets.min()} to {defocalOffsets.max()} mm."
-            )
-
         # Get the instrument
         camName = donutStampsExtra[0].cam_name
         instrument = getTaskInstrument(camName, None, self.config.instConfigFile)
-        instrument.defocalOffset = defocalOffsets.mean() / 1e3
 
         # Create the wavefront estimator
         wfEst = WfEstimator(
@@ -175,6 +160,13 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         for i, (donutExtra, donutIntra) in enumerate(
             zip(donutStampsExtra, donutStampsIntra)
         ):
+            # Determine and set the defocal offset
+            defocalOffset = np.mean([
+                donutExtra.defocal_distance,
+                donutIntra.defocal_distance,
+            ])
+            wfEst.instrument.defocalOffset = defocalOffset / 1e3
+
             # Estimate Zernikes
             zk = wfEst.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
             zkList.append(zk)
