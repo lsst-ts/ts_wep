@@ -161,10 +161,12 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             zip(donutStampsExtra, donutStampsIntra)
         ):
             # Determine and set the defocal offset
-            defocalOffset = np.mean([
-                donutExtra.defocal_distance,
-                donutIntra.defocal_distance,
-            ])
+            defocalOffset = np.mean(
+                [
+                    donutExtra.defocal_distance,
+                    donutIntra.defocal_distance,
+                ]
+            )
             wfEst.instrument.defocalOffset = defocalOffset / 1e3
 
             # Estimate Zernikes

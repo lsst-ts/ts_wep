@@ -119,7 +119,7 @@ class WfEstimator:
     @algo.setter
     def algo(self, value: WfAlgorithm) -> None:
         """Set the wavefront algorithm.
-        
+
         Parameters
         ----------
         value : WfAlgorithm
