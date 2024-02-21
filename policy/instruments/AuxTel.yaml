@@ -3,7 +3,7 @@
 
 name: AuxTel
 diameter: 1.2 # aperture diameter in meters
-obscuration: 0.3525 # fractional obscuration
+obscuration: 0.3525 # fractional obscuration ( = 0.423 m / 1.2 m)
 focalLength: 21.6 # effective focal length in meters
 pixelSize: 10.0e-6 # pixel size in meters
 wavelength: 632.0e-9 # effective wavelength, in meters

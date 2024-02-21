@@ -64,7 +64,7 @@ def _fitCircle(xPupil, yPupil, xItem, yItem, rPupilOut, rPupilIn, rEdge):
     """Fit a circle to the item edge on the pupil.
 
     This function works by taking pairs of points on the pupil and
-    item (e.g. the surface of on of the mirrors), and using these
+    item (e.g. the surface of one of the mirrors), and using these
     pairs to interpolate the edge of the item back to the pupil.
     It then fits a circle to the edge on the pupil. It returns
     NaNs if the edge does not cross the pupil.
