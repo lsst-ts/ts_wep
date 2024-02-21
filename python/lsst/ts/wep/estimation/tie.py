@@ -136,7 +136,7 @@ class TieAlgorithm(WfAlgorithm):
         ValueError
             If the value is not one of the allowed values
         """
-        allowedModels = ["onAxis", "offAxis"]
+        allowedModels = ["paraxial", "onAxis", "offAxis"]
         if value not in allowedModels:
             raise ValueError(f"opticalModel must be one of {str(allowedModels)[1:-1]}.")
 
@@ -499,18 +499,16 @@ class TieAlgorithm(WfAlgorithm):
         imageMapper = ImageMapper(instConfig=instrument, opticalModel=self.opticalModel)
 
         # Re-assign I1/I2 to intra/extra
-        intra = I1.copy() if I1.defocalType == DefocalType.Intra else I2.copy()
-        zkStartIntra = (
-            zkStartI1.copy()
-            if I1.defocalType == DefocalType.Intra
-            else zkStartI2.copy()
-        )
-        extra = I1.copy() if I1.defocalType == DefocalType.Extra else I2.copy()
-        zkStartExtra = (
-            zkStartI1.copy()
-            if I1.defocalType == DefocalType.Extra
-            else zkStartI2.copy()
-        )
+        if I1.defocalType == DefocalType.Intra:
+            intra = I1.copy()
+            zkStartIntra = zkStartI1.copy()
+            extra = I2.copy()
+            zkStartExtra = zkStartI2.copy()
+        else:
+            intra = I2.copy()
+            zkStartIntra = zkStartI2.copy()
+            extra = I1.copy()
+            zkStartExtra = zkStartI1.copy()
 
         # Calculate the mean starting Zernikes
         zkStartMean = np.mean([zkStartIntra, zkStartExtra], axis=0)

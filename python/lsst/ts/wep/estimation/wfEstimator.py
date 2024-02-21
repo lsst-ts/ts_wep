@@ -75,7 +75,7 @@ class WfEstimator:
         (the default is True)
     units : str, optional
         Units in which the Zernike coefficients are returned.
-        Options are "m", "um", "nm", or "arcsecs".
+        Options are "m", "um", "nm", or "arcsec".
         (the default is "um")
     saveHistory : bool, optional
         Whether to save the algorithm history in the self.history
@@ -269,7 +269,7 @@ class WfEstimator:
     @units.setter
     def units(self, value: str) -> None:
         """Set the units of the Zernike coefficients."""
-        allowed_units = ["m", "um", "nm", "arcsecs"]
+        allowed_units = ["m", "um", "nm", "arcsec"]
         if value not in allowed_units:
             raise ValueError(
                 f"Unit '{value}' not supported. "

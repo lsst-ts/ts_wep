@@ -361,7 +361,7 @@ def polygonContains(
     # Check shapes
     if not xGrid.shape == yGrid.shape:
         raise ValueError("xGrid and yGrid must have the same shape.")
-    if not len(xGrid.shape) == 2:
+    if not xGrid.ndim == 2:
         raise ValueError("xGrid and yGrid must be 2D.")
     if not poly.shape[1] == 2:
         raise ValueError("poly must be an Nx2 array.")

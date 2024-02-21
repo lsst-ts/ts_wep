@@ -127,7 +127,7 @@ class ImageMapper:
         uPupil : np.ndarray
              Normalized x coordinates on the pupil plane
         vPupil : np.ndarray
-             Normalized y coordinates on the image plane
+             Normalized y coordinates on the pupil plane
         zkCoeff : np.ndarray
             The wavefront at the pupil, represented as Zernike coefficients
             in meters for Noll indices >= 4.
@@ -703,7 +703,7 @@ class ImageMapper:
         angle = image.fieldAngle
 
         # Get the angle radius
-        rTheta = np.sqrt(np.sum(np.square(angle)))
+        rTheta = np.hypot(*angle)
 
         # Flatten the pupil arrays
         uPupil, vPupil = uPupil.ravel(), vPupil.ravel()

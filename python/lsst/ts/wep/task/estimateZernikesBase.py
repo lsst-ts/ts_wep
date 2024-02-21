@@ -77,7 +77,7 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
             "m": "meters",
             "um": "microns",
             "nm": "nanometers",
-            "arcsecs": "quadrature contribution to the PSF FWHM in arcseconds",
+            "arcsec": "quadrature contribution to the PSF FWHM in arcseconds",
         },
     )
     saveHistory = pexConfig.Field(

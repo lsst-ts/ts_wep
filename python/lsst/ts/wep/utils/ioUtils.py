@@ -142,7 +142,7 @@ def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
 
 
 def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
-    """Marge the passed keyword arguments with the values stored in the file.
+    """Merge the passed keyword arguments with the values stored in the file.
 
     If configFile is not provided, the keyword arguments are returned verbatim.
 

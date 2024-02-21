@@ -76,7 +76,7 @@ class Instrument:
         The effective wavelength of the instrument in meters. Can be a float,
         or a dictionary that corresponds to different bands. The keys in this
         dictionary are expected to correspond to the strings specified in the
-        BandLabel enum in jf_wep.utils.enums. If set to None, this defaults
+        BandLabel enum in ts_wep.utils.enums. If set to None, this defaults
         to {BandLabel.REF: 500e-9}. (the default is None)
     batoidModelName : str, optional
         Name of Batoid model. If the string contains "{band}", it is assumed

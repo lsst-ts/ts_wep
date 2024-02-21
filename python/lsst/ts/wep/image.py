@@ -101,7 +101,7 @@ class Image(object):
         """
         if not isinstance(value, np.ndarray):
             raise TypeError("image must be a numpy array.")
-        if len(value.shape) != 2 or value.shape[0] != value.shape[1]:
+        if value.ndim != 2 or value.shape[0] != value.shape[1]:
             raise ValueError("The image array must be square.")
         self._image = value.copy()
 
@@ -245,7 +245,7 @@ class Image(object):
         value = np.atleast_2d(value).astype(float)
 
         # Check shape
-        if value.shape[1] != 2 or len(value.shape) != 2:
+        if value.shape[1] != 2 or value.ndim != 2:
             raise ValueError(
                 "blendOffsets must have shape (N, 2), "
                 "where N is the number of blends you wish to mask."

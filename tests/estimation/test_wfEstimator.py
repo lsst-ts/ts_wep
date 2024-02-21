@@ -111,7 +111,7 @@ class TestWfEstimator(unittest.TestCase):
         for name in WfAlgorithmName:
             zk = dict()
             # Test every available unit
-            for units in ["m", "um", "nm", "arcsecs"]:
+            for units in ["m", "um", "nm", "arcsec"]:
                 wfEst = WfEstimator(algoName=name, units=units)
                 zk[units] = wfEst.estimateZk(intra, extra)
 
@@ -120,7 +120,7 @@ class TestWfEstimator(unittest.TestCase):
             self.assertTrue(
                 np.allclose(
                     convertZernikesToPsfWidth(zk["um"]),
-                    zk["arcsecs"],
+                    zk["arcsec"],
                 )
             )
 

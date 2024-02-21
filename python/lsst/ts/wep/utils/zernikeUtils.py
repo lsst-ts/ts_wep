@@ -207,7 +207,7 @@ def zernikeFit(
     v: np.ndarray,
     z: np.ndarray,
     jmax: int = 22,
-    obscuration: float = 0.61,
+    obscuration: float = 0.612,
     mask: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Fit Zernike polynomials to the surface.

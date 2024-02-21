@@ -116,16 +116,14 @@ class WfAlgorithm(ABC):
         # Validate I1
         if not isinstance(I1, Image):
             raise TypeError("I1 must be an Image object.")
-        if len(I1.image.shape) != 2 or not np.allclose(*I1.image.shape):  # type: ignore
+        if I1.image.ndim != 2 or not I1.image.shape[0] == I1.image.shape[1]:
             raise ValueError("I1.image must be square.")
 
         # Validate I2 if provided
         if I2 is not None:
             if not isinstance(I2, Image):
                 raise TypeError("I2 must be an Image object.")
-            if len(I2.image.shape) != 2 or not np.allclose(
-                *I2.image.shape  # type: ignore
-            ):
+            if I2.image.ndim != 2 or not I2.image.shape[0] == I2.image.shape[1]:
                 raise ValueError("I2.image must be square.")
             if I2.defocalType == I1.defocalType:
                 raise ValueError("I1 and I2 must be on opposite sides of focus.")
@@ -151,7 +149,7 @@ class WfAlgorithm(ABC):
         # Validate units
         if not isinstance(units, str):
             raise TypeError("units must be a str.")
-        allowedUnits = ["m", "nm", "um", "arcsecs"]
+        allowedUnits = ["m", "nm", "um", "arcsec"]
         if units not in allowedUnits:
             raise ValueError(f"units must be one of {allowedUnits}")
 
@@ -319,7 +317,7 @@ class WfAlgorithm(ABC):
             zk *= 1e6
         elif units == "nm":
             zk *= 1e9
-        elif units == "arcsecs":
+        elif units == "arcsec":
             zk = convertZernikesToPsfWidth(
                 zernikes=zk,
                 diameter=instrument.diameter,
