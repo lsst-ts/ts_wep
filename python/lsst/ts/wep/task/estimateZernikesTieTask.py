@@ -52,8 +52,8 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
     )
     maxIter = pexConfig.Field(
         dtype=int,
-        default=20,
-        doc="Maximum number of iterations for the TIE loop. (the default is 20)",
+        default=30,
+        doc="Maximum number of iterations for the TIE loop. (the default is 30)",
     )
     compSequence = pexConfig.ListField(
         dtype=int,
@@ -71,10 +71,10 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
     )
     centerTol = pexConfig.Field(
         dtype=float,
-        default=10e-9,
+        default=1e-9,
         doc="Maximum absolute change in any Zernike coefficient (in meters) "
         + "for which the images will be recentered. If 0, the images are "
-        + "recentered on every iteration. (the default is 10e-9)",
+        + "recentered on every iteration. (the default is 1e-9)",
     )
     centerBinary = pexConfig.Field(
         dtype=bool,

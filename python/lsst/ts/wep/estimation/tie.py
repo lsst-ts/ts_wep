@@ -52,7 +52,7 @@ class TieAlgorithm(WfAlgorithm):
         (the default is "offAxis")
     maxIter : int, optional
         The maximum number of iterations of the TIE loop.
-        (the default is 20)
+        (the default is 30)
     compSequence : iterable, optional
         An iterable that determines the maximum Noll index to compensate on
         each iteration of the TIE loop. For example, if compSequence = [4, 10],
@@ -76,7 +76,7 @@ class TieAlgorithm(WfAlgorithm):
         The maximum absolute change in any Zernike amplitude (in meters)
         between subsequent TIE iterations below which convergence is declared
         and iteration is stopped.
-        (the default is 10e-9)
+        (the default is 1e-9)
     maskKwargs : dict or None, optional
         Dictionary of mask keyword arguments to pass to mask creation.
         To see possibilities, see the docstring for
@@ -87,12 +87,12 @@ class TieAlgorithm(WfAlgorithm):
     def __init__(
         self,
         opticalModel: Optional[str] = "offAxis",
-        maxIter: Optional[int] = 20,
+        maxIter: Optional[int] = 30,
         compSequence: Optional[Iterable] = 2 * (4,) + 2 * (6,) + 4 * (13,) + 4 * (22,),
         compGain: Optional[float] = 0.6,
         centerTol: Optional[float] = 10e-9,
         centerBinary: Optional[bool] = True,
-        convergeTol: Optional[float] = 10e-9,
+        convergeTol: Optional[float] = 1e-9,
         maskKwargs: Optional[dict] = None,
     ) -> None:
         self.opticalModel = opticalModel
