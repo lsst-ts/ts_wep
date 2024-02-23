@@ -68,7 +68,7 @@ class TieAlgorithm(WfAlgorithm):
         which the images need to be recentered. A smaller value causes the
         images to be recentered more often. If 0, images are recentered on
         every iteration.
-        (the default is 10e-9)
+        (the default is 1e-9)
     centerBinary : bool, optional
         Whether to use a binary template when centering the image.
         (the default is True)
@@ -90,7 +90,7 @@ class TieAlgorithm(WfAlgorithm):
         maxIter: Optional[int] = 30,
         compSequence: Optional[Iterable] = 2 * (4,) + 2 * (6,) + 4 * (13,) + 4 * (22,),
         compGain: Optional[float] = 0.6,
-        centerTol: Optional[float] = 10e-9,
+        centerTol: Optional[float] = 1e-9,
         centerBinary: Optional[bool] = True,
         convergeTol: Optional[float] = 1e-9,
         maskKwargs: Optional[dict] = None,
@@ -129,7 +129,7 @@ class TieAlgorithm(WfAlgorithm):
             analytic model that is valid for slow optical systems near the
             optical axis. offAxis is recommended when you have a Batoid model
             and onAxis is recommended when you do not. paraxial is primarily
-            meant for testing (the default is "offAxis")
+            meant for testing.
 
         Raises
         ------
