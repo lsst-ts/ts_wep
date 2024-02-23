@@ -84,10 +84,10 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
     )
     convergeTol = pexConfig.Field(
         dtype=float,
-        default=10e-9,
+        default=1e-9,
         doc="The maximum absolute change in any Zernike amplitude (in meters) "
         + "between subsequent TIE iterations below which convergence is declared. "
-        + "(the default is 10e-9)",
+        + "(the default is 1e-9)",
     )
     maskKwargs = pexConfig.DictField(
         keytype=str,
