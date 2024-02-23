@@ -8,13 +8,17 @@ focalLength: 10.312 # effective focal length in meters
 defocalOffset: 1.5e-3 # defocal offset in meters
 pixelSize: 10.0e-6 # pixel size in meters
 refBand: r # band to use for BandLabel.REF
-wavelength: # effective wavelength per band, in meters
-  u: 367.1e-9
-  g: 482.7e-9
-  r: 622.3e-9
-  i: 754.6e-9
-  z: 869.1e-9
-  y: 971.0e-9
+# Effective wavelength per band, in meters.
+# These numbers are the phi-weighted effective wavelengths using v1.9
+# of the LSST throughputs, including detector, (3Ag) mirrors, lenses,
+# filters, and the fiducial atmosphere at airmass 1.2
+wavelength:
+  u: 370.9e-9
+  g: 476.7e-9
+  r: 619.4e-9
+  i: 753.9e-9
+  z: 866.8e-9
+  y: 973.9e-9
 batoidModelName: LSST_{band} # name used to load the Batoid model
 
 maskParams: # center and radius are in meters, theta in degrees
