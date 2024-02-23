@@ -31,7 +31,6 @@ __all__ = [
     "getZernikeParity",
 ]
 
-import re
 from typing import Optional
 
 import galsim
@@ -428,30 +427,17 @@ def getZernikeParity(jmax, axis="x"):
     ------
     ValueError
         If axis is not one of "x" or "y"
-    ValueError
-        If one of the Noll indices <= jmax has mixed parity
     """
-    if axis not in ["x", "y"]:
-        raise ValueError("axis must be either 'x' or 'y'.")
-
     parity = []
     for j in range(4, jmax + 1):
-        # Get the cartesian string
-        zkStr = galsim.zernike.describe_zernike(j)
-
-        # Get all exponents
-        exponents = re.findall(rf"(?<={axis}\^)[0-9]+|{axis}(?!\^)", zkStr) or [0]
-        exponents = np.array([1 if num == axis else int(num) for num in exponents])
-
-        # Get the remainders mod 2
-        remainder = exponents % 2
-
-        # Check they all match
-        allMatch = all(remainder) or all(~remainder)
-        if not allMatch:
-            raise ValueError(f"Noll index {j} has mixed parity")
-
-        # Get the parity: +1 = even, -1 = odd
-        parity.append(-2 * int(all(remainder)) + 1)
+        n, m = galsim.zernike.noll_to_zern(j)
+        if axis == "x":
+            # if (-1)^n * m >= 0, x parity is even
+            parity.append(2 * ((-1) ** n * m >= 0) - 1)
+        elif axis == "y":
+            # m >= 0, x parity is even
+            parity.append(2 * (m >= 0) - 1)
+        else:
+            raise ValueError("axis must be either 'x' or 'y'.")
 
     return np.array(parity)
