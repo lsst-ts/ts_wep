@@ -32,6 +32,15 @@ from typing_extensions import Self
 class Image(object):
     """Class to hold a donut image along with metadata.
 
+    All quantities in this object are assumed to be in the global
+    camera coordinate system (CCS). See https://sitcomtn-003.lsst.io
+    for details.
+
+    I specify the "global" coordinate system because corner wavefront
+    sensor images from the butler are rotated by some multiple of 90
+    degrees with respect to the global coordinate system. These images
+    should be de-rotated before being stored in this object.
+
     Parameters
     ----------
     image : np.ndarray
@@ -39,6 +48,7 @@ class Image(object):
     fieldAngle : np.ndarray or tuple or list
         The field angle of the donut, in degrees. The field angle
         is the angle to the source, measured from the optical axis.
+        See the note on coordinate systems above.
     defocalType : DefocalType or str
         Whether the image is intra- or extra-focal.
         Can be specified using a DefocalType Enum or the corresponding string.
@@ -54,6 +64,8 @@ class Image(object):
     blendOffsets : np.ndarray or tuple or list, optional
         Positions of blended donuts relative to central donut, in pixels.
         Must be provided in the format [[dx1, dy1], [dx2, dy2], ...].
+        Note these shifts must be in the global CCS (see the note on
+        coordinate systems above).
         (the default is an empty array, i.e. no blends)
     mask : np.ndarray, optional
         The mask for the image. Mask creation is meant to be handled by the

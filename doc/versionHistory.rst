@@ -15,7 +15,7 @@ Version History
 This is a big backwards-incompatible refactor of WEP. The major changes are:
 
 * Split the ``cwfs`` modules into ``centroid``, and ``estimation``.
-* Donut Images are now held by the ``Image`` class. This class is meant to hold information in the de-rotated camera coordinate system.
+* Donut Images are now held by the ``Image`` class. This class is meant to hold information in the global camera coordinate system (CCS).
 * A new ``Instrument`` class with new configurations in the ``policy/instruments`` directory. This class holds geometric information about the different telescopes and cameras, as well as interfaces with the Batoid models.
 * The ``ImageMapper`` class maps ``Image`` objects between the image and pupil planes, and creates pupil and image masks. The "offAxis" model now uses a real-time band-dependent fit with Batoid. The "onAxis" and "paraxial" models work the same as before.
 * The Zernike estimation classes have been generalized to allow different wavefront algorithm classes to plug into ``WfEstimator``.

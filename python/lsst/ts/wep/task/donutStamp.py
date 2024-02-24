@@ -39,6 +39,12 @@ from lsst.ts.wep.utils import getCameraFromButlerName
 class DonutStamp(AbstractStamp):
     """Single donut stamp
 
+    Note all of the top-level stamp information is in the data
+    visualization coordinate system (DVCS), while the information
+    packaged in self.wep_im is in the global camera coordinate
+    system (CCS). See https://sitcomtn-003.lsst.io and the Image
+    docstring for more information.
+
     Parameters
     ----------
     stamp_im : `lsst.afw.image.MaskedImageF`
@@ -210,13 +216,14 @@ class DonutStamp(AbstractStamp):
         """Return a ts.wep.image.Image object for the stamp.
 
         Note that the information from the butler is in the data visualization
-        coordinate system (DVCS), but the WEP Image is in the camera coordinate
-        system (CCS). These coordinate systems are related by a transpose. See
-        sitcomtn-003.lsst.io for more information.
+        coordinate system (DVCS), but the WEP Image is in the global camera
+        coordinate system (CCS). These coordinate systems are related by a
+        transpose. See sitcomtn-003.lsst.io for more information.
 
         Furthermore, CWFS images that arrive from the butler are rotated with
         respect to the science sensors. The info in the WEP Images has been
-        de-rotated so that everything aligns with the science sensors.
+        de-rotated so that everything aligns with the global coordinate system
+        used by the science sensors.
 
         Returns
         -------
