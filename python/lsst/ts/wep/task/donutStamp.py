@@ -364,7 +364,7 @@ class DonutStamp(AbstractStamp):
         # -1 = unblended regions of source donut
         # -2 = unblended regions of other donuts
         # -3 = blended regions of source & other donuts
-        stampMask = - stampMask
+        stampMask = -stampMask
 
         # Create the mask planes
         afwImage.Mask.addMaskPlane("DONUT")

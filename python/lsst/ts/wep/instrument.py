@@ -817,7 +817,7 @@ class Instrument:
         In the ZernikeTA calculation below, we use nrad=10 and choose naz so
         the pupil is approximately uniformly sampled. Not all the Zernike
         coefficients have converged with nrad=10, but we chose this number so
-        the image positions have converged. In particular, for nrad=10, the 
+        the image positions have converged. In particular, for nrad=10, the
         residuals with Batoid are less than 0.5 microns.
         """
         # Get the band enum
