@@ -120,16 +120,6 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         optional=True,
     )
-    multiplyMask = pexConfig.Field(
-        doc="Multiply the stamp by the source donut mask before saving.",
-        dtype=bool,
-        default=False,
-    )
-    maskGrowthIter = pexConfig.Field(
-        doc="How many iterations of binary dilation to run on the mask model.",
-        dtype=int,
-        default=6,
-    )
     subtractBackground = pexConfig.ConfigurableField(
         target=lsst.meas.algorithms.SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
@@ -164,9 +154,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.opticalModel = self.config.opticalModel
         # Set instrument configuration info
         self.instConfigFile = self.config.instConfigFile
-        # Parameters for mask multiplication (for deblending)
-        self.multiplyMask = self.config.multiplyMask
-        self.maskGrowthIter = self.config.maskGrowthIter
         # Set up background subtraction task
         self.makeSubtask("subtractBackground")
 
@@ -390,7 +377,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             finalBlendYList.append(blendStrY)
 
             # Prepare blend centroid position information
-            blendExists = False
             if len(donutRow["blend_centroid_x"]) > 0:
                 blendCentroidPositions = np.array(
                     [
@@ -398,7 +384,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                         donutRow["blend_centroid_y"] + yShift,
                     ]
                 ).T
-                blendExists = True
             else:
                 blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
 
@@ -431,12 +416,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 archive_element=linear_wcs,
             )
 
-            donutStamp.makeMask(instrument, self.opticalModel)
-
-            if (self.multiplyMask is True) and blendExists:
-                stampMask = donutStamp.stamp_im.mask
-                sourceMask = stampMask.array == stampMask.getMaskPlane("DONUT")
-                donutStamp.stamp_im.image.array *= sourceMask
             finalStamps.append(donutStamp)
 
         catalogLength = len(donutCatalog)

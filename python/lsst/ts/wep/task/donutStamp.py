@@ -334,20 +334,20 @@ class DonutStamp(AbstractStamp):
         )
         maskSource, maskBlends, maskBackground = self.wep_im.masks
 
-        # Create a mask for the stamp with blended regions highlighted
-        # In this array:
-        # 0 = background
-        # 1 = unblended regions of source donut
-        # 2 = unblended regions of other donuts
-        # 3 = blended regions of source & other donuts
-        stampMask = maskSource + 2 * maskBlends
+        # Add mask planes for the source and blend
+        afwImage.Mask.addMaskPlane("DONUT")
+        afwImage.Mask.addMaskPlane("BLEND")
+
+        # Create the stamp mask
+        stampMask = maskSource * afwImage.Mask.getPlaneBitMask("DONUT")
+        stampMask += maskBlends * afwImage.Mask.getPlaneBitMask("BLEND")
         stampMask = stampMask.astype(np.int32)
 
-        # This mask is in the CCS with the CWFSs de-rotated (see the docstring
-        # for self._setWepImage()). We need to put it back in the coordinate
-        # system of the info in the butler
+        # This mask is in the global CCS (see the docstring for
+        # self._setWepImage()). We need to put it back in the
+        # coordinate system of the info in the butler
 
-        # Transpose the mask (DVCS -> CCS)
+        # Transpose the mask (CCS -> DVCS)
         stampMask = stampMask.T
 
         # Rotate to sensor orientation
@@ -356,25 +356,6 @@ class DonutStamp(AbstractStamp):
         eulerZ = -detector.getOrientation().getYaw().asDegrees()
         nRot = int(eulerZ // 90)
         stampMask = np.rot90(stampMask, -nRot)
-
-        # Let's reflect all values to make sure we don't have issues
-        # when reassigning values below
-        # In this array:
-        # 0 = background
-        # -1 = unblended regions of source donut
-        # -2 = unblended regions of other donuts
-        # -3 = blended regions of source & other donuts
-        stampMask = -stampMask
-
-        # Create the mask planes
-        afwImage.Mask.addMaskPlane("DONUT")
-        afwImage.Mask.addMaskPlane("BLEND")
-        afwImage.Mask.addMaskPlane("OTHER")
-
-        # Reassign values
-        stampMask[stampMask == -1] = afwImage.Mask.getPlaneBitMask("DONUT")
-        stampMask[stampMask == -3] = afwImage.Mask.getPlaneBitMask("BLEND")
-        stampMask[stampMask == -2] = afwImage.Mask.getPlaneBitMask("OTHER")
 
         # Save mask
         self.stamp_im.setMask(afwImage.Mask(stampMask.copy()))

@@ -228,7 +228,7 @@ class TestDonutStamp(unittest.TestCase):
 
     def testMakeMask(self):
         donutStamp = DonutStamp(
-            afwImage.MaskedImageF(64, 64),
+            afwImage.MaskedImageF(160, 160),
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
             lsst.geom.Point2D(2047.5, 2001.5),
             np.array([[], []]).T,
@@ -241,7 +241,7 @@ class TestDonutStamp(unittest.TestCase):
 
         # Check that mask is empty at start
         mask = donutStamp.stamp_im.mask
-        self.assertEqual(mask.array.shape, (64, 64))
+        self.assertEqual(mask.array.shape, (160, 160))
         self.assertEqual(mask.array.sum(), 0)
 
         # Check masks after creation
@@ -249,13 +249,13 @@ class TestDonutStamp(unittest.TestCase):
         mask = donutStamp.stamp_im.mask
 
         maskKeys = mask.getMaskPlaneDict().keys()
-        self.assertTrue({"DONUT", "BLEND", "OTHER"} <= maskKeys)
+        self.assertTrue({"DONUT", "BLEND"} <= maskKeys)
 
         # Make sure not just an empty array
         self.assertGreater(mask.array.sum(), 0)
 
         # Donut at center of focal plane should be symmetric
-        np.testing.assert_array_equal(mask.array[:63], mask.array[-63:][::-1])
+        np.testing.assert_array_equal(mask.array[:159], mask.array[-159:][::-1])
 
     def testWepImage(self):
         # Goal: test the transformations that occur during WepImage creation

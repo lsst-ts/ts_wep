@@ -142,8 +142,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.initialCutoutPadding, 5)
         self.assertEqual(self.task.opticalModel, "offAxis")
         self.assertEqual(self.task.instConfigFile, None)
-        self.assertFalse(self.task.multiplyMask)
-        self.assertEqual(self.task.maskGrowthIter, 6)
 
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
@@ -254,10 +252,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             donutStamps[0].stamp_im.image.array, expCutOut
         )
 
-        # Test MaskPlaneDict has correct keys
-        maskKeys = donutStamps[0].stamp_im.mask.getMaskPlaneDict().keys()
-        self.assertTrue({"BKGRD", "DONUT", "BLEND", "OTHER"} <= maskKeys)
-
         # Check that local linear WCS in archive element is consistent with the
         # original exposure WCS.
         exposure_wcs = exposure.wcs
@@ -274,62 +268,3 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
                     rtol=0.0,
                     atol=10e-6,  # 10 microarcsecond accurate over stamp region
                 )
-
-    def testCutOutStampsBlended(self):
-        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
-        donutStampsNoBlend = self.task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
-
-        # Test that even with blends there is no mask multiplication
-        # when multiplyMask is False
-        donutCatalog["blend_centroid_x"] = [
-            [donutCatalog["centroid_x"].iloc[0]],
-            [],
-            [],
-        ]
-        donutCatalog["blend_centroid_y"] = [
-            [donutCatalog["centroid_y"].iloc[0]],
-            [],
-            [],
-        ]
-
-        # Reload exposure everytime since it is modified by stamp generation
-        exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsNoMultiply = self.task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
-        np.testing.assert_array_equal(
-            donutStampsNoBlend[0].stamp_im.image.array,
-            donutStampsNoMultiply[0].stamp_im.image.array,
-        )
-
-        # Test that turning on multiply mask includes mask in stamp image
-        multiplyConfig = CutOutDonutsBaseTaskConfig(multiplyMask=True)
-        maskedTask = CutOutDonutsBaseTask(config=multiplyConfig, name="Masked Task")
-        exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsMasked = maskedTask.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
-        self.assertGreater(
-            np.sum(donutStampsNoBlend[0].stamp_im.image.array),
-            np.sum(donutStampsMasked[0].stamp_im.image.array),
-        )
-        # Test that unblended stamp does not change
-        np.testing.assert_array_equal(
-            donutStampsNoBlend[1].stamp_im.image.array,
-            donutStampsMasked[1].stamp_im.image.array,
-        )
-        # Test that stamp centroid positions are added to donutStamp
-        self.assertEqual(
-            int(donutStampsMasked[0].blend_centroid_positions[0][0]),
-            donutStampsMasked[0].centroid_position.getX(),
-        )
-        self.assertEqual(
-            int(donutStampsMasked[0].blend_centroid_positions[0][1]),
-            donutStampsMasked[0].centroid_position.getY(),
-        )
