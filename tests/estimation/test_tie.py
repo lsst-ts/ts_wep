@@ -30,10 +30,11 @@ class TestTieAlgorithm(unittest.TestCase):
     """Test TieAlgorithm."""
 
     @staticmethod
-    def _createData():
+    def _createData(seed: int = 1234):
         # Create some random Zernikes
-        rng = np.random.default_rng(1243)
+        rng = np.random.default_rng(seed)
         zkTrue = rng.normal(0, 1e-5 / np.arange(1, 20) ** 2, size=19)
+        zkTrue = np.clip(zkTrue, -1e-6, +1e-6)
 
         # Create a pair of images
         mapper = ImageMapper()
@@ -99,17 +100,18 @@ class TestTieAlgorithm(unittest.TestCase):
             TieAlgorithm(maskKwargs="fake")
 
     def testAccuracy(self):
-        # Get the test data
-        zkTrue, intra, extra = self._createData()
+        for seed in [12345, 23451, 34512, 45123, 51234]:
+            # Get the test data
+            zkTrue, intra, extra = self._createData(seed)
 
-        # Create estimator
-        tie = TieAlgorithm()
+            # Create estimator
+            tie = TieAlgorithm()
 
-        # Estimate Zernikes (in meters)
-        zkEst = tie.estimateZk(intra, extra)
+            # Estimate Zernikes (in meters)
+            zkEst = tie.estimateZk(intra, extra)
 
-        # Check that results are fairly accurate
-        self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
+            # Check that results are fairly accurate
+            self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
     def testSaveHistory(self):
         # Run the algorithm
