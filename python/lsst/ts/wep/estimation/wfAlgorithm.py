@@ -319,7 +319,7 @@ class WfAlgorithm(ABC):
             zk *= 1e9
         elif units == "arcsec":
             zk = convertZernikesToPsfWidth(
-                zernikes=zk,
+                zernikes=zk * 1e6,
                 diameter=instrument.diameter,
                 obscuration=instrument.obscuration,
             )

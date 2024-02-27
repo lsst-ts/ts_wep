@@ -22,13 +22,53 @@
 import unittest
 
 import numpy as np
-from lsst.ts.wep import Image
+from lsst.ts.wep import Image, ImageMapper
 from lsst.ts.wep.estimation import WfEstimator
 from lsst.ts.wep.utils import WfAlgorithmName, convertZernikesToPsfWidth
 
 
 class TestWfEstimator(unittest.TestCase):
     """Test the wavefront estimator class."""
+
+    @staticmethod
+    def _createData(seed: int = 1234):
+        # Create some random Zernikes
+        rng = np.random.default_rng(seed)
+        zkTrue = rng.normal(0, 1e-5 / np.arange(1, 20) ** 2, size=19)
+        zkTrue = np.clip(zkTrue, -1e-6, +1e-6)
+
+        # Create a pair of images
+        mapper = ImageMapper()
+
+        intraStamp = mapper.mapPupilToImage(
+            Image(
+                np.zeros((180, 180)),
+                (0, -1),
+                "intra",
+                "r",
+                blendOffsets=[[70, 85]],
+            ),
+            zkTrue,
+        )
+        intraStamp.image *= 120
+        intraStamp.image += rng.normal(scale=np.sqrt(intraStamp.image))
+        intraStamp.image += rng.normal(scale=10, size=intraStamp.image.shape)
+
+        extraStamp = mapper.mapPupilToImage(
+            Image(
+                np.zeros((180, 180)),
+                (0, -1),
+                "extra",
+                "r",
+            ),
+            zkTrue,
+        )
+        extraStamp.image *= 60
+        extraStamp.image += rng.normal(scale=np.sqrt(extraStamp.image))
+        extraStamp.image += rng.normal(scale=15, size=extraStamp.image.shape)
+
+        # Return the Zernikes and both images
+        return zkTrue, intraStamp, extraStamp
 
     def testCreateWithDefaults(self):
         WfEstimator()
@@ -72,40 +112,82 @@ class TestWfEstimator(unittest.TestCase):
             WfEstimator(saveHistory="fake")
 
     def testDifferentJmax(self):
-        # Create some dummy images
-        intra = Image(
-            np.zeros((180, 180)),
-            (1.2, 0.3),
-            "intra",
-        )
-
-        extra = Image(
-            np.zeros((180, 180)),
-            (0.9, -1),
-            "extra",
-        )
+        # Get the test data
+        zkTrue, intra, extra = self._createData()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
-            # Test two different values of jmax
-            for jmax in [22, 28]:
-                wfEst = WfEstimator(algoName=name, jmax=jmax)
-                zk = wfEst.estimateZk(intra, extra)
-                self.assertEqual(len(zk), len(np.arange(4, jmax + 1)))
+            # Estimate with jmax=22
+            wfEst = WfEstimator(algoName=name, jmax=22, units="m")
+            zk22 = wfEst.estimateZk(intra, extra)
 
-    def testDifferentUnits(self):
-        # Create some dummy images
-        intra = Image(
-            np.zeros((180, 180)),
-            (1.2, 0.3),
-            "intra",
-        )
+            # Estimate with jmax=28
+            wfEst = WfEstimator(algoName=name, jmax=28, units="m")
+            zk28 = wfEst.estimateZk(intra, extra)
 
-        extra = Image(
-            np.zeros((180, 180)),
-            (0.9, -1),
-            "extra",
-        )
+            #  Make sure results are pretty similar up to Noll index 22
+            self.assertTrue(np.allclose(zk22, zk28[:-6], atol=50e-9))
+
+    def testStartWithIntrinsic(self):
+        # Get the test data
+        zkTrue, intra, extra = self._createData()
+
+        # Test every wavefront algorithm
+        for name in WfAlgorithmName:
+            # Estimate starting with intrinsics
+            wfEst = WfEstimator(algoName=name, startWithIntrinsic=True, units="m")
+            zk0 = wfEst.estimateZk(intra, extra)
+
+            # Estimate starting with zeros
+            wfEst = WfEstimator(algoName=name, startWithIntrinsic=False, units="m")
+            zk1 = wfEst.estimateZk(intra, extra)
+
+            # Make sure the results are pretty similar
+            self.assertTrue(np.allclose(zk0, zk1, atol=10e-9))
+
+    def testReturnWfDev(self):
+        # Get the test data
+        zkTrue, intra, extra = self._createData()
+
+        # Test every wavefront algorithm
+        for name in WfAlgorithmName:
+            # Estimate OPD
+            wfEst = WfEstimator(algoName=name, returnWfDev=False, units="m")
+            opd = wfEst.estimateZk(intra, extra)
+
+            # Estimate wavefront deviation
+            wfEst = WfEstimator(algoName=name, returnWfDev=True, units="m")
+            wfDev = wfEst.estimateZk(intra, extra)
+
+            # Make sure that OPD = wf dev + intrinsics
+            zkInt = wfEst.instrument.getIntrinsicZernikes(
+                *intra.fieldAngle,
+                jmax=len(opd) + 3,
+            )
+
+            # Make sure the results are identical
+            self.assertTrue(np.allclose(opd, wfDev + zkInt))
+
+    def testReturn4Up(self):
+        # Get the test data
+        zkTrue, intra, extra = self._createData()
+
+        # Test every wavefront algorithm
+        for name in WfAlgorithmName:
+            # Get estimate starting with Noll index 4
+            wfEst = WfEstimator(algoName=name, return4Up=True)
+            zk4up = wfEst.estimateZk(intra, extra)
+
+            # Get estimate starting with Noll index 0
+            wfEst = WfEstimator(algoName=name, return4Up=False)
+            zk0up = wfEst.estimateZk(intra, extra)
+
+            # Make sure the results are identical
+            self.assertTrue(np.allclose(zk4up, zk0up[4:]))
+
+    def testUnits(self):
+        # Get the test data
+        zkTrue, intra, extra = self._createData()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
