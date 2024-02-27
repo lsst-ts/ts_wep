@@ -337,6 +337,7 @@ class Instrument:
                 wavelength,
                 eps=eps,
                 jmax=4,
+                nx=128,
             )[4]
 
             # Define a function to calculate dZ4 for an offset detector
@@ -347,6 +348,7 @@ class Instrument:
                     wavelength,
                     eps=eps,
                     jmax=4,
+                    nx=128,
                 )[4]
 
             # Calculate the equivalent detector offset
@@ -730,6 +732,7 @@ class Instrument:
             wavelength,
             jmax=jmax,
             eps=batoidModel.pupilObscuration,
+            nx=128,
         )
 
         # Multiply by wavelength to get Zernikes in meters
@@ -808,6 +811,14 @@ class Instrument:
         -------
         np.ndarray
             The Zernike coefficients in meters
+
+        Notes
+        -----
+        In the ZernikeTA calculation below, we use nrad=10 and choose naz so
+        the pupil is approximately uniformly sampled. Not all the Zernike
+        coefficients have converged with nrad=10, but we chose this number so
+        the image positions have converged. In particular, for nrad=10, the 
+        residuals with Batoid are less than 0.5 microns.
         """
         # Get the band enum
         band = BandLabel(band)
