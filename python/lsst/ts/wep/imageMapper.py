@@ -32,8 +32,6 @@ from lsst.ts.wep.utils.zernikeUtils import zernikeGradEval
 from scipy.interpolate import interpn
 from scipy.ndimage import binary_dilation, shift
 
-import time
-
 
 class ImageMapper:
     """Class for mapping the pupil to the image plane, and vice versa.
@@ -501,12 +499,7 @@ class ImageMapper:
         # Determine which image pixels have corners inside the pupil
         dPixel = uImage[0, 1] - uImage[0, 0]
         corners = np.append(uImage[0] - dPixel / 2, uImage[0, -1] + dPixel / 2)
-        print("START TIMER")
-        start = time.time()
         inside = polygonContains(*np.meshgrid(corners, corners), imageEdge)
-        end = time.time()
-        print(end - start)
-        print("END TIMER")
 
         # Select pixels that have at least one corner inside
         inside = inside[:-1, :-1] | inside[1:, :-1] | inside[:-1, 1:] | inside[1:, 1:]
