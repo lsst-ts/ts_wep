@@ -571,9 +571,7 @@ class CompensableImage(object):
         elif model == "onAxis":
             # Calculate F(x, y) = m * sqrt(f^2-R^2) / sqrt(f^2-(x^2+y^2)*R^2)
             # m is the mask scaling factor
-            myA2 = (inst.focalLength**2 - R**2) / (
-                inst.focalLength**2 - lutr**2 * R**2
-            )
+            myA2 = (inst.focalLength**2 - R**2) / (inst.focalLength**2 - lutr**2 * R**2)
 
             # Put the unphysical value as NaN
             myA = myA2.copy()
@@ -695,17 +693,11 @@ class CompensableImage(object):
 
             elif model == "onAxis":
                 xpox = maskScalingFactor * myA * (
-                    1
-                    + lutx**2
-                    * R**2.0
-                    / (inst.focalLength**2 - R**2 * lutr**2)
+                    1 + lutx**2 * R**2.0 / (inst.focalLength**2 - R**2 * lutr**2)
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dx2")
 
                 ypoy = maskScalingFactor * myA * (
-                    1
-                    + luty**2
-                    * R**2.0
-                    / (inst.focalLength**2 - R**2 * lutr**2)
+                    1 + luty**2 * R**2.0 / (inst.focalLength**2 - R**2 * lutr**2)
                 ) + myC * ZernikeAnnularGrad(zcCol, lutx, luty, zobsR, "dy2")
 
                 xpoy = maskScalingFactor * myA * lutx * luty * R**2 / (
