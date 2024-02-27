@@ -267,7 +267,10 @@ class Image(object):
 
     @property
     def mask(self) -> Union[np.ndarray, None]:
-        """The image source mask."""
+        """The image source mask.
+
+        This mask has value 1 for source pixels and value 0 for other pixels.
+        """
         return self._mask
 
     @mask.setter
@@ -275,6 +278,7 @@ class Image(object):
         """Set the image source mask.
 
         Note mask creation is meant to be handled by the ImageMapper class.
+        This mask has value 1 for source pixels and value 0 for other pixels.
 
         Parameters
         ----------
@@ -298,7 +302,10 @@ class Image(object):
 
     @property
     def maskBlends(self) -> Union[np.ndarray, None]:
-        """The image source mask."""
+        """The image source mask.
+
+        This mask has value 1 for blend pixels and value 0 for other pixels.
+        """
         return self._maskBlends
 
     @maskBlends.setter
@@ -306,6 +313,7 @@ class Image(object):
         """Set the image blend mask.
 
         Note mask creation is meant to be handled by the ImageMapper class.
+        This mask has value 1 for blend pixels and value 0 for other pixels.
 
         Parameters
         ----------
@@ -329,7 +337,11 @@ class Image(object):
 
     @property
     def maskBackground(self) -> Union[np.ndarray, None]:
-        """The image background mask."""
+        """The image background mask.
+
+        This mask has value 1 for background pixels and value 0
+        for other pixels.
+        """
         return self._maskBackground
 
     @maskBackground.setter
@@ -337,6 +349,8 @@ class Image(object):
         """Set the image background mask.
 
         Note mask creation is meant to be handled by the ImageMapper class.
+        This mask has value 1 for background pixels and value 0
+        for other pixels.
 
         Parameters
         ----------
