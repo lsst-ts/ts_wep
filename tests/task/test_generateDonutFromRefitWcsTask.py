@@ -141,8 +141,8 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
 
     def testValidateConfigs(self):
         # Test some defaults
+        self.assertEqual(self.config.maxFitScatter, 1.0)
         self.assertEqual(self.config.astromTask.referenceSelector.magLimit.maximum, 15)
-        self.assertEqual(self.config.astromTask.matcher.maxOffsetPix, 3000)
 
         # Change up config
         self.config.astromTask.referenceSelector.magLimit.maximum = 18

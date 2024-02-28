@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-8.3.1:
+
+-------------
+8.3.1
+-------------
+
+* Update tests to be more robust to DM changes and fix failures after DM stack update to w_2024_08.
+* Run black v24.2.
+
 .. _lsst.ts.wep-8.3.0:
 
 -------------

@@ -133,6 +133,26 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         # Test instrument matches
         pipelineButler = dafButler.Butler(self.repoDir)
+        s11_wcs = pipelineButler.get(
+            "postISRCCD.wcs",
+            dataId={
+                "instrument": "LSSTCam",
+                "detector": 94,
+                "visit": exposureId,
+                "exposure": exposureId,
+            },
+            collections=[f"{runName}"],
+        )
+        s10_wcs = pipelineButler.get(
+            "postISRCCD.wcs",
+            dataId={
+                "instrument": "LSSTCam",
+                "detector": 93,
+                "visit": exposureId,
+                "exposure": exposureId,
+            },
+            collections=[f"{runName}"],
+        )
         donutCatDf_S11 = pipelineButler.get(
             "donutCatalog",
             dataId={"instrument": "LSSTCam", "detector": 94, "visit": exposureId},
@@ -163,40 +183,42 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
                 "blend_centroid_y",
             ],
         )
+        true_ra = [
+            6.281628787,
+            0.001158288,
+            0.000188775,
+            6.281628805,
+            0.001158410,
+            0.000188269,
+            6.281627496,
+            6.281627514,
+        ]
+        true_dec = [
+            -0.001389369,
+            0.0017140704,
+            0.000744243,
+            -0.001292381,
+            -0.002390839,
+            -0.003360248,
+            -0.005492987,
+            -0.005396017,
+        ]
         self.assertFloatsAlmostEqual(
-            np.sort(
-                [
-                    3806.7636478057957,
-                    2806.982895217227,
-                    607.3861483168994,
-                    707.3972344551466,
-                    614.607342274194,
-                    714.6336433247832,
-                    3815.2649173460436,
-                    2815.0561553920156,
-                ],
-            ),
+            np.sort(true_ra), np.sort(outputDf["coord_ra"]), atol=1e-8
+        )
+        self.assertFloatsAlmostEqual(
+            np.sort(true_dec), np.sort(outputDf["coord_dec"]), atol=1e-8
+        )
+        s11_x, s11_y = s11_wcs.skyToPixelArray(true_ra[:4], true_dec[:4])
+        s10_x, s10_y = s10_wcs.skyToPixelArray(true_ra[4:], true_dec[4:])
+        true_x = np.sort(np.array([s11_x, s10_x]).flatten())
+        true_y = np.sort(np.array([s11_y, s10_y]).flatten())
+        self.assertFloatsAlmostEqual(
+            true_x,
             np.sort(outputDf["centroid_x"]),
-            atol=1e-15,
-            rtol=1e-15,
+            atol=1e-2,  # Small fractions of pixel okay since we abbreviated ra, dec positions above
         )
-        self.assertFloatsAlmostEqual(
-            np.sort(
-                [
-                    3196.070534224157,
-                    2195.666002294077,
-                    394.8907003737886,
-                    394.9087004171349,
-                    396.2407036464963,
-                    396.22270360324296,
-                    3196.1965343932648,
-                    2196.188002312585,
-                ],
-            ),
-            np.sort(outputDf["centroid_y"]),
-            atol=1e-15,
-            rtol=1e-15,
-        )
+        self.assertFloatsAlmostEqual(true_y, np.sort(outputDf["centroid_y"]), atol=1e-2)
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
@@ -236,12 +258,21 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         # run task on all exposures
         donutCatDfList = []
+        donutCatXPixelList = []
+        donutCatYPixelList = []
         # Set task to take all donuts regardless of magnitude
         self.task.config.donutSelector.useCustomMagLimit = True
         for exposure in expList:
             taskOutput = self.task.run(deferredList, exposure)
             self.assertEqual(len(taskOutput.donutCatalog), 4)
             donutCatDfList.append(taskOutput.donutCatalog)
+            # Get pixel locations with proper wcs
+            donutX, donutY = exposure.wcs.skyToPixelArray(
+                taskOutput.donutCatalog["coord_ra"],
+                taskOutput.donutCatalog["coord_dec"],
+            )
+            donutCatXPixelList.append(donutX)
+            donutCatYPixelList.append(donutY)
 
         # concatenate catalogs from each exposure into a single catalog
         # to compare against the test input reference catalog
@@ -261,35 +292,13 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertCountEqual(np.radians(inputCat["ra"]), outputDf["coord_ra"])
         self.assertCountEqual(np.radians(inputCat["dec"]), outputDf["coord_dec"])
         self.assertFloatsAlmostEqual(
-            np.sort(
-                [
-                    3806.7636478057957,
-                    2806.982895217227,
-                    607.3861483168994,
-                    707.3972344551466,
-                    614.607342274194,
-                    714.6336433247832,
-                    3815.2649173460436,
-                    2815.0561553920156,
-                ],
-            ),
+            np.sort(np.array(donutCatXPixelList).flatten()),
             np.sort(outputDf["centroid_x"]),
             atol=1e-15,
             rtol=1e-15,
         )
         self.assertFloatsAlmostEqual(
-            np.sort(
-                [
-                    3196.070534224157,
-                    2195.666002294077,
-                    394.8907003737886,
-                    394.9087004171349,
-                    396.2407036464963,
-                    396.22270360324296,
-                    3196.1965343932648,
-                    2196.188002312585,
-                ],
-            ),
+            np.sort(np.array(donutCatYPixelList).flatten()),
             np.sort(outputDf["centroid_y"]),
             atol=1e-15,
             rtol=1e-15,

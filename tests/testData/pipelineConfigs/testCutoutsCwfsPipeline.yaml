@@ -41,7 +41,7 @@ tasks:
       # Test CWFS pipeline works when specifying instrument parameters.
       donutTemplateSize: 160
       donutStampSize: 160
-      initialCutoutPadding: 40
+      initialCutoutPadding: 5
       instObscuration: 0.61
       instFocalLength: 10.312
       instApertureDiameter: 8.36
