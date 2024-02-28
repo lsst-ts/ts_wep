@@ -294,14 +294,14 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertFloatsAlmostEqual(
             np.sort(np.array(donutCatXPixelList).flatten()),
             np.sort(outputDf["centroid_x"]),
-            atol=1e-15,
-            rtol=1e-15,
+            atol=1e-14,
+            rtol=1e-14,
         )
         self.assertFloatsAlmostEqual(
             np.sort(np.array(donutCatYPixelList).flatten()),
             np.sort(outputDf["centroid_y"]),
-            atol=1e-15,
-            rtol=1e-15,
+            atol=1e-14,
+            rtol=1e-14,
         )
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026

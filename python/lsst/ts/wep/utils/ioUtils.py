@@ -22,19 +22,27 @@
 __all__ = [
     "getModulePath",
     "getConfigDir",
+    "resolveRelativeConfigPath",
+    "readConfigYaml",
+    "mergeConfigWithFile",
+    "configClass",
     "getObsLsstCmdTaskConfigDir",
     "writeFile",
     "readPhoSimSettingData",
     "getAmpImagesFromDir",
 ]
 
+import inspect
 import os
 import re
+from typing import Any, Union
 
+import numpy as np
+import yaml
 from lsst.utils import getPackageDir
 
 
-def getModulePath():
+def getModulePath() -> str:
     """Get the path of module.
 
     Returns
@@ -46,7 +54,7 @@ def getModulePath():
     return getPackageDir("ts_wep")
 
 
-def getConfigDir():
+def getConfigDir() -> str:
     """Get the directory of configuration files.
 
     Returns
@@ -56,6 +64,187 @@ def getConfigDir():
     """
 
     return os.path.join(getModulePath(), "policy")
+
+
+def resolveRelativeConfigPath(path: str) -> str:
+    """Resolve a relative config path into an absolute path.
+
+    This does not check whether the absolute path actually points to a file.
+
+    Parameters
+    ----------
+    path : str
+        Path relative to the policy directory. Can start with "policy:" or not.
+
+    Returns
+    -------
+    str
+        Absolute path of config file in the policy directory
+    """
+    # Remove policy: prefix if present
+    path = path.removeprefix("policy:")
+
+    # Return the absolute policy path
+    return os.path.join(getConfigDir(), path)
+
+
+def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
+    """Read the config yaml file and return the corresponding dictionary.
+
+    Parameters
+    ----------
+    path : str
+        Path to the config yaml file. Can be an absolute or relative path, but
+        if the path starts with "policy:", the path will be understood to be
+        relative to the ts_wep policy directory.
+    recurseImports : str, optional
+        If True, and the config contains 'imports', open the file(s) provided
+        under that keyword and merge the resulting configurations. In the case
+        of overlapping keywords, each subsequent import overrides previous
+        imports, and the imported configs are all overridden by the top level
+        config. (the default is True)
+
+    Returns
+    -------
+    dict
+        Dictionary containing the configuration stored in the yaml file
+
+    Raises
+    ------
+    ValueError
+        If recurseImports is True and 'imports' doesn't map to a string
+        or 1D list of strings
+    """
+    # Is the path relative to the policy directory?
+    if path.startswith("policy:"):
+        # Get absolute path including the policy directory path
+        path = resolveRelativeConfigPath(path)
+
+    # Read the parameter file into a dictionary
+    with open(path, "r") as file:
+        config = yaml.safe_load(file)
+
+    if not recurseImports:
+        return config
+
+    # Iteratively load imports and merge configs
+    imports = np.atleast_1d(config.pop("imports", []))
+    importedConfig = dict()
+    if imports.size > 0 and (imports.ndim != 1 or imports.dtype.kind not in ["U", "S"]):
+        raise ValueError("'imports' must map to a string or list of strings")
+    for path in imports:
+        importedConfig = importedConfig | readConfigYaml(path)
+
+    # Apply the overrides to the imported config
+    config = importedConfig | config
+
+    return config
+
+
+def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
+    """Merge the passed keyword arguments with the values stored in the file.
+
+    If configFile is not provided, the keyword arguments are returned verbatim.
+
+    Parameters
+    ----------
+    configFile : str, optional
+        Path to the config yaml file. Can be an absolute or relative path,
+        but if the path starts with "policy:", the path will be understood
+        to be relative to the ts_wep policy directory. This file can only
+        contain keys that match keywords in kwargs, but it need not contain
+        all the keywords.
+    kwargs : Any
+        Keyword arguments with which to replace the values from the file.
+        Note that None values are always ignored in favor of the value in
+        configFile.
+
+    Returns
+    -------
+    dict
+        Config dictionary
+
+    Raises
+    ------
+    KeyError
+        If configFile contains keywords not present in kwargs
+    """
+    # Get the default values from the file
+    if configFile is None:
+        fileConfig = dict()
+    else:
+        fileConfig = readConfigYaml(configFile)
+
+    # Determine if the configFile contains keywords not present in kwargs
+    extraKeys = set(fileConfig.keys()) - set(kwargs.keys())
+    if len(extraKeys) > 0:
+        raise KeyError(f"configFile contains unrecognized keys {extraKeys}")
+
+    # Merge the two dictionaries
+    mergedConfig = {}
+    for key, val in kwargs.items():
+        if val is None:
+            mergedConfig[key] = fileConfig.get(key, None)
+        else:
+            mergedConfig[key] = val
+
+    return mergedConfig
+
+
+def configClass(config: Union[str, dict, None, Any], classObj: Any) -> Any:
+    """Configure the class.
+
+    This function is a generic wrapper around the process of passing a
+    config to the __init__ function of a class, so that the passed config
+    can take on a variety of types.
+
+    If config is a string, it is assumed to be the path to a config
+    file, and this path is passed to the configFile argument of the
+    class constructor. If config is a dictionary, then the contents
+    are passed as keyword arguments. If config is an instance of the
+    class, the instance is returned unchanged. If config is None, then
+    the class is instantiated using its defaults.
+
+    Parameters
+    ----------
+    config : str, dict, None, or class instance
+        The configuration for the class. See notes above.
+    classObj : class
+        A class that will be instantiated using the provided config.
+        See notes above.
+
+    Returns
+    -------
+    class instance
+        An instance of the classObj class with the provided configuration
+
+    Raises
+    ------
+    TypeError
+        If classObj is not a class
+    """
+    # Check that classObj is a class
+    if not inspect.isclass(classObj):
+        raise TypeError("classObj must be a class.")
+
+    # If config is an instance of this class, just return it
+    if isinstance(config, classObj):
+        return config
+
+    # If config is a string, pass config as configFile
+    if isinstance(config, str):
+        return classObj(configFile=config)
+    # If it's a dictionary, pass keyword arguments
+    elif isinstance(config, dict):
+        return classObj(**config)
+    # If it's None, try instantiating with defaults
+    elif config is None:
+        return classObj()
+    # If it's none of these, raise an error
+    else:
+        raise TypeError(
+            "config must be a string, dictionary, None, or an instance of classObj."
+        )
 
 
 def getObsLsstCmdTaskConfigDir():

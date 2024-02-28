@@ -14,7 +14,7 @@ tasks:
     # include bias or flats we only want to use doApplyGains and
     # doOverscan in our isr task.
     config:
-      connections.outputExposure: 'postISRCCD'
+      connections.outputExposure: "postISRCCD"
       doBias: False
       doVariance: False
       doLinearize: False
@@ -39,6 +39,5 @@ tasks:
       # And here we specify the configuration settings originally defined in
       # CutOutDonutsScienceSensorTaskConfig.
       # Test with default instrument configuration parameters
-      donutTemplateSize: 160
       donutStampSize: 160
       initialCutoutPadding: 40

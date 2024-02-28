@@ -17,8 +17,7 @@ WEP
 Overview
 ========
 
-The wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the intra- and extra-focal donut images.
-The wavefront error is determined by solving the transport of intensity equation (TIE) that approximates the change of intensity mainly comes from the wavefront error.
+The wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials based on the intra- and extra-focal donut images.
 
 In automatic operation, WEP will be run as part of the Main Telescope Active Optics System (`MTAOS <https://ts-mtaos.lsst.io/index.html>`_).
 

@@ -14,7 +14,7 @@ tasks:
     # include bias or flats we only want to use doApplyGains and
     # doOverscan in our isr task.
     config:
-      connections.outputExposure: 'postISRCCD'
+      connections.outputExposure: "postISRCCD"
       doBias: False
       doVariance: False
       doLinearize: False
@@ -31,20 +31,9 @@ tasks:
       python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN_PER_ROW'
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
-    config:
-      donutTemplateSize: 200
-      removeBlends: True
-      opticalModel: 'onAxis'
   cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings
-      donutTemplateSize: 200
       donutStampSize: 200
       initialCutoutPadding: 40
-      opticalModel: 'onAxis'
-      instObscuration: 0.3525
-      instFocalLength: 21.6
-      instApertureDiameter: 1.2
-      instDefocalOffset: 32.8
-      instPixelSize: 10.0e-6

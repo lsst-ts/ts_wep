@@ -26,9 +26,12 @@ import lsst.utils.tests
 import numpy as np
 import pytest
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
-from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
-from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task import (
+    CalcZernikesTask,
+    CalcZernikesTaskConfig,
+    CombineZernikesMeanTask,
+    CombineZernikesSigmaClipTask,
+)
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -92,7 +95,6 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
-        self.config.opticalModel = "onAxis"
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -119,7 +121,13 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
-    def testEstimateZernikes(self):
+    def testEstimateZernikesRegression(self):
+        """THIS DOES NOT TEST ZERNIKE ACCURACY!!!
+
+        This only tests to see if software changes result in different
+        Zernikes. If that is expected and okay, you can change the test
+        values below.
+        """
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
@@ -136,67 +144,37 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
             np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19)
         )
 
-        zkList = np.array(
+        # Previous Zernikes for regression test
+        zk = np.array(
             [
-                [
-                    8.51874706e-03,
-                    -1.14889498e-01,
-                    -4.59798303e-02,
-                    1.17980813e-02,
-                    -5.47971263e-03,
-                    -3.37311212e-02,
-                    1.68802493e-02,
-                    -3.78572402e-02,
-                    1.05657862e-02,
-                    -1.10063567e-04,
-                    -8.53572243e-03,
-                    1.01936034e-02,
-                    -1.75246804e-03,
-                    -1.78255049e-03,
-                    8.62521565e-04,
-                    -5.23579524e-04,
-                    -4.45220226e-03,
-                    2.38692144e-03,
-                    9.67399215e-03,
-                ],
-                [
-                    -2.40261395e-02,
-                    -1.10103556e-01,
-                    -1.31705158e-03,
-                    8.44028035e-03,
-                    -3.96194900e-04,
-                    -3.09416580e-02,
-                    2.19351288e-02,
-                    -3.03180146e-02,
-                    6.07601745e-03,
-                    -1.00489422e-03,
-                    -1.02136815e-02,
-                    7.33892033e-03,
-                    -1.18980188e-03,
-                    -2.71901549e-04,
-                    -3.58675079e-04,
-                    3.15012317e-04,
-                    -5.05772823e-03,
-                    1.09876495e-03,
-                    7.51209259e-03,
-                ],
+                -0.00283742,
+                0.12024323,
+                -0.05781533,
+                -0.00683463,
+                -0.01198631,
+                0.03911933,
+                -0.07739852,
+                -0.0307383,
+                0.0114996,
+                -0.00157382,
+                -0.00154171,
+                -0.00857287,
+                0.00426482,
+                -0.00160444,
+                0.01318693,
+                -0.00538555,
+                -0.02333674,
+                -0.02252251,
+                0.00943855,
             ]
         )
 
-        for i in range(2):
-            # ensure total rms error is within 0.5 microns from the
-            # recorded values with possible changes from ISR pipeline, etc.
-            self.assertLess(
-                np.sqrt(
-                    np.sum(np.square(zernCoeff.outputZernikesRaw[0][i] - zkList[i]))
-                ),
-                0.5,
-            )
+        self.assertTrue(np.allclose(zk, zernCoeff.outputZernikesRaw[0]))
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
-        combinedZernikesStruct = self.task.getCombinedZernikes(testArr)
+        combinedZernikesStruct = self.task.combineZernikes.run(testArr)
         np.testing.assert_array_equal(
             combinedZernikesStruct.combinedZernikes, np.ones(19)
         )

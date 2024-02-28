@@ -4,9 +4,6 @@ description: wep basic processing test pipeline
 # Here we specify the corresponding instrument for the data we
 # will be using.
 instrument: lsst.obs.lsst.LsstCam
-# Use imported instrument configuration
-imports:
-  - location: $TS_WEP_DIR/policy/cwfs/instData/lsstfam/instParamPipeConfig.yaml
 # Then we can specify each task in our pipeline by a name
 # and then specify the class name corresponding to that task
 tasks:
@@ -17,7 +14,7 @@ tasks:
     # include bias or flats we only want to use doApplyGains and
     # doOverscan in our isr task.
     config:
-      connections.outputExposure: 'postISRCCD'
+      connections.outputExposure: "postISRCCD"
       doBias: False
       doVariance: False
       doLinearize: False
@@ -42,7 +39,6 @@ tasks:
       # And here we specify the configuration settings originally defined in
       # CutOutDonutsScienceSensorTaskConfig.
       # Test Science Sensor pipeline works when specifying instrument configuration
-      donutTemplateSize: 160
       donutStampSize: 160
       initialCutoutPadding: 40
   calcZernikesTask:

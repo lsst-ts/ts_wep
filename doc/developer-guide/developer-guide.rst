@@ -4,9 +4,7 @@
 WEP Developer Guide
 ###################
 
-Wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the intra- and extra-focal donut images.
-The wavefront error is determined by solving the transport of intensity equation (TIE) that approximates the change of intensity mainly comes from the wavefront error.
-For an in-depth explanation of the algorithm that solves the TIE equation see the following technote: `SITCOMTN-046: AOS Algorithm for Wavefront Estimation <https://sitcomtn-046.lsst.io/>`_.
+Wavefront estimation pipeline (WEP) calculates the wavefront error in annular Zernike polynomials based on the intra- and extra-focal donut images.
 
 .. _WEP_Main_Classes:
 
@@ -18,7 +16,7 @@ Main Classes
 
 Important classes:
 
-* `WfEstimator` calculates the wavefront error in annular Zernike polynomials up to 22 terms based on the defocal donut images.
+* `WfEstimator` calculates the wavefront error in annular Zernike polynomials based on the defocal donut images.
 
 Important Pipeline Tasks:
 
@@ -29,8 +27,7 @@ Important Pipeline Tasks:
 
 Important enums:
 
-* `FilterType` defines the type of active filter.
-* `CamType` defines the type of camera.
+* `BandLabel` defines the type of active filter.
 * `BscDbType` defines the type of bright star catalog database.
 
 .. _WEP_Modules:
@@ -50,35 +47,42 @@ This module is a high-level module to use other modules.
 .. uml:: ../uml/wepClass.uml
     :caption: Class diagram of wep
 
-* **WfEstimator**: Calculate the wavefront error in annular Zernike polynomials up to 22 terms based on the defocal donut images.
-* **ParamReader**: Parameter reader class to read the yaml configuration files used in the calculation.
+* **Instrument**: Class that defines the geometry, mask model, Batoid model, etc. for different telescopes.
+* **Image**: Image class to have the function to get the donut center.
+* **ImageMapper**: Class that maps images between the pupil and image planes, and creates masks.
 * **DonutImageCheck**: Donut image check class to judge the donut image is effective or not.
 * **DonutDetector**: Detect donuts directly from an out of focus image by convolution with a template image.
 
-.. _WEP_modules_wep_cwfs:
+.. _WEP_modules_wep_centroid:
 
-wep.cwfs
+wep.centroid
 -------------
 
-This module calculates the wavefront error by solving the TIE.
+.. uml:: ../uml/centroidClass.uml
+    :caption: Class diagram of wep.centroid
 
-.. uml:: ../uml/cwfsClass.uml
-    :caption: Class diagram of wep.cwfs
+This module finds the centroids of donuts.
 
-* **Algorithm**: Algorithm class to solve the TIE to get the wavefront error.
-* **CompensableImage**: Compensable image class to project the donut image from the image plane to the pupil plane.
-* **Image**: Image class to have the function to get the donut center.
-* **Instrument**: Instrument class to have the instrument information used in the Algorithm class to solve the TIE.
 * **CentroidFindFactory**: Factory for creating the centroid find object to calculate the centroid of donut.
 * **CentroidDefault**: Default centroid class.
 * **CentroidRandomWalk**: CentroidDefault child class to get the centroid of donut by the random walk model.
-* **CentroidOtsu**: CentroidDefault child class to get the centroid of donut by the Otsu's method.
+* **CentroidOtsu**: CentroidDefault child class to get the centroid of donut by Otsu's method.
 * **CentroidConvolveTemplate**: CentroidDefault child class to get the centroids of one or more donuts in an image by convolution with a template donut.
-* **BaseCwfsTestCase**: Base class for CWFS tests.
-* **DonutTemplateFactory**: Factory for creating donut template objects used by CentroidConvolveTemplate.
-* **DonutTemplateDefault**: Default donut template class.
-* **DonutTemplateModel**: DonutTemplateDefault child class to make donut templates using an Instrument model.
-* **DonutTemplatePhosim**: DonutTemplateDefault child class to make donut templates from templates created with Phosim. See :doc:`here <../user-guide/phosimDonutTemplates>` for more information on creating and using Phosim donut templates.
+
+.. _WEP_modules_wep_estimation:
+
+wep.estimation
+-------------
+
+.. uml:: ../uml/estimationClass.uml
+    :caption: Class diagram of wep.estimation
+
+This module estimates the wavefront error.
+
+* **WfEstimator**: Calculate the wavefront error in annular Zernike polynomials based on the defocal donut images.
+* **WfAlgorithm**: Base class for algorithms that estimate Zernikes from donut images.
+* **WfAlgorithmFactory**: Factory for creating the algorithm classes
+* **TieAlgorithm**: Class that estimates Zernikes by solving the transport of intensity equation.
 
 .. _WEP_modules_wep_deblend:
 
@@ -125,6 +129,10 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **CombineZernikesMeanTask**: Gen 3 middleware task to combine the Zernike coefficients using an unweighted mean of coefficients from all donut pairs.
 * **CombineZernikesSigmaClipTask**: Gen 3 middleware task to combine the Zernike coefficients with a sigma clipping method that will remove donuts with outlier Zernike values from the final averaging of donut pairs.
 * **CombineZernikesSigmaClipTaskConfig**: Configuration setup for CombineZernikesSigmaClipTask.
+* **EstimateZernikesBaseTask**: Base class for EstimateZernikes subtasks that estimate the Zernike coefficients from donut images.
+* **EstimateZernikesBaseConfig**: Configuration for EstimateZernikesBase.
+* **EstimateZernikesTieTask**: Subtask that estimates Zernikes from stamps using the TIE algorithm.
+* **EstimateZernikesTieConfig**: Configuration for EstimateZernikesTieTask.
 * **CalcZernikesTask**: Gen 3 middleware task to calculate the zernikes from donut stamps that already exist in the butler.
 * **CalcZernikesTaskConnections**: Connections setup for CalcZernikesTask.
 * **CalcZernikesTaskConfig**: Configuration setup for CalcZernikesTask.
@@ -150,6 +158,7 @@ This module contains utility functions that are used elsewhere in WEP.
 
 * **enumUtils**: Enum definitions and related functions.
 * **ioUtils**: Functions for reading and writing files.
+* **maskUtils**: Functions for generating a mask model for an instrument.
 * **taskUtils**: Functions for running command line tasks from a python script.
 * **zernikeUtils**: Functions for evaluating and fitting Zernike polynomials. 
 * **plotUtils**: Functions for plotting results.
@@ -165,7 +174,10 @@ This section is autogenerated from docstrings.
 .. automodapi:: lsst.ts.wep
     :no-inheritance-diagram:
 
-.. automodapi:: lsst.ts.wep.cwfs
+.. automodapi:: lsst.ts.wep.centroid
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.estimation
     :no-inheritance-diagram:
 
 .. automodapi:: lsst.ts.wep.deblend

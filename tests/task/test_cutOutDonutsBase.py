@@ -25,13 +25,14 @@ import lsst.utils.tests
 import numpy as np
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
 )
 from lsst.ts.wep.utils import (
-    CamType,
     DefocalType,
+    createTemplateForDetector,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
@@ -77,7 +78,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         runProgram(cleanUpCmd)
 
     def setUp(self):
-        self.config = CutOutDonutsBaseTaskConfig(instDefocalOffset=1.5)
+        self.config = CutOutDonutsBaseTaskConfig()
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -98,18 +99,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def _generateTestExposures(self):
         # Generate donut template
-        template = self.task.getTemplate(
-            "R22_S11", DefocalType.Extra, self.task.donutTemplateSize, CamType.LsstCam
-        )
+        camera = LsstCam.getCamera()
+        template = createTemplateForDetector(camera.get("R22_S11"), "extra")
+        template = np.pad(template, (self.task.donutStampSize - len(template)) // 2)
         correlatedImage = correlate(template, template)
         maxIdx = np.argmax(correlatedImage)
         maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
-        templateCenter = np.array(maxLoc) - self.task.donutTemplateSize / 2
+        templateCenter = np.array(maxLoc) - len(template) / 2
 
         # Make donut centered in exposure
-        initCutoutSize = (
-            self.task.donutTemplateSize + self.task.initialCutoutPadding * 2
-        )
+        initCutoutSize = len(template) + self.task.initialCutoutPadding * 2
         centeredArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
         centeredArr[
             self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
@@ -127,9 +126,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Make new donut that needs to be shifted by 20 pixels
         # from the edge of the exposure
         offCenterArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
-        offCenterArr[
-            : self.task.donutTemplateSize - 20, : self.task.donutTemplateSize - 20
-        ] = template[20:, 20:]
+        offCenterArr[: len(template) - 20, : len(template) - 20] = template[20:, 20:]
         offCenterImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
         offCenterImage.array = offCenterArr
         offCenterExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
@@ -141,72 +138,19 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
 
     def testValidateConfigs(self):
-        self.assertEqual(self.task.donutTemplateSize, 160)
         self.assertEqual(self.task.donutStampSize, 160)
         self.assertEqual(self.task.initialCutoutPadding, 5)
         self.assertEqual(self.task.opticalModel, "offAxis")
-        self.assertEqual(self.task.instParams["obscuration"], 0.61)
-        self.assertEqual(self.task.instParams["focalLength"], 10.312)
-        self.assertEqual(self.task.instParams["apertureDiameter"], 8.36)
-        self.assertEqual(self.task.instParams["offset"], 1.5)
-        self.assertEqual(self.task.instParams["pixelSize"], 10.0e-6)
-        self.assertFalse(self.task.multiplyMask)
-        self.assertEqual(self.task.maskGrowthIter, 6)
+        self.assertEqual(self.task.instConfigFile, None)
 
-        self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.config.opticalModel = "onAxis"
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
-        self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
         self.assertEqual(self.task.opticalModel, "onAxis")
-
-    def testCreateInstDictFromConfig(self):
-        self.config.instObscuration = 0.1
-        self.config.instFocalLength = 10.0
-        self.config.instApertureDiameter = 10.0
-        self.config.instDefocalOffset = 0.01
-        self.config.instPixelSize = 0.1
-        task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
-
-        testDict = {
-            "obscuration": 0.1,
-            "focalLength": 10.0,
-            "apertureDiameter": 10.0,
-            "offset": 0.01,
-            "pixelSize": 0.1,
-        }
-
-        self.assertDictEqual(testDict, task.instParams)
-
-    def testCheckAndSetOffset(self):
-        # If offset is already set then no change
-        self.assertEqual(self.task.instParams["offset"], 1.5)
-        self.task._checkAndSetOffset(30.0)
-        self.assertEqual(self.task.instParams["offset"], 1.5)
-
-        # If offset is None then change to incoming value
-        self.task.instParams["offset"] = None
-        self.task._checkAndSetOffset(30.0)
-        self.assertEqual(self.task.instParams["offset"], 30.0)
-
-    def testGetTemplate(self):
-        extra_template = self.task.getTemplate(
-            "R22_S11", DefocalType.Extra, self.task.donutTemplateSize, CamType.LsstCam
-        )
-        self.assertEqual(
-            np.shape(extra_template),
-            (self.config.donutTemplateSize, self.config.donutTemplateSize),
-        )
-        self.config.donutTemplateSize = 180
-        self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
-        intra_template = self.task.getTemplate(
-            "R22_S11", DefocalType.Intra, self.task.donutTemplateSize, CamType.LsstCam
-        )
-        self.assertEqual(np.shape(intra_template), (180, 180))
 
     def testShiftCenter(self):
         centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)
@@ -308,15 +252,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             donutStamps[0].stamp_im.image.array, expCutOut
         )
 
-        # Test MaskPlaneDict has DONUT and mask has donut mask
-        self.assertIn(
-            "DONUT", list(donutStamps[0].stamp_im.mask.getMaskPlaneDict().keys())
-        )
-        self.assertCountEqual(
-            [0, donutStamps[0].stamp_im.mask.getPlaneBitMask("DONUT")],
-            np.unique(donutStamps[0].stamp_im.mask.array),
-        )
-
         # Check that local linear WCS in archive element is consistent with the
         # original exposure WCS.
         exposure_wcs = exposure.wcs
@@ -333,64 +268,3 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
                     rtol=0.0,
                     atol=10e-6,  # 10 microarcsecond accurate over stamp region
                 )
-
-    def testCutOutStampsBlended(self):
-        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
-        donutStampsNoBlend = self.task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
-
-        # Test that even with blends there is no mask multiplication
-        # when multiplyMask is False
-        donutCatalog["blend_centroid_x"] = [
-            [donutCatalog["centroid_x"].iloc[0]],
-            [],
-            [],
-        ]
-        donutCatalog["blend_centroid_y"] = [
-            [donutCatalog["centroid_y"].iloc[0]],
-            [],
-            [],
-        ]
-
-        # Reload exposure everytime since it is modified by stamp generation
-        exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsNoMultiply = self.task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
-        np.testing.assert_array_equal(
-            donutStampsNoBlend[0].stamp_im.image.array,
-            donutStampsNoMultiply[0].stamp_im.image.array,
-        )
-
-        # Test that turning on multiply mask includes mask in stamp image
-        multiplyConfig = CutOutDonutsBaseTaskConfig(
-            instDefocalOffset=1.5, multiplyMask=True
-        )
-        maskedTask = CutOutDonutsBaseTask(config=multiplyConfig, name="Masked Task")
-        exposure = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsMasked = maskedTask.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
-        self.assertGreater(
-            np.sum(donutStampsNoBlend[0].stamp_im.image.array),
-            np.sum(donutStampsMasked[0].stamp_im.image.array),
-        )
-        # Test that unblended stamp does not change
-        np.testing.assert_array_equal(
-            donutStampsNoBlend[1].stamp_im.image.array,
-            donutStampsMasked[1].stamp_im.image.array,
-        )
-        # Test that stamp centroid positions are added to donutStamp
-        self.assertEqual(
-            int(donutStampsMasked[0].blend_centroid_positions[0][0]),
-            donutStampsMasked[0].centroid_position.getX(),
-        )
-        self.assertEqual(
-            int(donutStampsMasked[0].blend_centroid_positions[0][1]),
-            donutStampsMasked[0].centroid_position.getY(),
-        )

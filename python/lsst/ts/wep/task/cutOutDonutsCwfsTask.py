@@ -57,9 +57,6 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Set size (in pixels) of donut template image used for
-        # final centroiding by convolution of initial cutout with template
-        self.donutTemplateSize = self.config.donutTemplateSize
         # Set final size (in pixels) of postage stamp images returned as
         # DonutStamp objects
         self.donutStampSize = self.config.donutStampSize
@@ -169,28 +166,21 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         donutStampsIntra = DonutStamps([], use_archive=True)
 
         for exposure in exposures:
-            focusZ = exposure.visitInfo.focusZ
             detectorName = exposure.getDetector().getName()
             if detectorName in self.extraFocalNames:
-                # LSST extrafocal chips are offset -1.5 mm
-                # when LSST camera defocus is at 0.
-                if self.config.instDefocalOffset is None:
-                    self.instParams["offset"] = np.abs(focusZ - 1.5)
-                else:
-                    self.config.instDefocalOffset
                 donutStampsExtraExp = self.cutOutStamps(
-                    exposure, extraCatalog, DefocalType.Extra, cameraName
+                    exposure,
+                    extraCatalog,
+                    DefocalType.Extra,
+                    cameraName,
                 )
                 donutStampsExtra.extend([stamp for stamp in donutStampsExtraExp])
             elif detectorName in self.intraFocalNames:
-                # LSST intrafocal chips are offset +1.5 mm
-                # when LSST camera defocus is at 0.
-                if self.config.instDefocalOffset is None:
-                    self.instParams["offset"] = np.abs(focusZ + 1.5)
-                else:
-                    self.config.instDefocalOffset
                 donutStampsIntraExp = self.cutOutStamps(
-                    exposure, intraCatalog, DefocalType.Intra, cameraName
+                    exposure,
+                    intraCatalog,
+                    DefocalType.Intra,
+                    cameraName,
                 )
                 donutStampsIntra.extend([stamp for stamp in donutStampsIntraExp])
             else:

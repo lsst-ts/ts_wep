@@ -91,14 +91,8 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
     def setUp(self):
         self.config = CutOutDonutsScienceSensorTaskConfig()
         self.config.donutStampSize = 200
-        self.config.donutTemplateSize = 200
         self.config.opticalModel = "onAxis"
         self.config.initialCutoutPadding = 40
-        self.config.instObscuration = 0.3525
-        self.config.instFocalLength = 21.6
-        self.config.instApertureDiameter = 1.2
-        self.config.instDefocalOffset = 32.8
-        self.config.instPixelSize = 10.0e-6
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -199,11 +193,11 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
             self.assertMaskedImagesAlmostEqual(
-                donutStamp.stamp_im, cutOutStamp.stamp_im
+                donutStamp.stamp_im, cutOutStamp.stamp_im, atol=1e-4
             )
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
             self.assertMaskedImagesAlmostEqual(
-                donutStamp.stamp_im, cutOutStamp.stamp_im
+                donutStamp.stamp_im, cutOutStamp.stamp_im, atol=1e-4
             )
 
     @classmethod

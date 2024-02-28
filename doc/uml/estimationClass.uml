@@ -1,0 +1,5 @@
+@startuml
+WfAlgorithm <|-- TieAlgorithm
+WfAlgorithmFactory ..> TieAlgorithm
+WfEstimator *-- WfAlgorithmFactory
+@enduml

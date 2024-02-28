@@ -63,24 +63,6 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.assertEqual(self.task.config.measurementTask.nSigmaDetection, 5.0)
         self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
 
-    def testCreateInstDictFromConfig(self):
-        self.config.instObscuration = 0.1
-        self.config.instFocalLength = 10.0
-        self.config.instApertureDiameter = 10.0
-        self.config.instDefocalOffset = 0.01
-        self.config.instPixelSize = 0.1
-        task = GenerateDonutDirectDetectTask(config=self.config)
-
-        testDict = {
-            "obscuration": 0.1,
-            "focalLength": 10.0,
-            "apertureDiameter": 10.0,
-            "offset": 0.01,
-            "pixelSize": 0.1,
-        }
-
-        self.assertDictEqual(testDict, task.instParams)
-
     def testUpdateDonutCatalog(self):
         testDataId = {
             "instrument": "LSSTCam",

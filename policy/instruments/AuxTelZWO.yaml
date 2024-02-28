@@ -1,0 +1,10 @@
+# High Speed ZW Optical Camera Parameters
+# lsst.obs.lsst.Latiss
+
+# Use settings from AuxTel
+imports: policy:instruments/AuxTel.yaml
+
+# Apply these overrides
+name: AuxTelZWO
+pixelSize: 15.2e-6
+batoidOffsetValue: 0.5e-3

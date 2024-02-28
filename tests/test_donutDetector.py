@@ -23,9 +23,9 @@ import unittest
 
 import numpy as np
 import pandas as pd
-from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.donutDetector import DonutDetector
-from lsst.ts.wep.utils import DefocalType, DonutTemplateType
+from lsst.ts.wep.utils import createTemplateForDetector
 
 
 class TestDonutDetector(unittest.TestCase):
@@ -34,24 +34,13 @@ class TestDonutDetector(unittest.TestCase):
     def setUp(self):
         self.donutDetector = DonutDetector()
 
-    def _makeData(self, imgSize, templateSize, donutSep):
-        templateMaker = DonutTemplateFactory.createDonutTemplate(
-            DonutTemplateType.Model
-        )
+    def _makeData(self, imgSize, donutSep):
+        # Create the template
+        camera = LsstCam().getCamera()
+        detector = camera.get("R22_S11")
+        template = createTemplateForDetector(detector, "extra")
 
-        # Set inst information
-        instParams = {
-            "obscuration": 0.61,
-            "focalLength": 10.312,
-            "apertureDiameter": 8.36,
-            "offset": 1.0,
-            "pixelSize": 10.0e-6,
-        }
-
-        template = templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, templateSize, instParams=instParams
-        )
-        templateHalfWidth = int(templateSize / 2)
+        templateHalfWidth = int(len(template) / 2)
 
         blendedImg = np.zeros((imgSize, imgSize))
         center = int(imgSize / 2)
@@ -105,7 +94,7 @@ class TestDonutDetector(unittest.TestCase):
         )
 
     def testDetectDonuts(self):
-        template, testImg = self._makeData(480, 160, 60)
+        template, testImg = self._makeData(480, 60)
         donutDf = self.donutDetector.detectDonuts(testImg, template, 126)
 
         self.assertCountEqual(

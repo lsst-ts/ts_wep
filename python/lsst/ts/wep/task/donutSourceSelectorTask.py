@@ -21,8 +21,6 @@
 
 __all__ = ["DonutSourceSelectorTaskConfig", "DonutSourceSelectorTask"]
 
-import os
-
 import astropy.units as u
 import lsst.geom
 import lsst.pex.config as pexConfig
@@ -31,8 +29,7 @@ import numpy as np
 import pandas as pd
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.sourceSelector import _getFieldFromCatalog
-from lsst.ts.wep.paramReader import ParamReader
-from lsst.ts.wep.utils import getConfigDir
+from lsst.ts.wep.utils import readConfigYaml
 from lsst.utils.timer import timeMethod
 from sklearn.neighbors import NearestNeighbors
 
@@ -48,7 +45,7 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
         dtype=bool,
         default=False,
         doc="Apply user-defined magnitude limit? If this is False then the code"
-        + " will default to use the magnitude values in policy/task/magLimitStar.yaml.",
+        + " will default to use the magnitude values in policy:magLimitStar.yaml.",
     )
     magMax = pexConfig.Field(
         dtype=float,
@@ -212,8 +209,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
             magMin = self.config.magMin
             magMax = self.config.magMax
         else:
-            magPolicyFile = os.path.join(getConfigDir(), "task", "magLimitStar.yaml")
-            magPolicyDefaults = ParamReader(magPolicyFile).getContent()
+            magPolicyDefaults = readConfigYaml("policy:magLimitStar.yaml")
             defaultFilterKey = f"filter{filterName.upper()}"
             magMax = magPolicyDefaults[defaultFilterKey]["high"]
             magMin = magPolicyDefaults[defaultFilterKey]["low"]

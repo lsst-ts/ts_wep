@@ -1,6 +1,8 @@
 @startuml
 class DonutImageCheck
 class DonutDetector
-class ParamReader
-class WfEstimator
+class Instrument
+class Image
+ImageMapper *-- Instrument
+ImageMapper *-- Image
 @enduml

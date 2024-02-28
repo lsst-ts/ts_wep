@@ -30,18 +30,20 @@ import lsst.geom
 import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.meas.algorithms.stamps import AbstractStamp
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
-from lsst.ts.wep.utils import (
-    DefocalType,
-    FilterType,
-    getCameraFromButlerName,
-    getFilterTypeFromBandLabel,
-)
+from lsst.ts.wep.image import Image
+from lsst.ts.wep.imageMapper import ImageMapper
+from lsst.ts.wep.utils import getCameraFromButlerName
 
 
 @dataclass
 class DonutStamp(AbstractStamp):
     """Single donut stamp
+
+    Note all of the top-level stamp information is in the data
+    visualization coordinate system (DVCS), while the information
+    packaged in self.wep_im is in the global camera coordinate
+    system (CCS). See https://sitcomtn-003.lsst.io and the Image
+    docstring for more information.
 
     Parameters
     ----------
@@ -59,7 +61,8 @@ class DonutStamp(AbstractStamp):
         Defocal state of the stamp. "extra" or "intra" are
         allowed values.
     defocal_distance : `float`
-        Defocal offset of the instrument in mm.
+        Defocal offset of the detector in mm. If the detector was not
+        actually shifted, this should be the equivalent detector offset.
     detector_name : `str`
         CCD where the donut is found
     cam_name : `str`
@@ -70,15 +73,12 @@ class DonutStamp(AbstractStamp):
     archive_element : `afwTable.io.Persistable`, optional
         Archive element (e.g. Transform or WCS) associated with this stamp.
         (the default is None.)
-    comp_im : `CompensableImage`, init=False
-        CompensableImage object to create masks for the stamp. This is
-        initialized in the __post_init__ stage of the dataclass.
-    mask_comp : `afwImage.Mask`, init=False
-        Padded Mask for use at the offset planes. This is
-        initialized in the __post_init__ stage of the dataclass.
-    mask_pupil : `afwImage.Mask`, init=False
-        Non-padded mask corresponding to aperture. This is
-        initialized in the __post_init__ stage of the dataclass.
+    wep_im : `lsst.ts.wep.image.Image`
+        ts.wep Image object used for mask creation, wavefront estimation, etc.
+        The information contained in this object has been transformed to the
+        camera coordinate system (CCS), with the CWFSs rotated to the same
+        orientation as the science sensors. It is this object that will be used
+        to interface with the wavefront estimator.
     """
 
     stamp_im: afwImage.MaskedImageF
@@ -91,14 +91,14 @@ class DonutStamp(AbstractStamp):
     cam_name: str
     bandpass: str
     archive_element: Optional[afwTable.io.Persistable] = None
-    comp_im: CompensableImage = field(default_factory=CompensableImage)
+    wep_im: Image = field(init=False)
 
     def __post_init__(self):
         """
-        This method sets up the CompensableImage after initialization
+        This method sets up the WEP Image after initialization
         because we need to use the parameters set in the original `__init__`.
         """
-        self._setCompensableImage()
+        self._setWepImage()
 
     @classmethod
     def factory(cls, stamp_im, metadata, index, archive_element=None):
@@ -212,34 +212,153 @@ class DonutStamp(AbstractStamp):
 
         return np.degrees(field_x), np.degrees(field_y)
 
-    def _setCompensableImage(self):
-        """
-        Set up the compensable image object in the dataclass.
-        """
+    def _setWepImage(self):
+        """Return a ts.wep.image.Image object for the stamp.
 
-        field_xy = self.calcFieldXY()
-        if np.shape(self.blend_centroid_positions)[1] > 0:
+        Note that the information from the butler is in the data visualization
+        coordinate system (DVCS), but the WEP Image is in the global camera
+        coordinate system (CCS). These coordinate systems are related by a
+        transpose. See sitcomtn-003.lsst.io for more information.
+
+        Furthermore, CWFS images that arrive from the butler are rotated with
+        respect to the science sensors. The info in the WEP Images has been
+        de-rotated so that everything aligns with the global coordinate system
+        used by the science sensors.
+
+        Returns
+        -------
+        ts.wep.image.Image
+
+        Raises
+        ------
+        RuntimeError
+            If the rotation angle of the detector with respect to the science
+            sensors is not an integer multiple of 90 degrees.
+        """
+        # Get the camera and detector
+        camera = self.getCamera()
+        detector = camera.get(self.detector_name)
+
+        # Get the rotation with respect to the science sensors
+        eulerZ = -detector.getOrientation().getYaw().asDegrees()
+        nRot = int(eulerZ // 90)
+        if not np.isclose(eulerZ % 90, 0):
+            raise RuntimeError(
+                f"The detector is rotated {-eulerZ} deg with respect to the science "
+                "sensors, but _setWepImage() only works for sensors whose rotations "
+                "are an integer multiple of 90 deg."
+            )
+
+        # Rotate to orientation of science sensors
+        image = np.rot90(self.stamp_im.getImage().getArray(), nRot)
+
+        # Transpose the image (DVCS -> CCS)
+        image = image.T
+
+        # Get the field angle, and transpose (DVCS -> CCS)
+        fieldAngle = self.calcFieldXY()
+        fieldAngle = (fieldAngle[1], fieldAngle[0])
+
+        # Determine the blend offsets
+        if self.blend_centroid_positions.size > 0:
+            # Get the offsets in the original pixel coordinates
             blendOffsets = self.blend_centroid_positions - self.centroid_position
-            blendOffsets = blendOffsets.T
-        else:
-            # If empty array then just pass this as the offset since
-            # CompensableImage understands empty lists mean no blend
-            blendOffsets = self.blend_centroid_positions
 
-        # If no bandpass set then use reference filter as
-        # default when creating a compensableImage instance
-        if self.bandpass == "":
-            filterLabel = FilterType.REF
-        else:
-            filterLabel = getFilterTypeFromBandLabel(self.bandpass)
+            # Rotate the coordinates to match the science sensors
+            rotMat = np.array([[0, -1], [1, 0]])
+            rotMat = np.linalg.matrix_power(rotMat, nRot)
+            blendOffsets = np.transpose(rotMat @ blendOffsets.T)
 
-        self.comp_im.setImg(
-            field_xy,
-            DefocalType(self.defocal_type),
-            filterLabel=filterLabel,
-            blendOffsets=blendOffsets.tolist(),
-            image=self.stamp_im.getImage().getArray(),
+            # Transpose the coordinates (DVCS -> CCS)
+            blendOffsets = blendOffsets[:, ::-1]
+
+        else:
+            blendOffsets = None
+
+        # Package everything in an Image object
+        wepImage = Image(
+            image=image,
+            fieldAngle=fieldAngle,
+            defocalType=self.defocal_type,
+            bandLabel=self.bandpass,
+            blendOffsets=blendOffsets,
         )
+
+        self.wep_im = wepImage
+
+    def makeMask(
+        self,
+        instrument,
+        opticalModel="offAxis",
+        dilate=0,
+        dilateBlends=0,
+    ):
+        """Create the mask for the image.
+
+        Note the mask is returned in the original coordinate system of the info
+        that came from the butler (i.e. the DVCS, and the CWFSs are rotated
+        with respect to the science sensors). See sitcomtn-003.lsst.io for more
+        information.
+
+        Also note that technically the image masks depend on the optical
+        aberrations, but this function assumes the aberrations are zero.
+
+        Parameters
+        ----------
+        instrument : Instrument
+            Instrument to use.
+        opticalModel : str, optional
+            The optical model to use for mapping between the image and
+            pupil planes. Can be "onAxis", or "offAxis". onAxis is an
+            analytic model appropriate for donuts near the optical axis.
+            It is valid for both slow and fast optical systems. The offAxis
+            model is a numerically-fit model that is valid for fast optical
+            systems at wide field angles. offAxis requires an accurate Batoid
+            model.
+        dilate : int, optional
+            How many times to dilate the central mask. This adds a boundary
+            of that many pixels to the mask. (the default is 0)
+        dilateBlends : int, optional
+            How many times to dilate the blend mask.
+        """
+        # Create the image mapper
+        imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
+
+        # Create the masks
+        imageMapper.createImageMasks(
+            self.wep_im,
+            binary=True,
+            dilate=dilate,
+            dilateBlends=dilateBlends,
+            maskBlends=False,
+        )
+        maskSource, maskBlends, maskBackground = self.wep_im.masks
+
+        # Add mask planes for the source and blend
+        afwImage.Mask.addMaskPlane("DONUT")
+        afwImage.Mask.addMaskPlane("BLEND")
+
+        # Create the stamp mask
+        stampMask = maskSource * afwImage.Mask.getPlaneBitMask("DONUT")
+        stampMask += maskBlends * afwImage.Mask.getPlaneBitMask("BLEND")
+        stampMask = stampMask.astype(np.int32)
+
+        # This mask is in the global CCS (see the docstring for
+        # self._setWepImage()). We need to put it back in the
+        # coordinate system of the info in the butler
+
+        # Transpose the mask (CCS -> DVCS)
+        stampMask = stampMask.T
+
+        # Rotate to sensor orientation
+        camera = self.getCamera()
+        detector = camera.get(self.detector_name)
+        eulerZ = -detector.getOrientation().getYaw().asDegrees()
+        nRot = int(eulerZ // 90)
+        stampMask = np.rot90(stampMask, -nRot)
+
+        # Save mask
+        self.stamp_im.setMask(afwImage.Mask(stampMask.copy()))
 
     def getLinearWCS(self):
         """

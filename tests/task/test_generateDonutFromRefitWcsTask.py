@@ -191,10 +191,14 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
 
         # Test the catalog
         np.testing.assert_array_almost_equal(
-            fitCatalog["centroid_x"] + 5, shiftedCatalog["centroid_x"], decimal=3
+            fitCatalog["centroid_x"] + truePixelShift,
+            shiftedCatalog["centroid_x"],
+            decimal=3,
         )
         np.testing.assert_array_almost_equal(
-            fitCatalog["centroid_y"] + 5, shiftedCatalog["centroid_y"], decimal=3
+            fitCatalog["centroid_y"] + truePixelShift,
+            shiftedCatalog["centroid_y"],
+            decimal=3,
         )
 
     def testWcsFailure(self):
@@ -274,6 +278,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         fitWcs = fitWcsOutput.outputExposure.wcs
         fitCatalog = fitWcsOutput.donutCatalog
 
+        print(fitWcs.getPixelOrigin(), preFitExp_S11.wcs.getPixelOrigin())
         # Test that WCS is different
         self.assertFalse(
             np.array_equal(
