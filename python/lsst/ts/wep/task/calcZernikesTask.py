@@ -19,9 +19,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["CalcZernikesTaskConnections", "CalcZernikesTaskConfig", "CalcZernikesTask"]
+__all__ = [
+    "CalcZernikesTaskConnections",
+    "CalcZernikesTaskConfig",
+    "CalcZernikesTask",
+]
 
-import os
+import abc
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -29,20 +33,13 @@ import numpy as np
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import (
-    DefocalType,
-    createInstDictFromConfig,
-    getCamTypeFromButlerName,
-    getConfigDir,
-    getFilterTypeFromBandLabel,
-    rotMatrix,
-)
-from lsst.ts.wep.wfEstimator import WfEstimator
+from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
 from lsst.utils.timer import timeMethod
 
 
 class CalcZernikesTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "detector", "instrument"),
 ):
     donutStampsExtra = connectionTypes.Input(
         doc="Extra-focal Donut Postage Stamp Images",
@@ -71,9 +68,16 @@ class CalcZernikesTaskConnections(
 
 
 class CalcZernikesTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=CalcZernikesTaskConnections
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=CalcZernikesTaskConnections,
 ):
-    # Config setting for pipeline task with defaults
+    estimateZernikes = pexConfig.ConfigurableField(
+        target=EstimateZernikesTieTask,
+        doc=str(
+            "Choise of task to estimate Zernikes from pairs of donuts. "
+            + "(the default is EstimateZernikesTieTask)"
+        ),
+    )
     combineZernikes = pexConfig.ConfigurableField(
         target=CombineZernikesSigmaClipTask,
         doc=str(
@@ -82,226 +86,27 @@ class CalcZernikesTaskConfig(
             + "is CombineZernikesSigmaClipTask.)"
         ),
     )
-    opticalModel = pexConfig.Field(
-        doc="Specify the optical model (offAxis, paraxial, onAxis).",
-        dtype=str,
-        default="offAxis",
-    )
-    instObscuration = pexConfig.Field(
-        doc="Obscuration (inner_radius / outer_radius of M1M3)",
-        dtype=float,
-        default=0.61,
-    )
-    instFocalLength = pexConfig.Field(
-        doc="Instrument Focal Length in m", dtype=float, default=10.312
-    )
-    instApertureDiameter = pexConfig.Field(
-        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
-    )
-    instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in mm. \
-        If None then will get this from the focusZ value in exposure visitInfo. \
-        (The default is None.)",
-        dtype=float,
-        default=None,
-        optional=True,
-    )
-    instPixelSize = pexConfig.Field(
-        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
-    )
-    transposeImages = pexConfig.Field(
-        doc="Specify whether to transpose the intra- and extra-focal images. \
-        (The default is to do the transpose).",
-        dtype=bool,
-        default=True,
-        optional=True,
-        deprecated="This field is no longer used. Will be removed after the end of October 2023.",
-    )
 
 
-class CalcZernikesTask(pipeBase.PipelineTask):
-    """
-    Run Zernike Estimation on corner wavefront sensors (CWFS)
+class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
+    """Base class for calculating Zernike coeffs from pairs of DonutStamps.
+
+    This class joins the EstimateZernikes and CombineZernikes subtasks to
+    be run on sets of DonutStamps.
     """
 
     ConfigClass = CalcZernikesTaskConfig
-    _DefaultName = "CalcZernikesTask"
+    _DefaultName = "calcZernikesBaseTask"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-        # Choice of task to combine the Zernike coefficients
-        # from individual pairs of donuts into a single array
-        # for the detector.
+        # Create subtasks
+        self.estimateZernikes = self.config.estimateZernikes
+        self.makeSubtask("estimateZernikes")
+
         self.combineZernikes = self.config.combineZernikes
         self.makeSubtask("combineZernikes")
-        # Specify optical model
-        self.opticalModel = self.config.opticalModel
-        # Set up instrument configuration dict
-        self.instParams = createInstDictFromConfig(self.config)
-
-    def calcBlendOffsets(self, donutStamp, eulerAngle):
-        """
-        Calculate the offsets between the center of the donutStamp
-        image and the centers of blended donuts appearing on the
-        stamp image. Include rotations for rotated wavefront
-        sensors.
-
-        Parameters
-        ----------
-        donutStamp : DonutStamp
-            Extra or intra-focal DonutStamp object.
-        eulerAngle : float
-            Angle of rotation of sensor compared to the
-            standard alignment of the focal plane.
-
-        Returns
-        -------
-        numpy.ndarray
-            Offsets of blended donuts compared to center of
-            DonutStamp postage stamp image.
-        """
-
-        blendCentroids = donutStamp.blend_centroid_positions
-        # If there are blends the array will not have nans
-        if np.sum(np.isnan(blendCentroids)) == 0:
-            blendOffsets = blendCentroids - donutStamp.centroid_position
-            blendOffsets = np.dot(blendOffsets, rotMatrix(eulerAngle))
-            # Exchange X,Y since we transpose the image below
-            blendOffsets = blendOffsets.T[::-1]
-        else:
-            # If no blend then pass nan array.
-            # CompensableImage understands nans means no blend.
-            blendOffsets = blendCentroids.T
-
-        return blendOffsets
-
-    def estimateZernikes(self, donutStampsExtra, donutStampsIntra):
-        """
-        Take the donut postage stamps and estimate the Zernike coefficients.
-
-        Parameters
-        ----------
-        donutStampsExtra : DonutStamps
-            Extra-focal donut postage stamps.
-        donutStampsIntra : DonutStamps
-            Intra-focal donut postage stamps.
-
-        Returns
-        -------
-        numpy.ndarray
-            Zernike coefficients for the exposure. Will return one set of
-            coefficients per set of stamps, not one set of coefficients
-            per detector so this will be a 2-D numpy array with
-            the number of rows equal to the number of donut stamps and
-            the number of columns equal to the number of Zernike coefficients.
-        """
-
-        zerArray = []
-
-        configDir = getConfigDir()
-        algoDir = os.path.join(configDir, "cwfs", "algo")
-        wfEsti = WfEstimator(algoDir)
-        detectorNames = donutStampsExtra.getDetectorNames()
-        camera = donutStampsExtra[0].getCamera()
-        detectorType = camera[detectorNames[0]].getType()
-        self.instParams["offset"] = donutStampsExtra.getDefocalDistances()[0]
-
-        camType = getCamTypeFromButlerName(camera.getName(), detectorType)
-        donutStampSize = np.shape(donutStampsExtra[0].stamp_im.getImage().getArray())[0]
-
-        wfEsti.config(
-            self.instParams,
-            sizeInPix=donutStampSize,
-            camType=camType,
-            opticalModel=self.opticalModel,
-        )
-
-        for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra):
-            fieldXYExtra = donutExtra.calcFieldXY()
-            fieldXYIntra = donutIntra.calcFieldXY()
-
-            camera = donutExtra.getCamera()
-            detectorExtra = camera.get(donutExtra.detector_name)
-            detectorIntra = camera.get(donutIntra.detector_name)
-
-            # Rotate any sensors that are not lined up with the focal plane.
-            # Mostly just for the corner wavefront sensors. The negative sign
-            # creates the correct rotation based upon closed loop tests
-            # with R04 and R40 corner sensors.
-            eulerZExtra = -detectorExtra.getOrientation().getYaw().asDegrees()
-            eulerZIntra = -detectorIntra.getOrientation().getYaw().asDegrees()
-
-            blendOffsetsExtra = self.calcBlendOffsets(donutExtra, eulerZExtra)
-            blendOffsetsIntra = self.calcBlendOffsets(donutIntra, eulerZIntra)
-
-            # Below we transform the image array and coordinates from the DVCS
-            # (Data Visualization Coordinate System) to the
-            # CCS (Camera Coordinate System). More information about these
-            # coordinate systems is available here: sitcomtn-003.lsst.io.
-            # This transformation below incorporates the DVCS to CCS
-            # conversion as a transpose.
-            #
-            #        DVCS               CCS
-            #   x                   y
-            #   ^                   ^
-            #   |                   |
-            #   |                   |
-            #   |                   |
-            #   |----------> y      |----------> x
-
-            wfEsti.setImg(
-                np.array([fieldXYExtra[1], fieldXYExtra[0]]),
-                DefocalType.Extra,
-                filterLabel=getFilterTypeFromBandLabel(donutExtra.bandpass),
-                image=donutExtra.stamp_im.image.array.T,
-                blendOffsets=blendOffsetsExtra.tolist(),
-            )
-            wfEsti.setImg(
-                np.array([fieldXYIntra[1], fieldXYIntra[0]]),
-                DefocalType.Intra,
-                filterLabel=getFilterTypeFromBandLabel(donutIntra.bandpass),
-                image=donutIntra.stamp_im.image.array.T,
-                blendOffsets=blendOffsetsIntra.tolist(),
-            )
-            wfEsti.reset()
-            zer4UpNm = wfEsti.calWfsErr()
-            zer4UpMicrons = zer4UpNm * 1e-3
-
-            zerArray.append(zer4UpMicrons)
-
-        return np.array(zerArray)
-
-    def getCombinedZernikes(self, zernikeArray):
-        """
-        Combine the Zernike coefficients from stamp pairs on the
-        CCD to create one final value for the CCD.
-
-        Parameters
-        ----------
-        zernikeArray : numpy.ndarray
-            The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the array should
-            be the set of Zernike coefficients for a single
-            donut pair.
-
-        Returns
-        -------
-        struct : `lsst.pipe.base.Struct`
-            The struct contains the following data:
-
-            - combinedZernikes : numpy.ndarray
-                The final combined Zernike coefficients from the CCD.
-            - combineFlags : numpy.ndarray
-                Flag indicating a particular set of Zernike
-                coefficients was not used in the final estimate.
-                If the values in a row in the `zernikeArray`
-                were used then its index is 0.
-                A value of 1 means the coefficients from that row
-                in the input `zernikeArray` were not used.
-        """
-
-        return self.combineZernikes.run(zernikeArray)
 
     @timeMethod
     def run(
@@ -311,20 +116,17 @@ class CalcZernikesTask(pipeBase.PipelineTask):
     ) -> pipeBase.Struct:
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
-        if (len(donutStampsExtra) == 0) or (len(donutStampsIntra) == 0):
+        if len(donutStampsExtra) == 0 or len(donutStampsIntra) == 0:
             return pipeBase.Struct(
-                outputZernikesRaw=np.ones(19) * np.nan,
-                outputZernikesAvg=np.ones(19) * np.nan,
+                outputZernikesRaw=np.full(19, np.nan),
+                outputZernikesAvg=np.full(19, np.nan),
             )
 
-        # Estimate Zernikes from collection of stamps
-        zernikeCoeffsRaw = self.estimateZernikes(donutStampsExtra, donutStampsIntra)
-        zernikeCoeffsCombined = self.getCombinedZernikes(zernikeCoeffsRaw)
+        # Estimate Zernikes from the collection of stamps
+        zkCoeffRaw = self.estimateZernikes.run(donutStampsExtra, donutStampsIntra)
+        zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
-        # Return extra-focal DonutStamps, intra-focal DonutStamps and
-        # Zernike coefficient numpy array as Struct that can be saved to
-        # Gen 3 repository all with the same dataId.
         return pipeBase.Struct(
-            outputZernikesAvg=np.array(zernikeCoeffsCombined.combinedZernikes),
-            outputZernikesRaw=np.array(zernikeCoeffsRaw),
+            outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
+            outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
         )

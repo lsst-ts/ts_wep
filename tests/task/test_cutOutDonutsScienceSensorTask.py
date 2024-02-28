@@ -97,12 +97,10 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         }
 
     def testValidateConfigs(self):
-        self.config.donutTemplateSize = 120
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
-        self.assertEqual(self.task.donutTemplateSize, 120)
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
 

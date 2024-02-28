@@ -156,9 +156,9 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
         exp.image += median  # put background back in
 
         # Add in padding as cutting off side of donut is very bad.
-        # If donut edge on one side is cut of we will not
+        # If donut edge on one side is cut off we will not
         # get accurate centroids.
-        boxSize = donutDiameter + cutoutPadding
+        boxSize = donutDiameter + 2 * cutoutPadding
         for objNum in range(len(objData)):
             obj = objData[objNum]
             objCentroid = (obj["xCentroid"], obj["yCentroid"])

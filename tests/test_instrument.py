@@ -19,237 +19,218 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
+import inspect
 import unittest
+from pathlib import Path
 
 import numpy as np
+from batoid.optic import CompoundOptic
 from lsst.ts.wep.instrument import Instrument
-from lsst.ts.wep.utils import CamType, getConfigDir, getModulePath
+from lsst.ts.wep.utils import getConfigDir, readConfigYaml
 
 
 class TestInstrument(unittest.TestCase):
     """Test the Instrument class."""
 
-    def setUp(self):
-        self.instConfigDir = os.path.join(getConfigDir(), "cwfs", "instData")
-        self.instConfigFile = os.path.join(
-            self.instConfigDir, "lsst", "instParamPipeConfig.yaml"
-        )
-        self.maskConfigFile = os.path.join(
-            self.instConfigDir, "lsst", "maskMigrate.yaml"
-        )
-        self.instConfigDict = {
-            # Obscuration (inner_radius / outer_radius of M1M3)
-            "obscuration": 0.61,
-            # Focal length in m
-            "focalLength": 10.312,
-            # Aperture diameter in m
-            "apertureDiameter": 8.36,
-            # Defocal distance offset in mm
-            "offset": 1.5,
-            # Camera pixel size in m
-            "pixelSize": 10.0e-6,
-        }
+    def testCreateWithDefaults(self):
+        Instrument()
 
-        self.dimOfDonutOnSensor = 120
-        self.inst = Instrument()
-        self.inst.configFromDict(
-            self.instConfigDict,
-            self.dimOfDonutOnSensor,
-            CamType.LsstCam,
-            self.maskConfigFile,
-        )
+    def testCreateFromAllPolicyFiles(self):
+        instConfigPath = Path(getConfigDir()) / "instruments"
+        paths = instConfigPath.glob("*.yaml")
 
-    def testConfigFromFileDefault(self):
-        newInst = Instrument()
-        newInst.configFromFile(self.dimOfDonutOnSensor, CamType.LsstFamCam)
-        self.assertDictEqual(self.inst.instParams, newInst.instParams)
+        for path in paths:
+            Instrument(str(path))
 
-    def testConfigFromDict(self):
-        newInst = Instrument()
-        newInst.configFromDict(
-            self.inst.instParams, self.dimOfDonutOnSensor, CamType.LsstCam
-        )
-        self.assertDictEqual(self.inst.instParams, newInst.instParams)
+    def testBadDiameter(self):
+        with self.assertRaises(ValueError):
+            Instrument(diameter=-1)
 
-    def testConfigFromDictWithIncorrectDictKeys(self):
-        # Check that error is raised when configDict keys are incorrect
-        newInst = Instrument()
-        instParamsList = list(self.inst.instParams.items())
-        badInstParams = {key: value for key, value in instParamsList[:4]}
-        with self.assertRaises(AssertionError) as context:
-            newInst.configFromDict(
-                badInstParams, self.dimOfDonutOnSensor, CamType.LsstCam
-            )
-        errMsg = f"Config Dict Keys: {badInstParams.keys()} do not match required \
-            instParamKeys: {self.inst.instParams.keys()}"
-        self.assertEqual(str(context.exception), errMsg)
+    def testBadObscuration(self):
+        with self.assertRaises(ValueError):
+            Instrument(obscuration=-1)
+        with self.assertRaises(ValueError):
+            Instrument(obscuration=2)
 
-    def testConfigFromFileWithIncorrectInstConfigFilePath(self):
-        badFilePath = "NoFile"
-        with self.assertRaises(ValueError) as context:
-            self.inst.configFromFile(120, CamType.LsstCam, badFilePath)
-        self.assertEqual(
-            str(context.exception),
-            f"Instrument configuration file at {badFilePath} does not exist.",
-        )
+    def testBadFocalLength(self):
+        with self.assertRaises(ValueError):
+            Instrument(focalLength=-1)
 
-    def testConfigFromFileWithIncorrectInstConfigFormat(self):
-        badFilePath = os.path.join(
-            getModulePath(),
-            "tests",
-            "testData",
-            "pipelineConfigs",
-            "testBasePipeline.yaml",
-        )
-        with self.assertRaises(ValueError) as context:
-            self.inst.configFromFile(120, CamType.LsstCam, badFilePath)
-        errMsg = "Instrument configuration file does not have expected format. "
-        errMsg += "See examples in policy/cwfs/instData."
-        self.assertEqual(str(context.exception), errMsg)
+    def testBadDefocalOffset(self):
+        with self.assertRaises(ValueError):
+            Instrument(defocalOffset="bad")
 
-    def testConfigFromFileWithIncorrectMaskConfigFilePath(self):
-        badMaskFilePath = "NoMaskFile"
-        with self.assertRaises(ValueError) as context:
-            self.inst.configFromFile(
-                120, CamType.LsstCam, maskConfigFile=badMaskFilePath
-            )
-        self.assertEqual(
-            str(context.exception),
-            f"Mask migrate file at {badMaskFilePath} does not exist.",
-        )
+    def testBadPixelSize(self):
+        with self.assertRaises(ValueError):
+            Instrument(pixelSize=-1)
 
-    def testConfigFromDictWithIncorrectMaskConfigFilePath(self):
-        badMaskFilePath = "NoMaskFile"
-        with self.assertRaises(ValueError) as context:
-            self.inst.configFromDict(
-                self.inst.instParams,
-                self.dimOfDonutOnSensor,
-                CamType.LsstCam,
-                maskConfigFile=badMaskFilePath,
-            )
-        self.assertEqual(
-            str(context.exception),
-            f"Mask migrate file at {badMaskFilePath} does not exist.",
-        )
+    def testBadWavelength(self):
+        with self.assertRaises(TypeError):
+            Instrument(wavelength="bad")
+        with self.assertRaises(ValueError):
+            Instrument(wavelength={"u": 500e-9})
 
-    def testSetDefaultMaskParams(self):
-        newInst = Instrument()
-        self.assertEqual(newInst.maskOffAxisCorr, [])
+    def testBadBatoidModelName(self):
+        with self.assertRaises(TypeError):
+            Instrument(batoidModelName=-1)
 
-        # AuxTel has no default parameters available
-        newInst.setDefaultMaskParams(CamType.AuxTel)
-        self.assertEqual(newInst.maskOffAxisCorr, [])
-        newInst.setDefaultMaskParams(CamType.AuxTelZWO)
-        self.assertEqual(newInst.maskOffAxisCorr, [])
+    def testBadRefBand(self):
+        with self.assertRaises(ValueError):
+            Instrument(refBand="bad")
 
-        # Test set correctly with valid camera
-        newInst.setDefaultMaskParams(CamType.LsstCam)
-        self.assertEqual(newInst.maskOffAxisCorr.shape, (9, 5))
-        self.assertEqual(newInst.maskOffAxisCorr[0, 0], 1.07)
-        self.assertEqual(newInst.maskOffAxisCorr[2, 3], -0.090100858)
-
-    def testGetMaskOffAxisCorr(self):
-        self.assertEqual(self.inst.maskOffAxisCorr.shape, (9, 5))
-        self.assertEqual(self.inst.maskOffAxisCorr[0, 0], 1.07)
-        self.assertEqual(self.inst.maskOffAxisCorr[2, 3], -0.090100858)
-
-    def testGetDimOfDonutImg(self):
-        dimOfDonutOnSensor = self.inst.dimOfDonutImg
-        self.assertEqual(dimOfDonutOnSensor, self.dimOfDonutOnSensor)
-
-    def testGetObscuration(self):
-        obscuration = self.inst.obscuration
-        self.assertEqual(obscuration, 0.61)
-
-    def testGetFocalLength(self):
-        focalLength = self.inst.focalLength
-        self.assertEqual(focalLength, 10.312)
-
-    def testGetApertureDiameter(self):
-        apertureDiameter = self.inst.apertureDiameter
-        self.assertEqual(apertureDiameter, 8.36)
-
-    def testGetDefocalDisOffseInM(self):
-        defocalDisInM = self.inst.defocalDisOffsetInM
-
-        # The answer is 1.5 mm
-        self.assertEqual(defocalDisInM * 1e3, 1.5)
-
-    def testGetPixelSize(self):
-        camPixelSizeInM = self.inst.pixelSize
-
-        # The answer is 10 um
-        self.assertEqual(camPixelSizeInM * 1e6, 10)
-
-    def testGetMarginalFocalLength(self):
-        marginalFL = self.inst.getMarginalFocalLength()
-        self.assertAlmostEqual(marginalFL, 9.4268, places=4)
-
-    def testGetSensorFactor(self):
-        sensorFactor = self.inst.getSensorFactor()
-        self.assertAlmostEqual(sensorFactor, 0.98679, places=5)
-
-    def testGetSensorCoor(self):
-        xSensor, ySensor = self.inst.getSensorCoor()
-        self.assertEqual(
-            xSensor.shape, (self.dimOfDonutOnSensor, self.dimOfDonutOnSensor)
-        )
-        self.assertAlmostEqual(xSensor[0, 0], -0.97857, places=5)
-        self.assertAlmostEqual(xSensor[0, 1], -0.96212, places=5)
-
-        self.assertEqual(
-            ySensor.shape, (self.dimOfDonutOnSensor, self.dimOfDonutOnSensor)
-        )
-        self.assertAlmostEqual(ySensor[0, 0], -0.97857, places=5)
-        self.assertAlmostEqual(ySensor[1, 0], -0.96212, places=5)
-
-    def testGetSensorCoorAnnular(self):
-        xoSensor, yoSensor = self.inst.getSensorCoorAnnular()
-        self.assertEqual(
-            xoSensor.shape, (self.dimOfDonutOnSensor, self.dimOfDonutOnSensor)
-        )
-        self.assertTrue(np.isnan(xoSensor[0, 0]))
-        self.assertTrue(np.isnan(xoSensor[60, 60]))
-
-        self.assertEqual(
-            yoSensor.shape, (self.dimOfDonutOnSensor, self.dimOfDonutOnSensor)
-        )
-        self.assertTrue(np.isnan(yoSensor[0, 0]))
-        self.assertTrue(np.isnan(yoSensor[60, 60]))
-
-    def testCalcSizeOfDonutExpected(self):
-        self.assertAlmostEqual(
-            self.inst.calcSizeOfDonutExpected(), 121.60589604, places=7
-        )
-
-    def testDataAuxTel(self):
-        auxTelConfigFile = os.path.join(
-            self.instConfigDir, "auxTel", "instParamPipeConfig.yaml"
-        )
+    def testNoBatoidModel(self):
         inst = Instrument()
-        inst.configFromFile(160, CamType.AuxTel, auxTelConfigFile)
+        inst.batoidModelName = None
+        batoidModel = inst.getBatoidModel()
+        self.assertIsNone(batoidModel)
 
-        self.assertEqual(inst.obscuration, 0.3525)
-        self.assertEqual(inst.focalLength, 21.6)
-        self.assertEqual(inst.apertureDiameter, 1.2)
-        self.assertAlmostEqual(inst.defocalDisOffsetInM, 0.041 * 0.8)
-        self.assertEqual(inst.pixelSize, 10.0e-6)
-        self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 182.2222222, places=7)
+    def testGetBatoidModel(self):
+        batoidModel = Instrument().getBatoidModel()
+        self.assertIsInstance(batoidModel, CompoundOptic)
 
-    def testDataAuxTelZWO(self):
-        auxTelZWOConfigFile = os.path.join(
-            self.instConfigDir, "auxTelZWO", "instParamPipeConfig.yaml"
-        )
+    def testBadBatoidOffsetOptic(self):
+        with self.assertRaises(RuntimeError):
+            inst = Instrument()
+            inst.batoidModelName = None
+            inst.batoidOffsetOptic = "Detector"
+        with self.assertRaises(TypeError):
+            Instrument(batoidOffsetOptic=1)
+        with self.assertRaises(ValueError):
+            Instrument(batoidOffsetOptic="fake")
+
+    def testBadBatoidOffsetValue(self):
+        with self.assertRaises(RuntimeError):
+            inst = Instrument()
+            inst.batoidModelName = None
+            inst.batoidOffsetValue = 1
+
+    def testGetIntrinsicZernikes(self):
         inst = Instrument()
-        inst.configFromFile(160, CamType.AuxTelZWO, auxTelZWOConfigFile)
 
-        self.assertEqual(inst.obscuration, 0.3525)
-        self.assertEqual(inst.focalLength, 21.6)
-        self.assertEqual(inst.apertureDiameter, 1.2)
-        self.assertEqual(inst.defocalDisOffsetInM, 0.0205)
-        self.assertEqual(inst.pixelSize, 15.2e-6)
-        self.assertAlmostEqual(inst.calcSizeOfDonutExpected(), 74.92690058, places=7)
+        # First check the shape
+        self.assertEqual(inst.getIntrinsicZernikes(0, 0, jmax=66).shape, (63,))
+        self.assertEqual(inst.getIntrinsicZernikes(1, 2, jmax=22).shape, (19,))
+
+        # Now check that in-place changes don't impact the cache
+        intrZk = inst.getIntrinsicZernikes(1, 1)
+        intrZk *= 3.14159
+        close = np.isclose(inst.getIntrinsicZernikes(1, 1), intrZk, atol=0)
+        self.assertFalse(np.any(close))
+
+    def testGetOffAxisCoeff(self):
+        inst = Instrument()
+
+        # First check the shape
+        self.assertEqual(inst.getOffAxisCoeff(0, 0, "intra", jmax=66).shape, (63,))
+        self.assertEqual(inst.getOffAxisCoeff(1, 2, "extra", jmax=22).shape, (19,))
+
+        # Now check that in-place changes don't impact the cache
+        intrZk = inst.getOffAxisCoeff(0, 0, "intra")
+        intrZk *= 3.14159
+        close = np.isclose(inst.getOffAxisCoeff(0, 0, "intra"), intrZk, atol=0)
+        self.assertTrue(np.all(~close))
+
+    def testBadMaskParams(self):
+        with self.assertRaises(TypeError):
+            Instrument(maskParams="bad")
+
+    def testDefaultMaskParams(self):
+        inst = Instrument()
+        inst.maskParams = None
+        self.assertEqual(inst.maskParams, dict())
+
+    def testCreatePupilGrid(self):
+        uImage, vImage = Instrument().createPupilGrid()
+        self.assertEqual(uImage.shape, vImage.shape)
+        self.assertTrue(np.allclose(uImage, vImage.T))
+
+    def testCreateImageGrid(self):
+        inst = Instrument()
+
+        uImage, vImage = inst.createImageGrid(160)
+        self.assertEqual(uImage.shape, vImage.shape)
+        self.assertEqual(uImage.shape, (160, 160))
+
+        uImage, vImage = inst.createImageGrid(221)
+        self.assertEqual(uImage.shape, (221, 221))
+
+        self.assertTrue(np.allclose(uImage, vImage.T))
+
+    def testRadius(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.radius, 4.18, rtol=1e-3))
+
+    def testArea(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.area, 34.33, rtol=1e-3))
+
+    def testFocalRatio(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.focalRatio, 1.234, rtol=1e-3))
+
+    def testPupilOffset(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.pupilOffset, 10.312**2 / 1.5e-3, rtol=1e-3))
+
+    def testPixelScale(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.pixelScale, 0.2, rtol=1e-3))
+
+    def testDonutRadius(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.donutRadius, 66.512, rtol=1e-3))
+
+    def testDonutDiameter(self):
+        inst = Instrument()
+        self.assertTrue(np.isclose(inst.donutDiameter, 2 * 66.512, rtol=1e-3))
+
+    def testPullFromBatoid(self):
+        inst = Instrument(
+            configFile=None,
+            diameter=None,
+            obscuration=None,
+            focalLength=None,
+            defocalOffset=None,
+            pixelSize=10e-6,
+            refBand="r",
+            wavelength={"r": 622.3e-9},
+            batoidModelName="LSST_r",
+            batoidOffsetOptic="Detector",
+            batoidOffsetValue=1.5e-3,
+        )
+        lsst = Instrument()
+
+        # Test that the values from Batoid are all correct
+        self.assertTrue(np.isclose(inst.diameter, lsst.diameter, rtol=1e-3))
+        self.assertTrue(np.isclose(inst.obscuration, lsst.obscuration, rtol=1e-3))
+        self.assertTrue(np.isclose(inst.focalLength, lsst.focalLength, rtol=1e-3))
+        self.assertTrue(np.isclose(inst.defocalOffset, lsst.defocalOffset, rtol=1e-3))
+
+    def testDefocalOffsetCalculation(self):
+        inst = Instrument("policy:instruments/AuxTel.yaml")
+        inst.batoidOffsetValue = 0.8e-3
+        self.assertTrue(np.isclose(inst.defocalOffset, 34.94e-3, rtol=1e-3))
+
+    def testImports(self):
+        # Get LSST and ComCam instruments
+        lsst = Instrument("policy:instruments/LsstCam.yaml")
+        comcam = Instrument("policy:instruments/ComCam.yaml")
+
+        # Get all the init arguments
+        keys = list(inspect.signature(Instrument).parameters.keys())
+
+        # Remove configFile
+        keys.remove("configFile")
+
+        # Remove keys that were present in the top level ComCam yaml
+        # because these override values in LsstCam
+        for key in readConfigYaml("policy:instruments/ComCam.yaml"):
+            if key in keys:
+                keys.remove(key)
+
+        # Iterate through the keys and make sure values are the same
+        for key in keys:
+            self.assertEqual(getattr(lsst, key), getattr(comcam, key))
 
 
 if __name__ == "__main__":

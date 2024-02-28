@@ -18,6 +18,7 @@ Needed Packages
 
 - ``lsst_distrib`` from LSST Science Pipelines (tag: ``w_latest``)
 - `galsim <https://github.com/GalSim-developers/GalSim>`_ (version >= 2.3; should be available from science pipelines v2.0.0 and up)
+- `batoid <https://github.com/jmeyers314/batoid>`_ (version >= 0.6.0)
 - `black <https://github.com/psf/black>`_ (optional)
 - `documenteer <https://github.com/lsst-sqre/documenteer>`_ (optional)
 - `plantuml <http://plantuml.com>`_ (optional)
@@ -113,5 +114,4 @@ See Also
     :titlesonly:
     :glob:
 
-    phosimDonutTemplates.rst
     wepBatchProcessing.rst

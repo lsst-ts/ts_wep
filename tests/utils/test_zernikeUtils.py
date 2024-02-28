@@ -23,252 +23,113 @@ import os
 import unittest
 
 import numpy as np
-from astropy.io import fits
-from lsst.ts.wep.cwfs import Instrument
 from lsst.ts.wep.utils import (
-    CamType,
-    ConvertZernikesToPsfWidth,
-    GetPsfGradPerZernike,
-    ZernikeAnnularEval,
-    ZernikeAnnularFit,
-    ZernikeAnnularGrad,
-    ZernikeAnnularJacobian,
-    ZernikeMaskedFit,
+    convertZernikesToPsfWidth,
+    createZernikeBasis,
+    createZernikeGradBasis,
     getModulePath,
+    getPsfGradPerZernike,
+    getZernikeParity,
+    zernikeEval,
+    zernikeGradEval,
 )
 from lsst.utils.tests import TestCase
-from scipy.integrate import nquad
 
 
 class TestZernikeUtils(TestCase):
     """Test the Zernike utility functions."""
 
-    def setUp(self):
-        self.testDataDir = os.path.join(
-            getModulePath(), "tests", "testData", "cwfsZernike"
+    def testOrthonormality(self):
+        # Create the Zernike basis
+        grid = np.linspace(-1, 1, 1000)
+        uGrid, vGrid = np.meshgrid(grid, grid)
+        zkBasis = createZernikeBasis(uGrid, vGrid, obscuration=0.61)
+
+        # Mask outside the pupil
+        r = np.sqrt(uGrid**2 + vGrid**2)
+        mask = (r >= 0.61) & (r <= 1)
+        zkBasis *= mask
+
+        # Calculate inner products
+        innerProd = np.einsum("jab,kab->jk", zkBasis, zkBasis)
+
+        # Calculate the expected norm of the Zernikes
+        dA = np.square(uGrid[0, 1] - uGrid[0, 0])
+        norm = np.pi * (1 - 0.61**2) / dA
+
+        # Normalize the inner products
+        innerProd /= norm
+
+        # Check identity
+        close = np.allclose(innerProd, np.identity(innerProd.shape[0]), atol=1e-2)
+        self.assertTrue(close)
+
+    def testZernikeEval(self):
+        # Create a Zernike basis
+        grid = np.linspace(-1, 1, 200)
+        uGrid, vGrid = np.meshgrid(grid, grid)
+        zkBasis = createZernikeBasis(uGrid, vGrid)
+
+        # Evaluate each Zernike polynomial and compare to basis
+        for i in range(len(zkBasis)):
+            coeff = np.zeros(i + 1)
+            coeff[-1] = 1
+            np.allclose(zernikeEval(uGrid, vGrid, coeff), zkBasis[i])
+
+    def testZernikeGradEval(self):
+        # Create a Zernike gradient basis
+        grid = np.linspace(-1, 1, 200)
+        uGrid, vGrid = np.meshgrid(grid, grid)
+        dzkdu, dzkdv = createZernikeGradBasis(uGrid, vGrid)
+
+        # Evaluate each Zernike gradient and compare to bases
+        for i in range(len(dzkdu)):
+            coeff = np.zeros(i + 1)
+            coeff[-1] = 1
+            np.allclose(zernikeGradEval(uGrid, vGrid, 1, 0, coeff), dzkdu[i])
+            np.allclose(zernikeGradEval(uGrid, vGrid, 0, 1, coeff), dzkdv[i])
+
+    def testConvertZernikesToPsf(self):
+        # Directory where expected values are stored
+        testDataDir = os.path.join(
+            getModulePath(),
+            "tests",
+            "testData",
+            "psfGradientsPerZernike",
         )
 
-        # Generate the mesh of x, y-coordinate
-        point = 400
-        ratio = 0.9
-        self.xx, self.yy = self._genGridXy(point, ratio)
-
-        self.obscuration = 0.61
-
-        numOfZk = 22
-        self.zerCoef = np.arange(1, 1 + numOfZk) * 0.1
-
-    def _genGridXy(self, point, ratio):
-        yy, xx = np.mgrid[
-            -(point / 2 - 0.5) : (point / 2 + 0.5),
-            -(point / 2 - 0.5) : (point / 2 + 0.5),
-        ]
-
-        xx = xx / (point * ratio / 2)
-        yy = yy / (point * ratio / 2)
-
-        return xx, yy
-
-    def testZernikeAnnularEval(self):
-        surface = ZernikeAnnularEval(self.zerCoef, self.xx, self.yy, self.obscuration)
-
-        self._checkAnsWithFile(surface, "annularZernikeEval.txt")
-
-    def _checkAnsWithFile(self, value, ansFileName, rtol=1e-8, atol=1e-8):
-        ansFilePath = os.path.join(self.testDataDir, ansFileName)
-        ans = np.loadtxt(ansFilePath)
-
-        self.assertFloatsAlmostEqual(value, ans, rtol=rtol, atol=atol)
-
-    def testZernikeAnnularNormality(self):
-        ansValue = np.pi * (1 - self.obscuration**2)
-        for ii in range(28):
-            z = np.zeros(28)
-            z[ii] = 1
-
-            normalization = nquad(
-                self._genNormalizedFunc,
-                [[self.obscuration, 1], [0, 2 * np.pi]],
-                args=(z, self.obscuration),
-            )[0]
-
-            self.assertAlmostEqual(normalization, ansValue)
-
-    def _genNormalizedFunc(self, r, theta, z, e):
-        func = r * ZernikeAnnularEval(z, r * np.cos(theta), r * np.sin(theta), e) ** 2
-
-        return func
-
-    def testZernikeAnnularOrthogonality(self):
-        # Check the orthogonality for Z1 - Z28
-        for jj in range(28):
-            z1 = np.zeros(28)
-            z1[jj] = 1
-            for ii in range(28):
-                if ii != jj:
-                    z2 = np.zeros(28)
-                    z2[ii] = 1
-
-                    orthogonality = nquad(
-                        self._genOrthogonalFunc,
-                        [[self.obscuration, 1], [0, 2 * np.pi]],
-                        args=(z1, z2, self.obscuration),
-                    )[0]
-
-                    self.assertAlmostEqual(orthogonality, 0)
-
-    def _genOrthogonalFunc(self, r, theta, z1, z2, e):
-        func = (
-            r
-            * ZernikeAnnularEval(z1, r * np.cos(theta), r * np.sin(theta), e)
-            * ZernikeAnnularEval(z2, r * np.cos(theta), r * np.sin(theta), e)
+        # LsstCam
+        calculated = getPsfGradPerZernike(
+            jmin=4,
+            jmax=37,
+            diameter=8.36,
+            obscuration=0.612,
         )
+        expected = np.genfromtxt(os.path.join(testDataDir, "lsstcam.txt"))
+        self.assertTrue(np.allclose(calculated, expected, atol=1e-3))
 
-        return func
-
-    def testZernikeAnnularGradDx(self):
-        surfGrad = ZernikeAnnularGrad(
-            self.zerCoef, self.xx, self.yy, self.obscuration, "dx"
-        )
-
-        self._checkAnsWithFile(surfGrad, "annularZernikeGradDx.txt")
-
-    def testZernikeAnnularGradDy(self):
-        surfGrad = ZernikeAnnularGrad(
-            self.zerCoef, self.xx, self.yy, self.obscuration, "dy"
-        )
-
-        self._checkAnsWithFile(surfGrad, "annularZernikeGradDy.txt")
-
-    def testZernikeAnnularGradDx2(self):
-        surfGrad = ZernikeAnnularGrad(
-            self.zerCoef, self.xx, self.yy, self.obscuration, "dx2"
-        )
-
-        self._checkAnsWithFile(surfGrad, "annularZernikeGradDx2.txt")
-
-    def testZernikeAnnularGradDy2(self):
-        surfGrad = ZernikeAnnularGrad(
-            self.zerCoef, self.xx, self.yy, self.obscuration, "dy2"
-        )
-
-        self._checkAnsWithFile(surfGrad, "annularZernikeGradDy2.txt")
-
-    def testZernikeAnnularGradDxy(self):
-        surfGrad = ZernikeAnnularGrad(
-            self.zerCoef, self.xx, self.yy, self.obscuration, "dxy"
-        )
-
-        self._checkAnsWithFile(surfGrad, "annularZernikeGradDxy.txt")
-
-    def testZernikeAnnularGradWrongAxis(self):
-        with self.assertRaises(ValueError):
-            ZernikeAnnularGrad(
-                self.zerCoef, self.xx, self.yy, self.obscuration, "wrongAxis"
-            )
-
-    def testZernikeAnnularJacobian1st(self):
-        annuZerJacobian = ZernikeAnnularJacobian(
-            self.zerCoef, self.xx, self.yy, self.obscuration, "1st"
-        )
-
-        self._checkAnsWithFile(annuZerJacobian, "annularZernikeJaco1st.txt")
-
-    def testZernikeAnnularJacobian2nd(self):
-        annuZerJacobian = ZernikeAnnularJacobian(
-            self.zerCoef, self.xx, self.yy, self.obscuration, "2nd"
-        )
-
-        self._checkAnsWithFile(annuZerJacobian, "annularZernikeJaco2nd.txt")
-
-    def testZernikeAnnularJacobianWrongType(self):
-        with self.assertRaises(ValueError):
-            ZernikeAnnularJacobian(
-                self.zerCoef, self.xx, self.yy, self.obscuration, "wrongType"
-            )
-
-    def testZernikeAnnularFit(self):
-        opdFitsFile = os.path.join(self.testDataDir, "sim6_iter0_opd0.fits.gz")
-        opd = fits.getdata(opdFitsFile)
-
-        # x-, y-coordinate in the OPD image
-        opdSize = opd.shape[0]
-        opdGrid1d = np.linspace(-1, 1, opdSize)
-        opdx, opdy = np.meshgrid(opdGrid1d, opdGrid1d)
-
-        idx = opd != 0
-        coef = ZernikeAnnularFit(opd[idx], opdx[idx], opdy[idx], 22, self.obscuration)
-
-        ansOpdFileName = "sim6_iter0_opd.zer"
-        ansOpdFilePath = os.path.join(self.testDataDir, ansOpdFileName)
-        allOpdAns = np.loadtxt(ansOpdFilePath)
-        self.assertLess(np.sum(np.abs(coef - allOpdAns[0, :])), 1e-10)
-
-    def testZernikeMaskFit(self):
-        e = 0.2
-        nc = 6
-        surface = ZernikeAnnularEval(self.zerCoef[0:nc], self.xx, self.yy, e)
-
-        # mask data
-        cut = -0.9
-        r = np.sqrt(self.xx**2 + self.yy**2)
-        idx = (r > 1) | (r < e) | (self.xx < cut)
-
-        xx = self.xx[:].copy()
-        yy = self.yy[:].copy()
-        xx[idx] = np.nan
-        yy[idx] = np.nan
-        mask = ~np.isnan(xx)
-
-        zr = ZernikeMaskedFit(surface, xx, yy, nc, mask, e)
-
-        self.assertLess(np.sum(np.abs(zr - self.zerCoef[0:nc]) ** 2), 1e-10)
-
-    def testConvertZernikesToPsfWidthLsstCam(self):
-        """Test that the LsstCam values match the expected values."""
-        # Calculate and compare conversion factors
-        conversion_factors = GetPsfGradPerZernike(jmax=37)
-        expected_factors = np.genfromtxt(
-            os.path.join(self.testDataDir, "psfGradientsPerZernike", "lsstcam.txt")
-        )
-        self.assertTrue(np.allclose(conversion_factors, expected_factors, atol=1e-3))
-
-        # Perform the comparison using convertZernikesToPsfWidth
-        converted_amplitudes = ConvertZernikesToPsfWidth(np.ones(34))
-        self.assertTrue(np.allclose(converted_amplitudes, expected_factors, atol=1e-3))
-
-    def testConvertZernikesToPsfWidthAuxTel(self):
-        """Test that the AuxTel values match the expected values.
-
-        For AuxTel, we will use jmin=1.
-        """
-        # Setup the AuxTel instrument
-        # Note the donut dimension shouldn't matter for this computation
-        inst = Instrument()
-        inst.configFromFile(160, CamType.AuxTel)
-        R_outer = inst.apertureDiameter / 2
-        R_inner = R_outer * inst.obscuration
-
-        # Calculate and compare conversion factors
-        conversion_factors = GetPsfGradPerZernike(
+        # AuxTel
+        calculated = getPsfGradPerZernike(
             jmin=1,
             jmax=37,
-            R_outer=R_outer,
-            R_inner=R_inner,
+            diameter=1.2,
+            obscuration=0.3525,
         )
-        expected_factors = np.genfromtxt(
-            os.path.join(self.testDataDir, "psfGradientsPerZernike", "auxtel.txt")
-        )
-        self.assertTrue(np.allclose(conversion_factors, expected_factors, atol=1e-3))
+        expected = np.genfromtxt(os.path.join(testDataDir, "auxtel.txt"))
+        self.assertTrue(np.allclose(calculated, expected, atol=1e-3))
 
-        # Perform the comparison using convertZernikesToPsfWidth
-        converted_amplitudes = ConvertZernikesToPsfWidth(
-            np.ones(37),
-            jmin=1,
-            R_outer=R_outer,
-            R_inner=R_inner,
-        )
-        self.assertTrue(np.allclose(converted_amplitudes, expected_factors, atol=1e-3))
+        # Finally check converting array of 1's returns the coefficients
+        coeffs = convertZernikesToPsfWidth(np.ones(19))
+        self.assertTrue(np.allclose(coeffs, getPsfGradPerZernike()))
+
+    def testGetZernikeParity(self):
+        xParity = getZernikeParity(22)
+        xTruth = [1, -1, 1, 1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, 1]
+        self.assertTrue(all(xParity == xTruth))
+
+        yParity = getZernikeParity(22, axis="y")
+        yTruth = [1, -1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1]
+        self.assertTrue(all(yParity == yTruth))
 
 
 if __name__ == "__main__":

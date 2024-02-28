@@ -5,8 +5,8 @@
 try:
     from .donutDetector import DonutDetector
     from .image import Image
-    from .paramReader import ParamReader
-    from .wfEstimator import WfEstimator
+    from .imageMapper import ImageMapper
+    from .instrument import Instrument
 except ImportError:
     pass
 

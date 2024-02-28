@@ -1,0 +1,31 @@
+# LSST ComCam Parameters
+# lsst.obs.lsst.LsstComCam
+
+# Use settings from LsstCam
+imports: policy:instruments/LsstCam.yaml
+
+# Apply these overrides
+name: LsstComCam
+batoidModelName: ComCam_{band}
+
+maskParams:
+  M1:
+    outer:
+      clear: True
+      thetaMin: 0.000
+      thetaMax: 0.500
+      center: [2.08520e-11, -5.27891e-09, 7.82060e-08, -3.86464e-07]
+      radius: [6.78565e-13, 1.91756e-12, 2.94382e-13, 4.18000e+00]
+    inner:
+      clear: False
+      thetaMin: 0.000
+      thetaMax: 0.500
+      center: [1.05252e-05, -9.49691e-06, -4.78994e-03, -1.60442e-07]
+      radius: [6.99418e-11, -3.45753e-08, -3.16637e-11, 2.55800e+00]
+  L1_entrance:
+    outer:
+      clear: True
+      thetaMin: 0.356
+      thetaMax: 0.500
+      center: [-1.82599e-01, -2.22664e+00, -4.04880e+00, -4.36910e-02]
+      radius: [3.39858e-01, -2.73065e-03, 5.28104e-02, 5.91961e+00]

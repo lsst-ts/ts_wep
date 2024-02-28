@@ -2,9 +2,6 @@
 # a Gen 3 pipeline used for testing in ts_wep.
 description: wep basic processing test pipeline
 instrument: lsst.obs.lsst.Latiss
-# Use imported instrument configuration
-imports:
-  - location: $TS_WEP_DIR/policy/cwfs/instData/auxTel/instParamPipeConfig.yaml
 tasks:
   isr:
     class: lsst.ip.isr.isrTask.IsrTask
@@ -13,7 +10,7 @@ tasks:
     # include bias or flats we only want to use doApplyGains and
     # doOverscan in our isr task.
     config:
-      connections.outputExposure: 'postISRCCD'
+      connections.outputExposure: "postISRCCD"
       doBias: False
       doVariance: False
       doLinearize: False
@@ -31,23 +28,9 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      # Obscuration (inner_radius / outer_radius of primary mirror)
-      instObscuration: 0.3525
-      # Focal length in m
-      instFocalLength: 21.6
-      # Aperture diameter in m
-      instApertureDiameter: 1.2
-      # Move the M2 to fake the move of focal plane dz
-      # Move the M2 by 0.8 mm = move the focal plane by 32.8 mm  (magnification of 41)
-      # Defocal distance offset in mm
-      instDefocalOffset: 32.8
-      # Camera pixel size in m
-      instPixelSize: 10.0e-6
-      # Set the optical model for LATISS
-      opticalModel: 'onAxis'
       # Set configuration for donutSelector. The customMagLimit
       # must be used because otherwise magnitude limits
-      # are checked in policy/task/magLimitStar.yaml file,
+      # are checked in policy:magLimitStar.yaml file,
       # and auxTel filter names tend to fluctuate (currently 'white',
       # but several other have been observed due to rapid development)
       donutSelector.useCustomMagLimit: True
@@ -58,7 +41,6 @@ tasks:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings
-      donutTemplateSize: 200
       donutStampSize: 200
       initialCutoutPadding: 40
   calcZernikesTask:

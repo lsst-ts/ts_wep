@@ -22,43 +22,18 @@
 import unittest
 
 import numpy as np
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTaskConfig
 from lsst.ts.wep.utils import (
-    createInstDictFromConfig,
+    centerWithTemplate,
     extractArray,
-    getDefocalDisInMm,
     padArray,
+    polygonContains,
     rotMatrix,
 )
+from scipy.ndimage import shift
 
 
 class TestMiscUtils(unittest.TestCase):
     """Test the miscellaneous utility functions."""
-
-    def testGetDefocalDisInMm(self):
-        self.assertEqual(getDefocalDisInMm("lsst"), 1.5)
-        self.assertEqual(getDefocalDisInMm("lsstfam"), 1.5)
-        self.assertEqual(getDefocalDisInMm("comcam"), 1.5)
-        self.assertEqual(getDefocalDisInMm("auxTel"), 0.8)
-        instName = "telescope"
-        assertMsg = f"Instrument name ({instName}) is not supported."
-        with self.assertRaises(ValueError) as context:
-            getDefocalDisInMm(instName)
-        self.assertTrue(assertMsg in str(context.exception))
-
-    def testCreateInstDictFromConfig(self):
-        # Test instDict creation in tasks
-        testConfig = CalcZernikesTaskConfig()
-        testInstDict = createInstDictFromConfig(testConfig)
-        truthInstDict = {
-            "obscuration": 0.61,
-            "focalLength": 10.312,
-            "apertureDiameter": 8.36,
-            "offset": None,
-            "pixelSize": 10.0e-6,
-        }
-
-        self.assertDictEqual(truthInstDict, testInstDict)
 
     def testRotMatrix(self):
         # Test rotation with 0 degrees
@@ -98,6 +73,69 @@ class TestMiscUtils(unittest.TestCase):
         imgExtracted = extractArray(imgPadded, imgDim)
 
         self.assertEqual(imgExtracted.shape[0], imgDim)
+
+    def testCenterWithTemplate(self):
+        # Create a template to use for correlating
+        template = np.pad(np.ones((40, 40)), 5)
+
+        # Expand template into a centered image
+        image = np.pad(template, 55)
+
+        # Roll the image to create a decentered image
+        decentered = np.roll(image, (3, 4), (0, 1))
+
+        # Recenter
+        recentered = centerWithTemplate(decentered, template)
+
+        # Compare the centers of mass
+        grid = np.arange(len(image))
+        x, y = np.meshgrid(grid, grid)
+        dx = (x * image).sum() / image.sum() - (x * recentered).sum() / recentered.sum()
+        dy = (y * image).sum() / image.sum() - (y * recentered).sum() / recentered.sum()
+        self.assertTrue(dx == 0)
+        self.assertTrue(dy == 0)
+
+        # Now decenter using a sub-pixel shift
+        decentered = shift(image, (-3.2, 4.1))
+
+        # Recenter
+        recentered = centerWithTemplate(decentered, template)
+
+        # Compare the centers of mass
+        # For this test, just require the final decenter is less than 0.5
+        # in each dimension, since it is impossible to get 100% correct
+        dx = (x * image).sum() / image.sum() - (x * recentered).sum() / recentered.sum()
+        dy = (y * image).sum() / image.sum() - (y * recentered).sum() / recentered.sum()
+        self.assertTrue(np.abs(dx) < 0.5)
+        self.assertTrue(np.abs(dy) < 0.5)
+
+    def testPolygonContains(self):
+        # First a small test
+        grid = np.arange(6).astype(float)
+        x, y = np.meshgrid(grid, grid)
+        poly = np.array([[0.9, 3.1, 3.1, 0.9, 0.9], [1.9, 1.9, 4.1, 4.1, 1.9]]).T
+        poly = poly.astype(float)
+        contains = polygonContains(x, y, poly)
+        truth = np.full_like(contains, False)
+        truth[2:5, 1:4] = True
+        self.assertTrue(np.array_equal(contains, truth))
+
+        # Now a bigger test
+        # Uses ratio of points inside circle / inside square = pi / 4
+        grid = np.linspace(-1, 1, 2000)
+        x, y = np.meshgrid(grid, grid)
+        theta = np.linspace(0, 2 * np.pi, 1000)
+        poly = np.array([np.cos(theta), np.sin(theta)]).T
+        contains = polygonContains(x, y, poly)
+        self.assertTrue(np.isclose(contains.mean(), np.pi / 4, atol=1e-3))
+
+        # Test bad shapes
+        with self.assertRaises(ValueError):
+            polygonContains(x, y[:-10], poly)
+        with self.assertRaises(ValueError):
+            polygonContains(x, y[..., None], poly)
+        with self.assertRaises(ValueError):
+            polygonContains(x, y, poly.T)
 
 
 if __name__ == "__main__":
