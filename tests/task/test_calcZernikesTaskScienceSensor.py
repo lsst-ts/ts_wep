@@ -24,9 +24,12 @@ import os
 import lsst.utils.tests
 import numpy as np
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
-from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
-from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task import (
+    CalcZernikesTask,
+    CalcZernikesTaskConfig,
+    CombineZernikesMeanTask,
+    CombineZernikesSigmaClipTask,
+)
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -115,14 +118,16 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        zernCoeff = self.task.estimateZernikes(donutStampsExtra, donutStampsIntra)
+        zernCoeff = self.task.estimateZernikes.run(
+            donutStampsExtra, donutStampsIntra
+        ).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
-        combinedZernikesStruct = self.task.getCombinedZernikes(testArr)
+        combinedZernikesStruct = self.task.combineZernikes.run(testArr)
         np.testing.assert_array_equal(
             combinedZernikesStruct.combinedZernikes, np.ones(19)
         )

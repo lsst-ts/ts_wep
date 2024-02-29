@@ -1,0 +1,28 @@
+# LATISS Telescope Parameters
+# lsst.obs.lsst.Latiss
+
+name: AuxTel
+diameter: 1.2 # aperture diameter in meters
+obscuration: 0.3525 # fractional obscuration ( = 0.423 m / 1.2 m)
+focalLength: 21.6 # effective focal length in meters
+pixelSize: 10.0e-6 # pixel size in meters
+wavelength: 632.0e-9 # effective wavelength, in meters
+batoidModelName: AuxTel # name used to load the Batoid model
+batoidOffsetOptic: M2 # the name of the batoid element to offset (default = Detector)
+batoidOffsetValue: 0.8e-3 # batoid offset in meter (default = defocalOffset)
+
+maskParams:
+  Baffle_M2c:
+    outer:
+      clear: False
+      thetaMin: 0.000
+      thetaMax: 0.070
+      center: [1.76436e-02, -2.14325e-03, 7.62418e-05, -7.33609e-07]
+      radius: [-9.35307e-06, 5.25024e-03, 7.85571e-07, 2.11500e-01]
+  Baffle_M1:
+    outer:
+      clear: True
+      thetaMin: 0.000
+      thetaMax: 0.070
+      center: [5.17231e-02, -6.60999e-03, 2.58992e-04, -3.14404e-06]
+      radius: [-1.01508e-06, 7.02883e-07, 9.25226e-09, 6.00000e-01]

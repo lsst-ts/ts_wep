@@ -152,9 +152,8 @@ class DonutStamps(StampsBase):
 
         Returns
         -------
-        list [int]
-            Defocal types for each stamp. Values are 0 intrafocal
-            and 1 for extrafocal.
+        list [str]
+            Defocal types for each stamp.
         """
         return [stamp.defocal_type for stamp in self]
 

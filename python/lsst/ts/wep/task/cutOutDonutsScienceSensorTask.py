@@ -30,7 +30,6 @@ import typing
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
 import lsst.pipe.base as pipeBase
-import numpy as np
 import pandas as pd
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.cutOutDonutsBase import (
@@ -181,17 +180,10 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         donutCatalog: typing.List[pd.DataFrame],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
-        # Use exposure focusZ to find which is extra and intra
-        focusZ0 = exposures[0].visitInfo.focusZ
-        focusZ1 = exposures[1].visitInfo.focusZ
-
-        # Get defocal distance from focusZ.
-        self._checkAndSetOffset(np.abs(focusZ0))
-
+        # Determine which exposure is intra-/extra-focal
+        focusZ = (exposures[0].visitInfo.focusZ, exposures[1].visitInfo.focusZ)
         cameraName = camera.getName()
-        extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(
-            focusZ0, focusZ1, cameraName
-        )
+        extraExpIdx, intraExpIdx = self.assignExtraIntraIdx(*focusZ, cameraName)
 
         # Get the donut stamps from extra and intra focal images
         donutStampsExtra = self.cutOutStamps(

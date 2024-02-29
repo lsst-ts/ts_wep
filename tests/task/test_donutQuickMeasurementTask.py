@@ -25,14 +25,14 @@ import unittest
 import numpy as np
 import pandas as pd
 from lsst.daf import butler as dafButler
-from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task.donutQuickMeasurementTask import (
     DonutQuickMeasurementTask,
     DonutQuickMeasurementTaskConfig,
 )
 from lsst.ts.wep.utils import (
     DefocalType,
-    DonutTemplateType,
+    createTemplateForDetector,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
@@ -102,22 +102,13 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         )
 
     def _getTemplate(self):
-        # Create template
-        templateMaker = DonutTemplateFactory.createDonutTemplate(
-            DonutTemplateType.Model
-        )
+        # Get the detector
+        cam = LsstCam().getCamera()
+        detector = cam.get("R22_S11")
 
-        # Set inst information
-        instParams = {
-            "obscuration": 0.61,
-            "focalLength": 10.312,
-            "apertureDiameter": 8.36,
-            "offset": 1.0,
-            "pixelSize": 10.0e-6,
-        }
-
-        template = templateMaker.makeTemplate(
-            "R22_S11", DefocalType.Extra, 160, instParams=instParams
+        # Create the template
+        template = createTemplateForDetector(
+            detector=detector, defocalType=DefocalType.Extra
         )
 
         return template

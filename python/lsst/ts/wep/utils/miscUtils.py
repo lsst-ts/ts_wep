@@ -21,15 +21,17 @@
 
 __all__ = [
     "searchDonutPos",
-    "getDefocalDisInMm",
-    "createInstDictFromConfig",
     "rotMatrix",
     "padArray",
     "extractArray",
+    "centerWithTemplate",
+    "polygonContains",
 ]
 
+import numba
 import numpy as np
 from scipy.ndimage import center_of_mass
+from scipy.signal import correlate
 
 
 def searchDonutPos(img):
@@ -53,58 +55,6 @@ def searchDonutPos(img):
     realcy, realcx = center_of_mass(img)
 
     return realcx, realcy
-
-
-def getDefocalDisInMm(instName):
-    """
-    Get the defocal distance for the instrument
-
-    Parameters
-    ----------
-    instName : str
-        Instrument name, one of
-        'lsst', 'lsstfam', 'comcam',
-        'auxTel'
-
-    Returns
-    -------
-    defocalDisInMm : float
-        Defocal distance in mm.
-
-    Raises
-    ------
-    ValueError
-        Instrument name is not supported.
-    """
-    if instName in ["lsst", "lsstfam", "comcam"]:
-        return 1.5
-    elif instName == "auxTel":
-        return 0.8
-    else:
-        raise ValueError(f"Instrument name ({instName}) is not supported.")
-
-
-def createInstDictFromConfig(config):
-    """Create configuration dictionary for the instrument.
-
-    Parameters
-    ----------
-    config : lsst.pipe.base.PipelineTaskConfig
-        Task configuration.
-
-    Returns
-    -------
-    dict
-        Instrument configuration parameters
-    """
-
-    return {
-        "obscuration": config.instObscuration,
-        "focalLength": config.instFocalLength,
-        "apertureDiameter": config.instApertureDiameter,
-        "offset": config.instDefocalOffset,
-        "pixelSize": config.instPixelSize,
-    }
 
 
 def rotMatrix(thetaDegrees):
@@ -214,3 +164,216 @@ def extractArray(inArray, dim):
     out = inArray[ii : ii + dim, ii : ii + dim]
 
     return out
+
+
+def centerWithTemplate(
+    image: np.ndarray,
+    template: np.ndarray,
+    rMax: float = 10,
+) -> np.ndarray:
+    """Center the image by correlating with the template.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        The image to be centered
+    template : np.ndarray
+        The template to use for correlation
+    rMax : float, optional
+        The maximum distance the image can be shifted, in pixels.
+        (the default is 10)
+
+    Returns
+    -------
+    np.ndarray
+        The centered image
+    """
+    # Replace any NaNs with zeros, because the NaNs screw up the correlation
+    image = np.nan_to_num(image)
+
+    # Correlate the template with the image
+    corr = correlate(image, template, mode="same")
+
+    # Mask within rMax of the center. We will not allow larger shifts.
+    grid = np.arange(image.shape[0])
+    rGrid = np.sqrt(np.sum(np.square(np.meshgrid(grid, grid) - grid.mean()), axis=0))
+    mask = rGrid <= rMax
+
+    # Get the index of maximum correlation
+    idxMax = np.unravel_index(np.argmax(mask * corr), corr.shape)
+    idxMax = np.array(idxMax)  # type: ignore
+
+    # Find shift relative to the center
+    centerShift = idxMax - image.shape[0] // 2  # type: ignore
+
+    # Roll the image so that the pixel with max correlation is in the center
+    image = np.roll(image, -centerShift, (0, 1))
+
+    return image
+
+
+@numba.jit(
+    "boolean[:](float64, float64[:], float64[:,:])",
+    nopython=True,
+    fastmath=True,
+)
+def _polygonContainsRow(y: float, row: np.ndarray, poly: np.ndarray) -> np.ndarray:
+    """Return mask indicating if each point in the row is inside the polygon.
+
+    Parameters
+    ----------
+    y : float
+        The y value of every point in the row
+    row : np.ndarray
+        A 1D array of x values for every point in the row
+    poly : np.ndarray
+        An Nx2 array of points specifying the polygon vertices. It is assumed
+        that an edge connects every pair of adjacent points, and that the final
+        point is identical to the first point.
+
+    Returns
+    -------
+    np.ndarray
+        A 1D array with the same shape as row, indicating whether each point
+        is inside the polygon
+    """
+    # If the row is totally outside the polygon, return False
+    if row.max() < poly[:, 0].min() or row.min() > poly[:, 0].max():
+        return np.full_like(row, False, dtype=np.bool_)
+
+    # Determine which polygon edges cross our column
+    dy0 = y - poly[:-1, 1]
+    dy1 = y - poly[1:, 1]
+    idx = np.where(dy0 * dy1 < 0)[0]
+
+    # Solve for the x-values of these edges where they cross the row
+    m = (poly[idx + 1, 0] - poly[idx, 0]) / (poly[idx + 1, 1] - poly[idx, 1])
+    x = m * dy0[idx] + poly[idx, 0]
+
+    # Count the number of edges to the right of each point in the row
+    edgesToRight = np.sum(np.expand_dims(row, -1) < x, axis=-1)
+
+    # The point is inside if the number of edges to the right is odd
+    inside = edgesToRight % 2 == 1
+
+    return inside
+
+
+@numba.jit(
+    "boolean[:,:](float64[:,:], float64[:,:], float64[:,:])",
+    nopython=True,
+    fastmath=True,
+)
+def _polygonContains(
+    xGrid: np.ndarray,
+    yGrid: np.ndarray,
+    poly: np.ndarray,
+) -> np.ndarray:
+    """Return mask indicating if each point in the grid is inside the polygon.
+
+    This function works only in 2D, and assumes that xGrid and yGrid are
+    regular grids like will be returned from np.meshgrid().
+
+    This function is compiled with numba to increase speed. The explicit
+    signature is provided so that the function is eagerly compiled on import,
+    rather than on execution.
+
+    Parameters
+    ----------
+    xGrid : np.ndarray
+        A 2D array of x values for the grid points. Must be floats.
+    yGrid : np.ndarray
+        A 2D array of y values for the grid points. Must be floats.
+    poly : np.ndarray
+        An Nx2 array of points specifying the polygon vertices. It is assumed
+        that an edge connects every pair of adjacent points, and that the final
+        point is identical to the first point. Must be floats.
+
+    Returns
+    -------
+    np.ndarray
+        A 2D array with the same shape as xGrid and yGrid, indicating whether
+        each point is inside the polygon
+    """
+    # Get the array of unique y values
+    y = yGrid[:, 0]
+
+    # Create an array full of False
+    inside = np.full_like(xGrid, False, dtype=np.bool_)
+
+    # Determine which rows have y-values that fall within polygon limits
+    idx = np.where((y > poly[:, 1].min()) & (y < poly[:, 1].max()))[0]
+
+    # If none do, we can return all False
+    if len(idx) == 0:
+        return inside
+
+    # Add some tiny shifts to the y-values of the polygon vertices
+    # This helps avoid problems with horizontal lines
+    polyShifted = poly.copy()
+    shifts = np.arange(len(poly) - 2) % 11 - 5
+    polyShifted[1:-1, 1] += 1e-12 * shifts
+
+    # Loop over rows inside polygon limits
+    for i in range(len(idx)):
+        inside[idx[i]] = _polygonContainsRow(
+            y[idx[i]],
+            xGrid[idx[i]],
+            polyShifted,
+        )
+
+    return inside
+
+
+def polygonContains(
+    xGrid: np.ndarray,
+    yGrid: np.ndarray,
+    poly: np.ndarray,
+) -> np.ndarray:
+    """Return mask indicating if each point in the grid is inside the polygon.
+
+    Note this function works only in 2D, and assumes that xGrid and yGrid are
+    regular grids like will be returned from np.meshgrid().
+
+    Parameters
+    ----------
+    xGrid : np.ndarray
+        A 2D array of x values for the grid points. Must be floats.
+    yGrid : np.ndarray
+        A 2D array of y values for the grid points. Must be floats.
+    poly : np.ndarray
+        An Nx2 array of points specifying the polygon vertices. It is assumed
+        that an edge connects every pair of adjacent points, and that the final
+        point is identical to the first point. Must be floats.
+
+    Returns
+    -------
+    np.ndarray
+        A 2D array with the same shape as xGrid and yGrid, indicating whether
+        each point is inside the polygon
+
+    Raises
+    ------
+    ValueError
+        If xGrid and yGrid are not the same shape, if either xGrid or yGrid are
+        not 2D, or if poly is not an Nx2 array
+    """
+    # Check shapes
+    if not xGrid.shape == yGrid.shape:
+        raise ValueError("xGrid and yGrid must have the same shape.")
+    if not xGrid.ndim == 2:
+        raise ValueError("xGrid and yGrid must be 2D.")
+    if not poly.shape[1] == 2:
+        raise ValueError("poly must be an Nx2 array.")
+
+    # Cast everything to floats
+    xGrid = xGrid.astype(float)
+    yGrid = yGrid.astype(float)
+    poly = poly.astype(float)
+
+    # If the last point in poly isn't the same as the first,
+    # append the first point to the end
+    if not np.allclose(poly[0], poly[-1]):
+        poly = np.vstack((poly, poly[0]))
+
+    return _polygonContains(xGrid, yGrid, poly)

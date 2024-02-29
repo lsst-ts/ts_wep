@@ -31,14 +31,13 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 import pandas as pd
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
-from lsst.ts.wep.cwfs.donutTemplateFactory import DonutTemplateFactory
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.utils import (
     DefocalType,
-    DonutTemplateType,
-    createInstDictFromConfig,
-    getCamTypeFromButlerName,
+    createTemplateForDetector,
+    getOffsetFromExposure,
+    getTaskInstrument,
 )
 from lsst.utils.timer import timeMethod
 
@@ -93,42 +92,24 @@ class GenerateDonutDirectDetectTaskConfig(
         target=DonutQuickMeasurementTask,
         doc="How to run source detection and measurement.",
     )
-    donutDiameter = pexConfig.Field(
-        dtype=int,
-        doc="The expected diameter of donuts in a donut image, in pixels.",
-        default=400,
-    )
     opticalModel = pexConfig.Field(
-        doc="Specify the optical model (offAxis, paraxial, onAxis).",
+        doc="Specify the optical model (offAxis, onAxis).",
         dtype=str,
         default="offAxis",
     )
-    instObscuration = pexConfig.Field(
-        doc="Obscuration (inner_radius / outer_radius of M1M3)",
-        dtype=float,
-        default=0.61,
-    )
-    instFocalLength = pexConfig.Field(
-        doc="Instrument Focal Length in m", dtype=float, default=10.312
-    )
-    instApertureDiameter = pexConfig.Field(
-        doc="Instrument Aperture Diameter in m", dtype=float, default=8.36
-    )
-    instDefocalOffset = pexConfig.Field(
-        doc="Instrument defocal offset in mm. \
-        If None then will get this from the focusZ value in exposure visitInfo. \
-        (The default is None.)",
-        dtype=float,
-        default=None,
+    instConfigFile = pexConfig.Field(
+        doc="Path to a instrument configuration file to override the instrument "
+        + "configuration. If begins with 'policy:' the path will be understood as "
+        + "relative to the ts_wep policy directory. If not provided, the default "
+        + "instrument for the camera will be loaded, and the defocal offset will "
+        + "be determined from the focusZ value in the exposure header.",
+        dtype=str,
         optional=True,
-    )
-    instPixelSize = pexConfig.Field(
-        doc="Instrument Pixel Size in m", dtype=float, default=10.0e-6
     )
     initialCutoutPadding = pexConfig.Field(
         doc=str(
-            "Additional padding in pixels on each side of initial "
-            + "`donutDiameter` guess for template postage stamp size "
+            "Additional padding in pixels on each side of the initial "
+            + "donut diameter guess for template postage stamp size "
             + "and for bounding boxes used for estimating centroids."
         ),
         dtype=int,
@@ -156,9 +137,6 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         # Instantiate the quickFrameMeasurementTask
         self.makeSubtask("measurementTask")
-
-        # Set up instrument configuration dict
-        self.instParams = createInstDictFromConfig(self.config)
 
         # Set up the donut selector task if we need it
         if self.config.doDonutSelection:
@@ -229,57 +207,47 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
     @timeMethod
     def run(self, exposure, camera):
-        detectorName = exposure.detector.getName()
-        detectorType = exposure.detector.getType()
-        filterName = exposure.filter.bandLabel
-        defocalType = DefocalType.Extra  # we use one of the DefocalTypes,
-        camType = getCamTypeFromButlerName(camera.getName(), detectorType)
-        pixelScale = exposure.getWcs().getPixelScale().asArcseconds()
+        camName = camera.getName()
+        bandLabel = exposure.filter.bandLabel
 
-        # Get defocal distance from focusZ.
-        if self.instParams["offset"] is None:
-            self.instParams["offset"] = np.abs(exposure.visitInfo.focusZ)
-        # LSST CWFS are offset +/- 1.5 mm when LSST camera defocus is at 0.
-        if detectorType.name == "WAVEFRONT":
-            if defocalType == DefocalType.Extra:
-                self.instParams["offset"] = np.abs(self.instParams["offset"] - 1.5)
-            elif defocalType == DefocalType.Intra:
-                self.instParams["offset"] = np.abs(self.instParams["offset"] + 1.5)
-            else:
-                raise ValueError(f"Defocal Type {defocalType} not valid.")
+        # We can pick an arbitrary defocalType because the templates
+        # look the same for intra/extra images (note this is only
+        # true in the rotated DVCS coordinate system)
+        defocalType = DefocalType.Extra
 
-        # create a donut template
-        templateMaker = DonutTemplateFactory.createDonutTemplate(
-            DonutTemplateType.Model
-        )
-        templateSize = int(self.config.donutDiameter + self.config.initialCutoutPadding)
-        if templateSize % 2 == 1:
-            templateSize += 1
-        template = templateMaker.makeTemplate(
-            detectorName,
-            defocalType,
-            templateSize,
-            camType=camType,
+        # Get the offset
+        offset = getOffsetFromExposure(exposure, camName, defocalType)
+
+        # Load the instrument
+        instrument = getTaskInstrument(camName, offset, self.config.instConfigFile)
+
+        # Create the image template for the detector
+        template = createTemplateForDetector(
+            detector=exposure.detector,
+            defocalType=defocalType,
+            bandLabel=bandLabel,
+            instrument=instrument,
             opticalModel=self.config.opticalModel,
-            pixelScale=pixelScale,
-            instParams=self.instParams,
+            padding=self.config.initialCutoutPadding,
+            binary=True,
         )
 
+        # Run the measurement task
         objData = self.measurementTask.run(
             exposure,
             template,
-            donutDiameter=self.config.donutDiameter,
+            donutDiameter=np.ceil(instrument.donutDiameter).astype(int),
             cutoutPadding=self.config.initialCutoutPadding,
         )
         donutDf = pd.DataFrame.from_dict(objData.detectedCatalog, orient="index")
         # Use the aperture flux with a 70 pixel aperture
-        donutDf[f"{filterName}_flux"] = donutDf["apFlux70"]
+        donutDf[f"{bandLabel}_flux"] = donutDf["apFlux70"]
 
         # Run the donut selector task.
         if self.config.doDonutSelection:
             self.log.info("Running Donut Selector")
             donutSelection = self.donutSelector.run(
-                donutDf, exposure.detector, filterName
+                donutDf, exposure.detector, bandLabel
             )
             donutCatSelected = donutDf[donutSelection.selected].reset_index(drop=True)
             donutCatSelected["blend_centroid_x"] = donutSelection.blendCentersX
@@ -292,7 +260,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             donutCatSelected = donutDf
 
         donutCatSelected.rename(
-            columns={f"{filterName}_flux": "source_flux"}, inplace=True
+            columns={f"{bandLabel}_flux": "source_flux"}, inplace=True
         )
 
         # update column names and content

@@ -25,11 +25,13 @@ import lsst.afw.image as afwImage
 import lsst.geom
 import lsst.obs.lsst as obs_lsst
 import numpy as np
-from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE
+from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE, PIXELS
 from lsst.daf.base import PropertyList
-from lsst.ts.wep.cwfs.compensableImage import CompensableImage
+from lsst.ts.wep.image import Image
+from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
-from lsst.ts.wep.utils import DefocalType
+from lsst.ts.wep.utils import BandLabel, DefocalType
+from scipy.ndimage import rotate
 
 
 class TestDonutStamp(unittest.TestCase):
@@ -123,10 +125,7 @@ class TestDonutStamp(unittest.TestCase):
             bandpass = donutStamp.bandpass
             self.assertEqual(bandpass, "r")
 
-            self.assertEqual(type(donutStamp.comp_im), CompensableImage)
-            np.testing.assert_array_equal(
-                donutStamp.comp_im.getImg(), donutStamp.stamp_im.image.array
-            )
+            self.assertIsInstance(donutStamp.wep_im, Image)
 
     def testFactoryMetadataDefaults(self):
         """
@@ -223,5 +222,113 @@ class TestDonutStamp(unittest.TestCase):
                     "LSSTCam",
                     "r",
                 )
-                self.assertEqual(donutStamp.comp_im.fieldX, np.degrees(trueFieldAngleX))
-                self.assertEqual(donutStamp.comp_im.fieldY, np.degrees(trueFieldAngleY))
+                fieldAngle = donutStamp.calcFieldXY()
+                self.assertEqual(fieldAngle[0], np.degrees(trueFieldAngleX))
+                self.assertEqual(fieldAngle[1], np.degrees(trueFieldAngleY))
+
+    def testMakeMask(self):
+        donutStamp = DonutStamp(
+            afwImage.MaskedImageF(160, 160),
+            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+            lsst.geom.Point2D(2047.5, 2001.5),
+            np.array([[], []]).T,
+            DefocalType.Extra.value,
+            1.5e-3,
+            "R22_S11",
+            "LSSTCam",
+            "r",
+        )
+
+        # Check that mask is empty at start
+        mask = donutStamp.stamp_im.mask
+        self.assertEqual(mask.array.shape, (160, 160))
+        self.assertEqual(mask.array.sum(), 0)
+
+        # Check masks after creation
+        donutStamp.makeMask(Instrument())
+        mask = donutStamp.stamp_im.mask
+
+        maskKeys = mask.getMaskPlaneDict().keys()
+        self.assertTrue({"DONUT", "BLEND"} <= maskKeys)
+
+        # Make sure not just an empty array
+        self.assertGreater(mask.array.sum(), 0)
+
+        # Donut at center of focal plane should be symmetric
+        np.testing.assert_array_equal(mask.array[:159], mask.array[-159:][::-1])
+
+    def testWepImage(self):
+        # Goal: test the transformations that occur during WepImage creation
+        rng = np.random.default_rng(0)
+        camera = obs_lsst.LsstCam().getCamera()
+
+        # Define a function that will test everything for the WEP Image
+        def _testWepImage(raft, sensor):
+            # Get the detector
+            detName = f"{raft}_{sensor}"
+            detector = camera.get(detName)
+
+            # Create a random stamp image
+            stamp = afwImage.MaskedImageF(160, 160)
+            stamp.image.array += rng.random(size=stamp.image.array.shape)
+
+            # Determine the center of the stamp
+            center = detector.getCenter(PIXELS)
+
+            # Determine the blend offsets
+            offsets = np.arange(6).reshape(-1, 2)
+
+            # Create the stamp
+            donutStamp = DonutStamp(
+                stamp,
+                lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
+                center,
+                center + offsets,
+                DefocalType.Extra.value,
+                1.5e-3,
+                detName,
+                "LSSTCam",
+                "r",
+            )
+
+            # Make the mask
+            donutStamp.makeMask(Instrument())
+
+            # Get the WEP Image
+            wepImage = donutStamp.wep_im
+
+            # Check that the rotation was applied to the image correctly
+            eulerZ = detector.getOrientation().getYaw().asDegrees()
+            sameImage = np.allclose(
+                rotate(wepImage.image.T, eulerZ),
+                donutStamp.stamp_im.image.array,
+            )
+            self.assertTrue(sameImage)
+
+            # Check that the field angle is correct
+            center = np.rad2deg(detector.getCenter(FIELD_ANGLE))
+            self.assertTrue(np.allclose(wepImage.fieldAngle, center[::-1]))
+
+            # Check the blend offsets are correct
+            theta = np.deg2rad(eulerZ)
+            rotMat = np.array(
+                [
+                    [np.cos(theta), -np.sin(theta)],
+                    [np.sin(theta), np.cos(theta)],
+                ]
+            )
+            offsets = np.array([rotMat @ v for v in offsets[:, ::-1]])
+            self.assertTrue(np.allclose(wepImage.blendOffsets, offsets))
+
+            # Check the DefocalType and BandLabel
+            self.assertEqual(wepImage.defocalType, DefocalType.Extra)
+            self.assertEqual(wepImage.bandLabel, BandLabel.LSST_R)
+
+        # Test all the CWFSs
+        for raftName in ["R00", "R04", "R40", "R44"]:
+            for sensorName in ["SW0", "SW1"]:
+                _testWepImage(raftName, sensorName)
+
+        # Test some science sensors
+        _testWepImage("R22", "S22")
+        _testWepImage("R21", "S11")

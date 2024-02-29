@@ -6,6 +6,30 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.0.0:
+
+-------------
+9.0.0
+-------------
+
+This is a big backwards-incompatible refactor of WEP. The major changes are:
+
+* Split the ``cwfs`` modules into ``centroid``, and ``estimation``.
+* Donut Images are now held by the ``Image`` class. This class is meant to hold information in the global camera coordinate system (CCS).
+* A new ``Instrument`` class with new configurations in the ``policy/instruments`` directory. This class holds geometric information about the different telescopes and cameras, as well as interfaces with the Batoid models.
+* The ``ImageMapper`` class maps ``Image`` objects between the image and pupil planes, and creates pupil and image masks. The "offAxis" model now uses a real-time band-dependent fit with Batoid. The "onAxis" and "paraxial" models work the same as before.
+* The Zernike estimation classes have been generalized to allow different wavefront algorithm classes to plug into ``WfEstimator``.
+* The TIE algorithm is implemented in ``estimation.TieAlgorithm``.
+* There are new utilities in ``utils`` for fitting mask models and plotting mask models and the ``ImageMapper`` methods.
+* ``Instrument`` configuration in tasks is now pulled from the default parameter files for each camera type. Overrides can be provided via the ``instConfigFile`` parameter. With the default instrument configurations, defocal offsets are pulled from the exposure metadata. If ``defocalOffset`` is explicitly set in the ``instConfigFile`` override, that defocal offset is used instead of the values from the exposure metadata.
+* The ``donutTemplateSize`` config parameter has been removed from all the relevant tasks, as the new ``ImageMapper`` can predict the required template size. ``initialCutoutPadding`` provides padding beyond this predicted value.
+* The ``multiplyMask`` and ``maskGrowthIter`` parameters have been removed from ``CutOutDonutsBase``. To mask blends during TIE fitting, instead use the ``maskKwargs`` parameter of the ``EstimateZernikesTieTask``.
+* When estimating Zernikes, the maximum Noll index (jmax) is now a configurable parameter (``maxNollIndex`` in ``EstimateZernikesBaseConfig``). You can also toggle whether estimation starts from zero or from the telescope's instrinsic Zernikes. You can toggle whether the task returns the full optical path difference (OPD) or just the wavefront deviation (OPD - intrinsic Zernikes). You can toggle whether the returned Zernikes start with Noll index 4 (the previous standard), or with index 0 (matching the Galsim convention). You can also set the units of the returned Zernikes.
+* The algorithm history can now be saved at the Task level using the ``saveHistory`` option in ``EstimateZernikesBaseConfig``. The history is saved in the task metadata in a json-compatible format. To convert the history back to the native format, use `utils.convertMetadataToHistory`.
+* Changing from the native butler coordinate system (data visualization coordinate system with rotated wavefront sensors) to the WEP coordinate system (camera coordinate system with de-rotated wavefront sensors) now happens entirely in ``task.DonutStamp._setWepImage``. Furthermore, the ``defocal_distance`` saved in the stamp is now the detector offset (or equivalent detector offset) rather than the raw focusZ info.
+* The AuxTel/LATISS unit tests have been fixed, and the LATISS Zernike calculation test has been explicitly switched to a regression test (rather than an accuracy test).
+* Enum's now map to strings instead of integers. This natural Enum-string connection replaces the various utils that previously existed to map between Enums and strings.
+
 .. _lsst.ts.wep-8.3.1:
 
 -------------

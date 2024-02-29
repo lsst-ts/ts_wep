@@ -19,14 +19,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import inspect
 import unittest
 
 import lsst.obs.lsst as obs_lsst
+import numpy as np
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.utils import (
+    createTemplateForDetector,
     getCameraFromButlerName,
+    getTaskInstrument,
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+from scipy.ndimage import binary_opening
 
 
 class TestTaskUtils(unittest.TestCase):
@@ -119,3 +125,72 @@ class TestTaskUtils(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             getCameraFromButlerName(badCamType)
         self.assertEqual(str(context.exception), errMsg)
+
+    def testGetTaskInstrument(self):
+        # def a function to compare two instruments
+        def assertInstEqual(inst1, inst2):
+            # Get the attributes to test
+            sig = inspect.signature(Instrument)
+            attributes = list(sig.parameters.keys())
+            attributes.remove("configFile")
+
+            # Loop over the attributes
+            for attr in attributes:
+                val1 = getattr(inst1, attr)
+                val2 = getattr(inst2, attr)
+                self.assertEqual(val1, val2)
+
+        # Test the defaults
+        assertInstEqual(getTaskInstrument("LSSTCam"), Instrument())
+        assertInstEqual(
+            getTaskInstrument("LSSTComCam"),
+            Instrument(configFile="policy:instruments/ComCam.yaml"),
+        )
+        assertInstEqual(
+            getTaskInstrument("LATISS"),
+            Instrument(configFile="policy:instruments/AuxTel.yaml"),
+        )
+
+        # Test override config file
+        assertInstEqual(
+            getTaskInstrument(
+                "LSSTCam", instConfigFile="policy:instruments/AuxTel.yaml"
+            ),
+            Instrument(configFile="policy:instruments/AuxTel.yaml"),
+        )
+
+        # Test override defocal offset (in mm)
+        inst = Instrument()
+        inst.defocalOffset = 1.234e-3
+        assertInstEqual(
+            getTaskInstrument("LSSTCam", offset=1.234),
+            inst,
+        )
+
+        with self.assertRaises(ValueError):
+            getTaskInstrument("fake")
+
+    def testCreateTemplateForDetector(self):
+        # Get the LSST camera
+        camera = obs_lsst.LsstCam().getCamera()
+
+        # Create a reference template
+        templateRef = createTemplateForDetector(
+            camera.get("R00_SW1"), "intra", nPixels=180
+        )
+
+        # Check that the butler orientations are all the same
+        for raft in ["R00", "R40", "R44", "R04"]:
+            for sensor in ["SW0", "SW1"]:
+                # Get detector info
+                detName = f"{raft}_{sensor}"
+                detector = camera.get(detName)
+                defocalType = "intra" if "1" in sensor else "extra"
+
+                # Check that butler orientation all matches reference
+                # (binary_opening removes small artifacts from centering)
+                template = createTemplateForDetector(
+                    detector, defocalType, nPixels=len(templateRef)
+                )
+                diff = binary_opening(template - templateRef, iterations=2)
+                assert np.allclose(diff, 0)

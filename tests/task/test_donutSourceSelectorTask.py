@@ -27,12 +27,11 @@ import numpy as np
 import pandas as pd
 from lsst.daf import butler as dafButler
 from lsst.pex.config import FieldValidationError
-from lsst.ts.wep.paramReader import ParamReader
 from lsst.ts.wep.task.donutSourceSelectorTask import (
     DonutSourceSelectorTask,
     DonutSourceSelectorTaskConfig,
 )
-from lsst.ts.wep.utils import getConfigDir, getModulePath
+from lsst.ts.wep.utils import getModulePath, readConfigYaml
 
 
 class TestDonutSourceSelectorTask(unittest.TestCase):
@@ -55,8 +54,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         minimalCat = pd.DataFrame()
 
         # Set magnitudes to test with policy file values
-        magPolicyFile = os.path.join(getConfigDir(), "task", "magLimitStar.yaml")
-        magPolicyDefaults = ParamReader(magPolicyFile).getContent()
+        magPolicyDefaults = readConfigYaml("policy:magLimitStar.yaml")
         defaultFilterKey = f"filter{self.filterName.upper()}"
         self.magMax = magPolicyDefaults[defaultFilterKey]["high"]
         self.magMin = magPolicyDefaults[defaultFilterKey]["low"]
