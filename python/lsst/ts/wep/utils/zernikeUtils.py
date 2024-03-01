@@ -39,6 +39,7 @@ import numpy as np
 
 def createGalsimZernike(
     zkCoeff: np.ndarray,
+    jmin: int = 4,
     obscuration: float = 0.612,
 ) -> galsim.zernike.Zernike:
     """Create a GalSim Zernike object with the given coefficients.
@@ -46,7 +47,9 @@ def createGalsimZernike(
     Parameters
     ----------
     zkCoeff : np.ndarray
-        Zernike coefficients for Noll indices >= 4, in any units.
+        Zernike coefficients in any units.
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -57,17 +60,18 @@ def createGalsimZernike(
         A GalSim Zernike object
     """
     return galsim.zernike.Zernike(
-        np.concatenate([np.zeros(4), zkCoeff]), R_inner=obscuration
+        np.concatenate([np.zeros(jmin), zkCoeff]), R_inner=obscuration
     )
 
 
 def createZernikeBasis(
     u: np.ndarray,
     v: np.ndarray,
+    jmin: int = 4,
     jmax: int = 22,
     obscuration: float = 0.612,
 ) -> np.ndarray:
-    """Create a basis of Zernike polynomials for Noll indices >= 4.
+    """Create a basis of Zernike polynomials.
 
     This function is evaluated on a grid of normalized pupil coordinates,
     where these coordinates are normalized pupil coordinates. Normalized
@@ -81,8 +85,10 @@ def createZernikeBasis(
         The x normalized pupil coordinate(s).
     v : np.ndarray
         The y normalized pupil coordinate(s). Must be same shape as u.
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
     jmax : int
-        The maximum Noll index to fit (the default is 22)
+        The maximum Noll index to fit, inclusive. (the default is 22)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -93,16 +99,17 @@ def createZernikeBasis(
         Zernike bases. The first axis indexes the Zernike polynomials.
     """
     # Create the basis
-    return galsim.zernike.zernikeBasis(jmax, u, v, R_inner=obscuration)[4:]
+    return galsim.zernike.zernikeBasis(jmax, u, v, R_inner=obscuration)[jmin:]
 
 
 def createZernikeGradBasis(
     u: np.ndarray,
     v: np.ndarray,
+    jmin: int = 4,
     jmax: int = 22,
     obscuration: float = 0.612,
 ) -> np.ndarray:
-    """Create a basis of Zernike gradient polynomials for Noll indices >= 4.
+    """Create a basis of Zernike gradient polynomials.
 
     This function is evaluated at the provided u and v coordinates, where
     these coordinates are normalized pupil coordinates. Normalized pupil
@@ -116,8 +123,10 @@ def createZernikeGradBasis(
         The x normalized pupil coordinate(s).
     v : np.ndarray
         The y normalized pupil coordinate(s). Must be same shape as u.
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
     jmax : int
-        The maximum Noll index to fit (the default is 22)
+        The maximum Noll index to fit, inclusive. (the default is 22)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -128,13 +137,15 @@ def createZernikeGradBasis(
         Array of Zernike bases. First axis has length 2, corresponding to the
         u and v gradients. The second axis indexes the Zernike polynomials.
     """
-    return galsim.zernike.zernikeGradBases(jmax, u, v, R_inner=obscuration)[:, 4:, ...]
+    gradBasis = galsim.zernike.zernikeGradBases(jmax, u, v, R_inner=obscuration)
+    return gradBasis[:, jmin:, ...]
 
 
 def zernikeEval(
     u: np.ndarray,
     v: np.ndarray,
     zkCoeff: np.ndarray,
+    jmin: int = 4,
     obscuration: float = 0.612,
 ) -> None:
     """Evaluate the Zernike series.
@@ -152,7 +163,9 @@ def zernikeEval(
     v : np.ndarray
         The y normalized pupil coordinate(s). Must be same shape as u.
     zkCoeff : np.ndarray
-        Zernike coefficients for Noll indices >= 4, in any units.
+        Zernike coefficients in any units.
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -164,7 +177,7 @@ def zernikeEval(
         shape as u and v, and the same units as zkCoeff.
     """
     # Create the Galsim Zernike object
-    galsimZernike = createGalsimZernike(zkCoeff, obscuration)
+    galsimZernike = createGalsimZernike(zkCoeff, jmin, obscuration)
 
     # Evaluate on the grid
     return galsimZernike(u, v)
@@ -176,6 +189,7 @@ def zernikeGradEval(
     uOrder: int,
     vOrder: int,
     zkCoeff: np.ndarray,
+    jmin: int = 4,
     obscuration: float = 0.612,
 ) -> np.ndarray:
     """Evaluate the gradient of the Zernike series.
@@ -197,7 +211,9 @@ def zernikeGradEval(
     vOrder : int
         The number of v derivatives to apply.
     zkCoeff : np.ndarray
-        Zernike coefficients for Noll indices >= 4, in any units.
+        Zernike coefficients in any units.
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -209,7 +225,7 @@ def zernikeGradEval(
         shape as u and v, and the same units as zkCoeff.
     """
     # Create the Galsim Zernike object
-    galsimZernike = createGalsimZernike(zkCoeff, obscuration)
+    galsimZernike = createGalsimZernike(zkCoeff, jmin, obscuration)
 
     # Apply derivatives
     for _ in range(uOrder):
@@ -225,6 +241,7 @@ def zernikeFit(
     u: np.ndarray,
     v: np.ndarray,
     z: np.ndarray,
+    jmin: int = 4,
     jmax: int = 22,
     obscuration: float = 0.612,
     mask: Optional[np.ndarray] = None,
@@ -233,27 +250,32 @@ def zernikeFit(
 
     Parameters
     ----------
-    Parameters
-    ----------
     u : np.ndarray
         The x normalized pupil coordinate(s).
     v : np.ndarray
         The y normalized pupil coordinate(s). Must be same shape as u.
     z : np.ndarray
         The wavefront surface evaluated at the u, v points.
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
     jmax : int
-        The maximum Noll index to fit (the default is 22)
+        The maximum Noll index to fit, inclusive. (the default is 22)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
     mask : np.ndarray, optional
         A mask for the surface. The Zernikes are only fit to the unmasked
         points. (the default is None)
+
+    Returns
+    -------
+    np.ndarray
+        The best fit Zernike coefficients in the same units as z.
     """
     mask = mask if mask is not None else np.full_like(u, True, dtype=bool)
 
     # Create a Zernike basis
-    zkBasis = createZernikeBasis(u[mask], v[mask], jmax, obscuration)
+    zkBasis = createZernikeBasis(u[mask], v[mask], jmin, jmax, obscuration)
 
     # Fit the Zernikes
     coeffs, *_ = np.linalg.lstsq(zkBasis.T, z[mask], rcond=-1)
@@ -274,16 +296,15 @@ def getPsfGradPerZernike(
 
     Parameters
     ----------
-    diameter : float
+    diameter : float, optional
         The diameter of the telescope aperture, in meters.
         (the default, 8.36, corresponds to the LSST primary mirror)
-    obscuration : float
+    obscuration : float, optional
         Central obscuration of telescope aperture (i.e. R_outer / R_inner).
         (the default, 0.612, corresponds to the LSST primary mirror)
-    jmin : int
-        The minimum Zernike Noll index, inclusive.
-        (the default, 4, ignores piston, x & y offsets, and tilt.)
-    jmax : int
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
+    jmax : int, optional
         The max Zernike Noll index, inclusive. (the default is 22.)
 
     Returns
@@ -390,7 +411,7 @@ def convertZernikesToPsfWidth(
     https://gist.github.com/jfcrenshaw/24056516cfa3ce0237e39507674a43e1
     """
     # Calculate jmax from jmin and the length of the zernike array
-    jmax = jmin + zernikes.shape[-1] - 1
+    jmax = jmin + np.array(zernikes).shape[-1] - 1
 
     # Calculate the conversion factors for each zernike
     conversion_factors = getPsfGradPerZernike(
@@ -407,21 +428,24 @@ def convertZernikesToPsfWidth(
     return dFWHM
 
 
-def getZernikeParity(jmax, axis="x"):
+def getZernikeParity(jmin: int = 4, jmax: int = 22, axis: str = "x"):
     """Return the parity of the Zernike polynomials (Noll index >= 4).
 
     Parameters
     ----------
-    jmax : int
-        The maximum Noll index
+    jmin : int, optional
+        The minimum Noll index, inclusive. (the default is 4)
+    jmax : int, optional
+        The maximum Noll index, inclusive. (the default is 22)
     axis : str, optional
         The axis for which to return the parity. Can be "x" or "y".
+        (the default is "x")
 
     Returns
     -------
     np.ndarray
-        The numpy array of parities, starting with Noll index 4.
-        +1 corresponds to even parity, while -1 corresponds to odd parity.
+        Aarray of parities, with +1 corresponding to even parity,
+        and -1 corresponding to odd parity.
 
     Raises
     ------
@@ -429,7 +453,7 @@ def getZernikeParity(jmax, axis="x"):
         If axis is not one of "x" or "y"
     """
     parity = []
-    for j in range(4, jmax + 1):
+    for j in range(jmin, jmax + 1):
         n, m = galsim.zernike.noll_to_zern(j)
         if axis == "x":
             # if (-1)^n * m >= 0, x parity is even
