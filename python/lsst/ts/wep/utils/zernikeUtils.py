@@ -49,7 +49,7 @@ def createGalsimZernike(
     zkCoeff : np.ndarray
         Zernike coefficients in any units.
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -58,7 +58,16 @@ def createGalsimZernike(
     -------
     galsim.zernike.Zernike
         A GalSim Zernike object
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative
     """
+    # Check jmin
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+
     return galsim.zernike.Zernike(
         np.concatenate([np.zeros(jmin), zkCoeff]), R_inner=obscuration
     )
@@ -86,9 +95,10 @@ def createZernikeBasis(
     v : np.ndarray
         The y normalized pupil coordinate(s). Must be same shape as u.
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     jmax : int
-        The maximum Noll index to fit, inclusive. (the default is 22)
+        The maximum Noll index to fit, inclusive. Must be >= jmin.
+        (the default is 22)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -97,7 +107,18 @@ def createZernikeBasis(
     -------
     np.ndarray
         Zernike bases. The first axis indexes the Zernike polynomials.
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative or jmax is less than jmin
     """
+    # Check jmin and jmax
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+    if jmax < jmin:
+        raise ValueError("jmax must be greater than jmin.")
+
     # Create the basis
     return galsim.zernike.zernikeBasis(jmax, u, v, R_inner=obscuration)[jmin:]
 
@@ -124,9 +145,10 @@ def createZernikeGradBasis(
     v : np.ndarray
         The y normalized pupil coordinate(s). Must be same shape as u.
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     jmax : int
-        The maximum Noll index to fit, inclusive. (the default is 22)
+        The maximum Noll index to fit, inclusive. Must be >= jmin.
+        (the default is 22)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -136,7 +158,18 @@ def createZernikeGradBasis(
     np.ndarray
         Array of Zernike bases. First axis has length 2, corresponding to the
         u and v gradients. The second axis indexes the Zernike polynomials.
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative or jmax is less than jmin
     """
+    # Check jmin and jmax
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+    if jmax < jmin:
+        raise ValueError("jmax must be greater than jmin.")
+
     gradBasis = galsim.zernike.zernikeGradBases(jmax, u, v, R_inner=obscuration)
     return gradBasis[:, jmin:, ...]
 
@@ -165,7 +198,7 @@ def zernikeEval(
     zkCoeff : np.ndarray
         Zernike coefficients in any units.
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -175,7 +208,16 @@ def zernikeEval(
     np.ndarray
         Values of the Zernike series at the given points. Has the same
         shape as u and v, and the same units as zkCoeff.
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative
     """
+    # Check jmin
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+
     # Create the Galsim Zernike object
     galsimZernike = createGalsimZernike(zkCoeff, jmin, obscuration)
 
@@ -213,7 +255,7 @@ def zernikeGradEval(
     zkCoeff : np.ndarray
         Zernike coefficients in any units.
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -223,7 +265,16 @@ def zernikeGradEval(
     np.ndarray
         Values of the Zernike series at the given points. Has the same
         shape as u and v, and the same units as zkCoeff.
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative
     """
+    # Check jmin
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+
     # Create the Galsim Zernike object
     galsimZernike = createGalsimZernike(zkCoeff, jmin, obscuration)
 
@@ -257,9 +308,10 @@ def zernikeFit(
     z : np.ndarray
         The wavefront surface evaluated at the u, v points.
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     jmax : int
-        The maximum Noll index to fit, inclusive. (the default is 22)
+        The maximum Noll index to fit, inclusive. Must be >= jmin.
+        (the default is 22)
     obscuration : float, optional
         The fractional obscuration.
         (the default is 0.612, corresponding to the Simonyi Survey Telescope.)
@@ -271,7 +323,18 @@ def zernikeFit(
     -------
     np.ndarray
         The best fit Zernike coefficients in the same units as z.
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative or jmax is less than jmin
     """
+    # Check jmin and jmax
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+    if jmax < jmin:
+        raise ValueError("jmax must be greater than jmin.")
+
     mask = mask if mask is not None else np.full_like(u, True, dtype=bool)
 
     # Create a Zernike basis
@@ -303,16 +366,28 @@ def getPsfGradPerZernike(
         Central obscuration of telescope aperture (i.e. R_outer / R_inner).
         (the default, 0.612, corresponds to the LSST primary mirror)
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     jmax : int, optional
-        The max Zernike Noll index, inclusive. (the default is 22.)
+        The max Zernike Noll index, inclusive. Must be >= jmin.
+        (the default is 22.)
 
     Returns
     -------
     np.ndarray
         Gradient of the PSF FWHM with respect to the corresponding Zernike.
         Units are arcsec / micron.
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative or jmax is less than jmin
     """
+    # Check jmin and jmax
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+    if jmax < jmin:
+        raise ValueError("jmax must be greater than jmin.")
+
     # Calculate the conversion factors
     conversion_factors = np.zeros(jmax + 1)
     for i in range(jmin, jmax + 1):
@@ -367,8 +442,8 @@ def convertZernikesToPsfWidth(
         Central obscuration of telescope aperture (i.e. R_outer / R_inner).
         (the default, 0.612, corresponds to the LSST primary mirror)
     jmin : int
-        The minimum Zernike Noll index, inclusive. The maximum Noll index is
-        inferred from `jmin` and the length of `zernikes`.
+        The minimum Zernike Noll index, inclusive. Must be >= 0. The
+        max Noll index is inferred from `jmin` and the length of `zernikes`.
         (the default is 4, which ignores piston, x & y offsets, and tilt.)
 
     Returns
@@ -409,7 +484,16 @@ def convertZernikesToPsfWidth(
 
     For a notebook demonstrating where the approximation breaks down:
     https://gist.github.com/jfcrenshaw/24056516cfa3ce0237e39507674a43e1
+
+    Raises
+    ------
+    ValueError
+        If jmin is negative
     """
+    # Check jmin
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+
     # Calculate jmax from jmin and the length of the zernike array
     jmax = jmin + np.array(zernikes).shape[-1] - 1
 
@@ -434,9 +518,9 @@ def getZernikeParity(jmin: int = 4, jmax: int = 22, axis: str = "x"):
     Parameters
     ----------
     jmin : int, optional
-        The minimum Noll index, inclusive. (the default is 4)
+        The minimum Noll index, inclusive. Must be >= 0. (the default is 4)
     jmax : int, optional
-        The maximum Noll index, inclusive. (the default is 22)
+        The maximum Noll index, inclusive. Must be >= jmin. (the default is 22)
     axis : str, optional
         The axis for which to return the parity. Can be "x" or "y".
         (the default is "x")
@@ -444,14 +528,22 @@ def getZernikeParity(jmin: int = 4, jmax: int = 22, axis: str = "x"):
     Returns
     -------
     np.ndarray
-        Aarray of parities, with +1 corresponding to even parity,
+        Array of parities, with +1 corresponding to even parity,
         and -1 corresponding to odd parity.
 
     Raises
     ------
     ValueError
         If axis is not one of "x" or "y"
+    ValueError
+        If jmin is negative or jmax is less than jmin
     """
+    # Check jmin and jmax
+    if jmin < 0:
+        raise ValueError("jmin cannot be negative.")
+    if jmax < jmin:
+        raise ValueError("jmax must be greater than jmin.")
+
     parity = []
     for j in range(jmin, jmax + 1):
         n, m = galsim.zernike.noll_to_zern(j)
