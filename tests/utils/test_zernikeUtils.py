@@ -31,6 +31,7 @@ from lsst.ts.wep.utils import (
     getPsfGradPerZernike,
     getZernikeParity,
     zernikeEval,
+    zernikeFit,
     zernikeGradEval,
 )
 from lsst.utils.tests import TestCase
@@ -123,13 +124,67 @@ class TestZernikeUtils(TestCase):
         self.assertTrue(np.allclose(coeffs, getPsfGradPerZernike()))
 
     def testGetZernikeParity(self):
-        xParity = getZernikeParity(22)
+        xParity = getZernikeParity()
         xTruth = [1, -1, 1, 1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, 1]
         self.assertTrue(all(xParity == xTruth))
 
-        yParity = getZernikeParity(22, axis="y")
+        yParity = getZernikeParity(axis="y")
         yTruth = [1, -1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1]
         self.assertTrue(all(yParity == yTruth))
+
+    def testJmin(self):
+        # Create a pupil grid
+        grid = np.linspace(-1, 1, 200)
+        u, v = np.meshgrid(grid, grid)
+
+        # And a set of Zernike coefficients
+        zkCoeff = np.arange(4, 22)[::-1]
+        zkCoeff = 1e-5 * zkCoeff[::-1] * (-1) ** zkCoeff
+
+        # Zernike Bases
+        zkB0 = createZernikeBasis(u, v, jmin=0)
+        zkB4 = createZernikeBasis(u, v, jmin=4)
+        self.assertTrue(np.allclose(zkB0[4:], zkB4))
+
+        # Zernike grad Bases
+        dzkB0 = createZernikeGradBasis(u, v, jmin=0)
+        dzkB4 = createZernikeGradBasis(u, v, jmin=4)
+        self.assertTrue(np.allclose(dzkB0[:, 4:, ...], dzkB4))
+
+        # Evaluate Zernikes
+        wf0 = zernikeEval(u, v, [0, 0, 0, 0] + list(zkCoeff), jmin=0)
+        wf4 = zernikeEval(u, v, zkCoeff, jmin=4)
+        self.assertTrue(np.allclose(wf0, wf4))
+
+        # Evaluate Zernike gradients
+        dwf0 = zernikeGradEval(u, v, 1, 1, [0, 0, 0, 0] + list(zkCoeff), jmin=0)
+        dwf4 = zernikeGradEval(u, v, 1, 1, zkCoeff, jmin=4)
+        self.assertTrue(np.allclose(dwf0, dwf4))
+
+        # Fit Zernikes
+        zkFit0 = zernikeFit(u, v, wf4, jmin=0)
+        zkFit4 = zernikeFit(u, v, wf4, jmin=4)
+        self.assertTrue(np.allclose(zkFit0[4:], zkFit4))
+
+        # PSF conversion factors
+        dpsf0 = getPsfGradPerZernike(jmin=0)
+        dpsf4 = getPsfGradPerZernike(jmin=4)
+        self.assertTrue(np.allclose(dpsf0[4:], dpsf4))
+
+        # Convert Zernikes
+        zkPsf0 = convertZernikesToPsfWidth([0, 0, 0, 0] + list(zkCoeff), jmin=0)
+        zkPsf4 = convertZernikesToPsfWidth(zkCoeff, jmin=4)
+        self.assertTrue(np.allclose(zkPsf0[4:], zkPsf4))
+
+        # Zernike x parity
+        xParity0 = getZernikeParity(jmin=0, axis="x")
+        xParity4 = getZernikeParity(jmin=4, axis="x")
+        self.assertTrue(np.allclose(xParity0[4:], xParity4))
+
+        # Zernike y parity
+        yParity0 = getZernikeParity(jmin=0, axis="y")
+        yParity4 = getZernikeParity(jmin=4, axis="y")
+        self.assertTrue(np.allclose(yParity0[4:], yParity4))
 
 
 if __name__ == "__main__":

@@ -436,12 +436,17 @@ class TieAlgorithm(WfAlgorithm):
         """
         # Get Zernike Bases
         uPupil, vPupil = instrument.createPupilGrid()
-        zk = createZernikeBasis(uPupil, vPupil, jmax, instrument.obscuration)
+        zk = createZernikeBasis(
+            uPupil,
+            vPupil,
+            jmax=jmax,
+            obscuration=instrument.obscuration,
+        )
         dzkdu, dzkdv = createZernikeGradBasis(
             uPupil,
             vPupil,
-            jmax,
-            instrument.obscuration,
+            jmax=jmax,
+            obscuration=instrument.obscuration,
         )
 
         # Calculate quantities for the linear system

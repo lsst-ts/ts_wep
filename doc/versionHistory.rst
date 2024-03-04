@@ -6,6 +6,11 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.1.0:
+
+* Added ``jmin`` arguments to Zernike utility functions.
+* Added ``jmin`` and ``jmax`` value checks to the Zernike utility functions.
+
 .. _lsst.ts.wep-9.0.0:
 
 -------------
