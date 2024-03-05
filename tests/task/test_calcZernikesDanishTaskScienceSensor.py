@@ -29,6 +29,7 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
+    EstimateZernikesDanishTask,
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -38,7 +39,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
+class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -63,7 +64,7 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesScienceSensorPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
@@ -81,6 +82,7 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
+        self.config.estimateZernikes.retarget(EstimateZernikesDanishTask)
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
@@ -100,6 +102,7 @@ class TestCalcZernikesTaskScienceSensor(lsst.utils.tests.TestCase):
         }
 
     def testValidateConfigs(self):
+        self.assertEqual(type(self.task.estimateZernikes), EstimateZernikesDanishTask)
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)

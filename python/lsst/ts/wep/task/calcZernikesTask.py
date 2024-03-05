@@ -74,7 +74,7 @@ class CalcZernikesTaskConfig(
     estimateZernikes = pexConfig.ConfigurableField(
         target=EstimateZernikesTieTask,
         doc=str(
-            "Choise of task to estimate Zernikes from pairs of donuts. "
+            "Choice of task to estimate Zernikes from pairs of donuts. "
             + "(the default is EstimateZernikesTieTask)"
         ),
     )
