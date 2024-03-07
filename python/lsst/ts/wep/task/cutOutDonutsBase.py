@@ -29,6 +29,7 @@ import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from copy import copy
 from lsst.afw.geom import makeSkyWcs
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
@@ -41,6 +42,9 @@ from lsst.ts.wep.utils import (
     getOffsetFromExposure,
     getTaskInstrument,
 )
+
+from lsst.ts.wep.donutImageCheck import DonutImageCheck
+from scipy.ndimage import binary_dilation, rotate, shift
 from scipy.signal import correlate
 
 
@@ -124,6 +128,12 @@ class CutOutDonutsBaseTaskConfig(
         target=lsst.meas.algorithms.SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
     )
+    maskGrowthIterSignal = pexConfig.Field(
+        doc="How many iterations of binary dilation to run on the image mask \
+        in calculation of the signal-to-noise ratio (The default is 6).",
+        dtype=int,
+        default=6,
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -154,6 +164,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.opticalModel = self.config.opticalModel
         # Set instrument configuration info
         self.instConfigFile = self.config.instConfigFile
+        self.maskGrowthIter = self.config.maskGrowthIter
+        self.maskGrowthIterSignal = self.config.maskGrowthIterSignal
         # Set up background subtraction task
         self.makeSubtask("subtractBackground")
 
@@ -263,6 +275,83 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
         return finalDonutX, finalDonutY, xCorner, yCorner
 
+    def calculateSignalToNoise(self, exposure, donutStamp):
+        """
+        Calculate the measure of signal-to-noise ratio in
+        several ways.
+
+        Parameters
+        ----------
+        exposure : lsst.afw.image.Exposure
+            Exposure with the donut image.
+        donutStamp : lsst.ts.wep.task.donutStamp
+            A stamp containing donut image and mask.
+
+        Returns
+        -------
+        dict
+            A dictionary of calculated quantities, including
+            'image_mean': the mean of the donut image inside the
+                 model mask.
+            'bkgnd_header': the background level calculated by
+                SubtractBackground task, stored by default
+                in the exposure under 'BGMEAN' keyword.
+            'bkgnd_mean': the mean of the image region outside
+                 the model mask .
+            'bkgnd_mean_dilated': the mean of the image region outside
+                 the dilated model mask.
+            'sn_ratio': the signal-to-noise ratio based on the
+                 inside of the model mask for the image level, and
+                 outside of the model mask for the background level.
+            'sn_ratio_dilated': the signal-to-noise ratio based on the
+                 model mask for the image level, and dilated model mask
+                 for the background level.
+            'sn_ratio_header':  the signal-to-noise ratio based on the
+                 model mask for the image level, and the  background level
+                 from SubtractBackground task.
+        """
+
+        # Store the background level for S/N calculation
+        bgmean = exposure.getMetadata()["BGMEAN"]
+
+        # Select image and  pupil mask
+        img = copy(donutStamp.stamp_im.image.array)
+        mask = donutStamp.stamp_im.mask.array
+        mask_dilated = binary_dilation(mask, iterations=self.maskGrowthIterSignal)
+
+        # Set negative parts of the image that may result from
+        # background oversubtraction to a very small value
+        # to avoid negative background and negative signal-to-noise
+        img[img < 0] = 1
+
+        # Calculate the mean of what's in the mask
+        mean_donut = np.mean(img * mask)
+
+        # Calculate the  mean of what's outside the pupil mask
+        negative_mask = np.logical_not(mask)
+        mean_background = np.mean(img * negative_mask)
+        ratio = mean_donut / mean_background
+
+        # Calculate the mean of what's outside the dilated mask
+        negative_mask_dilated = np.logical_not(mask_dilated)
+        mean_background_dilated = np.mean(img * negative_mask_dilated)
+        ratio_dilated = mean_donut / mean_background_dilated
+
+        # Use the exposure-header background
+        ratio_header = mean_donut / bgmean
+
+        # Store the contents per donut
+        sn_quantities = {
+            "image_mean": mean_donut,
+            "bkgnd_header": bgmean,
+            "bkgnd_mean": mean_background,
+            "bkgnd_mean_dilated": mean_background_dilated,
+            "sn_ratio": ratio,
+            "sn_ratio_dilated": ratio_dilated,
+            "sn_ratio_header": ratio_header,
+        }
+        return sn_quantities
+
     def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
         """
         Cut out postage stamps for sources in catalog.
@@ -309,6 +398,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             binary=True,
         )
 
+        # Initialie donut quality check
+        donutCheck = DonutImageCheck()
+
         # Final list of DonutStamp objects
         finalStamps = list()
 
@@ -323,6 +415,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Final locations of BBox corners for DonutStamp images
         xCornerList = list()
         yCornerList = list()
+
+        # Calculation of SN quantities
+        snQuant = list()
+
+        # Measure of donut entropy
+        isEffective = list()
 
         for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
@@ -416,6 +514,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 archive_element=linear_wcs,
             )
 
+            # Calculate the S/N per stamp
+            snQuant.append(self.calculateSignalToNoise(exposure, donutStamp))
+
+            # Store entropy-based measure of donut quality
+            isEffective.append(donutCheck.isEffDonut(donutStamp.stamp_im.image.array))
+
             finalStamps.append(donutStamp)
 
         catalogLength = len(donutCatalog)
@@ -440,4 +544,20 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["X0"] = np.array(xCornerList)
         stampsMetadata["Y0"] = np.array(yCornerList)
 
+        # Save the S/N values
+        stampsMetadata["IMAGE_MEAN_MASKED"] = np.array(
+            [snQuant[i]["image_mean"] for i in range(len(snQuant))]
+        )
+        stampsMetadata["SN_RATIO_BASE"] = np.array(
+            [snQuant[i]["sn_ratio"] for i in range(len(snQuant))]
+        )
+        stampsMetadata["SN_RATIO_DILATED"] = np.array(
+            [snQuant[i]["sn_ratio_dilated"] for i in range(len(snQuant))]
+        )
+        stampsMetadata["SN_RATIO_BGMEAN"] = np.array(
+            [snQuant[i]["sn_ratio_header"] for i in range(len(snQuant))]
+        )
+
+        # Save the entropy-based quality measure
+        stampsMetadata["EFFECTIVE"] = np.array(isEffective)
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
