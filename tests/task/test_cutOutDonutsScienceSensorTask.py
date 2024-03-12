@@ -136,6 +136,22 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
+    def testAssignExtraIntraIdxLsstComCamSim(self):
+        focusZNegative = -1
+        focusZPositive = 1
+
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
+            focusZNegative, focusZPositive, "LSSTComCamSim"
+        )
+        self.assertEqual(extraIdx, 1)
+        self.assertEqual(intraIdx, 0)
+
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
+            focusZPositive, focusZNegative, "LSSTComCamSim"
+        )
+        self.assertEqual(extraIdx, 0)
+        self.assertEqual(intraIdx, 1)
+
     def testAssignExtraIntraIdxFocusZValueError(self):
         focusZNegative = -1
         focusZPositive = 1
@@ -162,7 +178,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             self.task.assignExtraIntraIdx(-1, 1, cameraName)
         errorStr = str(
             f"Invalid cameraName parameter: {cameraName}. Camera must  "
-            "be one of: 'LSSTCam', 'LSSTComCam' or 'LATISS'",
+            "be one of: 'LSSTCam', 'LSSTComCam', 'LSSTComCamSim' or 'LATISS'",
         )
         self.assertEqual(errorStr, str(context.exception))
 

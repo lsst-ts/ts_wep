@@ -179,7 +179,7 @@ def getCameraFromButlerName(camName):
     ----------
     camName : str
         Name of instrument using butler convention. Available instruments
-        are LSSTCam, LSSTComCam, and LATISS.
+        are LSSTCam, LSSTComCam, LSSTComCamSim, and LATISS.
 
     Returns
     -------
@@ -196,6 +196,8 @@ def getCameraFromButlerName(camName):
         return obs_lsst.LsstCam().getCamera()
     elif camName == "LSSTComCam":
         return obs_lsst.LsstComCam().getCamera()
+    elif camName == "LSSTComCamSim":
+        return obs_lsst.LsstComCamSim().getCamera()
     elif camName == "LATISS":
         return obs_lsst.Latiss.getCamera()
     else:
@@ -219,7 +221,7 @@ def getOffsetFromExposure(
         The exposure
     camName : str
         Name of instrument using butler convention. Available instruments
-        are LSSTCam, LSSTComCam, and LATISS.
+        are LSSTCam, LSSTComCam, LSSTComCamSim, and LATISS.
     defocalType : DefocalType, str, or None
         The DefocalType enum, or corresponding string.
 
@@ -296,7 +298,7 @@ def getTaskInstrument(
     if instConfigFile is None:
         if camName == "LSSTCam":
             instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
-        elif camName == "LSSTComCam":
+        elif camName in ["LSSTComCam", "LSSTComCamSim"]:
             instrument = Instrument(configFile="policy:instruments/ComCam.yaml")
         elif camName == "LATISS":
             instrument = Instrument(configFile="policy:instruments/AuxTel.yaml")
