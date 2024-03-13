@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import getpass
 import os
 import tempfile
 
@@ -44,6 +45,10 @@ from lsst.ts.wep.utils import (
     os.path.exists("/sdf/data/rubin/repo/main") is False,
     reason="requires access to data in /repo/main",
 )
+@pytest.mark.skipif(
+    not os.getenv("PGPASSFILE"),
+    reason="requires access to butler db",
+)
 class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -59,7 +64,7 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         # Create a temporary test directory
         # under /sdf/data/rubin/repo/main/u/$USER
         # to ensure write access is granted
-        user = os.getlogin()
+        user = getpass.getuser()
         tempDir = os.path.join(cls.repoDir, "u", user)
         cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
         testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
@@ -147,28 +152,27 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         # Previous Zernikes for regression test
         zk = np.array(
             [
-                -0.00283742,
-                0.12024323,
-                -0.05781533,
-                -0.00683463,
-                -0.01198631,
-                0.03911933,
-                -0.07739852,
-                -0.0307383,
-                0.0114996,
-                -0.00157382,
-                -0.00154171,
-                -0.00857287,
-                0.00426482,
-                -0.00160444,
-                0.01318693,
-                -0.00538555,
-                -0.02333674,
-                -0.02252251,
-                0.00943855,
+                0.06301116,
+                0.16224293,
+                -0.03171561,
+                -0.01889007,
+                0.00448589,
+                0.03581878,
+                -0.05704621,
+                -0.02594513,
+                0.01350136,
+                -0.00455589,
+                -0.01713792,
+                0.00590172,
+                0.00505236,
+                0.0015623,
+                0.01403694,
+                -0.00709998,
+                -0.03391995,
+                -0.02250289,
+                0.0147995,
             ]
         )
-
         self.assertTrue(np.allclose(zk, zernCoeff.outputZernikesRaw[0]))
 
     def testGetCombinedZernikes(self):

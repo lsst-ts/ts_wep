@@ -17,6 +17,7 @@ See the docs: <https://ts-wep.lsst.io/>
 - lsst_distrib (tag: `w_latest`)
 - [git-lfs](https://git-lfs.com/)
 - [galsim](https://github.com/GalSim-developers/GalSim) (version >= 2.3; should be available from science pipelines v2.0.0 and up)
+- [batoid](https://jmeyers314.github.io/batoid/overview.html) (version >= 0.6.0)
 - [black](https://github.com/psf/black) (optional)
 - [documenteer](https://github.com/lsst-sqre/documenteer) (optional)
 - [plantuml](http://plantuml.com) (optional)
