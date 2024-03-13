@@ -6,6 +6,18 @@
 Version History
 ##################
 
+-------------
+9.1.1
+-------------
+
+.. _lsst.ts.wep-9.1.1:
+
+* Fix latiss tests by using getpass, and updating Zk values
+
+-------------
+9.1.0
+-------------
+
 .. _lsst.ts.wep-9.1.0:
 
 * Added ``jmin`` arguments to Zernike utility functions.
