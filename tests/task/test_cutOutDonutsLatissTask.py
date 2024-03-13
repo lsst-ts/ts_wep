@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import getpass
 import os
 import tempfile
 
@@ -41,7 +42,11 @@ from lsst.ts.wep.utils import (
 
 @pytest.mark.skipif(
     os.path.exists("/sdf/data/rubin/repo/main") is False,
-    reason="requires access to data in /repo/main",
+    reason="requires access to data in /repo/main database",
+)
+@pytest.mark.skipif(
+    not os.getenv("PGPASSFILE"),
+    reason="requires access to butler db",
 )
 class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
     @classmethod
@@ -59,7 +64,7 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         # Create a temporary test directory
         # under /sdf/data/rubin/repo/main/u/$USER
         # to ensure write access is granted
-        user = os.getlogin()
+        user = getpass.getuser()
         tempDir = os.path.join(cls.repoDir, "u", user)
         cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
         testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
