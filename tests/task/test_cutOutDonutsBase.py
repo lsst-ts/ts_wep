@@ -268,3 +268,50 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
                     rtol=0.0,
                     atol=10e-6,  # 10 microarcsecond accurate over stamp region
                 )
+
+    def testCalculateSignalToNoise(self):
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+        donutStamps = self.task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+        # test that all expected metadata is present
+        metadata = list(donutStamps.metadata)
+        self.assertCountEqual(
+            metadata,
+            [
+                "RA_DEG",
+                "DEC_DEG",
+                "DET_NAME",
+                "CAM_NAME",
+                "DFC_TYPE",
+                "DFC_DIST",
+                "CENT_X",
+                "CENT_Y",
+                "BLEND_CX",
+                "BLEND_CY",
+                "X0",
+                "Y0",
+                "IMAGE_MEAN_MASKED",
+                "SN_RATIO_BASE",
+                "SN_RATIO_DILATED",
+                "SN_RATIO_HEADER",
+                "EFFECTIVE",
+            ],
+        )
+        # test that each metric has been calculated
+        # for all donuts
+        for measure in [
+            "IMAGE_MEAN_MASKED",
+            "SN_RATIO_BASE",
+            "SN_RATIO_DILATED",
+            "SN_RATIO_HEADER",
+            "EFFECTIVE",
+        ]:
+            self.assertEqual(
+                len(donutStamps), len(donutStamps.metadata.getArray(measure))
+            )
+
+        # test that the effectiveness contains only binary values
+        unique_values = set(np.unique(donutStamps.metadata.getArray("EFFECTIVE")))
+        allowed_values = set([0, 1])
+        self.assertTrue(allowed_values.issuperset(unique_values))
