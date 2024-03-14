@@ -25,16 +25,18 @@ __all__ = [
     "CutOutDonutsBaseTask",
 ]
 
+from copy import copy
+
 import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-from copy import copy
 from lsst.afw.geom import makeSkyWcs
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
+from lsst.ts.wep.donutImageCheck import DonutImageCheck
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -42,9 +44,7 @@ from lsst.ts.wep.utils import (
     getOffsetFromExposure,
     getTaskInstrument,
 )
-
-from lsst.ts.wep.donutImageCheck import DonutImageCheck
-from scipy.ndimage import binary_dilation, rotate, shift
+from scipy.ndimage import binary_dilation
 from scipy.signal import correlate
 
 
