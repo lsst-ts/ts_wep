@@ -17,4 +17,5 @@ from .generateDonutCatalogUtils import *
 from .generateDonutCatalogWcsTask import *
 from .generateDonutDirectDetectTask import *
 from .generateDonutFromRefitWcsTask import *
+from .pairTask import *
 from .refCatalogInterface import *

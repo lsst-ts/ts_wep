@@ -73,7 +73,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
         )
-        pipeCmd += " -d 'exposure IN (4021123106001, 4021123106002)'"
+        pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
         runProgram(pipeCmd)
 
     def setUp(self):
