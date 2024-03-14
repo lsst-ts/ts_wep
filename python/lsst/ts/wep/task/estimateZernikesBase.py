@@ -153,12 +153,23 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             units=self.config.units,
             saveHistory=self.config.saveHistory,
         )
+        # Exclude stamps that are not effective
+        effectiveExtra = donutStampsExtra.metadata.getArray("EFFECTIVE")
+        effectiveIntra = donutStampsIntra.metadata.getArray("EFFECTIVE")
+        effectiveCombined = np.array(effectiveExtra) * np.array(effectiveIntra)
+
+        donutStampsExtraSelect = np.array(donutStampsExtra)[
+            effectiveCombined.astype(bool)
+        ]
+        donutStampsIntraSelect = np.array(donutStampsIntra)[
+            effectiveCombined.astype(bool)
+        ]
 
         # Loop over donut stamps and estimate Zernikes
         zkList = []
         histories = dict()
         for i, (donutExtra, donutIntra) in enumerate(
-            zip(donutStampsExtra, donutStampsIntra)
+            zip(donutStampsExtraSelect, donutStampsIntraSelect)
         ):
             # Determine and set the defocal offset
             defocalOffset = np.mean(
