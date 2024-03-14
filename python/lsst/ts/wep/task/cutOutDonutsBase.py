@@ -164,7 +164,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.opticalModel = self.config.opticalModel
         # Set instrument configuration info
         self.instConfigFile = self.config.instConfigFile
-        self.maskGrowthIter = self.config.maskGrowthIter
         self.maskGrowthIterSignal = self.config.maskGrowthIterSignal
         # Set up background subtraction task
         self.makeSubtask("subtractBackground")
@@ -291,28 +290,46 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         -------
         dict
             A dictionary of calculated quantities, including
-            'image_mean': the mean of the donut image inside the
+            'signal_mean': the mean of the donut image inside the
                  model mask.
-            'bkgnd_header': the background level calculated by
-                SubtractBackground task, stored by default
-                in the exposure under 'BGMEAN' keyword.
+            'bgmean': the background level calculated by
+                 SubtractBackground task, stored by default
+                 in the exposure under 'BGMEAN' keyword.
+            'bgvar': the background variance level calculated by
+                 SubtractBackground task, stored by default
+                 in the exposure under 'BGVAR' keyword.
             'bkgnd_mean': the mean of the image region outside
                  the model mask .
-            'bkgnd_mean_dilated': the mean of the image region outside
+            'bkgnd_dilated_mean': the mean of the image region outside
                  the dilated model mask.
-            'sn_ratio': the signal-to-noise ratio based on the
+            'bkgnd_var': the variance of the image region outside
+                 the model mask .
+            'bkgnd_dilated_var': the variance of the image region outside
+                 the dilated model mask.
+            'sn_ratio_mean': the signal-to-noise ratio based on the
                  inside of the model mask for the image level, and
                  outside of the model mask for the background level.
-            'sn_ratio_dilated': the signal-to-noise ratio based on the
-                 model mask for the image level, and dilated model mask
+            'sn_ratio_var': the signal-to-noise ratio based on the
+                 inside of the model mask for the image level, and
+                 outside of the model mask for the background variance.
+            'sn_ratio_dilated_mean': the signal-to-noise ratio based on the
+                 model mask for the image level, and dilated mask
                  for the background level.
-            'sn_ratio_header':  the signal-to-noise ratio based on the
+            'sn_ratio_dilated_var': the signal-to-noise ratio based on the
+                 model mask for the image level, and dilated mask
+                 for the background variance level.
+            'sn_ratio_header_mean':  the signal-to-noise ratio based on the
                  model mask for the image level, and the  background level
+                 from SubtractBackground task.
+            'sn_ratio_header_var':  the signal-to-noise ratio based on the
+                 model mask for the image level, and the  background variance
                  from SubtractBackground task.
         """
 
-        # Store the background level for S/N calculation
+        # Store the background variance level for S/N calculation
+        bgvar = exposure.getMetadata()["BGVAR"]
         bgmean = exposure.getMetadata()["BGMEAN"]
+        donutStamp.makeMask(self.instConfigFile, self.opticalModel)
 
         # Select image and  pupil mask
         img = copy(donutStamp.stamp_im.image.array)
@@ -325,30 +342,44 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         img[img < 0] = 1
 
         # Calculate the mean of what's in the mask
-        mean_donut = np.mean(img * mask)
+        donut_mean = np.mean(img * mask)
 
         # Calculate the  mean of what's outside the pupil mask
         negative_mask = np.logical_not(mask)
-        mean_background = np.mean(img * negative_mask)
-        ratio = mean_donut / mean_background
+        background = img * negative_mask
+        background_mean = np.mean(background)
+        background_var = np.var(background)
+        ratio_mean = donut_mean / background_mean
+        ratio_var = donut_mean / background_var
 
         # Calculate the mean of what's outside the dilated mask
         negative_mask_dilated = np.logical_not(mask_dilated)
-        mean_background_dilated = np.mean(img * negative_mask_dilated)
-        ratio_dilated = mean_donut / mean_background_dilated
+        background_dilated = img * negative_mask_dilated
+        background_dilated_mean = np.mean(background_dilated)
+        background_dilated_var = np.var(background_dilated)
 
-        # Use the exposure-header background
-        ratio_header = mean_donut / bgmean
+        ratio_dilated_mean = donut_mean / background_dilated_mean
+        ratio_dilated_var = donut_mean / background_dilated_var
+
+        # Use the exposure-header background variance
+        ratio_header_mean = donut_mean / bgmean
+        ratio_header_var = donut_mean / bgvar
 
         # Store the contents per donut
         sn_quantities = {
-            "image_mean": mean_donut,
-            "bkgnd_header": bgmean,
-            "bkgnd_mean": mean_background,
-            "bkgnd_mean_dilated": mean_background_dilated,
-            "sn_ratio": ratio,
-            "sn_ratio_dilated": ratio_dilated,
-            "sn_ratio_header": ratio_header,
+            "signal_mean": donut_mean,
+            "bgvar": bgvar,
+            "bgmean": bgmean,
+            "bkgnd_mean": background_mean,
+            "bkgnd_dilated_mean": background_dilated_mean,
+            "bkgnd_var": background_var,
+            "bkgnd_dilated_var": background_dilated_var,
+            "sn_ratio_mean": ratio_mean,
+            "sn_ratio_var": ratio_var,
+            "sn_ratio_dilated_mean": ratio_dilated_mean,
+            "sn_ratio_dilated_var": ratio_dilated_var,
+            "sn_ratio_header_mean": ratio_header_mean,
+            "sn_ratio_header_var": ratio_header_var,
         }
         return sn_quantities
 
@@ -546,18 +577,18 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
         # Save the S/N values
         stampsMetadata["IMAGE_MEAN_MASKED"] = np.array(
-            [snQuant[i]["image_mean"] for i in range(len(snQuant))]
+            [snQuant[i]["signal_mean"] for i in range(len(snQuant))]
         )
         stampsMetadata["SN_RATIO_BASE"] = np.array(
-            [snQuant[i]["sn_ratio"] for i in range(len(snQuant))]
+            [snQuant[i]["sn_ratio_var"] for i in range(len(snQuant))]
         )
         stampsMetadata["SN_RATIO_DILATED"] = np.array(
-            [snQuant[i]["sn_ratio_dilated"] for i in range(len(snQuant))]
+            [snQuant[i]["sn_ratio_dilated_var"] for i in range(len(snQuant))]
         )
-        stampsMetadata["SN_RATIO_BGMEAN"] = np.array(
-            [snQuant[i]["sn_ratio_header"] for i in range(len(snQuant))]
+        stampsMetadata["SN_RATIO_HEADER"] = np.array(
+            [snQuant[i]["sn_ratio_header_var"] for i in range(len(snQuant))]
         )
-
         # Save the entropy-based quality measure
-        stampsMetadata["EFFECTIVE"] = np.array(isEffective)
+        stampsMetadata["EFFECTIVE"] = np.array(isEffective).astype(int)
+
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
