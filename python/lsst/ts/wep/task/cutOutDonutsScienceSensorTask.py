@@ -114,7 +114,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             The `FOCUSZ` parameter from the second exposure.
         cameraName : str
             Name of camera for the exposure. Can accept "LSSTCam",
-            "LSSTComCam", "LATISS".
+            "LSSTComCam", "LSSTComCamSim", "LATISS".
 
         Returns
         -------
@@ -132,7 +132,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             Invalid cameraName variable.
         """
 
-        if cameraName in ["LSSTCam", "LSSTComCam"]:
+        if cameraName in ["LSSTCam", "LSSTComCam", "LSSTComCamSim"]:
             errorStr = "Must have one extra-focal and one intra-focal image."
             if focusZVal0 < 0:
                 # Check that other image does not have same defocal direction
@@ -167,7 +167,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         else:
             errorStr = str(
                 f"Invalid cameraName parameter: {cameraName}. Camera must  "
-                "be one of: 'LSSTCam', 'LSSTComCam' or 'LATISS'",
+                "be one of: 'LSSTCam', 'LSSTComCam', 'LSSTComCamSim' or 'LATISS'",
             )
             raise ValueError(errorStr)
 
