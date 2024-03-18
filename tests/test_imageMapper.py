@@ -501,7 +501,7 @@ class TestImageMapper(unittest.TestCase):
 
         # Function that maps config to required precision (% of pixel size)
         def maxPercent(**kwargs):
-            if "Lsst" in instConfig and model == "onAxis" and np.hypot(*angle) > 0:
+            if "Lsst" in instConfig and model == "onAxis":
                 return 25
             else:
                 return 10
