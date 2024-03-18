@@ -22,8 +22,8 @@
 import itertools
 import unittest
 
+import batoid
 import numpy as np
-from batoid import RayVector
 from lsst.ts.wep import Image, ImageMapper
 from scipy.ndimage import binary_opening
 
@@ -65,7 +65,7 @@ class TestImageMapper(unittest.TestCase):
         model = model.withLocallyShiftedOptic("Detector", [0, 0, offset])
 
         # We need to get the image position of the chief ray
-        rays = RayVector.fromStop(
+        rays = batoid.RayVector.fromStop(
             x=0,
             y=0,
             optic=model,
@@ -78,7 +78,7 @@ class TestImageMapper(unittest.TestCase):
         y0 = rays.y
 
         # Now map the pupil grid onto the image
-        rays = RayVector.fromStop(
+        rays = batoid.RayVector.fromStop(
             x=x.flatten(),
             y=y.flatten(),
             optic=model,
@@ -149,7 +149,7 @@ class TestImageMapper(unittest.TestCase):
         optic = inst.getBatoidModel()
 
         # Create a grid of rays that intersect the pupil
-        rays = RayVector.fromStop(
+        rays = batoid.RayVector.fromStop(
             x=x.flatten(),
             y=y.flatten(),
             optic=optic,
@@ -478,3 +478,125 @@ class TestImageMapper(unittest.TestCase):
         self.assertEqual(mapper.getProjectionSize((0, 0), "extra"), 136)
         self.assertEqual(mapper.getProjectionSize((1.2, 0.3), "intra"), 143)
         self.assertEqual(mapper.getProjectionSize((1.2, 0.3), "extra"), 146)
+
+    def testBatoidRaytraceResiduals(self):
+        # Define sets of configurations to test
+        instruments = [
+            "policy:instruments/LsstCam.yaml",
+            "policy:instruments/AuxTel.yaml",
+        ]
+        fieldAngles = [
+            (0, 0),
+            (-0.005, 0.002),
+            (0.015, 0),
+            (-0.11, -0.23),
+            (0.5, 0.01),
+            (0.0, -0.75),
+            (0.9, 0.9),
+            (-1.1, 1.0),
+            (-1.2, -1.2),
+        ]
+        opticalModels = ["paraxial", "onAxis", "offAxis"]
+        defocalTypes = ["intra", "extra"]
+
+        # Function that maps config to required precision (% of pixel size)
+        def maxPercent(**kwargs):
+            if "Lsst" in instConfig and model == "onAxis":
+                return 25
+            else:
+                return 10
+
+        # Loop over every combo
+        for instConfig, angle, model, dfType in itertools.product(
+            instruments, fieldAngles, opticalModels, defocalTypes
+        ):
+            # Skip combos we don't expect to work
+            if "Lsst" in instConfig and model == "paraxial":
+                continue
+            elif "AuxTel" in instConfig and np.hypot(*angle) > 0.07:
+                continue
+            elif model != "offAxis" and np.hypot(*angle) > 0.015:
+                continue
+
+            # Create the image mapper
+            mapper = ImageMapper(instConfig=instConfig, opticalModel=model)
+            inst = mapper.instrument
+
+            # Determine the defocal offset
+            offset = -inst.defocalOffset if dfType == "intra" else inst.defocalOffset
+
+            # Loop over each band
+            for band in inst.wavelength:
+                # Get the Batoid model
+                optic = inst.getBatoidModel(band)
+
+                # Create the RayVector
+                dirCos = batoid.utils.fieldToDirCos(*np.deg2rad(angle))
+                rays = batoid.RayVector.asPolar(
+                    optic=optic,
+                    wavelength=inst.wavelength[band],
+                    dirCos=dirCos,
+                    nrad=5,
+                    naz=30,
+                )
+
+                # Get normalized pupil coordinates
+                pupilRays = optic.stopSurface.interact(rays.copy())
+                uPupil = pupilRays.x / inst.radius
+                vPupil = pupilRays.y / inst.radius
+
+                # Map to focal plane using the offAxis model
+                uImage, vImage, *_ = mapper._constructForwardMap(
+                    uPupil,
+                    vPupil,
+                    inst.getIntrinsicZernikes(*angle, band, jmax=28),
+                    Image(np.zeros((1, 1)), angle, dfType, band),
+                )
+
+                # Convert normalized image coordinates to meters
+                xImage = uImage * inst.donutRadius * inst.pixelSize
+                yImage = vImage * inst.donutRadius * inst.pixelSize
+
+                # Trace to the focal plane with Batoid
+                optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(rays)
+
+                # Calculate the centered ray coordinates
+                chief = batoid.RayVector.fromStop(
+                    0,
+                    0,
+                    optic,
+                    wavelength=mapper.instrument.wavelength[band],
+                    dirCos=dirCos,
+                )
+                optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(chief)
+                xRay = rays.x - chief.x
+                yRay = rays.y - chief.y
+
+                # Calculate the residuals
+                dx = xImage - xRay
+                dy = yImage - yRay
+                dr = np.sqrt(dx**2 + dy**2)
+
+                # Only look at unvignetted rays
+                dr = dr[~rays.vignetted]
+
+                # Compare residuals to the pixel size
+                mp = maxPercent(
+                    instConfig=instConfig,
+                    angle=angle,
+                    model=model,
+                    dfType=dfType,
+                    band=band,
+                )
+                if not np.all(dr <= inst.pixelSize * mp / 100):
+                    raise AssertionError(
+                        "testBatoidRaytraceResiduals failed on configuration\n"
+                        f"    instrument = {instConfig}\n"
+                        f"    angle = {angle}\n"
+                        f"    model = {model}\n"
+                        f"    defocalType = {dfType}\n"
+                        f"    band = {band}\n"
+                        f"The maximum residual was {dr.max():.3e} m, "
+                        f"which is {dr.max() / inst.pixelSize * 100:.2f}% of a "
+                        f"pixel, exceeding the maximum value of {mp}%."
+                    )

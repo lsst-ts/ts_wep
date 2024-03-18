@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.2.1:
+
+-------------
+9.2.1
+-------------
+
+* Added unit test directly comparing ``ImageMapper`` optical models to Batoid raytracing.
+  
 .. _lsst.ts.wep-9.2.0:
 
 -------------
