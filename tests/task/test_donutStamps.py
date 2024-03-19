@@ -80,6 +80,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         metadata["DFC_TYPE"] = dfcTypes
         metadata["DFC_DIST"] = dfcDists
         metadata["BANDPASS"] = bandpass
+        metadata["EFFECTIVE"] = np.ones(nStamps).astype(int)
 
         donutStampList = [
             DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)
