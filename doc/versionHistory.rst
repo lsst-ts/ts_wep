@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.3.0:
+
+-------------
+9.3.0
+-------------
+
+* Add donut image quality checking.
+
 .. _lsst.ts.wep-9.2.1:
 
 -------------
@@ -14,6 +22,8 @@ Version History
 
 * Added unit test directly comparing ``ImageMapper`` optical models to Batoid raytracing.
   
+=======
+
 .. _lsst.ts.wep-9.2.0:
 
 -------------

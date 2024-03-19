@@ -186,6 +186,10 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
             else:
                 continue
 
+        # Add metadata to the resulting stamps
+        donutStampsExtra._refresh_metadata()
+        donutStampsIntra._refresh_metadata()
+
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if (len(donutStampsExtra) == 0) or (len(donutStampsIntra) == 0):
