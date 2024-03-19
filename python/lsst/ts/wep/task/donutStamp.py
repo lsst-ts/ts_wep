@@ -90,6 +90,7 @@ class DonutStamp(AbstractStamp):
     detector_name: str
     cam_name: str
     bandpass: str
+    effective: int
     archive_element: Optional[afwTable.io.Persistable] = None
     wep_im: Image = field(init=False)
 
@@ -173,6 +174,14 @@ class DonutStamp(AbstractStamp):
                 metadata.getArray("BANDPASS")[index]
                 if metadata.get("BANDPASS") is not None
                 else ""
+            ),
+            # "EFFECTIVE" is a measure of entropy-based information content
+            # If not available set to 1 by default, i.e. classifying the
+            # stamp as effective
+            effective=(
+                metadata.getArray("EFFECTIVE")[index]
+                if metadata.get("EFFECTIVE") is not None
+                else 1
             ),
         )
 
