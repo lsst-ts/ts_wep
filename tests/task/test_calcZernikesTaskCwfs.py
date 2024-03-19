@@ -134,6 +134,9 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         donutStampsIntra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
         )
+        donutStampsExtra._refresh_metadata()
+        donutStampsIntra._refresh_metadata()
+
         zernCoeffAllR04 = self.task.estimateZernikes.run(
             donutStampsExtra, donutStampsIntra
         ).zernikes
@@ -176,6 +179,8 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         donutStampsIntra = DonutStamps.readFits(
             os.path.join(donutStampDir, "R40_SW1_donutStamps.fits")
         )
+        donutStampsExtra._refresh_metadata()
+        donutStampsIntra._refresh_metadata()
         zernCoeffAllR40 = self.task.estimateZernikes.run(
             donutStampsExtra, donutStampsIntra
         ).zernikes
