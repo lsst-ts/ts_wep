@@ -264,7 +264,7 @@ def getOffsetFromExposure(
 
 def getTaskInstrument(
     camName: str,
-    detectorName: Union[str, None],
+    detectorName: str,
     offset: Union[float, None] = None,
     instConfigFile: Union[str, None] = None,
 ) -> Instrument:
@@ -280,8 +280,8 @@ def getTaskInstrument(
     ----------
     camName : str
         The name of the camera
-    detectorName : str or None
-        The name of the detector. Can be None.
+    detectorName : str
+        The name of the detector.
     offset : float or None, optional
         The true offset for the exposure in mm. For LSSTCam this corresponds
         to the offset of the detector, while for AuxTel it corresponds to the
@@ -297,8 +297,6 @@ def getTaskInstrument(
     Instrument
         The instrument object
     """
-    detectorName = "" if detectorName is None else detectorName
-
     # Load the starting instrument
     if instConfigFile is None:
         if camName == "LSSTCam":
