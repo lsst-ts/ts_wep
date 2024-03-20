@@ -208,6 +208,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
     @timeMethod
     def run(self, exposure, camera):
         camName = camera.getName()
+        detectorName = exposure.getDetector().getName()
         bandLabel = exposure.filter.bandLabel
 
         # We can pick an arbitrary defocalType because the templates
@@ -219,7 +220,12 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         offset = getOffsetFromExposure(exposure, camName, defocalType)
 
         # Load the instrument
-        instrument = getTaskInstrument(camName, offset, self.config.instConfigFile)
+        instrument = getTaskInstrument(
+            camName,
+            detectorName,
+            offset,
+            self.config.instConfigFile,
+        )
 
         # Create the image template for the detector
         template = createTemplateForDetector(
