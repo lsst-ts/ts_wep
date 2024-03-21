@@ -40,8 +40,9 @@ from typing import Union
 import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
 import numpy as np
-from lsst.afw.cameraGeom import FIELD_ANGLE, Detector
+from lsst.afw.cameraGeom import FIELD_ANGLE, Detector, DetectorType
 from lsst.afw.image import Exposure
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.instrument import Instrument
@@ -300,7 +301,8 @@ def getTaskInstrument(
     # Load the starting instrument
     if instConfigFile is None:
         if camName == "LSSTCam":
-            if "_SW" in detectorName:
+            camera = LsstCam().getCamera()
+            if camera[detectorName].getType() == DetectorType.WAVEFRONT:
                 instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
             else:
                 instrument = Instrument(configFile="policy:instruments/LsstFamCam.yaml")
