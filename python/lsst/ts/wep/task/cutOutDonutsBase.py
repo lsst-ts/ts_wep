@@ -296,7 +296,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         offset = getOffsetFromExposure(exposure, cameraName, defocalType)
 
         # Load the instrument
-        instrument = getTaskInstrument(cameraName, offset, self.instConfigFile)
+        instrument = getTaskInstrument(
+            cameraName,
+            detectorName,
+            offset,
+            self.instConfigFile,
+        )
 
         # Create the image template for the detector
         template = createTemplateForDetector(

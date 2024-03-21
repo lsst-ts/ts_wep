@@ -1,0 +1,9 @@
+# LSST Telescope parameters for Full-array Mode
+# lsst.obs.lsst.LsstCam
+
+# Use settings from LsstCam
+imports: policy:instruments/LsstCam.yaml
+
+# Apply these overrides
+name: LsstFamCam
+batoidOffsetOptic: LSSTCamera
