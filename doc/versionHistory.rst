@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.3.0:
+
+-------------
+9.3.0
+-------------
+
+* Added a separate instrument for full-array mode
+* Updated the ComCam mask model to match the bug fixes in Batoid
+
 .. _lsst.ts.wep-9.2.1:
 
 -------------

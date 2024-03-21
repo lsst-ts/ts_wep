@@ -139,7 +139,13 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         """
         # Get the instrument
         camName = donutStampsExtra[0].cam_name
-        instrument = getTaskInstrument(camName, None, self.config.instConfigFile)
+        detectorName = donutStampsExtra[0].detector_name
+        instrument = getTaskInstrument(
+            camName,
+            detectorName,
+            None,
+            self.config.instConfigFile,
+        )
 
         # Create the wavefront estimator
         wfEst = WfEstimator(

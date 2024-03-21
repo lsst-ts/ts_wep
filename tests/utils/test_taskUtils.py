@@ -141,20 +141,20 @@ class TestTaskUtils(unittest.TestCase):
                 self.assertEqual(val1, val2)
 
         # Test the defaults
-        assertInstEqual(getTaskInstrument("LSSTCam"), Instrument())
+        assertInstEqual(getTaskInstrument("LSSTCam", "R00_SW0"), Instrument())
         assertInstEqual(
-            getTaskInstrument("LSSTComCam"),
+            getTaskInstrument("LSSTComCam", "R22_S11"),
             Instrument(configFile="policy:instruments/ComCam.yaml"),
         )
         assertInstEqual(
-            getTaskInstrument("LATISS"),
+            getTaskInstrument("LATISS", None),
             Instrument(configFile="policy:instruments/AuxTel.yaml"),
         )
 
         # Test override config file
         assertInstEqual(
             getTaskInstrument(
-                "LSSTCam", instConfigFile="policy:instruments/AuxTel.yaml"
+                "LSSTCam", "R40_SW1", instConfigFile="policy:instruments/AuxTel.yaml"
             ),
             Instrument(configFile="policy:instruments/AuxTel.yaml"),
         )
@@ -163,12 +163,16 @@ class TestTaskUtils(unittest.TestCase):
         inst = Instrument()
         inst.defocalOffset = 1.234e-3
         assertInstEqual(
-            getTaskInstrument("LSSTCam", offset=1.234),
+            getTaskInstrument("LSSTCam", "R04_SW1", offset=1.234),
             inst,
         )
 
         with self.assertRaises(ValueError):
-            getTaskInstrument("fake")
+            getTaskInstrument("fake", None)
+
+        # Test LsstFamCam
+        famcam = getTaskInstrument("LSSTCam", "R22_S01")
+        self.assertEqual(famcam.batoidOffsetOptic, "LSSTCamera")
 
     def testCreateTemplateForDetector(self):
         # Get the LSST camera

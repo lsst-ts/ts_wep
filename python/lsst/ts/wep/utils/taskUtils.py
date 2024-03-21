@@ -40,8 +40,9 @@ from typing import Union
 import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
 import numpy as np
-from lsst.afw.cameraGeom import FIELD_ANGLE, Detector
+from lsst.afw.cameraGeom import FIELD_ANGLE, Detector, DetectorType
 from lsst.afw.image import Exposure
+from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.instrument import Instrument
@@ -264,6 +265,7 @@ def getOffsetFromExposure(
 
 def getTaskInstrument(
     camName: str,
+    detectorName: str,
     offset: Union[float, None] = None,
     instConfigFile: Union[str, None] = None,
 ) -> Instrument:
@@ -279,6 +281,8 @@ def getTaskInstrument(
     ----------
     camName : str
         The name of the camera
+    detectorName : str
+        The name of the detector.
     offset : float or None, optional
         The true offset for the exposure in mm. For LSSTCam this corresponds
         to the offset of the detector, while for AuxTel it corresponds to the
@@ -297,7 +301,11 @@ def getTaskInstrument(
     # Load the starting instrument
     if instConfigFile is None:
         if camName == "LSSTCam":
-            instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
+            camera = LsstCam().getCamera()
+            if camera[detectorName].getType() == DetectorType.WAVEFRONT:
+                instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
+            else:
+                instrument = Instrument(configFile="policy:instruments/LsstFamCam.yaml")
         elif camName in ["LSSTComCam", "LSSTComCamSim"]:
             instrument = Instrument(configFile="policy:instruments/ComCam.yaml")
         elif camName == "LATISS":
