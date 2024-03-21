@@ -26,6 +26,7 @@ from typing import Optional, Tuple, Union
 
 import danish
 import numpy as np
+from galsim import GalSimFFTSizeError
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from scipy.ndimage import binary_erosion
@@ -101,6 +102,7 @@ class DanishAlgorithm(WfAlgorithm):
             - "zkResid" - the Zernike coefficients fit to the donut
             - "zkSum" - zkResid + the intrinsic Zernikes
             - "model" - the final forward-modeled donut image
+            - "GalSimFFTSizeError" - whether this was hit during least_squares
 
         Note the units for all Zernikes are in meters, and all Zernikes start
         with Noll index 4.
@@ -150,6 +152,7 @@ class DanishAlgorithm(WfAlgorithm):
             *image.fieldAngle,
             image.defocalType,
             image.bandLabel,
+            jmaxIntrinsic=jmax,
             return4Up=False,
         )
         size = max(zkStart.size, offAxisCoeff.size)
@@ -189,20 +192,35 @@ class DanishAlgorithm(WfAlgorithm):
         x0 = [0.0, 0.0, 1.0] + [0.0] * (jmax - 3)
 
         # Use scipy to optimize the parameters
-        result = least_squares(
-            model.chi,
-            jac=model.jac,
-            x0=x0,
-            args=(img, backgroundStd**2),
-            **self.lstsqKwargs,
-        )
+        try:
+            result = least_squares(
+                model.chi,
+                jac=model.jac,
+                x0=x0,
+                args=(img, backgroundStd**2),
+                **self.lstsqKwargs,
+            )
+            result = dict(result)
 
-        # Unpack the parameters
-        dx, dy, fwhm, *zkResid = result.x
-        zkResid = np.array(zkResid)
+            # Unpack the parameters
+            dx, dy, fwhm, *zkResid = result["x"]
+            zkResid = np.array(zkResid)
 
-        # Add the starting zernikes back into the result
-        zkSum = zkResid + zkStart[4:]
+            # Add the starting zernikes back into the result
+            zkSum = zkResid + zkStart[4:]
+
+            # Flag that we didn't hit GalSimFFTSizeError
+            galSimFFTSizeError = False
+
+        # Sometimes this happens with Danish :(
+        except GalSimFFTSizeError:
+            # Fill dummy objects
+            result = None
+            zkResid = np.full(jmax - 3, np.nan)
+            zkSum = np.full(jmax - 3, np.nan)
+
+            # Flag the error
+            galSimFFTSizeError = True
 
         if saveHistory:
             # Save the history
@@ -210,7 +228,7 @@ class DanishAlgorithm(WfAlgorithm):
                 "image": img.copy(),
                 "variance": backgroundStd**2,
                 "zkStart": zkStart.copy(),
-                "lstsqResult": dict(result),
+                "lstsqResult": result,
                 "zkResid": zkResid.copy(),
                 "zkSum": zkSum.copy(),
                 "model": model.model(
@@ -221,6 +239,7 @@ class DanishAlgorithm(WfAlgorithm):
                     sky_level=backgroundStd,
                     flux=img.sum(),
                 ),
+                "GalSimFFTSizeError": galSimFFTSizeError,
             }
 
         else:

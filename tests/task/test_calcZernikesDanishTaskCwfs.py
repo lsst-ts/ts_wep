@@ -212,7 +212,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         # Make sure the total rms error is less than 0.35 microns off
         # from the OPD truth as a sanity check
         self.assertLess(
-            np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.39
+            np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.35
         )
 
     def testGetCombinedZernikes(self):
