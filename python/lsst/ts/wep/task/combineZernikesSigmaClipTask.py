@@ -23,11 +23,11 @@ __all__ = ["CombineZernikesSigmaClipTaskConfig", "CombineZernikesSigmaClipTask"]
 
 import lsst.pex.config as pexConfig
 import numpy as np
-from astropy.stats import sigma_clip
 from lsst.ts.wep.task.combineZernikesBase import (
     CombineZernikesBaseConfig,
     CombineZernikesBaseTask,
 )
+from lsst.ts.wep.utils import conditionalSigmaClip
 
 
 class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
@@ -39,6 +39,11 @@ class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
         dtype=float,
         default=3.0,
         doc="Number of standard deviations for the clipping limit.",
+    )
+    stdMin = pexConfig.Field(
+        dtype=float,
+        default=0.005,
+        doc="Minimum threshold for clipping the standard deviation in um.",
     )
     maxZernClip = pexConfig.Field(
         dtype=int,
@@ -62,17 +67,20 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         super().__init__(**kwargs)
         # Set the sigma from the config
         self.sigma = self.config.sigma
+        self.stdMin = self.config.stdMin
         self.maxZernClip = self.config.maxZernClip
 
     def combineZernikes(self, zernikeArray):
-        sigArray = sigma_clip(zernikeArray, sigma=self.sigma, axis=0, stdfunc="mad_std")
-        # Find which donuts have outlier values from the mask
-        flagArray = np.sum(sigArray.mask[:, : self.maxZernClip], axis=1)
-        # Create a binary flag array that only has a max of 1 instead
-        # of the total number of masked values in a row
-        binaryFlagArray = np.zeros(len(zernikeArray), dtype=int)
-        binaryFlagArray[np.where(flagArray > 0.5)] = 1
+        sigArray = conditionalSigmaClip(
+            zernikeArray, sigma=self.sigma, stdMin=self.stdMin, stdFunc="mad_std"
+        )
+        # Create a binary flag array that indicates
+        # donuts have outlier values. This array is 1 if
+        # it has any outlier values.
+        binaryFlagArray = np.any(
+            np.isnan(sigArray[:, : self.maxZernClip]), axis=1
+        ).astype(int)
         # Identify which rows to use when calculating final mean
-        keepIdx = np.where(binaryFlagArray == 0)
+        keepIdx = ~np.any(np.isnan(sigArray), axis=1)
 
         return np.mean(zernikeArray[keepIdx], axis=0), binaryFlagArray

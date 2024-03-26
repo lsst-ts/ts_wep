@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.3.1:
+
+-------------
+9.3.1
+-------------
+
+* Added conditional sigma clipping for averaging Zernike coefficients.
+
+
 .. _lsst.ts.wep-9.3.0:
 
 -------------
