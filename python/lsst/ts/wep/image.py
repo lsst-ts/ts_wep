@@ -29,7 +29,7 @@ from lsst.ts.wep.utils import BandLabel, DefocalType, PlaneType
 from typing_extensions import Self
 
 
-class Image(object):
+class Image:
     """Class to hold a donut image along with metadata.
 
     All quantities in this object are assumed to be in the global
@@ -68,8 +68,29 @@ class Image(object):
         coordinate systems above).
         (the default is an empty array, i.e. no blends)
     mask : np.ndarray, optional
-        The mask for the image. Mask creation is meant to be handled by the
-        ImageMapper class.
+        The image source mask that is 1 for source pixels and 0 otherwise.
+        Mask creation is meant to be handled by the ImageMapper class.
+        (the default is None)
+    maskBlends : np.ndarray, optional
+        The image blend mask that is 1 for blend pixels and 0 otherwise.
+        Mask creation is meant to be handled by the ImageMapper class.
+        (the default is None)
+    maskBackground : np.ndarray, optional
+        The image background mask that is 1 for background pixels and 0
+        otherwise. Mask creation is meant to be handled by the ImageMapper
+        class.
+        (the default is None)
+    defocalOffset : float, optional
+        The defocal offset of the detector when this image was taken (or
+        the equivalent offset if some other element, such as M2, was offset).
+        If not None, this value will override the default value in the
+        instrument when using the ImageMapper.
+        (the default is None)
+    batoidOffsetValue : float, optional
+        The offset of batoidOffsetOptic used to calculate off-axis
+        coefficients. If not None, this value will override the default value
+        in the instrument when using the ImageMapper.
+        (the default is None)
     """
 
     def __init__(
@@ -81,6 +102,10 @@ class Image(object):
         planeType: Union[PlaneType, str] = PlaneType.Image,
         blendOffsets: Union[np.ndarray, tuple, list, None] = None,
         mask: Optional[np.ndarray] = None,
+        maskBlends: Optional[np.ndarray] = None,
+        maskBackground: Optional[np.ndarray] = None,
+        defocalOffset: Optional[float] = None,
+        batoidOffsetValue: Optional[float] = None,
     ) -> None:
         self.image = image
         self.fieldAngle = fieldAngle  # type: ignore
@@ -89,6 +114,10 @@ class Image(object):
         self.planeType = planeType  # type: ignore
         self.blendOffsets = blendOffsets  # type: ignore
         self.mask = mask
+        self.maskBlends = maskBlends
+        self.maskBackground = maskBackground
+        self.defocalOffset = defocalOffset
+        self.batoidOffsetValue = batoidOffsetValue
 
     @property
     def image(self) -> np.ndarray:
@@ -162,7 +191,7 @@ class Image(object):
         TypeError
             The provided value is not a DefocalType Enum or string.
         """
-        if isinstance(value, str) or isinstance(value, DefocalType):
+        if isinstance(value, (str, DefocalType)):
             self._defocalType = DefocalType(value)
         else:
             raise TypeError(
@@ -193,7 +222,7 @@ class Image(object):
         """
         if value is None or value == "":
             self._bandLabel = BandLabel.REF
-        elif isinstance(value, str) or isinstance(value, BandLabel):
+        elif isinstance(value, (str, BandLabel)):
             self._bandLabel = BandLabel(value)
         else:
             raise TypeError(
@@ -220,7 +249,7 @@ class Image(object):
         TypeError
             The provided value is not a PlaneType Enum or string.
         """
-        if isinstance(value, str) or isinstance(value, PlaneType):
+        if isinstance(value, (str, PlaneType)):
             self._planeType = PlaneType(value)
         else:
             raise TypeError(
@@ -376,6 +405,57 @@ class Image(object):
     def masks(self) -> tuple:
         """Return (self.mask, self.maskBlends, self.maskBackground)."""
         return (self.mask, self.maskBlends, self.maskBackground)
+
+    @property
+    def defocalOffset(self) -> Union[float, None]:
+        """Defocal offset of the detector when this image was taken.
+
+        If some other element was offset, such as M2, this is the equivalent
+        detector offset. If not None, this value will override the default
+        value in the instrument when using the ImageMapper.
+        """
+        return self._defocalOffset
+
+    @defocalOffset.setter
+    def defocalOffset(self, value: Optional[float]) -> None:
+        """Set the defocal offset of the detector when this image was taken.
+
+        If some other element was offset, such as M2, this is the equivalent
+        detector offset. If not None, this value will override the default
+        value in the instrument when using the ImageMapper.
+
+        Parameters
+        ----------
+        value : float or None
+        """
+        if value is not None:
+            value = np.abs(float(value))
+        self._defocalOffset = value
+
+    @property
+    def batoidOffsetValue(self) -> Union[float, None]:
+        """Offset of batoidOffsetOptic used to calculate off-axis coefficients.
+
+        If not None, this value will override the default value in the
+        instrument when using the ImageMapper.
+        """
+        return self._batoidOffsetValue
+
+    @batoidOffsetValue.setter
+    def batoidOffsetValue(self, value: Optional[float]) -> None:
+        """Set the batoidOffsetValue.
+
+        This is the offset of the batoidOffsetOptic used to calculate the
+        off-axis coefficients for ImageMapper. If not None, this value will
+        override the default value in the instrument when using ImageMapper.
+
+        Parameters
+        ----------
+        value : float or None
+        """
+        if value is not None:
+            value = float(value)
+        self._batoidOffsetValue = value
 
     def copy(self) -> Self:
         """Return a copy of the DonutImage object.

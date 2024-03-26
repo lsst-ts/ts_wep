@@ -266,16 +266,8 @@ def getOffsetFromExposure(
 def getTaskInstrument(
     camName: str,
     detectorName: str,
-    offset: Union[float, None] = None,
-    instConfigFile: Union[str, None] = None,
 ) -> Instrument:
     """Get the instrument to use for the task.
-
-    The camera name is used to load a default instrument, and then the
-    defocalOffset is override using the offset value, if provided.
-    If instConfigFile is provided, that file is used instead of camName
-    to load the instrument, and offset is only used if instConfigFile
-    does not contain information for calculating the defocalOffset.
 
     Parameters
     ----------
@@ -283,56 +275,25 @@ def getTaskInstrument(
         The name of the camera
     detectorName : str
         The name of the detector.
-    offset : float or None, optional
-        The true offset for the exposure in mm. For LSSTCam this corresponds
-        to the offset of the detector, while for AuxTel it corresponds to the
-        offset of M2. (the default is None)
-    instConfigFile : str or None
-        An instrument config file to override the default instrument
-        for the camName. If begins with "policy:", this path is understood
-        as relative to the ts_wep policy directory.
-        (the default is None)
 
     Returns
     -------
     Instrument
         The instrument object
     """
-    # Load the starting instrument
-    if instConfigFile is None:
-        if camName == "LSSTCam":
-            camera = LsstCam().getCamera()
-            if camera[detectorName].getType() == DetectorType.WAVEFRONT:
-                instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
-            else:
-                instrument = Instrument(configFile="policy:instruments/LsstFamCam.yaml")
-        elif camName in ["LSSTComCam", "LSSTComCamSim"]:
-            instrument = Instrument(configFile="policy:instruments/ComCam.yaml")
-        elif camName == "LATISS":
-            instrument = Instrument(configFile="policy:instruments/AuxTel.yaml")
+    # Return the default instrument for this task config
+    if camName == "LSSTCam":
+        camera = LsstCam().getCamera()
+        if camera[detectorName].getType() == DetectorType.WAVEFRONT:
+            return Instrument(configFile="policy:instruments/LsstCam.yaml")
         else:
-            raise ValueError(f"No default instrument for camera {camName}")
-        overrideOffset = True
+            return Instrument(configFile="policy:instruments/LsstFamCam.yaml")
+    elif camName in ["LSSTComCam", "LSSTComCamSim"]:
+        return Instrument(configFile="policy:instruments/ComCam.yaml")
+    elif camName == "LATISS":
+        return Instrument(configFile="policy:instruments/AuxTel.yaml")
     else:
-        instrument = Instrument(configFile=instConfigFile)
-        try:
-            instrument.defocalOffset
-        except ValueError:
-            overrideOffset = True
-        else:
-            overrideOffset = False
-
-    if offset is None or not overrideOffset:
-        # We're done!
-        return instrument
-
-    # Override the defocalOffset
-    if instrument.batoidOffsetOptic is None:
-        instrument.defocalOffset = offset / 1e3
-    else:
-        instrument.batoidOffsetValue = offset / 1e3
-
-    return instrument
+        raise ValueError(f"No default instrument for camera {camName}")
 
 
 def createTemplateForDetector(

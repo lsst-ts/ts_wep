@@ -33,6 +33,7 @@ from lsst.ts.wep.utils import (
     convertHistoryToMetadata,
     getTaskInstrument,
 )
+from lsst.ts.wep import Instrument
 
 
 class EstimateZernikesBaseConfig(pexConfig.Config):
@@ -140,12 +141,10 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         # Get the instrument
         camName = donutStampsExtra[0].cam_name
         detectorName = donutStampsExtra[0].detector_name
-        instrument = getTaskInstrument(
-            camName,
-            detectorName,
-            None,
-            self.config.instConfigFile,
-        )
+        if self.config.instConfigFile is None:
+            instrument = getTaskInstrument(camName, detectorName)
+        else:
+            instrument = Instrument(configFile=self.config.instConfigFile)
 
         # Create the wavefront estimator
         wfEst = WfEstimator(
@@ -166,15 +165,6 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         for i, (donutExtra, donutIntra) in enumerate(
             zip(donutStampsExtra, donutStampsIntra)
         ):
-            # Determine and set the defocal offset
-            defocalOffset = np.mean(
-                [
-                    donutExtra.defocal_distance,
-                    donutIntra.defocal_distance,
-                ]
-            )
-            wfEst.instrument.defocalOffset = defocalOffset / 1e3
-
             # Estimate Zernikes
             zk = wfEst.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
             zkList.append(zk)

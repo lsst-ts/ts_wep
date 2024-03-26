@@ -40,6 +40,7 @@ from lsst.ts.wep.utils import (
     getTaskInstrument,
 )
 from lsst.utils.timer import timeMethod
+from lsst.ts.wep import Instrument
 
 
 class GenerateDonutDirectDetectTaskConnections(
@@ -216,16 +217,16 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # true in the rotated DVCS coordinate system)
         defocalType = DefocalType.Extra
 
-        # Get the offset
-        offset = getOffsetFromExposure(exposure, camName, defocalType)
-
         # Load the instrument
-        instrument = getTaskInstrument(
-            camName,
-            detectorName,
-            offset,
-            self.config.instConfigFile,
-        )
+        if self.config.instConfigFile is None:
+            instrument = getTaskInstrument(camName, detectorName)
+        else:
+            instrument = Instrument(configFile=self.config.instConfigFile)
+
+        # Set the Batoid offset
+        offset = getOffsetFromExposure(exposure, camName, defocalType)
+        instrument.batoidOffsetValue = offset / 1e3  # mm -> m
+        instrument.defocalOffset = instrument.calcEffDefocalOffset()
 
         # Create the image template for the detector
         template = createTemplateForDetector(
