@@ -158,6 +158,7 @@ class ImageMapper:
             offAxisCoeff = self.instrument.getOffAxisCoeff(
                 *image.fieldAngle,
                 image.defocalType,
+                image.batoidOffsetValue,
                 image.bandLabel,
                 jmaxIntrinsic=len(zkCoeff) + 3,
             )

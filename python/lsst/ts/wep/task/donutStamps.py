@@ -53,8 +53,10 @@ class DonutStamps(StampsBase):
         self.metadata["CAM_NAME"] = [cam for cam in cam_names]
         defocal_types = self.getDefocalTypes()
         self.metadata["DFC_TYPE"] = [dfc for dfc in defocal_types]
-        defocal_distances = self.getDefocalDistances()
-        self.metadata["DFC_DIST"] = [dfc_dist for dfc_dist in defocal_distances]
+        detector_offsets = self.getDetectorOffsets()
+        self.metadata["DET_OFFSET"] = [offset for offset in detector_offsets]
+        real_offsets = self.getRealOffsets()
+        self.metadata["REAL_OFFSET"] = [offset for offset in real_offsets]
         bandpasses = self.getBandpasses()
         self.metadata["BANDPASS"] = [bandpass for bandpass in bandpasses]
 
@@ -157,16 +159,27 @@ class DonutStamps(StampsBase):
         """
         return [stamp.defocal_type for stamp in self]
 
-    def getDefocalDistances(self):
+    def getDetectorOffsets(self):
         """
-        Get the defocal distance for each stamp.
+        Get the detector offset for each stamp.
 
         Returns
         -------
         list [float]
-            Defocal distances for each stamp in mm.
+            Detector offset for each stamp, in mm.
         """
-        return [stamp.defocal_distance for stamp in self]
+        return [stamp.detector_offset for stamp in self]
+
+    def getRealOffsets(self):
+        """
+        Get the real offset for each stamp.
+
+        Returns
+        -------
+        list [float]
+            Real offset for each stamp, in mm.
+        """
+        return [stamp.real_offset for stamp in self]
 
     def getBandpasses(self):
         """

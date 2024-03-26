@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.6.0:
+
+-------------
+9.6.0
+-------------
+
+* Added ``defocalOffset`` and ``batoidOffsetValue`` attributes to the ``Image`` class.
+* Offset values in ``Image`` class now override ``Instrument`` defaults when not None.
+
 .. _lsst.ts.wep-9.5.8:
 
 -------------
