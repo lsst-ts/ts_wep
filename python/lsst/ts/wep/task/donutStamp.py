@@ -60,9 +60,13 @@ class DonutStamp(AbstractStamp):
     defocal_type : `str`
         Defocal state of the stamp. "extra" or "intra" are
         allowed values.
-    defocal_distance : `float`
+    detector_offset : `float`
         Defocal offset of the detector in mm. If the detector was not
         actually shifted, this should be the equivalent detector offset.
+    real_offset : `float`
+        The real offset that was used to capture defocused images, in mm.
+        For LSSTCam, this corresponds to detector_offset, but for AuxTel
+        this corresponds to the M2 offset.
     detector_name : `str`
         CCD where the donut is found
     cam_name : `str`
@@ -86,18 +90,23 @@ class DonutStamp(AbstractStamp):
     centroid_position: lsst.geom.Point2D
     blend_centroid_positions: np.ndarray
     defocal_type: str
-    defocal_distance: float
+    detector_offset: float
+    real_offset: float
     detector_name: str
     cam_name: str
     bandpass: str
     archive_element: Optional[afwTable.io.Persistable] = None
     wep_im: Image = field(init=False)
 
+    # Legacy attribute to avoid errors (will be deleted in post-init)
+    defocal_distance: float = None
+
     def __post_init__(self):
         """
         This method sets up the WEP Image after initialization
         because we need to use the parameters set in the original `__init__`.
         """
+        delattr(self, "defocal_distance")
         self._setWepImage()
 
     @classmethod
@@ -164,6 +173,20 @@ class DonutStamp(AbstractStamp):
             defocal_distance=(
                 metadata.getArray("DFC_DIST")[index]
                 if metadata.get("DFC_DIST") is not None
+                else 1.5
+            ),
+            # "DET_OFFSET" stands for detector offset
+            # and "REAL_OFFSET" is the real offset (see the class docstring)
+            # If this is an old version of the stamps without these values
+            # use a default 1.5mm, corresponding to the Rubin CWFSs
+            detector_offset=(
+                metadata.getArray("DET_OFFSET")[index]
+                if metadata.getArray("DET_OFFSET") is not None
+                else 1.5
+            ),
+            real_offset=(
+                metadata.getArray("REAL_OFFSET")[index]
+                if metadata.getArray("REAL_OFFSET") is not None
                 else 1.5
             ),
             # "BANDPASS" stands for the exposure bandpass
@@ -288,6 +311,8 @@ class DonutStamp(AbstractStamp):
             defocalType=self.defocal_type,
             bandLabel=self.bandpass,
             blendOffsets=blendOffsets,
+            defocalOffset=self.detector_offset / 1e3,  # mm -> m
+            batoidOffsetValue=self.real_offset / 1e3,  # mm -> m
         )
 
         self.wep_im = wepImage
