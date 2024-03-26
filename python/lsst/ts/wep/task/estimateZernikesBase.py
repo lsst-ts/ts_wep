@@ -160,7 +160,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
                     donutIntra.defocal_distance,
                 ]
             )
-            wfEstimator.instrument.defocalOffset = defocalOffset / 1e3
+            wfEstimator.instrument.defocalOffset = defocalOffset / 1e3  # m -> mm
 
             # Estimate Zernikes
             zk = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)

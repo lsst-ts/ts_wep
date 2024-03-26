@@ -38,6 +38,8 @@ class DanishAlgorithm(WfAlgorithm):
 
     The Danish algorithm is based on Janish 2012:
     http://hdl.handle.net/1721.1/78543
+    Implemented and improved by Josh Meyers:
+    https://github.com/jmeyers314/danish
 
     Parameters
     ----------
@@ -99,8 +101,8 @@ class DanishAlgorithm(WfAlgorithm):
             - "variance" - the background variance that was used for fitting
             - "zkStart" - the starting Zernike coefficients
             - "lstsqResult" - dictionary of results returned by least_squares
-            - "zkResid" - the Zernike coefficients fit to the donut
-            - "zkSum" - zkResid + the intrinsic Zernikes
+            - "zkFit" - the Zernike coefficients fit to the donut
+            - "zkSum" - zkFit + the intrinsic Zernikes
             - "model" - the final forward-modeled donut image
             - "GalSimFFTSizeError" - whether this was hit during least_squares
 
@@ -203,11 +205,11 @@ class DanishAlgorithm(WfAlgorithm):
             result = dict(result)
 
             # Unpack the parameters
-            dx, dy, fwhm, *zkResid = result["x"]
-            zkResid = np.array(zkResid)
+            dx, dy, fwhm, *zkFit = result["x"]
+            zkFit = np.array(zkFit)
 
             # Add the starting zernikes back into the result
-            zkSum = zkResid + zkStart[4:]
+            zkSum = zkFit + zkStart[4:]
 
             # Flag that we didn't hit GalSimFFTSizeError
             galSimFFTSizeError = False
@@ -216,7 +218,7 @@ class DanishAlgorithm(WfAlgorithm):
         except GalSimFFTSizeError:
             # Fill dummy objects
             result = None
-            zkResid = np.full(jmax - 3, np.nan)
+            zkFit = np.full(jmax - 3, np.nan)
             zkSum = np.full(jmax - 3, np.nan)
 
             # Flag the error
@@ -229,13 +231,13 @@ class DanishAlgorithm(WfAlgorithm):
                 "variance": backgroundStd**2,
                 "zkStart": zkStart.copy(),
                 "lstsqResult": result,
-                "zkResid": zkResid.copy(),
+                "zkFit": zkFit.copy(),
                 "zkSum": zkSum.copy(),
                 "model": model.model(
                     dx,
                     dy,
                     fwhm,
-                    zkResid,
+                    zkFit,
                     sky_level=backgroundStd,
                     flux=img.sum(),
                 ),
