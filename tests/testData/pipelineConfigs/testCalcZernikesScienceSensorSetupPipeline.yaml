@@ -33,13 +33,11 @@ tasks:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
       donutSelector.unblendedSeparation: 1
-  cutOutDonutsCwfsTask:
-    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+  cutOutDonutsScienceSensorTask:
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
       # And here we specify the configuration settings originally defined in
-      # CutOutDonutsCwfsTaskConfig.
-      # Test with default instrument configuration parameters
+      # CutOutDonutsScienceSensorTaskConfig.
+      # Test Science Sensor pipeline works when specifying instrument configuration
       donutStampSize: 160
       initialCutoutPadding: 40
-  calcZernikesTask:
-    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask

@@ -39,7 +39,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
+class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -64,7 +64,7 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesCwfsPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
@@ -221,3 +221,15 @@ class TestCalcZernikesTaskCwfs(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(
             combinedZernikesStruct.flags, np.zeros(len(testArr))
         )
+
+    def testRequiresPairs(self):
+        self.config.estimateZernikes.usePairs = False
+        newTask = CalcZernikesTask(config=self.config, name="Base Task")
+        with self.assertRaises(ValueError):
+            newTask.estimateZernikes.run(
+                self.donutStampsExtra,
+                self.donutStampsIntra,
+            )
+
+        # Reset this config setting
+        self.config.estimateZernikes.usePairs = True
