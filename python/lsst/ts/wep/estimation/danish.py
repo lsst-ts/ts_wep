@@ -214,12 +214,25 @@ class DanishAlgorithm(WfAlgorithm):
             # Flag that we didn't hit GalSimFFTSizeError
             galSimFFTSizeError = False
 
+            # If we're saving the history, compute the model image
+            if saveHistory:
+                modelImage = model.model(
+                    dx,
+                    dy,
+                    fwhm,
+                    zkFit,
+                    sky_level=backgroundStd,
+                    flux=img.sum(),
+                )
+
         # Sometimes this happens with Danish :(
         except GalSimFFTSizeError:
             # Fill dummy objects
             result = None
             zkFit = np.full(jmax - 3, np.nan)
             zkSum = np.full(jmax - 3, np.nan)
+            if saveHistory:
+                modelImage = np.full_like(img, np.nan)
 
             # Flag the error
             galSimFFTSizeError = True
@@ -233,14 +246,7 @@ class DanishAlgorithm(WfAlgorithm):
                 "lstsqResult": result,
                 "zkFit": zkFit.copy(),
                 "zkSum": zkSum.copy(),
-                "model": model.model(
-                    dx,
-                    dy,
-                    fwhm,
-                    zkFit,
-                    sky_level=backgroundStd,
-                    flux=img.sum(),
-                ),
+                "model": modelImage,
                 "GalSimFFTSizeError": galSimFFTSizeError,
             }
 

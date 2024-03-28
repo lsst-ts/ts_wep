@@ -37,6 +37,10 @@ class TestDanishAlgorithm(unittest.TestCase):
         zkTrue = rng.normal(0, 1e-5 / np.arange(1, 20) ** 2, size=19)
         zkTrue = np.clip(zkTrue, -1e-6, +1e-6)
 
+        # Sample a random seeing
+        seeing = rng.uniform(0.1, 1)  # arcseconds
+        seeing /= 0.5  # arcseconds -> pixels
+
         # Create a pair of images
         mapper = ImageMapper()
 
@@ -46,11 +50,12 @@ class TestDanishAlgorithm(unittest.TestCase):
                 (0, -1),
                 "intra",
                 "r",
+                blendOffsets=[[70, 85]],
             ),
             zkTrue,
         )
-        intraStamp.image *= 120
-        intraStamp.image = gaussian_filter(intraStamp.image, 3)
+        intraStamp.image *= rng.uniform(50, 200)
+        intraStamp.image = gaussian_filter(intraStamp.image, seeing)
         intraStamp.image += rng.normal(scale=np.sqrt(intraStamp.image))
         intraStamp.image += rng.normal(scale=10, size=intraStamp.image.shape)
 
@@ -63,8 +68,8 @@ class TestDanishAlgorithm(unittest.TestCase):
             ),
             zkTrue,
         )
-        extraStamp.image *= 60
-        extraStamp.image = gaussian_filter(extraStamp.image, 3)
+        extraStamp.image *= rng.uniform(50, 200)
+        extraStamp.image = gaussian_filter(extraStamp.image, seeing)
         extraStamp.image += rng.normal(scale=np.sqrt(extraStamp.image))
         extraStamp.image += rng.normal(scale=15, size=extraStamp.image.shape)
 

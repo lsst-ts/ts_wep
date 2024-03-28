@@ -21,7 +21,7 @@
 
 import unittest
 
-from lsst.ts.wep.estimation import TieAlgorithm, WfAlgorithmFactory
+from lsst.ts.wep.estimation import DanishAlgorithm, TieAlgorithm, WfAlgorithmFactory
 from lsst.ts.wep.utils import WfAlgorithmName
 
 
@@ -39,6 +39,22 @@ class TestWfAlgorithmFactory(unittest.TestCase):
         # Make sure config parameters are propagated
         algo = WfAlgorithmFactory.createWfAlgorithm("tie", {"maxIter": 30})
         self.assertEqual(algo.maxIter, 30)
+
+    def testCreateDanishAlgorithm(self):
+        # Make sure it returns the correct type
+        self.assertIsInstance(
+            WfAlgorithmFactory.createWfAlgorithm("danish"), DanishAlgorithm
+        )
+        self.assertIsInstance(
+            WfAlgorithmFactory.createWfAlgorithm(WfAlgorithmName.Danish),
+            DanishAlgorithm,
+        )
+
+        # Make sure config parameters are propagated
+        algo = WfAlgorithmFactory.createWfAlgorithm(
+            "danish", {"lstsqKwargs": dict(ftol=1e-5)}
+        )
+        self.assertEqual(algo.lstsqKwargs["ftol"], 1e-5)
 
     def testBadAlgoName(self):
         with self.assertRaises(ValueError):
