@@ -523,7 +523,9 @@ class TestImageMapper(unittest.TestCase):
             inst = mapper.instrument
 
             # Determine the defocal offset
-            offset = -inst.defocalOffset if dfType == "intra" else inst.defocalOffset
+            offsetOptic = inst.batoidOffsetOptic
+            dfSign = -1 if dfType == "intra" else +1
+            offset = [0, 0, dfSign * inst.batoidOffsetValue]
 
             # Loop over each band
             for band in inst.wavelength:
@@ -558,7 +560,7 @@ class TestImageMapper(unittest.TestCase):
                 yImage = vImage * inst.donutRadius * inst.pixelSize
 
                 # Trace to the focal plane with Batoid
-                optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(rays)
+                optic.withLocallyShiftedOptic(offsetOptic, offset).trace(rays)
 
                 # Calculate the centered ray coordinates
                 chief = batoid.RayVector.fromStop(
@@ -568,7 +570,7 @@ class TestImageMapper(unittest.TestCase):
                     wavelength=mapper.instrument.wavelength[band],
                     dirCos=dirCos,
                 )
-                optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(chief)
+                optic.withLocallyShiftedOptic(offsetOptic, offset).trace(chief)
                 xRay = rays.x - chief.x
                 yRay = rays.y - chief.y
 
