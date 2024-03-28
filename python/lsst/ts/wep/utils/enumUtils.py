@@ -97,3 +97,4 @@ class PlaneType(Enum):
 
 class WfAlgorithmName(Enum):
     TIE = "tie"
+    Danish = "danish"

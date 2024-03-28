@@ -26,10 +26,12 @@ __all__ = [
     "extractArray",
     "centerWithTemplate",
     "polygonContains",
+    "conditionalSigmaClip",
 ]
 
 import numba
 import numpy as np
+from astropy.stats import sigma_clip
 from scipy.ndimage import center_of_mass
 from scipy.signal import correlate
 
@@ -377,3 +379,56 @@ def polygonContains(
         poly = np.vstack((poly, poly[0]))
 
     return _polygonContains(xGrid, yGrid, poly)
+
+
+# Function to apply conditional sigma clipping
+def conditionalSigmaClip(
+    array: np.ndarray, sigma: float, stdMin: float = 0.005, stdFunc: str = "mad_std"
+) -> np.ndarray:
+    """Apply conditional sigma clipping to an array.
+    Note this function applies sigma clipping to each
+    column of the input array, and replaces the column
+    with the clipped data while maintaining masked
+    elements as NaN. Sigma clipping is only applied
+    if the standard deviation exceeds std_min. This function
+    is used in the combineZernikesSigmaClipTask
+
+    Parameters
+    ----------
+    array : np.ndarray
+        Input array to be processed.
+    sigma : float
+        Number of standard deviations for the clipping limit.
+    stdMin : float
+        Minimum standard deviation to apply sigma clipping.
+    stdFunc : str
+        Function to calculate the standard deviation.
+        Can be either "mad_std" or "std"
+
+    Returns
+    -------
+    np.ndarray
+        Processed array with conditional sigma clipping applied.
+
+    Raises
+    ------
+    ValueError
+        If stdFunc is not "mad_std" or "std"
+    """
+
+    if stdFunc not in ["mad_std", "std"]:
+        raise ValueError("stdfunc must be either 'mad_std' or 'std'")
+
+    # Initialize an array to hold processed (clipped or original) data
+    processedArray = np.copy(array)  # Use a copy to maintain original data
+
+    for i in range(array.shape[1]):  # Iterate over columns
+        column = array[:, i]
+        # Apply sigma clipping if the standard deviation exceeds std_min
+        if np.std(column) > stdMin:
+            clipped = sigma_clip(column, sigma=sigma, stdfunc=stdFunc)
+            # Replace processedArray column data with clipped data,
+            # maintaining masked as NaN
+            processedArray[:, i] = clipped.filled(np.nan)
+
+    return processedArray

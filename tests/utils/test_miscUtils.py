@@ -24,6 +24,7 @@ import unittest
 import numpy as np
 from lsst.ts.wep.utils import (
     centerWithTemplate,
+    conditionalSigmaClip,
     extractArray,
     padArray,
     polygonContains,
@@ -136,6 +137,37 @@ class TestMiscUtils(unittest.TestCase):
             polygonContains(x, y[..., None], poly)
         with self.assertRaises(ValueError):
             polygonContains(x, y, poly.T)
+
+    def testConditionalSigmaClipping(self):
+        # Create a sample array where:
+        # - The first column has low variability
+        # and should not be clipped.
+        # - The second column has high variability
+        # and should be clipped.
+        sampleArray = np.array(
+            [[1.0, 100.0], [2.0, 200.0], [6.0, 600.0], [2.0, 200.0], [1.0, 100.0]]
+        )
+        # Set sigma for sigma clipping
+        sigma = 1.5
+        # Set a std_min that will ensure the second column
+        # is clipped but not the first
+        stdMin = 50
+
+        # Call the function with the sample array
+        processedArray = conditionalSigmaClip(
+            sampleArray, sigma=sigma, stdMin=stdMin, stdFunc="mad_std"
+        )
+
+        # Assert the first column remains unchanged
+        np.testing.assert_array_equal(processedArray[:, 0], sampleArray[:, 0])
+
+        # Assert the second column has NaNs due to clipping
+        # This assumes the sigma clipping with std would indeed
+        # clip values in the second column.
+        # Checking for NaNs as a result of clipping
+        assert np.isnan(
+            processedArray[:, 1]
+        ).any(), "Expected NaNs in the second column after clipping"
 
 
 if __name__ == "__main__":

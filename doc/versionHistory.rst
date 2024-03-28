@@ -6,6 +6,21 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.4.0:
+-------------
+9.4.0
+-------------
+
+* Added the Danish wavefront estimation algorithm.
+  
+.. _lsst.ts.wep-9.3.1:
+
+-------------
+9.3.1
+-------------
+
+* Added conditional sigma clipping for averaging Zernike coefficients.
+
 .. _lsst.ts.wep-9.3.0:
 
 -------------
@@ -22,7 +37,7 @@ Version History
 -------------
 
 * Added unit test directly comparing ``ImageMapper`` optical models to Batoid raytracing.
-  
+
 .. _lsst.ts.wep-9.2.0:
 
 -------------
