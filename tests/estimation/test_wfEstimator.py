@@ -25,6 +25,7 @@ import numpy as np
 from lsst.ts.wep import Image, ImageMapper
 from lsst.ts.wep.estimation import WfEstimator
 from lsst.ts.wep.utils import WfAlgorithmName, convertZernikesToPsfWidth
+from scipy.ndimage import gaussian_filter
 
 
 class TestWfEstimator(unittest.TestCase):
@@ -36,6 +37,10 @@ class TestWfEstimator(unittest.TestCase):
         rng = np.random.default_rng(seed)
         zkTrue = rng.normal(0, 1e-5 / np.arange(1, 20) ** 2, size=19)
         zkTrue = np.clip(zkTrue, -1e-6, +1e-6)
+
+        # Sample a random seeing
+        seeing = rng.uniform(0.1, 1)  # arcseconds
+        seeing /= 0.5  # arcseconds -> pixels
 
         # Create a pair of images
         mapper = ImageMapper()
@@ -50,7 +55,8 @@ class TestWfEstimator(unittest.TestCase):
             ),
             zkTrue,
         )
-        intraStamp.image *= 120
+        intraStamp.image *= rng.uniform(50, 200)
+        intraStamp.image = gaussian_filter(intraStamp.image, seeing)
         intraStamp.image += rng.normal(scale=np.sqrt(intraStamp.image))
         intraStamp.image += rng.normal(scale=10, size=intraStamp.image.shape)
 
@@ -63,7 +69,8 @@ class TestWfEstimator(unittest.TestCase):
             ),
             zkTrue,
         )
-        extraStamp.image *= 60
+        extraStamp.image *= rng.uniform(50, 200)
+        extraStamp.image = gaussian_filter(extraStamp.image, seeing)
         extraStamp.image += rng.normal(scale=np.sqrt(extraStamp.image))
         extraStamp.image += rng.normal(scale=15, size=extraStamp.image.shape)
 

@@ -29,7 +29,7 @@ from lsst.ts.wep.utils import BandLabel, DefocalType, PlaneType
 from typing_extensions import Self
 
 
-class Image(object):
+class Image:
     """Class to hold a donut image along with metadata.
 
     All quantities in this object are assumed to be in the global
@@ -67,9 +67,6 @@ class Image(object):
         Note these shifts must be in the global CCS (see the note on
         coordinate systems above).
         (the default is an empty array, i.e. no blends)
-    mask : np.ndarray, optional
-        The mask for the image. Mask creation is meant to be handled by the
-        ImageMapper class.
     """
 
     def __init__(
@@ -80,7 +77,6 @@ class Image(object):
         bandLabel: Union[BandLabel, str] = BandLabel.REF,
         planeType: Union[PlaneType, str] = PlaneType.Image,
         blendOffsets: Union[np.ndarray, tuple, list, None] = None,
-        mask: Optional[np.ndarray] = None,
     ) -> None:
         self.image = image
         self.fieldAngle = fieldAngle  # type: ignore
@@ -88,7 +84,11 @@ class Image(object):
         self.bandLabel = bandLabel  # type: ignore
         self.planeType = planeType  # type: ignore
         self.blendOffsets = blendOffsets  # type: ignore
-        self.mask = mask
+
+        # Set all mask variables
+        self._mask = None
+        self._maskBlends = None
+        self._maskBackground = None
 
     @property
     def image(self) -> np.ndarray:

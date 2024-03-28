@@ -10,6 +10,7 @@ from .donutSourceSelectorTask import *
 from .donutStamp import *
 from .donutStamps import *
 from .estimateZernikesBase import *
+from .estimateZernikesDanishTask import *
 from .estimateZernikesTieTask import *
 from .generateDonutCatalogOnlineTask import *
 from .generateDonutCatalogUtils import *

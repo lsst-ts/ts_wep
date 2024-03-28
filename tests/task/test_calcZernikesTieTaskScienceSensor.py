@@ -19,13 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import getpass
 import os
-import tempfile
 
 import lsst.utils.tests
 import numpy as np
-import pytest
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
@@ -41,15 +38,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-@pytest.mark.skipif(
-    os.path.exists("/sdf/data/rubin/repo/main") is False,
-    reason="requires access to data in /repo/main",
-)
-@pytest.mark.skipif(
-    not os.getenv("PGPASSFILE"),
-    reason="requires access to butler db",
-)
-class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
+class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):
         """
@@ -57,18 +46,10 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         """
 
         moduleDir = getModulePath()
-        testDataDir = os.path.join(moduleDir, "tests", "testData")
-        testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
-        cls.repoDir = "/sdf/data/rubin/repo/main"
-
-        # Create a temporary test directory
-        # under /sdf/data/rubin/repo/main/u/$USER
-        # to ensure write access is granted
-        user = getpass.getuser()
-        tempDir = os.path.join(cls.repoDir, "u", user)
-        cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
-        testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
-        cls.runName = os.path.join("u", user, testDirName)
+        cls.testDataDir = os.path.join(moduleDir, "tests", "testData")
+        testPipelineConfigDir = os.path.join(cls.testDataDir, "pipelineConfigs")
+        cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
+        cls.runName = "run1"
 
         # Check that run doesn't already exist due to previous improper cleanup
         butler = dafButler.Butler(cls.repoDir)
@@ -78,19 +59,19 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-        # Point to the collections with
-        # the raw images and calibrations
-        collections = "LATISS/raw/all,LATISS/calib"
-        instrument = "lsst.obs.lsst.Latiss"
-        cls.cameraName = "LATISS"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+        instrument = "lsst.obs.lsst.LsstCam"
+        cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesLatissPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
         )
-        pipeCmd += " -d 'exposure IN (2021090800487, 2021090800488) AND visit_system=0'"
+        # Make sure we are using the right exposure+detector combinations
+        pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
+        pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
         runProgram(pipeCmd)
 
     @classmethod
@@ -106,16 +87,16 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
-            "instrument": "LATISS",
-            "detector": 0,
-            "exposure": 2021090800487,
-            "visit": 2021090800487,
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106001,
+            "visit": 4021123106001,
         }
         self.dataIdIntra = {
-            "instrument": "LATISS",
-            "detector": 0,
-            "exposure": 2021090800488,
-            "visit": 2021090800488,
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106002,
+            "visit": 4021123106002,
         }
 
     def testValidateConfigs(self):
@@ -126,13 +107,7 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
-    def testEstimateZernikesRegression(self):
-        """THIS DOES NOT TEST ZERNIKE ACCURACY!!!
-
-        This only tests to see if software changes result in different
-        Zernikes. If that is expected and okay, you can change the test
-        values below.
-        """
+    def testEstimateZernikes(self):
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
@@ -143,37 +118,11 @@ class TestCalcZernikesTaskLatiss(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        zernCoeff = self.task.run(donutStampsExtra, donutStampsIntra)
+        zernCoeff = self.task.estimateZernikes.run(
+            donutStampsExtra, donutStampsIntra
+        ).zernikes
 
-        self.assertEqual(
-            np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19)
-        )
-
-        # Previous Zernikes for regression test
-        zk = np.array(
-            [
-                0.06301116,
-                0.16224293,
-                -0.03171561,
-                -0.01889007,
-                0.00448589,
-                0.03581878,
-                -0.05704621,
-                -0.02594513,
-                0.01350136,
-                -0.00455589,
-                -0.01713792,
-                0.00590172,
-                0.00505236,
-                0.0015623,
-                0.01403694,
-                -0.00709998,
-                -0.03391995,
-                -0.02250289,
-                0.0147995,
-            ]
-        )
-        self.assertTrue(np.allclose(zk, zernCoeff.outputZernikesRaw[0]))
+        self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))
