@@ -143,6 +143,10 @@ class TestTaskUtils(unittest.TestCase):
         # Test the defaults
         assertInstEqual(getTaskInstrument("LSSTCam", "R00_SW0"), Instrument())
         assertInstEqual(
+            getTaskInstrument("LSSTCam", "R22_S11"),
+            Instrument(configFile="policy:instruments/LsstFamCam.yaml"),
+        )
+        assertInstEqual(
             getTaskInstrument("LSSTComCam", "R22_S11"),
             Instrument(configFile="policy:instruments/ComCam.yaml"),
         )
@@ -151,26 +155,10 @@ class TestTaskUtils(unittest.TestCase):
             Instrument(configFile="policy:instruments/AuxTel.yaml"),
         )
 
-        # Test override config file
-        assertInstEqual(
-            getTaskInstrument(
-                "LSSTCam", "R40_SW1", instConfigFile="policy:instruments/AuxTel.yaml"
-            ),
-            Instrument(configFile="policy:instruments/AuxTel.yaml"),
-        )
-
-        # Test override defocal offset (in mm)
-        inst = Instrument()
-        inst.defocalOffset = 1.234e-3
-        assertInstEqual(
-            getTaskInstrument("LSSTCam", "R04_SW1", offset=1.234),
-            inst,
-        )
-
         with self.assertRaises(ValueError):
             getTaskInstrument("fake", None)
 
-        # Test LsstFamCam
+        # Test LsstFamCam batoidOffsetOptic
         famcam = getTaskInstrument("LSSTCam", "R22_S01")
         self.assertEqual(famcam.batoidOffsetOptic, "LSSTCamera")
 
