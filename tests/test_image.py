@@ -68,9 +68,9 @@ class TestImage(unittest.TestCase):
 
     def testBadMask(self):
         with self.assertRaises(TypeError):
-            Image(np.zeros((160, 160)), (0, 0), "intra", mask=1)
+            Image(np.zeros((160, 160)), (0, 0), "intra").mask = 1
         with self.assertRaises(ValueError):
-            Image(np.zeros((160, 160)), (0, 0), "intra", mask=np.zeros((1, 1)))
+            Image(np.zeros((160, 160)), (0, 0), "intra").mask = np.zeros((1, 1))
 
     def testCopy(self):
         rng = np.random.default_rng(0)
