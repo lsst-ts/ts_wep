@@ -99,7 +99,7 @@ class DonutStamp(AbstractStamp):
     wep_im: Image = field(init=False)
 
     # Legacy attribute to avoid errors (will be deleted in post-init)
-    defocal_distance: float = None
+    defocal_distance: Optional[float] = None
 
     def __post_init__(self):
         """
@@ -147,6 +147,25 @@ class DonutStamp(AbstractStamp):
         else:
             blend_centroid_positions = np.array([["nan"], ["nan"]], dtype=float).T
 
+        # Get the detector offset and real offset info (see the class docstring
+        # for the difference in these numbers). This might fail for old stamps
+        # in which case we will just default to 1.5mm, which is the default
+        # for LSSTCam
+        try:
+            detector_offset = (
+                metadata.getArray("DET_OFFSET")[index]
+                if metadata.getArray("DET_OFFSET") is not None
+                else 1.5
+            )
+            real_offset = (
+                metadata.getArray("REAL_OFFSET")[index]
+                if metadata.getArray("REAL_OFFSET") is not None
+                else 1.5
+            )
+        except KeyError:
+            detector_offset = 1.5
+            real_offset = 1.5
+
         return cls(
             stamp_im=stamp_im,
             archive_element=archive_element,
@@ -167,28 +186,9 @@ class DonutStamp(AbstractStamp):
             # "DFC_TYPE" stands for defocal type in string form.
             # Need to convert to DefocalType
             defocal_type=metadata.getArray("DFC_TYPE")[index],
-            # "DFC_DIST" stands for defocal distance
-            # If this is an old version of the stamps without a defocal
-            # distance set this to default value of 1.5 mm.
-            defocal_distance=(
-                metadata.getArray("DFC_DIST")[index]
-                if metadata.get("DFC_DIST") is not None
-                else 1.5
-            ),
-            # "DET_OFFSET" stands for detector offset
-            # and "REAL_OFFSET" is the real offset (see the class docstring)
-            # If this is an old version of the stamps without these values
-            # use a default 1.5mm, corresponding to the Rubin CWFSs
-            detector_offset=(
-                metadata.getArray("DET_OFFSET")[index]
-                if metadata.getArray("DET_OFFSET") is not None
-                else 1.5
-            ),
-            real_offset=(
-                metadata.getArray("REAL_OFFSET")[index]
-                if metadata.getArray("REAL_OFFSET") is not None
-                else 1.5
-            ),
+            # Set the defocal offset info
+            detector_offset=detector_offset,
+            real_offset=real_offset,
             # "BANDPASS" stands for the exposure bandpass
             # If this is an old version of the stamps without bandpass
             # information then an empty string ("") will be set as default.
