@@ -67,7 +67,8 @@ class TestDonutStamp(unittest.TestCase):
         dfcTypes = [DefocalType.Extra.value] * nStamps
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
-        dfcDists = np.ones(nStamps) * 1.25
+        detectorOffsets = np.ones(nStamps) * 1.25
+        realOffsets = np.ones(nStamps) * 1.25
         bandpass = ["r"] * nStamps
 
         metadata = PropertyList()
@@ -79,7 +80,8 @@ class TestDonutStamp(unittest.TestCase):
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
         if testDefaults is False:
-            metadata["DFC_DIST"] = dfcDists
+            metadata["DET_OFFSET"] = detectorOffsets
+            metadata["REAL_OFFSET"] = realOffsets
             metadata["BLEND_CX"] = blendCentX
             metadata["BLEND_CY"] = blendCentY
             metadata["BANDPASS"] = bandpass
@@ -120,8 +122,8 @@ class TestDonutStamp(unittest.TestCase):
                 self.assertEqual(defocalType, DefocalType.Intra.value)
             else:
                 self.assertEqual(defocalType, DefocalType.Extra.value)
-            defocalDist = donutStamp.defocal_distance
-            self.assertEqual(defocalDist, 1.25)
+            self.assertEqual(donutStamp.detector_offset, 1.25)
+            self.assertEqual(donutStamp.real_offset, 1.25)
             bandpass = donutStamp.bandpass
             self.assertEqual(bandpass, "r")
 
@@ -140,9 +142,6 @@ class TestDonutStamp(unittest.TestCase):
             donutStamp = DonutStamp.factory(
                 self.testDefaultStamps[i], self.testDefaultMetadata, i
             )
-            defocalDist = donutStamp.defocal_distance
-            # Test default metadata distance of 1.5 mm
-            self.assertEqual(defocalDist, 1.5)
             # Test blend centroids arrays are nans
             np.testing.assert_array_equal(
                 donutStamp.blend_centroid_positions,
@@ -191,7 +190,8 @@ class TestDonutStamp(unittest.TestCase):
             lsst.geom.Point2D(2047.5, 2001.5),
             np.array([[], []]).T,
             DefocalType.Extra.value,
-            1.5e-3,
+            1.5,
+            1.5,
             "R22_S11",
             "LSSTCam",
             "r",
@@ -218,6 +218,7 @@ class TestDonutStamp(unittest.TestCase):
                     np.array([[20], [20]]).T,
                     DefocalType.Extra.value,
                     0.0,
+                    0.0,
                     detName,
                     "LSSTCam",
                     "r",
@@ -233,7 +234,8 @@ class TestDonutStamp(unittest.TestCase):
             lsst.geom.Point2D(2047.5, 2001.5),
             np.array([[], []]).T,
             DefocalType.Extra.value,
-            1.5e-3,
+            1.5,
+            1.5,
             "R22_S11",
             "LSSTCam",
             "r",
@@ -285,7 +287,8 @@ class TestDonutStamp(unittest.TestCase):
                 center,
                 center + offsets,
                 DefocalType.Extra.value,
-                1.5e-3,
+                1.5,
+                -3,
                 detName,
                 "LSSTCam",
                 "r",
@@ -327,6 +330,10 @@ class TestDonutStamp(unittest.TestCase):
             # Check the DefocalType and BandLabel
             self.assertEqual(wepImage.defocalType, DefocalType.Extra)
             self.assertEqual(wepImage.bandLabel, BandLabel.LSST_R)
+
+            # Test the offsets
+            self.assertEqual(wepImage.defocalOffset, 1.5e-3)
+            self.assertEqual(wepImage.batoidOffsetValue, -3e-3)
 
         # Test all the CWFSs
         for raftName in ["R00", "R04", "R40", "R44"]:
