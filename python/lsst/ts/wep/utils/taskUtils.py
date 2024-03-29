@@ -229,7 +229,7 @@ def getOffsetFromExposure(
     Returns
     -------
     float
-        The offset in mm
+        The offset in mm (absolute value)
 
     Raises
     ------
@@ -260,7 +260,7 @@ def getOffsetFromExposure(
     else:
         raise ValueError(f"defocalType {defocalType} not supported.")
 
-    return offset
+    return np.abs(offset)
 
 
 def getTaskInstrument(

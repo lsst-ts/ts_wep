@@ -163,10 +163,15 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
             [DefocalType.Extra.value] * int((self.nStamps - halfStampIdx)),
         )
 
-    def testGetDefocalDistances(self):
-        defocalDistances = self.donutStamps.getDefocalDistances()
+    def testGetDetectorOffsets(self):
+        detectorOffsets = self.donutStamps.getDetectorOffsets()
         for idx in range(self.nStamps):
-            self.assertEqual(defocalDistances[idx], 1.5)
+            self.assertEqual(detectorOffsets[idx], 1.5)
+
+    def testGetRealOffsets(self):
+        realOffsets = self.donutStamps.getRealOffsets()
+        for idx in range(self.nStamps):
+            self.assertEqual(realOffsets[idx], 1.5)
 
     def testGetBandpass(self):
         bandpasses = self.donutStamps.getBandpasses()

@@ -268,7 +268,11 @@ class WfAlgorithm(ABC):
         )
 
         # If either image has defocal offset, override default instrument value
-        offsets = [I.defocalOffset for I in (I1, I2) if I.defocalOffset is not None]
+        offsets = [
+            img.defocalOffset
+            for img in (I1, I2)
+            if img is not None and img.defocalOffset is not None
+        ]
         if len(offsets) > 0:
             instrument = instrument.copy()
             instrument.defocalOffset = np.mean(offsets)
