@@ -31,6 +31,7 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 import pandas as pd
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.utils import (
@@ -40,7 +41,6 @@ from lsst.ts.wep.utils import (
     getTaskInstrument,
 )
 from lsst.utils.timer import timeMethod
-from lsst.ts.wep import Instrument
 
 
 class GenerateDonutDirectDetectTaskConnections(

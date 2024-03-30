@@ -26,6 +26,7 @@ import abc
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -33,7 +34,6 @@ from lsst.ts.wep.utils import (
     convertHistoryToMetadata,
     getTaskInstrument,
 )
-from lsst.ts.wep import Instrument
 
 
 class EstimateZernikesBaseConfig(pexConfig.Config):
