@@ -34,6 +34,7 @@ from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -42,7 +43,6 @@ from lsst.ts.wep.utils import (
     getTaskInstrument,
 )
 from scipy.signal import correlate
-from lsst.ts.wep import Instrument
 
 
 class CutOutDonutsBaseTaskConnections(
