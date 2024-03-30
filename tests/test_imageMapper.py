@@ -501,7 +501,11 @@ class TestImageMapper(unittest.TestCase):
 
         # Function that maps config to required precision (% of pixel size)
         def maxPercent(**kwargs):
-            if "Lsst" in instConfig and model == "onAxis":
+            if "AuxTel" in instConfig and model != "offAxis":
+                # Shifting M2 also generates spherical aberration,
+                # which isn't compensated by paraxial and on-axis
+                return 150
+            elif "Lsst" in instConfig and model == "onAxis":
                 return 25
             else:
                 return 10
