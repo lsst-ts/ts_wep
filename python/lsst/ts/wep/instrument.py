@@ -860,14 +860,13 @@ class Instrument:
 
         # Get the Batoid offset
         if batoidOffsetValue is None:
-            batoidOffsetValue = self.batoidOffsetValue
-        if batoidOffsetValue is None:
-            batoidOffsetValue = 0
+            defocalType = DefocalType(defocalType)
+            defocalSign = +1 if defocalType == DefocalType.Extra else -1
+            offset = [0, 0, defocalSign * self.batoidOffsetValue]
+        else:
+            offset = [0, 0, batoidOffsetValue]
 
-        # Offset the Batoid optic
-        defocalType = DefocalType(defocalType)
-        defocalSign = +1 if defocalType == DefocalType.Extra else -1
-        offset = [0, 0, defocalSign * batoidOffsetValue]
+        # Offset the optic
         optic = self.batoidOffsetOptic
         batoidModel = batoidModel.withLocallyShiftedOptic(optic, offset)
 
