@@ -153,10 +153,12 @@ class DonutStamp(AbstractStamp):
         if defocal_type not in ["intra", "extra"]:
             raise ValueError(f"defocal_type {defocal_type} not supported.")
 
+        # Get the Camera name
+        # "CAM_NAME" stands for camera name
+        cam_name = metadata.getArray("CAM_NAME")[index]
+
         # Get the detector offset and real offset info (see the class docstring
-        # for the difference in these numbers). This might fail for old stamps
-        # in which case we will just default to 1.5mm, which is the default
-        # for LSSTCam
+        # for the difference in these numbers). All values in mm
         try:
             detector_offset = (
                 metadata.getArray("DET_OFFSET")[index]
@@ -168,12 +170,21 @@ class DonutStamp(AbstractStamp):
                 if metadata.getArray("REAL_OFFSET") is not None
                 else 1.5
             )
+        # This might fail for old stamps, in which case we use these hard-coded
+        # defaults for AuxTel and LSSTCam+
         except KeyError:
-            detector_offset = 1.5
-            if defocal_type == "extra":
-                real_offset = +1.5
+            if cam_name == "LATISS":
+                detector_offset = 34.7
+                if defocal_type == "extra":
+                    real_offset = +0.8
+                else:
+                    real_offset = -0.8
             else:
-                real_offset = -1.5
+                detector_offset = 1.5
+                if defocal_type == "extra":
+                    real_offset = +1.5
+                else:
+                    real_offset = -1.5
 
         return cls(
             stamp_im=stamp_im,
