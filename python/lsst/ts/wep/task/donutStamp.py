@@ -147,6 +147,12 @@ class DonutStamp(AbstractStamp):
         else:
             blend_centroid_positions = np.array([["nan"], ["nan"]], dtype=float).T
 
+        # Get the defocal type
+        # "DFC_TYPE" stands for defocal type in string form.
+        defocal_type = metadata.getArray("DFC_TYPE")[index]
+        if defocal_type not in ["intra", "extra"]:
+            raise ValueError(f"defocal_type {defocal_type} not supported.")
+
         # Get the detector offset and real offset info (see the class docstring
         # for the difference in these numbers). This might fail for old stamps
         # in which case we will just default to 1.5mm, which is the default
@@ -164,7 +170,10 @@ class DonutStamp(AbstractStamp):
             )
         except KeyError:
             detector_offset = 1.5
-            real_offset = 1.5
+            if defocal_type == "extra":
+                real_offset = +1.5
+            else:
+                real_offset = -1.5
 
         return cls(
             stamp_im=stamp_im,
@@ -183,10 +192,8 @@ class DonutStamp(AbstractStamp):
             detector_name=metadata.getArray("DET_NAME")[index],
             # "CAM_NAME" stands for camera name
             cam_name=metadata.getArray("CAM_NAME")[index],
-            # "DFC_TYPE" stands for defocal type in string form.
-            # Need to convert to DefocalType
-            defocal_type=metadata.getArray("DFC_TYPE")[index],
             # Set the defocal offset info
+            defocal_type=defocal_type,
             detector_offset=detector_offset,
             real_offset=real_offset,
             # "BANDPASS" stands for the exposure bandpass
