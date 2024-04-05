@@ -254,7 +254,7 @@ class TestTieAlgorithm(unittest.TestCase):
         extra.defocalOffset = 0
 
         tie = TieAlgorithm()
-        with self.assertRaises(np.linalg.LinAlgError):
+        with np.testing.assert_raises(np.linalg.LinAlgError):
             tie.estimateZk(intra, extra)
 
 
