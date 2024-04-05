@@ -170,8 +170,10 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
 
     def testGetRealOffsets(self):
         realOffsets = self.donutStamps.getRealOffsets()
+        defocalTypes = self.donutStamps.getDefocalTypes()
         for idx in range(self.nStamps):
-            self.assertEqual(realOffsets[idx], 1.5)
+            sign = +1 if defocalTypes[idx] == "extra" else -1
+            self.assertEqual(realOffsets[idx], sign * 1.5)
 
     def testGetBandpass(self):
         bandpasses = self.donutStamps.getBandpasses()
