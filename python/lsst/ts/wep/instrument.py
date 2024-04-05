@@ -897,7 +897,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType,
+        defocalType: Optional[DefocalType] = None,
         batoidOffsetValue: Optional[float] = None,
         band: Union[BandLabel, str] = BandLabel.REF,
         jmax: int = 78,
@@ -912,10 +912,10 @@ class Instrument:
             The x-component of the field angle in degrees.
         yAngle : float
             The y-component of the field angle in degrees.
-        defocalType : DefocalType or str
+        defocalType : DefocalType or str, optional
             The DefocalType Enum or corresponding string, specifying which side
-            of focus to model.
-        batoidOffsetValue : float or None
+            of focus to model. (the default is None)
+        batoidOffsetValue : float or None, optional
             The offset of the batoidOffsetOptic used to calculate the off-axis
             coefficients. If None, then self.batoidOffsetOptic is used.
             (the default is None)
@@ -941,7 +941,16 @@ class Instrument:
         -------
         np.ndarray
             The Zernike coefficients in meters, for Noll indices >= 4
+
+        Raises
+        ------
+        ValueError
+            If defocalType and batoidOffsetValue are both None.
         """
+        if defocalType is None and batoidOffsetValue is None:
+            raise ValueError(
+                "You must provide either defocalType or batoidOffsetValue."
+            )
 
         # Get zernikeTA
         zkTA = self._getIntrinsicZernikesTACached(

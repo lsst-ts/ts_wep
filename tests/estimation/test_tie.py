@@ -268,6 +268,20 @@ class TestTieAlgorithm(unittest.TestCase):
 
         self.assertGreater(mask1.sum(), mask2.sum())
 
+    def testDefocalOffsetPropagation(self):
+        """Test that image-level defocal offsets propagate.
+
+        We will do this by setting defocal offsets to 0 and making
+        sure an error is raised.
+        """
+        zkTrue, intra, extra = self._createData()
+        intra.defocalOffset = 0
+        extra.defocalOffset = 0
+
+        tie = TieAlgorithm()
+        with self.assertRaises(np.linalg.LinAlgError):
+            tie.estimateZk(intra, extra)
+
 
 if __name__ == "__main__":
     # Do the unit test
