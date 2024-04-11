@@ -282,7 +282,7 @@ class TestTieAlgorithm(unittest.TestCase):
         try:
             tie.estimateZk(intra, extra)
             raise RuntimeError("This should have raised an error!")
-        except:
+        except Exception:
             pass
 
 
