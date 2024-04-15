@@ -74,6 +74,11 @@ class ExposurePairerConfig(pexConfig.Config):
         default=0.1,
     )
 
+    forceUniquePairs = pexConfig.Field[bool](
+        doc="If True, force each extra exposure to be paired with a unique intra exposure.",
+        default=True,
+    )
+
 
 class ExposurePairer(pipeBase.Task):
     ConfigClass = ExposurePairerConfig
@@ -168,6 +173,12 @@ class ExposurePairer(pipeBase.Task):
                 out.append(
                     IntraExtraIdxPair(nearbyTable[nearest]["exposure"], row["exposure"])
                 )
+                if self.config.forceUniquePairs:
+                    idx = np.where(
+                        intraTable["exposure"] == nearbyTable[nearest]["exposure"]
+                    )[0]
+                    intraTable.remove_rows(idx)
+
         return out
 
 
