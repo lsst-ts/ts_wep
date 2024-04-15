@@ -51,14 +51,17 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
         cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
         cls.runName = "run1"
+        cls.pairTableName = "run2_pair_table"
+        cls.run2Name = "run2"
 
-        # Check that run doesn't already exist due to previous improper cleanup
+        # Check that runs don't already exist due to previous improper cleanup
         butler = dafButler.Butler(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
-        if cls.runName in collectionsList:
-            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-            runProgram(cleanUpCmd)
+        for runName in [cls.runName, cls.pairTableName, cls.run2Name]:
+            if runName in collectionsList:
+                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, runName)
+                runProgram(cleanUpCmd)
 
         # Point to the collections for the reference catalogs,
         # the raw images and the camera model in the calib directory
@@ -72,6 +75,28 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+        )
+        pipeCmd += " -d 'exposure IN (4021123106001..4021123106007)'"
+        runProgram(pipeCmd)
+
+        # Test ingestion of pair table
+        cmd = "ingestPairTable.py"
+        cmd += f" -b {cls.repoDir}"
+        cmd += f" -o {cls.pairTableName}"
+        cmd += f" --instrument {cls.cameraName}"
+        cmd += f" {os.path.join(testDataDir, 'pairTable.ecsv')}"
+        runProgram(cmd)
+
+        # Run cutouts with table pairer
+        collections += "," + cls.runName + "," + cls.pairTableName
+        pipeCmd = writePipetaskCmd(
+            cls.repoDir,
+            cls.run2Name,
+            instrument,
+            collections,
+            pipelineYaml=os.path.join(
+                testPipelineConfigDir, "testCutoutsFamPipelineTablePairer.yaml"
+            ),
         )
         pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
         runProgram(pipeCmd)
@@ -236,7 +261,31 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
 
+    def testTaskRunTablePairer(self):
+        # Get everything via the extra ID
+        intraStamps1 = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        intraStamps2 = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.run2Name]
+        )
+
+        extraStamps1 = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        extraStamps2 = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.run2Name]
+        )
+
+        assert intraStamps1.metadata == intraStamps2.metadata
+        assert extraStamps1.metadata == extraStamps2.metadata
+        for s1, s2 in zip(intraStamps1, intraStamps2):
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)
+        for s1, s2 in zip(extraStamps1, extraStamps2):
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)
+
     @classmethod
     def tearDownClass(cls):
-        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-        runProgram(cleanUpCmd)
+        for runName in [cls.runName, cls.pairTableName, cls.run2Name]:
+            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, runName)
+            runProgram(cleanUpCmd)

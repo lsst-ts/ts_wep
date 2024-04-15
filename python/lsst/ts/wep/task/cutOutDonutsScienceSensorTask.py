@@ -55,6 +55,17 @@ class CutOutDonutsScienceSensorTaskConnections(
         name="postISRCCD.visitInfo",
         multiple=True,
     )
+    donutVisitPairTable = ct.Input(
+        doc="Visit pair table",
+        dimensions=("instrument",),
+        storageClass="AstropyTable",
+        name="donutVisitPairTable",
+    )
+
+    def __init__(self, *, config=None):
+        super().__init__(config=config)
+        if not config.pairer.target._needsPairTable:
+            del self.donutVisitPairTable
 
 
 class CutOutDonutsScienceSensorTaskConfig(
@@ -110,7 +121,12 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             v.dataId["visit"]: v for v in outputRefs.donutStampsExtra
         }
 
-        pairs = self.pairer.run(visitInfoDict)
+        if hasattr(inputRefs, "donutVisitPairTable"):
+            pairs = self.pairer.run(
+                visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable)
+            )
+        else:
+            pairs = self.pairer.run(visitInfoDict)
         for pair in pairs:
             exposures = butlerQC.get(
                 [exposureHandleDict[k] for k in [pair.intra, pair.extra]]

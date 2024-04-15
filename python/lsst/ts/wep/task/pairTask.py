@@ -22,6 +22,8 @@
 __all__ = [
     "ExposurePairerConfig",
     "ExposurePairer",
+    "TablePairerConfig",
+    "TablePairer",
 ]
 
 import typing
@@ -76,6 +78,7 @@ class ExposurePairerConfig(pexConfig.Config):
 class ExposurePairer(pipeBase.Task):
     ConfigClass = ExposurePairerConfig
     _DefaultName = "exposurePairer"
+    _needsPairTable = False
 
     def run(
         self, visitInfos: typing.Dict[int, afwImage.VisitInfo]
@@ -132,6 +135,8 @@ class ExposurePairer(pipeBase.Task):
                 best_offset = offset
 
         extraTable = table[np.abs(table["focusZ"] - best_offset) < thresh]
+        # In case it's useful in the future, here's how to make the in-focus
+        # table:
         # focalTable = table[
         #     np.abs(table["focusZ"] - best_offset + separation) < thresh
         # ]
@@ -163,4 +168,28 @@ class ExposurePairer(pipeBase.Task):
                 out.append(
                     IntraExtraIdxPair(nearbyTable[nearest]["exposure"], row["exposure"])
                 )
+        return out
+
+
+class TablePairerConfig(pexConfig.Config):
+    pass
+
+
+class TablePairer(pipeBase.Task):
+    ConfigClass = TablePairerConfig
+    _DefaultName = "tablePairer"
+    _needsPairTable = True
+
+    def run(
+        self,
+        visitInfos: typing.Dict[int, afwImage.VisitInfo],
+        pairTable: Table,
+    ) -> typing.List[IntraExtraIdxPair]:
+        """
+        Pair up the intra- and extra-focal exposures.
+        """
+        out = []
+        for row in pairTable:
+            if row["intra"] in visitInfos and row["extra"] in visitInfos:
+                out.append(IntraExtraIdxPair(row["intra"], row["extra"]))
         return out
