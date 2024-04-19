@@ -670,7 +670,10 @@ class Instrument:
             )[4]
 
         # Calculate the equivalent detector offset
-        result = minimize_scalar(lambda offset: np.abs(dZ4det(offset) - dZ4optic))
+        result = minimize_scalar(
+            lambda offset: np.abs(dZ4det(offset) - dZ4optic),
+            bounds=[-0.1, 0.1],
+        )
 
         return np.abs(result.x)
 
