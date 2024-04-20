@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.4:
+
+-------------
+9.5.4
+-------------
+
+* Fix blend centroid coordinates in donut stamp generation.
+
 .. _lsst.ts.wep-9.5.3:
 
 -------------
