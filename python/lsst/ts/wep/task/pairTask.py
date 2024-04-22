@@ -85,11 +85,22 @@ class ExposurePairer(pipeBase.Task):
     _DefaultName = "exposurePairer"
     _needsPairTable = False
 
-    def run(
-        self, visitInfos: typing.Dict[int, afwImage.VisitInfo]
-    ) -> typing.List[IntraExtraIdxPair]:
+    def makeTables(
+        self,
+        visitInfos: typing.Dict[int, afwImage.VisitInfo],
+    ) -> typing.Dict[str, Table]:
         """
-        Pair up the intra- and extra-focal exposures.
+        Make tables of intra/extra/focal/and pairs of exposures.
+
+        Parameters
+        ----------
+        visitInfos : dict
+            A dictionary of VisitInfo objects keyed by exposure.
+
+        Returns
+        -------
+        dict
+            A dictionary of astropy tables keyed by type.
         """
         if self.config.doOverrideSeparation:
             separation = self.config.overrideSeparation
@@ -140,11 +151,7 @@ class ExposurePairer(pipeBase.Task):
                 best_offset = offset
 
         extraTable = table[np.abs(table["focusZ"] - best_offset) < thresh]
-        # In case it's useful in the future, here's how to make the in-focus
-        # table:
-        # focalTable = table[
-        #     np.abs(table["focusZ"] - best_offset + separation) < thresh
-        # ]
+        focalTable = table[np.abs(table["focusZ"] - best_offset + separation) < thresh]
         intraTable = table[
             np.abs(table["focusZ"] - best_offset + 2 * separation) < thresh
         ]
@@ -152,7 +159,18 @@ class ExposurePairer(pipeBase.Task):
         # For each extra focal exposure, find the best intra focal exposure.
         # Note that it's possible that the same intra exposure is paired with
         # multiple extra exposures.
-        out = []
+        dtype = [
+            ("extra", "<i8"),
+            ("intra", "<i8"),
+        ]
+        for prefix in ["extra", "intra"]:
+            for name, dt in extraTable.dtype.fields.items():
+                if name in ("exposure", "radec"):
+                    continue
+                dtype.append((prefix + "_" + name, dt[0]))
+
+        pairTable = Table(dtype=dtype)
+
         for row in extraTable:
             nearby = (
                 np.abs(intraTable["mjd"] - row["mjd"]) * 86400
@@ -169,16 +187,43 @@ class ExposurePairer(pipeBase.Task):
             if np.any(nearby):
                 nearbyTable = intraTable[nearby]
                 # Pick the nearest remaining point in radec
-                nearest = np.argmin(row["radec"].separation(nearbyTable["radec"]).deg)
-                out.append(
-                    IntraExtraIdxPair(nearbyTable[nearest]["exposure"], row["exposure"])
+                nearest_idx = np.argmin(
+                    row["radec"].separation(nearbyTable["radec"]).deg
                 )
+                nearest_row = nearbyTable[nearest_idx]
+                value = [row["exposure"], nearest_row["exposure"]]
+                for r in [row, nearest_row]:
+                    for name in r.dtype.names:
+                        if name in ("exposure", "radec"):
+                            continue
+                        value.append(r[name])
+                pairTable.add_row(np.array(value))
                 if self.config.forceUniquePairs:
-                    idx = np.where(
-                        intraTable["exposure"] == nearbyTable[nearest]["exposure"]
-                    )[0]
+                    idx = np.where(intraTable["exposure"] == nearest_row["exposure"])[0]
                     intraTable.remove_rows(idx)
 
+        # Adjust intra/extraTables to only hold unused exposures
+        extraTable = extraTable[~np.isin(extraTable["exposure"], pairTable["extra"])]
+        intraTable = intraTable[~np.isin(intraTable["exposure"], pairTable["intra"])]
+
+        return {
+            "pairTable": pairTable,
+            "unusedIntraTable": intraTable,
+            "unusedExtraTable": extraTable,
+            "focalTable": focalTable,
+        }
+
+    def run(
+        self, visitInfos: typing.Dict[int, afwImage.VisitInfo]
+    ) -> typing.List[IntraExtraIdxPair]:
+        """
+        Pair up the intra- and extra-focal exposures.
+        """
+        tables = self.makeTables(visitInfos)
+        pairTable = tables["pairTable"]
+        out = []
+        for row in pairTable:
+            out.append(IntraExtraIdxPair(row["intra"], row["extra"]))
         return out
 
 
