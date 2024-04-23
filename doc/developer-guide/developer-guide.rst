@@ -148,6 +148,8 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutFromRefitWcsTaskConnections**: Connections setup for GenerateDonutFromRefitWcsTask.
 * **GenerateDonutFromRefitWcsTaskConfig**: Configuration setup for GenerateDonutFromRefitWcsTask.
 * **GenerateDonutCatalogUtils**: Common utility functions for the GenerateDonutCatalog...Tasks.
+* **ExposurePairer**: Subtask to pair intra- and extra-focal exposures heuristically.
+* **TablePairer**: Subtask to pair intra- and extra-focal exposures manually from a table.  Use generatePairTable.py script as a useful starting point.
 
 .. _WEP_modules_wep_utils:
 
@@ -160,7 +162,7 @@ This module contains utility functions that are used elsewhere in WEP.
 * **ioUtils**: Functions for reading and writing files.
 * **maskUtils**: Functions for generating a mask model for an instrument.
 * **taskUtils**: Functions for running command line tasks from a python script.
-* **zernikeUtils**: Functions for evaluating and fitting Zernike polynomials. 
+* **zernikeUtils**: Functions for evaluating and fitting Zernike polynomials.
 * **plotUtils**: Functions for plotting results.
 * **miscUtils**: Miscellaneous utility functions.
 

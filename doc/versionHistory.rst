@@ -6,13 +6,20 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.0:
+-------------
+9.5.0
+-------------
+
+* Add exposure pairing for full array mode.
+
 .. _lsst.ts.wep-9.4.0:
 -------------
 9.4.0
 -------------
 
 * Added the Danish wavefront estimation algorithm.
-  
+
 .. _lsst.ts.wep-9.3.1:
 
 -------------

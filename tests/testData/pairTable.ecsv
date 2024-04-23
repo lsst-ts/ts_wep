@@ -1,0 +1,8 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: intra, datatype: int64}
+# - {name: extra, datatype: int64}
+# schema: astropy-2.0
+intra extra
+4021123106002 4021123106001
