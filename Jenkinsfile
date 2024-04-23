@@ -75,7 +75,7 @@ pipeline {
                         git lfs fetch --all || echo git lfs fetch FAILED
                         git lfs checkout || echo git lfs checkout FAILED
                         setup -k -r .
-                        scons python
+                        scons lib python shebang
                     """
                 }
             }

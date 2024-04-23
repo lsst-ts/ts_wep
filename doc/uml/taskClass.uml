@@ -29,6 +29,7 @@ CutOutDonutsScienceSensorTaskConfig *-- CutOutDonutsBaseTaskConnections
 CutOutDonutsScienceSensorTask *-- CutOutDonutsScienceSensorTaskConfig
 CutOutDonutsBaseTaskConnections <|-- CutOutDonutsScienceSensorTaskConnections
 CutOutDonutsScienceSensorTaskConfig *-- CutOutDonutsScienceSensorTaskConnections
+CutOutDonutsScienceSensorTaskConfig *-- ExposurePairer
 CutOutDonutsScienceSensorTask ..> DonutStamps
 CutOutDonutsBaseTaskConfig *-- CutOutDonutsBaseTaskConnections
 CutOutDonutsBaseTask *-- CutOutDonutsBaseTaskConfig
@@ -42,4 +43,6 @@ GenerateDonutFromRefitWcsTaskConfig *-- GenerateDonutFromRefitWcsTaskConnections
 GenerateDonutCatalogWcsTaskConfig <|-- GenerateDonutFromRefitWcsTaskConfig
 GenerateDonutFromRefitWcsTask *-- GenerateDonutFromRefitWcsTaskConfig
 GenerateDonutCatalogWcsTask <|-- GenerateDonutFromRefitWcsTask
+ExposurePairer *-- ExposurePairerConfig
+TablePairer *-- TablePairerConfig
 @enduml

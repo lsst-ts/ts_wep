@@ -29,9 +29,10 @@ import typing
 
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
+import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
+import lsst.pipe.base.connectionTypes as ct
 import pandas as pd
-from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
@@ -41,24 +42,40 @@ from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
 
+from .pairTask import ExposurePairer
+
 
 class CutOutDonutsScienceSensorTaskConnections(
     CutOutDonutsBaseTaskConnections, dimensions=("detector", "instrument")
 ):
-    exposures = connectionTypes.Input(
-        doc="Input exposure to make measurements on",
+    visitInfos = ct.Input(
+        doc="Exposure VisitInfos",
         dimensions=("exposure", "detector", "instrument"),
-        storageClass="Exposure",
-        name="postISRCCD",
+        storageClass="VisitInfo",
+        name="postISRCCD.visitInfo",
         multiple=True,
     )
+    donutVisitPairTable = ct.Input(
+        doc="Visit pair table",
+        dimensions=("instrument",),
+        storageClass="AstropyTable",
+        name="donutVisitPairTable",
+    )
+
+    def __init__(self, *, config=None):
+        super().__init__(config=config)
+        if not config.pairer.target._needsPairTable:
+            del self.donutVisitPairTable
 
 
 class CutOutDonutsScienceSensorTaskConfig(
     CutOutDonutsBaseTaskConfig,
     pipelineConnections=CutOutDonutsScienceSensorTaskConnections,
 ):
-    pass
+    pairer = pexConfig.ConfigurableField(
+        target=ExposurePairer,
+        doc="Task to pair up intra- and extra-focal exposures",
+    )
 
 
 class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
@@ -68,6 +85,10 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
 
     ConfigClass = CutOutDonutsScienceSensorTaskConfig
     _DefaultName = "CutOutDonutsScienceSensorTask"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.makeSubtask("pairer")
 
     def runQuantum(
         self,
@@ -86,20 +107,43 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         so we put this in the dataId associated with the
         extra-focal detector.
         """
-
-        exposures = butlerQC.get(inputRefs.exposures)
-        focusZVals = [exp.visitInfo.focusZ for exp in exposures]
         camera = butlerQC.get(inputRefs.camera)
-        extraIdx, intraIdx = self.assignExtraIntraIdx(
-            focusZVals[0], focusZVals[1], camera.getName()
-        )
 
-        donutCats = butlerQC.get(inputRefs.donutCatalog)
+        visitInfoDict = {
+            v.dataId["exposure"]: butlerQC.get(v) for v in inputRefs.visitInfos
+        }
+        exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
+        donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
+        donutStampsIntraHandleDict = {
+            v.dataId["visit"]: v for v in outputRefs.donutStampsIntra
+        }
+        donutStampsExtraHandleDict = {
+            v.dataId["visit"]: v for v in outputRefs.donutStampsExtra
+        }
 
-        outputs = self.run(exposures, donutCats, camera)
-
-        butlerQC.put(outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraIdx])
-        butlerQC.put(outputs.donutStampsIntra, outputRefs.donutStampsIntra[extraIdx])
+        if hasattr(inputRefs, "donutVisitPairTable"):
+            pairs = self.pairer.run(
+                visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable)
+            )
+        else:
+            pairs = self.pairer.run(visitInfoDict)
+        for pair in pairs:
+            exposures = butlerQC.get(
+                [exposureHandleDict[k] for k in [pair.intra, pair.extra]]
+            )
+            donutCats = butlerQC.get(
+                [donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]]
+            )
+            outputs = self.run(exposures, donutCats, camera)
+            butlerQC.put(
+                outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra]
+            )
+            butlerQC.put(
+                outputs.donutStampsIntra,
+                donutStampsIntraHandleDict[
+                    pair.extra
+                ],  # Intentionally use extra id for intra stamps here
+            )
 
     def assignExtraIntraIdx(self, focusZVal0, focusZVal1, cameraName):
         """
