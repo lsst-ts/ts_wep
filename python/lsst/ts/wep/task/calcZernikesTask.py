@@ -30,6 +30,7 @@ import abc
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from astropy.table import Table
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -53,6 +54,7 @@ class CalcZernikesTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
     )
+
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
         dimensions=("visit", "detector", "instrument"),
@@ -64,6 +66,18 @@ class CalcZernikesTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="NumpyArray",
         name="zernikeEstimateAvg",
+    )
+    donutsExtraQuality = connectionTypes.Output(
+        doc="Quality information for extra-focal donuts",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="DataFrame",
+        name="donutsExtraQuality",
+    )
+    donutsIntraQuality = connectionTypes.Output(
+        doc="Quality information for intra-focal donuts",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="DataFrame",
+        name="donutsIntraQuality",
     )
 
 
@@ -84,6 +98,26 @@ class CalcZernikesTaskConfig(
             "Choice of task to combine the Zernikes from pairs of "
             + "donuts into a single value for the detector. (The default "
             + "is CombineZernikesSigmaClipTask.)"
+        ),
+    )
+    selectWithEntropy = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Whether to use entropy in deciding to use the donut.",
+    )
+
+    selectWithSignalToNoise = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Whether to use signal to noise ratio in deciding to use the donut.",
+    )
+
+    signalToNoiseThreshold = pexConfig.Field(
+        dtype=float,
+        default=20,
+        doc=str(
+            "The S/N threshold to use (keep donuts only above the threshold)."
+            + "The default S/N = 20 corresponds to the default entropy threshold (3.5)"
         ),
     )
 
@@ -108,6 +142,11 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.combineZernikes = self.config.combineZernikes
         self.makeSubtask("combineZernikes")
 
+        # Inherit config parameters
+        self.selectWithEntropy = self.config.selectWithEntropy
+        self.selectWithSignalToNoise = self.config.selectWithSignalToNoise
+        self.signalToNoiseThreshold = self.config.signalToNoiseThreshold
+
     @timeMethod
     def run(
         self,
@@ -120,13 +159,64 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             return pipeBase.Struct(
                 outputZernikesRaw=np.full(19, np.nan),
                 outputZernikesAvg=np.full(19, np.nan),
+                donutsExtraQuality=[],
+                donutsIntraQuality=[],
             )
+        # Which donuts to use for Zernike estimation
+        # initiate these by selecting all donuts
+        # Donuts are selected individually.
+        effectiveExtra = np.ones(len(donutStampsExtra), dtype="bool")
+        effectiveIntra = np.ones(len(donutStampsIntra), dtype="bool")
+        if self.selectWithEntropy:
+            effectiveExtra = np.array(
+                donutStampsExtra.metadata.getArray("EFFECTIVE")
+            ).astype(bool)
+            effectiveIntra = np.array(
+                donutStampsIntra.metadata.getArray("EFFECTIVE")
+            ).astype(bool)
+
+        snSelectExtra = np.ones(len(donutStampsExtra), dtype="bool")
+        snSelectIntra = np.ones(len(donutStampsIntra), dtype="bool")
+        snExtra = np.zeros(len(donutStampsIntra))
+        snIntra = np.zeros(len(donutStampsIntra))
+        if self.selectWithSignalToNoise:
+            snExtra = np.asarray(donutStampsExtra.metadata.getArray("SN"))
+            snSelectExtra = snExtra > self.signalToNoiseThreshold
+
+            snIntra = np.asarray(donutStampsIntra.metadata.getArray("SN"))
+            snSelectIntra = snIntra > self.signalToNoiseThreshold
+
+        # AND condition : if both selectWithEntropy
+        # and selectWithSignalToNoise, then
+        # only donuts that pass with SN criterion as well
+        # as entropy criterion are selected
+        selectExtra = effectiveExtra * snSelectExtra
+        selectIntra = effectiveIntra * snSelectIntra
+
+        # store information about which extra-focal donuts were selected
+        donutsExtraQuality = Table(
+            data=[snExtra, effectiveExtra, snSelectExtra, selectExtra],
+            names=["SN", "EFFECTIVE_SELECT", "SN_SELECT", "FINAL_SELECT"],
+        ).to_pandas()
+
+        # store information about which intra-focal donuts were selected
+        donutsIntraQuality = Table(
+            data=[snIntra, effectiveIntra, snSelectIntra, selectIntra],
+            names=["SN", "EFFECTIVE_SELECT", "SN_SELECT", "FINAL_SELECT"],
+        ).to_pandas()
+
+        donutStampsExtraSelect = np.array(donutStampsExtra)[selectExtra]
+        donutStampsIntraSelect = np.array(donutStampsIntra)[selectIntra]
 
         # Estimate Zernikes from the collection of stamps
-        zkCoeffRaw = self.estimateZernikes.run(donutStampsExtra, donutStampsIntra)
+        zkCoeffRaw = self.estimateZernikes.run(
+            donutStampsExtraSelect, donutStampsIntraSelect
+        )
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
         return pipeBase.Struct(
             outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
             outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
+            donutsExtraQuality=donutsExtraQuality,
+            donutsIntraQuality=donutsIntraQuality,
         )
