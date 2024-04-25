@@ -501,7 +501,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 defocal_distance=instrument.defocalOffset * 1e3,
                 bandpass=bandLabel,
                 archive_element=linear_wcs,
-                effective=int(donutCheck.isEffDonut(finalStamp.image.array)),
             )
 
             # Calculate the S/N per stamp
