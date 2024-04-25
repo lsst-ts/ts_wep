@@ -34,6 +34,7 @@ from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
+from lsst.ts.wep.donutImageCheck import DonutImageCheck
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -41,6 +42,7 @@ from lsst.ts.wep.utils import (
     getOffsetFromExposure,
     getTaskInstrument,
 )
+from scipy.ndimage import binary_dilation, binary_erosion
 from scipy.signal import correlate
 
 
@@ -124,6 +126,18 @@ class CutOutDonutsBaseTaskConfig(
         target=lsst.meas.algorithms.SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
     )
+    sourceErosionIter = pexConfig.Field(
+        doc="How many iterations of binary erosion to run on the image mask "
+        + "to calculate mean donut signal (The default is 1).",
+        dtype=int,
+        default=1,
+    )
+    bkgDilationIter = pexConfig.Field(
+        doc="How many iterations of binary dilation to run on the image mask "
+        + "to calculate the background variance (The default is 10).",
+        dtype=int,
+        default=10,
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -154,6 +168,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.opticalModel = self.config.opticalModel
         # Set instrument configuration info
         self.instConfigFile = self.config.instConfigFile
+        # Set the amount of mask erosion for signal calculation
+        self.sourceErosionIter = self.config.sourceErosionIter
+        # Set the amount of mask dilation for background
+        self.bkgDilationIter = self.config.bkgDilationIter
         # Set up background subtraction task
         self.makeSubtask("subtractBackground")
 
@@ -263,6 +281,61 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
         return finalDonutX, finalDonutY, xCorner, yCorner
 
+    def calculateSN(self, stamp):
+        """
+        Calculate signal-to-noise ratio.
+
+        Parameters
+        ----------
+        stamp : lsst.ts.wep.task.donutStamp
+            A stamp containing donut image.
+
+
+        Returns
+        -------
+        dict
+             A dictionary of calculated quantities:
+            'SN': the signal to noise ratio
+            'signal': the calculated signal
+            'noise': the calculated noise
+        """
+
+        stamp.makeMask(self.instConfigFile, self.opticalModel)
+
+        stamp_mask = stamp.stamp_im.mask.array
+        image = stamp.stamp_im.image.array
+        
+        # The following are donut mask values; we select 
+        # those elements of the mask that include a donut 
+        # maskPlaneDict={'BAD': 0, 'BLEND': 10, 'CR': 3, 'DETECTED': 5, 
+        #'DETECTED_NEGATIVE': 6, 'DONUT': 9, 'EDGE': 4, 'INTRP': 2,
+        #'NO_DATA': 8, 'SAT': 1, 'SUSPECT': 7}
+        
+        donut_mask = np.array((stamp_mask == 512) | (stamp_mask == 1024)).astype(int)
+        # Number of pixels taken by the donut in the original donut mask
+        n_px_mask = np.sum(donut_mask)
+
+        # shrink the mask to remove fuzzy donut edges in signal estimation
+        eroded_mask = binary_erosion(donut_mask, iterations=self.sourceErosionIter)
+        signal_mean = image[eroded_mask].mean()  # per pixel
+
+        # expand the inverted mask to avoid source contribution
+        # in background noise estimation
+        bkgnd_mask = ~binary_dilation(donut_mask, iterations=self.bkgDilationIter)
+        background_stdev = image[bkgnd_mask].std()  # per pixel
+
+        # Calculate total noise and total signal
+        ttl_noise = np.sqrt(
+            n_px_mask * signal_mean + (background_stdev * n_px_mask) ** 2.0
+        )
+        ttl_signal = n_px_mask * signal_mean
+
+        sn = ttl_signal / ttl_noise
+
+        sn_dic = {"SN": sn, "signal": ttl_signal, "noise": ttl_noise}
+
+        return sn_dic
+
     def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
         """
         Cut out postage stamps for sources in catalog.
@@ -314,6 +387,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             binary=True,
         )
 
+        # Initialie donut quality check
+        donutCheck = DonutImageCheck()
+
         # Final list of DonutStamp objects
         finalStamps = list()
 
@@ -328,6 +404,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Final locations of BBox corners for DonutStamp images
         xCornerList = list()
         yCornerList = list()
+
+        # Calculation of SN quantities
+        snQuant = list()
+
+        # Measure of donut entropy
+        isEffective = list()
 
         for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
@@ -419,7 +501,14 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 defocal_distance=instrument.defocalOffset * 1e3,
                 bandpass=bandLabel,
                 archive_element=linear_wcs,
+                effective=int(donutCheck.isEffDonut(finalStamp.image.array)),
             )
+
+            # Calculate the S/N per stamp
+            snQuant.append(self.calculateSN(donutStamp))
+
+            # Store entropy-based measure of donut quality
+            isEffective.append(donutCheck.isEffDonut(donutStamp.stamp_im.image.array))
 
             finalStamps.append(donutStamp)
 
@@ -444,5 +533,17 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Save the corner values
         stampsMetadata["X0"] = np.array(xCornerList)
         stampsMetadata["Y0"] = np.array(yCornerList)
+
+        # Save the S/N values
+        stampsMetadata["SN"] = np.array([snQuant[i]["SN"] for i in range(len(snQuant))])
+        stampsMetadata["SIGNAL"] = np.array(
+            [snQuant[i]["signal"] for i in range(len(snQuant))]
+        )
+        stampsMetadata["NOISE"] = np.array(
+            [snQuant[i]["noise"] for i in range(len(snQuant))]
+        )
+
+        # Save the entropy-based quality measure
+        stampsMetadata["EFFECTIVE"] = np.array(isEffective).astype(int)
 
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
