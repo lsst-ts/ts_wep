@@ -6,7 +6,16 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.2:
+
+-------------
+9.5.2
+-------------
+
+* Fix units in ExposurePairer and add tests.
+
 .. _lsst.ts.wep-9.5.1:
+
 -------------
 9.5.1
 -------------
@@ -14,6 +23,7 @@ Version History
 * Fixed compatibility with Batoid 0.6.2
 
 .. _lsst.ts.wep-9.5.0:
+
 -------------
 9.5.0
 -------------
@@ -21,6 +31,7 @@ Version History
 * Add exposure pairing for full array mode.
 
 .. _lsst.ts.wep-9.4.0:
+
 -------------
 9.4.0
 -------------

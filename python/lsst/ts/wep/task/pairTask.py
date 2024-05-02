@@ -133,7 +133,7 @@ class ExposurePairer(pipeBase.Task):
                 visitInfo.boresightParAngle
                 - visitInfo.boresightRotAngle
                 - (np.pi / 2 * radians)
-            ).asRadians()
+            ).asDegrees()
             focusZ = visitInfo.focusZ
             table.add_row([exposure, ra, dec, mjd, focusZ, rtp])
         table["radec"] = SkyCoord(table["ra"], table["dec"], unit="radian")
@@ -177,11 +177,10 @@ class ExposurePairer(pipeBase.Task):
                 < self.config.timeThreshold
             )
             nearby &= (
-                np.abs(intraTable["rtp"] - row["rtp"]) * 3600
-                < self.config.rotationThreshold
+                np.abs(intraTable["rtp"] - row["rtp"]) < self.config.rotationThreshold
             )
             nearby &= (
-                row["radec"].separation(intraTable["radec"]).deg
+                row["radec"].separation(intraTable["radec"]).arcsec
                 < self.config.pointingThreshold
             )
             if np.any(nearby):
