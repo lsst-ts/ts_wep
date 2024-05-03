@@ -899,6 +899,7 @@ class ImageMapper:
             sourceMask = binary_dilation(sourceMask, iterations=dilate)
             sourceMask = sourceMask.astype(int)
         if dilateBlends > 0:
+            blendMask0 = np.pad(blendMask0, dilateBlends)
             blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
             blendMask0 = blendMask0.astype(int)
 
@@ -907,7 +908,10 @@ class ImageMapper:
         if image.blendOffsets.size > 0:
             # Add the blends
             for offset in image.blendOffsets:
-                blendMask += shift(blendMask0, offset)
+                blendMask += shift(blendMask0, offset)[
+                    dilateBlends:-dilateBlends,
+                    dilateBlends:-dilateBlends,
+                ]
 
                 # Clip the values
                 blendMask = np.clip(blendMask, 0, 1)
@@ -1052,6 +1056,7 @@ class ImageMapper:
             sourceMask = binary_dilation(sourceMask, iterations=dilate)
             sourceMask = sourceMask.astype(int)
         if dilateBlends > 0:
+            blendMask0 = np.pad(blendMask0, dilateBlends)
             blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
             blendMask0 = blendMask0.astype(int)
 
@@ -1060,7 +1065,10 @@ class ImageMapper:
         if image.blendOffsets.size > 0:
             # Add the blends
             for offset in image.blendOffsets:
-                blendMask += shift(blendMask0, offset)
+                blendMask += shift(blendMask0, offset)[
+                    dilateBlends:-dilateBlends,
+                    dilateBlends:-dilateBlends,
+                ]
 
                 # Clip the values
                 blendMask = np.clip(blendMask, 0, 1)

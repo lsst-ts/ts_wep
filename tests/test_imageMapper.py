@@ -600,3 +600,47 @@ class TestImageMapper(unittest.TestCase):
                         f"which is {dr.max() / inst.pixelSize * 100:.2f}% of a "
                         f"pixel, exceeding the maximum value of {mp}%."
                     )
+
+    def testDilatedBlendedMasks(self):
+        """
+        Blended masks are created by copying the source mask, dilating it,
+        and then shifting it to the positions of the blends. If you dilate
+        the mask enough it will grow larger than the image size. Previously,
+        this was not properly modeled, which resulted in sharp edges on masks
+        where the dilated source mask hit the side of the image.
+
+        This bug has been fixed so that blend masks do not have these sharp
+        edges. This test makes sure the fix is working by dilating and shifting
+        the mask by value larger than the image size. That way the blended mask
+        should be all zero, but ONLY if the mask model is keeping track of mask
+        values that are originally outside of the bounding box (pre-shift).
+        """
+        # Create default image mapper
+        mapper = ImageMapper()
+
+        # Create a dummy pupil image with a far-away blend
+        uPupil, vPupil = mapper.instrument.createPupilGrid()
+        pupil = Image(
+            uPupil,
+            (0, 0),
+            "intra",
+            planeType="pupil",
+            blendOffsets=[[0, 200]],
+        )
+
+        # Create a blended mask with dilation = blend shift
+        mapper.createPupilMasks(pupil, maskBlends=True, dilateBlends=200)
+
+        # Confirm that all mask values are zero
+        self.assertTrue(np.allclose(pupil.mask, 0))
+
+        # Now do the same with an image mask
+        image = Image(
+            uPupil,
+            (0, 0),
+            "intra",
+            planeType="image",
+            blendOffsets=[[0, 200]],
+        )
+        mapper.createImageMasks(image, maskBlends=True, dilateBlends=200)
+        self.assertTrue(np.allclose(image.mask, 0))

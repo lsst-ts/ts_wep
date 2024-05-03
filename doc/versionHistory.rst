@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.3:
+
+-------------
+9.5.3
+-------------
+
+* Fixed bug where blended masks have sharp edges when using dilateBlends.
+
 .. _lsst.ts.wep-9.5.2:
 
 -------------
