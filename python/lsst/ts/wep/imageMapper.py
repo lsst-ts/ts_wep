@@ -909,8 +909,8 @@ class ImageMapper:
             # Add the blends
             for offset in image.blendOffsets:
                 blendMask += shift(blendMask0, offset)[
-                    dilateBlends:-dilateBlends,
-                    dilateBlends:-dilateBlends,
+                    dilateBlends : len(blendMask0) - dilateBlends,
+                    dilateBlends : len(blendMask0) - dilateBlends,
                 ]
 
                 # Clip the values
@@ -1063,11 +1063,12 @@ class ImageMapper:
         # Mask the blends
         blendMask = np.zeros_like(sourceMask)
         if image.blendOffsets.size > 0:
+            # Get the buff
             # Add the blends
             for offset in image.blendOffsets:
                 blendMask += shift(blendMask0, offset)[
-                    dilateBlends:-dilateBlends,
-                    dilateBlends:-dilateBlends,
+                    dilateBlends : len(blendMask0) - dilateBlends,
+                    dilateBlends : len(blendMask0) - dilateBlends,
                 ]
 
                 # Clip the values
