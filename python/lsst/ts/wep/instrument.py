@@ -352,8 +352,11 @@ class Instrument:
                 )[4]
 
             # Calculate the equivalent detector offset
-            result = minimize_scalar(lambda offset: np.abs(dZ4det(offset) - dZ4optic))
-            if not result.success or result.fun > 1e-5:
+            result = minimize_scalar(
+                lambda offset: np.abs((dZ4det(offset) - dZ4optic) / dZ4optic),
+                bounds=(-0.1, 0.1),
+            )
+            if not result.success or result.fun > 1e-3:
                 raise RuntimeError(
                     "Calculating defocalOffset from batoidOffsetValue failed."
                 )

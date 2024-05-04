@@ -109,7 +109,7 @@ class TestInstrument(unittest.TestCase):
 
         # First check the shape
         self.assertEqual(inst.getIntrinsicZernikes(0, 0, jmax=66).shape, (63,))
-        self.assertEqual(inst.getIntrinsicZernikes(1, 2, jmax=22).shape, (19,))
+        self.assertEqual(inst.getIntrinsicZernikes(1, 1.2, jmax=22).shape, (19,))
 
         # Now check that in-place changes don't impact the cache
         intrZk = inst.getIntrinsicZernikes(1, 1)
@@ -122,7 +122,7 @@ class TestInstrument(unittest.TestCase):
 
         # First check the shape
         self.assertEqual(inst.getOffAxisCoeff(0, 0, "intra", jmax=66).shape, (63,))
-        self.assertEqual(inst.getOffAxisCoeff(1, 2, "extra", jmax=22).shape, (19,))
+        self.assertEqual(inst.getOffAxisCoeff(1, 1.2, "extra", jmax=22).shape, (19,))
 
         # Now check that in-place changes don't impact the cache
         intrZk = inst.getOffAxisCoeff(0, 0, "intra")
