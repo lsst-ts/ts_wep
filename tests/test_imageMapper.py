@@ -604,10 +604,10 @@ class TestImageMapper(unittest.TestCase):
     def testDilatedBlendedMasks(self):
         """
         Blended masks are created by copying the source mask, dilating it,
-        and then shifting it to the positions of the blends. If you dilate
-        the mask enough it will grow larger than the image size. Previously,
-        this was not properly modeled, which resulted in sharp edges on masks
-        where the dilated source mask hit the side of the image.
+        and shifting it to the positions of the blends. If you dilate the
+        mask enough it will grow larger than the image size. Previously,
+        this was not properly modeled, which resulted in sharp edges on
+        masks where the dilated source mask hit the side of the image.
 
         This bug has been fixed so that blend masks do not have these sharp
         edges. This test makes sure the fix is working by dilating and shifting
