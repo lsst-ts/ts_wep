@@ -6,6 +6,13 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.1:
+-------------
+9.5.1
+-------------
+
+* Fixed compatibility with Batoid 0.6.2
+
 .. _lsst.ts.wep-9.5.0:
 -------------
 9.5.0
