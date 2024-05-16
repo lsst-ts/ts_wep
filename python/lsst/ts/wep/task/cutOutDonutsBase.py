@@ -42,8 +42,9 @@ from lsst.ts.wep.utils import (
     getOffsetFromExposure,
     getTaskInstrument,
 )
-from scipy.ndimage import binary_dilation, binary_erosion
+from scipy.ndimage import binary_dilation
 from scipy.signal import correlate
+import astropy.units as u
 
 
 class CutOutDonutsBaseTaskConnections(
@@ -126,12 +127,6 @@ class CutOutDonutsBaseTaskConfig(
         target=lsst.meas.algorithms.SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
     )
-    sourceErosionIter = pexConfig.Field(
-        doc="How many iterations of binary erosion to run on the image mask "
-        + "to calculate mean donut signal (The default is 1).",
-        dtype=int,
-        default=1,
-    )
     bkgDilationIter = pexConfig.Field(
         doc="How many iterations of binary dilation to run on the image mask "
         + "to calculate the background variance (The default is 10).",
@@ -168,8 +163,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.opticalModel = self.config.opticalModel
         # Set instrument configuration info
         self.instConfigFile = self.config.instConfigFile
-        # Set the amount of mask erosion for signal calculation
-        self.sourceErosionIter = self.config.sourceErosionIter
         # Set the amount of mask dilation for background
         self.bkgDilationIter = self.config.bkgDilationIter
         # Set up background subtraction task
@@ -230,6 +223,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             Final x corner position on exposure for donutStamp BBox.
         int
             Final y corner position on exposure for donutStamp BBox.
+        float
+            The height of the max point in the convolved image.
         """
 
         expDim = exposure.getDimensions()
@@ -259,6 +254,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         correlatedImage = correlate(initialCutout.image.array, template)
         maxIdx = np.argmax(correlatedImage)
         maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
+        peakHeight = correlatedImage[maxLoc]
 
         # The actual donut location is at the center of the template
         # But the peak of correlation will correspond to the [0, 0]
@@ -279,7 +275,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         xCorner = xStampCent - stampHalfWidth
         yCorner = yStampCent - stampHalfWidth
 
-        return finalDonutX, finalDonutY, xCorner, yCorner
+        return finalDonutX, finalDonutY, xCorner, yCorner, peakHeight
 
     def calculateSN(self, stamp):
         """
@@ -294,46 +290,72 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         Returns
         -------
         dict
-             A dictionary of calculated quantities:
-            'SN': the signal to noise ratio
-            'signal': the calculated signal
-            'noise': the calculated noise
+             A dictionary of calculated quantities
         """
 
         stamp.makeMask(self.instConfigFile, self.opticalModel)
-
-        stamp_mask = stamp.stamp_im.mask.array
         image = stamp.stamp_im.image.array
-        
-        # The following are donut mask values; we select 
-        # those elements of the mask that include a donut 
-        # maskPlaneDict={'BAD': 0, 'BLEND': 10, 'CR': 3, 'DETECTED': 5, 
-        #'DETECTED_NEGATIVE': 6, 'DONUT': 9, 'EDGE': 4, 'INTRP': 2,
-        #'NO_DATA': 8, 'SAT': 1, 'SUSPECT': 7}
-        
-        donut_mask = np.array((stamp_mask == 512) | (stamp_mask == 1024)).astype(int)
+        variance = stamp.stamp_im.variance.array
+
+        # The following are example donut mask values:
+        # maskPlaneDict={'BAD': 0, 'BLEND': 10, 'CR': 3, 'DETECTED': 5,
+        # 'DETECTED_NEGATIVE': 6, 'DONUT': 9, 'EDGE': 4, 'INTRP': 2,
+        # 'NO_DATA': 8, 'SAT': 1, 'SUSPECT': 7}
+
+        # The total mask value per pixel reflects that,
+        # So that each mask pixel has a value of
+        # eg.0, 512, 1024 for LSSTCam,
+        # or 0, 2048 for auxTel
+        # Thus to find out the number of pixels
+        # taken by the donut mask we sum all
+        # the nonzero mask pixels.
+        donut_mask = stamp.stamp_im.mask.array > 0
+
         # Number of pixels taken by the donut in the original donut mask
         n_px_mask = np.sum(donut_mask)
 
-        # shrink the mask to remove fuzzy donut edges in signal estimation
-        eroded_mask = binary_erosion(donut_mask, iterations=self.sourceErosionIter)
-        signal_mean = image[eroded_mask].mean()  # per pixel
+        # Signal estimate based on the donut mean
+        signal_mean = image[donut_mask].mean()  # per pixel
+        ttl_signal_mean = n_px_mask * signal_mean
 
-        # expand the inverted mask to avoid source contribution
-        # in background noise estimation
+        # Signal estimate based on the sum of donut pixels
+        ttl_signal_sum = np.sum(image[donut_mask])
+
+        # Background noise estimate:
+        # expand the inverted mask to remove donut contribution
         bkgnd_mask = ~binary_dilation(donut_mask, iterations=self.bkgDilationIter)
-        background_stdev = image[bkgnd_mask].std()  # per pixel
+        background_image_stdev = image[bkgnd_mask].std()  # per pixel
+        sqrt_mean_variance = np.sqrt(np.mean(variance[bkgnd_mask]))
 
-        # Calculate total noise and total signal
-        ttl_noise = np.sqrt(
-            n_px_mask * signal_mean + (background_stdev * n_px_mask) ** 2.0
-        )
-        ttl_signal = n_px_mask * signal_mean
+        # Per-pixel variance based on the image region
+        # outside of the dilated donut mask
+        background_image_variance = image[bkgnd_mask].var()
 
-        sn = ttl_signal / ttl_noise
+        # The mean image value  in the background region
+        background_image_mean = np.mean(image[bkgnd_mask])
 
-        sn_dic = {"SN": sn, "signal": ttl_signal, "noise": ttl_noise}
+        # Total noise based on the variance of the image background
+        ttl_noise_bkgnd_variance = np.sqrt(background_image_variance * n_px_mask)
 
+        # Noise based on the sum of variance plane pixels inside the donut mask
+        ttl_noise_donut_variance = np.sqrt(variance[donut_mask].sum())
+        sn = 0
+        # Avoid zero division in case variance plane doesn't exist
+        if ttl_noise_donut_variance > 0:
+            sn = ttl_signal_sum / ttl_noise_donut_variance
+
+        sn_dic = {
+            "SN": sn,
+            "signal_mean": ttl_signal_mean,
+            "signal_sum": ttl_signal_sum,
+            "n_px_mask": n_px_mask,
+            "background_image_stdev": background_image_stdev,
+            "sqrt_mean_variance": sqrt_mean_variance,
+            "background_image_variance": background_image_variance,
+            "background_image_mean": background_image_mean,
+            "ttl_noise_bkgnd_variance": ttl_noise_bkgnd_variance,
+            "ttl_noise_donut_variance": ttl_noise_donut_variance,
+        }
         return sn_dic
 
     def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
@@ -388,7 +410,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         )
 
         # Initialie donut quality check
-        donutCheck = DonutImageCheck()
+        donutCheck = DonutImageCheck(returnEntro=True)
 
         # Final list of DonutStamp objects
         finalStamps = list()
@@ -405,11 +427,20 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         xCornerList = list()
         yCornerList = list()
 
+        # Centroid shift
+        drCentroidList = list()
+
         # Calculation of SN quantities
         snQuant = list()
 
         # Measure of donut entropy
         isEffective = list()
+
+        # Value of entropy
+        stampsEntropy = list()
+
+        # Value of correlation peak height
+        peakHeights = list()
 
         for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
@@ -422,11 +453,19 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             # the postage stamp with the donut template and return
             # the new centroid position as well as the corners of the
             # postage stamp to cut out of the exposure.
-            finalDonutX, finalDonutY, xCorner, yCorner = self.calculateFinalCentroid(
-                exposure, template, xCent, yCent
+            finalDonutX, finalDonutY, xCorner, yCorner, peakHeight = (
+                self.calculateFinalCentroid(exposure, template, xCent, yCent)
             )
+            peakHeights.append(peakHeight)
+
             xShift = finalDonutX - xCent
             yShift = finalDonutY - yCent
+
+            # Calculate the distance between original catalog position and
+            # the updated centroid position
+            dr = np.sqrt(xShift**2.0 + yShift**2.0)
+            drCentroidList.append(dr)
+
             finalXCentList.append(finalDonutX)
             finalYCentList.append(finalDonutY)
 
@@ -507,9 +546,13 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             snQuant.append(self.calculateSN(donutStamp))
 
             # Store entropy-based measure of donut quality
-            isEffective.append(donutCheck.isEffDonut(donutStamp.stamp_im.image.array))
+            eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)
+            isEffective.append(eff)
+            stampsEntropy.append(entro)
 
             finalStamps.append(donutStamp)
+
+        # Calculate the difference between original centroid and final centroid
 
         catalogLength = len(donutCatalog)
         stampsMetadata = PropertyList()
@@ -523,9 +566,18 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DFC_DIST"] = np.array(
             [instrument.defocalOffset * 1e3] * catalogLength
         )
+        # Save the donut flux as magnitude
+        stampsMetadata["MAG"] = (donutCatalog["source_flux"].values * u.nJy).to_value(
+            u.ABmag
+        )
+        # Save the original centroid values
+        stampsMetadata["CENT_X0"] = np.array(donutCatalog["centroid_x"].values)
+        stampsMetadata["CENT_Y0"] = np.array(donutCatalog["centroid_y"].values)
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)
         stampsMetadata["CENT_Y"] = np.array(finalYCentList)
+        # Save the centroid shift
+        stampsMetadata["CENT_DR"] = np.array(drCentroidList)
         # Save the centroid positions of blended sources
         stampsMetadata["BLEND_CX"] = np.array(finalBlendXList, dtype=str)
         stampsMetadata["BLEND_CY"] = np.array(finalBlendYList, dtype=str)
@@ -534,15 +586,45 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["Y0"] = np.array(yCornerList)
 
         # Save the S/N values
-        stampsMetadata["SN"] = np.array([snQuant[i]["SN"] for i in range(len(snQuant))])
-        stampsMetadata["SIGNAL"] = np.array(
-            [snQuant[i]["signal"] for i in range(len(snQuant))]
+        stampsMetadata["SN"] = np.array(
+            [snQuant[i]["SN"] for i in range(len(snQuant))], dtype=float
         )
-        stampsMetadata["NOISE"] = np.array(
-            [snQuant[i]["noise"] for i in range(len(snQuant))]
+        stampsMetadata["SIGNAL_MEAN"] = np.array(
+            [snQuant[i]["signal_mean"] for i in range(len(snQuant))]
+        )
+        stampsMetadata["SIGNAL_SUM"] = np.array(
+            [snQuant[i]["signal_sum"] for i in range(len(snQuant))], dtype=float
+        )
+        stampsMetadata["NPX_MASK"] = np.array(
+            [snQuant[i]["n_px_mask"] for i in range(len(snQuant))], dtype=float
+        )
+        stampsMetadata["BKGD_STDEV"] = np.array(
+            [snQuant[i]["background_image_stdev"] for i in range(len(snQuant))],
+            dtype=float,
+        )
+        stampsMetadata["SQRT_MEAN_VAR"] = np.array(
+            [snQuant[i]["sqrt_mean_variance"] for i in range(len(snQuant))], dtype=float
+        )
+        stampsMetadata["BKGD_VAR"] = np.array(
+            [snQuant[i]["background_image_variance"] for i in range(len(snQuant))],
+            dtype=float,
+        )
+        stampsMetadata["BACKGROUND_IMAGE_MEAN"] = np.array(
+            [snQuant[i]["background_image_mean"] for i in range(len(snQuant))],
+            dtype=float,
+        )
+        stampsMetadata["NOISE_VAR_BKGD"] = np.array(
+            [snQuant[i]["ttl_noise_bkgnd_variance"] for i in range(len(snQuant))]
+        )
+        stampsMetadata["NOISE_VAR_DONUT"] = np.array(
+            [snQuant[i]["ttl_noise_donut_variance"] for i in range(len(snQuant))],
+            dtype=float,
         )
 
         # Save the entropy-based quality measure
         stampsMetadata["EFFECTIVE"] = np.array(isEffective).astype(int)
+        stampsMetadata["ENTROPY"] = np.array(stampsEntropy)
 
+        # Save the peak of the correlated image
+        stampsMetadata["PEAK_HEIGHT"] = np.array(peakHeights)
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
