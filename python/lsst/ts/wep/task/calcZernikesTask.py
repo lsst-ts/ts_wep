@@ -102,23 +102,28 @@ class CalcZernikesTaskConfig(
     )
     selectWithEntropy = pexConfig.Field(
         dtype=bool,
-        default=True,
+        default=False,
         doc="Whether to use entropy in deciding to use the donut.",
     )
 
     selectWithSignalToNoise = pexConfig.Field(
         dtype=bool,
-        default=True,
+        default=False,
         doc="Whether to use signal to noise ratio in deciding to use the donut.",
     )
 
-    signalToNoiseThreshold = pexConfig.Field(
+    minSignalToNoise = pexConfig.Field(
         dtype=float,
-        default=20,
+        default=5000,
         doc=str(
             "The S/N threshold to use (keep donuts only above the threshold)."
-            + "The default S/N = 20 corresponds to the default entropy threshold (3.5)"
+            + "The default S/N = 5000 corresponds to the default entropy threshold (3.5)"
         ),
+    )
+    maxEntropy = pexConfig.Field(
+        dtype=float,
+        default=3.5,
+        doc=str("The entropy threshold to use (keep donuts only below the threshold)."),
     )
 
 
@@ -145,7 +150,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Inherit config parameters
         self.selectWithEntropy = self.config.selectWithEntropy
         self.selectWithSignalToNoise = self.config.selectWithSignalToNoise
-        self.signalToNoiseThreshold = self.config.signalToNoiseThreshold
+        self.minSignalToNoise = self.config.minSignalToNoise
+        self.maxEntropy = self.config.maxEntropy
 
     @timeMethod
     def run(
@@ -164,45 +170,56 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             )
         # Which donuts to use for Zernike estimation
         # initiate these by selecting all donuts
-        # Donuts are selected individually.
-        effectiveExtra = np.ones(len(donutStampsExtra), dtype="bool")
-        effectiveIntra = np.ones(len(donutStampsIntra), dtype="bool")
+        entropySelectExtra = np.ones(len(donutStampsExtra), dtype="bool")
+        entropySelectIntra = np.ones(len(donutStampsIntra), dtype="bool")
+        entropyExtra = np.zeros(len(donutStampsIntra))
+        entropyIntra = np.zeros(len(donutStampsIntra))
         if self.selectWithEntropy:
-            effectiveExtra = np.array(
-                donutStampsExtra.metadata.getArray("EFFECTIVE")
-            ).astype(bool)
-            effectiveIntra = np.array(
-                donutStampsIntra.metadata.getArray("EFFECTIVE")
-            ).astype(bool)
+            entropyExtra = np.asarray(donutStampsExtra.metadata.getArray("ENTROPY"))
+            entropyIntra = np.asarray(donutStampsIntra.metadata.getArray("ENTROPY"))
+            entropySelectExtra = entropyExtra < self.maxEntropy
+            entropySelectIntra = entropyIntra < self.maxEntropy
 
         snSelectExtra = np.ones(len(donutStampsExtra), dtype="bool")
         snSelectIntra = np.ones(len(donutStampsIntra), dtype="bool")
         snExtra = np.zeros(len(donutStampsIntra))
         snIntra = np.zeros(len(donutStampsIntra))
         if self.selectWithSignalToNoise:
-            snExtra = np.asarray(donutStampsExtra.metadata.getArray("SN"))
-            snSelectExtra = snExtra > self.signalToNoiseThreshold
+            snExtra = np.asarray(donutStampsExtra.metadata.getArray("SN_VAR"))
+            snSelectExtra = self.minSignalToNoise < snExtra
 
-            snIntra = np.asarray(donutStampsIntra.metadata.getArray("SN"))
-            snSelectIntra = snIntra > self.signalToNoiseThreshold
+            snIntra = np.asarray(donutStampsIntra.metadata.getArray("SN_VAR"))
+            snSelectIntra = self.minSignalToNoise < snIntra
 
         # AND condition : if both selectWithEntropy
         # and selectWithSignalToNoise, then
         # only donuts that pass with SN criterion as well
         # as entropy criterion are selected
-        selectExtra = effectiveExtra * snSelectExtra
-        selectIntra = effectiveIntra * snSelectIntra
+        selectExtra = entropySelectExtra * snSelectExtra
+        selectIntra = entropySelectIntra * snSelectIntra
 
         # store information about which extra-focal donuts were selected
         donutsExtraQuality = Table(
-            data=[snExtra, effectiveExtra, snSelectExtra, selectExtra],
-            names=["SN", "EFFECTIVE_SELECT", "SN_SELECT", "FINAL_SELECT"],
+            data=[
+                snExtra,
+                entropyExtra,
+                entropySelectExtra,
+                snSelectExtra,
+                selectExtra,
+            ],
+            names=["SN", "ENTROPY", "ENTROPY_SELECT", "SN_SELECT", "FINAL_SELECT"],
         ).to_pandas()
 
         # store information about which intra-focal donuts were selected
         donutsIntraQuality = Table(
-            data=[snIntra, effectiveIntra, snSelectIntra, selectIntra],
-            names=["SN", "EFFECTIVE_SELECT", "SN_SELECT", "FINAL_SELECT"],
+            data=[
+                snIntra,
+                entropyIntra,
+                entropySelectIntra,
+                snSelectIntra,
+                selectIntra,
+            ],
+            names=["SN", "ENTROPY", "ENTROPY_SELECT", "SN_SELECT", "FINAL_SELECT"],
         ).to_pandas()
 
         donutStampsExtraSelect = np.array(donutStampsExtra)[selectExtra]
