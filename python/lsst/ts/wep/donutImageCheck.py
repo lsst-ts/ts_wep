@@ -26,7 +26,7 @@ from scipy.stats import entropy
 
 
 class DonutImageCheck(object):
-    def __init__(self, numOfBins=256, entroThres=3.5):
+    def __init__(self, numOfBins=256, entroThres=3.5, returnEntro=False):
         """Donut image check class to judge the donut image is effective or
         not.
 
@@ -36,6 +36,9 @@ class DonutImageCheck(object):
             Number of bins in the histogram. (the default is 256.)
         entroThres : float, optional
             Threshold of entropy (the default is 3.5.)
+        returnEntro: bool, optional
+            Whether to return the calculated entropy value
+            (the default is False).
         """
 
         # Number of bins in the histogram
@@ -43,6 +46,9 @@ class DonutImageCheck(object):
 
         # Threshold of entropy
         self.entroThres = entroThres
+
+        # Whether to return the calculated value
+        self.returnEntro = returnEntro
 
     def isEffDonut(self, donutImg):
         """Is effective donut image or not.
@@ -64,9 +70,15 @@ class DonutImageCheck(object):
         # Square the distribution to magnify the difference in entropy
         imgEntropy = entropy(hist**2)
         if (imgEntropy < self.entroThres) and (imgEntropy != 0):
-            return True
+            eff = True
         else:
-            return False
+            eff = False
+
+        # Return the actual entropy value if needed
+        if self.returnEntro:
+            return eff, imgEntropy
+        else:
+            return eff
 
 
 if __name__ == "__main__":

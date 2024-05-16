@@ -107,6 +107,22 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
+        # Test the default config values
+        self.assertEqual(self.task.selectWithEntropy, False)
+        self.assertEqual(self.task.selectWithSignalToNoise, False)
+
+        # Test changing configs
+        self.config.selectWithEntropy = True
+        self.config.selectWithSignalToNoise = True
+        self.config.minSignalToNoise = 3500
+        self.config.maxEntropy = 4
+        self.task = CalcZernikesTask(config=self.config, name="Changed Task")
+
+        self.assertEqual(self.task.selectWithEntropy, True)
+        self.assertEqual(self.task.selectWithSignalToNoise, True)
+        self.assertEqual(self.task.minSignalToNoise, 3500)
+        self.assertEqual(self.task.maxEntropy, 4)
+
     def testEstimateZernikes(self):
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
@@ -123,6 +139,33 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         ).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
+
+    def testCalcZernikes(self):
+        donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        struct = self.task.run(donutStampsIntra, donutStampsExtra)
+
+        # check that 4 elements are created
+        self.assertEqual(len(struct), 4)
+
+        # check that donut quality is reported for all donuts
+        self.assertEqual(len(struct.donutsExtraQuality), len(donutStampsExtra))
+        self.assertEqual(len(struct.donutsIntraQuality), len(donutStampsIntra))
+
+        # check that all desired quantities are included
+        colnames = list(struct.donutsIntraQuality.columns)
+        desired_colnames = [
+            "SN",
+            "ENTROPY",
+            "ENTROPY_SELECT",
+            "SN_SELECT",
+            "FINAL_SELECT",
+        ]
+        np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))

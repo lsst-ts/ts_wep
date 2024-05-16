@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.6.0:
+
+-------------
+9.6.0
+-------------
+
+* Add donut image quality checking.
+
 .. _lsst.ts.wep-9.5.4:
 
 -------------
