@@ -38,8 +38,11 @@ from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import (createTemplateForDetector,
-                               getOffsetFromExposure, getTaskInstrument)
+from lsst.ts.wep.utils import (
+    createTemplateForDetector,
+    getOffsetFromExposure,
+    getTaskInstrument,
+)
 from scipy.ndimage import binary_dilation
 from scipy.signal import correlate
 
