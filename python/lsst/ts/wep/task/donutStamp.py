@@ -264,13 +264,14 @@ class DonutStamp(AbstractStamp):
             # Get the offsets in the original pixel coordinates
             blendOffsets = self.blend_centroid_positions - self.centroid_position
 
-            # Rotate the coordinates to match the science sensors
-            rotMat = np.array([[0, -1], [1, 0]])
-            rotMat = np.linalg.matrix_power(rotMat, nRot)
+            # Rotate the coordinates (by -90 each time)
+            # to match the science sensors
+            rotMat = np.array([[0, 1], [-1, 0]])
+            if self.defocal_type == "extra":
+                rotMat = np.linalg.matrix_power(rotMat, nRot + 2)
+            else:
+                rotMat = np.linalg.matrix_power(rotMat, nRot)
             blendOffsets = np.transpose(rotMat @ blendOffsets.T)
-
-            # Transpose the coordinates (DVCS -> CCS)
-            blendOffsets = blendOffsets[:, ::-1]
 
         else:
             blendOffsets = None
