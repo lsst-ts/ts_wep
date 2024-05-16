@@ -114,12 +114,14 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         # Test changing configs
         self.config.selectWithEntropy = True
         self.config.selectWithSignalToNoise = True
-        self.config.signalToNoiseThreshold = 3500
+        self.config.minSignalToNoise = 3500
+        self.config.maxEntropy = 4
         self.task = CalcZernikesTask(config=self.config, name="Changed Task")
 
         self.assertEqual(self.task.selectWithEntropy, True)
         self.assertEqual(self.task.selectWithSignalToNoise, True)
-        self.assertEqual(self.task.signalToNoiseThreshold, 3500)
+        self.assertEqual(self.task.minSignalToNoise, 3500)
+        self.assertEqual(self.task.maxEntropy, 4)
 
     def testEstimateZernikes(self):
         donutStampsExtra = self.butler.get(
