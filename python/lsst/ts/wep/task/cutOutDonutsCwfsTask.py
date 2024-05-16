@@ -139,7 +139,8 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
                     inputRefs.donutCatalog[dCatIntraIdx],
                 ]
             )
-            # each time we pass exactly one pair of exposures and donut catalogs
+            # each time we pass exactly one pair of
+            # exposures and donut catalogs
             outputs = self.run(expInputs, dCatInputs, camera)
 
             butlerQC.put(
