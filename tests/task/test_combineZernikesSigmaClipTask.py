@@ -71,7 +71,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         # Test that zernikes higher than maxZernClip don't remove
         # a row from the final averaging
         zernikeArray[0, 3:] += 100.0
-        zernikeArray[51, 3:] -= 100.0
+        zernikeArray[49, 3:] -= 100.0
         # Revert the change in the 100th row from previous test
         trueFlags[100] = 1
         combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
@@ -80,13 +80,15 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertTrue(isinstance(testFlags[0], numbers.Integral))
 
         # Test that changing the maxZernClip parameter does change
-        # if a row is removed from the final result
+        # whether a row is removed from the final result
+        zernikeArray[50, 3:] += 100.0
+        zernikeArray[51, 3:] -= 100.0
         self.config.maxZernClip = 5
         self.task = CombineZernikesSigmaClipTask(config=self.config)
         combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
         np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
         trueFlags[0] = 1
-        trueFlags[51] = 1
+        trueFlags[49:52] = 1
         np.testing.assert_array_equal(trueFlags, testFlags)
         self.assertTrue(isinstance(testFlags[0], numbers.Integral))
 
