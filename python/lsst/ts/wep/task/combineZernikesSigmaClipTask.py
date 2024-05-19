@@ -81,6 +81,6 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             np.isnan(sigArray[:, : self.maxZernClip]), axis=1
         ).astype(int)
         # Identify which rows to use when calculating final mean
-        keepIdx = ~np.any(np.isnan(sigArray), axis=1)
+        keepIdx = ~np.array(binaryFlagArray, dtype=bool)
 
         return np.mean(zernikeArray[keepIdx], axis=0), binaryFlagArray
