@@ -92,6 +92,24 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         np.testing.assert_array_equal(trueFlags, testFlags)
         self.assertTrue(isinstance(testFlags[0], numbers.Integral))
 
+    def testCombineZernikesEffectiveMaxZernClip(self):
+        testWhileZernikeArray = np.ones((3, 10))
+        testWhileZernikeArray[0, 4] = 3
+        testWhileZernikeArray[1, 3] = 3
+        testWhileZernikeArray[2, 2] = 3
+
+        # Test that changing the maxZernClip parameter does change
+        # whether a row is removed from the final result
+        self.config.maxZernClip = 6
+        self.task = CombineZernikesSigmaClipTask(config=self.config)
+        combinedZernikes, testFlags = self.task.combineZernikes(testWhileZernikeArray)
+        np.testing.assert_array_equal(testWhileZernikeArray[0], combinedZernikes)
+        self.assertEqual(self.task.metadata["maxZernClip"], 6)
+        self.assertEqual(self.task.metadata["effMaxZernClip"], 4)
+        trueFlags = np.array([0, 1, 1])
+        np.testing.assert_array_equal(trueFlags, testFlags)
+        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
+
     def testTaskRun(self):
         zernikeArray, trueFlags = self.prepareTestData()
         combinedZernikesStruct = self.task.run(zernikeArray)

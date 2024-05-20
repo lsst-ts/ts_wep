@@ -77,10 +77,29 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         # Create a binary flag array that indicates
         # donuts have outlier values. This array is 1 if
         # it has any outlier values.
-        binaryFlagArray = np.any(
-            np.isnan(sigArray[:, : self.maxZernClip]), axis=1
-        ).astype(int)
+        # If all available donuts have a clipped value in the
+        # first maxZernClip coefficients then reduce maxZernClip by 1
+        # until we get one that passes.
+        numRejected = len(sigArray)
+        effMaxZernClip = self.maxZernClip + 1
+
+        while numRejected == len(sigArray):
+            effMaxZernClip -= 1
+            binaryFlagArray = np.any(
+                np.isnan(sigArray[:, :effMaxZernClip]), axis=1
+            ).astype(int)
+            numRejected = np.sum(binaryFlagArray)
         # Identify which rows to use when calculating final mean
         keepIdx = ~np.array(binaryFlagArray, dtype=bool)
+
+        self.log.info(
+            f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}."
+        )
+        if effMaxZernClip < self.maxZernClip:
+            self.log.warning(
+                f"EffMaxZernClip ({effMaxZernClip}) was less than MaxZernClip config ({self.maxZernClip})."
+            )
+        self.metadata["maxZernClip"] = self.maxZernClip
+        self.metadata["effMaxZernClip"] = effMaxZernClip
 
         return np.mean(zernikeArray[keepIdx], axis=0), binaryFlagArray
