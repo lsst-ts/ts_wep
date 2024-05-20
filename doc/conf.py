@@ -15,9 +15,8 @@ html_short_title = project
 doxylink = {}
 
 
-# Support the sphinx extension of plantuml
-extensions.append("sphinxcontrib.plantuml")
-
-# Put the path to plantuml.jar
-plantuml_path = os.path.expanduser("~/plantuml.jar")
-plantuml = f"java -jar {plantuml_path}"
+# Support the sphinx extension of mermaid
+extensions = [
+    "sphinxcontrib.mermaid",
+    "sphinx_automodapi.automodapi",
+]

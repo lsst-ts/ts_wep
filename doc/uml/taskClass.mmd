@@ -1,4 +1,5 @@
-@startuml
+classDiagram
+
 class RefCatalogInterface
 CombineZernikesBaseTask <|-- CombineZernikesMeanTask
 CombineZernikesBaseTask <|-- CombineZernikesSigmaClipTask
@@ -45,4 +46,3 @@ GenerateDonutFromRefitWcsTask *-- GenerateDonutFromRefitWcsTaskConfig
 GenerateDonutCatalogWcsTask <|-- GenerateDonutFromRefitWcsTask
 ExposurePairer *-- ExposurePairerConfig
 TablePairer *-- TablePairerConfig
-@enduml

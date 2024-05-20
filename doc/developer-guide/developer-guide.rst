@@ -44,7 +44,7 @@ wep
 
 This module is a high-level module to use other modules.
 
-.. uml:: ../uml/wepClass.uml
+.. mermaid:: ../uml/wepClass.mmd
     :caption: Class diagram of wep
 
 * **Instrument**: Class that defines the geometry, mask model, Batoid model, etc. for different telescopes.
@@ -58,7 +58,7 @@ This module is a high-level module to use other modules.
 wep.centroid
 -------------
 
-.. uml:: ../uml/centroidClass.uml
+.. mermaid:: ../uml/centroidClass.mmd
     :caption: Class diagram of wep.centroid
 
 This module finds the centroids of donuts.
@@ -74,7 +74,7 @@ This module finds the centroids of donuts.
 wep.estimation
 -------------
 
-.. uml:: ../uml/estimationClass.uml
+.. mermaid:: ../uml/estimationClass.mmd
     :caption: Class diagram of wep.estimation
 
 This module estimates the wavefront error.
@@ -91,7 +91,7 @@ wep.deblend
 
 This module does the image deblending.
 
-.. uml:: ../uml/deblendClass.uml
+.. mermaid:: ../uml/deblendClass.mmd
     :caption: Class diagram of wep.deblend
 
 * **DeblendDonutFactory**: Factory for creating the deblend donut object to deblend the bright star donut from neighboring stars.
@@ -106,7 +106,7 @@ wep.task
 
 This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware.
 
-.. uml:: ../uml/taskClass.uml
+.. mermaid:: ../uml/taskClass.mmd
     :caption: Class diagram of wep.task
 
 * **GenerateDonutDirectDetectTaskConnections**: Connections setup for GenerateDonutDirectDetectTask to run in a pipeline with Gen 3 middleware.
