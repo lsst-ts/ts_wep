@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.5:
+
+-------------
+9.5.5
+-------------
+
+* Correct indices used to calculate Zernike average.
+* Update tests to discern whether flags and mean use the same indices.
+
 .. _lsst.ts.wep-9.5.4:
 
 -------------
