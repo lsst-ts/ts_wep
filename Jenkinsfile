@@ -35,8 +35,6 @@ pipeline {
         XML_REPORT = "jenkinsReport/report.xml"
         // Module name used in the pytest coverage analysis
         MODULE_NAME = "lsst.ts.wep"
-        // PlantUML url
-        PLANTUML_URL = "https://github.com/plantuml/plantuml/releases/download/v1.2021.13/plantuml-1.2021.13.jar"
         // Authority to publish the document online
         user_ci = credentials('lsst-io')
         LTD_USERNAME = "${user_ci_USR}"
@@ -116,8 +114,6 @@ pipeline {
               withEnv(["HOME=${env.WORKSPACE}"]) {
                 def RESULT = sh returnStatus: true, script: """
                   source ${env.LSST_STACK}/loadLSST.bash
-
-                  curl -L ${env.PLANTUML_URL} -o plantuml.jar
 
                   pip install sphinxcontrib-plantuml
 

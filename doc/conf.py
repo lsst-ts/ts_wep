@@ -3,8 +3,6 @@
 This configuration only affects single-package Sphinx documentation builds.
 """
 
-import os.path
-
 import lsst.ts.wep
 from documenteer.conf.pipelinespkg import *
 
