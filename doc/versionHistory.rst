@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.7:
+
+-------------
+9.5.7
+-------------
+
+* Update default maxFieldDist in donutSourceSelectorTask.py after analysis in DM-42067 (see ts_analysis_notebooks/aos/vignetting).
+
 .. _lsst.ts.wep-9.5.6:
 
 -------------
