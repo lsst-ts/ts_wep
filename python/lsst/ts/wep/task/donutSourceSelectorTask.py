@@ -61,7 +61,7 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     # in ts_analysis_notebooks/aos/vignetting.
     maxFieldDist = pexConfig.Field(
         dtype=float,
-        default=1.813,
+        default=1.808,
         doc="Maximum distance from center of focal plane (in degrees).",
     )
     unblendedSeparation = pexConfig.Field(
