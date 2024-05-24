@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.6:
+
+-------------
+9.5.6
+-------------
+
+* Move class diagrams to mermaid from plantUML.
+
 .. _lsst.ts.wep-9.5.5:
 
 -------------

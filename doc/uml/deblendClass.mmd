@@ -1,6 +1,7 @@
-@startuml
-class nelderMeadModify << (F,orchid) >>
+classDiagram
+
+class nelderMeadModify
+<<function>> nelderMeadModify
 DeblendDefault <|-- DeblendAdapt
 DeblendDonutFactory ..> DeblendAdapt
 DeblendAdapt ..> nelderMeadModify
-@enduml
