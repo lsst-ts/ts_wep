@@ -1,4 +1,4 @@
-@Library('JenkinsShared')_
+@Library('JenkinsShared@tickets/DM-44299_2')_
 DevelopPipeline(
     name: "ts_wep",
     module_name: "lsst.ts.wep",
@@ -7,5 +7,6 @@ DevelopPipeline(
     extra_packages: [],
     kickoff_jobs: [],
     slack_build_channel: "aos-builds",
-    has_doc_site: true
+    has_doc_site: true,
+    require_git_lfs: true
 )
