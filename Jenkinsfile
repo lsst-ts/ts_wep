@@ -8,5 +8,6 @@ DevelopPipeline(
     kickoff_jobs: [],
     slack_build_channel: "aos-builds",
     has_doc_site: true,
-    require_git_lfs: true
+    require_git_lfs: true,
+    require_scons: true
 )
