@@ -63,10 +63,11 @@ class DonutStamp(AbstractStamp):
     detector_offset : `float`
         Defocal offset of the detector in mm. If the detector was not
         actually shifted, this should be the equivalent detector offset.
-    real_offset : `float`
-        The real offset that was used to capture defocused images, in mm.
-        For LSSTCam, this corresponds to detector_offset, but for AuxTel
-        this corresponds to the M2 offset.
+    optic_offset : `float`
+        The real offset applied to an optic element to capture defocused
+        images, in mm. For LSSTCam, this corresponds to detector_offset,
+        for LSST full-array and ComCam this corresponds to the camera offset,
+        and for AuxTel this corresponds to the M2 offset.
     detector_name : `str`
         CCD where the donut is found
     cam_name : `str`
@@ -91,7 +92,7 @@ class DonutStamp(AbstractStamp):
     blend_centroid_positions: np.ndarray
     defocal_type: str
     detector_offset: float
-    real_offset: float
+    optic_offset: float
     detector_name: str
     cam_name: str
     bandpass: str
@@ -157,17 +158,17 @@ class DonutStamp(AbstractStamp):
         # "CAM_NAME" stands for camera name
         cam_name = metadata.getArray("CAM_NAME")[index]
 
-        # Get the detector offset and real offset info (see the class docstring
+        # Get the detector offset and optic offset info (see class docstring
         # for the difference in these numbers). All values in mm
         try:
             detector_offset = (
-                metadata.getArray("DET_OFFSET")[index]
-                if metadata.getArray("DET_OFFSET") is not None
+                metadata.getArray("DET_DZ")[index]
+                if metadata.getArray("DET_DZ") is not None
                 else 1.5
             )
-            real_offset = (
-                metadata.getArray("REAL_OFFSET")[index]
-                if metadata.getArray("REAL_OFFSET") is not None
+            optic_offset = (
+                metadata.getArray("OPTIC_DZ")[index]
+                if metadata.getArray("OPTIC_DZ") is not None
                 else 1.5
             )
         # This might fail for old stamps, in which case we use these hard-coded
@@ -176,15 +177,15 @@ class DonutStamp(AbstractStamp):
             if cam_name == "LATISS":
                 detector_offset = 34.7
                 if defocal_type == "extra":
-                    real_offset = +0.8
+                    optic_offset = +0.8
                 else:
-                    real_offset = -0.8
+                    optic_offset = -0.8
             else:
                 detector_offset = 1.5
                 if defocal_type == "extra":
-                    real_offset = +1.5
+                    optic_offset = +1.5
                 else:
-                    real_offset = -1.5
+                    optic_offset = -1.5
 
         return cls(
             stamp_im=stamp_im,
@@ -206,7 +207,7 @@ class DonutStamp(AbstractStamp):
             # Set the defocal offset info
             defocal_type=defocal_type,
             detector_offset=detector_offset,
-            real_offset=real_offset,
+            optic_offset=optic_offset,
             # "BANDPASS" stands for the exposure bandpass
             # If this is an old version of the stamps without bandpass
             # information then an empty string ("") will be set as default.
@@ -325,7 +326,7 @@ class DonutStamp(AbstractStamp):
             bandLabel=self.bandpass,
             blendOffsets=blendOffsets,
             defocalOffset=self.detector_offset / 1e3,  # mm -> m
-            batoidOffsetValue=self.real_offset / 1e3,  # mm -> m
+            batoidOffsetValue=self.optic_offset / 1e3,  # mm -> m
         )
 
         self.wep_im = wepImage
