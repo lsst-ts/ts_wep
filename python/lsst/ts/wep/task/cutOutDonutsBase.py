@@ -454,7 +454,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 defocal_type=defocalType.value,
                 # Save defocal offsets in mm.
                 detector_offset=instrument.defocalOffset * 1e3,  # m -> mm
-                real_offset=instrument.batoidOffsetValue * 1e3,  # m -> mm
+                optic_offset=instrument.batoidOffsetValue * 1e3,  # m -> mm
                 bandpass=bandLabel,
                 archive_element=linear_wcs,
             )
@@ -471,10 +471,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DFC_TYPE"] = np.array(
             [defocalType.value] * catalogLength, dtype=str
         )
-        stampsMetadata["DET_OFFSET"] = np.array(
+        stampsMetadata["DET_DZ"] = np.array(
             [instrument.defocalOffset * 1e3] * catalogLength
         )
-        stampsMetadata["REAL_OFFSET"] = np.array(
+        stampsMetadata["OPTIC_DZ"] = np.array(
             [instrument.batoidOffsetValue * 1e3] * catalogLength
         )
         # Save the centroid values

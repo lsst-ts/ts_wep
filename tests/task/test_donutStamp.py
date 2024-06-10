@@ -68,7 +68,7 @@ class TestDonutStamp(unittest.TestCase):
         halfStampIdx = int(nStamps / 2)
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
         detectorOffsets = np.ones(nStamps) * 1.25
-        realOffsets = np.ones(nStamps) * 1.25
+        opticOffsets = np.ones(nStamps) * 1.25
         bandpass = ["r"] * nStamps
 
         metadata = PropertyList()
@@ -80,8 +80,8 @@ class TestDonutStamp(unittest.TestCase):
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
         if testDefaults is False:
-            metadata["DET_OFFSET"] = detectorOffsets
-            metadata["REAL_OFFSET"] = realOffsets
+            metadata["DET_DZ"] = detectorOffsets
+            metadata["OPTIC_DZ"] = opticOffsets
             metadata["BLEND_CX"] = blendCentX
             metadata["BLEND_CY"] = blendCentY
             metadata["BANDPASS"] = bandpass
@@ -123,7 +123,7 @@ class TestDonutStamp(unittest.TestCase):
             else:
                 self.assertEqual(defocalType, DefocalType.Extra.value)
             self.assertEqual(donutStamp.detector_offset, 1.25)
-            self.assertEqual(donutStamp.real_offset, 1.25)
+            self.assertEqual(donutStamp.optic_offset, 1.25)
             bandpass = donutStamp.bandpass
             self.assertEqual(bandpass, "r")
 

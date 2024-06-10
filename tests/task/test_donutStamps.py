@@ -168,12 +168,12 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         for idx in range(self.nStamps):
             self.assertEqual(detectorOffsets[idx], 1.5)
 
-    def testGetRealOffsets(self):
-        realOffsets = self.donutStamps.getRealOffsets()
+    def testGetOpticOffsets(self):
+        opticOffsets = self.donutStamps.getOpticOffsets()
         defocalTypes = self.donutStamps.getDefocalTypes()
         for idx in range(self.nStamps):
             sign = +1 if defocalTypes[idx] == "extra" else -1
-            self.assertEqual(realOffsets[idx], sign * 1.5)
+            self.assertEqual(opticOffsets[idx], sign * 1.5)
 
     def testGetBandpass(self):
         bandpasses = self.donutStamps.getBandpasses()

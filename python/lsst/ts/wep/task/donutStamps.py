@@ -54,9 +54,9 @@ class DonutStamps(StampsBase):
         defocal_types = self.getDefocalTypes()
         self.metadata["DFC_TYPE"] = [dfc for dfc in defocal_types]
         detector_offsets = self.getDetectorOffsets()
-        self.metadata["DET_OFFSET"] = [offset for offset in detector_offsets]
-        real_offsets = self.getRealOffsets()
-        self.metadata["REAL_OFFSET"] = [offset for offset in real_offsets]
+        self.metadata["DET_DZ"] = [offset for offset in detector_offsets]
+        optic_offsets = self.getOpticOffsets()
+        self.metadata["OPTIC_DZ"] = [offset for offset in optic_offsets]
         bandpasses = self.getBandpasses()
         self.metadata["BANDPASS"] = [bandpass for bandpass in bandpasses]
 
@@ -170,16 +170,16 @@ class DonutStamps(StampsBase):
         """
         return [stamp.detector_offset for stamp in self]
 
-    def getRealOffsets(self):
+    def getOpticOffsets(self):
         """
-        Get the real offset for each stamp.
+        Get the optic offset for each stamp.
 
         Returns
         -------
         list [float]
-            Real offset for each stamp, in mm.
+            Optic offset for each stamp, in mm.
         """
-        return [stamp.real_offset for stamp in self]
+        return [stamp.optic_offset for stamp in self]
 
     def getBandpasses(self):
         """
