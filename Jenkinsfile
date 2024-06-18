@@ -1,4 +1,4 @@
-@Library('JenkinsShared@tickets/DM-44299_2')_
+@Library('JenkinsShared')_
 DevelopPipeline(
     name: "ts_wep",
     module_name: "lsst.ts.wep",
