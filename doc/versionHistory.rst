@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.5.8:
+
+-------------
+9.5.8
+-------------
+
+* Update to use ts_jenkins_shared_library.
+
 .. _lsst.ts.wep-9.5.7:
 
 -------------
