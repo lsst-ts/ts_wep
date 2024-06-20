@@ -811,6 +811,82 @@ class ImageMapper:
 
         return centralMask
 
+    def createBlendMask(self, blendOffsets, sourceMask0, blendMask0, maskBlends, dilateBlends):
+
+        sourceMask = sourceMask0.copy()
+        if dilateBlends > 0:
+            blendMask0 = np.pad(blendMask0, dilateBlends)
+            blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
+            blendMask0 = blendMask0.astype(int)
+
+        # Mask the blends
+        blendMask = np.zeros_like(sourceMask)
+        if blendOffsets.size > 0:
+            # Add the blends
+            for offset in blendOffsets:
+                blendMask += shift(blendMask0, offset)[
+                    dilateBlends : len(blendMask0) - dilateBlends,
+                    dilateBlends : len(blendMask0) - dilateBlends,
+                ]
+
+                # Clip the values
+                blendMask = np.clip(blendMask, 0, 1)
+        print(np.sum(sourceMask))
+        if maskBlends:
+            sourceMask -= blendMask
+            sourceMask = np.clip(sourceMask, 0, 1)
+        print(np.sum(sourceMask))
+
+        return sourceMask, blendMask
+
+    def autoDilateBlendMask(self, image, sourceMask, blendMask, maskBlends, maxDilateIter, fracChange):
+
+        sourceMask0 = sourceMask.copy()
+        blendMask0 = blendMask.copy()
+        imageArray = image.image
+        blendOffsets = image.blendOffsets
+        if image.defocalType == DefocalType.Extra:
+            # imageArray = np.rot90(imageArray, 2)
+            blendOffsets *= -1.0
+            print('Rotating')
+        print('IterNum 0')
+        print(np.sum(sourceMask0), maskBlends)
+        newSourceMask, newBlendMask = self.createBlendMask(image.blendOffsets, sourceMask0, blendMask0, maskBlends, 0)
+        print(np.sum(sourceMask0), np.sum(newSourceMask), maskBlends)
+        blendPix = newSourceMask * imageArray
+        blendPix = blendPix[blendPix > 0]
+        p95 = np.percentile(blendPix, 95)
+        medianPixel = np.median(blendPix[blendPix > p95]) # np.max(blendPix)
+        print(medianPixel, len(blendPix), np.max(blendPix))
+        print(np.histogram(blendPix))
+        if image.defocalType == DefocalType.Extra:
+            np.savetxt('blendMask.txt', newSourceMask)
+            np.savetxt('image.txt', imageArray)
+
+        for iterNum in range(1, maxDilateIter+1):
+            sourceMask0 = sourceMask.copy()
+            blendMask0 = blendMask.copy()
+            print(f'IterNum {iterNum}')
+            newSourceMask, newBlendMask = self.createBlendMask(image.blendOffsets, sourceMask0, blendMask0, maskBlends, iterNum)
+            print(np.sum(sourceMask0), np.sum(newSourceMask))
+            blendPix = newSourceMask * imageArray
+            blendPix = blendPix[blendPix > 0]
+            p95 = np.percentile(blendPix, 95)
+            newMedian = np.median(blendPix[blendPix > p95]) # np.max(blendPix)
+            medianChange = medianPixel - newMedian
+            print(medianPixel, newMedian, medianChange, np.max(blendPix))
+            print(np.histogram(blendPix))
+            if medianChange < fracChange*medianPixel:
+                break
+            else:
+                medianPixel = newMedian
+
+        if image.defocalType == DefocalType.Extra:
+            np.savetxt('blendMask_final.txt', newSourceMask)
+            np.savetxt('image_final.txt', imageArray)
+
+        return iterNum-1
+
     def createPupilMasks(
         self,
         image: Image,
@@ -866,13 +942,17 @@ class ImageMapper:
             )
 
         # Check the dilate values
-        dilate, dilateBlends = int(dilate), int(dilateBlends)
+        dilate = int(dilate)
         if dilate < 0:
             raise ValueError("dilate must be a non-negative integer.")
-        elif dilateBlends < 0:
-            raise ValueError("dilateBlends must be a non-negative integer.")
         elif dilate > 0 and not binary:
             raise ValueError("If dilate is greater than zero, binary must be True.")
+
+        if dilateBlends != 'auto':
+            if dilateBlends < 0:
+                raise ValueError("dilateBlends must be a non-negative integer.")
+            else:
+                dilateBlends = int(dilateBlends)
 
         # Get the pupil grid
         uPupil, vPupil = self.instrument.createPupilGrid()
@@ -898,28 +978,12 @@ class ImageMapper:
         if dilate > 0:
             sourceMask = binary_dilation(sourceMask, iterations=dilate)
             sourceMask = sourceMask.astype(int)
-        if dilateBlends > 0:
-            blendMask0 = np.pad(blendMask0, dilateBlends)
-            blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
-            blendMask0 = blendMask0.astype(int)
 
-        # Mask the blends
-        blendMask = np.zeros_like(sourceMask)
-        if image.blendOffsets.size > 0:
-            # Add the blends
-            for offset in image.blendOffsets:
-                blendMask += shift(blendMask0, offset)[
-                    dilateBlends : len(blendMask0) - dilateBlends,
-                    dilateBlends : len(blendMask0) - dilateBlends,
-                ]
+        if dilateBlends == 'auto':
+            dilateBlends = self.autoDilateBlendMask(image, sourceMask, blendMask0, maskBlends, maxDilateIter=8, fracChange=0.005)
+        print(dilateBlends)
 
-                # Clip the values
-                blendMask = np.clip(blendMask, 0, 1)
-
-        # Subtract the blends from the source mask
-        if maskBlends:
-            sourceMask -= blendMask
-            sourceMask = np.clip(sourceMask, 0, 1)
+        sourceMask, blendMask = self.createBlendMask(image.blendOffsets, sourceMask, blendMask0, maskBlends, dilateBlends)
 
         # Create the background mask
         backgroundMask = np.ones_like(sourceMask)
@@ -993,13 +1057,17 @@ class ImageMapper:
             )
 
         # Check the dilate values
-        dilate, dilateBlends = int(dilate), int(dilateBlends)
+        dilate = int(dilate)
         if dilate < 0:
             raise ValueError("dilate must be a non-negative integer.")
-        elif dilateBlends < 0:
-            raise ValueError("dilateBlends must be a non-negative integer.")
         elif dilate > 0 and not binary:
             raise ValueError("If dilate is greater than zero, binary must be True.")
+
+        if dilateBlends != 'auto':
+            if dilateBlends < 0:
+                raise ValueError("dilateBlends must be a non-negative integer.")
+            else:
+                dilateBlends = int(dilateBlends)
 
         if zkCoeff is None:
             # Get the intrinsic Zernikes
@@ -1055,29 +1123,12 @@ class ImageMapper:
         if dilate > 0:
             sourceMask = binary_dilation(sourceMask, iterations=dilate)
             sourceMask = sourceMask.astype(int)
-        if dilateBlends > 0:
-            blendMask0 = np.pad(blendMask0, dilateBlends)
-            blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
-            blendMask0 = blendMask0.astype(int)
 
-        # Mask the blends
-        blendMask = np.zeros_like(sourceMask)
-        if image.blendOffsets.size > 0:
-            # Get the buff
-            # Add the blends
-            for offset in image.blendOffsets:
-                blendMask += shift(blendMask0, offset)[
-                    dilateBlends : len(blendMask0) - dilateBlends,
-                    dilateBlends : len(blendMask0) - dilateBlends,
-                ]
+        if dilateBlends == 'auto':
+            dilateBlends = self.autoDilateBlendMask(image, sourceMask, blendMask0, maskBlends, maxDilateIter=8, fracChange=0.005)
+        print(dilateBlends)
 
-                # Clip the values
-                blendMask = np.clip(blendMask, 0, 1)
-
-        # Subtract the blends from the source mask
-        if maskBlends:
-            sourceMask -= blendMask
-            sourceMask = np.clip(sourceMask, 0, 1)
+        sourceMask, blendMask = self.createBlendMask(image.blendOffsets, sourceMask, blendMask0, maskBlends, dilateBlends)
 
         # Create the background mask
         backgroundMask = np.ones_like(sourceMask)
