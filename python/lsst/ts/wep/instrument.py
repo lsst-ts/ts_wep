@@ -871,7 +871,7 @@ class Instrument:
 
         # Offset the optic
         optic = self.batoidOffsetOptic
-        batoidModel = batoidModel.withLocallyShiftedOptic(optic, offset)
+        shiftedModel = batoidModel.withLocallyShiftedOptic(optic, offset)
 
         # Get the wavelength
         if len(self.wavelength) > 1:
@@ -881,7 +881,7 @@ class Instrument:
 
         # Get the off-axis model Zernikes in wavelengths
         zkIntrinsic = batoid.zernikeTA(
-            batoidModel,
+            shiftedModel,
             *np.deg2rad([xAngle, yAngle]),
             wavelength,
             jmax=jmax,
