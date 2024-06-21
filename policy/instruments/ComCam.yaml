@@ -7,7 +7,7 @@ imports: policy:instruments/LsstCam.yaml
 # Apply these overrides
 name: LsstComCam
 batoidModelName: ComCam_{band}
-batoidOffsetOptic: ComCam
+batoidOffsetOptic: Detector
 
 maskParams:
   M1:
