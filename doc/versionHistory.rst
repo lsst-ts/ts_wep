@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.6.0:
+
+-------------
+9.6.0
+-------------
+
+* Add auto-dilation option to making blend masks in ImageMapper.
+
 .. _lsst.ts.wep-9.5.8:
 
 -------------
