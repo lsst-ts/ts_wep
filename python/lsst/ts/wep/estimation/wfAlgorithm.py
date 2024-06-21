@@ -267,6 +267,16 @@ class WfAlgorithm(ABC):
             saveHistory,
         )
 
+        # If either image has defocal offset, override default instrument value
+        offsets = [
+            img.defocalOffset
+            for img in (I1, I2)
+            if img is not None and img.defocalOffset is not None
+        ]
+        if len(offsets) > 0:
+            instrument = instrument.copy()
+            instrument.defocalOffset = np.mean(offsets)
+
         # Get the intrinsic Zernikes?
         if startWithIntrinsic or returnWfDev:
             zkIntrinsicI1 = instrument.getIntrinsicZernikes(

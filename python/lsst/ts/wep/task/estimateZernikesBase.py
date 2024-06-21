@@ -26,6 +26,7 @@ import abc
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -153,15 +154,6 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         for i, (donutExtra, donutIntra) in enumerate(
             zip(donutStampsExtra, donutStampsIntra)
         ):
-            # Determine and set the defocal offset
-            defocalOffset = np.mean(
-                [
-                    donutExtra.defocal_distance,
-                    donutIntra.defocal_distance,
-                ]
-            )
-            wfEstimator.instrument.defocalOffset = defocalOffset / 1e3  # m -> mm
-
             # Estimate Zernikes
             zk = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
             zkList.append(zk)
@@ -203,10 +195,6 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         zkList = []
         histories = dict()
         for i, donutExtra in enumerate(donutStampsExtra):
-            # Determine and set the defocal offset
-            defocalOffset = donutExtra.defocal_distance
-            wfEstimator.instrument.defocalOffset = defocalOffset / 1e3
-
             # Estimate Zernikes
             zk = wfEstimator.estimateZk(donutExtra.wep_im)
             zkList.append(zk)
@@ -215,10 +203,6 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             # this is just an empty dictionary)
             histories[f"extra{i}"] = convertHistoryToMetadata(wfEstimator.history)
         for i, donutIntra in enumerate(donutStampsIntra):
-            # Determine and set the defocal offset
-            defocalOffset = donutIntra.defocal_distance
-            wfEstimator.instrument.defocalOffset = defocalOffset / 1e3
-
             # Estimate Zernikes
             zk = wfEstimator.estimateZk(donutIntra.wep_im)
             zkList.append(zk)
@@ -255,12 +239,10 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         # Get the instrument
         camName = donutStampsExtra[0].cam_name
         detectorName = donutStampsExtra[0].detector_name
-        instrument = getTaskInstrument(
-            camName,
-            detectorName,
-            None,
-            self.config.instConfigFile,
-        )
+        if self.config.instConfigFile is None:
+            instrument = getTaskInstrument(camName, detectorName)
+        else:
+            instrument = Instrument(configFile=self.config.instConfigFile)
 
         # Create the wavefront estimator
         wfEst = WfEstimator(

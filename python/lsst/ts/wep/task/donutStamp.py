@@ -60,9 +60,14 @@ class DonutStamp(AbstractStamp):
     defocal_type : `str`
         Defocal state of the stamp. "extra" or "intra" are
         allowed values.
-    defocal_distance : `float`
+    detector_offset : `float`
         Defocal offset of the detector in mm. If the detector was not
         actually shifted, this should be the equivalent detector offset.
+    optic_offset : `float`
+        The real offset applied to an optic element to capture defocused
+        images, in mm. For LSSTCam, this corresponds to detector_offset,
+        for LSST full-array and ComCam this corresponds to the camera offset,
+        and for AuxTel this corresponds to the M2 offset.
     detector_name : `str`
         CCD where the donut is found
     cam_name : `str`
@@ -86,18 +91,23 @@ class DonutStamp(AbstractStamp):
     centroid_position: lsst.geom.Point2D
     blend_centroid_positions: np.ndarray
     defocal_type: str
-    defocal_distance: float
+    detector_offset: float
+    optic_offset: float
     detector_name: str
     cam_name: str
     bandpass: str
     archive_element: Optional[afwTable.io.Persistable] = None
     wep_im: Image = field(init=False)
 
+    # Legacy attribute to avoid errors (will be deleted in post-init)
+    defocal_distance: Optional[float] = None
+
     def __post_init__(self):
         """
         This method sets up the WEP Image after initialization
         because we need to use the parameters set in the original `__init__`.
         """
+        delattr(self, "defocal_distance")
         self._setWepImage()
 
     @classmethod
@@ -138,6 +148,45 @@ class DonutStamp(AbstractStamp):
         else:
             blend_centroid_positions = np.array([["nan"], ["nan"]], dtype=float).T
 
+        # Get the defocal type
+        # "DFC_TYPE" stands for defocal type in string form.
+        defocal_type = metadata.getArray("DFC_TYPE")[index]
+        if defocal_type not in ["intra", "extra"]:
+            raise ValueError(f"defocal_type {defocal_type} not supported.")
+
+        # Get the Camera name
+        # "CAM_NAME" stands for camera name
+        cam_name = metadata.getArray("CAM_NAME")[index]
+
+        # Get the detector offset and optic offset info (see class docstring
+        # for the difference in these numbers). All values in mm
+        try:
+            detector_offset = (
+                metadata.getArray("DET_DZ")[index]
+                if metadata.getArray("DET_DZ") is not None
+                else 1.5
+            )
+            optic_offset = (
+                metadata.getArray("OPTIC_DZ")[index]
+                if metadata.getArray("OPTIC_DZ") is not None
+                else 1.5
+            )
+        # This might fail for old stamps, in which case we use these hard-coded
+        # defaults for AuxTel and LSSTCam+
+        except KeyError:
+            if cam_name == "LATISS":
+                detector_offset = 34.7
+                if defocal_type == "extra":
+                    optic_offset = +0.8
+                else:
+                    optic_offset = -0.8
+            else:
+                detector_offset = 1.5
+                if defocal_type == "extra":
+                    optic_offset = +1.5
+                else:
+                    optic_offset = -1.5
+
         return cls(
             stamp_im=stamp_im,
             archive_element=archive_element,
@@ -155,17 +204,10 @@ class DonutStamp(AbstractStamp):
             detector_name=metadata.getArray("DET_NAME")[index],
             # "CAM_NAME" stands for camera name
             cam_name=metadata.getArray("CAM_NAME")[index],
-            # "DFC_TYPE" stands for defocal type in string form.
-            # Need to convert to DefocalType
-            defocal_type=metadata.getArray("DFC_TYPE")[index],
-            # "DFC_DIST" stands for defocal distance
-            # If this is an old version of the stamps without a defocal
-            # distance set this to default value of 1.5 mm.
-            defocal_distance=(
-                metadata.getArray("DFC_DIST")[index]
-                if metadata.get("DFC_DIST") is not None
-                else 1.5
-            ),
+            # Set the defocal offset info
+            defocal_type=defocal_type,
+            detector_offset=detector_offset,
+            optic_offset=optic_offset,
             # "BANDPASS" stands for the exposure bandpass
             # If this is an old version of the stamps without bandpass
             # information then an empty string ("") will be set as default.
@@ -283,6 +325,8 @@ class DonutStamp(AbstractStamp):
             defocalType=self.defocal_type,
             bandLabel=self.bandpass,
             blendOffsets=blendOffsets,
+            defocalOffset=self.detector_offset / 1e3,  # mm -> m
+            batoidOffsetValue=self.optic_offset / 1e3,  # mm -> m
         )
 
         self.wep_im = wepImage
