@@ -868,11 +868,12 @@ class ImageMapper:
 
                 # Clip the values
                 blendMask = np.clip(blendMask, 0, 1)
-        print(np.sum(sourceMask))
+
+        # If masking the blend in the source mask then we subtract
+        # the overlapping area out of the source mask.
         if maskBlends:
             sourceMask -= blendMask
             sourceMask = np.clip(sourceMask, 0, 1)
-        print(np.sum(sourceMask))
 
         return sourceMask, blendMask
 
@@ -881,9 +882,8 @@ class ImageMapper:
         image: Image,
         sourceMask: np.ndarray,
         blendMask: np.ndarray,
-        maskBlends: bool,
-        maxDilateIter: int,
-        fracChange: float,
+        maxDilateIter: int=8,
+        fracChange: float=0.005,
     ) -> int:
         """Automatically calculate the number of dilations used for the
         blend mask. This works by looking at the median of the top 5%
@@ -893,22 +893,29 @@ class ImageMapper:
 
         Parameters
         ----------
-        blendOffsets : np.ndarray
-            Positions of blended donuts relative to central donut, in pixels.
-        sourceMaskInit : np.ndarray
+        image : Image
+            A stamp object containing the metadata required for constructing
+            the mask.
+        sourceMask : np.ndarray
             Mask array for central source.
-        blendMaskInit : np.ndarray
+        blendMask : np.ndarray
             Mask array for blended source. This array is unshifted so it should
             be very similar to sourceMaskInit as the masked area is centered in
             the array.
-        maskBlends : bool
-            Whether to subtract the blend mask from the source mask.
         dilateBlends : int or str
             How many times to dilate the blended masks. Note this only matters
             if maskBlends==True, and is not an option if binary==False. Can be
             set to 'auto' in addition to specifying an integer number of
             dilations. When set to 'auto' the method ``autoDilateBlendMask``
             will be used to select the number of dilations.
+        maxDilateIter : in, optional
+            Maximum number of dilation iterations.
+            (the default is 8.)
+        fracChange : float, optional
+            Maximum fractional amount the median of the top 5% of brightest
+            pixels can change between dilation iterations of the blend mask
+            before auto dilation stops.
+            (the default is 0.005.)
 
         Returns
         -------
@@ -925,7 +932,7 @@ class ImageMapper:
 
         # Run initial iteration.
         newSourceMask, _ = self.createBlendMask(
-            image.blendOffsets, sourceMaskInit, blendMaskInit, maskBlends, 0
+            image.blendOffsets, sourceMaskInit, blendMaskInit, True, 0
         )
         blendPix = newSourceMask * imageArray
         blendPix = blendPix[blendPix > 0]
@@ -938,7 +945,7 @@ class ImageMapper:
             sourceMaskInit = sourceMask.copy()
             blendMaskInit = blendMask.copy()
             newSourceMask, _ = self.createBlendMask(
-                image.blendOffsets, sourceMaskInit, blendMaskInit, maskBlends, iterNum
+                image.blendOffsets, sourceMaskInit, blendMaskInit, True, iterNum
             )
             blendPix = newSourceMask * imageArray
             blendPix = blendPix[blendPix > 0]
@@ -1052,9 +1059,6 @@ class ImageMapper:
                 image,
                 sourceMask,
                 blendMask0,
-                maskBlends,
-                maxDilateIter=8,
-                fracChange=0.005,
             )
 
         sourceMask, blendMask = self.createBlendMask(
@@ -1208,9 +1212,6 @@ class ImageMapper:
                 image,
                 sourceMask,
                 blendMask0,
-                maskBlends,
-                maxDilateIter=8,
-                fracChange=0.005,
             )
 
         sourceMask, blendMask = self.createBlendMask(
