@@ -882,8 +882,8 @@ class ImageMapper:
         image: Image,
         sourceMask: np.ndarray,
         blendMask: np.ndarray,
-        maxDilateIter: int=8,
-        fracChange: float=0.005,
+        maxDilateIter: int = 8,
+        fracChange: float = 0.005,
     ) -> int:
         """Automatically calculate the number of dilations used for the
         blend mask. This works by looking at the median of the top 5%
