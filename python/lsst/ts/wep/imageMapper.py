@@ -1024,10 +1024,9 @@ class ImageMapper:
             raise ValueError("If dilate is greater than zero, binary must be True.")
 
         if dilateBlends != "auto":
+            dilateBlends = int(dilateBlends)
             if dilateBlends < 0:
                 raise ValueError("dilateBlends must be a non-negative integer.")
-            else:
-                dilateBlends = int(dilateBlends)
 
         # Get the pupil grid
         uPupil, vPupil = self.instrument.createPupilGrid()
