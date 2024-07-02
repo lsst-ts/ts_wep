@@ -25,7 +25,7 @@ import unittest
 import batoid
 import numpy as np
 from lsst.ts.wep import Image, ImageMapper
-from scipy.ndimage import binary_opening
+from scipy.ndimage import binary_erosion, binary_opening, shift
 
 
 class TestImageMapper(unittest.TestCase):
@@ -469,6 +469,123 @@ class TestImageMapper(unittest.TestCase):
             mask1.sum(),
             mask0.sum(),
         )
+
+    def testCreateBlendMask(self):
+        mapper = ImageMapper()
+        inst = mapper.instrument
+
+        # Create a dummy image
+        image = Image(
+            np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
+            (0, 0),
+            "intra",
+            blendOffsets=[[0, 0]],
+        )
+        mapper.createImageMasks(image, maskBlends=False)
+        mask0 = image.mask
+
+        # Test that blend mask is the same as source mask before shifting
+        srcMask, blendMask = mapper.createBlendMask(
+            np.array([[0, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
+        )
+        np.testing.assert_array_almost_equal(srcMask, blendMask)
+
+        # Test that blend mask is shifted source mask by amount specified
+        srcMask, blendMask = mapper.createBlendMask(
+            np.array([[2, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
+        )
+        np.testing.assert_array_almost_equal(shift(srcMask, (2, 0)), blendMask)
+
+        # Test that masking blends subtracts from source mask
+        srcMask, blendMask = mapper.createBlendMask(
+            np.array([[0, 0]]), mask0, mask0, maskBlends=True, dilateBlends=0
+        )
+        self.assertEqual(np.sum(srcMask), 0)
+
+        # Check extra-focal as well
+        # Create a dummy image
+        image = Image(
+            np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
+            (0, 0),
+            "extra",
+            blendOffsets=[[0, 0]],
+        )
+        mapper.createImageMasks(image, maskBlends=False)
+        mask0 = image.mask
+
+        # Test that blend mask is the same as source mask before shifting
+        srcMask, blendMask = mapper.createBlendMask(
+            np.array([[0, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
+        )
+        np.testing.assert_array_almost_equal(srcMask, blendMask)
+
+        # Test that blend mask is shifted source mask by amount specified
+        srcMask, blendMask = mapper.createBlendMask(
+            np.array([[2, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
+        )
+        np.testing.assert_array_almost_equal(shift(srcMask, (2, 0)), blendMask)
+
+        # Test that masking blends subtracts from source mask
+        srcMask, blendMask = mapper.createBlendMask(
+            np.array([[0, 0]]), mask0, mask0, maskBlends=True, dilateBlends=0
+        )
+        self.assertEqual(np.sum(srcMask), 0)
+
+    def testAutoDilateBlendMask(self):
+        mapper = ImageMapper()
+        inst = mapper.instrument
+
+        def _testAutoDilate(intra: bool, pupil: bool):
+            # Create a dummy image
+            image = Image(
+                np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
+                (0, 0),
+                "intra" if intra else "extra",
+                blendOffsets=[[110, 0]],
+            )
+
+            # Get the source mask in order to simulate blended image
+            mapper.createImageMasks(image, maskBlends=False)
+            mask0 = image.mask
+            image.image = np.array(mask0.copy(), dtype=np.float64)
+            image.image += shift(image.image, image.blendOffsets[0, ::-1])
+
+            # Add some noise
+            rng = np.random.default_rng(123)
+            image.image += rng.normal(scale=0.1, size=np.shape(image.image))
+
+            if not intra and pupil:
+                # For extrafocal, the pupil and image are 180 deg rotated
+                image.image = np.rot90(image.image, 2)
+
+            # Erode mask and check auto-dilation fixes this erosion
+            erodedMask = np.array(binary_erosion(mask0, iterations=3), dtype=np.int64)
+            dilatedMask = mapper._autoDilateBlendMask(
+                image=image,
+                mask=erodedMask,
+                sourceMask=mask0,
+                autoDilateMaxIter=8,
+                autoDilateFracChange=5e-3,
+                pupil=pupil,
+            )
+            blendMask = mapper._createBlendMask(
+                image=image,
+                mask=mask0,
+                dilateBlends=0,
+                pupil=pupil,
+            )
+            try:
+                np.testing.assert_array_almost_equal(blendMask, dilatedMask)
+            except AssertionError:
+                raise AssertionError(f"Failed on test of intra={intra}, pupil={pupil}")
+
+        # Test image masks
+        _testAutoDilate(intra=True, pupil=False)
+        _testAutoDilate(intra=False, pupil=False)
+
+        # Test pupil masks
+        _testAutoDilate(intra=True, pupil=True)
+        _testAutoDilate(intra=False, pupil=True)
 
     def testGetProjectionSize(self):
         mapper = ImageMapper()
