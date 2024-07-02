@@ -535,43 +535,57 @@ class TestImageMapper(unittest.TestCase):
         mapper = ImageMapper()
         inst = mapper.instrument
 
-        # Create a dummy image
-        image = Image(
-            np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
-            (0, 0),
-            "intra",
-            blendOffsets=[[110, 0]],
-        )
-        mapper.createImageMasks(image, maskBlends=False)
-        mask0 = image.mask
-        image.image = np.array(mask0.copy(), dtype=np.float64)
-        image.image += shift(image.image, (110, 0))
-        rand = np.random.RandomState(42)
-        image.image += rand.normal(scale=0.1, size=np.shape(image.image))
+        def _testAutoDilate(intra: bool, pupil: bool):
+            # Create a dummy image
+            image = Image(
+                np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
+                (0, 0),
+                "intra" if intra else "extra",
+                blendOffsets=[[110, 0]],
+            )
 
-        erodedMask = np.array(binary_erosion(mask0, iterations=3), dtype=np.int64)
-        dilateIter = mapper.autoDilateBlendMask(
-            image, np.array(mask0, dtype=np.int64), erodedMask
-        )
-        self.assertEqual(dilateIter, 3)
+            # Get the source mask in order to simulate blended image
+            mapper.createImageMasks(image, maskBlends=False)
+            mask0 = image.mask
+            image.image = np.array(mask0.copy(), dtype=np.float64)
+            image.image += shift(image.image, image.blendOffsets[0, ::-1])
 
-        # Check extra-focal as well
-        # Create a dummy image
-        extraImage = Image(
-            np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
-            (0, 0),
-            "extra",
-            blendOffsets=[[110, 0]],
-        )
-        mapper.createImageMasks(extraImage, maskBlends=False)
-        mask0 = extraImage.mask
-        extraImage.image = np.rot90(image.image, 2)
+            # Add some noise
+            rng = np.random.default_rng(123)
+            image.image += rng.normal(scale=0.1, size=np.shape(image.image))
 
-        erodedMask = np.array(binary_erosion(mask0, iterations=3), dtype=np.int64)
-        dilateIter = mapper.autoDilateBlendMask(
-            extraImage, np.array(mask0, dtype=np.int64), erodedMask
-        )
-        self.assertEqual(dilateIter, 3)
+            if not intra and pupil:
+                # For extrafocal images, the pupil and image are 180 deg rotated
+                image.image = np.rot90(image.image, 2)
+
+            # Erode mask and check auto-dilation fixes this erosion
+            erodedMask = np.array(binary_erosion(mask0, iterations=3), dtype=np.int64)
+            dilatedMask = mapper._autoDilateBlendMask(
+                image=image,
+                mask=erodedMask,
+                sourceMask=mask0,
+                autoDilateMaxIter=8,
+                autoDilateFracChange=5e-3,
+                pupil=pupil,
+            )
+            blendMask = mapper._createBlendMask(
+                image=image,
+                mask=mask0,
+                dilateBlends=0,
+                pupil=pupil,
+            )
+            try:
+                np.testing.assert_array_almost_equal(blendMask, dilatedMask)
+            except AssertionError:
+                raise AssertionError(f"Failed on test of intra={intra}, pupil={pupil}")
+
+        # Test image masks
+        _testAutoDilate(intra=True, pupil=False)
+        _testAutoDilate(intra=False, pupil=False)
+
+        # Test pupil masks
+        _testAutoDilate(intra=True, pupil=True)
+        _testAutoDilate(intra=False, pupil=True)
 
     def testGetProjectionSize(self):
         mapper = ImageMapper()
