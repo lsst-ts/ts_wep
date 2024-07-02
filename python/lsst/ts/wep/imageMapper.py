@@ -772,102 +772,217 @@ class ImageMapper:
 
         return mask
 
-    def _maskBlends(
+    def _createBlendMask(
         self,
-        centralMask: np.ndarray,
-        blendMask: np.ndarray,
-        blendOffsets: np.ndarray,
-        binary: bool,
+        image: Image,
+        mask: np.ndarray,
+        dilateBlends: int,
+        pupil: bool,
     ) -> np.ndarray:
-        """Shift the central mask to mask the blends.
+        """Create a blend mask with the specified dilation.
 
         Parameters
         ----------
+        image : Image
+            A stamp object containing the metadata required for constructing
+            the mask.
         mask : np.ndarray
-            The central mask
-        blendOffsets : np.ndarray
-            The blend offsets
-        binary : bool
-            Whether to return a binary mask
+            The un-dilated source mask that is used to construct blend masks.
+        dilateBlends : int
+            How many times to dilate the blended masks. Note this only matters
+            if maskBlends==True, and is not an option if binary==False. Can
+            also be set to "auto" in which case an algorithm automatically
+            attempts to infer the correct amount of dilation.
+        pupil : bool
+            Whether this function is called during creation of pupil masks.
+            If False, it is assumed this function is called during creation
+            of image masks.
 
         Returns
         -------
         np.ndarray
-            The mask with the blends masked
+            Blend mask array
         """
-        # If no blends, just return the original mask
-        if blendOffsets.size == 0:
-            return centralMask
+        # Get the blend offsets. Note for extrafocal images, the orientation
+        # is flipped with respect to the pupil
+        blendOffsets = image.blendOffsets.copy()
+        if pupil and image.defocalType == DefocalType.Extra:
+            blendOffsets *= -1
 
-        # Shift blend mask to each offset and subtract from the central mask
+        # Make the central blend mask and pad it so dilation doesn't
+        # bleed off the edge of the stamp
+        blendMask0 = mask.copy()
+        if dilateBlends > 0:
+            blendMask0 = np.pad(blendMask0, dilateBlends)
+            blendMask0 = binary_dilation(blendMask0, iterations=dilateBlends)
+            blendMask0 = blendMask0.astype(int)
+
+        # Shift the central blend mask to the position of the blends
+        blendMask = np.zeros_like(mask)
         for offset in blendOffsets:
-            centralMask -= shift(blendMask, offset)
+            blendMask += shift(blendMask0, offset[::-1])[
+                dilateBlends : len(blendMask0) - dilateBlends,
+                dilateBlends : len(blendMask0) - dilateBlends,
+            ]
 
-        # Clip negative pixels
-        centralMask = np.clip(centralMask, 0, 1)
+        # Clip the values
+        blendMask = np.clip(blendMask, 0, 1)
 
-        if binary:
-            centralMask = (centralMask > 0.5).astype(int)
+        return blendMask
 
-        return centralMask
-
-    def createBlendMask(
+    def _autoDilateBlendMask(
         self,
-        blendOffsets: np.ndarray,
-        sourceMaskInit: np.ndarray,
-        blendMaskInit: np.ndarray,
-        maskBlends: bool,
-        dilateBlends: Union[int, str],
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Create a mask array that covers known blended objects with
-        the given blend offsets. If maskBlends is True then this will also
-        mask the blends in the source mask used by the estimation algorithm.
+        image: Image,
+        mask: np.ndarray,
+        sourceMask: np.ndarray,
+        autoDilateMaxIter: int,
+        autoDilateFracChange: float,
+        pupil: bool,
+    ) -> np.ndarray:
+        """Create blend mask while automatically determining the dilation.
+
+        This works by looking at the median of the top 5% of pixels ranked
+        by brightness and iteratively dilating the mask until this median
+        value stops changing.
 
         Parameters
         ----------
-        blendOffsets : np.ndarray
-            Positions of blended donuts relative to central donut, in pixels.
-        sourceMaskInit : np.ndarray
-            Mask array for central source.
-        blendMaskInit : np.ndarray
-            Mask array for blended source. This array is unshifted so it should
-            be very similar to sourceMaskInit as the masked area is centered in
-            the array.
+        image : Image
+            A stamp object containing the metadata required for constructing
+            the mask.
+        mask : np.ndarray
+            The un-dilated source mask that is used to construct blend masks.
+        sourceMask : np.ndarray
+            The dilated source mask.
+        autoDilateMaxIter : int, optional
+            Maximum number of iterations in the dilateBlends auto-algorithm.
+            (the default is 8)
+        autoDilateFracChange : float, optional
+            In the dilateBlends auto-algorithm, this is the max fractional
+            amount the median of the top 5% of brightest pixels can change
+            between dilation iterations of the blend mask before auto dilation
+            stops. (the default is 0.005.)
+        pupil : bool
+            Whether this function is called during creation of pupil masks.
+            If False, it is assumed this function is called during creation
+            of image masks.
+
+        Returns
+        -------
+        np.ndarray
+            Blend mask array
+        """
+        # Create a dummy values to start
+        blendMaskOld = np.zeros_like(mask)
+        top5medianOld = 0
+
+        # Increase amount of blend dilation until criterion is met
+        # or max number of iterations reached
+        for iterNum in range(autoDilateMaxIter + 1):
+            # Create blend mask with zero dilation
+            blendMask = self._createBlendMask(
+                image=image,
+                mask=mask,
+                dilateBlends=iterNum,
+                pupil=pupil,
+            )
+
+            # Mask the blends
+            sourceMaskTemp = np.clip(sourceMask - blendMask, 0, 1)
+
+            # Get median value of top 5% of unmasked pixels
+            unmaskedPix = sourceMaskTemp * image.image
+            unmaskedPix = unmaskedPix[unmaskedPix > 0]
+            top5median = np.percentile(unmaskedPix, 97.5)
+
+            # Check how much the median changed
+            medianChange = np.abs(top5median - top5medianOld)
+            if medianChange < autoDilateFracChange * top5median:
+                break
+
+            # Update old parameters
+            blendMaskOld = blendMask
+            top5medianOld = top5median
+
+        return blendMaskOld
+
+    def _createMaskTriplet(
+        self,
+        image: Image,
+        mask: np.ndarray,
+        binary: bool,
+        dilate: int,
+        dilateBlends: Union[int, str],
+        autoDilateMaxIter: int,
+        autoDilateFracChange: float,
+        maskBlends: bool,
+        pupil: bool,
+    ) -> None:
+        """Create the triple of source, blend, and background masks.
+
+        Parameters
+        ----------
+        image : Image
+            A stamp object containing the metadata required for constructing
+            the masks.
+        mask : np.ndarray
+            Fiducial source mask.
+        binary : bool
+            Whether to return a binary mask. If False, a fractional mask is
+            returned instead.
+        dilate : int
+            How many times to dilate the central mask. This adds a boundary
+            of that many pixels to the mask. Note this is not an option if
+            binary==False.
+        dilateBlends : int or str
+            How many times to dilate the blended masks. Can also be set to
+            "auto" in which case an algorithm automatically attempts to infer
+            the correct amount of dilation.
+        autoDilateMaxIter : int
+            Maximum number of iterations in the dilateBlends auto-algorithm.
+        autoDilateFracChange : float
+            In the dilateBlends auto-algorithm, this is the max fractional
+            amount the median of the top 5% of brightest pixels can change
+            between dilation iterations of the blend mask before auto dilation
+            stops.
         maskBlends : bool
             Whether to subtract the blend mask from the source mask.
-        dilateBlends : int or str
-            How many times to dilate the blended masks. Note this only matters
-            if maskBlends==True, and is not an option if binary==False. Can be
-            set to 'auto' in addition to specifying an integer number of
-            dilations. When set to 'auto' the method ``autoDilateBlendMask``
-            will be used to select the number of dilations.
-
-        Returns
-        -------
-        np.ndarray
-            Source mask with blends masked if maskBlends is True.
-        np.ndarray
-            Blend mask with sources shifted to location of blends.
+        pupil : bool
+            Whether this function is called during creation of pupil masks.
+            If False, it is assumed this function is called during creation
+            of image masks.
         """
+        # Set the mask to binary?
+        if binary:
+            mask = (mask > 0.5).astype(int)
 
-        sourceMask = sourceMaskInit.copy()
-        if dilateBlends > 0:
-            blendMaskInit = np.pad(blendMaskInit, dilateBlends)
-            blendMaskInit = binary_dilation(blendMaskInit, iterations=dilateBlends)
-            blendMaskInit = blendMaskInit.astype(int)
+        # Dilate the mask?
+        sourceMask = mask.copy()
+        if dilate > 0:
+            sourceMask = binary_dilation(sourceMask, iterations=dilate)
+            sourceMask = sourceMask.astype(int)
 
-        # Mask the blends
-        blendMask = np.zeros_like(sourceMask)
-        if blendOffsets.size > 0:
-            # Add the blends
-            for offset in blendOffsets:
-                blendMask += shift(blendMaskInit, offset)[
-                    dilateBlends : len(blendMaskInit) - dilateBlends,
-                    dilateBlends : len(blendMaskInit) - dilateBlends,
-                ]
-
-                # Clip the values
-                blendMask = np.clip(blendMask, 0, 1)
+        # Create the blend mask
+        if len(image.blendOffsets) == 0:
+            blendMask = np.zeros_like(mask)
+        elif dilateBlends == "auto":
+            # Use algorithm to automatically dilate the blend mask
+            blendMask = self._autoDilateBlendMask(
+                image=image,
+                mask=mask,
+                sourceMask=sourceMask,
+                autoDilateMaxIter=autoDilateMaxIter,
+                autoDilateFracChange=autoDilateFracChange,
+                pupil=pupil,
+            )
+        else:
+            # Create the blend mask
+            blendMask = self._createBlendMask(
+                image=image,
+                mask=mask,
+                dilateBlends=dilateBlends,  # type: ignore
+                pupil=pupil,
+            )
 
         # If masking the blend in the source mask then we subtract
         # the overlapping area out of the source mask.
@@ -875,89 +990,78 @@ class ImageMapper:
             sourceMask -= blendMask
             sourceMask = np.clip(sourceMask, 0, 1)
 
-        return sourceMask, blendMask
+        # Create the background mask
+        backgroundMask = np.ones_like(sourceMask)
+        backgroundMask -= sourceMask
+        backgroundMask -= blendMask
+        backgroundMask = np.clip(backgroundMask, 0, 1)
 
-    def autoDilateBlendMask(
+        # Set the masks
+        image.mask = sourceMask
+        image.maskBlends = blendMask
+        image.maskBackground = backgroundMask
+
+    def _maskArgCheck(
         self,
         image: Image,
-        sourceMask: np.ndarray,
-        blendMask: np.ndarray,
-        maxDilateIter: int = 8,
-        fracChange: float = 0.005,
-    ) -> int:
-        """Automatically calculate the number of dilations used for the
-        blend mask. This works by looking at the median of the top 5%
-        of pixels ranked by brightness and iteratively dilating the
-        mask until this median value stops changing by more than `fracChange`
-        fractional amount.
+        binary: bool,
+        dilate: int,
+        dilateBlends: Union[int, str],
+        ignorePlane: bool,
+        pupil: bool,
+    ) -> None:
+        """Check arguments for mask creation.
 
         Parameters
         ----------
         image : Image
             A stamp object containing the metadata required for constructing
             the mask.
-        sourceMask : np.ndarray
-            Mask array for central source.
-        blendMask : np.ndarray
-            Mask array for blended source. This array is unshifted so it should
-            be very similar to sourceMaskInit as the masked area is centered in
-            the array.
+        binary : bool
+            Whether to return a binary mask. If False, a fractional mask is
+            returned instead.
+        dilate : int
+            How many times to dilate the central mask. This adds a boundary
+            of that many pixels to the mask. Note this is not an option if
+            binary==False.
         dilateBlends : int or str
-            How many times to dilate the blended masks. Note this only matters
-            if maskBlends==True, and is not an option if binary==False. Can be
-            set to 'auto' in addition to specifying an integer number of
-            dilations. When set to 'auto' the method ``autoDilateBlendMask``
-            will be used to select the number of dilations.
-        maxDilateIter : in, optional
-            Maximum number of dilation iterations.
-            (the default is 8.)
-        fracChange : float, optional
-            Maximum fractional amount the median of the top 5% of brightest
-            pixels can change between dilation iterations of the blend mask
-            before auto dilation stops.
-            (the default is 0.005.)
+            How many times to dilate the blended masks. Can also be set to
+            "auto" in which case an algorithm automatically attempts to infer
+            the correct amount of dilation.
+        ignorePlane : bool
+            If False, check that image.planeType == PlaneType.Pupil.
+        pupil : bool
+            Whether this function is called during creation of pupil masks.
+            If False, it is assumed this function is called during creation
+            of image masks.
 
-        Returns
-        -------
-        int
-            Number of iterations of binary dilation to use for masking blends.
+        Raises
+        ------
+        ValueError
+            The image is not on the pupil plane or the dilate values are
+            invalid.
         """
-        sourceMaskInit = sourceMask.copy()
-        blendMaskInit = blendMask.copy()
-        imageArray = image.image
-        blendOffsets = image.blendOffsets
-        # Rotate blendOffsets by 180 for extra-focal images.
-        if image.defocalType == DefocalType.Extra:
-            blendOffsets *= -1.0
-
-        # Run initial iteration.
-        newSourceMask, _ = self.createBlendMask(
-            image.blendOffsets, sourceMaskInit, blendMaskInit, True, 0
-        )
-        blendPix = newSourceMask * imageArray
-        blendPix = blendPix[blendPix > 0]
-        p95 = np.percentile(blendPix, 95)
-        medianPixel = np.median(blendPix[blendPix > p95])
-
-        # Add dilation and compare to initial value up to maxDilateIter
-        # number of dilation iterations.
-        for iterNum in range(1, maxDilateIter + 1):
-            sourceMaskInit = sourceMask.copy()
-            blendMaskInit = blendMask.copy()
-            newSourceMask, _ = self.createBlendMask(
-                image.blendOffsets, sourceMaskInit, blendMaskInit, True, iterNum
+        # Check the image plane
+        requiredPlane = PlaneType.Pupil if pupil else PlaneType.Image
+        if not ignorePlane and image.planeType != requiredPlane:
+            raise ValueError(
+                f"The image is not on the {'pupil' if pupil else 'image'} plane. "
+                "If you want to ignore this check, set ignorePlane=True."
             )
-            blendPix = newSourceMask * imageArray
-            blendPix = blendPix[blendPix > 0]
-            p95 = np.percentile(blendPix, 95)
-            newMedian = np.median(blendPix[blendPix > p95])
-            medianChange = medianPixel - newMedian
-            if medianChange < fracChange * medianPixel:
-                break
-            else:
-                medianPixel = newMedian
 
-        return iterNum - 1
+        # Check the dilate values
+        dilate = int(dilate)
+        if dilate < 0:
+            raise ValueError("dilate must be a non-negative integer.")
+        elif dilate > 0 and not binary:
+            raise ValueError("If dilate is greater than zero, binary must be True.")
+
+        if dilateBlends != "auto":
+            dilateBlends = int(dilateBlends)
+            if dilateBlends < 0:
+                raise ValueError(
+                    "dilateBlends must be a non-negative integer, or 'auto'."
+                )
 
     def createPupilMasks(
         self,
@@ -966,6 +1070,8 @@ class ImageMapper:
         binary: bool = True,
         dilate: int = 0,
         dilateBlends: Union[int, str] = 0,
+        autoDilateMaxIter: int = 8,
+        autoDilateFracChange: float = 5e-3,
         maskBlends: bool = False,
         ignorePlane: bool = False,
     ) -> None:
@@ -990,12 +1096,17 @@ class ImageMapper:
             of that many pixels to the mask. Note this is not an option if
             binary==False. (the default is 0)
         dilateBlends : int or str, optional
-            How many times to dilate the blended masks. Note this only matters
-            if maskBlends==True, and is not an option if binary==False. Can be
-            set to 'auto' in addition to specifying an integer number of
-            dilations. When set to 'auto' the method ``autoDilateBlendMask``
-            will be used to select the number of dilations.
-            (the default is 0)
+            How many times to dilate the blended masks. Can also be set to
+            "auto" in which case an algorithm automatically attempts to infer
+            the correct amount of dilation. (the default is 0)
+        autoDilateMaxIter : int, optional
+            Maximum number of iterations in the dilateBlends auto-algorithm.
+            (the default is 8)
+        autoDilateFracChange : float, optional
+            In the dilateBlends auto-algorithm, this is the max fractional
+            amount the median of the top 5% of brightest pixels can change
+            between dilation iterations of the blend mask before auto dilation
+            stops. (the default is 0.005.)
         maskBlends : bool, optional
             Whether to subtract the blend mask from the source mask.
             (the default is False)
@@ -1009,24 +1120,15 @@ class ImageMapper:
             The image is not on the pupil plane or the dilate values are
             invalid.
         """
-        # Check the image plane
-        if not ignorePlane and image.planeType != PlaneType.Pupil:
-            raise ValueError(
-                "The image is not on the pupil plane. "
-                "If you want to ignore this check, set ignorePlane=True."
-            )
-
-        # Check the dilate values
-        dilate = int(dilate)
-        if dilate < 0:
-            raise ValueError("dilate must be a non-negative integer.")
-        elif dilate > 0 and not binary:
-            raise ValueError("If dilate is greater than zero, binary must be True.")
-
-        if dilateBlends != "auto":
-            dilateBlends = int(dilateBlends)
-            if dilateBlends < 0:
-                raise ValueError("dilateBlends must be a non-negative integer.")
+        # Check arguments
+        self._maskArgCheck(
+            image=image,
+            binary=binary,
+            dilate=dilate,
+            dilateBlends=dilateBlends,
+            ignorePlane=ignorePlane,
+            pupil=True,
+        )
 
         # Get the pupil grid
         uPupil, vPupil = self.instrument.createPupilGrid()
@@ -1042,38 +1144,18 @@ class ImageMapper:
         # Restore the mask shape
         mask = mask.reshape(uPupil.shape)
 
-        # Set the mask to binary?
-        if binary:
-            mask = (mask > 0.5).astype(int)
-
-        # Dilate the mask?
-        sourceMask = mask.copy()
-        blendMask0 = mask.copy()
-        if dilate > 0:
-            sourceMask = binary_dilation(sourceMask, iterations=dilate)
-            sourceMask = sourceMask.astype(int)
-
-        if dilateBlends == "auto":
-            dilateBlends = self.autoDilateBlendMask(
-                image,
-                sourceMask,
-                blendMask0,
-            )
-
-        sourceMask, blendMask = self.createBlendMask(
-            image.blendOffsets, sourceMask, blendMask0, maskBlends, dilateBlends
+        # Create the mask triplet
+        self._createMaskTriplet(
+            image=image,
+            mask=mask,
+            binary=binary,
+            dilate=dilate,
+            dilateBlends=dilateBlends,
+            autoDilateMaxIter=autoDilateMaxIter,
+            autoDilateFracChange=autoDilateFracChange,
+            maskBlends=maskBlends,
+            pupil=True,
         )
-
-        # Create the background mask
-        backgroundMask = np.ones_like(sourceMask)
-        backgroundMask -= sourceMask
-        backgroundMask -= blendMask
-        backgroundMask = np.clip(backgroundMask, 0, 1)
-
-        # Set the masks
-        image.mask = sourceMask
-        image.maskBlends = blendMask
-        image.maskBackground = backgroundMask
 
     def createImageMasks(
         self,
@@ -1083,6 +1165,8 @@ class ImageMapper:
         binary: bool = True,
         dilate: int = 0,
         dilateBlends: int = 0,
+        autoDilateMaxIter: int = 8,
+        autoDilateFracChange: float = 5e-3,
         maskBlends: bool = False,
         ignorePlane: bool = False,
         _invMap: Optional[tuple] = None,
@@ -1111,13 +1195,18 @@ class ImageMapper:
             How many times to dilate the central mask. This adds a boundary
             of that many pixels to the mask. Note this is not an option if
             binary==False. (the default is 0)
-        dilateBlends : int, optional
-            How many times to dilate the blended masks. Note this only matters
-            if maskBlends==True, and is not an option if binary==False. Can be
-            set to 'auto' in addition to specifying an integer number of
-            dilations. When set to 'auto' the method ``autoDilateBlendMask``
-            will be used to select the number of dilations.
-            (the default is 0)
+        dilateBlends : int or str, optional
+            How many times to dilate the blended masks. Can also be set to
+            "auto" in which case an algorithm automatically attempts to infer
+            the correct amount of dilation. (the default is 0)
+        autoDilateMaxIter : int, optional
+            Maximum number of iterations in the dilateBlends auto-algorithm.
+            (the default is 8)
+        autoDilateFracChange : float, optional
+            In the dilateBlends auto-algorithm, this is the max fractional
+            amount the median of the top 5% of brightest pixels can change
+            between dilation iterations of the blend mask before auto dilation
+            stops. (the default is 0.005.)
         maskBlends : bool, optional
             Whether to subtract the blend mask from the source mask.
             (the default is False)
@@ -1131,25 +1220,14 @@ class ImageMapper:
             The image is not on the image plane or the dilate values are
             invalid.
         """
-        # Check the image plane
-        if not ignorePlane and image.planeType != PlaneType.Image:
-            raise ValueError(
-                "The image is not on the image plane. "
-                "If you want to ignore this check, set ignorePlane=True."
-            )
-
-        # Check the dilate values
-        dilate = int(dilate)
-        if dilate < 0:
-            raise ValueError("dilate must be a non-negative integer.")
-        elif dilate > 0 and not binary:
-            raise ValueError("If dilate is greater than zero, binary must be True.")
-
-        if dilateBlends != "auto":
-            if dilateBlends < 0:
-                raise ValueError("dilateBlends must be a non-negative integer.")
-            else:
-                dilateBlends = int(dilateBlends)
+        self._maskArgCheck(
+            image=image,
+            binary=binary,
+            dilate=dilate,
+            dilateBlends=dilateBlends,
+            ignorePlane=ignorePlane,
+            pupil=False,
+        )
 
         if zkCoeff is None:
             # Get the intrinsic Zernikes
@@ -1195,38 +1273,18 @@ class ImageMapper:
             fwdMap=fwdMap,
         )
 
-        # Set the mask to binary?
-        if binary:
-            mask = (mask > 0.5).astype(int)
-
-        # Dilate the mask?
-        sourceMask = mask.copy()
-        blendMask0 = mask.copy()
-        if dilate > 0:
-            sourceMask = binary_dilation(sourceMask, iterations=dilate)
-            sourceMask = sourceMask.astype(int)
-
-        if dilateBlends == "auto":
-            dilateBlends = self.autoDilateBlendMask(
-                image,
-                sourceMask,
-                blendMask0,
-            )
-
-        sourceMask, blendMask = self.createBlendMask(
-            image.blendOffsets, sourceMask, blendMask0, maskBlends, dilateBlends
+        # Create the mask triplet
+        self._createMaskTriplet(
+            image=image,
+            mask=mask,
+            binary=binary,
+            dilate=dilate,
+            dilateBlends=dilateBlends,
+            autoDilateMaxIter=autoDilateMaxIter,
+            autoDilateFracChange=autoDilateFracChange,
+            maskBlends=maskBlends,
+            pupil=False,
         )
-
-        # Create the background mask
-        backgroundMask = np.ones_like(sourceMask)
-        backgroundMask -= sourceMask
-        backgroundMask -= blendMask
-        backgroundMask = np.clip(backgroundMask, 0, 1)
-
-        # Set the masks
-        image.mask = sourceMask
-        image.maskBlends = blendMask
-        image.maskBackground = backgroundMask
 
     def getProjectionSize(
         self,
