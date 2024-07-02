@@ -13,6 +13,7 @@ Version History
 -------------
 
 * Add auto-dilation option to making blend masks in ImageMapper.
+* Fixed bugs with blend offsets for extrafocal image masks.
 
 .. _lsst.ts.wep-9.5.8:
 
