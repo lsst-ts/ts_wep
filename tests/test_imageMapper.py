@@ -555,7 +555,7 @@ class TestImageMapper(unittest.TestCase):
             image.image += rng.normal(scale=0.1, size=np.shape(image.image))
 
             if not intra and pupil:
-                # For extrafocal images, the pupil and image are 180 deg rotated
+                # For extrafocal, the pupil and image are 180 deg rotated
                 image.image = np.rot90(image.image, 2)
 
             # Erode mask and check auto-dilation fixes this erosion
