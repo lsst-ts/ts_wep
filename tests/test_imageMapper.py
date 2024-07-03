@@ -474,62 +474,64 @@ class TestImageMapper(unittest.TestCase):
         mapper = ImageMapper()
         inst = mapper.instrument
 
-        # Create a dummy image
-        image = Image(
-            np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
-            (0, 0),
-            "intra",
-            blendOffsets=[[0, 0]],
-        )
-        mapper.createImageMasks(image, maskBlends=False)
-        mask0 = image.mask
+        def _testCreateBlendMask(intra: bool, pupil: bool):
+            try:
+                # Create a dummy image
+                image = Image(
+                    np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
+                    (0, 0),
+                    "intra" if intra else "extra",
+                    planeType="pupil" if pupil else "image",
+                )
 
-        # Test that blend mask is the same as source mask before shifting
-        srcMask, blendMask = mapper.createBlendMask(
-            np.array([[0, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
-        )
-        np.testing.assert_array_almost_equal(srcMask, blendMask)
+                # Create masks
+                if pupil:
+                    mapper.createPupilMasks(image)
+                else:
+                    mapper.createImageMasks(image)
+                mask0 = image.mask
 
-        # Test that blend mask is shifted source mask by amount specified
-        srcMask, blendMask = mapper.createBlendMask(
-            np.array([[2, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
-        )
-        np.testing.assert_array_almost_equal(shift(srcMask, (2, 0)), blendMask)
+                # Test that blend mask is same as source mask before shifting
+                image.blendOffsets = [[0, 0]]
+                blendMask = mapper._createBlendMask(
+                    image,
+                    mask0,
+                    dilateBlends=0,
+                    pupil=pupil,
+                )
+                np.testing.assert_array_almost_equal(mask0, blendMask)
 
-        # Test that masking blends subtracts from source mask
-        srcMask, blendMask = mapper.createBlendMask(
-            np.array([[0, 0]]), mask0, mask0, maskBlends=True, dilateBlends=0
-        )
-        self.assertEqual(np.sum(srcMask), 0)
+                # Test that blend mask is shifted by specified amount
+                image.blendOffsets = [[2, 0]]
+                blendMask = mapper._createBlendMask(
+                    image,
+                    mask0,
+                    dilateBlends=0,
+                    pupil=pupil,
+                )
+                shiftSign = -1 if (pupil and not intra) else +1
+                mask0shifted = shift(mask0, (0, shiftSign * 2))
+                np.testing.assert_array_almost_equal(mask0shifted, blendMask)
 
-        # Check extra-focal as well
-        # Create a dummy image
-        image = Image(
-            np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
-            (0, 0),
-            "extra",
-            blendOffsets=[[0, 0]],
-        )
-        mapper.createImageMasks(image, maskBlends=False)
-        mask0 = image.mask
+                # Test that dilation increases mask size
+                image.blendOffsets = [[0, 0]]
+                blendMask = mapper._createBlendMask(
+                    image,
+                    mask0,
+                    dilateBlends=1,
+                    pupil=pupil,
+                )
+                self.assertGreater(blendMask.sum(), mask0.sum())
+            except AssertionError:
+                raise AssertionError(f"Failed on test of intra={intra}, pupil={pupil}")
 
-        # Test that blend mask is the same as source mask before shifting
-        srcMask, blendMask = mapper.createBlendMask(
-            np.array([[0, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
-        )
-        np.testing.assert_array_almost_equal(srcMask, blendMask)
+        # Test image masks
+        _testCreateBlendMask(intra=True, pupil=False)
+        _testCreateBlendMask(intra=False, pupil=False)
 
-        # Test that blend mask is shifted source mask by amount specified
-        srcMask, blendMask = mapper.createBlendMask(
-            np.array([[2, 0]]), mask0, mask0, maskBlends=False, dilateBlends=0
-        )
-        np.testing.assert_array_almost_equal(shift(srcMask, (2, 0)), blendMask)
-
-        # Test that masking blends subtracts from source mask
-        srcMask, blendMask = mapper.createBlendMask(
-            np.array([[0, 0]]), mask0, mask0, maskBlends=True, dilateBlends=0
-        )
-        self.assertEqual(np.sum(srcMask), 0)
+        # Test pupil masks
+        _testCreateBlendMask(intra=True, pupil=True)
+        _testCreateBlendMask(intra=False, pupil=True)
 
     def testAutoDilateBlendMask(self):
         mapper = ImageMapper()
