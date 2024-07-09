@@ -44,13 +44,16 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         return inputArray, outputFlags
 
     def testValidateConfigs(self):
-        self.assertEqual(3.0, self.task.sigma)
+        self.assertEqual(
+            {"sigma": 3.0, "stdfunc": "mad_std", "maxiters": 1},
+            self.task.sigmaClipKwargs,
+        )
         self.assertEqual(3, self.task.maxZernClip)
-        self.config.sigma = 2.0
+        self.config.sigmaClipKwargs["sigma"] = 2.0
         self.config.stdMin = 0.005
         self.config.maxZernClip = 5
         self.task = CombineZernikesSigmaClipTask(config=self.config)
-        self.assertEqual(2.0, self.task.sigma)
+        self.assertEqual(2.0, self.task.sigmaClipKwargs["sigma"])
         self.assertEqual(0.005, self.task.stdMin)
         self.assertEqual(5, self.task.maxZernClip)
 

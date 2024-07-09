@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.6.0:
+
+-------------
+9.6.0
+-------------
+
+* Change CombineZernikesSigmaClipTask to use kwargs dict to set arguments in astropy.stats.sigma_clip.
+
 .. _lsst.ts.wep-9.5.8:
 
 -------------
