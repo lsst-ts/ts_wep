@@ -383,7 +383,7 @@ def polygonContains(
 
 # Function to apply conditional sigma clipping
 def conditionalSigmaClip(
-    array: np.ndarray, sigma: float, stdMin: float = 0.005, stdFunc: str = "mad_std"
+    array: np.ndarray, sigmaClipKwargs: dict, stdMin: float = 0.005
 ) -> np.ndarray:
     """Apply conditional sigma clipping to an array.
     Note this function applies sigma clipping to each
@@ -416,7 +416,7 @@ def conditionalSigmaClip(
         If stdFunc is not "mad_std" or "std"
     """
 
-    if stdFunc not in ["mad_std", "std"]:
+    if sigmaClipKwargs["stdfunc"] not in ["mad_std", "std"]:
         raise ValueError("stdfunc must be either 'mad_std' or 'std'")
 
     # Initialize an array to hold processed (clipped or original) data
@@ -426,7 +426,7 @@ def conditionalSigmaClip(
         column = array[:, i]
         # Apply sigma clipping if the standard deviation exceeds std_min
         if np.std(column) > stdMin:
-            clipped = sigma_clip(column, sigma=sigma, stdfunc=stdFunc)
+            clipped = sigma_clip(column, **sigmaClipKwargs)
             # Replace processedArray column data with clipped data,
             # maintaining masked as NaN
             processedArray[:, i] = clipped.filled(np.nan)

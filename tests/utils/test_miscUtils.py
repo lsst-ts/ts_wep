@@ -148,14 +148,14 @@ class TestMiscUtils(unittest.TestCase):
             [[1.0, 100.0], [2.0, 200.0], [6.0, 600.0], [2.0, 200.0], [1.0, 100.0]]
         )
         # Set sigma for sigma clipping
-        sigma = 1.5
         # Set a std_min that will ensure the second column
         # is clipped but not the first
+        sigmaClipKwargs = {"sigma": 1.5, "stdfunc": "mad_std"}
         stdMin = 50
 
         # Call the function with the sample array
         processedArray = conditionalSigmaClip(
-            sampleArray, sigma=sigma, stdMin=stdMin, stdFunc="mad_std"
+            sampleArray, sigmaClipKwargs=sigmaClipKwargs, stdMin=stdMin
         )
 
         # Assert the first column remains unchanged
