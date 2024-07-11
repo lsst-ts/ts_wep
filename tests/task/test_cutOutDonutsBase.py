@@ -142,15 +142,18 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.initialCutoutPadding, 5)
         self.assertEqual(self.task.opticalModel, "offAxis")
         self.assertEqual(self.task.instConfigFile, None)
+        self.assertEqual(self.task.maxRecenterDistance, 20)
 
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.config.opticalModel = "onAxis"
+        self.config.maxRecenterDistance = 10
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
         self.assertEqual(self.task.opticalModel, "onAxis")
+        self.assertEqual(self.task.maxRecenterDistance, 10)
 
     def testShiftCenter(self):
         centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)
@@ -180,16 +183,59 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(cornerX, centerCoord[0] - self.task.donutStampSize / 2)
         self.assertEqual(cornerY, centerCoord[1] - self.task.donutStampSize / 2)
 
+    def testCalcFinalCentroidOnEdge(self):
+        (
+            centeredExp,
+            centerCoord,
+            template,
+            edgeExp,
+            edgeCoord,
+        ) = self._generateTestExposures()
+
         centerX, centerY, cornerX, cornerY = self.task.calculateFinalCentroid(
-            offCenterExp, template, centerCoord[0], centerCoord[1]
+            edgeExp, template, centerCoord[0], centerCoord[1]
         )
         # For donut stamp that would go off the top corner of the exposure
         # then the stamp should start at (0, 0) instead
-        self.assertAlmostEqual(centerX, offCenterCoord[0])
-        self.assertAlmostEqual(centerY, offCenterCoord[1])
+        self.assertAlmostEqual(centerX, edgeCoord[0])
+        self.assertAlmostEqual(centerY, edgeCoord[1])
         # Corner of image should be 0, 0
         self.assertEqual(cornerX, 0)
         self.assertEqual(cornerY, 0)
+
+    def testMaxRecenter(self):
+        maxRecenter = 5
+        self.task.maxRecenterDistance = maxRecenter
+        exp, catalog = self._getExpAndCatalog(DefocalType.Extra)
+        # Shift image so that recentering will fail when cutting out
+        # donuts at the original positions
+        exp.image.array = np.roll(exp.image.array, maxRecenter * 2, axis=0)
+
+        # Set first item in catalog to pass by adjusting catalog entry
+        centroid_y_arr = catalog["centroid_y"].values
+        centroid_y_arr[0] += maxRecenter * 2
+        catalog["centroid_y"] = centroid_y_arr
+
+        # Test that warnings logged due to recentering failures
+        with self.assertLogs(logger=self.task.log.logger, level="WARNING") as cm:
+            donutStamps = self.task.cutOutStamps(
+                exp, catalog, DefocalType.Extra, self.cameraName
+            )
+        # Test that there are only two warnings since first object should pass
+        self.assertEqual(len(cm.output), 2)
+        # All donuts except the first one should have unchanged values
+        for stamp, catRow, logMsg in zip(
+            donutStamps[1:], catalog.to_records()[1:], cm.output
+        ):
+            self.assertEqual(stamp.centroid_position[0], int(catRow["centroid_x"]))
+            self.assertEqual(stamp.centroid_position[1], int(catRow["centroid_y"]))
+            errMsg = (
+                "WARNING:lsst.Base Task:Donut Recentering Failed. "
+                + "Flagging and not shifting center of stamp for source"
+                + f' at ({int(catRow["centroid_x"])}, {int(catRow["centroid_y"])}).'
+            )
+            self.assertEqual(logMsg, errMsg)
+        self.assertEqual(self.task.metadata.arrays["recenterFlags"], [0, 1, 1])
 
     def _getExpAndCatalog(self, defocalType):
         """
@@ -241,6 +287,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             exposure, donutCatalog, DefocalType.Extra, self.cameraName
         )
         self.assertTrue(len(donutStamps), 4)
+        self.assertTrue(self.task.metadata.arrays["recenterFlags"], [0, 0, 0, 0])
 
         stampCentroid = donutStamps[0].centroid_position
         stampBBox = lsst.geom.Box2I(
