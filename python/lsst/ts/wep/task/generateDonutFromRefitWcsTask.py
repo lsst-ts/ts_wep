@@ -335,11 +335,40 @@ and direct detect catalog as output."
             )
             detector = exposure.getDetector()
             filterName = exposure.filter.bandLabel
-            if self.config.photoRefFilter is not None:
-                photoRefObjLoader.config.anyFilterMapsToThis = (
-                    self.config.photoRefFilter
+            catCreateErrorMsg = (
+                "Returning new WCS but original direct detect catalog as donutCatalog."
+            )
+
+            # Check that there are catalogs
+            if len(photoRefCat) == 0:
+                self.log.warning("No catalogs cover this detector.")
+                donutCatalog = fitDonutCatalog
+                self.log.warning(catCreateErrorMsg)
+                return pipeBase.Struct(
+                    outputExposure=exposure, donutCatalog=donutCatalog
                 )
-                print(photoRefObjLoader.config)
+
+            # Check that specified filter exists in catalogs
+            if self.config.photoRefFilter is not None:
+                if (
+                    f"{self.config.photoRefFilter}_flux"
+                    not in photoRefCat[0].get().schema
+                ):
+                    filterFailMsg = (
+                        "Photometric Reference Catalog does not contain "
+                        + f"photoRefFilter: {self.config.photoRefFilter}"
+                    )
+                    self.log.warning(filterFailMsg)
+                    donutCatalog = fitDonutCatalog
+                    self.log.warning(catCreateErrorMsg)
+                    return pipeBase.Struct(
+                        outputExposure=exposure, donutCatalog=donutCatalog
+                    )
+                else:
+                    photoRefObjLoader.config.anyFilterMapsToThis = (
+                        self.config.photoRefFilter
+                    )
+                    filterName = self.config.photoRefFilter
 
             try:
                 # Match detector layout to reference catalog
@@ -359,21 +388,11 @@ and direct detect catalog as output."
                     refSelection, filterName, blendCentersX, blendCentersY
                 )
                 self.metadata["refCatalogSuccess"] = True
-
             # Except RuntimeError caused when no reference catalog
             # available for the region covered by detector
-            except RuntimeError as refCatError:
-                if "reference filter" in str(refCatError):
-                    self.log.warning(
-                        "Photometric Reference Catalog does not contain "
-                        + f"photoRefFilter: {self.config.photoRefFilter}"
-                    )
-                else:
-                    self.log.warning("No catalogs cover this detector.")
+            except RuntimeError:
+                self.log.warning("No catalogs cover this detector.")
                 donutCatalog = fitDonutCatalog
-                self.log.warning(
-                    "Returning new WCS but original direct \
-detect catalog as donutCatalog."
-                )
+                self.log.warning(catCreateErrorMsg)
 
         return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
