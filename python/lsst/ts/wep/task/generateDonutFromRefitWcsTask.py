@@ -126,6 +126,16 @@ class GenerateDonutFromRefitWcsTaskConfig(
         dtype=float,
         default=1.0,
     )
+    astromRefFilter = pexConfig.Field(
+        doc="Set filter to use in Astrometry task.",
+        dtype=str,
+        default="phot_g_mean",
+    )
+    photoRefFilter = pexConfig.Field(
+        doc="Set filter to use in Photometry catalog. If not set will try to use exposure filter.",
+        dtype=str,
+        optional=True,
+    )
 
     # Took these defaults from atmospec/centroiding which I used
     # as a template for implementing WCS fitting in a task.
@@ -279,7 +289,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         )
         self.astromTask.setRefObjLoader(astromRefObjLoader)
         self.astromTask.refObjLoader.config.anyFilterMapsToThis = (
-            self.config.anyFilterMapsToThis
+            self.config.astromRefFilter
         )
         afwCat = self.formatDonutCatalog(fitDonutCatalog)
         originalWcs = copy(exposure.wcs)
@@ -325,6 +335,11 @@ and direct detect catalog as output."
             )
             detector = exposure.getDetector()
             filterName = exposure.filter.bandLabel
+            if self.config.photoRefFilter is not None:
+                photoRefObjLoader.config.anyFilterMapsToThis = (
+                    self.config.photoRefFilter
+                )
+                print(photoRefObjLoader.config)
 
             try:
                 # Match detector layout to reference catalog
@@ -347,8 +362,14 @@ and direct detect catalog as output."
 
             # Except RuntimeError caused when no reference catalog
             # available for the region covered by detector
-            except RuntimeError:
-                self.log.warning("No catalogs cover this detector.")
+            except RuntimeError as refCatError:
+                if "reference filter" in str(refCatError):
+                    self.log.warning(
+                        "Photometric Reference Catalog does not contain "
+                        + f"photoRefFilter: {self.config.photoRefFilter}"
+                    )
+                else:
+                    self.log.warning("No catalogs cover this detector.")
                 donutCatalog = fitDonutCatalog
                 self.log.warning(
                     "Returning new WCS but original direct \
