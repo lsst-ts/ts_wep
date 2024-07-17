@@ -39,6 +39,7 @@ tasks:
     config:
       connections.astromRefCat: "cal_ref_cat"
       connections.photoRefCat: "cal_ref_cat"
+      astromRefFilter: "g"
       astromTask.referenceSelector.doMagLimit: False
       donutSelector.unblendedSeparation: 1
   cutOutDonutsScienceSensorTask:

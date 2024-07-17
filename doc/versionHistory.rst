@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.7.0:
+
+-------------
+9.7.0
+-------------
+
+* Change configuration options for GenerateDonutFromRefitWcsTask to specify filter for photometric catalog as well.
+
 .. _lsst.ts.wep-9.6.0:
 
 -------------
