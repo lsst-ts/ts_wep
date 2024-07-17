@@ -143,21 +143,27 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         # Test some defaults
         self.assertEqual(self.config.maxFitScatter, 1.0)
         self.assertEqual(self.config.astromTask.referenceSelector.magLimit.maximum, 15)
+        self.assertEqual(self.config.astromRefFilter, "phot_g_mean")
 
         # Change up config
         self.config.astromTask.referenceSelector.magLimit.maximum = 18
         self.config.astromTask.matcher.maxOffsetPix = 2500
+        self.config.astromRefFilter = "g"
+        self.config.photoRefFilter = "g"
 
         # Test new settings
         task = GenerateDonutFromRefitWcsTask(config=self.config)
         self.assertEqual(task.config.astromTask.referenceSelector.magLimit.maximum, 18)
         self.assertEqual(task.config.astromTask.matcher.maxOffsetPix, 2500)
+        self.assertEqual(task.config.astromRefFilter, "g")
+        self.assertEqual(task.config.photoRefFilter, "g")
 
     def testTaskFit(self):
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
         self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
+        self.config.astromRefFilter = "g"
         task = GenerateDonutFromRefitWcsTask(config=self.config)
 
         # Fit the WCS with the task since Phosim fit will be off
@@ -207,6 +213,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         # Set cutoff so there will be no sources and fit will fail
         self.config.astromTask.referenceSelector.magLimit.maximum = 8.0
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
+        self.config.astromRefFilter = "g"
         task = GenerateDonutFromRefitWcsTask(config=self.config)
 
         # Fit the WCS with the task since Phosim fit will be off
@@ -251,12 +258,13 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertFalse(task.metadata["wcsFitSuccess"])
         self.assertFalse(task.metadata["refCatalogSuccess"])
 
-    def testRefCatalogFailure(self):
+    def testRefCatalogFailureWithNoCatalogs(self):
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
         # Set up task
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
         self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
+        self.config.astromRefFilter = "g"
         task = GenerateDonutFromRefitWcsTask(config=self.config)
 
         # Shift the WCS by a known amount
@@ -278,7 +286,61 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         fitWcs = fitWcsOutput.outputExposure.wcs
         fitCatalog = fitWcsOutput.donutCatalog
 
-        print(fitWcs.getPixelOrigin(), preFitExp_S11.wcs.getPixelOrigin())
+        # Test that WCS is different
+        self.assertFalse(
+            np.array_equal(
+                np.array(fitWcs.getPixelOrigin()),
+                np.array(preFitExp_S11.wcs.getPixelOrigin()),
+            )
+        )
+        # But that catalog is the same
+        np.testing.assert_array_equal(
+            fitCatalog["centroid_x"], directDetectCat["centroid_x"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["centroid_y"], directDetectCat["centroid_y"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["coord_ra"], directDetectCat["coord_ra"]
+        )
+        np.testing.assert_array_equal(
+            fitCatalog["coord_dec"], directDetectCat["coord_dec"]
+        )
+        # Test metadata flags
+        self.assertTrue(task.metadata["wcsFitSuccess"])
+        self.assertFalse(task.metadata["refCatalogSuccess"])
+
+    def testRefCatalogFailureWithNonExistentPhotoRefFilter(self):
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+
+        # Set up task
+        self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
+        self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
+        self.config.astromRefFilter = "g"
+        self.config.photoRefFilter = "bad_g"
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
+
+        # Shift the WCS by a known amount
+        truePixelShift = 5
+        directDetectCat["centroid_x"] += truePixelShift
+        directDetectCat["centroid_y"] += truePixelShift
+
+        # Give incomplete list of reference catalogs
+        with self.assertLogs(self.logger.name, level="WARNING") as context:
+            fitWcsOutput = task.run(
+                dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs
+            )
+        self.assertIn(
+            "Photometric Reference Catalog does not contain photoRefFilter: bad_g",
+            context.output[0],
+        )
+        self.assertIn(
+            "Returning new WCS but original direct detect catalog as donutCatalog.",
+            context.output[1],
+        )
+        fitWcs = fitWcsOutput.outputExposure.wcs
+        fitCatalog = fitWcsOutput.donutCatalog
+
         # Test that WCS is different
         self.assertFalse(
             np.array_equal(
