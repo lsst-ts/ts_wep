@@ -124,6 +124,12 @@ class CutOutDonutsBaseTaskConfig(
         target=lsst.meas.algorithms.SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
     )
+    maxRecenterDistance = pexConfig.Field(
+        doc="Maximum distance (in pixels) to shift donut stamp centroid when "
+        + "performing recentering step with convolution.",
+        dtype=int,
+        default=20,
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -156,6 +162,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.instConfigFile = self.config.instConfigFile
         # Set up background subtraction task
         self.makeSubtask("subtractBackground")
+        # Set max recentering distance in pixels
+        self.maxRecenterDistance = self.config.maxRecenterDistance
 
     def shiftCenter(self, center, boundary, distance):
         """Shift the center if its distance to boundary is less than required.
@@ -329,6 +337,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         xCornerList = list()
         yCornerList = list()
 
+        # Keep track of recentering failures
+        recenterFlags = list()
+
         for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
@@ -345,8 +356,22 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             )
             xShift = finalDonutX - xCent
             yShift = finalDonutY - yCent
+            # If shift is greater than maxRecenteringDistance
+            # then use no shift at all
+            recenterDist = np.sqrt(xShift**2.0 + yShift**2.0)
+            recenterFlag = 0
+            if recenterDist > self.maxRecenterDistance:
+                self.log.warning(
+                    "Donut Recentering Failed. Flagging and "
+                    + f"not shifting center of stamp for source at {(xCent, yCent)}."
+                )
+                finalDonutX = xCent
+                finalDonutY = yCent
+                recenterFlag = 1
+
             finalXCentList.append(finalDonutX)
             finalYCentList.append(finalDonutY)
+            recenterFlags.append(recenterFlag)
 
             # Get the final cutout
             finalCorner = lsst.geom.Point2I(xCorner, yCorner)
@@ -444,5 +469,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Save the corner values
         stampsMetadata["X0"] = np.array(xCornerList)
         stampsMetadata["Y0"] = np.array(yCornerList)
+
+        if len(finalStamps) > 0:
+            self.metadata["recenterFlags"] = recenterFlags
 
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.8.0:
+
+-------------
+9.8.0
+-------------
+
+* Add maxRecenterDistance configuration option to cutOutDonutsBase.
+
 .. _lsst.ts.wep-9.7.0:
 
 -------------
