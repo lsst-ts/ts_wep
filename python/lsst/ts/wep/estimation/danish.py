@@ -270,8 +270,8 @@ class DanishAlgorithm(WfAlgorithm):
         ----------
         I1 : Image
             An Image object containing an intra- or extra-focal donut image.
-        I2 : Image
-            A second image, on the opposite side of focus from I1.
+        I2 : Image or None
+            A second image, on the opposite side of focus from I1. Can be None.
         zkStartI1 : np.ndarray
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
