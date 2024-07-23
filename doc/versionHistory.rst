@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.8.1:
+
+-------------
+9.8.1
+-------------
+
+* Fixed bug in convertMetadataToHistory that failed when array shape values were floats.
+
 .. _lsst.ts.wep-9.8.0:
 
 -------------
