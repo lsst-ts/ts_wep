@@ -485,8 +485,8 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata) -> dict:
             metadata = np.array(
                 metadata["values"],
                 dtype=metadata["dtype"],
-            ).reshape(metadata["shape"])
-        # Otherwise, recures on keys and values
+            ).reshape([int(val) for val in metadata["shape"]])
+        # Otherwise, recurse on keys and values
         else:
             metadata = {
                 convertMetadataToHistory(key): convertMetadataToHistory(val)
