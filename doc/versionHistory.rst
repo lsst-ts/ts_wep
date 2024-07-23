@@ -6,13 +6,119 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-9.8.1:
+
+-------------
+9.8.1
+-------------
+
+* Fixed bug in convertMetadataToHistory that failed when array shape values were floats.
+
+.. _lsst.ts.wep-9.8.0:
+
+-------------
+9.8.0
+-------------
+
+* Add maxRecenterDistance configuration option to cutOutDonutsBase.
+
+.. _lsst.ts.wep-9.7.0:
+
+-------------
+9.7.0
+-------------
+
+* Change configuration options for GenerateDonutFromRefitWcsTask to specify filter for photometric catalog as well.
+
+.. _lsst.ts.wep-9.6.0:
+
+-------------
+9.6.0
+-------------
+
+* Change CombineZernikesSigmaClipTask to use kwargs dict to set arguments in astropy.stats.sigma_clip.
+
+.. _lsst.ts.wep-9.5.8:
+
+-------------
+9.5.8
+-------------
+
+* Update to use ts_jenkins_shared_library.
+
+.. _lsst.ts.wep-9.5.7:
+
+-------------
+9.5.7
+-------------
+
+* Update default maxFieldDist in donutSourceSelectorTask.py after analysis in DM-42067 (see ts_analysis_notebooks/aos/vignetting).
+
+.. _lsst.ts.wep-9.5.6:
+
+-------------
+9.5.6
+-------------
+
+* Move class diagrams to mermaid from plantUML.
+
+.. _lsst.ts.wep-9.5.5:
+
+-------------
+9.5.5
+-------------
+
+* Correct indices used to calculate Zernike average.
+* Update tests to discern whether flags and mean use the same indices.
+
+.. _lsst.ts.wep-9.5.4:
+
+-------------
+9.5.4
+-------------
+
+* Fix blend centroid coordinates in donut stamp generation.
+
+.. _lsst.ts.wep-9.5.3:
+
+-------------
+9.5.3
+-------------
+
+* Fixed bug where blended masks have sharp edges when using dilateBlends.
+
+.. _lsst.ts.wep-9.5.2:
+
+-------------
+9.5.2
+-------------
+
+* Fix units in ExposurePairer and add tests.
+
+.. _lsst.ts.wep-9.5.1:
+
+-------------
+9.5.1
+-------------
+
+* Fixed compatibility with Batoid 0.6.2
+
+.. _lsst.ts.wep-9.5.0:
+
+-------------
+9.5.0
+-------------
+
+* Add exposure pairing for full array mode.
+
 .. _lsst.ts.wep-9.4.0:
+
 -------------
 9.4.0
 -------------
 
 * Added the Danish wavefront estimation algorithm.
-  
+
 .. _lsst.ts.wep-9.3.1:
 
 -------------

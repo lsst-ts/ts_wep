@@ -126,6 +126,16 @@ class GenerateDonutFromRefitWcsTaskConfig(
         dtype=float,
         default=1.0,
     )
+    astromRefFilter = pexConfig.Field(
+        doc="Set filter to use in Astrometry task.",
+        dtype=str,
+        default="phot_g_mean",
+    )
+    photoRefFilter = pexConfig.Field(
+        doc="Set filter to use in Photometry catalog. If not set will try to use exposure filter.",
+        dtype=str,
+        optional=True,
+    )
 
     # Took these defaults from atmospec/centroiding which I used
     # as a template for implementing WCS fitting in a task.
@@ -279,7 +289,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         )
         self.astromTask.setRefObjLoader(astromRefObjLoader)
         self.astromTask.refObjLoader.config.anyFilterMapsToThis = (
-            self.config.anyFilterMapsToThis
+            self.config.astromRefFilter
         )
         afwCat = self.formatDonutCatalog(fitDonutCatalog)
         originalWcs = copy(exposure.wcs)
@@ -325,6 +335,40 @@ and direct detect catalog as output."
             )
             detector = exposure.getDetector()
             filterName = exposure.filter.bandLabel
+            catCreateErrorMsg = (
+                "Returning new WCS but original direct detect catalog as donutCatalog."
+            )
+
+            # Check that there are catalogs
+            if len(photoRefCat) == 0:
+                self.log.warning("No catalogs cover this detector.")
+                donutCatalog = fitDonutCatalog
+                self.log.warning(catCreateErrorMsg)
+                return pipeBase.Struct(
+                    outputExposure=exposure, donutCatalog=donutCatalog
+                )
+
+            # Check that specified filter exists in catalogs
+            if self.config.photoRefFilter is not None:
+                if (
+                    f"{self.config.photoRefFilter}_flux"
+                    not in photoRefCat[0].get().schema
+                ):
+                    filterFailMsg = (
+                        "Photometric Reference Catalog does not contain "
+                        + f"photoRefFilter: {self.config.photoRefFilter}"
+                    )
+                    self.log.warning(filterFailMsg)
+                    donutCatalog = fitDonutCatalog
+                    self.log.warning(catCreateErrorMsg)
+                    return pipeBase.Struct(
+                        outputExposure=exposure, donutCatalog=donutCatalog
+                    )
+                else:
+                    photoRefObjLoader.config.anyFilterMapsToThis = (
+                        self.config.photoRefFilter
+                    )
+                    filterName = self.config.photoRefFilter
 
             try:
                 # Match detector layout to reference catalog
@@ -344,15 +388,11 @@ and direct detect catalog as output."
                     refSelection, filterName, blendCentersX, blendCentersY
                 )
                 self.metadata["refCatalogSuccess"] = True
-
             # Except RuntimeError caused when no reference catalog
             # available for the region covered by detector
             except RuntimeError:
                 self.log.warning("No catalogs cover this detector.")
                 donutCatalog = fitDonutCatalog
-                self.log.warning(
-                    "Returning new WCS but original direct \
-detect catalog as donutCatalog."
-                )
+                self.log.warning(catCreateErrorMsg)
 
         return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)

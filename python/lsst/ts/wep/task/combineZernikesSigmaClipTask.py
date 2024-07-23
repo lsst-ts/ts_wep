@@ -35,10 +35,8 @@ class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
     Configuration for combining Zernike coefficients with sigma clipping.
     """
 
-    sigma = pexConfig.Field(
-        dtype=float,
-        default=3.0,
-        doc="Number of standard deviations for the clipping limit.",
+    sigmaClipKwargs = pexConfig.DictField(
+        keytype=str, default=dict(), doc="Arguments for astropy.stats.sigma_clip."
     )
     stdMin = pexConfig.Field(
         dtype=float,
@@ -65,22 +63,43 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Set the sigma from the config
-        self.sigma = self.config.sigma
-        self.stdMin = self.config.stdMin
+        # Set the sigma_clip settings from the config
+        self.sigmaClipKwargs = {"sigma": 3.0, "maxiters": 1, "stdfunc": "mad_std"}
+        for key, val in self.config.sigmaClipKwargs.items():
+            self.sigmaClipKwargs[key] = val
         self.maxZernClip = self.config.maxZernClip
+        self.stdMin = self.config.stdMin
 
     def combineZernikes(self, zernikeArray):
         sigArray = conditionalSigmaClip(
-            zernikeArray, sigma=self.sigma, stdMin=self.stdMin, stdFunc="mad_std"
+            zernikeArray, sigmaClipKwargs=self.sigmaClipKwargs, stdMin=self.stdMin
         )
         # Create a binary flag array that indicates
         # donuts have outlier values. This array is 1 if
         # it has any outlier values.
-        binaryFlagArray = np.any(
-            np.isnan(sigArray[:, : self.maxZernClip]), axis=1
-        ).astype(int)
+        # If all available donuts have a clipped value in the
+        # first maxZernClip coefficients then reduce maxZernClip by 1
+        # until we get one that passes.
+        numRejected = len(sigArray)
+        effMaxZernClip = self.maxZernClip + 1
+
+        while numRejected == len(sigArray):
+            effMaxZernClip -= 1
+            binaryFlagArray = np.any(
+                np.isnan(sigArray[:, :effMaxZernClip]), axis=1
+            ).astype(int)
+            numRejected = np.sum(binaryFlagArray)
         # Identify which rows to use when calculating final mean
-        keepIdx = ~np.any(np.isnan(sigArray), axis=1)
+        keepIdx = ~np.array(binaryFlagArray, dtype=bool)
+
+        self.log.info(
+            f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}."
+        )
+        if effMaxZernClip < self.maxZernClip:
+            self.log.warning(
+                f"EffMaxZernClip ({effMaxZernClip}) was less than MaxZernClip config ({self.maxZernClip})."
+            )
+        self.metadata["maxZernClip"] = self.maxZernClip
+        self.metadata["effMaxZernClip"] = effMaxZernClip
 
         return np.mean(zernikeArray[keepIdx], axis=0), binaryFlagArray

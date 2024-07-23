@@ -1,4 +1,5 @@
-@startuml
+classDiagram
+
 class RefCatalogInterface
 CombineZernikesBaseTask <|-- CombineZernikesMeanTask
 CombineZernikesBaseTask <|-- CombineZernikesSigmaClipTask
@@ -29,6 +30,7 @@ CutOutDonutsScienceSensorTaskConfig *-- CutOutDonutsBaseTaskConnections
 CutOutDonutsScienceSensorTask *-- CutOutDonutsScienceSensorTaskConfig
 CutOutDonutsBaseTaskConnections <|-- CutOutDonutsScienceSensorTaskConnections
 CutOutDonutsScienceSensorTaskConfig *-- CutOutDonutsScienceSensorTaskConnections
+CutOutDonutsScienceSensorTaskConfig *-- ExposurePairer
 CutOutDonutsScienceSensorTask ..> DonutStamps
 CutOutDonutsBaseTaskConfig *-- CutOutDonutsBaseTaskConnections
 CutOutDonutsBaseTask *-- CutOutDonutsBaseTaskConfig
@@ -42,4 +44,5 @@ GenerateDonutFromRefitWcsTaskConfig *-- GenerateDonutFromRefitWcsTaskConnections
 GenerateDonutCatalogWcsTaskConfig <|-- GenerateDonutFromRefitWcsTaskConfig
 GenerateDonutFromRefitWcsTask *-- GenerateDonutFromRefitWcsTaskConfig
 GenerateDonutCatalogWcsTask <|-- GenerateDonutFromRefitWcsTask
-@enduml
+ExposurePairer *-- ExposurePairerConfig
+TablePairer *-- TablePairerConfig

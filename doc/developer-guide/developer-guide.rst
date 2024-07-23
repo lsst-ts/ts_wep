@@ -44,7 +44,7 @@ wep
 
 This module is a high-level module to use other modules.
 
-.. uml:: ../uml/wepClass.uml
+.. mermaid:: ../uml/wepClass.mmd
     :caption: Class diagram of wep
 
 * **Instrument**: Class that defines the geometry, mask model, Batoid model, etc. for different telescopes.
@@ -58,7 +58,7 @@ This module is a high-level module to use other modules.
 wep.centroid
 -------------
 
-.. uml:: ../uml/centroidClass.uml
+.. mermaid:: ../uml/centroidClass.mmd
     :caption: Class diagram of wep.centroid
 
 This module finds the centroids of donuts.
@@ -74,7 +74,7 @@ This module finds the centroids of donuts.
 wep.estimation
 -------------
 
-.. uml:: ../uml/estimationClass.uml
+.. mermaid:: ../uml/estimationClass.mmd
     :caption: Class diagram of wep.estimation
 
 This module estimates the wavefront error.
@@ -91,7 +91,7 @@ wep.deblend
 
 This module does the image deblending.
 
-.. uml:: ../uml/deblendClass.uml
+.. mermaid:: ../uml/deblendClass.mmd
     :caption: Class diagram of wep.deblend
 
 * **DeblendDonutFactory**: Factory for creating the deblend donut object to deblend the bright star donut from neighboring stars.
@@ -106,7 +106,7 @@ wep.task
 
 This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware.
 
-.. uml:: ../uml/taskClass.uml
+.. mermaid:: ../uml/taskClass.mmd
     :caption: Class diagram of wep.task
 
 * **GenerateDonutDirectDetectTaskConnections**: Connections setup for GenerateDonutDirectDetectTask to run in a pipeline with Gen 3 middleware.
@@ -148,6 +148,8 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutFromRefitWcsTaskConnections**: Connections setup for GenerateDonutFromRefitWcsTask.
 * **GenerateDonutFromRefitWcsTaskConfig**: Configuration setup for GenerateDonutFromRefitWcsTask.
 * **GenerateDonutCatalogUtils**: Common utility functions for the GenerateDonutCatalog...Tasks.
+* **ExposurePairer**: Subtask to pair intra- and extra-focal exposures heuristically.
+* **TablePairer**: Subtask to pair intra- and extra-focal exposures manually from a table.  Use generatePairTable.py script as a useful starting point.
 
 .. _WEP_modules_wep_utils:
 
@@ -160,7 +162,7 @@ This module contains utility functions that are used elsewhere in WEP.
 * **ioUtils**: Functions for reading and writing files.
 * **maskUtils**: Functions for generating a mask model for an instrument.
 * **taskUtils**: Functions for running command line tasks from a python script.
-* **zernikeUtils**: Functions for evaluating and fitting Zernike polynomials. 
+* **zernikeUtils**: Functions for evaluating and fitting Zernike polynomials.
 * **plotUtils**: Functions for plotting results.
 * **miscUtils**: Miscellaneous utility functions.
 
