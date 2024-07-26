@@ -298,10 +298,10 @@ class TestDonutStamp(unittest.TestCase):
             wepImage = donutStamp.wep_im
 
             # Check that the rotation was applied to the image correctly
-            #   (Here we transform a WEP image into the coordinate system
-            #   in which data comes out of the butler, so this is the
-            #   inverse of the forwawrd transformation applied to the image
-            #   in _setWepImage())
+            # (Here we transform a WEP image into the coordinate system
+            # in which data comes out of the butler, so this is the
+            # inverse of the forwawrd transformation applied to the image
+            # in _setWepImage())
             eulerZ = detector.getOrientation().getYaw().asDegrees()
             sameImage = np.allclose(
                 rotate(wepImage.image.T, eulerZ),

@@ -272,8 +272,8 @@ class DonutStamp(AbstractStamp):
 
             # Rotate the coordinates to match the science sensors
             rotMat = np.array([[0, -1], [1, 0]])
-            rotMat = np.linalg.matrix_power(rotMat, nRot)
-            blendOffsets = np.transpose(rotMat @ blendOffsets.T)
+            rotMatMultiple = np.linalg.matrix_power(rotMat, nRot)
+            blendOffsets = np.transpose(rotMatMultiple @ blendOffsets.T)
 
             # Transpose the coordinates (DVCS -> CCS)
             blendOffsets = blendOffsets[:, ::-1]
@@ -333,10 +333,10 @@ class DonutStamp(AbstractStamp):
         # Create the masks
         imageMapper.createImageMasks(
             self.wep_im,
-            binary=True,
+            isBinary=True,
             dilate=dilate,
             dilateBlends=dilateBlends,
-            maskBlends=False,
+            doMaskBlends=False,
         )
         maskSource, maskBlends, maskBackground = self.wep_im.masks
 

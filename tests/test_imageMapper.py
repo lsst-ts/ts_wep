@@ -127,7 +127,7 @@ class TestImageMapper(unittest.TestCase):
 
         # Check that the binary mask matches the expected truth
         image = Image(np.zeros_like(r), (0, 0), "intra", "ref", "pupil")
-        mapper.createPupilMasks(image, binary=True)
+        mapper.createPupilMasks(image, isBinary=True)
         self.assertTrue(np.allclose(image.mask, truth))
 
     def testCreatePupilMaskOffCenter(self):
@@ -172,7 +172,7 @@ class TestImageMapper(unittest.TestCase):
             "ref",
             "pupil",
         )
-        mapper.createPupilMasks(image, binary=True)
+        mapper.createPupilMasks(image, isBinary=True)
 
         # Get the difference in the masks
         diff = maskPupilBatoid.astype(float) - image.mask.astype(float)
@@ -239,7 +239,7 @@ class TestImageMapper(unittest.TestCase):
         recentered = mapper.centerOnProjection(
             decentered,
             zk,
-            binary=True,
+            isBinary=True,
             rMax=np.inf,
         )
         self.assertTrue(np.allclose(recentered.image, image.image))
@@ -248,7 +248,7 @@ class TestImageMapper(unittest.TestCase):
         recentered = mapper.centerOnProjection(
             decentered,
             zk,
-            binary=False,
+            isBinary=False,
             rMax=np.inf,
         )
         self.assertTrue(np.allclose(recentered.image, image.image))
@@ -343,35 +343,35 @@ class TestImageMapper(unittest.TestCase):
 
         # Test that a blend offset of 0 removes all the flux
         image.blendOffsets = [[0, 0]]
-        mapper.createImageMasks(image, maskBlends=True)
+        mapper.createImageMasks(image, doMaskBlends=True)
         self.assertTrue(np.allclose(image.mask, 0))
-        mapper.createPupilMasks(image, maskBlends=True, ignorePlane=True)
+        mapper.createPupilMasks(image, doMaskBlends=True, ignorePlane=True)
         self.assertTrue(np.allclose(image.mask, 0))
         self.assertTrue(
-            np.allclose(mapper.mapImageToPupil(image, maskBlends=True).image, 0)
+            np.allclose(mapper.mapImageToPupil(image, doMaskBlends=True).image, 0)
         )
         self.assertTrue(
-            np.allclose(mapper.mapPupilToImage(image, maskBlends=True).image, 0)
+            np.allclose(mapper.mapPupilToImage(image, doMaskBlends=True).image, 0)
         )
 
         # Non-zero blend offset removes a portion of the flux
         image.blendOffsets = [[50, 50]]
-        mapper.createImageMasks(image, maskBlends=False)
+        mapper.createImageMasks(image, doMaskBlends=False)
         mask0 = image.mask
-        mapper.createImageMasks(image, maskBlends=True)
+        mapper.createImageMasks(image, doMaskBlends=True)
         mask1 = image.mask
         self.assertTrue(0 < mask1.sum() < mask0.sum())
 
-        mapper.createPupilMasks(image, maskBlends=False, ignorePlane=True)
+        mapper.createPupilMasks(image, doMaskBlends=False, ignorePlane=True)
         mask0 = image.mask
-        mapper.createPupilMasks(image, maskBlends=True, ignorePlane=True)
+        mapper.createPupilMasks(image, doMaskBlends=True, ignorePlane=True)
         mask1 = image.mask
         self.assertTrue(0 < mask1.sum() < mask0.sum())
 
         self.assertTrue(
             0
-            < mapper.mapImageToPupil(image, maskBlends=True).image.sum()
-            < mapper.mapPupilToImage(image, maskBlends=False).image.sum()
+            < mapper.mapImageToPupil(image, doMaskBlends=True).image.sum()
+            < mapper.mapPupilToImage(image, doMaskBlends=False).image.sum()
         )
 
     def testDilate(self):
@@ -394,23 +394,23 @@ class TestImageMapper(unittest.TestCase):
 
         # Test that you can only dilate a binary mask
         with self.assertRaises(ValueError):
-            mapper.createImageMasks(image, binary=False, dilate=1)
+            mapper.createImageMasks(image, isBinary=False, dilate=1)
         with self.assertRaises(ValueError):
-            mapper.createPupilMasks(image, binary=False, dilate=1, ignorePlane=True)
+            mapper.createPupilMasks(image, isBinary=False, dilate=1, ignorePlane=True)
 
         # Test that the dilated mask is bigger
-        mapper.createImageMasks(image, binary=True)
+        mapper.createImageMasks(image, isBinary=True)
         mask0 = image.mask
-        mapper.createImageMasks(image, binary=True, dilate=1)
+        mapper.createImageMasks(image, isBinary=True, dilate=1)
         mask1 = image.mask
         self.assertGreater(
             mask1.sum(),
             mask0.sum(),
         )
 
-        mapper.createPupilMasks(image, binary=True, ignorePlane=True)
+        mapper.createPupilMasks(image, isBinary=True, ignorePlane=True)
         mask0 = image.mask
-        mapper.createPupilMasks(image, binary=True, dilate=1, ignorePlane=True)
+        mapper.createPupilMasks(image, isBinary=True, dilate=1, ignorePlane=True)
         mask1 = image.mask
         self.assertGreater(
             mask1.sum(),
@@ -437,30 +437,32 @@ class TestImageMapper(unittest.TestCase):
             mapper.createPupilMasks(image, dilateBlends=-1, ignorePlane=True)
 
         # Test that you CAN dilate blends for a fractional mask
-        mapper.createImageMasks(image, binary=False, dilateBlends=1, maskBlends=True)
+        mapper.createImageMasks(
+            image, isBinary=False, dilateBlends=1, doMaskBlends=True
+        )
         mapper.createPupilMasks(
             image,
-            binary=False,
+            isBinary=False,
             dilateBlends=1,
-            maskBlends=True,
+            doMaskBlends=True,
             ignorePlane=True,
         )
 
         # Test that the mask with dilated blends is smaller
-        mapper.createImageMasks(image, maskBlends=True)
+        mapper.createImageMasks(image, doMaskBlends=True)
         mask0 = image.mask
-        mapper.createImageMasks(image, maskBlends=True, dilateBlends=1)
+        mapper.createImageMasks(image, doMaskBlends=True, dilateBlends=1)
         mask1 = image.mask
         self.assertLess(
             mask1.sum(),
             mask0.sum(),
         )
 
-        mapper.createPupilMasks(image, maskBlends=True, ignorePlane=True)
+        mapper.createPupilMasks(image, doMaskBlends=True, ignorePlane=True)
         mask0 = image.mask
         mapper.createPupilMasks(
             image,
-            maskBlends=True,
+            doMaskBlends=True,
             dilateBlends=1,
             ignorePlane=True,
         )
@@ -474,18 +476,18 @@ class TestImageMapper(unittest.TestCase):
         mapper = ImageMapper()
         inst = mapper.instrument
 
-        def _testCreateBlendMask(intra: bool, pupil: bool):
+        def _testCreateBlendMask(isIntra: bool, isPupilMask: bool):
             try:
                 # Create a dummy image
                 image = Image(
                     np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
                     (0, 0),
-                    "intra" if intra else "extra",
-                    planeType="pupil" if pupil else "image",
+                    "intra" if isIntra else "extra",
+                    planeType="pupil" if isPupilMask else "image",
                 )
 
                 # Create masks
-                if pupil:
+                if isPupilMask:
                     mapper.createPupilMasks(image)
                 else:
                     mapper.createImageMasks(image)
@@ -497,7 +499,7 @@ class TestImageMapper(unittest.TestCase):
                     image,
                     mask0,
                     dilateBlends=0,
-                    pupil=pupil,
+                    isPupilMask=isPupilMask,
                 )
                 np.testing.assert_array_almost_equal(mask0, blendMask)
 
@@ -507,9 +509,9 @@ class TestImageMapper(unittest.TestCase):
                     image,
                     mask0,
                     dilateBlends=0,
-                    pupil=pupil,
+                    isPupilMask=isPupilMask,
                 )
-                shiftSign = -1 if (pupil and not intra) else +1
+                shiftSign = -1 if (isPupilMask and not isIntra) else +1
                 mask0shifted = shift(mask0, (0, shiftSign * 2))
                 np.testing.assert_array_almost_equal(mask0shifted, blendMask)
 
@@ -519,35 +521,37 @@ class TestImageMapper(unittest.TestCase):
                     image,
                     mask0,
                     dilateBlends=1,
-                    pupil=pupil,
+                    isPupilMask=isPupilMask,
                 )
                 self.assertGreater(blendMask.sum(), mask0.sum())
             except AssertionError:
-                raise AssertionError(f"Failed on test of intra={intra}, pupil={pupil}")
+                raise AssertionError(
+                    f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}"
+                )
 
         # Test image masks
-        _testCreateBlendMask(intra=True, pupil=False)
-        _testCreateBlendMask(intra=False, pupil=False)
+        _testCreateBlendMask(isIntra=True, isPupilMask=False)
+        _testCreateBlendMask(isIntra=False, isPupilMask=False)
 
         # Test pupil masks
-        _testCreateBlendMask(intra=True, pupil=True)
-        _testCreateBlendMask(intra=False, pupil=True)
+        _testCreateBlendMask(isIntra=True, isPupilMask=True)
+        _testCreateBlendMask(isIntra=False, isPupilMask=True)
 
     def testAutoDilateBlendMask(self):
         mapper = ImageMapper()
         inst = mapper.instrument
 
-        def _testAutoDilate(intra: bool, pupil: bool):
+        def _testAutoDilate(isIntra: bool, isPupilMask: bool):
             # Create a dummy image
             image = Image(
                 np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
                 (0, 0),
-                "intra" if intra else "extra",
+                "intra" if isIntra else "extra",
                 blendOffsets=[[110, 0]],
             )
 
             # Get the source mask in order to simulate blended image
-            mapper.createImageMasks(image, maskBlends=False)
+            mapper.createImageMasks(image, doMaskBlends=False)
             mask0 = image.mask
             image.image = np.array(mask0.copy(), dtype=np.float64)
             image.image += shift(image.image, image.blendOffsets[0, ::-1])
@@ -556,7 +560,7 @@ class TestImageMapper(unittest.TestCase):
             rng = np.random.default_rng(123)
             image.image += rng.normal(scale=0.1, size=np.shape(image.image))
 
-            if not intra and pupil:
+            if not isIntra and isPupilMask:
                 # For extrafocal, the pupil and image are 180 deg rotated
                 image.image = np.rot90(image.image, 2)
 
@@ -568,26 +572,28 @@ class TestImageMapper(unittest.TestCase):
                 sourceMask=mask0,
                 autoDilateMaxIter=8,
                 autoDilateFracChange=5e-3,
-                pupil=pupil,
+                isPupilMask=isPupilMask,
             )
             blendMask = mapper._createBlendMask(
                 image=image,
                 mask=mask0,
                 dilateBlends=0,
-                pupil=pupil,
+                isPupilMask=isPupilMask,
             )
             try:
                 np.testing.assert_array_almost_equal(blendMask, dilatedMask)
             except AssertionError:
-                raise AssertionError(f"Failed on test of intra={intra}, pupil={pupil}")
+                raise AssertionError(
+                    f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}"
+                )
 
         # Test image masks
-        _testAutoDilate(intra=True, pupil=False)
-        _testAutoDilate(intra=False, pupil=False)
+        _testAutoDilate(isIntra=True, isPupilMask=False)
+        _testAutoDilate(isIntra=False, isPupilMask=False)
 
         # Test pupil masks
-        _testAutoDilate(intra=True, pupil=True)
-        _testAutoDilate(intra=False, pupil=True)
+        _testAutoDilate(isIntra=True, isPupilMask=True)
+        _testAutoDilate(isIntra=False, isPupilMask=True)
 
     def testGetProjectionSize(self):
         mapper = ImageMapper()
@@ -748,7 +754,7 @@ class TestImageMapper(unittest.TestCase):
         )
 
         # Create a blended mask with dilation = blend shift
-        mapper.createPupilMasks(pupil, maskBlends=True, dilateBlends=200)
+        mapper.createPupilMasks(pupil, doMaskBlends=True, dilateBlends=200)
 
         # Confirm that all mask values are zero
         self.assertTrue(np.allclose(pupil.mask, 0))
@@ -761,5 +767,5 @@ class TestImageMapper(unittest.TestCase):
             planeType="image",
             blendOffsets=[[0, 200]],
         )
-        mapper.createImageMasks(image, maskBlends=True, dilateBlends=200)
+        mapper.createImageMasks(image, doMaskBlends=True, dilateBlends=200)
         self.assertTrue(np.allclose(image.mask, 0))
