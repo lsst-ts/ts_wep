@@ -261,7 +261,7 @@ class TestTieAlgorithm(unittest.TestCase):
         mask1 = hist[max(hist)]["mask"]
 
         # Run TIE with with blend masking
-        tie = TieAlgorithm(maskKwargs=dict(maskBlends=True))
+        tie = TieAlgorithm(maskKwargs=dict(doMaskBlends=True))
         tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         mask2 = hist[max(hist)]["mask"]

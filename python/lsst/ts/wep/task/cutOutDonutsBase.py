@@ -319,7 +319,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             instrument=instrument,
             opticalModel=self.opticalModel,
             padding=self.initialCutoutPadding,
-            binary=True,
+            isBinary=True,
         )
 
         # Final list of DonutStamp objects

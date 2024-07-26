@@ -342,7 +342,7 @@ def createTemplateForDetector(
     instrument: Instrument = Instrument(),
     opticalModel: str = "offAxis",
     padding: int = 5,
-    binary: bool = True,
+    isBinary: bool = True,
     ccs: bool = False,
     nPixels: int = None,
 ) -> np.ndarray:
@@ -365,7 +365,7 @@ def createTemplateForDetector(
         The optical model for the ImageMapper. (the default is "offAxis")
     padding : int, optional
         Padding, in pixels, on each side of the template. (the default is 5)
-    binary : bool, optional
+    isBinary : bool, optional
         Whether to return a binary template. (the default is True)
     ccs : bool, optional
         Whether to return a template that is in the camera coordinate system
@@ -406,8 +406,8 @@ def createTemplateForDetector(
     )
 
     # Create the Donut template
-    if binary:
-        imageMapper.createImageMasks(dummyImage, binary=True)
+    if isBinary:
+        imageMapper.createImageMasks(dummyImage, isBinary=True)
         template = dummyImage.mask.astype(int)
     else:
         template = imageMapper.mapPupilToImage(dummyImage)
