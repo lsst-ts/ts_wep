@@ -23,16 +23,19 @@ import typing
 import unittest
 
 import lsst.geom
+import lsst.pex.config as pexConfig
 from lsst.afw.coord import Observatory
 from lsst.afw.image import VisitInfo
 from lsst.daf.base import DateTime
-from lsst.ts.wep.task import ExposurePairer, ExposurePairerConfig
+from lsst.ts.wep.task import (
+    ExposurePairer,
+    ExposurePairerConfig,
+    GroupPairer,
+    GroupPairerConfig,
+)
 
 
 class TestPairTask(unittest.TestCase):
-    def setUp(self) -> None:
-        return super().setUp()
-
     def _createVisitInfoDict(
         self,
         ra_deg_start: float = 0.0,
@@ -183,6 +186,12 @@ class TestPairTask(unittest.TestCase):
         self.assertEqual(task_output[0].intra, 2)
         self.assertEqual(task_output[0].extra, 3)
 
+        task_config = ExposurePairerConfig(ignoreThresholds=True)
+        task = ExposurePairer(config=task_config)
+
+        task_output = task.run(visit_info_dict)
+        self.assertEqual(len(task_output), 2)
+
     def testExposurePairerForceUniquePairs(self) -> None:
         task_config = ExposurePairerConfig()
         task = ExposurePairer(config=task_config)
@@ -210,3 +219,25 @@ class TestPairTask(unittest.TestCase):
         self.assertEqual(task_output[0].extra, 1)
         self.assertEqual(task_output[1].intra, 0)
         self.assertEqual(task_output[1].extra, 2)
+
+    def testGroupPairerWrongNumberInGroup(self) -> None:
+        task_config = GroupPairerConfig()
+        task = GroupPairer(config=task_config)
+
+        # Test 4,3,3,2 VisitInfos.  Should succeed if len is 2 or 3
+        visit_info_dict = self._createVisitInfoDict()
+        visit_info_dict.update(self._createVisitInfoDict(intra_id=2, extra_id=3))
+
+        while visit_info_dict:
+            if len(visit_info_dict) in (2, 3):
+                with self.assertNoLogs(logger=task.log.name, level="WARNING"):
+                    task.run(visit_info_dict)
+            else:
+                with self.assertLogs(logger=task.log.name, level="WARNING"):
+                    task.run(visit_info_dict)
+            visit_info_dict.popitem()
+
+    def testGroupPairerIgnoreThresholds(self) -> None:
+        task_config = GroupPairerConfig(ignoreThresholds=False)
+        with self.assertRaises(pexConfig.FieldValidationError):
+            GroupPairer(config=task_config)

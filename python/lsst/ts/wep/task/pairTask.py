@@ -294,9 +294,7 @@ class GroupPairer(ExposurePairer):
         # visitInfos should either be an intra/extra pair, or possibly an
         # intra/extra/in-focus triplet.  Catch that here.
         if len(visitInfos) not in (2, 3):
-            self.log.warning(
-                "Expected 2 or 3 visits, but got %d.", len(visitInfos)
-            )
+            self.log.warning("Expected 2 or 3 visits, but got %d.", len(visitInfos))
             self.log.warning("Received exposure ids:")
             for vi in visitInfos.keys():
                 self.log.warning("  %d", vi)
