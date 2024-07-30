@@ -298,9 +298,13 @@ class TestDonutStamp(unittest.TestCase):
             wepImage = donutStamp.wep_im
 
             # Check that the rotation was applied to the image correctly
-            eulerZ = -detector.getOrientation().getYaw().asDegrees()
+            # (Here we transform a WEP image into the coordinate system
+            # in which data comes out of the butler, so this is the
+            # inverse of the forwawrd transformation applied to the image
+            # in _setWepImage())
+            eulerZ = detector.getOrientation().getYaw().asDegrees()
             sameImage = np.allclose(
-                rotate(wepImage.image, eulerZ).T,
+                rotate(wepImage.image.T, eulerZ),
                 donutStamp.stamp_im.image.array,
             )
             self.assertTrue(sameImage)
@@ -310,18 +314,14 @@ class TestDonutStamp(unittest.TestCase):
             self.assertTrue(np.allclose(wepImage.fieldAngle, center[::-1]))
 
             # Check the blend offsets are correct
-            # Rotate in opposite direction
-            theta = np.deg2rad(eulerZ) * -1.0
-            # Add extra 180 degrees for extra-focal
-            if donutStamp.defocal_type == "extra":
-                theta += np.pi
+            theta = np.deg2rad(eulerZ)
             rotMat = np.array(
                 [
                     [np.cos(theta), -np.sin(theta)],
                     [np.sin(theta), np.cos(theta)],
                 ]
             )
-            offsets = np.array([rotMat @ v for v in offsets[:, ::]])
+            offsets = np.array([rotMat @ v for v in offsets])[:, ::-1]
             self.assertTrue(np.allclose(wepImage.blendOffsets, offsets))
 
             # Check the DefocalType and BandLabel

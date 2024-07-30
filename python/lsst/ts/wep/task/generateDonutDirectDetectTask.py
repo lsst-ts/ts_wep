@@ -235,7 +235,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             instrument=instrument,
             opticalModel=self.config.opticalModel,
             padding=self.config.initialCutoutPadding,
-            binary=True,
+            isBinary=True,
         )
 
         # Run the measurement task

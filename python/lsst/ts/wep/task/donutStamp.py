@@ -240,17 +240,23 @@ class DonutStamp(AbstractStamp):
         detector = camera.get(self.detector_name)
 
         # Get the rotation with respect to the science sensors
-        eulerZ = -detector.getOrientation().getYaw().asDegrees()
+        eulerZ = detector.getOrientation().getYaw().asDegrees()
         nRot = int(eulerZ // 90)
         if not np.isclose(eulerZ % 90, 0):
             raise RuntimeError(
-                f"The detector is rotated {-eulerZ} deg with respect to the science "
+                f"The detector is rotated {eulerZ} deg with respect to the science "
                 "sensors, but _setWepImage() only works for sensors whose rotations "
                 "are an integer multiple of 90 deg."
             )
 
-        # Rotate to orientation of science sensors
-        image = np.rot90(self.stamp_im.getImage().getArray(), nRot)
+        # Rotate image to orientation of science sensors
+        #   Note that np.rot90 performs right-handed rotations on arrays
+        #   (i.e. rotates them counter-clockwise). However, because images
+        #   are stored "upside down" in numpy (e.g. you plot them with
+        #   plt.imshow(..., origin="lower")), np.rot90 actually performs
+        #   left-handed rotations on images. We therefore need to use
+        #   negative nRot to perform a regular right-handed rotation
+        image = np.rot90(self.stamp_im.getImage().getArray(), -nRot)
 
         # Transpose the image (DVCS -> CCS)
         image = image.T
@@ -264,14 +270,13 @@ class DonutStamp(AbstractStamp):
             # Get the offsets in the original pixel coordinates
             blendOffsets = self.blend_centroid_positions - self.centroid_position
 
-            # Rotate the coordinates (by -90 each time)
-            # to match the science sensors
-            rotMat = np.array([[0, 1], [-1, 0]])
-            if self.defocal_type == "extra":
-                rotMat = np.linalg.matrix_power(rotMat, nRot + 2)
-            else:
-                rotMat = np.linalg.matrix_power(rotMat, nRot)
-            blendOffsets = np.transpose(rotMat @ blendOffsets.T)
+            # Rotate the coordinates to match the science sensors
+            rotMat = np.array([[0, -1], [1, 0]])
+            rotMatMultiple = np.linalg.matrix_power(rotMat, nRot)
+            blendOffsets = np.transpose(rotMatMultiple @ blendOffsets.T)
+
+            # Transpose the coordinates (DVCS -> CCS)
+            blendOffsets = blendOffsets[:, ::-1]
 
         else:
             blendOffsets = None
@@ -328,10 +333,10 @@ class DonutStamp(AbstractStamp):
         # Create the masks
         imageMapper.createImageMasks(
             self.wep_im,
-            binary=True,
+            isBinary=True,
             dilate=dilate,
             dilateBlends=dilateBlends,
-            maskBlends=False,
+            doMaskBlends=False,
         )
         maskSource, maskBlends, maskBackground = self.wep_im.masks
 

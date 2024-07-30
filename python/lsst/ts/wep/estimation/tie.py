@@ -565,13 +565,13 @@ class TieAlgorithm(WfAlgorithm):
                 intraCent = imageMapper.centerOnProjection(
                     intra,
                     zkCenter + zkStartIntra,
-                    binary=self.centerBinary,
+                    isBinary=self.centerBinary,
                     **self.maskKwargs,
                 )
                 extraCent = imageMapper.centerOnProjection(
                     extra,
                     zkCenter + zkStartExtra,
-                    binary=self.centerBinary,
+                    isBinary=self.centerBinary,
                     **self.maskKwargs,
                 )
 
