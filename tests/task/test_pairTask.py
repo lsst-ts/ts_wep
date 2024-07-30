@@ -30,9 +30,7 @@ from lsst.ts.wep.task import ExposurePairer, ExposurePairerConfig
 
 
 class TestPairTask(unittest.TestCase):
-
     def setUp(self) -> None:
-
         return super().setUp()
 
     def _createVisitInfoDict(
@@ -47,7 +45,6 @@ class TestPairTask(unittest.TestCase):
         intra_id: int = 0,
         extra_id: int = 1,
     ) -> typing.Dict[int, VisitInfo]:
-
         intra_boresight = lsst.geom.SpherePoint(
             ra_deg_start, dec_deg_start, lsst.geom.degrees
         )
@@ -94,7 +91,6 @@ class TestPairTask(unittest.TestCase):
         return {intra_id: intra_visit_info, extra_id: extra_visit_info}
 
     def testExposurePairer(self) -> None:
-
         task_config = ExposurePairerConfig()
         task = ExposurePairer(config=task_config)
 
@@ -107,7 +103,6 @@ class TestPairTask(unittest.TestCase):
         self.assertEqual(task_output[0].extra, 1)
 
     def testExposurePairerRaDecThresh(self) -> None:
-
         task_config = ExposurePairerConfig(pointingThreshold=2.0 * 3600)
         task = ExposurePairer(config=task_config)
 
@@ -135,7 +130,6 @@ class TestPairTask(unittest.TestCase):
         self.assertEqual(task_output[0].extra, 3)
 
     def testExposurePairerTimeThresh(self) -> None:
-
         task_config = ExposurePairerConfig(timeThreshold=65)
         task = ExposurePairer(config=task_config)
 
@@ -163,7 +157,6 @@ class TestPairTask(unittest.TestCase):
         self.assertEqual(task_output[0].extra, 3)
 
     def testExposurePairerRotationThresh(self) -> None:
-
         task_config = ExposurePairerConfig(rotationThreshold=2.0)
         task = ExposurePairer(config=task_config)
 
@@ -191,7 +184,6 @@ class TestPairTask(unittest.TestCase):
         self.assertEqual(task_output[0].extra, 3)
 
     def testExposurePairerForceUniquePairs(self) -> None:
-
         task_config = ExposurePairerConfig()
         task = ExposurePairer(config=task_config)
 
