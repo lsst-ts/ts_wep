@@ -74,7 +74,9 @@ class ExposurePairerConfig(pexConfig.Config):
     )
 
     overrideSeparation = pexConfig.Field[float](
-        doc="Expected intra-focal to focal separation (mm)",
+        doc="Expected extra-focal to focal separation (mm).  Note that this is signed such that "
+        "a positive value means an extra-focal exposure has a greater focusZ value than an "
+        "intra-focal exposure.",
         default=1.5,
     )
 
@@ -121,7 +123,7 @@ class ExposurePairer(pipeBase.Task):
                 case "LSSTCam" | "LSSTComCam" | "LSSTComCamSim":
                     separation = 1.5
                 case "LATISS":
-                    separation = 0.8
+                    separation = -0.8
 
         # Partition intra/extra/focal groups by finding a common offset that
         # maximizes the number of assigned visits.
@@ -148,7 +150,7 @@ class ExposurePairer(pipeBase.Task):
             focusZ = visitInfo.focusZ
             table.add_row([exposure, ra, dec, mjd, focusZ, rtp])
         table["radec"] = SkyCoord(table["ra"], table["dec"], unit="radian")
-        thresh = self.config.groupingThreshold * separation
+        thresh = self.config.groupingThreshold * abs(separation)
 
         best_n_inliers = 0
         best_offset = None
