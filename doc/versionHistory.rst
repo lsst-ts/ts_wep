@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.0.0:
+
+-------------
+10.0.0
+-------------
+
+* Removed Zernike units configuration from tasks so that tasks always return Zernikes in microns
+
 .. _lsst.ts.wep-9.9:
 
 -------------

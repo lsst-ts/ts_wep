@@ -69,17 +69,6 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         + "to the Noll index. In this case, indices 0-3 are always set to zero, "
         + "because they are not estimated by our pipeline.",
     )
-    units = pexConfig.ChoiceField(
-        dtype=str,
-        default="um",
-        doc="Units in which the Zernike coefficients are returned.",
-        allowed={
-            "m": "meters",
-            "um": "microns",
-            "nm": "nanometers",
-            "arcsec": "quadrature contribution to the PSF FWHM in arcseconds",
-        },
-    )
     usePairs = pexConfig.Field(
         dtype=bool,
         default=True,
@@ -236,7 +225,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
     ) -> np.ndarray:
-        """Estimate Zernike coefficients from the donut stamps.
+        """Estimate Zernike coefficients (in microns) from the donut stamps.
 
         Parameters
         ----------
@@ -250,7 +239,8 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         `lsst.pipe.base.Struct`
             A struct containing "zernikes", which is a 2D numpy array,
             where the first axis indexes the pair of DonutStamps and the
-            second axis indexes the Zernikes coefficients.
+            second axis indexes the Zernikes coefficients. The units are
+            microns.
         """
         # Get the instrument
         camName = donutStampsExtra[0].cam_name
@@ -271,7 +261,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             startWithIntrinsic=self.config.startWithIntrinsic,
             returnWfDev=self.config.returnWfDev,
             return4Up=self.config.return4Up,
-            units=self.config.units,
+            units="um",
             saveHistory=self.config.saveHistory,
         )
 
