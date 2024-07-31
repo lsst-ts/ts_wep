@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.2.0:
+
+-------------
+10.2.0
+-------------
+
+* Add option to pair intra/extra focal exposures by group dimension.
+
 .. _lsst.ts.wep-10.1.1:
 
 -------------
