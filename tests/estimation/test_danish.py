@@ -22,59 +22,12 @@
 import unittest
 
 import numpy as np
-from lsst.ts.wep import Image, ImageMapper
 from lsst.ts.wep.estimation import DanishAlgorithm
-from scipy.ndimage import gaussian_filter
+from lsst.ts.wep.utils.modelUtils import forwardModelPair
 
 
 class TestDanishAlgorithm(unittest.TestCase):
     """Test DanishAlgorithm."""
-
-    @staticmethod
-    def _createData(seed: int = 1234):
-        # Create some random Zernikes
-        rng = np.random.default_rng(seed)
-        zkTrue = rng.normal(0, 1e-5 / np.arange(1, 20) ** 2, size=19)
-        zkTrue = np.clip(zkTrue, -1e-6, +1e-6)
-
-        # Sample a random seeing
-        seeing = rng.uniform(0.1, 1)  # arcseconds
-        seeing /= 0.5  # arcseconds -> pixels
-
-        # Create a pair of images
-        mapper = ImageMapper()
-
-        intraStamp = mapper.mapPupilToImage(
-            Image(
-                np.zeros((180, 180)),
-                (0, -1),
-                "intra",
-                "r",
-                blendOffsets=[[70, 85]],
-            ),
-            zkTrue,
-        )
-        intraStamp.image *= rng.uniform(50, 200)
-        intraStamp.image = gaussian_filter(intraStamp.image, seeing)
-        intraStamp.image += rng.normal(scale=np.sqrt(intraStamp.image))
-        intraStamp.image += rng.normal(scale=10, size=intraStamp.image.shape)
-
-        extraStamp = mapper.mapPupilToImage(
-            Image(
-                np.zeros((180, 180)),
-                (0, -1),
-                "extra",
-                "r",
-            ),
-            zkTrue,
-        )
-        extraStamp.image *= rng.uniform(50, 200)
-        extraStamp.image = gaussian_filter(extraStamp.image, seeing)
-        extraStamp.image += rng.normal(scale=np.sqrt(extraStamp.image))
-        extraStamp.image += rng.normal(scale=15, size=extraStamp.image.shape)
-
-        # Return the Zernikes and both images
-        return zkTrue, intraStamp, extraStamp
 
     def testBadLstsqKwargs(self):
         for kwarg in ["fun", "x0", "jac", "args"]:
@@ -86,7 +39,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         dan = DanishAlgorithm(lstsqKwargs={"max_nfev": 1})
 
         # Create some data
-        zkTrue, intra, extra = self._createData()
+        zkTrue, intra, extra = forwardModelPair()
 
         # Estimate Zernikes
         dan.estimateZk(intra, extra, saveHistory=True)
@@ -103,7 +56,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         # Try several different random seeds
         for seed in [12345, 23451, 34512, 45123, 51234]:
             # Get the test data
-            zkTrue, intra, extra = self._createData(seed)
+            zkTrue, intra, extra = forwardModelPair(seed=seed)
 
             # Test estimation with pairs and single donuts:
             for images in [[intra, extra], [intra], [extra]]:

@@ -22,60 +22,13 @@
 import unittest
 
 import numpy as np
-from lsst.ts.wep import Image, ImageMapper
 from lsst.ts.wep.estimation import WfEstimator
 from lsst.ts.wep.utils import WfAlgorithmName, convertZernikesToPsfWidth
-from scipy.ndimage import gaussian_filter
+from lsst.ts.wep.utils.modelUtils import forwardModelPair
 
 
 class TestWfEstimator(unittest.TestCase):
     """Test the wavefront estimator class."""
-
-    @staticmethod
-    def _createData(seed: int = 1234):
-        # Create some random Zernikes
-        rng = np.random.default_rng(seed)
-        zkTrue = rng.normal(0, 1e-5 / np.arange(1, 20) ** 2, size=19)
-        zkTrue = np.clip(zkTrue, -1e-6, +1e-6)
-
-        # Sample a random seeing
-        seeing = rng.uniform(0.1, 1)  # arcseconds
-        seeing /= 0.5  # arcseconds -> pixels
-
-        # Create a pair of images
-        mapper = ImageMapper()
-
-        intraStamp = mapper.mapPupilToImage(
-            Image(
-                np.zeros((180, 180)),
-                (0, -1),
-                "intra",
-                "r",
-                blendOffsets=[[70, 85]],
-            ),
-            zkTrue,
-        )
-        intraStamp.image *= rng.uniform(50, 200)
-        intraStamp.image = gaussian_filter(intraStamp.image, seeing)
-        intraStamp.image += rng.normal(scale=np.sqrt(intraStamp.image))
-        intraStamp.image += rng.normal(scale=10, size=intraStamp.image.shape)
-
-        extraStamp = mapper.mapPupilToImage(
-            Image(
-                np.zeros((180, 180)),
-                (0, -1),
-                "extra",
-                "r",
-            ),
-            zkTrue,
-        )
-        extraStamp.image *= rng.uniform(50, 200)
-        extraStamp.image = gaussian_filter(extraStamp.image, seeing)
-        extraStamp.image += rng.normal(scale=np.sqrt(extraStamp.image))
-        extraStamp.image += rng.normal(scale=15, size=extraStamp.image.shape)
-
-        # Return the Zernikes and both images
-        return zkTrue, intraStamp, extraStamp
 
     def testCreateWithDefaults(self):
         WfEstimator()
@@ -120,7 +73,7 @@ class TestWfEstimator(unittest.TestCase):
 
     def testDifferentJmax(self):
         # Get the test data
-        zkTrue, intra, extra = self._createData()
+        zkTrue, intra, extra = forwardModelPair()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
@@ -137,7 +90,7 @@ class TestWfEstimator(unittest.TestCase):
 
     def testStartWithIntrinsic(self):
         # Get the test data
-        zkTrue, intra, extra = self._createData()
+        zkTrue, intra, extra = forwardModelPair()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
@@ -154,7 +107,7 @@ class TestWfEstimator(unittest.TestCase):
 
     def testReturnWfDev(self):
         # Get the test data
-        zkTrue, intra, extra = self._createData()
+        zkTrue, intra, extra = forwardModelPair()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
@@ -177,7 +130,7 @@ class TestWfEstimator(unittest.TestCase):
 
     def testReturn4Up(self):
         # Get the test data
-        zkTrue, intra, extra = self._createData()
+        zkTrue, intra, extra = forwardModelPair()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
@@ -194,7 +147,7 @@ class TestWfEstimator(unittest.TestCase):
 
     def testUnits(self):
         # Get the test data
-        zkTrue, intra, extra = self._createData()
+        zkTrue, intra, extra = forwardModelPair()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
