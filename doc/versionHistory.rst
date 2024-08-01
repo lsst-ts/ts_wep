@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.1.0:
+
+-------------
+10.1.0
+-------------
+
+* Added lsst.ts.wep.utils.modelUtils.forwardModelPair to facilitate forward modeling donuts for testing and data exploration
+* Added lsst.ts.wep.utils.plotUtils.plotTieConvergence to diagnose TIE convergence
+
 .. _lsst.ts.wep-10.0.0:
 
 -------------

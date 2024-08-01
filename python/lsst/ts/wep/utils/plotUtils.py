@@ -25,6 +25,7 @@ __all__ = [
     "plotPupilMaskElements",
     "plotRoundTrip",
     "plotMapperResiduals",
+    "plotTieConvergence",
 ]
 
 from typing import Optional, Union
@@ -472,3 +473,76 @@ def plotMapperResiduals(
     # Print info about total residuals
     print(f"mean resid: {dr[mask].mean():.3e} m")
     print(f"max resid: {dr[mask].max():.3e} m")
+
+
+def plotTieConvergence(history: dict, ax: Union[plt.Axes, None] = None) -> plt.Axes:
+    """Plot the convergence of Zernike coefficients stored in the history.
+
+    The two metrics on this plot are labeled "Max" and "RMS". These are the
+    max change in any Zernike coefficient and the RMS change of all Zernike
+    coefficients between each subsequent iteration of the TIE. There is also
+    a number printed above the metrics for each iteration corresponding to the
+    Noll index of the Zernike coefficient that changed the most.
+
+    Parameters
+    ----------
+    history : dict
+        The algorithm history dictionary corresponding to a single Zernike
+        estimate (i.e. from a single call to the TIE solver). Note that
+        if you're loading the history from the butler metadata, you can
+        use lsst.ts.wep.utils.taskUtils.convertMetadataToHistory to convert
+        the butler format to the format expected by this function.
+    ax : plt.Axes
+        The matplotlib axis on which to plot the data
+
+    Returns
+    -------
+    plt.Axes
+        The matplotlib axis on which the data is plotted
+    """
+    # Get the starting Zernikes
+    zk0 = history[0]["zkStartMean"]
+
+    # Create lists to hold metrics from each iter
+    maxList = []
+    rmsList = []
+    maxChanger = []
+
+    # Loop over iterations
+    for i in range(1, len(history)):
+        # Get new best OPD estimate
+        zk1 = history[i]["zkSum"]
+
+        # Get difference
+        diff = np.abs(zk1 - zk0) * 1e9
+
+        # Calculate metrics
+        maxList.append(diff.max())
+        rmsList.append(np.sqrt(np.sum(diff**2)))
+
+        # Save the max changer
+        maxChanger.append(diff.argmax() + 4)
+
+        # Advance zk0
+        zk0 = zk1
+
+    # If no axes were passed, created new axes
+    if ax is None:
+        fig, ax = plt.subplots(constrained_layout=True)
+
+    # Plot the metrics
+    ax.plot(np.arange(1, len(rmsList) + 1), rmsList, marker="|", label="RMS change")
+    ax.plot(np.arange(1, len(maxList) + 1), maxList, marker="|", label="Max change")
+    ax.legend()
+    ax.set(
+        yscale="log",
+        xlabel="Iteration",
+        ylabel="Nanometers",
+        ylim=(np.min(rmsList) / 2, np.max(rmsList) * 2),
+    )
+
+    # Plot index of max change above each iteration
+    for i, noll in enumerate(maxChanger):
+        ax.text(i + 1, 1.2 * rmsList[i], noll, ha="center", va="bottom")
+
+    return ax
