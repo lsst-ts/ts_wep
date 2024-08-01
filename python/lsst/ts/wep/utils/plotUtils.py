@@ -478,13 +478,20 @@ def plotMapperResiduals(
 def plotTieConvergence(history: dict, ax: Union[plt.Axes, None] = None) -> plt.Axes:
     """Plot the convergence of Zernike coefficients stored in the history.
 
-    Note that the numbers printed above the metrics for each iteration
-    are the Zernike Noll index that changed the most on that iteration.
+    The two metrics on this plot are labeled "Max" and "RMS". These are the
+    max change in any Zernike coefficient and the RMS change of all Zernike
+    coefficients between each subsequent iteration of the TIE. There is also
+    a number printed above the metrics for each iteration corresponding to the
+    Noll index of the Zernike coefficient that changed the most.
 
     Parameters
     ----------
     history : dict
-        The algorithm history dictionary
+        The algorithm history dictionary corresponding to a single Zernike
+        estimate (i.e. from a single call to the TIE solver). Note that
+        if you're loading the history from the butler metadata, you can
+        use lsst.ts.wep.utils.taskUtils.convertMetadataToHistory to convert
+        the butler format to the format expected by this function.
     ax : plt.Axes
         The matplotlib axis on which to plot the data
 

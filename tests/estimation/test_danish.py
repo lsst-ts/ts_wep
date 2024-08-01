@@ -23,7 +23,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.estimation import DanishAlgorithm
-from lsst.ts.wep.utils.testUtils import forwardModelPair
+from lsst.ts.wep.utils.modelUtils import forwardModelPair
 
 
 class TestDanishAlgorithm(unittest.TestCase):

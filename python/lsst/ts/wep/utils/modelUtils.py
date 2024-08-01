@@ -34,6 +34,7 @@ from scipy.signal import convolve
 
 def forwardModelPair(
     seed: int = 1234,
+    zkCoeff: Union[np.ndarray, None] = None,
     zkNorm: float = 1e-6,
     zkMax: float = 1e-6,
     jmax: int = 22,
@@ -55,14 +56,20 @@ def forwardModelPair(
     ----------
     seed : int, optional
         The random seed. (the default is 1234)
+    zkCoeff : np.ndarray or None, optional
+        A set of Zernike coefficients, in meters. If None, a random
+        set of Zernikes are generated using zkNorm, zkMax, jmax.
     zkNorm : float, optional
-        Normalization for random Zernike coefficients, in meters.
+        Normalization for random Zernike coefficients, in meters. Note
+        this parameter is ignored if zkCoeff is not None.
         (the default is 1e-5)
     zkMax : float, optional
-        The max absolute value of any Zernike coefficient.
+        The max absolute value of any Zernike coefficient. Note
+        this parameter is ignored if zkCoeff is not None.
         (the default is 1e-6)
     jmax : int, optional
-        The maximum Noll index for the random Zernike coefficients.
+        The maximum Noll index for the random Zernike coefficients. Note
+        this parameter is ignored if zkCoeff is not None.
         (the default is 22)
     fluxIntra : int, optional
         Flux of the intrafocal donut.
@@ -110,10 +117,11 @@ def forwardModelPair(
     # Create the ImageMapper that will forward model the images
     mapper = ImageMapper(instConfig=instConfig)
 
-    # Create some random Zernikes
-    rng = np.random.default_rng(seed)
-    zkTrue = rng.normal(0, zkNorm / np.arange(1, jmax - 2) ** 1.5, size=jmax - 3)
-    zkTrue = np.clip(zkTrue, -zkMax, +zkMax)
+    # Generate random Zernikes?
+    if zkCoeff is None:
+        rng = np.random.default_rng(seed)
+        zkCoeff = rng.normal(0, zkNorm / np.arange(1, jmax - 2) ** 1.5, size=jmax - 3)
+        zkCoeff = np.clip(zkCoeff, -zkMax, +zkMax)
 
     # Sample random seeing and skyLevel?
     _seeing = rng.uniform(0.3, 1.5)
@@ -141,7 +149,7 @@ def forwardModelPair(
             bandLabel,
             blendOffsets=blendOffsetsIntra,
         ),
-        zkTrue,
+        zkCoeff,
     )
     # Add blends
     if blendOffsetsIntra is None:
@@ -169,7 +177,7 @@ def forwardModelPair(
             bandLabel,
             blendOffsets=blendOffsetsExtra,
         ),
-        zkTrue,
+        zkCoeff,
     )
     # Add blends
     if blendOffsetsExtra is None:
@@ -188,4 +196,4 @@ def forwardModelPair(
     extraStamp.image = rng.poisson(extraStamp.image).astype(float)
     extraStamp.image -= background
 
-    return zkTrue, intraStamp, extraStamp
+    return zkCoeff, intraStamp, extraStamp

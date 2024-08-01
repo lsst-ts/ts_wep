@@ -24,7 +24,7 @@ import unittest
 import numpy as np
 from lsst.ts.wep.estimation import WfEstimator
 from lsst.ts.wep.utils import WfAlgorithmName, convertZernikesToPsfWidth
-from lsst.ts.wep.utils.testUtils import forwardModelPair
+from lsst.ts.wep.utils.modelUtils import forwardModelPair
 
 
 class TestWfEstimator(unittest.TestCase):
