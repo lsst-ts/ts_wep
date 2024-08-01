@@ -173,8 +173,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             offCenterExp,
             offCenterCoord,
         ) = self._generateTestExposures()
-        centerX, centerY, cornerX, cornerY = self.task.calculateFinalCentroid(
-            centeredExp, template, centerCoord[0], centerCoord[1]
+        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY = (
+            self.task.calculateFinalCentroid(
+                centeredExp, template, centerCoord[0], centerCoord[1]
+            )
         )
         # For centered donut final center and final corner should be
         # half stamp width apart
@@ -182,6 +184,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(centerY, centerCoord[1])
         self.assertEqual(cornerX, centerCoord[0] - self.task.donutStampSize / 2)
         self.assertEqual(cornerY, centerCoord[1] - self.task.donutStampSize / 2)
+        self.assertEqual(initCornerX, cornerX)
+        self.assertEqual(initCornerY, cornerY)
 
     def testCalcFinalCentroidOnEdge(self):
         (
@@ -192,8 +196,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             edgeCoord,
         ) = self._generateTestExposures()
 
-        centerX, centerY, cornerX, cornerY = self.task.calculateFinalCentroid(
-            edgeExp, template, centerCoord[0], centerCoord[1]
+        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY = (
+            self.task.calculateFinalCentroid(
+                edgeExp, template, centerCoord[0], centerCoord[1]
+            )
         )
         # For donut stamp that would go off the top corner of the exposure
         # then the stamp should start at (0, 0) instead
@@ -205,7 +211,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def testMaxRecenter(self):
         maxRecenter = 5
-        self.task.maxRecenterDistance = maxRecenter
         exp, catalog = self._getExpAndCatalog(DefocalType.Extra)
         # Shift image so that recentering will fail when cutting out
         # donuts at the original positions
@@ -216,6 +221,21 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         centroid_y_arr[0] += maxRecenter * 2
         catalog["centroid_y"] = centroid_y_arr
 
+        # Get original shifts
+        donutStampsOrig = self.task.cutOutStamps(
+            exp, catalog, DefocalType.Extra, self.cameraName
+        )
+        xShifts = []
+        yShifts = []
+        for stamp_cent, catalog_x, catalog_y in zip(
+            donutStampsOrig.getCentroidPositions(),
+            catalog["centroid_x"].values,
+            catalog["centroid_y"].values,
+        ):
+            xShifts.append(stamp_cent.getX() - int(catalog_x))
+            yShifts.append(stamp_cent.getY() - int(catalog_y))
+
+        self.task.maxRecenterDistance = maxRecenter
         # Test that warnings logged due to recentering failures
         with self.assertLogs(logger=self.task.log.logger, level="WARNING") as cm:
             donutStamps = self.task.cutOutStamps(
@@ -224,18 +244,28 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Test that there are only two warnings since first object should pass
         self.assertEqual(len(cm.output), 2)
         # All donuts except the first one should have unchanged values
-        for stamp, catRow, logMsg in zip(
-            donutStamps[1:], catalog.to_records()[1:], cm.output
+        for stamp, catRow, logMsg, xShift, yShift in zip(
+            donutStamps[1:],
+            catalog.to_records()[1:],
+            cm.output,
+            xShifts[1:],
+            yShifts[1:],
         ):
             self.assertEqual(stamp.centroid_position[0], int(catRow["centroid_x"]))
             self.assertEqual(stamp.centroid_position[1], int(catRow["centroid_y"]))
             errMsg = (
                 "WARNING:lsst.Base Task:Donut Recentering Failed. "
-                + "Flagging and not shifting center of stamp for source"
-                + f' at ({int(catRow["centroid_x"])}, {int(catRow["centroid_y"])}).'
+                + "Flagging and not shifting center of stamp for extra-focal source"
+                + f' at ({int(catRow["centroid_x"])}, {int(catRow["centroid_y"])}). '
+                + f"Catalog index: {catRow.index}. "
+                + f"Proposed Shift: ({int(xShift)}, {int(yShift)})."
             )
             self.assertEqual(logMsg, errMsg)
-        self.assertEqual(self.task.metadata.arrays["recenterFlags"], [0, 1, 1])
+        self.assertEqual(self.task.metadata.arrays["recenterFlagsExtra"], [0, 1, 1])
+
+        # Test that recenterFlags gets Intra focal label correct
+        self.task.cutOutStamps(exp, catalog, DefocalType.Intra, self.cameraName)
+        self.assertEqual(self.task.metadata.arrays["recenterFlagsIntra"], [0, 1, 1])
 
     def _getExpAndCatalog(self, defocalType):
         """
@@ -287,7 +317,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             exposure, donutCatalog, DefocalType.Extra, self.cameraName
         )
         self.assertTrue(len(donutStamps), 4)
-        self.assertTrue(self.task.metadata.arrays["recenterFlags"], [0, 0, 0, 0])
+        self.assertTrue(self.task.metadata.arrays["recenterFlagsExtra"], [0, 0, 0, 0])
 
         stampCentroid = donutStamps[0].centroid_position
         stampBBox = lsst.geom.Box2I(

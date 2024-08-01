@@ -25,6 +25,8 @@ __all__ = [
     "CutOutDonutsBaseTask",
 ]
 
+from copy import copy
+
 import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -228,14 +230,16 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampHalfWidth = int(self.donutStampSize / 2)
 
         # Shift stamp center if necessary
-        xCent = self.shiftCenter(xCent, expDim.getX(), initialHalfWidth)
-        xCent = self.shiftCenter(xCent, 0, initialHalfWidth)
-        yCent = self.shiftCenter(yCent, expDim.getY(), initialHalfWidth)
-        yCent = self.shiftCenter(yCent, 0, initialHalfWidth)
+        xCentShifted = copy(xCent)
+        yCentShifted = copy(yCent)
+        xCentShifted = self.shiftCenter(xCentShifted, expDim.getX(), initialHalfWidth)
+        xCentShifted = self.shiftCenter(xCentShifted, 0, initialHalfWidth)
+        yCentShifted = self.shiftCenter(yCentShifted, expDim.getY(), initialHalfWidth)
+        yCentShifted = self.shiftCenter(yCentShifted, 0, initialHalfWidth)
 
         # Stamp BBox defined by corner pixel and extent
-        initXCorner = xCent - initialHalfWidth
-        initYCorner = yCent - initialHalfWidth
+        initXCorner = xCentShifted - initialHalfWidth
+        initYCorner = yCentShifted - initialHalfWidth
 
         # Define BBox and get cutout from exposure
         initCornerPoint = lsst.geom.Point2I(initXCorner, initYCorner)
@@ -256,8 +260,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         templateHalfWidth = int(len(template) / 2)
         newX = maxLoc[1] - templateHalfWidth
         newY = maxLoc[0] - templateHalfWidth
-        finalDonutX = xCent + (newX - initialHalfWidth)
-        finalDonutY = yCent + (newY - initialHalfWidth)
+        finalDonutX = xCentShifted + (newX - initialHalfWidth)
+        finalDonutY = yCentShifted + (newY - initialHalfWidth)
 
         # Shift stamp center if necessary but not final centroid definition
         xStampCent = self.shiftCenter(finalDonutX, expDim.getX(), stampHalfWidth)
@@ -268,8 +272,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Define corner for final stamp BBox
         xCorner = xStampCent - stampHalfWidth
         yCorner = yStampCent - stampHalfWidth
+        origXCorner = xCent - stampHalfWidth
+        origYCorner = yCent - stampHalfWidth
 
-        return finalDonutX, finalDonutY, xCorner, yCorner
+        return finalDonutX, finalDonutY, xCorner, yCorner, origXCorner, origYCorner
 
     def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
         """
@@ -351,8 +357,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             # the postage stamp with the donut template and return
             # the new centroid position as well as the corners of the
             # postage stamp to cut out of the exposure.
-            finalDonutX, finalDonutY, xCorner, yCorner = self.calculateFinalCentroid(
-                exposure, template, xCent, yCent
+            finalDonutX, finalDonutY, xCorner, yCorner, initXCorner, initYCorner = (
+                self.calculateFinalCentroid(exposure, template, xCent, yCent)
             )
             xShift = finalDonutX - xCent
             yShift = finalDonutY - yCent
@@ -363,10 +369,15 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             if recenterDist > self.maxRecenterDistance:
                 self.log.warning(
                     "Donut Recentering Failed. Flagging and "
-                    + f"not shifting center of stamp for source at {(xCent, yCent)}."
+                    + f"not shifting center of stamp for {defocalType.value}-focal "
+                    + f"source at {(xCent, yCent)}. Catalog index: {donutRow.index}. "
+                    + f"Proposed Shift: {(xShift, yShift)}."
                 )
+                # Overwrite Shifts
                 finalDonutX = xCent
                 finalDonutY = yCent
+                xCorner = initXCorner
+                yCorner = initYCorner
                 recenterFlag = 1
 
             finalXCentList.append(finalDonutX)
@@ -471,6 +482,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["Y0"] = np.array(yCornerList)
 
         if len(finalStamps) > 0:
-            self.metadata["recenterFlags"] = recenterFlags
+            self.metadata[f"recenterFlags{defocalType.value.capitalize()}"] = (
+                recenterFlags
+            )
 
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)

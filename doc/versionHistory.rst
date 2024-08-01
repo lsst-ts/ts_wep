@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.1.1:
+
+-------------
+10.1.1
+-------------
+
+* Separate recenterFlags in cutOutDonuts tasks metadata into recenterFlagsExtra and recenterFlagsIntra.
+
 .. _lsst.ts.wep-10.1.0:
 
 -------------
