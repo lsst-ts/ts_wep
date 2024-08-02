@@ -21,7 +21,7 @@
 
 import os
 from copy import copy
-
+import numpy as np
 import lsst.utils.tests
 import pandas as pd
 from lsst.daf import butler as dafButler
@@ -273,6 +273,61 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
+            )
+
+        # Check that the  new metadata is stored in butler
+        donutStamps = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        metadata = list(donutStamps.metadata)
+        expectedMetadata = [
+            "RA_DEG",
+            "DEC_DEG",
+            "DET_NAME",
+            "CAM_NAME",
+            "DFC_TYPE",
+            "DFC_DIST",
+            "MAG",
+            "CENT_X0",
+            "CENT_Y0",
+            "CENT_X",
+            "CENT_Y",
+            "CENT_DX",
+            "CENT_DY",
+            "CENT_DR",
+            "BLEND_CX",
+            "BLEND_CY",
+            "X0",
+            "Y0",
+            "SN",
+            "SIGNAL_MEAN",
+            "SIGNAL_SUM",
+            "NPX_MASK",
+            "BKGD_STDEV",
+            "SQRT_MEAN_VAR",
+            "BKGD_VAR",
+            "BACKGROUND_IMAGE_MEAN",
+            "NOISE_VAR_BKGD",
+            "NOISE_VAR_DONUT",
+            "EFFECTIVE",
+            "ENTROPY",
+            "PEAK_HEIGHT",
+        ]
+        # Test that all expected metadata is included in the butler
+        self.assertEqual(
+            np.sum(np.in1d(expectedMetadata, metadata)), len(expectedMetadata)
+        )
+        for measure in [
+            "SIGNAL_SUM",
+            "SIGNAL_MEAN",
+            "NOISE_VAR_BKGD",
+            "NOISE_VAR_DONUT",
+            "EFFECTIVE",
+            "ENTROPY",
+            "PEAK_HEIGHT",
+        ]:
+            self.assertEqual(
+                len(donutStamps), len(donutStamps.metadata.getArray(measure))
             )
 
     def testTaskRunTablePairer(self):
