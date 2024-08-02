@@ -41,6 +41,7 @@ from lsst.ts.wep.task.generateDonutCatalogUtils import (
     runSelection,
 )
 from lsst.utils.timer import timeMethod
+import numpy as np
 
 
 class GenerateDonutCatalogWcsTaskConnections(
@@ -190,6 +191,9 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         fieldObjects = donutCatalogToDataFrame(
             refSelection, filterName, blendCentersX, blendCentersY
+        )
+        fieldObjects["detector"] = np.array(
+            [detector.getName()] * len(fieldObjects), dtype=str
         )
 
         return pipeBase.Struct(donutCatalog=fieldObjects)
