@@ -271,5 +271,6 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         # update column names and content
         donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
+        donutCatUpd["detector"] = np.array([detectorName] * len(donutCatUpd), dtype=str)
 
         return pipeBase.Struct(donutCatalog=donutCatUpd)
