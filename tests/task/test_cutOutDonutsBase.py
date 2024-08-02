@@ -173,7 +173,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             offCenterExp,
             offCenterCoord,
         ) = self._generateTestExposures()
-        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY = (
+        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
             self.task.calculateFinalCentroid(
                 centeredExp, template, centerCoord[0], centerCoord[1]
             )
@@ -187,6 +187,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(initCornerX, cornerX)
         self.assertEqual(initCornerY, cornerY)
 
+        # Also check the peak height for the centered exposure
+        self.assertAlmostEqual(peakHeight, 9471.999796846694)
+
     def testCalcFinalCentroidOnEdge(self):
         (
             centeredExp,
@@ -196,7 +199,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             edgeCoord,
         ) = self._generateTestExposures()
 
-        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY = (
+        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
             self.task.calculateFinalCentroid(
                 edgeExp, template, centerCoord[0], centerCoord[1]
             )
@@ -208,6 +211,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Corner of image should be 0, 0
         self.assertEqual(cornerX, 0)
         self.assertEqual(cornerY, 0)
+        # Also check the peak height for the off-center exposure
+        self.assertAlmostEqual(peakHeight, 8943.999944194224)
 
     def testMaxRecenter(self):
         maxRecenter = 5
@@ -241,13 +246,15 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             donutStamps = self.task.cutOutStamps(
                 exp, catalog, DefocalType.Extra, self.cameraName
             )
-        # Test that there are only two warnings since first object should pass
-        self.assertEqual(len(cm.output), 2)
+        # Test that there are only variance warnings
+        # since first object should pass
+        self.assertEqual(len(cm.output), 5)
         # All donuts except the first one should have unchanged values
+        recenteringWarnings = [
+            warn for warn in cm.output if "Donut Recentering " in warn
+        ]
         for stamp, catRow, logMsg, xShift, yShift in zip(
-            donutStamps[1:],
-            catalog.to_records()[1:],
-            cm.output,
+            donutStamps[1:], catalog.to_records()[1:], recenteringWarnings,
             xShifts[1:],
             yShifts[1:],
         ):
@@ -311,7 +318,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # exposure metadata.
         self.assertIsInstance(exposure.getMetadata()["BGMEAN"], float)
 
-    def testCutOutStamps(self):
+    def testCutOutStampsTaskRunNormal(self):
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
         donutStamps = self.task.cutOutStamps(
             exposure, donutCatalog, DefocalType.Extra, self.cameraName
@@ -356,12 +363,31 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "VISIT",
             "DFC_TYPE",
             "DFC_DIST",
+            "MAG",
+            "CENT_X0",
+            "CENT_Y0",
             "CENT_X",
             "CENT_Y",
+            "CENT_DX",
+            "CENT_DY",
+            "CENT_DR",
             "BLEND_CX",
             "BLEND_CY",
             "X0",
             "Y0",
+            "SN",
+            "SIGNAL_MEAN",
+            "SIGNAL_SUM",
+            "NPX_MASK",
+            "BKGD_STDEV",
+            "SQRT_MEAN_VAR",
+            "BKGD_VAR",
+            "BACKGROUND_IMAGE_MEAN",
+            "NOISE_VAR_BKGD",
+            "NOISE_VAR_DONUT",
+            "EFFECTIVE",
+            "ENTROPY",
+            "PEAK_HEIGHT",
         ]
         self.assertCountEqual(metadata, expectedMetadata)
 
@@ -369,3 +395,29 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(
             self.dataIdExtra["visit"], donutStamps.metadata.getArray("VISIT")[0]
         )
+
+        # test that each metric has been calculated
+        # for all donuts
+        for measure in [
+            "SIGNAL_SUM",
+            "SIGNAL_MEAN",
+            "NOISE_VAR_BKGD",
+            "NOISE_VAR_DONUT",
+            "EFFECTIVE",
+            "ENTROPY",
+            "PEAK_HEIGHT",
+        ]:
+            self.assertEqual(
+                len(donutStamps), len(donutStamps.metadata.getArray(measure))
+            )
+
+        # test that the effectiveness contains only binary values
+        unique_values = set(np.unique(donutStamps.metadata.getArray("EFFECTIVE")))
+        allowed_values = set([0, 1])
+        self.assertTrue(allowed_values.issuperset(unique_values))
+
+        # test the calculation of SN
+        sn_values = [2149.17757703855, 2160.5407329704117, 2042.1965399542976]
+        sn_calculated = donutStamps.metadata.getArray("SN")
+        np.testing.assert_array_almost_equal(sn_values, sn_calculated, decimal=4)
+
