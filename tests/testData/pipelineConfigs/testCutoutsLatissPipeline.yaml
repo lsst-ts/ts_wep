@@ -16,7 +16,7 @@ tasks:
     config:
       connections.outputExposure: "postISRCCD"
       doBias: False
-      doVariance: False
+      doVariance: True
       doLinearize: False
       doCrosstalk: False
       doDefect: False
