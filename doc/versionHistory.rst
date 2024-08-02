@@ -6,6 +6,16 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.4.0:
+
+-------------
+10.4.0
+-------------
+
+* Added random field angles in lsst.ts.wep.utils.modelUtils.forwardModelPair
+* Fixed two bugs related to the random number generator in lsst.ts.wep.utils.modelUtils.forwardModelPair
+* Added tests for lsst.ts.wep.utils.modelUtils.forwardModelPair
+
 .. _lsst.ts.wep-10.3.0:
 
 -------------
