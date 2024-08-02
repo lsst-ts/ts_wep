@@ -48,6 +48,26 @@ class TestDonutImageCheck(unittest.TestCase):
         # I[1,0]   I[1,1]
         donutImg = donutImg[::-1, :]
 
+        # test that by default the returnEntro is False
+        self.assertFalse(self.donutImgCheck.returnEntro)
+
+        # change that to True
+        self.donutImgCheck.returnEntro = True
+        # first check that now two outputs are present
+        self.assertTrue(len(self.donutImgCheck.isEffDonut(donutImg)) == 2)
+        # then test that the values are what is expected
+        effective, entro = self.donutImgCheck.isEffDonut(donutImg)
+
+        self.assertTrue(effective)
+        np.testing.assert_allclose(
+            entro,
+            0.027858272652433826,
+        )
+
+        # change back to the default
+        self.donutImgCheck.returnEntro = False
+
+        # test that now we only get the boolean as before
         self.assertTrue(self.donutImgCheck.isEffDonut(donutImg))
 
     def testIsEffDonutWithConstImg(self):
