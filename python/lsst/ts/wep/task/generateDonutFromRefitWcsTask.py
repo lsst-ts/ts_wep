@@ -29,6 +29,7 @@ import lsst.meas.base as measBase
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
+import numpy as np
 import pandas as pd
 from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
@@ -394,5 +395,10 @@ and direct detect catalog as output."
                 self.log.warning("No catalogs cover this detector.")
                 donutCatalog = fitDonutCatalog
                 self.log.warning(catCreateErrorMsg)
+
+        detectorName = exposure.getDetector().getName()
+        donutCatalog["detector"] = np.array(
+            [detectorName] * len(donutCatalog), dtype=str
+        )
 
         return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
