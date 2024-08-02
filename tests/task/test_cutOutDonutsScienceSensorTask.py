@@ -21,8 +21,9 @@
 
 import os
 from copy import copy
-import numpy as np
+
 import lsst.utils.tests
+import numpy as np
 import pandas as pd
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
@@ -275,7 +276,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
 
-        # Check that the  new metadata is stored in butler
+        # Check that the new metadata is stored in butler
         donutStamps = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
