@@ -108,14 +108,14 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
         self.dataIdExtra = {
             "instrument": "LATISS",
             "detector": 0,
-            "exposure": 2021090800487,
-            "visit": 2021090800487,
+            "exposure": 2021090800488,
+            "visit": 2021090800488,
         }
         self.dataIdIntra = {
             "instrument": "LATISS",
             "detector": 0,
-            "exposure": 2021090800488,
-            "visit": 2021090800488,
+            "exposure": 2021090800487,
+            "visit": 2021090800487,
         }
 
     def testValidateConfigs(self):
