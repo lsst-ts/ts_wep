@@ -139,6 +139,8 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
                     inputRefs.donutCatalog[dCatIntraIdx],
                 ]
             )
+            # each time we pass exactly one pair of
+            # exposures and donut catalogs
             outputs = self.run(expInputs, dCatInputs, camera)
 
             butlerQC.put(
@@ -159,32 +161,48 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
         cameraName = camera.getName()
-        extraCatalog, intraCatalog = donutCatalogs
+        # The order of donut catalogs and of
+        # exposures is not relevant -
+        # we test below their defocal position
+        # based on exposure.getDetector()
+        # or 'detector' column in the donut catalog
 
-        # Get the donut stamps from extra and intra focal images
-        donutStampsExtra = DonutStamps([], use_archive=True)
-        donutStampsIntra = DonutStamps([], use_archive=True)
-
+        # Check which exposure is extra-focal
+        # and which is intra-focal
         for exposure in exposures:
             detectorName = exposure.getDetector().getName()
             if detectorName in self.extraFocalNames:
-                donutStampsExtraExp = self.cutOutStamps(
-                    exposure,
-                    extraCatalog,
-                    DefocalType.Extra,
-                    cameraName,
-                )
-                donutStampsExtra.extend([stamp for stamp in donutStampsExtraExp])
+                extraExposure = exposure
             elif detectorName in self.intraFocalNames:
-                donutStampsIntraExp = self.cutOutStamps(
-                    exposure,
-                    intraCatalog,
-                    DefocalType.Intra,
-                    cameraName,
-                )
-                donutStampsIntra.extend([stamp for stamp in donutStampsIntraExp])
+                intraExposure = exposure
+        # Check which donut catalog is
+        # extra-focal or intra-focal
+        for catalog in donutCatalogs:
+            if "detector" in catalog.columns:
+                detectorName = np.unique(catalog["detector"])
+                if detectorName in self.extraFocalNames:
+                    extraCatalog = catalog
+                elif detectorName in self.intraFocalNames:
+                    intraCatalog = catalog
             else:
-                continue
+                self.log.warning(
+                    "Donut catalog does not contain detector column; \
+assuming extra, intra donut catalog order."
+                )
+                extraCatalog, intraCatalog = donutCatalogs
+
+        donutStampsExtra = self.cutOutStamps(
+            extraExposure,
+            extraCatalog,
+            DefocalType.Extra,
+            cameraName,
+        )
+        donutStampsIntra = self.cutOutStamps(
+            intraExposure,
+            intraCatalog,
+            DefocalType.Intra,
+            cameraName,
+        )
 
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
