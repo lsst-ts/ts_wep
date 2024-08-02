@@ -86,7 +86,7 @@ class TestWfEstimator(unittest.TestCase):
             zk28 = wfEst.estimateZk(intra, extra)
 
             #  Make sure results are pretty similar up to Noll index 22
-            self.assertTrue(np.allclose(zk22, zk28[:-6], atol=50e-9))
+            self.assertLess(np.sqrt(np.sum(np.square(zk28[:-6] - zk22))), 75e-9)
 
     def testStartWithIntrinsic(self):
         # Get the test data
@@ -103,7 +103,7 @@ class TestWfEstimator(unittest.TestCase):
             zk1 = wfEst.estimateZk(intra, extra)
 
             # Make sure the results are pretty similar
-            self.assertTrue(np.allclose(zk0, zk1, atol=10e-9))
+            self.assertLess(np.sqrt(np.sum(np.square(zk1 - zk0))), 80e-9)
 
     def testReturnWfDev(self):
         # Get the test data

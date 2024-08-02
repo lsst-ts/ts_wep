@@ -90,13 +90,13 @@ def forwardModelPair(
     fieldAngleIntra : tuple, optional
         Field angle, in degrees, of the intrafocal donut. If the angle is
         only specified for the intra or extrafocal donut, both donuts use
-        that angle. If neither is specified, a random angle is used for
-        both. (the default is None)
+        that angle. If neither is specified, the same random angle is used
+        for both. (the default is None)
     fieldAngleExtra : tuple, optional
         Field angle, in degrees, of the extrafocal donut. If the angle is
         only specified for the intra or extrafocal donut, both donuts use
-        that angle. If neither is specified, a random angle is used for
-        both. (the default is None)
+        that angle. If neither is specified, the same random angle is used
+        for both. (the default is None)
     blendOffsetsIntra : Iterable or None, optional
         The blend offsets of the intrafocal donut.
         (the default is None)
@@ -157,12 +157,13 @@ def forwardModelPair(
         fieldAngleExtra = fieldAngleIntra
 
     # Create a Kolmogorov kernel
-    atm = galsim.Kolmogorov(fwhm=seeing)
-    atmKernel = atm.drawImage(
-        nx=nPix // 2,
-        ny=nPix // 2,
-        scale=mapper.instrument.pixelScale,
-    ).array
+    if seeing > 0:
+        atm = galsim.Kolmogorov(fwhm=seeing)
+        atmKernel = atm.drawImage(
+            nx=nPix // 2,
+            ny=nPix // 2,
+            scale=mapper.instrument.pixelScale,
+        ).array
 
     # Calculate background per pixel level from skyLevel
     background = skyLevel * mapper.instrument.pixelScale**2
@@ -182,16 +183,19 @@ def forwardModelPair(
     if blendOffsetsIntra is None:
         nBlends = 0
     else:
-        nBlends = len(blendOffsetsIntra)
+        offsets = np.atleast_2d(blendOffsetsIntra)
+        nBlends = len(offsets)
         centralDonut = intraStamp.image.copy()
-        for blendShift in blendOffsetsIntra:
+        for blendShift in offsets:
             intraStamp.image += shift(centralDonut, blendShift[::-1])
     # Convolve with Kolmogorov atmosphere
-    intraStamp.image = convolve(intraStamp.image, atmKernel, mode="same")
+    if seeing > 0:
+        intraStamp.image = convolve(intraStamp.image, atmKernel, mode="same")
     # Normalize the flux
     intraStamp.image *= fluxIntra * (1 + nBlends) / intraStamp.image.sum()
     # Poisson noise
     intraStamp.image += background
+    intraStamp.image = np.clip(intraStamp.image, 0, None)
     intraStamp.image = rng.poisson(intraStamp.image).astype(float)
     intraStamp.image -= background
 
@@ -210,16 +214,19 @@ def forwardModelPair(
     if blendOffsetsExtra is None:
         nBlends = 0
     else:
-        nBlends = len(blendOffsetsExtra)
+        offsets = np.atleast_2d(blendOffsetsExtra)
+        nBlends = len(offsets)
         centralDonut = extraStamp.image.copy()
-        for blendShift in blendOffsetsExtra:
+        for blendShift in offsets:
             extraStamp.image += shift(centralDonut, blendShift[::-1])
     # Convolve with Kolmogorov atmosphere
-    extraStamp.image = convolve(extraStamp.image, atmKernel, mode="same")
+    if seeing > 0:
+        extraStamp.image = convolve(extraStamp.image, atmKernel, mode="same")
     # Normalize the flux
     extraStamp.image *= fluxExtra / extraStamp.image.sum()
     # Poisson noise
     extraStamp.image += background
+    extraStamp.image = np.clip(extraStamp.image, 0, None)
     extraStamp.image = rng.poisson(extraStamp.image).astype(float)
     extraStamp.image -= background
 
