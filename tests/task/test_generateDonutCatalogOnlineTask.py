@@ -132,8 +132,10 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
                 "source_flux",
                 "blend_centroid_x",
                 "blend_centroid_y",
+                "detector",
             ],
         )
+        self.assertEqual(np.unique(donutCatalog["detector"]), detectorName)
         self.assertCountEqual(
             donutCatalog["coord_ra"], np.ravel([cat0["coord_ra"], cat1["coord_ra"]])
         )
