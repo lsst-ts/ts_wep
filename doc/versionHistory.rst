@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.3.0:
+
+-------------
+10.3.0
+-------------
+
+* Added single-side-of-focus mode to the TIE
+
 .. _lsst.ts.wep-10.2.0:
 
 -------------
@@ -39,7 +47,7 @@ Version History
 
 * Removed Zernike units configuration from tasks so that tasks always return Zernikes in microns
 
-.. _lsst.ts.wep-9.9:
+.. _lsst.ts.wep-9.9.0:
 
 -------------
 9.9.0
