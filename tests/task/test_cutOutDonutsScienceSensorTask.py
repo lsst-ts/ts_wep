@@ -53,12 +53,13 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         cls.runName = "run1"
         cls.pairTableName = "run2_pair_table"
         cls.run2Name = "run2"
+        cls.run3Name = "run3"
 
         # Check that runs don't already exist due to previous improper cleanup
         butler = dafButler.Butler(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
-        for runName in [cls.runName, cls.pairTableName, cls.run2Name]:
+        for runName in [cls.runName, cls.pairTableName, cls.run2Name, cls.run3Name]:
             if runName in collectionsList:
                 cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, runName)
                 runProgram(cleanUpCmd)
@@ -96,6 +97,19 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             collections,
             pipelineYaml=os.path.join(
                 testPipelineConfigDir, "testCutoutsFamPipelineTablePairer.yaml"
+            ),
+        )
+        pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
+        runProgram(pipeCmd)
+
+        # Try Group Pairer
+        pipeCmd = writePipetaskCmd(
+            cls.repoDir,
+            "run3",
+            instrument,
+            collections,
+            pipelineYaml=os.path.join(
+                testPipelineConfigDir, "testCutoutsFamPipelineGroupPairer.yaml"
             ),
         )
         pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
@@ -284,8 +298,31 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         for s1, s2 in zip(extraStamps1, extraStamps2):
             self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)
 
+    def testTaskRunGroupPairer(self):
+        # Get everything via the extra ID
+        intraStamps1 = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        intraStamps3 = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.run3Name]
+        )
+
+        extraStamps1 = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        extraStamps3 = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.run3Name]
+        )
+
+        assert intraStamps1.metadata == intraStamps3.metadata
+        assert extraStamps1.metadata == extraStamps3.metadata
+        for s1, s3 in zip(intraStamps1, intraStamps3):
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)
+        for s1, s3 in zip(extraStamps1, extraStamps3):
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)
+
     @classmethod
     def tearDownClass(cls):
-        for runName in [cls.runName, cls.pairTableName, cls.run2Name]:
+        for runName in [cls.runName, cls.pairTableName, cls.run2Name, cls.run3Name]:
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, runName)
             runProgram(cleanUpCmd)

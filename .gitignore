@@ -25,6 +25,7 @@ pytest_session.txt
 
 # Vscode setting
 .vscode/
+.env
 
 # Mac metadata
 .DS_Store

@@ -24,6 +24,8 @@ __all__ = [
     "ExposurePairer",
     "TablePairerConfig",
     "TablePairer",
+    "GroupPairerConfig",
+    "GroupPairer",
 ]
 
 import typing
@@ -58,13 +60,23 @@ class ExposurePairerConfig(pexConfig.Config):
         default=1.0,
     )
 
+    ignoreThresholds = pexConfig.Field[bool](
+        doc=(
+            "If True, ignore time, pointing, and rotation thresholds.  Useful when grouping by "
+            "exposure.group"
+        ),
+        default=False,
+    )
+
     doOverrideSeparation = pexConfig.Field[bool](
         doc="Whether to override expected intra-focal to focal separation",
         default=False,
     )
 
     overrideSeparation = pexConfig.Field[float](
-        doc="Expected intra-focal to focal separation (mm)",
+        doc="Expected extra-focal to focal separation (mm).  Note that this is signed such that "
+        "a positive value means an extra-focal exposure has a greater focusZ value than an "
+        "intra-focal exposure.",
         default=1.5,
     )
 
@@ -84,6 +96,7 @@ class ExposurePairer(pipeBase.Task):
     ConfigClass = ExposurePairerConfig
     _DefaultName = "exposurePairer"
     _needsPairTable = False
+    _needsGroupDimension = False
 
     def makeTables(
         self,
@@ -110,7 +123,7 @@ class ExposurePairer(pipeBase.Task):
                 case "LSSTCam" | "LSSTComCam" | "LSSTComCamSim":
                     separation = 1.5
                 case "LATISS":
-                    separation = 0.8
+                    separation = -0.8
 
         # Partition intra/extra/focal groups by finding a common offset that
         # maximizes the number of assigned visits.
@@ -137,7 +150,7 @@ class ExposurePairer(pipeBase.Task):
             focusZ = visitInfo.focusZ
             table.add_row([exposure, ra, dec, mjd, focusZ, rtp])
         table["radec"] = SkyCoord(table["ra"], table["dec"], unit="radian")
-        thresh = self.config.groupingThreshold * separation
+        thresh = self.config.groupingThreshold * abs(separation)
 
         best_n_inliers = 0
         best_offset = None
@@ -172,17 +185,21 @@ class ExposurePairer(pipeBase.Task):
         pairTable = Table(dtype=dtype)
 
         for row in extraTable:
-            nearby = (
-                np.abs(intraTable["mjd"] - row["mjd"]) * 86400
-                < self.config.timeThreshold
-            )
-            nearby &= (
-                np.abs(intraTable["rtp"] - row["rtp"]) < self.config.rotationThreshold
-            )
-            nearby &= (
-                row["radec"].separation(intraTable["radec"]).arcsec
-                < self.config.pointingThreshold
-            )
+            if self.config.ignoreThresholds:
+                nearby = np.ones(len(intraTable), dtype=bool)
+            else:
+                nearby = (
+                    np.abs(intraTable["mjd"] - row["mjd"]) * 86400
+                    < self.config.timeThreshold
+                )
+                nearby &= (
+                    np.abs(intraTable["rtp"] - row["rtp"])
+                    < self.config.rotationThreshold
+                )
+                nearby &= (
+                    row["radec"].separation(intraTable["radec"]).arcsec
+                    < self.config.pointingThreshold
+                )
             if np.any(nearby):
                 nearbyTable = intraTable[nearby]
                 # Pick the nearest remaining point in radec
@@ -234,6 +251,7 @@ class TablePairer(pipeBase.Task):
     ConfigClass = TablePairerConfig
     _DefaultName = "tablePairer"
     _needsPairTable = True
+    _needsGroupDimension = False
 
     def run(
         self,
@@ -248,3 +266,39 @@ class TablePairer(pipeBase.Task):
             if row["intra"] in visitInfos and row["extra"] in visitInfos:
                 out.append(IntraExtraIdxPair(row["intra"], row["extra"]))
         return out
+
+
+class GroupPairerConfig(ExposurePairerConfig):
+    def setDefaults(self):
+        super().setDefaults()
+        self.ignoreThresholds = True
+
+    def validate(self):
+        super().validate()
+
+        if not self.ignoreThresholds:
+            raise pexConfig.FieldValidationError(
+                self.__class__.ignoreThresholds,
+                self,
+                "ignoreThresholds must be True for GroupPairer",
+            )
+
+
+class GroupPairer(ExposurePairer):
+    ConfigClass = GroupPairerConfig
+    _DefaultName = "groupPairer"
+    _needsGroupDimension = True
+
+    def run(
+        self,
+        visitInfos: typing.Dict[int, afwImage.VisitInfo],
+    ) -> typing.List[IntraExtraIdxPair]:
+        # visitInfos should either be an intra/extra pair, or possibly an
+        # intra/extra/in-focus triplet.  Catch that here.
+        if len(visitInfos) not in (2, 3):
+            self.log.warning("Expected 2 or 3 visits, but got %d.", len(visitInfos))
+            self.log.warning("Received exposure ids:")
+            for vi in visitInfos.keys():
+                self.log.warning("  %d", vi)
+            return []
+        return super().run(visitInfos)

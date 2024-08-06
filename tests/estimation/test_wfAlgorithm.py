@@ -33,7 +33,7 @@ class TestWfAlgorithm(unittest.TestCase):
         with self.assertRaises(TypeError) as err:
             WfAlgorithm()
 
-        self.assertEquals(
+        self.assertEqual(
             str(err.exception),
             "Can't instantiate abstract class WfAlgorithm with "
             + "abstract methods _estimateZk, requiresPairs",
@@ -50,7 +50,7 @@ class TestWfAlgorithm(unittest.TestCase):
                 def _estimateZk(self, *args, **kwargs) -> np.ndarray:
                     return np.zeros(19)
 
-        self.assertEquals(
+        self.assertEqual(
             str(err.exception),
             "When subclassing WfAlgorithm you must write a docstring "
             + "for the history property. Please use this to describe "
