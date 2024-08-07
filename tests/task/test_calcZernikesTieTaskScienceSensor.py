@@ -30,6 +30,7 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
+    DonutStampSelectorTask,
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -107,23 +108,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
-
-        # Test the default config values
-        self.assertEqual(self.task.selectWithEntropy, False)
-        self.assertEqual(self.task.selectWithSignalToNoise, False)
-        self.assertEqual(self.task.useCustomSnLimit, False)
-
-        # Test changing configs
-        self.config.selectWithEntropy = True
-        self.config.selectWithSignalToNoise = True
-        self.config.minSignalToNoise = 500
-        self.config.maxEntropy = 4
-        self.task = CalcZernikesTask(config=self.config, name="Changed Task")
-
-        self.assertEqual(self.task.selectWithEntropy, True)
-        self.assertEqual(self.task.selectWithSignalToNoise, True)
-        self.assertEqual(self.task.minSignalToNoise, 500)
-        self.assertEqual(self.task.maxEntropy, 4)
+        self.assertEqual(type(self.task.donutStampSelector), DonutStampSelectorTask)
 
     def testEstimateZernikes(self):
         donutStampsExtra = self.butler.get(
@@ -192,59 +177,3 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(
             combinedZernikesStruct.flags, np.zeros(len(testArr))
         )
-
-    def testSelectDonuts(self):
-        donutStampsIntra = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-
-        # test default: no donuts are excluded
-        donutStampsSelect, donutsQuality = self.task.selectDonuts(donutStampsIntra)
-
-        # by default,  config.selectWithEntropy is False,
-        # so we select all donuts
-        self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 3)
-
-        # by default, config.selectWithSignalToNoise is False,
-        # so we select all donuts
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
-
-        # switch on selectWithEntropy,
-        # set config.maxEntropy so that one donut is selected
-        self.config.selectWithEntropy = True
-        entropyThreshold = 2.8
-        self.config.maxEntropy = entropyThreshold
-
-        task = CalcZernikesTask(config=self.config, name="Entropy Task")
-
-        donutStampsSelect, donutsQuality = task.selectDonuts(donutStampsIntra)
-        self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 1)
-
-        # also test that the entropy of the selected donut
-        # is indeed below threshold
-        self.assertLess(
-            donutsQuality["ENTROPY"][donutsQuality["ENTROPY_SELECT"]].values,
-            entropyThreshold,
-        )
-
-        # switch on selectWithSignalToNoise
-        self.config.selectWithSignalToNoise = True
-        task = CalcZernikesTask(config=self.config, name="SN Task")
-
-        # by default we use the yaml config values so that
-        # all donuts here would get selected
-        donutStampsSelect, donutsQuality = task.selectDonuts(donutStampsIntra)
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
-
-        # test that if we use the custom threshold,
-        # some donuts won't get selected
-        self.config.useCustomSnLimit = True
-        minSignalToNoise = 1000
-        self.config.minSignalToNoise = minSignalToNoise
-        task = CalcZernikesTask(config=self.config, name="Base Task")
-        donutStampsSelect, donutsQuality = task.selectDonuts(donutStampsIntra)
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 2)
-
-        # test that the SN of selected donuts is indeed above the threshold
-        for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]].values:
-            self.assertLess(minSignalToNoise, v)
