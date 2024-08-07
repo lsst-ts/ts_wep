@@ -6,6 +6,32 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.4.0:
+
+-------------
+10.4.0
+-------------
+
+* Added random field angles in lsst.ts.wep.utils.modelUtils.forwardModelPair
+* Fixed two bugs related to the random number generator in lsst.ts.wep.utils.modelUtils.forwardModelPair
+* Added tests for lsst.ts.wep.utils.modelUtils.forwardModelPair
+
+.. _lsst.ts.wep-10.3.0:
+
+-------------
+10.3.0
+-------------
+
+* Added single-side-of-focus mode to the TIE
+
+.. _lsst.ts.wep-10.2.0:
+
+-------------
+10.2.0
+-------------
+
+* Add option to pair intra/extra focal exposures by group dimension.
+
 .. _lsst.ts.wep-10.1.1:
 
 -------------
@@ -31,7 +57,7 @@ Version History
 
 * Removed Zernike units configuration from tasks so that tasks always return Zernikes in microns
 
-.. _lsst.ts.wep-9.9:
+.. _lsst.ts.wep-9.9.0:
 
 -------------
 9.9.0

@@ -66,6 +66,15 @@ class CutOutDonutsScienceSensorTaskConnections(
         super().__init__(config=config)
         if not config.pairer.target._needsPairTable:
             del self.donutVisitPairTable
+        if config.pairer.target._needsGroupDimension:
+            # Note that when running with the GroupPairer you might also need
+            # to change the name of the task in the pipeline yaml file (the
+            # yaml key under `tasks` that points to
+            # `CutOutDonutsScienceSensorTask`) to avoid dataset type dimension
+            # conflicts with CutOutDonutsScienceSensorTask executions that
+            # were run without the group pairer (and hence without the `group`
+            # input dimension).
+            self.dimensions.add("group")
 
 
 class CutOutDonutsScienceSensorTaskConfig(

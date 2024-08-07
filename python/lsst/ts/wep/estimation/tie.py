@@ -28,6 +28,7 @@ import numpy as np
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import DefocalType, createZernikeBasis, createZernikeGradBasis
+from scipy.ndimage import gaussian_filter
 
 
 class TieAlgorithm(WfAlgorithm):
@@ -82,18 +83,27 @@ class TieAlgorithm(WfAlgorithm):
         To see possibilities, see the docstring for
         lsst.ts.wep.imageMapper.ImageMapper.createPupilMasks().
         (the default is None)
+    requiresPairs : bool, optional
+        Whether to allow Zernike estimation with a single donut. If True,
+        pairs are required. (the default is True)
+    modelPupilKernelSize : float, optional
+        The size of the Gaussian kernel to convolve with the model pupil
+        when estimating Zernikes with a single donut.
+        (the default is 2)
     """
 
     def __init__(
         self,
-        opticalModel: Optional[str] = "offAxis",
-        maxIter: Optional[int] = 30,
-        compSequence: Optional[Iterable] = 2 * (4,) + 2 * (6,) + 4 * (13,) + 4 * (22,),
-        compGain: Optional[float] = 0.6,
-        centerTol: Optional[float] = 1e-9,
-        centerBinary: Optional[bool] = True,
-        convergeTol: Optional[float] = 1e-9,
+        opticalModel: str = "offAxis",
+        maxIter: int = 30,
+        compSequence: Iterable = 2 * (4,) + 2 * (6,) + 4 * (13,) + 4 * (22,),
+        compGain: float = 0.6,
+        centerTol: float = 1e-9,
+        centerBinary: bool = True,
+        convergeTol: float = 1e-9,
         maskKwargs: Optional[dict] = None,
+        requiresPairs: bool = True,
+        modelPupilKernelSize: float = 2,
     ) -> None:
         self.opticalModel = opticalModel
         self.maxIter = maxIter
@@ -103,11 +113,27 @@ class TieAlgorithm(WfAlgorithm):
         self.centerBinary = centerBinary
         self.convergeTol = convergeTol
         self.maskKwargs = maskKwargs
+        self.requiresPairs = requiresPairs
+        self.modelPupilKernelSize = modelPupilKernelSize
 
     @property
     def requiresPairs(self) -> bool:
         """Whether the algorithm requires pairs to estimate Zernikes."""
-        return True
+        return self._requiresPairs
+
+    @requiresPairs.setter
+    def requiresPairs(self, value: bool) -> None:
+        """Set whether the algorithm requires pairs to estimate Zernikes.
+
+        Parameters
+        ----------
+        value : bool
+            Whether to allow Zernike estimation with a single donut.
+            If True, pairs are required.
+        """
+        if not isinstance(value, bool):
+            raise TypeError("requiresPairs must be a bool.")
+        self._requiresPairs = value
 
     @property
     def opticalModel(self) -> str:
@@ -143,7 +169,7 @@ class TieAlgorithm(WfAlgorithm):
         self._opticalModel = value
 
     @property
-    def solver(self) -> Union[str, None]:
+    def solver(self) -> str:
         """The name of the TIE solver."""
         return self._solver
 
@@ -368,6 +394,31 @@ class TieAlgorithm(WfAlgorithm):
         self._maskKwargs = value
 
     @property
+    def modelPupilKernelSize(self) -> float:
+        """Return the Gaussian kernel size for the model pupil."""
+        return self._modelPupilKernelSize
+
+    @modelPupilKernelSize.setter
+    def modelPupilKernelSize(self, value: float) -> None:
+        """Set size of  Gaussian kernel that is convolved with the model pupil.
+
+        This only matters when estimating Zernikes from a single side of focus.
+
+        Parameters
+        ----------
+        value : float
+            The size of the Gaussian kernel to convolve with the model pupil
+            when estimating Zernikes with a single donut.
+        """
+        value = float(value)
+        if value < 0:
+            raise ValueError(
+                "modelPupilKernelSize must be greater than or equal to zero."
+            )
+
+        self._modelPupilKernelSize = value
+
+    @property
     def history(self) -> dict:
         """The algorithm history.
 
@@ -383,6 +434,8 @@ class TieAlgorithm(WfAlgorithm):
             - "zkStartMean" - the mean of the starting Zernikes. Note these
                               Zernikes are added to zkBest to estimate the
                               full OPD.
+            - "pupil" - model pupil image, in the case where only one image
+                        was passed to the estimator.
 
         Each iteration of the solver is then stored under indices >= 1.
         The entry for each iteration is also a dictionary, containing
@@ -406,6 +459,101 @@ class TieAlgorithm(WfAlgorithm):
         index 4.
         """
         return super().history
+
+    @staticmethod
+    def _assignIntraExtra(
+        I1: Image,
+        I2: Union[Image, None],
+        zkStartI1: np.ndarray,
+        zkStartI2: Union[np.ndarray, None],
+    ) -> tuple:
+        """Assign I1 and I2 to intra and extra.
+
+        Parameters
+        ----------
+        I1 : Image
+            An Image object containing an intra- or extra-focal donut image.
+        I2 : Image or None
+            A second image, on the opposite side of focus from I1. Can be None.
+        zkStartI1 : np.ndarray
+            The starting Zernikes for I1 (in meters, for Noll indices >= 4)
+        zkStartI2 : np.ndarray or None
+            The starting Zernikes for I2 (in meters, for Noll indices >= 4)
+            Can be None.
+
+        Returns
+        -------
+        Image or None
+            The intrafocal image, or None if no intrafocal image was passed
+        Image or None
+            The extrafocal image, or None if no intrafocal image was passed
+        """
+        # Start everything as None
+        intra, extra, zkStartIntra, zkStartExtra = None, None, None, None
+
+        # Replace intra and extra as appropriate
+        if I1 is not None:
+            if I1.defocalType == DefocalType.Intra:
+                intra = I1.copy()
+                zkStartIntra = zkStartI1.copy()
+            else:
+                extra = I1.copy()
+                zkStartExtra = zkStartI1.copy()
+        if I2 is not None:
+            if I2.defocalType == DefocalType.Intra:
+                intra = I2.copy()
+                zkStartIntra = zkStartI2.copy()
+            else:
+                extra = I2.copy()
+                zkStartExtra = zkStartI2.copy()
+
+        return intra, extra, zkStartIntra, zkStartExtra
+
+    def _createPupilImage(
+        self,
+        refImage: Image,
+        imageMapper: ImageMapper,
+    ) -> Image:
+        """Create a pupil image to be used when one image is missing.
+
+        Parameters
+        ----------
+        refImage : Image
+            The other image for the pair. Used for getting metadata.
+        imageMapper : ImageMapper
+            The ImageMapper to be used for pupil dimensions and mask creation.
+
+        Returns
+        -------
+        Image
+            A Pupil image
+        """
+        # Get the pupil size
+        nPix = imageMapper.instrument.nPupilPixels
+
+        # And the defocal type for the pupil
+        defocalType = "intra" if refImage.defocalType == DefocalType.Extra else "extra"
+
+        # Create empty pupil image
+        pupil = Image(
+            image=np.zeros((nPix, nPix)),
+            fieldAngle=refImage.fieldAngle,
+            defocalType=defocalType,
+            bandLabel=refImage.bandLabel,
+            planeType="pupil",
+        )
+
+        # Create the pupil mask
+        imageMapper.createPupilMasks(pupil)
+
+        # Replace the image with the pupil mask
+        # (Convolving with Gaussian gives better results)
+        pupil.image = gaussian_filter(
+            pupil.mask.astype(float),
+            self.modelPupilKernelSize,
+        )
+
+        return pupil
 
     def _expSolve(
         self,
@@ -464,9 +612,9 @@ class TieAlgorithm(WfAlgorithm):
     def _estimateZk(
         self,
         I1: Image,
-        I2: Image,  # type: ignore[override]
+        I2: Optional[Image],  # type: ignore[override]
         zkStartI1: np.ndarray,
-        zkStartI2: np.ndarray,
+        zkStartI2: Optional[np.ndarray],
         instrument: Instrument,
         saveHistory: bool,
     ) -> np.ndarray:
@@ -476,12 +624,13 @@ class TieAlgorithm(WfAlgorithm):
         ----------
         I1 : Image
             An Image object containing an intra- or extra-focal donut image.
-        I2 : Image
-            A second image, on the opposite side of focus from I1.
+        I2 : Image or None
+            A second image, on the opposite side of focus from I1. Can be None.
         zkStartI1 : np.ndarray
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
             The starting Zernikes for I2 (in meters, for Noll indices >= 4)
+            Can be None.
         instrument : Instrument
             The Instrument object associated with the DonutStamps.
         saveHistory : bool
@@ -504,28 +653,39 @@ class TieAlgorithm(WfAlgorithm):
         imageMapper = ImageMapper(instConfig=instrument, opticalModel=self.opticalModel)
 
         # Re-assign I1/I2 to intra/extra
-        if I1.defocalType == DefocalType.Intra:
-            intra = I1.copy()
-            zkStartIntra = zkStartI1.copy()
-            extra = I2.copy()
-            zkStartExtra = zkStartI2.copy()
-        else:
-            intra = I2.copy()
-            zkStartIntra = zkStartI2.copy()
-            extra = I1.copy()
-            zkStartExtra = zkStartI1.copy()
+        intra, extra, zkStartIntra, zkStartExtra = self._assignIntraExtra(
+            I1,
+            I2,
+            zkStartI1,
+            zkStartI2,
+        )
 
-        # Calculate the mean starting Zernikes
-        zkStartMean = np.mean([zkStartIntra, zkStartExtra], axis=0)
+        # Create a pupil object for handling missing images
+        if intra is None:
+            pupil = self._createPupilImage(extra, imageMapper)
+        elif extra is None:
+            pupil = self._createPupilImage(intra, imageMapper)
+        else:
+            # No missing image
+            pupil = None
+
+        # Calculate the mean starting Zernikes, ignoring None values
+        if zkStartIntra is None:
+            zkStartMean = zkStartExtra.copy()
+        elif zkStartExtra is None:
+            zkStartMean = zkStartIntra.copy()
+        else:
+            zkStartMean = np.nanmean([zkStartIntra, zkStartExtra], axis=0)
 
         if saveHistory:
             # Save the initial images and intrinsic Zernikes in the history
             self._history[0] = {
-                "intraInit": intra.image.copy(),
-                "extraInit": extra.image.copy(),
-                "zkStartIntra": zkStartIntra.copy(),
-                "zkStartExtra": zkStartExtra.copy(),
+                "intraInit": None if intra is None else intra.image.copy(),
+                "extraInit": None if extra is None else extra.image.copy(),
+                "zkStartIntra": None if intra is None else zkStartIntra.copy(),
+                "zkStartExtra": None if extra is None else zkStartExtra.copy(),
                 "zkStartMean": zkStartMean.copy(),
+                "pupil": None if pupil is None else pupil.copy(),
             }
 
         # Initialize Zernike arrays at zero
@@ -562,31 +722,47 @@ class TieAlgorithm(WfAlgorithm):
             if recenter:
                 # Zernikes have changed enough that we should recenter images
                 zkCenter = zkComp.copy()
-                intraCent = imageMapper.centerOnProjection(
-                    intra,
-                    zkCenter + zkStartIntra,
-                    isBinary=self.centerBinary,
-                    **self.maskKwargs,
+                intraCent = (
+                    None
+                    if intra is None
+                    else imageMapper.centerOnProjection(
+                        intra,
+                        zkCenter + zkStartIntra,
+                        isBinary=self.centerBinary,
+                        **self.maskKwargs,
+                    )
                 )
-                extraCent = imageMapper.centerOnProjection(
-                    extra,
-                    zkCenter + zkStartExtra,
-                    isBinary=self.centerBinary,
-                    **self.maskKwargs,
+                extraCent = (
+                    None
+                    if extra is None
+                    else imageMapper.centerOnProjection(
+                        extra,
+                        zkCenter + zkStartExtra,
+                        isBinary=self.centerBinary,
+                        **self.maskKwargs,
+                    )
                 )
 
             # Compensate images using the Zernikes
-            intraComp = imageMapper.mapImageToPupil(
-                intraCent,
-                zkComp + zkStartIntra,
-                masks=None if i == 0 else intraComp.masks,  # noqa: F821
-                **self.maskKwargs,
+            intraComp = (
+                pupil
+                if intraCent is None
+                else imageMapper.mapImageToPupil(
+                    intraCent,
+                    zkComp + zkStartIntra,
+                    masks=None if i == 0 else intraComp.masks,  # noqa: F821
+                    **self.maskKwargs,
+                )
             )
-            extraComp = imageMapper.mapImageToPupil(
-                extraCent,
-                zkComp + zkStartExtra,
-                masks=None if i == 0 else extraComp.masks,  # noqa: F821
-                **self.maskKwargs,
+            extraComp = (
+                pupil
+                if extraCent is None
+                else imageMapper.mapImageToPupil(
+                    extraCent,
+                    zkComp + zkStartExtra,
+                    masks=None if i == 0 else extraComp.masks,  # noqa: F821
+                    **self.maskKwargs,
+                )
             )
 
             # Apply a common pupil mask to each
@@ -623,6 +799,13 @@ class TieAlgorithm(WfAlgorithm):
                 # Estimate the Zernikes
                 zkResid = self._expSolve(I0, dIdz, jmax, instrument)
 
+                # If estimating with a single donut, double the coefficients
+                # This is because the simulated pupil image is aberration free
+                # so it is effectively damping the detected aberrations
+                # (effect is only a small increase in convergence rate)
+                if intraCent is None or extraCent is None:
+                    zkResid *= 2
+
                 # Check for convergence
                 # (1) The max absolute difference with the previous iteration
                 #     must be below self.convergeTol
@@ -644,15 +827,15 @@ class TieAlgorithm(WfAlgorithm):
                 # Save the images and Zernikes from this iteration
                 self._history[i + 1] = {
                     "recenter": bool(recenter),
-                    "intraCent": intraCent.image.copy(),
-                    "extraCent": extraCent.image.copy(),
+                    "intraCent": None if intraCent is None else intraCent.image.copy(),
+                    "extraCent": None if extraCent is None else extraCent.image.copy(),
                     "intraComp": intraComp.image.copy(),
                     "extraComp": extraComp.image.copy(),
                     "mask": mask.copy(),  # type: ignore
                     "I0": I0.copy(),
                     "dIdz": dIdz.copy(),
-                    "zkCompIntra": zkComp + zkStartIntra,
-                    "zkCompExtra": zkComp + zkStartExtra,
+                    "zkCompIntra": None if intraCent is None else zkComp + zkStartIntra,
+                    "zkCompExtra": None if extraCent is None else zkComp + zkStartExtra,
                     "zkResid": zkResid.copy(),
                     "zkBest": zkBest.copy(),
                     "zkSum": zkSum.copy(),

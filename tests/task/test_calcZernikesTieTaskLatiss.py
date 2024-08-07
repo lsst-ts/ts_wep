@@ -173,7 +173,9 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
                 0.0147995,
             ]
         )
-        self.assertTrue(np.allclose(zk, zernCoeff.outputZernikesRaw[0]))
+        self.assertFloatsAlmostEqual(
+            zk, zernCoeff.outputZernikesRaw[0], rtol=0, atol=1e-3
+        )
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))

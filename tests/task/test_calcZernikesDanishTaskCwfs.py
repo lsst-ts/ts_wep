@@ -171,7 +171,6 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertLess(
             np.sqrt(np.sum(np.square(zernCoeffAvgR04 - trueZernCoeffR04))), 0.39
         )
-        np.save("testR04zk.npy", zernCoeffAvgR04)
 
         # Test R40
         donutStampsExtra = DonutStamps.readFits(
