@@ -31,6 +31,7 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 import pandas as pd
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.utils import (
@@ -216,16 +217,16 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # true in the rotated DVCS coordinate system)
         defocalType = DefocalType.Extra
 
-        # Get the offset
-        offset = getOffsetFromExposure(exposure, camName, defocalType)
-
         # Load the instrument
-        instrument = getTaskInstrument(
-            camName,
-            detectorName,
-            offset,
-            self.config.instConfigFile,
-        )
+        if self.config.instConfigFile is None:
+            instrument = getTaskInstrument(camName, detectorName)
+        else:
+            instrument = Instrument(configFile=self.config.instConfigFile)
+
+        # Set the Batoid offset
+        offset = getOffsetFromExposure(exposure, camName, defocalType)
+        instrument.batoidOffsetValue = offset / 1e3  # mm -> m
+        instrument.defocalOffset = instrument.calcEffDefocalOffset()
 
         # Create the image template for the detector
         template = createTemplateForDetector(

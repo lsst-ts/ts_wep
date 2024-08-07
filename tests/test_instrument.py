@@ -130,6 +130,17 @@ class TestInstrument(unittest.TestCase):
         close = np.isclose(inst.getOffAxisCoeff(0, 0, "intra"), intrZk, atol=0)
         self.assertTrue(np.all(~close))
 
+        # Check that swapping the sign of the offset flips Z4
+        z4one = inst.getOffAxisCoeff(1, 1, "extra", jmax=4)
+        z4two = inst.getOffAxisCoeff(
+            1,
+            1,
+            "extra",
+            jmax=4,
+            batoidOffsetValue=-inst.batoidOffsetValue,
+        )
+        self.assertTrue(np.isclose(z4one[0], -z4two[0], rtol=1e-4))
+
     def testBadMaskParams(self):
         with self.assertRaises(TypeError):
             Instrument(maskParams="bad")
@@ -207,9 +218,19 @@ class TestInstrument(unittest.TestCase):
         self.assertTrue(np.isclose(inst.defocalOffset, lsst.defocalOffset, rtol=1e-3))
 
     def testDefocalOffsetCalculation(self):
+        # Load AuxTel
         inst = Instrument("policy:instruments/AuxTel.yaml")
+
+        # Test the method
+        self.assertTrue(np.isclose(inst.calcEffDefocalOffset(), 34.94e-3, rtol=1e-3))
+
+        # Test auto-attribute
         inst.batoidOffsetValue = 0.8e-3
         self.assertTrue(np.isclose(inst.defocalOffset, 34.94e-3, rtol=1e-3))
+
+        # Also test LsstCam
+        inst = Instrument("policy:instruments/LsstCam.yaml")
+        self.assertTrue(np.isclose(inst.calcEffDefocalOffset(), inst.defocalOffset))
 
     def testImports(self):
         # Get LSST and ComCam instruments

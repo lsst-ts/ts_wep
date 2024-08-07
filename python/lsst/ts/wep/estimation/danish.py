@@ -152,8 +152,9 @@ class DanishAlgorithm(WfAlgorithm):
         zkStart = np.pad(zkStart, (4, 0))
         offAxisCoeff = instrument.getOffAxisCoeff(
             *image.fieldAngle,
-            image.defocalType,
-            image.bandLabel,
+            defocalType=image.defocalType,
+            batoidOffsetValue=image.batoidOffsetValue,
+            band=image.bandLabel,
             jmaxIntrinsic=jmax,
             return4Up=False,
         )

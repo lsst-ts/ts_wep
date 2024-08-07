@@ -21,6 +21,7 @@
 
 __all__ = ["Instrument"]
 
+from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple, Union
@@ -29,6 +30,7 @@ import batoid
 import numpy as np
 from lsst.ts.wep.utils import BandLabel, DefocalType, EnumDict, mergeConfigWithFile
 from scipy.optimize import minimize_scalar
+from typing_extensions import Self
 
 
 class Instrument:
@@ -173,8 +175,8 @@ class Instrument:
         self.getBatoidModel.cache_clear()
         self._getIntrinsicZernikesCached.cache_clear()
         self._getIntrinsicZernikesTACached.cache_clear()
+        self.calcEffDefocalOffset.cache_clear()
         self._focalLengthBatoid = None
-        self._defocalOffsetBatoid = None
 
     @property
     def name(self) -> str:
@@ -319,52 +321,8 @@ class Instrument:
         """The defocal offset in meters."""
         if self._defocalOffset is not None:
             return self._defocalOffset
-        elif self._defocalOffsetBatoid is not None:
-            return self._defocalOffsetBatoid
         elif self.batoidModelName is not None and self._batoidOffsetValue is not None:
-            # Load the model and wavelength info
-            batoidModel = self.getBatoidModel()
-            offsetOptic = self.batoidOffsetOptic
-            eps = batoidModel.pupilObscuration
-            wavelength = self.wavelength[BandLabel.REF]
-            batoidOffsetValue = self.batoidOffsetValue
-
-            # Calculate dZ4 for the optic
-            shift = np.array([0, 0, batoidOffsetValue])
-            dZ4optic = batoid.zernike(
-                batoidModel.withLocallyShiftedOptic(offsetOptic, +shift),
-                *np.zeros(2),
-                wavelength,
-                eps=eps,
-                jmax=4,
-                nx=128,
-            )[4]
-
-            # Define a function to calculate dZ4 for an offset detector
-            def dZ4det(offset):
-                return batoid.zernike(
-                    batoidModel.withLocallyShiftedOptic("Detector", [0, 0, offset]),
-                    *np.zeros(2),
-                    wavelength,
-                    eps=eps,
-                    jmax=4,
-                    nx=128,
-                )[4]
-
-            # Calculate the equivalent detector offset
-            result = minimize_scalar(
-                lambda offset: np.abs((dZ4det(offset) - dZ4optic) / dZ4optic),
-                bounds=(-0.1, 0.1),
-            )
-            if not result.success or result.fun > 1e-3:
-                raise RuntimeError(
-                    "Calculating defocalOffset from batoidOffsetValue failed."
-                )
-
-            # Save the calculated offset
-            self._defocalOffsetBatoid = np.abs(result.x)
-
-            return self._defocalOffsetBatoid
+            return self.calcEffDefocalOffset()
         else:
             raise ValueError(
                 "There is currently no defocalOffset set. "
@@ -461,8 +419,8 @@ class Instrument:
         # Clear relevant caches
         self._getIntrinsicZernikesCached.cache_clear()
         self._getIntrinsicZernikesTACached.cache_clear()
+        self.calcEffDefocalOffset.cache_clear()
         self._focalLengthBatoid = None
-        self._defocalOffsetBatoid = None
 
     @property
     def wavelength(self) -> EnumDict:
@@ -500,7 +458,7 @@ class Instrument:
             raise TypeError("wavelength must be a float, dictionary, or None.")
 
         # Save wavelength info in a BandLabel EnumDict
-        if isinstance(value, dict) or isinstance(value, EnumDict):
+        if isinstance(value, (dict, EnumDict)):
             value = EnumDict(BandLabel, value)
             try:
                 value[BandLabel.REF] = value[self.refBand]
@@ -518,8 +476,8 @@ class Instrument:
         # Clear relevant caches
         self._getIntrinsicZernikesCached.cache_clear()
         self._getIntrinsicZernikesTACached.cache_clear()
+        self.calcEffDefocalOffset.cache_clear()
         self._focalLengthBatoid = None
-        self._defocalOffsetBatoid = None
 
     @property
     def batoidModelName(self) -> Union[str, None]:
@@ -577,13 +535,18 @@ class Instrument:
         self.getBatoidModel.cache_clear()
         self._getIntrinsicZernikesCached.cache_clear()
         self._getIntrinsicZernikesTACached.cache_clear()
+        self.calcEffDefocalOffset.cache_clear()
         self._focalLengthBatoid = None
-        self._defocalOffsetBatoid = None
 
     @property
     def batoidOffsetOptic(self) -> Union[str, None]:
         """The optic that is offset in the Batoid model."""
-        return self._batoidOffsetOptic
+        if self.batoidModelName is None:
+            return None
+        elif self._batoidOffsetOptic is None:
+            return "Detector"
+        else:
+            return self._batoidOffsetOptic
 
     @batoidOffsetOptic.setter
     def batoidOffsetOptic(self, value: Union[str, None]) -> None:
@@ -618,12 +581,17 @@ class Instrument:
 
         # Clear relevant caches
         self._getIntrinsicZernikesTACached.cache_clear()
-        self._defocalOffsetBatoid = None
+        self.calcEffDefocalOffset.cache_clear()
 
     @property
     def batoidOffsetValue(self) -> Union[float, None]:
         """Amount in meters the optic is offset in the Batoid model."""
-        return self._batoidOffsetValue
+        if self.batoidModelName is None:
+            return None
+        elif self._batoidOffsetValue is None and self.batoidOffsetOptic == "Detector":
+            return self.defocalOffset
+        else:
+            return self._batoidOffsetValue
 
     @batoidOffsetValue.setter
     def batoidOffsetValue(self, value: Union[float, None]) -> None:
@@ -651,7 +619,63 @@ class Instrument:
 
         # Clear relevant caches
         self._getIntrinsicZernikesTACached.cache_clear()
-        self._defocalOffsetBatoid = None
+        self.calcEffDefocalOffset.cache_clear()
+
+    @lru_cache(10)
+    def calcEffDefocalOffset(self, batoidOffsetValue: Optional[float] = None) -> float:
+        """Calculate effective detector offset corresponding to Batoid offset.
+
+        Uses the Batoid model and Z4 ratios to determine which detector offset
+        creates the same defocus as the batoidOffsetValue.
+
+        Parameters
+        ----------
+        batoidOffsetValue : float or None, optional
+            The offset of self.batoidOffsetOptic in meters. If None,
+            self.batoidOffsetValue is used. (the default is None)
+
+        Returns
+        -------
+        float
+            The equivalent detector offset in meters (always positive).
+        """
+        # Load the model and wavelength info
+        batoidModel = self.getBatoidModel()
+        offsetOptic = self.batoidOffsetOptic
+        eps = batoidModel.pupilObscuration
+        wavelength = self.wavelength[BandLabel.REF]
+        if batoidOffsetValue is None:
+            batoidOffsetValue = self.batoidOffsetValue
+
+        # Calculate dZ4 for the optic
+        shift = np.array([0, 0, batoidOffsetValue])
+        dZ4optic = batoid.zernike(
+            batoidModel.withLocallyShiftedOptic(offsetOptic, +shift),
+            *np.zeros(2),
+            wavelength,
+            eps=eps,
+            jmax=4,
+            nx=128,
+        )[4]
+
+        # Define a function to calculate dZ4 for an offset detector
+        def dZ4det(offset):
+            return batoid.zernike(
+                batoidModel.withLocallyShiftedOptic("Detector", [0, 0, offset]),
+                *np.zeros(2),
+                wavelength,
+                eps=eps,
+                jmax=4,
+                nx=128,
+            )[4]
+
+        # Calculate the equivalent detector offset
+        result = minimize_scalar(
+            lambda offset: np.abs(dZ4det(offset) - dZ4optic),
+            bounds=[-0.1, 0.1],
+        )
+
+        return np.abs(result.x)
 
     @lru_cache(10)
     def getBatoidModel(
@@ -789,6 +813,7 @@ class Instrument:
         xAngle: float,
         yAngle: float,
         defocalType: DefocalType,
+        batoidOffsetValue: float,
         band: Union[BandLabel, str],
         jmax: int,
     ) -> np.ndarray:
@@ -803,6 +828,9 @@ class Instrument:
         defocalType : DefocalType or str
             The DefocalType Enum or corresponding string, specifying which side
             of focus to model.
+        batoidOffsetValue : float or None
+            The offset of the batoidOffsetOptic used to calculate the off-axis
+            coefficients. If None, then self.batoidOffsetOptic is used.
         band : BandLabel or str
             The BandLabel Enum or corresponding string, specifying which
             batoid model to load. Only relevant if self.batoidModelName
@@ -833,11 +861,17 @@ class Instrument:
         if batoidModel is None:
             return np.zeros(jmax + 1)
 
-        # Offset the focal plane
-        defocalType = DefocalType(defocalType)
-        defocalSign = +1 if defocalType == DefocalType.Extra else -1
-        offset = [0, 0, defocalSign * self.defocalOffset]
-        batoidModel = batoidModel.withLocallyShiftedOptic("Detector", offset)
+        # Get the Batoid offset
+        if batoidOffsetValue is None:
+            defocalType = DefocalType(defocalType)
+            defocalSign = +1 if defocalType == DefocalType.Extra else -1
+            offset = [0, 0, defocalSign * self.batoidOffsetValue]
+        else:
+            offset = [0, 0, batoidOffsetValue]
+
+        # Offset the optic
+        optic = self.batoidOffsetOptic
+        shiftedModel = batoidModel.withLocallyShiftedOptic(optic, offset)
 
         # Get the wavelength
         if len(self.wavelength) > 1:
@@ -847,7 +881,7 @@ class Instrument:
 
         # Get the off-axis model Zernikes in wavelengths
         zkIntrinsic = batoid.zernikeTA(
-            batoidModel,
+            shiftedModel,
             *np.deg2rad([xAngle, yAngle]),
             wavelength,
             jmax=jmax,
@@ -866,7 +900,8 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType,
+        defocalType: Optional[DefocalType] = None,
+        batoidOffsetValue: Optional[float] = None,
         band: Union[BandLabel, str] = BandLabel.REF,
         jmax: int = 78,
         jmaxIntrinsic: int = 78,
@@ -880,9 +915,13 @@ class Instrument:
             The x-component of the field angle in degrees.
         yAngle : float
             The y-component of the field angle in degrees.
-        defocalType : DefocalType or str
+        defocalType : DefocalType or str, optional
             The DefocalType Enum or corresponding string, specifying which side
-            of focus to model.
+            of focus to model. (the default is None)
+        batoidOffsetValue : float or None, optional
+            The offset of the batoidOffsetOptic used to calculate the off-axis
+            coefficients. If None, then self.batoidOffsetOptic is used.
+            (the default is None)
         band : BandLabel or str, optional
             The BandLabel Enum or corresponding string, specifying which
             batoid model to load. Only relevant if self.batoidModelName
@@ -905,12 +944,23 @@ class Instrument:
         -------
         np.ndarray
             The Zernike coefficients in meters, for Noll indices >= 4
+
+        Raises
+        ------
+        ValueError
+            If defocalType and batoidOffsetValue are both None.
         """
+        if defocalType is None and batoidOffsetValue is None:
+            raise ValueError(
+                "You must provide either defocalType or batoidOffsetValue."
+            )
+
         # Get zernikeTA
         zkTA = self._getIntrinsicZernikesTACached(
             xAngle,
             yAngle,
             defocalType,
+            batoidOffsetValue,
             band,
             jmax,
         )
@@ -1060,3 +1110,13 @@ class Instrument:
         uImage, vImage = np.meshgrid(grid, grid)
 
         return uImage, vImage
+
+    def copy(self) -> Self:
+        """Return a copy of the Instrument object.
+
+        Returns
+        -------
+        Instrument
+            A deep copy of self.
+        """
+        return deepcopy(self)

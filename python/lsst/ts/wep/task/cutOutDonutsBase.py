@@ -36,6 +36,7 @@ from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -117,8 +118,7 @@ class CutOutDonutsBaseTaskConfig(
         doc="Path to a instrument configuration file to override the instrument "
         + "configuration. If begins with 'policy:' the path will be understood as "
         + "relative to the ts_wep policy directory. If not provided, the default "
-        + "instrument for the camera will be loaded, and the defocal offset will "
-        + "be determined from the focusZ value in the exposure header.",
+        + "instrument for the camera will be loaded.",
         dtype=str,
         optional=True,
     )
@@ -307,16 +307,16 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Run background subtraction
         self.subtractBackground.run(exposure=exposure).background
 
-        # Get the offset
-        offset = getOffsetFromExposure(exposure, cameraName, defocalType)
-
         # Load the instrument
-        instrument = getTaskInstrument(
-            cameraName,
-            detectorName,
-            offset,
-            self.instConfigFile,
-        )
+        if self.instConfigFile is None:
+            instrument = getTaskInstrument(cameraName, detectorName)
+        else:
+            instrument = Instrument(configFile=self.instConfigFile)
+
+        # Set the Batoid offset
+        offset = getOffsetFromExposure(exposure, cameraName, defocalType)
+        instrument.batoidOffsetValue = offset / 1e3  # mm -> m
+        instrument.defocalOffset = instrument.calcEffDefocalOffset()
 
         # Create the image template for the detector
         template = createTemplateForDetector(
@@ -452,8 +452,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
                 detector_name=detectorName,
                 cam_name=cameraName,
                 defocal_type=defocalType.value,
-                # Save defocal offset in mm.
-                defocal_distance=instrument.defocalOffset * 1e3,
+                # Save defocal offsets in mm.
+                detector_offset=instrument.defocalOffset * 1e3,  # m -> mm
+                optic_offset=instrument.batoidOffsetValue * 1e3,  # m -> mm
                 bandpass=bandLabel,
                 archive_element=linear_wcs,
             )
@@ -470,8 +471,11 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DFC_TYPE"] = np.array(
             [defocalType.value] * catalogLength, dtype=str
         )
-        stampsMetadata["DFC_DIST"] = np.array(
+        stampsMetadata["DET_DZ"] = np.array(
             [instrument.defocalOffset * 1e3] * catalogLength
+        )
+        stampsMetadata["OPTIC_DZ"] = np.array(
+            [instrument.batoidOffsetValue * 1e3] * catalogLength
         )
         # Save the centroid values
         stampsMetadata["CENT_X"] = np.array(finalXCentList)

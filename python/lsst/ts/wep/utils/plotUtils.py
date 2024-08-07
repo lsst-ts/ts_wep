@@ -393,7 +393,7 @@ def plotMapperResiduals(
 
     # Determine the defocal offset
     offset = -1 if defocalType == "intra" else +1
-    offset *= instrument.defocalOffset
+    offset *= instrument.batoidOffsetValue
 
     # Create the Batoid RayVector
     nrad = 50
@@ -407,24 +407,26 @@ def plotMapperResiduals(
         naz=naz,
     )
 
-    # Get the normalized pupil coordinates
-    uPupil = (rays.x - rays.x.mean()) / mapper.instrument.radius
-    vPupil = (rays.y - rays.y.mean()) / mapper.instrument.radius
+    # Get normalized pupil coordinates
+    pupilRays = optic.stopSurface.interact(rays.copy())
+    uPupil = pupilRays.x / instrument.radius
+    vPupil = pupilRays.y / instrument.radius
 
     # Map to focal plane using the offAxis model
     uImage, vImage, *_ = mapper._constructForwardMap(
         uPupil,
         vPupil,
-        mapper.instrument.getIntrinsicZernikes(*angle, band, jmax=22),
+        instrument.getIntrinsicZernikes(*angle, band, jmax=28),
         Image(np.zeros((1, 1)), angle, defocalType, band),
     )
 
     # Convert normalized image coordinates to meters
-    xImage = uImage * mapper.instrument.donutRadius * mapper.instrument.pixelSize
-    yImage = vImage * mapper.instrument.donutRadius * mapper.instrument.pixelSize
+    xImage = uImage * instrument.donutRadius * instrument.pixelSize
+    yImage = vImage * instrument.donutRadius * instrument.pixelSize
 
     # Trace to the focal plane with Batoid
-    optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(rays)
+    optic = optic.withLocallyShiftedOptic(instrument.batoidOffsetOptic, [0, 0, offset])
+    optic.trace(rays)
 
     # Calculate the centered ray coordinates
     chief = batoid.RayVector.fromStop(
@@ -434,7 +436,7 @@ def plotMapperResiduals(
         wavelength=mapper.instrument.wavelength[band],
         dirCos=dirCos,
     )
-    optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(chief)
+    optic.trace(chief)
     xRay = rays.x - chief.x
     yRay = rays.y - chief.y
 
