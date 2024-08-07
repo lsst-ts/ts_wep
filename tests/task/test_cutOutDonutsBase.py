@@ -345,3 +345,27 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
                     rtol=0.0,
                     atol=10e-6,  # 10 microarcsecond accurate over stamp region
                 )
+
+        # Check that all expected metadata is present
+        metadata = list(donutStamps.metadata)
+        expectedMetadata = [
+            "RA_DEG",
+            "DEC_DEG",
+            "DET_NAME",
+            "CAM_NAME",
+            "VISIT",
+            "DFC_TYPE",
+            "DFC_DIST",
+            "CENT_X",
+            "CENT_Y",
+            "BLEND_CX",
+            "BLEND_CY",
+            "X0",
+            "Y0",
+        ]
+        self.assertCountEqual(metadata, expectedMetadata)
+
+        # test that the visit is properly stored
+        self.assertEqual(
+            self.dataIdExtra["visit"], donutStamps.metadata.getArray("VISIT")[0]
+        )
