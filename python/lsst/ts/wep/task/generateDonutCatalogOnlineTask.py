@@ -25,6 +25,7 @@ import warnings
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
+import numpy as np
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
@@ -129,6 +130,9 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
 
         fieldObjects = donutCatalogToDataFrame(
             refSelection, filterName, blendCentersX, blendCentersY
+        )
+        fieldObjects["detector"] = np.array(
+            [detector.getName()] * len(fieldObjects), dtype=str
         )
 
         return pipeBase.Struct(donutCatalog=fieldObjects)

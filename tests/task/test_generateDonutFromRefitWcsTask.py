@@ -207,6 +207,9 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             decimal=3,
         )
 
+        # Test that detector names are present
+        self.assertEqual(np.unique(fitCatalog["detector"]), "R22_S11")
+
     def testWcsFailure(self):
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
