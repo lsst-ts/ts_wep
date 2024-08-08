@@ -254,7 +254,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             warn for warn in cm.output if "Donut Recentering " in warn
         ]
         for stamp, catRow, logMsg, xShift, yShift in zip(
-            donutStamps[1:], catalog.to_records()[1:], recenteringWarnings,
+            donutStamps[1:],
+            catalog.to_records()[1:],
+            recenteringWarnings,
             xShifts[1:],
             yShifts[1:],
         ):
@@ -420,4 +422,3 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         sn_values = [2149.17757703855, 2160.5407329704117, 2042.1965399542976]
         sn_calculated = donutStamps.metadata.getArray("SN")
         np.testing.assert_array_almost_equal(sn_values, sn_calculated, decimal=4)
-
