@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 from copy import copy
+
 import astropy.units as u
 import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
@@ -294,7 +295,15 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         origXCorner = xCent - stampHalfWidth
         origYCorner = yCent - stampHalfWidth
 
-        return finalDonutX, finalDonutY, xCorner, yCorner, origXCorner, origYCorner, peakHeight
+        return (
+            finalDonutX,
+            finalDonutY,
+            xCorner,
+            yCorner,
+            origXCorner,
+            origYCorner,
+            peakHeight,
+        )
 
     def calculateSN(self, stamp):
         """
@@ -399,7 +408,6 @@ using the variance of image background for noise estimate."
             "ttl_noise_donut_variance": ttl_noise_donut_variance,
         }
         return sn_dic
->>>>>>> eb1a6b4 (add donut quality check to cutOutDonutsBase)
 
     def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
         """
@@ -502,9 +510,15 @@ using the variance of image background for noise estimate."
             # the postage stamp with the donut template and return
             # the new centroid position as well as the corners of the
             # postage stamp to cut out of the exposure.
-            finalDonutX, finalDonutY, xCorner, yCorner, initXCorner, initYCorner, peakHeight = (
-                self.calculateFinalCentroid(exposure, template, xCent, yCent)
-            )
+            (
+                finalDonutX,
+                finalDonutY,
+                xCorner,
+                yCorner,
+                initXCorner,
+                initYCorner,
+                peakHeight,
+            ) = self.calculateFinalCentroid(exposure, template, xCent, yCent)
             peakHeights.append(peakHeight)
 
             xShift = finalDonutX - xCent
