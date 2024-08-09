@@ -27,6 +27,7 @@ __all__ = [
     "getOffsetFromExposure",
     "getTaskInstrument",
     "createTemplateForDetector",
+    "createTemplateInFocus",
     "convertHistoryToMetadata",
     "convertMetadataToHistory",
 ]
@@ -333,6 +334,39 @@ def getTaskInstrument(
         instrument.batoidOffsetValue = offset / 1e3
 
     return instrument
+
+
+def gkern(length=3, sig=0.5):
+    """
+    creates gaussian kernel with side length l and a sigma of sig
+    """
+
+    ax = np.linspace(-(length - 1) / 2.0, (length - 1) / 2.0, length)
+    xx, yy = np.meshgrid(ax, ax)
+
+    kernel = np.exp(-0.5 * (np.square(xx) + np.square(yy)) / np.square(sig))
+
+    return kernel / np.sum(kernel)
+
+
+def createTemplateInFocus(length: float = 11, sigma: float = 2.5):
+    """Create an in-focus Gaussian PSF
+
+    Parameters
+    ----------
+    length: float, optional
+        Length of the correlation template.
+    sigma: float, optional
+        Sigma (spread) of the Gaussian PSF.
+
+    Returns
+    -------
+    np.ndarray
+        The donut template array.
+    """
+    psf_array = gkern(length=length, sig=sigma)
+    psf_array = psf_array.astype(np.float64)
+    return psf_array
 
 
 def createTemplateForDetector(
