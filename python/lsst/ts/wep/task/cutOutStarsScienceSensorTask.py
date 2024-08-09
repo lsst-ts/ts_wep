@@ -40,11 +40,37 @@ from lsst.ts.wep.task.cutOutDonutsBase import (
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
-
+from lsst.fgcmcal.utilities import lookupStaticCalibrations
 
 class CutOutStarsScienceSensorTaskConnections(
-    CutOutDonutsBaseTaskConnections, dimensions=("detector", "instrument")
+    pipeBase.PipelineTaskConnections, dimensions=("exposure", "instrument")
 ):
+    exposures = connectionTypes.Input(
+        doc="Input exposure to make measurements on",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="Exposure",
+        name="postISRCCD",
+        multiple=True,
+    )
+    donutCatalog = connectionTypes.Input(
+        doc="Donut Locations",
+        dimensions=(
+            "visit",
+            "detector",
+            "instrument",
+        ),
+        storageClass="DataFrame",
+        name="donutCatalog",
+        multiple=True,
+    )
+    camera = connectionTypes.PrerequisiteInput(
+        name="camera",
+        storageClass="Camera",
+        doc="Input camera to construct complete exposures.",
+        dimensions=["instrument"],
+        isCalibration=True,
+        lookupFunction=lookupStaticCalibrations,
+    )
     starStamps = connectionTypes.Output(
         doc="In-Focus Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
@@ -91,20 +117,25 @@ class CutOutStarsScienceSensorTask(CutOutDonutsBaseTask):
         """
         # Get the inputs from butler
         camera = butlerQC.get(inputRefs.camera)
-        exposure = butlerQC.get(inputRefs.exposures)
-        srcCat = butlerQC.get(inputRefs.donutCatalog)
+                 
+        exposureRefs = [v for v in inputRefs.exposures]
+        donutCatalogRefs = [v for v in inputRefs.donutCatalog]
 
-        # Run the task
-        outputs = self.run(exposure, srcCat, camera)
+        for i in range(len(exposureRefs)):
+            exposure = butlerQC.get(exposureRefs[i])
+            srcCat = butlerQC.get(donutCatalogRefs[i])
 
-        # Put the outputs in the butler
-        butlerQC.put(outputs.starStamps, outputRefs.starStamps)
+            # Run the task
+            outputs = self.run(exposure, srcCat, camera)
+
+            # Put the outputs in the butler
+            butlerQC.put(outputs.starStamps, outputRefs.starStamps[i])
 
     @timeMethod
     def run(
         self,
-        exposure: typing.List[afwImage.Exposure],
-        sourceCatalog: typing.List[pd.DataFrame],
+        exposure: afwImage.Exposure,
+        sourceCatalog: pd.DataFrame,
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
@@ -114,8 +145,8 @@ class CutOutStarsScienceSensorTask(CutOutDonutsBaseTask):
 
         # Get the star stamps from in-focus exposure
         starStamps = self.cutOutStamps(
-            exposure[0],
-            sourceCatalog[0],
+            exposure,
+            sourceCatalog,
             DefocalType.Focus,
             cameraName,
         )
