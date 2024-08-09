@@ -89,7 +89,7 @@ class CutOutDonutsScienceSensorTaskConfig(
 
 class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
     """
-    Run Zernike Estimation in full-array mode (FAM)
+    Cut out donut stamps for full array mode.
     """
 
     ConfigClass = CutOutDonutsScienceSensorTaskConfig
@@ -253,15 +253,15 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         )
 
         # If no donuts are in the donutCatalog for a set of exposures
-        # then return the Zernike coefficients as nan.
+        # then return empty donut stamps list
         if len(donutStampsExtra) == 0:
             return pipeBase.Struct(
                 donutStampsExtra=DonutStamps([]),
                 donutStampsIntra=DonutStamps([]),
             )
 
-        # Return extra-focal DonutStamps, intra-focal DonutStamps and
-        # Zernike coefficient numpy array as Struct that can be saved to
+        # Return extra-focal DonutStamps, intra-focal DonutStamps
+        # as Struct that can be saved to
         # Gen 3 repository all with the same dataId.
         return pipeBase.Struct(
             donutStampsExtra=donutStampsExtra,
