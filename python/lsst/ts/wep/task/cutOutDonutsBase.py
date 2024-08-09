@@ -42,8 +42,10 @@ from lsst.ts.wep.utils import (
     createTemplateForDetector,
     getOffsetFromExposure,
     getTaskInstrument,
+    createTemplateInFocus,
 )
 from scipy.signal import correlate
+from lsst.ts.wep.utils.enumUtils import DefocalType
 
 
 class CutOutDonutsBaseTaskConnections(
@@ -319,15 +321,18 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         )
 
         # Create the image template for the detector
-        template = createTemplateForDetector(
-            detector=detector,
-            defocalType=defocalType,
-            bandLabel=bandLabel,
-            instrument=instrument,
-            opticalModel=self.opticalModel,
-            padding=self.initialCutoutPadding,
-            isBinary=True,
-        )
+        if defocalType == DefocalType.Focus:
+            template = createTemplateInFocus()
+        else:
+            template = createTemplateForDetector(
+                detector=detector,
+                defocalType=defocalType,
+                bandLabel=bandLabel,
+                instrument=instrument,
+                opticalModel=self.opticalModel,
+                padding=self.initialCutoutPadding,
+                isBinary=True,
+            )
 
         # Final list of DonutStamp objects
         finalStamps = list()
