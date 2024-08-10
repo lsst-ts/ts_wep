@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.5.0:
+
+-------------
+10.5.0
+-------------
+
+* Add cutOutStarsScienceSensorTask to cut stamps around in-focus sources.
+
 .. _lsst.ts.wep-10.4.1:
 
 -------------
