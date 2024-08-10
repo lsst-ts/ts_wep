@@ -40,12 +40,12 @@ from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
     createTemplateForDetector,
+    createTemplateInFocus,
     getOffsetFromExposure,
     getTaskInstrument,
-    createTemplateInFocus,
 )
-from scipy.signal import correlate
 from lsst.ts.wep.utils.enumUtils import DefocalType
+from scipy.signal import correlate
 
 
 class CutOutDonutsBaseTaskConnections(
