@@ -25,22 +25,20 @@ __all__ = [
     "CutOutStarsScienceSensorTask",
 ]
 
-import typing
-
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
 import lsst.pipe.base as pipeBase
 import pandas as pd
+from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
-    CutOutDonutsBaseTaskConnections,
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
-from lsst.fgcmcal.utilities import lookupStaticCalibrations
+
 
 class CutOutStarsScienceSensorTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("exposure", "instrument")
@@ -117,7 +115,6 @@ class CutOutStarsScienceSensorTask(CutOutDonutsBaseTask):
         """
         # Get the inputs from butler
         camera = butlerQC.get(inputRefs.camera)
-                 
         exposureRefs = [v for v in inputRefs.exposures]
         donutCatalogRefs = [v for v in inputRefs.donutCatalog]
 
