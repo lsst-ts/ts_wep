@@ -81,6 +81,7 @@ class DeblendDonutType(Enum):
 class DefocalType(Enum):
     Intra = "intra"
     Extra = "extra"
+    Focus = "focus"
 
 
 class ImageType(Enum):
