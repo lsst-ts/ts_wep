@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.4.2:
+
+-------------
+10.4.2
+-------------
+
+* Add pipelines directory to easily share pipeline templates.
+
 .. _lsst.ts.wep-10.4.1:
 
 -------------
