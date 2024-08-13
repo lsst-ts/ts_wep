@@ -302,6 +302,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         detector = exposure.getDetector()
         detectorName = detector.getName()
         bandLabel = exposure.filter.bandLabel
+        visitId = exposure.getInfo().getVisitInfo().id
 
         # Run background subtraction
         self.subtractBackground.run(exposure=exposure).background
@@ -465,6 +466,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"].values)
         stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
+        stampsMetadata["VISIT"] = np.array([visitId] * catalogLength, dtype=int)
         stampsMetadata["DFC_TYPE"] = np.array(
             [defocalType.value] * catalogLength, dtype=str
         )

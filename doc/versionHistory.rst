@@ -6,6 +6,22 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.4.2:
+
+-------------
+10.4.2
+-------------
+
+* Add pipelines directory to easily share pipeline templates.
+
+.. _lsst.ts.wep-10.4.1:
+
+-------------
+10.4.1
+-------------
+
+* Add visit to donutStamps metadata.
+
 .. _lsst.ts.wep-10.4.0:
 
 -------------
@@ -22,7 +38,7 @@ Version History
 10.3.0
 -------------
 
-* Added single-side-of-focus mode to the TIE
+* Added single-side-of-focus mode to the TIE.
 
 .. _lsst.ts.wep-10.2.0:
 
