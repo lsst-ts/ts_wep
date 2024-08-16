@@ -245,31 +245,52 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             donutDiameter=np.ceil(instrument.donutDiameter).astype(int),
             cutoutPadding=self.config.initialCutoutPadding,
         )
-        donutDf = pd.DataFrame.from_dict(objData.detectedCatalog, orient="index")
-        # Use the aperture flux with a 70 pixel aperture
-        donutDf[f"{bandLabel}_flux"] = donutDf["apFlux70"]
+        if len(objData.detectedCatalog) > 0:
+            donutDf = pd.DataFrame.from_dict(objData.detectedCatalog, orient="index")
+            # Use the aperture flux with a 70 pixel aperture
+            donutDf[f"{bandLabel}_flux"] = donutDf["apFlux70"]
 
-        # Run the donut selector task.
-        if self.config.doDonutSelection:
-            self.log.info("Running Donut Selector")
-            donutSelection = self.donutSelector.run(
-                donutDf, exposure.detector, bandLabel
+            # Run the donut selector task.
+            if self.config.doDonutSelection:
+                self.log.info("Running Donut Selector")
+                donutSelection = self.donutSelector.run(
+                    donutDf, exposure.detector, bandLabel
+                )
+                donutCatSelected = donutDf[donutSelection.selected].reset_index(
+                    drop=True
+                )
+                donutCatSelected["blend_centroid_x"] = donutSelection.blendCentersX
+                donutCatSelected["blend_centroid_y"] = donutSelection.blendCentersY
+            else:
+                # if donut selector was not run,
+                # set the required columns to be empty
+                donutDf["blend_centroid_x"] = ""
+                donutDf["blend_centroid_y"] = ""
+                donutCatSelected = donutDf
+
+            donutCatSelected.rename(
+                columns={f"{bandLabel}_flux": "source_flux"}, inplace=True
             )
-            donutCatSelected = donutDf[donutSelection.selected].reset_index(drop=True)
-            donutCatSelected["blend_centroid_x"] = donutSelection.blendCentersX
-            donutCatSelected["blend_centroid_y"] = donutSelection.blendCentersY
+
+            # update column names and content
+            donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
+            donutCatUpd["detector"] = np.array(
+                [detectorName] * len(donutCatUpd), dtype=str
+            )
         else:
-            # if donut selector was not run,
-            # set the required columns to be empty
-            donutDf["blend_centroid_x"] = ""
-            donutDf["blend_centroid_y"] = ""
-            donutCatSelected = donutDf
-
-        donutCatSelected.rename(
-            columns={f"{bandLabel}_flux": "source_flux"}, inplace=True
-        )
-
-        # update column names and content
-        donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
+            self.log.warning(
+                "No sources found in the exposure. Returning an empty donut catalog."
+            )
+            donutCatalogColumns = [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "detector",
+                "source_flux",
+                "blend_centroid_x",
+                "blend_centroid_y",
+            ]
+            donutCatUpd = pd.DataFrame(columns=donutCatalogColumns)
 
         return pipeBase.Struct(donutCatalog=donutCatUpd)
