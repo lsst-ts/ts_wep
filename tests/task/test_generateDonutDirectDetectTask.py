@@ -20,8 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import unittest
+from copy import copy
 
+import lsst.afw.image as afwImage
+import lsst.utils.tests
 import numpy as np
 import pandas as pd
 from lsst.daf import butler as dafButler
@@ -37,18 +39,66 @@ from lsst.ts.wep.utils import (
 )
 
 
-class TestGenerateDonutDirectDetectTask(unittest.TestCase):
+class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        """
+        Run the pipeline only once since it takes a
+        couple minutes with the ISR.
+        """
+        # Run pipeline command
+        runName = "run1"
+        moduleDir = getModulePath()
+        testDataDir = os.path.join(moduleDir, "tests", "testData")
+        testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
+        cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
+        cls.runName = "run1"
+
+        butler = dafButler.Butler(cls.repoDir)
+        registry = butler.registry
+
+        # Check that run doesn't already exist due to previous improper cleanup
+        collectionsList = list(registry.queryCollections())
+        if runName in collectionsList:
+            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, runName)
+            runProgram(cleanUpCmd)
+
+        instrument = "lsst.obs.lsst.LsstCam"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+        cls.cameraName = "LSSTCam"
+
+        exposureId = 4021123106001  # Exposure ID for test extra-focal image
+        pipelineYaml = os.path.join(
+            testPipelineConfigDir, "testDonutDirectDetectPipeline.yaml"
+        )
+        pipetaskCmd = writePipetaskCmd(
+            cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+        )
+        # Update task configuration to match pointing information
+        pipetaskCmd += f" -d 'exposure IN ({exposureId})'"
+
+        # Run pipeline task
+        runProgram(pipetaskCmd)
+
     def setUp(self):
         self.config = GenerateDonutDirectDetectTaskConfig()
         self.task = GenerateDonutDirectDetectTask(config=self.config)
 
-        moduleDir = getModulePath()
-        self.testDataDir = os.path.join(moduleDir, "tests", "testData")
-        self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
-        self.centerRaft = ["R22_S10", "R22_S11"]
-
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
+
+        self.testDataIdS10 = {
+            "instrument": "LSSTCam",
+            "detector": 93,
+            "exposure": 4021123106001,
+            "visit": 4021123106001,
+        }
+        self.testDataIdS11 = {
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106001,
+            "visit": 4021123106001,
+        }
 
     def testValidateConfigs(self):
         # Test config in task
@@ -64,13 +114,9 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
 
     def testUpdateDonutCatalog(self):
-        testDataId = {
-            "instrument": "LSSTCam",
-            "detector": 94,
-            "exposure": 4021123106001,
-        }
+
         testExposure = self.butler.get(
-            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
+            "raw", dataId=self.testDataIdS10, collections=["LSSTCam/raw/all"]
         )
 
         # setup a test donut catalog DataFrame
@@ -103,46 +149,106 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         ]
         self.assertEqual(np.sum(np.in1d(newColumns, list(donutCatUpd.columns))), 8)
 
-    def testPipeline(self):
+    def testTaskRun(self):
+        """
+        Test that the task runs interactively.
+        """
+
+        # Test run with an empty exposure
+        # Read a real exposure and substitute the
+        # image component with the background noise
+        exposure_S11 = self.butler.get(
+            "postISRCCD",
+            dataId=self.testDataIdS11,
+            collections=[self.runName],
+        )
+        bkgnd = 100 * (
+            np.random.random_sample(size=np.shape(exposure_S11.image.array)) - 0.5
+        )
+        image = afwImage.ImageF(exposure_S11.getBBox())
+        image.array[:] = bkgnd
+        maskedImage = afwImage.MaskedImageF(image)
+        exposure_noSrc = copy(exposure_S11)
+        exposure_noSrc.setMaskedImage(maskedImage)
+
+        # Run task on empty exposure
+        camera = self.butler.get(
+            "camera",
+            dataId={"instrument": "LSSTCam"},
+            collections=["LSSTCam/calib/unbounded"],
+        )
+        taskOutNoSrc = self.task.run(
+            exposure_noSrc,
+            camera,
+        )
+
+        # Test that there are no rows, but all columns are present
+        self.assertEqual(len(taskOutNoSrc.donutCatalog), 0)
+
+        expected_columns = [
+            "coord_ra",
+            "coord_dec",
+            "centroid_x",
+            "centroid_y",
+            "detector",
+            "source_flux",
+            "blend_centroid_x",
+            "blend_centroid_y",
+        ]
+        self.assertCountEqual(taskOutNoSrc.donutCatalog.columns, expected_columns)
+
+        # Run detection with different sources in each exposure
+        exposure_S10 = self.butler.get(
+            "postISRCCD",
+            dataId=self.testDataIdS10,
+            collections=[self.runName],
+        )
+        taskOut_S11 = self.task.run(
+            exposure_S11,
+            camera,
+        )
+        taskOut_S10 = self.task.run(
+            exposure_S10,
+            camera,
+        )
+
+        # Test that the length of catalogs is as expected
+        outputDf = pd.concat([taskOut_S11.donutCatalog, taskOut_S10.donutCatalog])
+        self.assertEqual(len(outputDf), 6)
+
+        # Test that the interactive output is as expected
+        self.assertCountEqual(
+            outputDf.columns,
+            expected_columns,
+        )
+        # Test against truth the centroid for all sources
+        tolerance = 15  # pixels
+
+        result_y = np.sort(outputDf["centroid_y"].values)
+        truth_y = np.sort(np.array([3196, 2198, 398, 2196, 3197, 398]))
+        diff_y = np.sum(result_y - truth_y)
+
+        result_x = np.sort(outputDf["centroid_x"].values)
+        truth_x = np.sort(np.array([3815, 2814, 617, 2811, 3812, 614]))
+        diff_x = np.sum(result_x - truth_x)
+
+        self.assertLess(diff_x, tolerance)
+        self.assertLess(diff_y, tolerance)
+
+    def testTaskRunPipeline(self):
         """
         Test that the task runs in a pipeline.
         """
-
-        # Run pipeline command
-        runName = "run1"
-        instrument = "lsst.obs.lsst.LsstCam"
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
-        exposureId = 4021123106001  # Exposure ID for test extra-focal image
-        testPipelineConfigDir = os.path.join(self.testDataDir, "pipelineConfigs")
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testDonutDirectDetectPipeline.yaml"
-        )
-        pipetaskCmd = writePipetaskCmd(
-            self.repoDir, runName, instrument, collections, pipelineYaml=pipelineYaml
-        )
-        # Update task configuration to match pointing information
-        pipetaskCmd += f" -d 'exposure IN ({exposureId})'"
-
-        # Check that run doesn't already exist due to previous improper cleanup
-        collectionsList = list(self.registry.queryCollections())
-        if runName in collectionsList:
-            cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
-            runProgram(cleanUpCmd)
-
-        # Run pipeline task
-        runProgram(pipetaskCmd)
-
         # Test instrument matches
-        pipelineButler = dafButler.Butler(self.repoDir)
-        donutCatDf_S11 = pipelineButler.get(
+        donutCatDf_S11 = self.butler.get(
             "donutCatalog",
-            dataId={"instrument": "LSSTCam", "detector": 94, "visit": exposureId},
-            collections=[f"{runName}"],
+            dataId=self.testDataIdS11,
+            collections=[self.runName],
         )
-        donutCatDf_S10 = pipelineButler.get(
+        donutCatDf_S10 = self.butler.get(
             "donutCatalog",
-            dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
-            collections=[f"{runName}"],
+            dataId=self.testDataIdS10,
+            collections=[self.runName],
         )
 
         # Check 2 unblended sources in each detector
@@ -188,6 +294,7 @@ class TestGenerateDonutDirectDetectTask(unittest.TestCase):
         self.assertLess(diff_x, tolerance)
         self.assertLess(diff_y, tolerance)
 
-        # Clean up
-        cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
+    @classmethod
+    def tearDownClass(cls):
+        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
