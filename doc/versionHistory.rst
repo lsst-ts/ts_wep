@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-10.6.0:
+
+-------------
+10.6.0
+-------------
+
+* Update Image bandLabel setter to handle condition where the bandLabel is string but the string is not a valid BandLabel enumeration.
+
 .. _lsst.ts.wep-10.5.0:
 
 -------------
