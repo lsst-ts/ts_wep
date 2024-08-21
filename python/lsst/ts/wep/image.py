@@ -193,8 +193,14 @@ class Image:
         """
         if value is None or value == "":
             self._bandLabel = BandLabel.REF
-        elif isinstance(value, str) or isinstance(value, BandLabel):
+        elif isinstance(value, BandLabel):
             self._bandLabel = BandLabel(value)
+        elif isinstance(value, str):
+            self._bandLabel = (
+                BandLabel(value)
+                if value in {band_label.value for band_label in BandLabel}
+                else BandLabel.REF
+            )
         else:
             raise TypeError(
                 "bandLabel must be a BandLabel Enum, "

@@ -23,6 +23,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.image import Image
+from lsst.ts.wep.utils import BandLabel
 
 
 class TestImage(unittest.TestCase):
@@ -55,6 +56,12 @@ class TestImage(unittest.TestCase):
     def testBadBandLabel(self):
         with self.assertRaises(TypeError):
             Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel=1)
+
+    def testBandLabelStringNotInEnum(self):
+        image = Image(
+            np.zeros((160, 160)), (0, 0), "intra", bandLabel="NOT_AN_ENUMERATION"
+        )
+        assert image.bandLabel == BandLabel.REF
 
     def testBadPlaneType(self):
         with self.assertRaises(TypeError):
