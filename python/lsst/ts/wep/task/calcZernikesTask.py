@@ -144,12 +144,26 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 donutsExtraQuality=pd.DataFrame([]),
                 donutsIntraQuality=pd.DataFrame([]),
             )
+
         # Run donut selection. By default all donut stamps are selected
         # and we are provided with donut quality table containing
         # SN and entropy information if present in donut stamps
         # metadata.
         selectionExtra = self.donutStampSelector.run(donutStampsExtra)
         selectionIntra = self.donutStampSelector.run(donutStampsIntra)
+
+        # If no donuts get selected, also return Zernike
+        # coefficients as nan.
+        if (
+            len(selectionExtra.donutStampsSelect) == 0
+            or len(selectionIntra.donutStampsSelect) == 0
+        ):
+            return pipeBase.Struct(
+                outputZernikesRaw=np.full(19, np.nan),
+                outputZernikesAvg=np.full(19, np.nan),
+                donutsExtraQuality=pd.DataFrame([]),
+                donutsIntraQuality=pd.DataFrame([]),
+            )
 
         # Estimate Zernikes from the collection of stamps
         zkCoeffRaw = self.estimateZernikes.run(
