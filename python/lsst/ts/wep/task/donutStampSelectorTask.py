@@ -35,21 +35,18 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
         default=False,
         doc="Whether to use entropy in deciding to use the donut.",
     )
-
     selectWithSignalToNoise = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="Whether to use signal to noise ratio in deciding to use the donut."
         + "By default the values from snLimitStar.yaml config file are used.",
     )
-
     useCustomSnLimit = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="Apply user-defined signal to noise minimum cutoff? If this is False then the code"
         + " will default to use the minimum values in snLimitStar.yaml.",
     )
-
     minSignalToNoise = pexConfig.Field(
         dtype=float,
         default=600,
@@ -150,7 +147,8 @@ class DonutStampSelectorTask(pipeBase.Task):
             if self.config.selectWithEntropy:
                 entropySelect = entropyValue < self.config.maxEntropy
         else:
-            self.log.warning("Entropy not in donut stamps metadata. Using all donuts.")
+            self.log.warning("No entropy cut. Checking if signal-to-noise \
+should be applied.")
         # By default select all donuts,  only overwritten
         # if selectWithSignalToNoise is True
         snSelect = np.ones(len(donutStamps), dtype="bool")
@@ -173,7 +171,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 # Select using the given threshold
                 snSelect = snThreshold < snValue
         else:
-            self.log.warning("SN not in donut stamps metadata. Using all donuts.")
+            self.log.warning("No signal-to-noise selection applied.")
         # AND condition : if both selectWithEntropy
         # and selectWithSignalToNoise, then
         # only donuts that pass with SN criterion as well
