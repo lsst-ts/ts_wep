@@ -109,6 +109,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
         self.assertEqual(type(self.task.donutStampSelector), DonutStampSelectorTask)
+        self.assertEqual(self.task.doDonutStampSelector, False)
 
     def testEstimateZernikes(self):
         donutStampsExtra = self.butler.get(
@@ -139,12 +140,15 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         # check that 4 elements are created
         self.assertEqual(len(structNormal), 4)
 
+        # Turn on the donut stamp selector
+        self.task.doDonutStampSelector = True
+        structSelect = self.task.run(donutStampsIntra, donutStampsExtra)
         # check that donut quality is reported for all donuts
-        self.assertEqual(len(structNormal.donutsExtraQuality), len(donutStampsExtra))
-        self.assertEqual(len(structNormal.donutsIntraQuality), len(donutStampsIntra))
+        self.assertEqual(len(structSelect.donutsExtraQuality), len(donutStampsExtra))
+        self.assertEqual(len(structSelect.donutsIntraQuality), len(donutStampsIntra))
 
         # check that all desired quantities are included
-        colnames = list(structNormal.donutsIntraQuality.columns)
+        colnames = list(structSelect.donutsIntraQuality.columns)
         desired_colnames = [
             "SN",
             "ENTROPY",
