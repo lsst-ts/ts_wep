@@ -147,8 +147,10 @@ class DonutStampSelectorTask(pipeBase.Task):
             if self.config.selectWithEntropy:
                 entropySelect = entropyValue < self.config.maxEntropy
         else:
-            self.log.warning("No entropy cut. Checking if signal-to-noise \
-should be applied.")
+            self.log.warning(
+                "No entropy cut. Checking if signal-to-noise \
+should be applied."
+            )
         # By default select all donuts,  only overwritten
         # if selectWithSignalToNoise is True
         snSelect = np.ones(len(donutStamps), dtype="bool")
