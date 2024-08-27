@@ -104,6 +104,9 @@ class CalcZernikesTaskConfig(
     donutStampSelector = pexConfig.ConfigurableField(
         target=DonutStampSelectorTask, doc="How to select donut stamps."
     )
+    doDonutStampSelector = pexConfig.Field(
+        doc="Whether or not to run donut stamp selector.", dtype=bool, default=False
+    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
@@ -129,6 +132,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.donutStampSelector = self.config.donutStampSelector
         self.makeSubtask("donutStampSelector")
 
+        self.doDonutStampSelector = self.config.doDonutStampSelector
+
     @timeMethod
     def run(
         self,
@@ -145,35 +150,49 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 donutsIntraQuality=pd.DataFrame([]),
             )
 
-        # Run donut selection. By default all donut stamps are selected
+        # Run donut stamp selection. By default all donut stamps are selected
         # and we are provided with donut quality table containing
         # SN and entropy information if present in donut stamps
         # metadata.
-        selectionExtra = self.donutStampSelector.run(donutStampsExtra)
-        selectionIntra = self.donutStampSelector.run(donutStampsIntra)
+        if self.doDonutStampSelector:
+            self.log.info("Running Donut Stamp Selector")
+            selectionExtra = self.donutStampSelector.run(donutStampsExtra)
+            selectionIntra = self.donutStampSelector.run(donutStampsIntra)
 
-        # If no donuts get selected, also return Zernike
-        # coefficients as nan.
-        if (
-            len(selectionExtra.donutStampsSelect) == 0
-            or len(selectionIntra.donutStampsSelect) == 0
-        ):
+            # If no donuts get selected, also return Zernike
+            # coefficients as nan.
+            if (
+                len(selectionExtra.donutStampsSelect) == 0
+                or len(selectionIntra.donutStampsSelect) == 0
+            ):
+                self.log.info("No donut stamps were selected.")
+                return pipeBase.Struct(
+                    outputZernikesRaw=np.full(19, np.nan),
+                    outputZernikesAvg=np.full(19, np.nan),
+                    donutsExtraQuality=pd.DataFrame([]),
+                    donutsIntraQuality=pd.DataFrame([]),
+                )
+
+            # Estimate Zernikes from the collection of selected stamps
+            zkCoeffRaw = self.estimateZernikes.run(
+                selectionExtra.donutStampsSelect, selectionIntra.donutStampsSelect
+            )
+            zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
+
             return pipeBase.Struct(
-                outputZernikesRaw=np.full(19, np.nan),
-                outputZernikesAvg=np.full(19, np.nan),
+                outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
+                outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
+                donutsExtraQuality=selectionExtra.donutsQuality,
+                donutsIntraQuality=selectionIntra.donutsQuality,
+            )
+        else:
+            # Estimate Zernikes from the collection of all stamps,
+            # without using entropy or SN
+            zkCoeffRaw = self.estimateZernikes.run(donutStampsExtra, donutStampsIntra)
+            zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
+            return pipeBase.Struct(
+                outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
+                outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
                 donutsExtraQuality=pd.DataFrame([]),
                 donutsIntraQuality=pd.DataFrame([]),
             )
-
-        # Estimate Zernikes from the collection of stamps
-        zkCoeffRaw = self.estimateZernikes.run(
-            selectionExtra.donutStampsSelect, selectionIntra.donutStampsSelect
-        )
-        zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
-
-        return pipeBase.Struct(
-            outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
-            outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
-            donutsExtraQuality=selectionExtra.donutsQuality,
-            donutsIntraQuality=selectionIntra.donutsQuality,
-        )
