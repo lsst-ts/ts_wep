@@ -168,6 +168,10 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertEqual(len(donutCatDf_S11), 4)
         self.assertEqual(len(donutCatDf_S10), 4)
 
+        # Check correct detector names
+        self.assertEqual(np.unique(donutCatDf_S11["detector"]), "R22_S11")
+        self.assertEqual(np.unique(donutCatDf_S10["detector"]), "R22_S10")
+
         # Check outputs are correct
         outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
         self.assertEqual(len(outputDf), 8)
@@ -181,6 +185,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
                 "source_flux",
                 "blend_centroid_x",
                 "blend_centroid_y",
+                "detector",
             ],
         )
         true_ra = [

@@ -264,6 +264,10 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             np.arange(3), np.argsort(donutCatDf_S11["source_flux"].values)[::-1]
         )
 
+        # Check correct detector names
+        self.assertEqual(np.unique(donutCatDf_S11["detector"]), "R22_S11")
+        self.assertEqual(np.unique(donutCatDf_S10["detector"]), "R22_S10")
+
         # Check outputs are correct
         outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
         self.assertEqual(len(outputDf), 6)

@@ -1,0 +1,15 @@
+---
+
+# Limits of available minimum SN for star selection
+
+# The values for these are from simulation of isolated stellar grid
+# using both direct detect and WCS-based reference catalog fluxes 
+# See https://github.com/suberlak/AOS/blob/main/AOS_DM-44022_analyze_wfs_grid_ugriz.ipynb
+
+filterU: 1116
+filterG: 691
+filterR: 762
+filterI: 815
+filterZ: 953
+filterY: 851
+

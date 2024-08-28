@@ -278,6 +278,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
                 [detectorName] * len(donutCatUpd), dtype=str
             )
         else:
+
             self.log.warning(
                 "No sources found in the exposure. Returning an empty donut catalog."
             )
