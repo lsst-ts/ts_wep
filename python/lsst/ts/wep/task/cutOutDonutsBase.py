@@ -417,6 +417,24 @@ using the variance of image background for noise estimate."
         return sn_dic
 
     def filterBadRecentering(self, xShift, yShift):
+        """Filter out donuts that are recentered far away from the median
+        shift of all donuts. The median is subtracted to account for a constant
+        shift due to any constant offsets from the WCS used to calculate
+        the pixel positions.
+
+        Parameters
+        ----------
+        xShift : np.ndarray
+            Shifts of all donut sources in the x-direction in units of pixels.
+        yShift : np.ndarray
+            Shifts of all donut sources in the y-direction in units of pixels.
+
+        Returns
+        -------
+        np.ndarray
+            Indices where total shift after median subtraction is more than
+            the value allowed by self.maxRecenterDistance
+        """
 
         # Calculate median shifts and subtract them out to remove WCS offsets
         medXShift = np.median(xShift)
