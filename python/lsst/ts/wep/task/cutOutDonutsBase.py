@@ -184,12 +184,12 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Set max recentering distance in pixels
         self.maxRecenterDistance = self.config.maxRecenterDistance
 
-    def shiftCenter(self, center, boundary, distance):
+    def shiftCenters(self, centerArr, boundary, distance):
         """Shift the center if its distance to boundary is less than required.
 
         Parameters
         ----------
-        center : float
+        centerArr : float
             Center point.
         boundary : float
             Boundary point.
@@ -203,13 +203,14 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         """
 
         # Distance between the center and boundary
-        delta = boundary - center
+        centerArrCopy = copy(centerArr)
+        delta = boundary - centerArrCopy
 
         # Shift the center if needed
-        if abs(delta) < distance:
-            return boundary - np.sign(delta) * distance
-        else:
-            return center
+        shiftNeeded = np.where(np.abs(delta) < distance)
+        centerArrCopy[shiftNeeded] = boundary - np.sign(delta[shiftNeeded]) * distance
+
+        return centerArrCopy
 
     def calculateFinalCentroid(self, exposure, template, xCent, yCent):
         """
@@ -251,43 +252,49 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Shift stamp center if necessary
         xCentShifted = copy(xCent)
         yCentShifted = copy(yCent)
-        xCentShifted = self.shiftCenter(xCentShifted, expDim.getX(), initialHalfWidth)
-        xCentShifted = self.shiftCenter(xCentShifted, 0, initialHalfWidth)
-        yCentShifted = self.shiftCenter(yCentShifted, expDim.getY(), initialHalfWidth)
-        yCentShifted = self.shiftCenter(yCentShifted, 0, initialHalfWidth)
+        xCentShifted = self.shiftCenters(xCentShifted, expDim.getX(), initialHalfWidth)
+        xCentShifted = self.shiftCenters(xCentShifted, 0, initialHalfWidth)
+        yCentShifted = self.shiftCenters(yCentShifted, expDim.getY(), initialHalfWidth)
+        yCentShifted = self.shiftCenters(yCentShifted, 0, initialHalfWidth)
 
         # Stamp BBox defined by corner pixel and extent
         initXCorner = xCentShifted - initialHalfWidth
         initYCorner = yCentShifted - initialHalfWidth
 
-        # Define BBox and get cutout from exposure
-        initCornerPoint = lsst.geom.Point2I(initXCorner, initYCorner)
-        initBBox = lsst.geom.Box2I(
-            initCornerPoint, lsst.geom.Extent2I(initialCutoutSize)
-        )
-        initialCutout = exposure[initBBox]
+        newX = list()
+        newY = list()
+        peakHeight = list()
 
-        # Find the centroid by finding the max point in an initial
-        # cutout convolved with a template
-        correlatedImage = correlate(initialCutout.image.array, template)
-        maxIdx = np.argmax(correlatedImage)
-        maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
-        peakHeight = correlatedImage[maxLoc]
+        for initX, initY in zip(initXCorner, initYCorner):
+            # Define BBox and get cutout from exposure
+            initCornerPoint = lsst.geom.Point2I(initX, initY)
+            initBBox = lsst.geom.Box2I(
+                initCornerPoint, lsst.geom.Extent2I(initialCutoutSize)
+            )
+            initialCutout = copy(exposure[initBBox])
 
-        # The actual donut location is at the center of the template
-        # But the peak of correlation will correspond to the [0, 0]
-        # corner of the template
-        templateHalfWidth = int(len(template) / 2)
-        newX = maxLoc[1] - templateHalfWidth
-        newY = maxLoc[0] - templateHalfWidth
-        finalDonutX = xCentShifted + (newX - initialHalfWidth)
-        finalDonutY = yCentShifted + (newY - initialHalfWidth)
+            # Find the centroid by finding the max point in an initial
+            # cutout convolved with a template
+            correlatedImage = correlate(initialCutout.image.array, template)
+            maxIdx = np.argmax(correlatedImage)
+            maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
+            peakHeight.append(correlatedImage[maxLoc])
+
+            # The actual donut location is at the center of the template
+            # But the peak of correlation will correspond to the [0, 0]
+            # corner of the template
+            templateHalfWidth = int(len(template) / 2)
+            newX.append(maxLoc[1] - templateHalfWidth)
+            newY.append(maxLoc[0] - templateHalfWidth)
+
+        finalDonutX = xCentShifted + (np.array(newX) - initialHalfWidth)
+        finalDonutY = yCentShifted + (np.array(newY) - initialHalfWidth)
 
         # Shift stamp center if necessary but not final centroid definition
-        xStampCent = self.shiftCenter(finalDonutX, expDim.getX(), stampHalfWidth)
-        xStampCent = self.shiftCenter(xStampCent, 0, stampHalfWidth)
-        yStampCent = self.shiftCenter(finalDonutY, expDim.getY(), stampHalfWidth)
-        yStampCent = self.shiftCenter(yStampCent, 0, stampHalfWidth)
+        xStampCent = self.shiftCenters(finalDonutX, expDim.getX(), stampHalfWidth)
+        xStampCent = self.shiftCenters(xStampCent, 0, stampHalfWidth)
+        yStampCent = self.shiftCenters(finalDonutY, expDim.getY(), stampHalfWidth)
+        yStampCent = self.shiftCenters(yStampCent, 0, stampHalfWidth)
 
         # Define corner for final stamp BBox
         xCorner = xStampCent - stampHalfWidth
@@ -302,7 +309,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             yCorner,
             origXCorner,
             origYCorner,
-            peakHeight,
+            np.array(peakHeight),
         )
 
     def calculateSN(self, stamp):
@@ -409,6 +416,23 @@ using the variance of image background for noise estimate."
         }
         return sn_dic
 
+    def filterBadRecentering(self, xShift, yShift):
+
+        # Calculate median shifts and subtract them out to remove WCS offsets
+        medXShift = np.median(xShift)
+        medYShift = np.median(yShift)
+        self.metadata["medianXShift"] = medXShift
+        self.metadata["medianYShift"] = medYShift
+        self.log.info(f"Median Recentering Shift: ({medXShift}, {medYShift})")
+        finalXShift = xShift - medXShift
+        finalYShift = yShift - medYShift
+
+        # If shift is greater than maxRecenteringDistance
+        # then use no shift at all
+        totalShift = np.sqrt(finalXShift**2.0 + finalYShift**2.0)
+        shiftFailureIdx = np.where(totalShift > self.maxRecenterDistance)[0]
+        return shiftFailureIdx
+
     def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
         """
         Cut out postage stamps for sources in catalog.
@@ -467,10 +491,6 @@ using the variance of image background for noise estimate."
         # Final list of DonutStamp objects
         finalStamps = list()
 
-        # Final locations of donut centroids in pixels
-        finalXCentList = list()
-        finalYCentList = list()
-
         # Final locations of blended sources in pixels
         finalBlendXList = list()
         finalBlendYList = list()
@@ -480,12 +500,35 @@ using the variance of image background for noise estimate."
         yCornerList = list()
 
         # Keep track of recentering failures
-        recenterFlags = list()
+        recenterFlags = np.zeros(len(donutCatalog), dtype=int)
+        xCent = donutCatalog["centroid_x"].values
+        yCent = donutCatalog["centroid_y"].values
+        (
+            finalDonutX,
+            finalDonutY,
+            xCorner,
+            yCorner,
+            initXCorner,
+            initYCorner,
+            peakHeight,
+        ) = self.calculateFinalCentroid(exposure, template, xCent, yCent)
+        xShift = finalDonutX - xCent
+        yShift = finalDonutY - yCent
+        recenterFailureIdx = self.filterBadRecentering(xShift, yShift)
 
-        # Centroid shift
-        dxCentroidList = list()
-        dyCentroidList = list()
-        drCentroidList = list()
+        finalDonutX[recenterFailureIdx] = xCent[recenterFailureIdx]
+        finalDonutY[recenterFailureIdx] = yCent[recenterFailureIdx]
+        xCorner[recenterFailureIdx] = initXCorner[recenterFailureIdx]
+        yCorner[recenterFailureIdx] = initYCorner[recenterFailureIdx]
+        recenterFlags[recenterFailureIdx] = 1
+
+        donutCatalog["finalDonutX"] = np.array(finalDonutX, dtype=int)
+        donutCatalog["finalDonutY"] = np.array(finalDonutY, dtype=int)
+        donutCatalog["xCorner"] = np.array(xCorner, dtype=int)
+        donutCatalog["yCorner"] = np.array(yCorner, dtype=int)
+        donutCatalog["xShift"] = np.array(xShift, dtype=int)
+        donutCatalog["yShift"] = np.array(yShift, dtype=int)
+        donutCatalog["recenterFlags"] = recenterFlags
 
         # Calculation of SN quantities
         snQuant = list()
@@ -496,70 +539,31 @@ using the variance of image background for noise estimate."
         # Value of entropy
         stampsEntropy = list()
 
-        # Value of correlation peak height
-        peakHeights = list()
-
         for donutRow in donutCatalog.to_records():
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
             # on the donut
-            xCent = int(donutRow["centroid_x"])
-            yCent = int(donutRow["centroid_y"])
 
             # Adjust the centroid coordinates from the catalog by convolving
             # the postage stamp with the donut template and return
             # the new centroid position as well as the corners of the
             # postage stamp to cut out of the exposure.
-            (
-                finalDonutX,
-                finalDonutY,
-                xCorner,
-                yCorner,
-                initXCorner,
-                initYCorner,
-                peakHeight,
-            ) = self.calculateFinalCentroid(exposure, template, xCent, yCent)
-            peakHeights.append(peakHeight)
-
-            xShift = finalDonutX - xCent
-            yShift = finalDonutY - yCent
-            dxCentroidList.append(xShift)
-            dyCentroidList.append(yShift)
-
-            # If shift is greater than maxRecenteringDistance
-            # then use no shift at all
-            recenterDist = np.sqrt(xShift**2.0 + yShift**2.0)
-            recenterFlag = 0
-            if recenterDist > self.maxRecenterDistance:
+            if donutRow["recenterFlags"] == 1:
                 self.log.warning(
                     "Donut Recentering Failed. Flagging and "
                     + f"not shifting center of stamp for {defocalType.value}-focal "
-                    + f"source at {(xCent, yCent)}. Catalog index: {donutRow.index}. "
-                    + f"Proposed Shift: {(xShift, yShift)}."
+                    + f"source at {(donutRow['centroid_x'], donutRow['centroid_y'])}. "
+                    + f"Catalog index: {donutRow.index}. "
+                    + f"Proposed Shift: {(donutRow['xShift'], donutRow['yShift'])}."
                 )
-                # Overwrite Shifts
-                finalDonutX = xCent
-                finalDonutY = yCent
-                xCorner = initXCorner
-                yCorner = initYCorner
-                recenterFlag = 1
-
-            # Calculate the distance between original catalog position and
-            # the updated centroid position
-            dr = np.sqrt(xShift**2.0 + yShift**2.0)
-            drCentroidList.append(dr)
-
-            finalXCentList.append(finalDonutX)
-            finalYCentList.append(finalDonutY)
-            recenterFlags.append(recenterFlag)
 
             # Get the final cutout
-            finalCorner = lsst.geom.Point2I(xCorner, yCorner)
+            finalCorner = lsst.geom.Point2I(donutRow["xCorner"], donutRow["yCorner"])
             finalBBox = lsst.geom.Box2I(
                 finalCorner, lsst.geom.Extent2I(self.donutStampSize)
             )
-            xCornerList.append(xCorner)
-            yCornerList.append(yCorner)
+            xCornerList.append(donutRow["xCorner"])
+            yCornerList.append(donutRow["yCorner"])
             finalCutout = exposure[finalBBox].clone()
 
             # Save MaskedImage to stamp
@@ -572,8 +576,8 @@ using the variance of image background for noise estimate."
             for blend_cx, blend_cy in zip(
                 donutRow["blend_centroid_x"], donutRow["blend_centroid_y"]
             ):
-                blend_final_x = blend_cx + xShift
-                blend_final_y = blend_cy + yShift
+                blend_final_x = blend_cx + donutRow["xShift"]
+                blend_final_y = blend_cy + donutRow["yShift"]
                 blendStrX += f"{blend_final_x:.2f},"
                 blendStrY += f"{blend_final_y:.2f},"
             # Remove comma from last entry
@@ -590,8 +594,8 @@ using the variance of image background for noise estimate."
             if len(donutRow["blend_centroid_x"]) > 0:
                 blendCentroidPositions = np.array(
                     [
-                        donutRow["blend_centroid_x"] + xShift,
-                        donutRow["blend_centroid_y"] + yShift,
+                        donutRow["blend_centroid_x"] + donutRow["xShift"],
+                        donutRow["blend_centroid_y"] + donutRow["yShift"],
                     ]
                 ).T
             else:
@@ -601,7 +605,9 @@ using the variance of image background for noise estimate."
             # Be careful to get the cd matrix from the linearized WCS instead
             # of the one from the full WCS.
             wcs = exposure.wcs
-            centroid_position = Point2D(finalDonutX, finalDonutY)
+            centroid_position = Point2D(
+                donutRow["finalDonutX"], donutRow["finalDonutY"]
+            )
             linearTransform = wcs.linearizePixelToSky(centroid_position, degrees)
             cdMatrix = linearTransform.getLinear().getMatrix()
             linear_wcs = makeSkyWcs(
@@ -661,12 +667,14 @@ using the variance of image background for noise estimate."
         stampsMetadata["CENT_X0"] = np.array(donutCatalog["centroid_x"].values)
         stampsMetadata["CENT_Y0"] = np.array(donutCatalog["centroid_y"].values)
         # Save the centroid values
-        stampsMetadata["CENT_X"] = np.array(finalXCentList)
-        stampsMetadata["CENT_Y"] = np.array(finalYCentList)
+        stampsMetadata["CENT_X"] = donutCatalog["finalDonutX"]
+        stampsMetadata["CENT_Y"] = donutCatalog["finalDonutY"]
         # Save the centroid shift
-        stampsMetadata["CENT_DX"] = np.array(dxCentroidList)
-        stampsMetadata["CENT_DY"] = np.array(dyCentroidList)
-        stampsMetadata["CENT_DR"] = np.array(drCentroidList)
+        stampsMetadata["CENT_DX"] = donutCatalog["xShift"]
+        stampsMetadata["CENT_DY"] = donutCatalog["yShift"]
+        stampsMetadata["CENT_DR"] = np.sqrt(
+            donutCatalog["xShift"] ** 2 + donutCatalog["yShift"] ** 2
+        )
         # Save the centroid positions of blended sources
         stampsMetadata["BLEND_CX"] = np.array(finalBlendXList, dtype=str)
         stampsMetadata["BLEND_CY"] = np.array(finalBlendYList, dtype=str)
@@ -675,7 +683,7 @@ using the variance of image background for noise estimate."
         stampsMetadata["Y0"] = np.array(yCornerList)
 
         if len(finalStamps) > 0:
-            self.metadata[f"recenterFlags{defocalType.value.capitalize()}"] = (
+            self.metadata[f"recenterFlags{defocalType.value.capitalize()}"] = list(
                 recenterFlags
             )
 
@@ -720,5 +728,5 @@ using the variance of image background for noise estimate."
         stampsMetadata["ENTROPY"] = np.array(stampsEntropy)
 
         # Save the peak of the correlated image
-        stampsMetadata["PEAK_HEIGHT"] = np.array(peakHeights)
+        stampsMetadata["PEAK_HEIGHT"] = peakHeight
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)

@@ -155,15 +155,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.opticalModel, "onAxis")
         self.assertEqual(self.task.maxRecenterDistance, 10)
 
-    def testShiftCenter(self):
-        centerUpperLimit = self.task.shiftCenter(190.0, 200.0, 20.0)
-        self.assertEqual(centerUpperLimit, 180.0)
-        centerLowerLimit = self.task.shiftCenter(10.0, 0.0, 20.0)
-        self.assertEqual(centerLowerLimit, 20.0)
-        centerNoChangeUpper = self.task.shiftCenter(100.0, 200.0, 20.0)
-        self.assertEqual(centerNoChangeUpper, 100.0)
-        centerNoChangeLower = self.task.shiftCenter(100.0, 200.0, 20.0)
-        self.assertEqual(centerNoChangeLower, 100.0)
+    def testShiftCenters(self):
+        centerArr = np.array([190.0, 10.0, 100.0, 100.0])
+        centerUpperLimit = self.task.shiftCenters(centerArr, 200.0, 20.0)
+        np.testing.assert_array_equal(centerUpperLimit, [180.0, 10.0, 100.0, 100.0])
+        centerLowerLimit = self.task.shiftCenters(centerUpperLimit, 0.0, 20.0)
+        np.testing.assert_array_equal(centerLowerLimit, [180.0, 20.0, 100.0, 100.0])
+        centerNoChangeUpper = self.task.shiftCenters(centerLowerLimit, 200.0, 20.0)
+        np.testing.assert_array_equal(centerNoChangeUpper, [180.0, 20.0, 100.0, 100.0])
+        centerNoChangeLower = self.task.shiftCenters(centerNoChangeUpper, 200.0, 20.0)
+        np.testing.assert_array_equal(centerNoChangeLower, [180.0, 20.0, 100.0, 100.0])
 
     def testCalculateFinalCentroid(self):
         (
@@ -173,17 +174,19 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             offCenterExp,
             offCenterCoord,
         ) = self._generateTestExposures()
+        centerCoordX = np.array([centerCoord[0]])
+        centerCoordY = np.array([centerCoord[1]])
         centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
             self.task.calculateFinalCentroid(
-                centeredExp, template, centerCoord[0], centerCoord[1]
+                centeredExp, template, centerCoordX, centerCoordY
             )
         )
         # For centered donut final center and final corner should be
         # half stamp width apart
-        self.assertEqual(centerX, centerCoord[0])
-        self.assertEqual(centerY, centerCoord[1])
-        self.assertEqual(cornerX, centerCoord[0] - self.task.donutStampSize / 2)
-        self.assertEqual(cornerY, centerCoord[1] - self.task.donutStampSize / 2)
+        self.assertEqual(centerX, centerCoordX)
+        self.assertEqual(centerY, centerCoordY)
+        self.assertEqual(cornerX, centerCoordX - self.task.donutStampSize / 2)
+        self.assertEqual(cornerY, centerCoordY - self.task.donutStampSize / 2)
         self.assertEqual(initCornerX, cornerX)
         self.assertEqual(initCornerY, cornerY)
 
@@ -198,19 +201,20 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             edgeExp,
             edgeCoord,
         ) = self._generateTestExposures()
-
+        centerCoordX = np.array([centerCoord[0]])
+        centerCoordY = np.array([centerCoord[1]])
         centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
             self.task.calculateFinalCentroid(
-                edgeExp, template, centerCoord[0], centerCoord[1]
+                edgeExp, template, centerCoordX, centerCoordY
             )
         )
         # For donut stamp that would go off the top corner of the exposure
         # then the stamp should start at (0, 0) instead
-        self.assertAlmostEqual(centerX, edgeCoord[0])
-        self.assertAlmostEqual(centerY, edgeCoord[1])
+        np.testing.assert_array_almost_equal(centerX, np.array([edgeCoord[0]]))
+        np.testing.assert_array_almost_equal(centerY, np.array([edgeCoord[1]]))
         # Corner of image should be 0, 0
-        self.assertEqual(cornerX, 0)
-        self.assertEqual(cornerY, 0)
+        self.assertEqual(cornerX, np.zeros(1))
+        self.assertEqual(cornerY, np.zeros(1))
         # Also check the peak height for the off-center exposure
         self.assertAlmostEqual(peakHeight, 8943.999944194224)
 
@@ -221,9 +225,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # donuts at the original positions
         exp.image.array = np.roll(exp.image.array, maxRecenter * 2, axis=0)
 
-        # Set first item in catalog to pass by adjusting catalog entry
+        # Set first item in catalog to pass by adjusting catalog entries
         centroid_y_arr = catalog["centroid_y"].values
-        centroid_y_arr[0] += maxRecenter * 2
+        centroid_y_arr[1] += maxRecenter * 2
+        centroid_y_arr[2] -= maxRecenter * 2
         catalog["centroid_y"] = centroid_y_arr
 
         # Get original shifts
@@ -265,7 +270,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             errMsg = (
                 "WARNING:lsst.Base Task:Donut Recentering Failed. "
                 + "Flagging and not shifting center of stamp for extra-focal source"
-                + f' at ({int(catRow["centroid_x"])}, {int(catRow["centroid_y"])}). '
+                + f' at ({catRow["centroid_x"]}, {catRow["centroid_y"]}). '
                 + f"Catalog index: {catRow.index}. "
                 + f"Proposed Shift: ({int(xShift)}, {int(yShift)})."
             )
@@ -391,6 +396,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "ENTROPY",
             "PEAK_HEIGHT",
         ]
+        print(metadata)
         self.assertCountEqual(metadata, expectedMetadata)
 
         # test that the visit is properly stored
@@ -422,3 +428,24 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         sn_values = [2149.17757703855, 2160.5407329704117, 2042.1965399542976]
         sn_calculated = donutStamps.metadata.getArray("SN")
         np.testing.assert_array_almost_equal(sn_values, sn_calculated, decimal=4)
+
+    def testFilterBadRecentering(self):
+        maxRecenter = 25
+        self.task.maxRecenterDistance = maxRecenter
+        xShift = np.array([10, 10, 0])
+        yShift = np.array([10, 10, 50])
+        medX = np.median(xShift)
+        medY = np.median(yShift)
+
+        shiftFailureIdx = self.task.filterBadRecentering(xShift, yShift)
+        np.testing.assert_array_equal(np.array([2]), shiftFailureIdx)
+
+        # Test that median shifts are output to log
+        with self.assertLogs(logger=self.task.log.logger, level="INFO") as cm:
+            self.task.filterBadRecentering(xShift, yShift)
+        infoMsg = f"INFO:lsst.Base Task:Median Recentering Shift: ({medX}, {medY})"
+        self.assertEqual(infoMsg, cm.output[0])
+
+        # Test that task metadata stores median shifts
+        self.assertEqual(self.task.metadata.scalars["medianXShift"], medX)
+        self.assertEqual(self.task.metadata.scalars["medianYShift"], medY)
