@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.1.0:
+
+-------------
+11.1.0
+-------------
+
+* Make maxRecenteringDistance cut more robust in cutOutDonutsBase by first subtracting median shift and then comparing shifts to maxRecenteringDistance.
+
 .. _lsst.ts.wep-11.0.0:
 
 -------------
