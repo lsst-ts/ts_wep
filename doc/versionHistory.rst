@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.4.0:
+
+-------------
+11.4.0
+-------------
+
+* Set default maxNollIndex to zk28 in estimateZernikesBase.
+
 .. _lsst.ts.wep-11.3.0:
 
 -------------
