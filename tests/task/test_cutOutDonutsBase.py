@@ -107,35 +107,46 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         maxLoc = np.unravel_index(maxIdx, np.shape(correlatedImage))
         templateCenter = np.array(maxLoc) - len(template) / 2
 
-        # Make donut centered in exposure
+        # Make two donuts centered along one axis in exposure
         initCutoutSize = len(template) + self.task.initialCutoutPadding * 2
         centeredArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
         centeredArr[
             self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
             self.task.initialCutoutPadding : -self.task.initialCutoutPadding,
         ] += template
-        centeredImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
-        centeredImage.array = centeredArr
-        centeredExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
+        centeredImage = afwImage.ImageF(initCutoutSize * 2, initCutoutSize)
+        centeredImage.array = np.concatenate([centeredArr, centeredArr], axis=1)
+        centeredExp = afwImage.ExposureF(initCutoutSize * 2, initCutoutSize)
         centeredExp.setImage(centeredImage)
-        centerCoord = (
+        centerCoord_1 = (
             self.task.initialCutoutPadding + templateCenter[1],
             self.task.initialCutoutPadding + templateCenter[0],
         )
+        centerCoord_2 = [centerCoord_1[0] + initCutoutSize, centerCoord_1[1]]
+        centerCoordArr = np.array(
+            [[centerCoord_1[0], centerCoord_2[0]], [centerCoord_1[1], centerCoord_2[1]]]
+        )
 
         # Make new donut that needs to be shifted by 20 pixels
-        # from the edge of the exposure
+        # from the edge of the exposure. Then add centered donut to
+        # the side
         offCenterArr = np.zeros((initCutoutSize, initCutoutSize), dtype=np.float32)
         offCenterArr[: len(template) - 20, : len(template) - 20] = template[20:, 20:]
-        offCenterImage = afwImage.ImageF(initCutoutSize, initCutoutSize)
-        offCenterImage.array = offCenterArr
-        offCenterExp = afwImage.ExposureF(initCutoutSize, initCutoutSize)
+        offCenterImage = afwImage.ImageF(initCutoutSize * 2, initCutoutSize)
+        offCenterImage.array = np.concatenate([offCenterArr, centeredArr], axis=1)
+        offCenterExp = afwImage.ExposureF(initCutoutSize * 2, initCutoutSize)
         offCenterExp.setImage(offCenterImage)
         # Center coord value 20 pixels closer than template center
         # due to stamp overrunning the edge of the exposure.
         offCenterCoord = templateCenter - 20
+        offCenterCoordArr = np.array(
+            [
+                [offCenterCoord[0], centerCoordArr[0, 1]],
+                [offCenterCoord[1], centerCoordArr[1, 1]],
+            ]
+        )
 
-        return centeredExp, centerCoord, template, offCenterExp, offCenterCoord
+        return centeredExp, centerCoordArr, template, offCenterExp, offCenterCoordArr
 
     def testValidateConfigs(self):
         self.assertEqual(self.task.donutStampSize, 160)
@@ -166,7 +177,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         centerNoChangeLower = self.task.shiftCenters(centerNoChangeUpper, 200.0, 20.0)
         np.testing.assert_array_equal(centerNoChangeLower, [180.0, 20.0, 100.0, 100.0])
 
-    def testCalculateFinalCentroid(self):
+    def testCalculateFinalCentroids(self):
         (
             centeredExp,
             centerCoord,
@@ -174,26 +185,30 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             offCenterExp,
             offCenterCoord,
         ) = self._generateTestExposures()
-        centerCoordX = np.array([centerCoord[0]])
-        centerCoordY = np.array([centerCoord[1]])
+        centerCoordX = centerCoord[0]
+        centerCoordY = centerCoord[1]
         centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
-            self.task.calculateFinalCentroid(
+            self.task.calculateFinalCentroids(
                 centeredExp, template, centerCoordX, centerCoordY
             )
         )
         # For centered donut final center and final corner should be
         # half stamp width apart
-        self.assertEqual(centerX, centerCoordX)
-        self.assertEqual(centerY, centerCoordY)
-        self.assertEqual(cornerX, centerCoordX - self.task.donutStampSize / 2)
-        self.assertEqual(cornerY, centerCoordY - self.task.donutStampSize / 2)
-        self.assertEqual(initCornerX, cornerX)
-        self.assertEqual(initCornerY, cornerY)
+        np.testing.assert_array_equal(centerX, centerCoordX)
+        np.testing.assert_array_equal(centerY, centerCoordY)
+        np.testing.assert_array_equal(
+            cornerX, centerCoordX - self.task.donutStampSize / 2
+        )
+        np.testing.assert_array_equal(
+            cornerY, centerCoordY - self.task.donutStampSize / 2
+        )
+        np.testing.assert_array_equal(initCornerX, cornerX)
+        np.testing.assert_array_equal(initCornerY, cornerY)
 
         # Also check the peak height for the centered exposure
-        self.assertAlmostEqual(peakHeight, 9471.999796846694)
+        np.testing.assert_array_almost_equal(peakHeight, np.ones(2) * 9471.999796846694)
 
-    def testCalcFinalCentroidOnEdge(self):
+    def testCalcFinalCentroidsOnEdge(self):
         (
             centeredExp,
             centerCoord,
@@ -201,22 +216,24 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             edgeExp,
             edgeCoord,
         ) = self._generateTestExposures()
-        centerCoordX = np.array([centerCoord[0]])
-        centerCoordY = np.array([centerCoord[1]])
+        centerCoordX = centerCoord[0]
+        centerCoordY = centerCoord[1]
         centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
-            self.task.calculateFinalCentroid(
+            self.task.calculateFinalCentroids(
                 edgeExp, template, centerCoordX, centerCoordY
             )
         )
         # For donut stamp that would go off the top corner of the exposure
         # then the stamp should start at (0, 0) instead
-        np.testing.assert_array_almost_equal(centerX, np.array([edgeCoord[0]]))
-        np.testing.assert_array_almost_equal(centerY, np.array([edgeCoord[1]]))
+        np.testing.assert_array_equal(centerX, edgeCoord[0])
+        np.testing.assert_array_equal(centerY, edgeCoord[1])
         # Corner of image should be 0, 0
-        self.assertEqual(cornerX, np.zeros(1))
-        self.assertEqual(cornerY, np.zeros(1))
+        np.testing.assert_array_equal(cornerX, np.array([0, initCornerX[1]]))
+        np.testing.assert_array_equal(cornerY, np.array([0, initCornerY[1]]))
         # Also check the peak height for the off-center exposure
-        self.assertAlmostEqual(peakHeight, 8943.999944194224)
+        np.testing.assert_array_almost_equal(
+            peakHeight, np.array([8943.999944194224, 9471.999796846694])
+        )
 
     def testMaxRecenter(self):
         maxRecenter = 5
@@ -396,7 +413,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "ENTROPY",
             "PEAK_HEIGHT",
         ]
-        print(metadata)
         self.assertCountEqual(metadata, expectedMetadata)
 
         # test that the visit is properly stored
