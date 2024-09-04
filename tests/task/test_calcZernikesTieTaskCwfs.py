@@ -234,25 +234,6 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
             combinedZernikesStruct.flags, np.zeros(len(testArr))
         )
 
-    def testRequiresPairs(self):
-        # Load the test data
-        donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
-        donutStampsExtra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
-        )
-        donutStampsIntra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
-        )
-
-        # Estimating without pairs while requiresPairs is True should fail
-        self.config.estimateZernikes.usePairs = False
-        with self.assertRaises(ValueError):
-            self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
-
-        # Now set requiresPairs False
-        self.config.estimateZernikes.requiresPairs = False
-        self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
-
     def testWithAndWithoutPairs(self):
         # Load the test data
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
@@ -265,7 +246,6 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # First estimate without pairs
         self.config.estimateZernikes.usePairs = False
-        self.config.estimateZernikes.requiresPairs = False
         zkAllWithoutPairs = self.task.estimateZernikes.run(
             donutStampsExtra, donutStampsIntra
         ).zernikes
