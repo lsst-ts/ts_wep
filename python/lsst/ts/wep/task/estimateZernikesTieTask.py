@@ -97,12 +97,6 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
         + "lsst.ts.wep.imageMapper.ImageMapper.createPupilMasks(). "
         + "(the default is an emtpy dictionary)",
     )
-    requiresPairs = pexConfig.Field(
-        dtype=bool,
-        default=True,
-        doc="Whether to allow Zernike estimation with a single donut. If True, "
-        + "pairs are required. (the default is True)",
-    )
     modelPupilKernelSize = pexConfig.Field(
         dtype=float,
         default=2,

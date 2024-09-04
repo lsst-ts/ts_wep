@@ -140,12 +140,15 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
     ) -> pipeBase.Struct:
+        # Get jmax
+        jmax = self.estimateZernikes.config.maxNollIndex
+
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if len(donutStampsExtra) == 0 or len(donutStampsIntra) == 0:
             return pipeBase.Struct(
-                outputZernikesRaw=np.full(19, np.nan),
-                outputZernikesAvg=np.full(19, np.nan),
+                outputZernikesRaw=np.full(jmax - 4, np.nan),
+                outputZernikesAvg=np.full(jmax - 4, np.nan),
                 donutsExtraQuality=pd.DataFrame([]),
                 donutsIntraQuality=pd.DataFrame([]),
             )
@@ -167,8 +170,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ):
                 self.log.info("No donut stamps were selected.")
                 return pipeBase.Struct(
-                    outputZernikesRaw=np.full(19, np.nan),
-                    outputZernikesAvg=np.full(19, np.nan),
+                    outputZernikesRaw=np.full(jmax - 4, np.nan),
+                    outputZernikesAvg=np.full(jmax - 4, np.nan),
                     donutsExtraQuality=pd.DataFrame([]),
                     donutsIntraQuality=pd.DataFrame([]),
                 )
