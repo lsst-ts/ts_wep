@@ -169,10 +169,14 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             camera,
         ) = self._getDataFromButler()
 
-        # Test normal behavior
+        # Test normal behavior: both exposure and donut catalog
+        # order is tested for in the task
         taskOut = self.task.run(
             [copy(exposureIntra), copy(exposureExtra)],
-            [donutCatalogExtra, donutCatalogIntra],
+            [
+                donutCatalogExtra,
+                donutCatalogIntra,
+            ],
             camera,
         )
 
@@ -203,11 +207,55 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior
         taskOut = self.task.run(
-            [exposureIntra, exposureExtra],
+            [copy(exposureIntra), copy(exposureExtra)],
             [donutCatalogExtra, donutCatalogIntra],
             camera,
         )
+        # Test that order of donut catalogs is tested just like exposures
+        taskOutReorder = self.task.run(
+            [copy(exposureIntra), copy(exposureExtra)],
+            [donutCatalogIntra, donutCatalogExtra],
+            camera,
+        )
 
+        # One way is to ensure that both donut arrays are identical
+        for stampNormal, stampReorder in zip(
+            taskOut.donutStampsExtra, taskOutReorder.donutStampsExtra
+        ):
+            self.assertMaskedImagesAlmostEqual(
+                stampNormal.stamp_im, stampReorder.stamp_im
+            )
+        for stampNormal, stampReorder in zip(
+            taskOut.donutStampsIntra, taskOutReorder.donutStampsIntra
+        ):
+            self.assertMaskedImagesAlmostEqual(
+                stampNormal.stamp_im, stampReorder.stamp_im
+            )
+
+        # Test that legacy dataset works as well (without "detector" column)
+        donutCatalogExtraNoDetector = donutCatalogExtra.drop(columns=["detector"])
+        donutCatalogIntraNoDetector = donutCatalogIntra.drop(columns=["detector"])
+
+        taskOutLegacy = self.task.run(
+            [copy(exposureExtra), copy(exposureIntra)],
+            [donutCatalogExtraNoDetector, donutCatalogIntraNoDetector],
+            camera,
+        )
+        # The donuts should be identical
+        for legacyStamp, normalStamp in zip(
+            taskOutLegacy.donutStampsExtra, taskOut.donutStampsExtra
+        ):
+            self.assertMaskedImagesAlmostEqual(
+                legacyStamp.stamp_im, normalStamp.stamp_im
+            )
+        for legacyStamp, normalStamp in zip(
+            taskOutLegacy.donutStampsIntra, taskOut.donutStampsIntra
+        ):
+            self.assertMaskedImagesAlmostEqual(
+                legacyStamp.stamp_im, normalStamp.stamp_im
+            )
+
+        # Compare the interactive run to pipetask run results
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )

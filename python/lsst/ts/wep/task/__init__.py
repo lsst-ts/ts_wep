@@ -9,6 +9,7 @@ from .donutQuickMeasurementTask import *
 from .donutSourceSelectorTask import *
 from .donutStamp import *
 from .donutStamps import *
+from .donutStampSelectorTask import *
 from .estimateZernikesBase import *
 from .estimateZernikesDanishTask import *
 from .estimateZernikesTieTask import *

@@ -34,6 +34,7 @@ import lsst.afw.table as afwTable
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
+import numpy as np
 from lsst.meas.algorithms import LoadReferenceObjectsConfig, ReferenceObjectLoader
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
@@ -190,6 +191,9 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         fieldObjects = donutCatalogToDataFrame(
             refSelection, filterName, blendCentersX, blendCentersY
+        )
+        fieldObjects["detector"] = np.array(
+            [detector.getName()] * len(fieldObjects), dtype=str
         )
 
         return pipeBase.Struct(donutCatalog=fieldObjects)
