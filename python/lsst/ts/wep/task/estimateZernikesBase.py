@@ -74,7 +74,8 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         default=True,
         doc="Whether to estimate Zernike coefficients from pairs of donut "
         + "stamps. If False, Zernikes are estimated from individual donuts. "
-        + "Note the TIE algorithm requires pairs of donuts.",
+        + "Note if ONLY intra- or extra-focal stamps are passed, then Zernikes "
+        + "are estimated from individual donuts, even if this is True.",
     )
     saveHistory = pexConfig.Field(
         dtype=bool,
@@ -243,8 +244,12 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             microns.
         """
         # Get the instrument
-        camName = donutStampsExtra[0].cam_name
-        detectorName = donutStampsExtra[0].detector_name
+        if len(donutStampsExtra) > 0:
+            refStamp = donutStampsExtra[0]
+        else:
+            refStamp = donutStampsIntra[0]
+        camName = refStamp.cam_name
+        detectorName = refStamp.detector_name
         instrument = getTaskInstrument(
             camName,
             detectorName,
@@ -265,7 +270,11 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             saveHistory=self.config.saveHistory,
         )
 
-        if self.config.usePairs:
+        if (
+            self.config.usePairs
+            and len(donutStampsExtra) > 0
+            and len(donutStampsIntra) > 0
+        ):
             zernikes = self.estimateFromPairs(
                 donutStampsExtra,
                 donutStampsIntra,
@@ -276,7 +285,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
                 raise ValueError(
                     f"Wavefront algorithm `{wfEst.algo.__class__.__name__}` "
                     "requires pairs of donuts. Please set usePairs=True in "
-                    "the task config."
+                    "the task config and/or do not use the 'Unpaired' task."
                 )
             zernikes = self.estimateFromIndivStamps(
                 donutStampsExtra,
