@@ -126,7 +126,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             donutStampsExtra, donutStampsIntra
         ).zernikes
 
-        self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 19))
+        self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 25))
 
     def testCalcZernikes(self):
         donutStampsExtra = self.butler.get(
