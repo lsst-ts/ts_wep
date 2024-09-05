@@ -144,8 +144,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # then return the Zernike coefficients as nan.
         if len(donutStampsExtra) == 0 or len(donutStampsIntra) == 0:
             return pipeBase.Struct(
-                outputZernikesRaw=np.full(19, np.nan),
-                outputZernikesAvg=np.full(19, np.nan),
+                outputZernikesRaw=np.atleast_2d(np.full(19, np.nan)),
+                outputZernikesAvg=np.atleast_2d(np.full(19, np.nan)),
                 donutsExtraQuality=pd.DataFrame([]),
                 donutsIntraQuality=pd.DataFrame([]),
             )
@@ -167,8 +167,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ):
                 self.log.info("No donut stamps were selected.")
                 return pipeBase.Struct(
-                    outputZernikesRaw=np.full(19, np.nan),
-                    outputZernikesAvg=np.full(19, np.nan),
+                    outputZernikesRaw=np.atleast_2d(np.full(19, np.nan)),
+                    outputZernikesAvg=np.atleast_2d(np.full(19, np.nan)),
                     donutsExtraQuality=pd.DataFrame([]),
                     donutsIntraQuality=pd.DataFrame([]),
                 )
@@ -180,8 +180,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
             return pipeBase.Struct(
-                outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
-                outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
+                outputZernikesAvg=np.atleast_2d(
+                    np.array(zkCoeffCombined.combinedZernikes)
+                ),
+                outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
                 donutsExtraQuality=selectionExtra.donutsQuality,
                 donutsIntraQuality=selectionIntra.donutsQuality,
             )
@@ -191,8 +193,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             zkCoeffRaw = self.estimateZernikes.run(donutStampsExtra, donutStampsIntra)
             zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
             return pipeBase.Struct(
-                outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
-                outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
+                outputZernikesAvg=np.atleast_2d(
+                    np.array(zkCoeffCombined.combinedZernikes)
+                ),
+                outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
                 donutsExtraQuality=pd.DataFrame([]),
                 donutsIntraQuality=pd.DataFrame([]),
             )

@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.2.0:
+
+-------------
+11.2.0
+-------------
+
+* Change CalcZernikesTask output to be at least 2D for average as well as raw to make integration with MTAOS easier.
+
 .. _lsst.ts.wep-11.1.0:
 
 -------------
