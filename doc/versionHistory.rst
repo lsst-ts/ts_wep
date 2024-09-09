@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.4.2:
+
+-------------
+11.4.2
+-------------
+
+* Add full comcam pipeline to pipelines folder including wep and donut_viz tasks.
+
 .. _lsst.ts.wep-11.4.1:
 
 -------------
@@ -74,7 +82,6 @@ Version History
 -------------
 
 * Fix handling of empty exposures in generateDonutDirectDetect.
-
 
 .. _lsst.ts.wep-10.4.2:
 

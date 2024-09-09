@@ -1,0 +1,73 @@
+description: rapid analysis pipeline for ComCam
+instrument: lsst.obs.lsst.LsstComCam
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 5
+  cutOutDonutsScienceSensorGroupTask:
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      python: |
+        from lsst.ts.wep.task.pairTask import GroupPairer
+        config.pairer.retarget(GroupPairer)
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      estimateZernikes.maxNollIndex: 28
+      estimateZernikes.saveHistory: False
+      estimateZernikes.maskKwargs: {'doMaskBlends': False}
+  isr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: true
+      ampOffset.doApplyAmpOffset: false
+      # Turn off slow steps in ISR
+      doBrighterFatter: false
+      doCrosstalk: false
+  aggregateZernikesTask:
+    class: lsst.donut.viz.AggregateZernikesTask
+  aggregateDonutCatalogsTask:
+    class: lsst.donut.viz.AggregateDonutCatalogsTask
+  aggregateAOSVisitTableTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableTask
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: false
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: false
+
+# Define pipeline steps
+subsets:
+  step1:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsScienceSensorGroupTask
+      - calcZernikesTask
+    description: |
+      This step processes the input images with ISR, 
+      finds and cuts out the donut stamps, 
+      and estimates the Zernike coefficients from the donut pairs.
+  step2a:
+    subset:
+      - aggregateZernikesTask
+      - aggregateDonutCatalogsTask
+      - aggregateAOSVisitTableTask
+      - plotAOSTask
+      - aggregateDonutStampsTask
+      - plotDonutTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
