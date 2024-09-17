@@ -6,6 +6,18 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.4.1:
+
+-------------
+11.4.1
+-------------
+
+* Fix treatment of binary dilation in calculateSN.
+* Fix how calculateSN masks treat blended pixels.
+* Make calculateSN formatting consistent with the rest of cutOutDonutsBaseTask.
+* Add a test with a blended stamp for calculateSN.
+* Make variance plane warning only appear once.
+
 .. _lsst.ts.wep-11.4.0:
 
 -------------

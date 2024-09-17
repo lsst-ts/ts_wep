@@ -183,6 +183,8 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.makeSubtask("subtractBackground")
         # Set max recentering distance in pixels
         self.maxRecenterDistance = self.config.maxRecenterDistance
+        # Set Variance Plane Warning only once
+        self.varianceWarningSet = False
 
     def shiftCenters(self, centerArr, boundary, distance):
         """Shift the centers of sources if the distance to
@@ -337,8 +339,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         """
 
         stamp.makeMask(self.instConfigFile, self.opticalModel)
-        image = stamp.stamp_im.image.array
-        variance = stamp.stamp_im.variance.array
+        imageArray = stamp.stamp_im.image.array
+        mask = stamp.stamp_im.mask
+        varianceArray = stamp.stamp_im.variance.array
 
         # The following are example donut mask values:
         # maskPlaneDict={'BAD': 0, 'BLEND': 10, 'CR': 3, 'DETECTED': 5,
@@ -352,78 +355,84 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Thus to find out the number of pixels
         # taken by the donut mask we sum all
         # the nonzero mask pixels.
-        donut_mask = stamp.stamp_im.mask.array > 0
+        donutMaskPlane = mask.getMaskPlane("DONUT")
+        donutMask = mask.array == np.power(2, donutMaskPlane)
 
         # Number of pixels taken by the donut in the original donut mask
-        n_px_mask = np.sum(donut_mask)
+        nPxMask = np.sum(donutMask)
 
         # Signal estimate based on the donut mean
-        signal_mean = image[donut_mask].mean()  # per pixel
-        ttl_signal_mean = n_px_mask * signal_mean
+        signalMean = imageArray[donutMask].mean()  # per pixel
+        ttlSignalMean = nPxMask * signalMean
 
         # Signal estimate based on the sum of donut pixels
-        ttl_signal_sum = np.sum(image[donut_mask])
+        ttlSignalSum = np.sum(imageArray[donutMask])
 
         # Background noise estimate:
         # expand the inverted mask to remove donut contribution
         # the amount of default dilation was matched
         # to produce SN comparable to when using the
         # variance plane
-        bkgnd_mask = ~binary_dilation(donut_mask, iterations=self.bkgDilationIter)
+        bkgndMask = ~binary_dilation(donutMask, iterations=self.bkgDilationIter)
         # Test whether the mask is not too large.
         # If cross-section reached the edge of the
         # image, reduce until it's not the case.
-        width, height = np.shape(bkgnd_mask)
-        xsection = bkgnd_mask[:, width // 2]
-        while ~xsection[0]:
-            self.bkgDilationIter -= 2
+        width, height = np.shape(bkgndMask)
+        xsection = bkgndMask[:, width // 2]
+        while (~xsection[0]) and (self.bkgDilationIter > 1):
+            self.bkgDilationIter -= 1
             self.log.warning(
                 f"Binary dilation of donut mask reached the edge of the image; \
 reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             )
-            bkgnd_mask = ~binary_dilation(donut_mask, iterations=self.bkgDilationIter)
-            xsection = bkgnd_mask[:, width // 2]
+            bkgndMask = ~binary_dilation(donutMask, iterations=self.bkgDilationIter)
+            xsection = bkgndMask[:, width // 2]
+        # Remove any other masked pixels including blends
+        bkgndMask[mask.array > 0] = 0
 
-        background_image_stdev = image[bkgnd_mask].std()  # per pixel
-        sqrt_mean_variance = np.sqrt(np.mean(variance[bkgnd_mask]))
+        backgroundImageStdev = imageArray[bkgndMask].std()  # per pixel
+        sqrtMeanVariance = np.sqrt(np.mean(varianceArray[bkgndMask]))
 
         # Per-pixel variance based on the image region
         # outside of the dilated donut mask
-        background_image_variance = image[bkgnd_mask].var()
+        backgroundImageVariance = imageArray[bkgndMask].var()
 
         # The mean image value  in the background region
-        background_image_mean = np.mean(image[bkgnd_mask])
+        backgroundImageMean = np.mean(imageArray[bkgndMask])
 
         # Total noise based on the variance of the image background
-        ttl_noise_bkgnd_variance = np.sqrt(background_image_variance * n_px_mask)
+        ttlNoiseBkgndVariance = np.sqrt(backgroundImageVariance * nPxMask)
 
         # Noise based on the sum of variance plane pixels inside the donut mask
-        ttl_noise_donut_variance = np.sqrt(variance[donut_mask].sum())
+        ttlNoiseDonutVariance = np.sqrt(varianceArray[donutMask].sum())
 
         # Avoid zero division in case variance plane doesn't exist
-        if ttl_noise_donut_variance > 0:
-            sn = ttl_signal_sum / ttl_noise_donut_variance
+        if ttlNoiseDonutVariance > 0:
+            sn = ttlSignalSum / ttlNoiseDonutVariance
         # Legacy behavior: if variance plance was not calculated,
         # use the image background variance
         else:
-            sn = ttl_signal_sum / ttl_noise_bkgnd_variance
-            self.log.warning(
-                "Missing variance plane; \
-using the variance of image background for noise estimate."
-            )
-        sn_dic = {
+            sn = ttlSignalSum / ttlNoiseBkgndVariance
+            # Only warn about missing variance plane once per task
+            if self.varianceWarningSet is False:
+                self.log.warning(
+                    "Missing variance plane; \
+    using the variance of image background for noise estimate."
+                )
+                self.varianceWarningSet = True
+        snDict = {
             "SN": sn,
-            "signal_mean": ttl_signal_mean,
-            "signal_sum": ttl_signal_sum,
-            "n_px_mask": n_px_mask,
-            "background_image_stdev": background_image_stdev,
-            "sqrt_mean_variance": sqrt_mean_variance,
-            "background_image_variance": background_image_variance,
-            "background_image_mean": background_image_mean,
-            "ttl_noise_bkgnd_variance": ttl_noise_bkgnd_variance,
-            "ttl_noise_donut_variance": ttl_noise_donut_variance,
+            "signal_mean": ttlSignalMean,
+            "signal_sum": ttlSignalSum,
+            "n_px_mask": nPxMask,
+            "background_image_stdev": backgroundImageStdev,
+            "sqrt_mean_variance": sqrtMeanVariance,
+            "background_image_variance": backgroundImageVariance,
+            "background_image_mean": backgroundImageMean,
+            "ttl_noise_bkgnd_variance": ttlNoiseBkgndVariance,
+            "ttl_noise_donut_variance": ttlNoiseDonutVariance,
         }
-        return sn_dic
+        return snDict
 
     def filterBadRecentering(self, xShifts, yShifts):
         """Filter out donuts that are recentered far away from the median
