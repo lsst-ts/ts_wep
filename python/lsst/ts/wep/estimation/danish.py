@@ -29,6 +29,7 @@ import numpy as np
 from galsim import GalSimFFTSizeError
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
+from lsst.ts.wep.utils import binArray
 from scipy.ndimage import binary_erosion
 from scipy.optimize import least_squares
 
@@ -46,15 +47,39 @@ class DanishAlgorithm(WfAlgorithm):
     lstsqKwargs : dict, optional
         A dictionary containing any of the keyword arguments for
         scipy.optimize.least_squares, except `fun`, `x0`, `jac`, or `args`.
+    binning : int, optional
+        Binning factor to apply to the donut stamps before estimating
+        Zernike coefficients. The default value of 1 means no binning.
     """
 
-    def __init__(self, lstsqKwargs: Optional[dict] = None) -> None:
+    def __init__(self, lstsqKwargs: Optional[dict] = None, binning: int = 1) -> None:
+        self.binning = binning
         self.lstsqKwargs = lstsqKwargs
 
     @property
     def requiresPairs(self) -> bool:
         """Whether the algorithm requires pairs to estimate Zernikes."""
         return False
+
+    @property
+    def binning(self) -> int:
+        """Binning factor to apply to donut stamps."""
+        return self._binning
+
+    @binning.setter
+    def binning(self, value: int) -> None:
+        """Set the binning factor to apply to the donut stamps.
+
+        Parameters
+        ----------
+        value : int
+            The binning factor. A value of 1 means no binning.
+        """
+        if not isinstance(value, int):
+            raise TypeError("binning must be an integer.")
+        if value < 1:
+            raise ValueError("binning must be greater than or equal to 1.")
+        self._binning = value
 
     @property
     def lstsqKwargs(self) -> dict:
@@ -176,6 +201,10 @@ class DanishAlgorithm(WfAlgorithm):
         # Get the image array
         img = image.image
 
+        if self.binning > 1:
+            img = binArray(img, self.binning)
+            backgroundStd /= self.binning
+
         # If size of image is even, cut off final row/column
         if img.shape[0] % 2 == 0:
             img = img[:-1, :-1]
@@ -295,7 +324,7 @@ class DanishAlgorithm(WfAlgorithm):
             R_inner=instrument.radius * instrument.obscuration,
             mask_params=instrument.maskParams,
             focal_length=instrument.focalLength,
-            pixel_scale=instrument.pixelSize,
+            pixel_scale=instrument.pixelSize * self.binning,
         )
 
         # Create an empty history

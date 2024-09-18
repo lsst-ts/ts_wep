@@ -110,6 +110,12 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
         + "when estimating Zernikes with a single donut. "
         + "(the default is 2)",
     )
+    binning = pexConfig.Field(
+        dtype=int,
+        default=1,
+        doc="Binning factor to apply to the donut stamps before estimating "
+        + "Zernike coefficients. A value of 1 means no binning.",
+    )
 
 
 class EstimateZernikesTieTask(EstimateZernikesBaseTask):

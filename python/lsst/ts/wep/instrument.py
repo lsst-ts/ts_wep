@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
+
 __all__ = ["Instrument"]
 
 from functools import lru_cache
@@ -161,6 +163,29 @@ class Instrument:
 
         # Check the config
         self.checkConfig()
+
+    def copy(self) -> Instrument:
+        """Return a deep copy of the instrument.
+
+        Notes
+        -----
+        Any cached data from the original instrument will need to be
+        repopulated in the copied instrument.
+        """
+        return Instrument(
+            name=self.name,
+            diameter=self.diameter,
+            obscuration=self.obscuration,
+            focalLength=self.focalLength,
+            defocalOffset=self.defocalOffset,
+            pixelSize=self.pixelSize,
+            refBand=self.refBand,
+            wavelength=self.wavelength,
+            batoidModelName=self.batoidModelName,
+            batoidOffsetOptic=self.batoidOffsetOptic,
+            batoidOffsetValue=self.batoidOffsetValue,
+            maskParams=self.maskParams,
+        )
 
     def checkConfig(self) -> None:
         """Access every attribute to make sure no errors are thrown."""

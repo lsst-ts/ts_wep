@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.3.0:
+
+-------------
+11.3.0
+-------------
+
+* Add option to bin donut stamps before estimating the wavefront.
+
 .. _lsst.ts.wep-11.2.0:
 
 -------------
