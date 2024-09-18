@@ -27,6 +27,7 @@ __all__ = [
     "centerWithTemplate",
     "polygonContains",
     "conditionalSigmaClip",
+    "binArray",
 ]
 
 import numba
@@ -432,3 +433,30 @@ def conditionalSigmaClip(
             processedArray[:, i] = clipped.filled(np.nan)
 
     return processedArray
+
+
+def binArray(array: np.ndarray, binning: int) -> np.ndarray:
+    """Bin a 2d array by averaging over non-overlapping blocks.
+
+    Parameters
+    ----------
+    array : np.ndarray
+        The 2d array to be binned
+    binning : int
+        The binning factor
+
+    Returns
+    -------
+    np.ndarray
+        The binned array
+    """
+    # Ensure the array is divisible by the binning factor
+    array = array[
+        : array.shape[0] // binning * binning, : array.shape[1] // binning * binning
+    ]
+    # Bin the array
+    binned = array.reshape(
+        array.shape[0] // binning, binning, array.shape[1] // binning, binning
+    ).mean(axis=(1, 3))
+
+    return binned

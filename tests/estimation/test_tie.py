@@ -64,14 +64,28 @@ class TestTieAlgorithm(unittest.TestCase):
             # Get the test data
             zkTrue, intra, extra = forwardModelPair(seed=seed)
 
+            # Compute shape of binned images
+            binned_shape = tuple(sh // 2 for sh in intra.image.shape)
+
             # Create estimator
             tie = TieAlgorithm()
+            tieBin = TieAlgorithm(binning=2)
 
             # Estimate Zernikes (in meters)
             zkEst = tie.estimateZk(intra, extra)
 
             # Check that results are fairly accurate
             self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
+
+            # Test with binning
+            zkEst = tieBin.estimateZk(intra, extra, saveHistory=True)
+            self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
+
+            # Test that we binned the images.
+            self.assertEqual(tieBin.history[0]["intraInit"].shape, binned_shape)
+            self.assertEqual(tieBin.history[0]["extraInit"].shape, binned_shape)
+            self.assertEqual(tieBin.history[1]["intraCent"].shape, binned_shape)
+            self.assertEqual(tieBin.history[1]["extraCent"].shape, binned_shape)
 
     def testSaveHistory(self):
         # Run the algorithm

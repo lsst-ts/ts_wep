@@ -52,11 +52,24 @@ class TestDanishAlgorithm(unittest.TestCase):
     def testAccuracy(self):
         # Create estimator
         dan = DanishAlgorithm()
+        danBin = DanishAlgorithm(binning=2)
 
         # Try several different random seeds
         for seed in [12345, 23451, 34512, 45123, 51234]:
             # Get the test data
             zkTrue, intra, extra = forwardModelPair(seed=seed)
+
+            # Compute shape of binned images
+            shapex, shapey = intra.image.shape
+            binned_shapex = shapex // 2
+            binned_shapey = shapey // 2
+
+            # Ensure odd
+            if binned_shapex % 2 == 0:
+                binned_shapex -= 1
+            if binned_shapey % 2 == 0:
+                binned_shapey -= 1
+            binned_shape = (binned_shapex, binned_shapey)
 
             # Test estimation with pairs and single donuts:
             for images in [[intra, extra], [intra], [extra]]:
@@ -65,3 +78,17 @@ class TestDanishAlgorithm(unittest.TestCase):
 
                 # Check that results are fairly accurate
                 self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
+
+                # Test with binning
+                zkEst = danBin.estimateZk(*images, saveHistory=True)
+                self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
+
+                # Test that we binned the images.
+                if "intra" in danBin.history:
+                    self.assertEqual(
+                        danBin.history["intra"]["image"].shape, binned_shape
+                    )
+                if "extra" in danBin.history:
+                    self.assertEqual(
+                        danBin.history["extra"]["image"].shape, binned_shape
+                    )

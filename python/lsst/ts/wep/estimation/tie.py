@@ -27,7 +27,12 @@ from typing import Iterable, Optional, Union
 import numpy as np
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
-from lsst.ts.wep.utils import DefocalType, createZernikeBasis, createZernikeGradBasis
+from lsst.ts.wep.utils import (
+    DefocalType,
+    binArray,
+    createZernikeBasis,
+    createZernikeGradBasis,
+)
 from scipy.ndimage import gaussian_filter
 
 
@@ -90,6 +95,9 @@ class TieAlgorithm(WfAlgorithm):
         The size of the Gaussian kernel to convolve with the model pupil
         when estimating Zernikes with a single donut.
         (the default is 2)
+    binning : int, optional
+        Binning factor to apply to the donut stamps before estimating
+        Zernike coefficients. The default value of 1 means no binning.
     """
 
     def __init__(
@@ -104,6 +112,7 @@ class TieAlgorithm(WfAlgorithm):
         maskKwargs: Optional[dict] = None,
         requiresPairs: bool = True,
         modelPupilKernelSize: float = 2,
+        binning: int = 1,
     ) -> None:
         self.opticalModel = opticalModel
         self.maxIter = maxIter
@@ -115,6 +124,7 @@ class TieAlgorithm(WfAlgorithm):
         self.maskKwargs = maskKwargs
         self.requiresPairs = requiresPairs
         self.modelPupilKernelSize = modelPupilKernelSize
+        self.binning = binning
 
     @property
     def requiresPairs(self) -> bool:
@@ -419,6 +429,26 @@ class TieAlgorithm(WfAlgorithm):
         self._modelPupilKernelSize = value
 
     @property
+    def binning(self) -> int:
+        """The binning factor to apply to donut stamps."""
+        return self._binning
+
+    @binning.setter
+    def binning(self, value: int) -> None:
+        """Set the binning factor to apply to the donut stamps.
+
+        Parameters
+        ----------
+        value : int
+            The binning factor. A value of 1 means no binning.
+        """
+        if not isinstance(value, int):
+            raise TypeError("binning must be an integer.")
+        if value < 1:
+            raise ValueError("binning must be greater than or equal to 1.")
+        self._binning = value
+
+    @property
     def history(self) -> dict:
         """The algorithm history.
 
@@ -649,6 +679,9 @@ class TieAlgorithm(WfAlgorithm):
         RuntimeError
             If the solver is not supported
         """
+        if self.binning > 1:
+            instrument = instrument.copy()
+            instrument.pixelSize *= self.binning
         # Create the ImageMapper for centering and image compensation
         imageMapper = ImageMapper(instConfig=instrument, opticalModel=self.opticalModel)
 
@@ -659,6 +692,12 @@ class TieAlgorithm(WfAlgorithm):
             zkStartI1,
             zkStartI2,
         )
+
+        if self.binning > 1:
+            if intra is not None:
+                intra.image = binArray(intra.image, self.binning)
+            if extra is not None:
+                extra.image = binArray(extra.image, self.binning)
 
         # Create a pupil object for handling missing images
         if intra is None:
