@@ -24,6 +24,7 @@ import os
 import lsst.utils.tests
 import numpy as np
 import pandas as pd
+from astropy.table import QTable
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
@@ -137,8 +138,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         )
         structNormal = self.task.run(donutStampsIntra, donutStampsExtra)
 
-        # check that 4 elements are created
-        self.assertEqual(len(structNormal), 4)
+        # check that 5 elements are created
+        self.assertEqual(len(structNormal), 5)
 
         # Turn on the donut stamp selector
         self.task.doDonutStampSelector = True
@@ -170,6 +171,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             self.assertIsInstance(struct.donutsExtraQuality, pd.DataFrame)
             self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
             self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
+            self.assertIsInstance(struct.zernikes, QTable)
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))
