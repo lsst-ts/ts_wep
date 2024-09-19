@@ -47,7 +47,7 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
     )
     maxNollIndex = pexConfig.Field(
         dtype=int,
-        default=22,
+        default=28,
         doc="The maximum Zernike Noll index estimated.",
     )
     startWithIntrinsic = pexConfig.Field(
