@@ -268,9 +268,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             donutStamps = self.task.cutOutStamps(
                 exp, catalog, DefocalType.Extra, self.cameraName
             )
-        # Test that there are only variance warnings
+        # Test that there are warnings for two objects
         # since first object should pass
-        self.assertEqual(len(cm.output), 5)
+        self.assertEqual(len(cm.output), 2)
         # All donuts except the first one should have unchanged values
         recenteringWarnings = [
             warn for warn in cm.output if "Donut Recentering " in warn
@@ -465,3 +465,38 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Test that task metadata stores median shifts
         self.assertEqual(self.task.metadata.scalars["medianXShift"], medX)
         self.assertEqual(self.task.metadata.scalars["medianYShift"], medY)
+
+    def testCalculateSNWithBlends(self):
+        """Test that blends work with the masking routines used in calculateSN.
+        We previously found that blends can end up in an infinite loop or
+        result in nan values for SN."""
+
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+        stamps = self.task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+        stamp = stamps[0]
+        orig_sn_dict = self.task.calculateSN(stamp)
+
+        # Add blend to mask
+        stamp.wep_im.blendOffsets = [[-50, -60]]
+        sn_dict = self.task.calculateSN(stamp)
+        for val in sn_dict.values():
+            self.assertFalse(np.isnan(val))
+        # Blended pixels should be excluded from the original donut mask now
+        self.assertTrue(orig_sn_dict["n_px_mask"] > sn_dict["n_px_mask"])
+
+    def testCalculateSNWithLargeMask(self):
+        """Test that dilation correction loop runs and logs correctly."""
+
+        self.task.bkgDilationIter = 100
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+        with self.assertLogs(logger=self.task.log.logger, level="WARNING") as cm:
+            self.task.cutOutStamps(
+                exposure, donutCatalog, DefocalType.Extra, self.cameraName
+            )
+        infoMsg = (
+            "WARNING:lsst.Base Task:Binary dilation of donut mask reached the edge "
+        )
+        infoMsg += "of the image; reducing the amount of donut mask dilation to 99"
+        self.assertEqual(infoMsg, cm.output[0])
