@@ -17,6 +17,7 @@ Version History
 * Make calculateSN formatting consistent with the rest of cutOutDonutsBaseTask.
 * Add a test with a blended stamp for calculateSN.
 * Make variance plane warning only appear once.
+* Fix test values in test_donutStampSelectorTask due to changes to ISR in w_2024_38.
 
 .. _lsst.ts.wep-11.4.0:
 
