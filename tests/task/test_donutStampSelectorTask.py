@@ -136,7 +136,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # switch on selectWithEntropy,
         # set config.maxEntropy so that one donut is selected
         self.config.selectWithEntropy = True
-        entropyThreshold = 2.8
+        entropyThreshold = 2.85
         self.config.maxEntropy = entropyThreshold
 
         task = DonutStampSelectorTask(config=self.config, name="Entropy Task")
@@ -164,12 +164,12 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # test that if we use the custom threshold,
         # some donuts won't get selected
         self.config.useCustomSnLimit = True
-        minSignalToNoise = 1590
+        minSignalToNoise = 1658
         self.config.minSignalToNoise = minSignalToNoise
         task = DonutStampSelectorTask(config=self.config, name="SN Task")
         selection = task.selectStamps(donutStampsIntra)
         donutsQuality = selection.donutsQuality
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 1)
+        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 2)
 
         # test that the SN of selected donuts is indeed above the threshold
         for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]].values:
@@ -206,7 +206,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # switch on selectWithEntropy,
         # set config.maxEntropy so that one donut is selected
         self.config.selectWithEntropy = True
-        entropyThreshold = 2.8
+        entropyThreshold = 2.85
         self.config.maxEntropy = entropyThreshold
 
         task = DonutStampSelectorTask(config=self.config, name="Entropy Task")

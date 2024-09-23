@@ -117,7 +117,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
             self.donutStampsExtra, self.donutStampsIntra
         ).zernikes
 
-        self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 19))
+        self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 25))
 
     def testEstimateCornerZernikes(self):
         """
@@ -142,25 +142,31 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         ).combinedZernikes
         trueZernCoeffR04 = np.array(
             [
-                -0.35353452,
-                0.07365128,
-                0.62222451,
-                -0.06206281,
-                0.09065757,
-                0.21722746,
-                0.20491936,
-                0.00849322,
-                -0.01150489,
-                -0.02599147,
-                -0.00150702,
-                0.14100845,
-                -0.02294787,
-                0.02284791,
-                -0.02116483,
-                -0.02537743,
-                -0.01866772,
-                0.01653037,
-                -0.00552862,
+                -3.98568849e-01,
+                3.29880192e-02,
+                6.86914803e-01,
+                3.90220393e-02,
+                -7.50009174e-02,
+                1.81549349e-01,
+                1.39330112e-01,
+                1.29821719e-05,
+                -8.61263006e-03,
+                -5.29780246e-03,
+                4.29874356e-02,
+                9.03785421e-02,
+                3.26618090e-03,
+                4.18176969e-04,
+                -2.90643396e-02,
+                -2.52572372e-02,
+                -2.51558908e-02,
+                4.00444469e-02,
+                -6.71305522e-03,
+                -1.87932168e-02,
+                2.77894381e-04,
+                -2.12649168e-02,
+                9.96417120e-03,
+                -1.45702414e-02,
+                -1.05431895e-02,
             ]
         )
         # Make sure the total rms error is less than 0.35 microns off
@@ -184,25 +190,31 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         ).combinedZernikes
         trueZernCoeffR40 = np.array(
             [
-                -3.83610201e-01,
-                2.06528254e-01,
-                5.42893431e-01,
-                7.74255848e-02,
-                -3.40529812e-02,
-                5.45565149e-02,
-                -8.65849308e-02,
-                1.75029212e-02,
-                -1.40149246e-04,
-                -4.11223127e-02,
-                -2.42644902e-03,
-                1.52392233e-01,
-                1.24547354e-02,
-                -2.33075716e-02,
-                -7.35477674e-04,
-                1.93518814e-02,
-                3.65768735e-03,
-                4.12718699e-02,
-                -6.93386734e-03,
+                -4.51261752e-01,
+                2.16216207e-01,
+                4.66819698e-01,
+                -9.23288192e-02,
+                4.97984634e-02,
+                9.33841073e-02,
+                -4.89458314e-02,
+                7.17956342e-03,
+                1.74395927e-02,
+                -2.81949251e-02,
+                9.53899106e-03,
+                1.29594074e-01,
+                -5.42637866e-03,
+                1.21212094e-02,
+                -1.66611416e-04,
+                2.34503797e-02,
+                3.56519007e-03,
+                3.64561520e-02,
+                -8.42437070e-03,
+                -1.58178023e-02,
+                -8.84574527e-03,
+                -1.24650851e-02,
+                -2.66815820e-04,
+                1.86351265e-04,
+                1.70769973e-03,
             ]
         )
         # Make sure the total rms error is less than 0.35 microns off
@@ -212,11 +224,11 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         )
 
     def testGetCombinedZernikes(self):
-        testArr = np.zeros((2, 19))
+        testArr = np.zeros((2, 25))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
         np.testing.assert_array_equal(
-            combinedZernikesStruct.combinedZernikes, np.ones(19)
+            combinedZernikesStruct.combinedZernikes, np.ones(25)
         )
         np.testing.assert_array_equal(
             combinedZernikesStruct.flags, np.zeros(len(testArr))
@@ -273,5 +285,6 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         self.assertGreaterEqual(zkAllWithoutPairs.shape[0], 2 * zkAllWithPairs.shape[0])
 
         # Check that the averages are similar
-        diff = np.sqrt(np.sum((zkAvgWithPairs - zkAvgWithoutPairs) ** 2))
-        self.assertLess(diff, 0.16)
+        self.assertLess(
+            np.sqrt(np.sum(np.square(zkAvgWithPairs - zkAvgWithoutPairs))), 0.30
+        )
