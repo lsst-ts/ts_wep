@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.5.0:
+
+-------------
+11.5.0
+-------------
+
+* Add astropy table output to CalcZernikesTask.
+
 .. _lsst.ts.wep-11.4.2:
 
 -------------
