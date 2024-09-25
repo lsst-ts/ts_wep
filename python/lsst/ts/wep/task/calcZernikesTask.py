@@ -160,9 +160,15 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("extra_field", pos2f_dtype),
             ("intra_centroid", pos2f_dtype),
             ("extra_centroid", pos2f_dtype),
+            ("intra_mag", "<f4"),
+            ("extra_mag", "<f4"),
+            ("intra_sn", "<f4"),
+            ("extra_sn", "<f4"),
+            ("intra_entropy", "<f4"),
+            ("extra_entropy", "<f4"),
         ]
         for j in range(4, self.maxNollIndex + 1):
-            dtype.append((f"Z{j}", "<f8"))
+            dtype.append((f"Z{j}", "<f4"))
 
         table = QTable(dtype=dtype)
 
@@ -237,6 +243,12 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_field": np.nan,
                 "intra_centroid": np.nan,
                 "extra_centroid": np.nan,
+                "intra_mag": np.nan,
+                "extra_mag": np.nan,
+                "intra_sn": np.nan,
+                "extra_sn": np.nan,
+                "intra_entropy": np.nan,
+                "extra_entropy": np.nan,
             }
         )
         for i, (intra, extra, zk, flag) in enumerate(
@@ -247,36 +259,61 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 zkCoeffCombined.flags,
             )
         ):
-            zkTable.add_row(
-                {
-                    "label": f"pair{i+1}",
-                    "used": not flag,
-                    **{
-                        f"Z{j}": zk[j - 4] * u.micron
-                        for j in range(4, self.maxNollIndex + 1)
-                    },
-                    "intra_field": (
-                        np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
-                    ),
-                    "extra_field": (
-                        np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
-                    ),
-                    "intra_centroid": (
-                        np.array(
-                            (intra.centroid_position.x, intra.centroid_position.y),
-                            dtype=pos2f_dtype,
-                        )
-                        * u.pixel
-                    ),
-                    "extra_centroid": (
-                        np.array(
-                            (extra.centroid_position.x, extra.centroid_position.y),
-                            dtype=pos2f_dtype,
-                        )
-                        * u.pixel
-                    ),
-                }
+            row = dict()
+            row["label"] = f"pair{i+1}"
+            row["used"] = not flag
+            row.update(
+                {f"Z{j}": zk[j - 4] * u.micron for j in range(4, self.maxNollIndex + 1)}
             )
+            row["intra_field"] = (
+                np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+            )
+            row["extra_field"] = (
+                np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+            )
+            row["intra_centroid"] = (
+                np.array(
+                    (intra.centroid_position.x, intra.centroid_position.y),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
+            )
+            row["extra_centroid"] = (
+                np.array(
+                    (extra.centroid_position.x, extra.centroid_position.y),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
+            )
+            for key in ["MAG", "SN", "ENTROPY"]:
+                for stamps, foc in [
+                    (donutStampsIntra, "intra"),
+                    (donutStampsExtra, "extra"),
+                ]:
+                    if key in stamps.metadata:
+                        val = stamps.metadata.getArray(key)[i]
+                    else:
+                        val = np.nan
+                    row[f"{foc}_{key.lower()}"] = val
+            zkTable.add_row(row)
+
+        zkTable.meta["intra"] = {}
+        zkTable.meta["extra"] = {}
+
+        for dict_, stamps in [
+            (zkTable.meta["intra"], donutStampsIntra),
+            (zkTable.meta["extra"], donutStampsExtra),
+        ]:
+            dict_["det_name"] = stamps.metadata["DET_NAME"]
+            dict_["visit"] = stamps.metadata["VISIT"]
+            dict_["dfc_dist"] = stamps.metadata["DFC_DIST"]
+            dict_["band"] = stamps.metadata["BANDPASS"]
+
+        zkTable.meta["cam_name"] = donutStampsIntra.metadata["CAM_NAME"]
+        assert (
+            donutStampsIntra.metadata["CAM_NAME"]
+            == donutStampsExtra.metadata["CAM_NAME"]
+        )
 
         return pipeBase.Struct(
             outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),
