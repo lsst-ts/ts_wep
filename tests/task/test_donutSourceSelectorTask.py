@@ -60,8 +60,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.magMin = magPolicyDefaults[defaultFilterKey]["low"]
         self.magRange = self.magMax - self.magMin
         magArray = [
-            self.magMax + 1.0,
             self.magMax - 0.1,
+            self.magMax + 1.0,
             self.magMin - 1.0,
             self.magMax - 1.0,
         ]
@@ -122,14 +122,14 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
-        self.assertListEqual(list(testCatSelected), [False, True, True, True])
+        self.assertListEqual(list(testCatSelected), [True, False, True, True])
 
         # Test Defaults are used when useCustomMagLimit is turned off.
         self.config.useCustomMagLimit = False
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
-        self.assertListEqual(list(testCatSelected), [False, True, False, True])
+        self.assertListEqual(list(testCatSelected), [True, False, False, True])
 
     def testSelectSources(self):
         minimalCat, detector = self._createTestCat()
@@ -195,8 +195,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
-        # Test that only the brightest blended on the end that only
-        # blends with one other donut is not accepted if maxBlended
+        # Test that two donuts on either end of the triplet that only
+        # blend with one other donut are not accepted if maxBlended
         # is still set to 0.
         self.config.isolatedMagDiff = 10.0
         self.config.unblendedSeparation = 70
@@ -206,8 +206,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
 
-        # Test that only the brightest blended on the end that only
-        # blends with one other donut is accepted even though
+        # Test that two donuts on either end of the triplet that only
+        # blend with one other donut are accepted even though
         # it does not meet the isolatedMagDiff criterion we allow
         # it because we now allow maxBlended up to 1.
         self.config.isolatedMagDiff = 10.0
@@ -218,9 +218,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         # Make sure the one that gets through selection is
         # the brightest one.
-        self.assertListEqual(list(testCatSelected), [False, False, True, True])
-        self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], []])
-        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
+        self.assertListEqual(list(testCatSelected), [True, False, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], [140.0], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [100.0], []])
 
         # Lower unblendedSeparation so that the first two donuts
         # are the only blended ones. Test that the brighter of the
@@ -235,8 +235,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         # Make sure the first accepted donut is the one with the
         # correct entries in blendCentersX and blendCentersY.
-        self.assertListEqual(list(testCatSelected), [False, True, True, True])
-        self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], [], []])
+        self.assertListEqual(list(testCatSelected), [True, False, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], [], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [], []])
 
         # If we increase unblendedSeparation back to 100 then our group of
@@ -269,7 +269,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
-        self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], []])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
 
         # If we increase isolatedMagDiff to once again include
@@ -319,6 +319,18 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
+
+        # Test that when there are multiple blends but no all are within
+        # isolatedMagDiff that the correct donuts are
+        self.config.minBlendedSeparation = 55
+        self.config.isolatedMagDiff = 9.0
+        self.config.maxBlended = 1
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
 
         # Test output if we have an empty catalog. Make sure that
         # all parts of the Struct are returned as expected.

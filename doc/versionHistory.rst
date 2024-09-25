@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.5.1:
+
+-------------
+11.5.1
+-------------
+
+* Fixed bug in donutSourceSelectorTask where the task set with maxBlended > 0 and sources with a number of overlapping donuts greater than maxBlended did not give correct blend centers in the final catalog.
+
 .. _lsst.ts.wep-11.5.0:
 
 -------------
