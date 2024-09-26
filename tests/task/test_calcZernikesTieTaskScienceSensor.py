@@ -21,6 +21,7 @@
 
 import os
 
+import astropy.units as u
 import lsst.utils.tests
 import numpy as np
 import pandas as pd
@@ -140,6 +141,48 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         # check that 5 elements are created
         self.assertEqual(len(structNormal), 5)
+
+        zkAvg1 = structNormal.outputZernikesAvg[0]
+        zkAvgRow = structNormal.zernikes[structNormal.zernikes["label"] == "average"][0]
+        zkAvg2 = np.array([zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
+        self.assertFloatsAlmostEqual(zkAvg1, zkAvg2, rtol=1e-7, atol=0)
+
+        zkRaw1 = structNormal.outputZernikesRaw
+        zkRaw2 = np.full_like(zkRaw1, np.nan)
+        i = 0
+        for row in structNormal.zernikes:
+            if row["label"] == "average":
+                continue
+            zkRaw2[i] = np.array(
+                [row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
+            )
+            i += 1
+        self.assertFloatsAlmostEqual(zkRaw1, zkRaw2, rtol=1e-7, atol=0)
+
+        # verify remaining desired columns exist in zernikes table
+        desired_colnames = [
+            "used",
+            "intra_field",
+            "extra_field",
+            "intra_centroid",
+            "extra_centroid",
+            "intra_mag",
+            "extra_mag",
+            "intra_sn",
+            "extra_sn",
+            "intra_entropy",
+            "extra_entropy",
+        ]
+        self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
+
+        # Check metadata keys exist
+        self.assertIn("cam_name", structNormal.zernikes.meta)
+        for k in ["intra", "extra"]:
+            dict_ = structNormal.zernikes.meta[k]
+            self.assertIn("det_name", dict_)
+            self.assertIn("visit", dict_)
+            self.assertIn("dfc_dist", dict_)
+            self.assertIn("band", dict_)
 
         # Turn on the donut stamp selector
         self.task.doDonutStampSelector = True
