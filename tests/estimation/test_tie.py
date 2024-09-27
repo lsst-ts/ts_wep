@@ -142,7 +142,6 @@ class TestTieAlgorithm(unittest.TestCase):
         }
         for iteration in hist.values():
             for key, val in contents.items():
-                print(type(iteration[key]))
                 self.assertIsInstance(iteration.pop(key), val)
 
             # Check that was all that was in the history
