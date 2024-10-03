@@ -68,7 +68,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         flux = (magArray * u.ABmag).to_value(u.nJy)
 
         minimalCat["g_flux"] = flux
-        minimalCat["centroid_x"] = [100.0, 140.0, 190.0, 400.0]
+        minimalCat["centroid_x"] = [100.0, 140.0, 190.0, 360.0]
         minimalCat["centroid_y"] = [100.0, 100.0, 100.0, 100.0]
         camera = self.butler.get(
             "camera",
@@ -320,18 +320,6 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
 
-        # Test that when there are multiple blends but no all are within
-        # isolatedMagDiff that the correct donuts are
-        self.config.minBlendedSeparation = 55
-        self.config.isolatedMagDiff = 9.0
-        self.config.maxBlended = 1
-        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
-        testCatSelected = testCatStruct.selected
-        self.assertListEqual(list(testCatSelected), [False, False, True, True])
-        self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
-        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
-
         # Test output if we have an empty catalog. Make sure that
         # all parts of the Struct are returned as expected.
         self.config.isolatedMagDiff = 10.0
@@ -344,6 +332,38 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [])
         self.assertEqual(testCatStruct.blendCentersX, None)
         self.assertEqual(testCatStruct.blendCentersY, None)
+
+        # Test that when there are multiple blends but not all are within
+        # isolatedMagDiff that the donut centers for only the blended
+        # donuts within isolatedMagDiff are kept since these are the only ones
+        # that should count as blended.
+        self.config.minBlendedSeparation = 55
+        self.config.unblendedSeparation = 100
+        self.config.isolatedMagDiff = 9.0
+        self.config.maxBlended = 1
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
+        self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
+
+        # Test same as above but with multiple donuts kept and one donut that
+        # should not appear.
+        # Need to move donuts away from edge to test with needed separation
+        minimalCat["centroid_y"] += 100.0
+        minimalCat["centroid_x"] += 100.0
+        self.config.unblendedSeparation = 180
+        self.config.isolatedMagDiff = 9.0
+        self.config.maxBlended = 2
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, True, False])
+        for bX, trueBX in zip(testCatStruct.blendCentersX, [[200.0, 460.0]]):
+            self.assertListEqual(list(bX), trueBX)
+        for bY, trueBY in zip(testCatStruct.blendCentersY, [[200.0, 200.0]]):
+            self.assertListEqual(list(bY), trueBY)
 
     def testTaskRun(self):
         minimalCat, detector = self._createTestCat()
