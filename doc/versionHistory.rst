@@ -6,6 +6,30 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.5.1:
+
+-------------
+11.5.1
+-------------
+
+* Fixed bug in donutSourceSelectorTask where the task set with maxBlended > 0 and sources with a number of overlapping donuts greater than maxBlended did not give correct blend centers in the final catalog.
+
+.. _lsst.ts.wep-11.5.0:
+
+-------------
+11.5.0
+-------------
+
+* Add astropy table output to CalcZernikesTask.
+
+.. _lsst.ts.wep-11.4.2:
+
+-------------
+11.4.2
+-------------
+
+* Add full comcam pipeline to pipelines folder including wep and donut_viz tasks.
+
 .. _lsst.ts.wep-11.4.1:
 
 -------------
@@ -74,7 +98,6 @@ Version History
 -------------
 
 * Fix handling of empty exposures in generateDonutDirectDetect.
-
 
 .. _lsst.ts.wep-10.4.2:
 
