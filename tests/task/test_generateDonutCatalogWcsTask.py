@@ -23,7 +23,7 @@ import os
 
 import lsst.geom
 import numpy as np
-import pandas as pd
+from astropy.table import vstack
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
@@ -154,12 +154,12 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             collections=[f"{runName}"],
         )
         donutCatDf_S11 = pipelineButler.get(
-            "donutCatalog",
+            "donutCatalogAstropy",
             dataId={"instrument": "LSSTCam", "detector": 94, "visit": exposureId},
             collections=[f"{runName}"],
         )
         donutCatDf_S10 = pipelineButler.get(
-            "donutCatalog",
+            "donutCatalogAstropy",
             dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
             collections=[f"{runName}"],
         )
@@ -173,19 +173,24 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertEqual(np.unique(donutCatDf_S10["detector"]), "R22_S10")
 
         # Check outputs are correct
-        outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
-        self.assertEqual(len(outputDf), 8)
+        outputTable = vstack([donutCatDf_S11, donutCatDf_S10])
+        self.assertEqual(len(outputTable), 8)
         self.assertCountEqual(
-            outputDf.columns,
+            outputTable.columns,
             [
                 "coord_ra",
                 "coord_dec",
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
+                "detector",
+            ],
+        )
+        self.assertCountEqual(
+            outputTable.meta.keys(),
+            [
                 "blend_centroid_x",
                 "blend_centroid_y",
-                "detector",
             ],
         )
         true_ra = [
@@ -209,10 +214,10 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             -0.005396017,
         ]
         self.assertFloatsAlmostEqual(
-            np.sort(true_ra), np.sort(outputDf["coord_ra"]), atol=1e-8
+            np.sort(true_ra), np.sort(outputTable["coord_ra"].value), atol=1e-8
         )
         self.assertFloatsAlmostEqual(
-            np.sort(true_dec), np.sort(outputDf["coord_dec"]), atol=1e-8
+            np.sort(true_dec), np.sort(outputTable["coord_dec"].value), atol=1e-8
         )
         s11_x, s11_y = s11_wcs.skyToPixelArray(true_ra[:4], true_dec[:4])
         s10_x, s10_y = s10_wcs.skyToPixelArray(true_ra[4:], true_dec[4:])
@@ -220,14 +225,14 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         true_y = np.sort(np.array([s11_y, s10_y]).flatten())
         self.assertFloatsAlmostEqual(
             true_x,
-            np.sort(outputDf["centroid_x"]),
+            np.sort(outputTable["centroid_x"].value),
             atol=1e-2,  # Small fractions of pixel okay since we abbreviated ra, dec positions above
         )
-        self.assertFloatsAlmostEqual(true_y, np.sort(outputDf["centroid_y"]), atol=1e-2)
+        self.assertFloatsAlmostEqual(true_y, np.sort(outputTable["centroid_y"].value), atol=1e-2)
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
-        self.assertCountEqual(outputDf["source_flux"], fluxTruth)
+        self.assertCountEqual(outputTable["source_flux"].value, fluxTruth)
 
         # Clean up
         cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
@@ -281,9 +286,9 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         # concatenate catalogs from each exposure into a single catalog
         # to compare against the test input reference catalog
-        outputDf = donutCatDfList[0]
+        outputTable = donutCatDfList[0]
         for donutCat in donutCatDfList[1:]:
-            outputDf = pd.concat([outputDf, donutCat])
+            outputTable = vstack([outputTable, donutCat])
 
         # Compare ra, dec info to original input catalog
         inputCat = np.genfromtxt(
@@ -293,22 +298,22 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             names=["id", "ra", "dec", "mag"],
         )
 
-        self.assertEqual(len(outputDf), 8)
-        self.assertCountEqual(np.radians(inputCat["ra"]), outputDf["coord_ra"])
-        self.assertCountEqual(np.radians(inputCat["dec"]), outputDf["coord_dec"])
+        self.assertEqual(len(outputTable), 8)
+        self.assertCountEqual(np.radians(inputCat["ra"]), outputTable["coord_ra"].value)
+        self.assertCountEqual(np.radians(inputCat["dec"]), outputTable["coord_dec"].value)
         self.assertFloatsAlmostEqual(
             np.sort(np.array(donutCatXPixelList).flatten()),
-            np.sort(outputDf["centroid_x"]),
+            np.sort(outputTable["centroid_x"]),
             atol=1e-14,
             rtol=1e-14,
         )
         self.assertFloatsAlmostEqual(
             np.sort(np.array(donutCatYPixelList).flatten()),
-            np.sort(outputDf["centroid_y"]),
+            np.sort(outputTable["centroid_y"]),
             atol=1e-14,
             rtol=1e-14,
         )
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
-        self.assertCountEqual(outputDf["source_flux"], fluxTruth)
+        self.assertCountEqual(outputTable["source_flux"].value, fluxTruth)
