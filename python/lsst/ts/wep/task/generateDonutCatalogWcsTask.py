@@ -75,8 +75,8 @@ class GenerateDonutCatalogWcsTaskConnections(
             "detector",
             "instrument",
         ),
-        storageClass="DataFrame",
-        name="donutCatalog",
+        storageClass="AstropyQTable",
+        name="donutCatalogAstropy",
     )
 
 
