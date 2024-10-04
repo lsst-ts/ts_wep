@@ -35,7 +35,7 @@ from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
-    donutCatalogToDataFrame,
+    donutCatalogToAstropy,
     runSelection,
 )
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
@@ -385,7 +385,7 @@ and direct detect catalog as output."
                     donutSelectorTask,
                 )
 
-                donutCatalog = donutCatalogToDataFrame(
+                donutCatalog = donutCatalogToAstropy(
                     refSelection, filterName, blendCentersX, blendCentersY
                 )
                 self.metadata["refCatalogSuccess"] = True

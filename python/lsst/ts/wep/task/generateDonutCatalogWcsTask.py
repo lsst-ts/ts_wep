@@ -38,7 +38,7 @@ import numpy as np
 from lsst.meas.algorithms import LoadReferenceObjectsConfig, ReferenceObjectLoader
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
-    donutCatalogToDataFrame,
+    donutCatalogToAstropy,
     runSelection,
 )
 from lsst.utils.timer import timeMethod
@@ -189,7 +189,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             blendCentersX = None
             blendCentersY = None
 
-        fieldObjects = donutCatalogToDataFrame(
+        fieldObjects = donutCatalogToAstropy(
             refSelection, filterName, blendCentersX, blendCentersY
         )
         fieldObjects["detector"] = np.array(

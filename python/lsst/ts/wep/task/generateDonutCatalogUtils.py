@@ -19,9 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["runSelection", "donutCatalogToDataFrame"]
+__all__ = ["runSelection", "donutCatalogToAstropy"]
 
-import pandas as pd
+import astropy.units as u
+import numpy as np
+from astropy.table import QTable
 
 
 def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
@@ -73,7 +75,7 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
         )
 
 
-def donutCatalogToDataFrame(
+def donutCatalogToAstropy(
     donutCatalog=None, filterName=None, blendCentersX=None, blendCentersY=None
 ):
     """
@@ -103,7 +105,7 @@ def donutCatalogToDataFrame(
 
     Returns
     -------
-    `pandas.DataFrame`
+    `astropy.table.QTable`
         Complete catalog of reference sources in the pointing.
 
     Raises
@@ -167,17 +169,18 @@ def donutCatalogToDataFrame(
             )
             raise ValueError(blendErrMsg)
 
-    fieldObjects = pd.DataFrame([])
-    fieldObjects["coord_ra"] = ra
-    fieldObjects["coord_dec"] = dec
+    flux_sort = np.argsort(sourceFlux)[::-1]
+
+    fieldObjects = QTable()
+    fieldObjects["coord_ra"] = ra * u.rad
+    fieldObjects["coord_dec"] = dec * u.rad
     fieldObjects["centroid_x"] = centroidX
     fieldObjects["centroid_y"] = centroidY
-    fieldObjects["source_flux"] = sourceFlux
-    fieldObjects["blend_centroid_x"] = blendCX
-    fieldObjects["blend_centroid_y"] = blendCY
+    fieldObjects["source_flux"] = sourceFlux * u.nJy
 
-    fieldObjects = fieldObjects.sort_values("source_flux", ascending=False).reset_index(
-        drop=True
-    )
+    fieldObjects.sort("source_flux", reverse=True)
+
+    fieldObjects.meta["blend_centroid_x"] = [blendCX[idx] for idx in flux_sort]
+    fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
 
     return fieldObjects
