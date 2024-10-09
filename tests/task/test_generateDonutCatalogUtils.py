@@ -29,6 +29,7 @@ from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.ts.wep.task import DonutSourceSelectorTask, DonutSourceSelectorTaskConfig
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
+    addVisitInfoToCatTable,
     donutCatalogToAstropy,
     runSelection,
 )
@@ -65,7 +66,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         return refObjLoader
 
-    def _createTestDonutCat(self):
+    def _createTestDonutCat(self, returnExposure=False):
         refObjLoader = self._createRefObjLoader()
 
         # Check that our refObjLoader loads the available objects
@@ -86,7 +87,10 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             testExposure.filter.bandLabel,
         )
 
-        return donutCatSmall.refCat
+        if returnExposure is False:
+            return donutCatSmall.refCat
+        else:
+            return donutCatSmall.refCat, testExposure
 
     def testRunSelection(self):
         refObjLoader = self._createRefObjLoader()
@@ -331,3 +335,20 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 blendCentersY=[[4], [], [], []],
             )
         self.assertTrue(xyMismatchErrMsg in str(context.exception))
+
+    def testAddVisitInfoToCatTable(self):
+
+        donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
+        fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
+        catTableWithMeta = addVisitInfoToCatTable(testExposure, fieldObjects)
+        visitInfoKeys = [
+            "boresight_ra",
+            "boresight_dec",
+            "boresight_rot_angle",
+            "boresight_par_angle",
+            "mjd",
+            "visit_id",
+        ]
+
+        self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
+        self.assertCountEqual(visitInfoKeys, catTableWithMeta.meta["visit_info"].keys())

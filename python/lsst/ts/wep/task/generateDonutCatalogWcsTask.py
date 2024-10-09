@@ -38,6 +38,7 @@ import numpy as np
 from lsst.meas.algorithms import LoadReferenceObjectsConfig, ReferenceObjectLoader
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
+    addVisitInfoToCatTable,
     donutCatalogToAstropy,
     runSelection,
 )
@@ -195,5 +196,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         fieldObjects["detector"] = np.array(
             [detector.getName()] * len(fieldObjects), dtype=str
         )
+
+        fieldObjects = addVisitInfoToCatTable(exposure, fieldObjects)
 
         return pipeBase.Struct(donutCatalog=fieldObjects)

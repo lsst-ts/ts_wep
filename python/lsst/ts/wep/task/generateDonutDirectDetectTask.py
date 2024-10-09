@@ -25,15 +25,16 @@ __all__ = [
     "GenerateDonutDirectDetectTask",
 ]
 
+import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
-import astropy.units as u
 from astropy.table import QTable
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
 from lsst.ts.wep.utils import (
     DefocalType,
     createTemplateForDetector,
@@ -170,7 +171,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # coord_ra; coord_dec; centroid_x; centroid_y;
         # source_flux; detector; mags
 
-         # add a detector column
+        # add a detector column
         donutCat["detector"] = exposure.detector.getName()
 
         # pass the boresight ra, dec
@@ -197,11 +198,11 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             ]
         ]
         donutCatUpd["source_flux"] = donutCat["source_flux"] * u.nJy
-        fluxSort = np.argsort(donutCatUpd['source_flux'])[::-1]
-        donutCatUpd.meta['blend_centroid_x'] = [
+        fluxSort = np.argsort(donutCatUpd["source_flux"])[::-1]
+        donutCatUpd.meta["blend_centroid_x"] = [
             donutCat.meta["blend_centroid_x"][idx] for idx in fluxSort
         ]
-        donutCatUpd.meta['blend_centroid_y'] = [
+        donutCatUpd.meta["blend_centroid_y"] = [
             donutCat.meta["blend_centroid_y"][idx] for idx in fluxSort
         ]
 
@@ -291,5 +292,9 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
                 "source_flux",
             ]
             donutCatUpd = QTable(names=donutCatalogColumns)
+            donutCatUpd.meta["blend_centroid_x"] = ""
+            donutCatUpd.meta["blend_centroid_y"] = ""
+
+        donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
 
         return pipeBase.Struct(donutCatalog=donutCatUpd)

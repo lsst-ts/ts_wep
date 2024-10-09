@@ -19,9 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["runSelection", "donutCatalogToAstropy"]
+__all__ = ["runSelection", "donutCatalogToAstropy", "addVisitInfoToCatTable"]
 
 import astropy.units as u
+import lsst.afw.image as afwImage
 import numpy as np
 from astropy.table import QTable
 
@@ -184,3 +185,41 @@ def donutCatalogToAstropy(
     fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
 
     return fieldObjects
+
+
+def addVisitInfoToCatTable(exposure: afwImage.Exposure, donutCat: QTable):
+    """
+    Add visit info from the exposure object to the catalog QTable metadata.
+    This should include all information we will need downstream in the
+    WEP tasks that would otherwise require loading VisitInfo from the butler.
+
+    Parameters
+    ----------
+    exposure : lsst.afw.image.Exposure
+        Image with donut sources that go in to the accompanying catalog.
+    donutCat : astropy.table.QTable
+        Donut catalog for given exposure.
+
+    Returns
+    -------
+    `astropy.table.QTable`
+        Catalog with relevant exposure metadata added to catalog metadata.
+    """
+
+    visitInfo = exposure.visitInfo
+
+    catVisitInfo = dict()
+    visitRaDec = visitInfo.boresightRaDec
+    catVisitInfo["boresight_ra"] = visitRaDec.getRa().asDegrees() * u.deg
+    catVisitInfo["boresight_dec"] = visitRaDec.getDec().asDegrees() * u.deg
+    catVisitInfo["boresight_rot_angle"] = (
+        visitInfo.boresightRotAngle.asDegrees() * u.deg
+    )
+    catVisitInfo["boresight_par_angle"] = (
+        visitInfo.boresightParAngle.asDegrees() * u.deg
+    )
+    catVisitInfo["mjd"] = visitInfo.date.toAstropy().mjd
+    catVisitInfo["visit_id"] = visitInfo.id
+    donutCat.meta["visit_info"] = catVisitInfo
+
+    return donutCat
