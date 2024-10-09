@@ -153,27 +153,27 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             },
             collections=[f"{runName}"],
         )
-        donutCatDf_S11 = pipelineButler.get(
+        donutCatTable_S11 = pipelineButler.get(
             "donutCatalogAstropy",
             dataId={"instrument": "LSSTCam", "detector": 94, "visit": exposureId},
             collections=[f"{runName}"],
         )
-        donutCatDf_S10 = pipelineButler.get(
+        donutCatTable_S10 = pipelineButler.get(
             "donutCatalogAstropy",
             dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
             collections=[f"{runName}"],
         )
 
         # Check 4 sources in each detector
-        self.assertEqual(len(donutCatDf_S11), 4)
-        self.assertEqual(len(donutCatDf_S10), 4)
+        self.assertEqual(len(donutCatTable_S11), 4)
+        self.assertEqual(len(donutCatTable_S10), 4)
 
         # Check correct detector names
-        self.assertEqual(np.unique(donutCatDf_S11["detector"]), "R22_S11")
-        self.assertEqual(np.unique(donutCatDf_S10["detector"]), "R22_S10")
+        self.assertEqual(np.unique(donutCatTable_S11["detector"]), "R22_S11")
+        self.assertEqual(np.unique(donutCatTable_S10["detector"]), "R22_S10")
 
         # Check outputs are correct
-        outputTable = vstack([donutCatDf_S11, donutCatDf_S10])
+        outputTable = vstack([donutCatTable_S11, donutCatTable_S10])
         self.assertEqual(len(outputTable), 8)
         self.assertCountEqual(
             outputTable.columns,
@@ -188,10 +188,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         )
         self.assertCountEqual(
             outputTable.meta.keys(),
-            [
-                "blend_centroid_x",
-                "blend_centroid_y",
-            ],
+            ["blend_centroid_x", "blend_centroid_y", "visit_info"],
         )
         true_ra = [
             6.281628787,
@@ -228,7 +225,9 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             np.sort(outputTable["centroid_x"].value),
             atol=1e-2,  # Small fractions of pixel okay since we abbreviated ra, dec positions above
         )
-        self.assertFloatsAlmostEqual(true_y, np.sort(outputTable["centroid_y"].value), atol=1e-2)
+        self.assertFloatsAlmostEqual(
+            true_y, np.sort(outputTable["centroid_y"].value), atol=1e-2
+        )
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
@@ -267,7 +266,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             )
 
         # run task on all exposures
-        donutCatDfList = []
+        donutCatTableList = []
         donutCatXPixelList = []
         donutCatYPixelList = []
         # Set task to take all donuts regardless of magnitude
@@ -275,7 +274,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         for exposure in expList:
             taskOutput = self.task.run(deferredList, exposure)
             self.assertEqual(len(taskOutput.donutCatalog), 4)
-            donutCatDfList.append(taskOutput.donutCatalog)
+            donutCatTableList.append(taskOutput.donutCatalog)
             # Get pixel locations with proper wcs
             donutX, donutY = exposure.wcs.skyToPixelArray(
                 taskOutput.donutCatalog["coord_ra"],
@@ -286,8 +285,8 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         # concatenate catalogs from each exposure into a single catalog
         # to compare against the test input reference catalog
-        outputTable = donutCatDfList[0]
-        for donutCat in donutCatDfList[1:]:
+        outputTable = donutCatTableList[0]
+        for donutCat in donutCatTableList[1:]:
             outputTable = vstack([outputTable, donutCat])
 
         # Compare ra, dec info to original input catalog
@@ -300,7 +299,9 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         self.assertEqual(len(outputTable), 8)
         self.assertCountEqual(np.radians(inputCat["ra"]), outputTable["coord_ra"].value)
-        self.assertCountEqual(np.radians(inputCat["dec"]), outputTable["coord_dec"].value)
+        self.assertCountEqual(
+            np.radians(inputCat["dec"]), outputTable["coord_dec"].value
+        )
         self.assertFloatsAlmostEqual(
             np.sort(np.array(donutCatXPixelList).flatten()),
             np.sort(outputTable["centroid_x"]),
