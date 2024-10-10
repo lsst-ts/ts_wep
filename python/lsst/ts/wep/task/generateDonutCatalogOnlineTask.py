@@ -134,5 +134,4 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         fieldObjects["detector"] = np.array(
             [detector.getName()] * len(fieldObjects), dtype=str
         )
-
         return pipeBase.Struct(donutCatalog=fieldObjects)

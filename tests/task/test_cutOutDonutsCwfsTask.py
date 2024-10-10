@@ -132,10 +132,10 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         )
         # Get the donut catalogs for each detector
         donutCatalogExtra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutCatalogAstropy", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutCatalogIntra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutCatalogAstropy", dataId=self.dataIdIntra, collections=[self.runName]
         )
         # Get the camera from the butler
         camera = self.butler.get(
@@ -233,12 +233,12 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             )
 
         # Test that legacy dataset works as well (without "detector" column)
-        donutCatalogExtraNoDetector = donutCatalogExtra.drop(columns=["detector"])
-        donutCatalogIntraNoDetector = donutCatalogIntra.drop(columns=["detector"])
+        donutCatalogExtra.remove_column("detector")
+        donutCatalogIntra.remove_column("detector")
 
         taskOutLegacy = self.task.run(
             [copy(exposureExtra), copy(exposureIntra)],
-            [donutCatalogExtraNoDetector, donutCatalogIntraNoDetector],
+            [donutCatalogExtra, donutCatalogIntra],
             camera,
         )
         # The donuts should be identical

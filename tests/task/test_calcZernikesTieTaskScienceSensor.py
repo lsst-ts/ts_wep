@@ -24,8 +24,7 @@ import os
 import astropy.units as u
 import lsst.utils.tests
 import numpy as np
-import pandas as pd
-from astropy.table import QTable
+from astropy.table import QTable, Table
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
@@ -210,8 +209,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             # donut quality tables are pandas dataFrame,
             # and Zernikes are numpy arrays
             # both for normal run and for null run
-            self.assertIsInstance(struct.donutsIntraQuality, pd.DataFrame)
-            self.assertIsInstance(struct.donutsExtraQuality, pd.DataFrame)
+            self.assertIsInstance(struct.donutsIntraQuality, Table)
+            self.assertIsInstance(struct.donutsExtraQuality, Table)
             self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
             self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
             self.assertIsInstance(struct.zernikes, QTable)
