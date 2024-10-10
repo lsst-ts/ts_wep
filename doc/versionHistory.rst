@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.0.0:
+
+-------------
+12.0.0
+-------------
+
+* Change pandas.DataFrame outputs to Astropy Tables.
+
 .. _lsst.ts.wep-11.5.2:
 
 -------------
