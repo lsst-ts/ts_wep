@@ -205,7 +205,7 @@ should be applied."
                 selected,
             ],
             names=["SN", "ENTROPY", "SN_SELECT", "ENTROPY_SELECT", "FINAL_SELECT"],
-        ).to_pandas()
+        )
 
         self.log.info("Selected %d/%d donut stamps", selected.sum(), len(donutStamps))
 
