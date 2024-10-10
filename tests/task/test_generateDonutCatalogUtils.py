@@ -23,13 +23,14 @@ import os
 import unittest
 
 import lsst.geom
-import pandas as pd
+from astropy.table import QTable
 from lsst.daf import butler as dafButler
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.ts.wep.task import DonutSourceSelectorTask, DonutSourceSelectorTaskConfig
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
-    donutCatalogToDataFrame,
+    addVisitInfoToCatTable,
+    donutCatalogToAstropy,
     runSelection,
 )
 from lsst.ts.wep.utils import getModulePath
@@ -65,7 +66,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         return refObjLoader
 
-    def _createTestDonutCat(self):
+    def _createTestDonutCat(self, returnExposure=False):
         refObjLoader = self._createRefObjLoader()
 
         # Check that our refObjLoader loads the available objects
@@ -86,7 +87,10 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             testExposure.filter.bandLabel,
         )
 
-        return donutCatSmall.refCat
+        if returnExposure is False:
+            return donutCatSmall.refCat
+        else:
+            return donutCatSmall.refCat, testExposure
 
     def testRunSelection(self):
         refObjLoader = self._createRefObjLoader()
@@ -149,10 +153,10 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         self.assertEqual(blendX, [[]] * 4)
         self.assertEqual(blendY, [[]] * 4)
 
-    def testDonutCatalogToDataFrame(self):
+    def testDonutCatalogToAstropy(self):
         donutCatSmall = self._createTestDonutCat()
 
-        fieldObjects = donutCatalogToDataFrame(donutCatSmall, "g")
+        fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
         self.assertEqual(len(fieldObjects), 4)
         self.assertCountEqual(
             fieldObjects.columns,
@@ -162,13 +166,18 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
+            ],
+        )
+        self.assertCountEqual(
+            fieldObjects.meta.keys(),
+            [
                 "blend_centroid_x",
                 "blend_centroid_y",
             ],
         )
 
-        # Test that None returns an empty dataframe
-        fieldObjectsNone = donutCatalogToDataFrame()
+        # Test that None returns an empty QTable
+        fieldObjectsNone = donutCatalogToAstropy()
         self.assertEqual(len(fieldObjectsNone), 0)
         self.assertCountEqual(
             fieldObjects.columns,
@@ -178,6 +187,11 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
+            ],
+        )
+        self.assertCountEqual(
+            fieldObjects.meta.keys(),
+            [
                 "blend_centroid_x",
                 "blend_centroid_y",
             ],
@@ -185,33 +199,42 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         # Test that blendCentersX and blendCentersY
         # get assigned correctly.
-        fieldObjectsBlends = donutCatalogToDataFrame(
+        fieldObjectsBlends = donutCatalogToAstropy(
             donutCatSmall,
             "g",
         )
-        fieldObjectsBlends.at[1, "blend_centroid_x"].append(5)
-        fieldObjectsBlends.at[1, "blend_centroid_y"].append(3)
+        print(fieldObjectsBlends)
+        print(fieldObjectsBlends[1])
+        print(fieldObjectsBlends.dtype)
+        fieldObjectsBlends.meta["blend_centroid_x"][1].append(5)
+        fieldObjectsBlends.meta["blend_centroid_y"][1].append(3)
+        print(fieldObjectsBlends)
+        print(fieldObjectsBlends[1])
         self.assertListEqual(
-            fieldObjectsBlends["blend_centroid_x"].values.tolist(), [[], [5], [], []]
+            fieldObjectsBlends.meta["blend_centroid_x"], [[], [5], [], []]
         )
         self.assertListEqual(
-            fieldObjectsBlends["blend_centroid_y"].values.tolist(), [[], [3], [], []]
+            fieldObjectsBlends.meta["blend_centroid_y"], [[], [3], [], []]
         )
 
-    def testDonutCatalogToDataFrameWithBlendCenters(self):
+    def testDonutCatalogToAstropyWithBlendCenters(self):
         donutCatSmall = self._createTestDonutCat()
+        # Brightest three fluxes are all the same.
+        # Change two slightly so that we get a consistent order
+        # after sorting the catalog by brightness.
         donutCatSmall["g_flux"][1] -= 0.1
+        donutCatSmall["g_flux"][2] -= 0.02
         blendCentersX = [list() for _ in range(len(donutCatSmall))]
         blendCentersY = [list() for _ in range(len(donutCatSmall))]
 
-        fieldObjects = donutCatalogToDataFrame(
+        fieldObjects = donutCatalogToAstropy(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
         self.assertListEqual(
-            list(fieldObjects["blend_centroid_x"]), [list()] * len(donutCatSmall)
+            list(fieldObjects.meta["blend_centroid_x"]), [list()] * len(donutCatSmall)
         )
         self.assertListEqual(
-            list(fieldObjects["blend_centroid_y"]), [list()] * len(donutCatSmall)
+            list(fieldObjects.meta["blend_centroid_y"]), [list()] * len(donutCatSmall)
         )
 
         blendValsX = [
@@ -224,33 +247,35 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         ]
         blendCentersX[0].append(blendValsX[0])
         blendCentersY[0].append(blendValsY[0])
-        fieldObjectsOneBlend = donutCatalogToDataFrame(
+        fieldObjectsOneBlend = donutCatalogToAstropy(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
         self.assertListEqual(
-            list(fieldObjectsOneBlend["blend_centroid_x"]),
+            list(fieldObjectsOneBlend.meta["blend_centroid_x"]),
             [[blendValsX[0]], [], [], []],
         )
         self.assertListEqual(
-            list(fieldObjectsOneBlend["blend_centroid_y"]),
+            list(fieldObjectsOneBlend.meta["blend_centroid_y"]),
             [[blendValsY[0]], [], [], []],
         )
 
         blendCentersX[1].append(blendValsX[1])
         blendCentersY[1].append(blendValsY[1])
-        fieldObjectsTwoBlends = donutCatalogToDataFrame(
+        print(donutCatSmall)
+        fieldObjectsTwoBlends = donutCatalogToAstropy(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
+        print(fieldObjectsTwoBlends)
         self.assertListEqual(
-            list(fieldObjectsTwoBlends["blend_centroid_x"]),
+            list(fieldObjectsTwoBlends.meta["blend_centroid_x"]),
             [[blendValsX[0]], [], [blendValsX[1]], []],
         )
         self.assertListEqual(
-            list(fieldObjectsTwoBlends["blend_centroid_y"]),
+            list(fieldObjectsTwoBlends.meta["blend_centroid_y"]),
             [[blendValsY[0]], [], [blendValsY[1]], []],
         )
 
-    def testDonutCatalogToDataFrameErrors(self):
+    def testDonutCatalogToAstropyErrors(self):
         columnList = [
             "coord_ra",
             "coord_dec",
@@ -260,12 +285,12 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "blend_centroid_x",
             "blend_centroid_y",
         ]
-        donutCatZero = pd.DataFrame([], columns=columnList)
+        donutCatZero = QTable(names=columnList)
 
         # Test donutCatalog supplied but no filterName
         filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
         with self.assertRaises(ValueError) as context:
-            donutCatalogToDataFrame(donutCatZero)
+            donutCatalogToAstropy(donutCatZero)
         self.assertTrue(filterErrMsg in str(context.exception))
 
         # Test blendCenters are both supplied or both left as None
@@ -274,10 +299,10 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             + " both be None or both be a list."
         )
         with self.assertRaises(ValueError) as context:
-            donutCatalogToDataFrame(donutCatZero, "g", blendCentersX=[])
+            donutCatalogToAstropy(donutCatZero, "g", blendCentersX=[])
         self.assertTrue(blendErrMsg in str(context.exception))
         with self.assertRaises(ValueError) as context:
-            donutCatalogToDataFrame(donutCatZero, "g", blendCentersY=[])
+            donutCatalogToAstropy(donutCatZero, "g", blendCentersY=[])
         self.assertTrue(blendErrMsg in str(context.exception))
 
         # Test blendCenters must be same length as donutCat
@@ -286,10 +311,10 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             + " both be None or both be a list."
         )
         with self.assertRaises(ValueError) as context:
-            donutCatalogToDataFrame(donutCatZero, "g", blendCentersX=[[], []])
+            donutCatalogToAstropy(donutCatZero, "g", blendCentersX=[[], []])
         self.assertTrue(lengthErrMsg in str(context.exception))
         with self.assertRaises(ValueError) as context:
-            donutCatalogToDataFrame(donutCatZero, "g", blendCentersY=[[], []])
+            donutCatalogToAstropy(donutCatZero, "g", blendCentersY=[[], []])
         self.assertTrue(lengthErrMsg in str(context.exception))
 
         donutCatSmall = self._createTestDonutCat()
@@ -303,10 +328,27 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             + "same index."
         )
         with self.assertRaises(ValueError) as context:
-            donutCatalogToDataFrame(
+            donutCatalogToAstropy(
                 donutCatSmall,
                 "g",
                 blendCentersX=[[1], [0], [], []],
                 blendCentersY=[[4], [], [], []],
             )
         self.assertTrue(xyMismatchErrMsg in str(context.exception))
+
+    def testAddVisitInfoToCatTable(self):
+
+        donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
+        fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
+        catTableWithMeta = addVisitInfoToCatTable(testExposure, fieldObjects)
+        visitInfoKeys = [
+            "boresight_ra",
+            "boresight_dec",
+            "boresight_rot_angle",
+            "boresight_par_angle",
+            "mjd",
+            "visit_id",
+        ]
+
+        self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
+        self.assertCountEqual(visitInfoKeys, catTableWithMeta.meta["visit_info"].keys())

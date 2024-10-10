@@ -241,7 +241,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         exp.image.array = np.roll(exp.image.array, maxRecenter * 2, axis=0)
 
         # Set first item in catalog to pass by adjusting catalog entries
-        centroid_y_arr = catalog["centroid_y"].values
+        centroid_y_arr = catalog["centroid_y"].value
         centroid_y_arr[1] += maxRecenter * 2
         centroid_y_arr[2] -= maxRecenter * 2
         catalog["centroid_y"] = centroid_y_arr
@@ -254,8 +254,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         yShifts = []
         for stamp_cent, catalog_x, catalog_y in zip(
             donutStampsOrig.getCentroidPositions(),
-            catalog["centroid_x"].values,
-            catalog["centroid_y"].values,
+            catalog["centroid_x"].value,
+            catalog["centroid_y"].value,
         ):
             xShifts.append(stamp_cent.getX() - int(catalog_x))
             yShifts.append(stamp_cent.getY() - int(catalog_y))
@@ -275,7 +275,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         ]
         for stamp, catRow, logMsg, xShift, yShift in zip(
             donutStamps[1:],
-            catalog.to_records()[1:],
+            catalog[1:],
             recenteringWarnings,
             xShifts[1:],
             yShifts[1:],
@@ -286,7 +286,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
                 "WARNING:lsst.Base Task:Donut Recentering Failed. "
                 + "Flagging and not shifting center of stamp for extra-focal source"
                 + f' at ({catRow["centroid_x"]}, {catRow["centroid_y"]}). '
-                + f"Catalog index: {catRow.index}. "
+                + f"Catalog row: {catRow.index+1}. "
                 + f"Proposed Shift: ({int(xShift)}, {int(yShift)})."
             )
             self.assertEqual(logMsg, errMsg)
@@ -323,7 +323,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "postISRCCD", dataId=dataId, collections=[self.runName]
         )
         donutCatalog = self.butler.get(
-            "donutCatalog", dataId=dataId, collections=[self.runName]
+            "donutCatalogAstropy", dataId=dataId, collections=[self.runName]
         )
 
         return exposure, donutCatalog
@@ -441,7 +441,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # test the calculation of SN
         sn_values = [2149.17757703855, 2160.5407329704117, 2042.1965399542976]
         sn_calculated = donutStamps.metadata.getArray("SN")
-        np.testing.assert_array_almost_equal(sn_values, sn_calculated, decimal=4)
+        self.assertCountEqual(sn_values, sn_calculated)
 
     def testFilterBadRecentering(self):
         maxRecenter = 25

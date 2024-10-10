@@ -147,7 +147,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # also test that the entropy of the selected donut
         # is indeed below threshold
         self.assertLess(
-            donutsQuality["ENTROPY"][donutsQuality["ENTROPY_SELECT"]].values,
+            donutsQuality["ENTROPY"][donutsQuality["ENTROPY_SELECT"]],
             entropyThreshold,
         )
 
@@ -172,7 +172,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 2)
 
         # test that the SN of selected donuts is indeed above the threshold
-        for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]].values:
+        for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]]:
             self.assertLess(minSignalToNoise, v)
 
     def testTaskRun(self):
@@ -217,6 +217,6 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # also test that the entropy of the selected donut
         # is indeed below threshold
         self.assertLess(
-            donutsQuality["ENTROPY"][donutsQuality["ENTROPY_SELECT"]].values,
+            donutsQuality["ENTROPY"][donutsQuality["ENTROPY_SELECT"]],
             entropyThreshold,
         )

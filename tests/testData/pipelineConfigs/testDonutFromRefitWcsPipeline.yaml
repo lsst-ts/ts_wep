@@ -32,7 +32,7 @@ tasks:
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
-      connections.donutCatalog: "directDetectDonutCatalog"
+      connections.donutCatalog: "directDetectDonutCatalogAstropy"
       connections.exposure: "preFitPostISRCCD"
   generateDonutFromRefitWcsTask:
     class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask

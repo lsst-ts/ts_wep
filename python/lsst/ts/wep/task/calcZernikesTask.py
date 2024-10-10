@@ -31,8 +31,7 @@ import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-import pandas as pd
-from astropy.table import QTable
+from astropy.table import QTable, Table
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -81,14 +80,14 @@ class CalcZernikesTaskConnections(
     donutsExtraQuality = connectionTypes.Output(
         doc="Quality information for extra-focal donuts",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="DataFrame",
-        name="donutsExtraQuality",
+        storageClass="AstropyTable",
+        name="donutsExtraQualityAstropy",
     )
     donutsIntraQuality = connectionTypes.Output(
         doc="Quality information for intra-focal donuts",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="DataFrame",
-        name="donutsIntraQuality",
+        storageClass="AstropyTable",
+        name="donutsIntraQualityAstropy",
     )
 
 
@@ -188,8 +187,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             outputZernikesRaw=np.atleast_2d(np.full(self.maxNollIndex - 3, np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(self.maxNollIndex - 3, np.nan)),
             zernikes=self.initZkTable(),
-            donutsExtraQuality=pd.DataFrame([]),
-            donutsIntraQuality=pd.DataFrame([]),
+            donutsExtraQuality=Table([]),
+            donutsIntraQuality=Table([]),
         )
 
     @timeMethod
@@ -223,8 +222,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 self.log.info("No donut stamps were selected.")
                 return self.empty()
         else:
-            donutsExtraQuality = pd.DataFrame([])
-            donutsIntraQuality = pd.DataFrame([])
+            donutsExtraQuality = Table([])
+            donutsIntraQuality = Table([])
 
         # Estimate Zernikes from the collection of selected stamps
         zkCoeffRaw = self.estimateZernikes.run(donutStampsExtra, donutStampsIntra)
