@@ -310,7 +310,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # are closer than minBlendedSeparation move on
                 elif np.sum(blendTooClose & magTooClose) > 0:
                     continue
-                # If the number of overlapping sources is less than or equal to
+                # If the number of overlapping sources with magnitudes close
+                # enough to count as blended is less than or equal to
                 # maxBlended then keep this source
                 elif len(magDiff) <= maxBlended:
                     index.append(groupIndices[srcOn])
@@ -320,12 +321,12 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # all the faint sources that we don't care about
                     # when deblending. Add one to index because
                     # magDiff is all sources in magSortedDf after index=0.
-                    maxIdx = np.where(magDiff < minMagDiff)[0] + 1
+                    blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
                     blendCentersX[groupIndices[srcOn]] = (
-                        magSortedDf["x"].iloc[idxList[maxIdx]].values
+                        magSortedDf["x"].iloc[idxList[blendMagIdx]].values
                     )
                     blendCentersY[groupIndices[srcOn]] = (
-                        magSortedDf["y"].iloc[idxList[maxIdx]].values
+                        magSortedDf["y"].iloc[idxList[blendMagIdx]].values
                     )
                     sourcesKept += 1
                 # Keep the source if it is blended with up to maxBlended
@@ -336,11 +337,14 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # or fewer sources.
                 elif np.partition(magDiff, maxBlended)[maxBlended] > minMagDiff:
                     index.append(groupIndices[srcOn])
+                    # Same process as above to make sure we only get
+                    # the blend centers we care about
+                    blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
                     blendCentersX[groupIndices[srcOn]] = (
-                        magSortedDf["x"].iloc[idxList[1 : maxBlended + 1]].values
+                        magSortedDf["x"].iloc[idxList[blendMagIdx]].values
                     )
                     blendCentersY[groupIndices[srcOn]] = (
-                        magSortedDf["y"].iloc[idxList[1 : maxBlended + 1]].values
+                        magSortedDf["y"].iloc[idxList[blendMagIdx]].values
                     )
                     sourcesKept += 1
                 else:

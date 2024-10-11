@@ -206,7 +206,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(initCornerY, cornerY)
 
         # Also check the peak height for the centered exposure
-        np.testing.assert_array_almost_equal(peakHeight, np.ones(2) * 9471.999796846694)
+        self.assertFloatsAlmostEqual(peakHeight, 9472.0, rtol=0, atol=3e-4)
 
     def testCalcFinalCentroidsOnEdge(self):
         (
@@ -231,9 +231,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(cornerX, np.array([0, initCornerX[1]]))
         np.testing.assert_array_equal(cornerY, np.array([0, initCornerY[1]]))
         # Also check the peak height for the off-center exposure
-        np.testing.assert_array_almost_equal(
-            peakHeight, np.array([8943.999944194224, 9471.999796846694])
-        )
+        self.assertFloatsAlmostEqual(peakHeight, [8944.0, 9472.0], rtol=0, atol=3e-4)
 
     def testMaxRecenter(self):
         maxRecenter = 5

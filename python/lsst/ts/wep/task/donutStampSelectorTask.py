@@ -25,6 +25,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import Table
+from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import readConfigYaml
 from lsst.utils.timer import timeMethod
 
@@ -103,8 +104,22 @@ class DonutStampSelectorTask(pipeBase.Task):
         """
         result = self.selectStamps(donutStamps)
 
+        selectedStamps = DonutStamps(
+            [donutStamps[i] for i in range(len(donutStamps)) if result.selected[i]]
+        )
+        selectedStamps._refresh_metadata()
+        # Need to copy a few other fields by hand
+        for k in ["SN", "ENTROPY", "VISIT"]:
+            if k in donutStamps.metadata:
+                selectedStamps.metadata[k] = np.array(
+                    [
+                        donutStamps.metadata.getArray(k)[i]
+                        for i in range(len(donutStamps))
+                        if result.selected[i]
+                    ]
+                )
         return pipeBase.Struct(
-            donutStampsSelect=np.array(donutStamps)[result.selected],
+            donutStampsSelect=selectedStamps,
             selected=result.selected,
             donutsQuality=result.donutsQuality,
         )
