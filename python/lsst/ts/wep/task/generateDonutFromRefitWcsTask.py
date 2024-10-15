@@ -73,7 +73,7 @@ class GenerateDonutFromRefitWcsTaskConnections(
             "instrument",
         ),
         storageClass="AstropyQTable",
-        name="directDetectDonutCatalogAstropy",
+        name="directDetectDonutTable",
     )
     astromRefCat = connectionTypes.PrerequisiteInput(
         doc="Reference catalog to use for astrometry",
@@ -105,7 +105,7 @@ class GenerateDonutFromRefitWcsTaskConnections(
             "instrument",
         ),
         storageClass="AstropyQTable",
-        name="donutCatalogAstropy",
+        name="donutTable",
     )
 
 
@@ -179,7 +179,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
         Parameters
         ----------
-        catalog : `pandas.Dataframe`
+        catalog : `astropy.table.QTable`
             Catalog containing donut sources already detected
             on the exposure.
 

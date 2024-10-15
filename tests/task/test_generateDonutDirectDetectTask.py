@@ -242,12 +242,12 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         """
         # Test instrument matches
         donutCatTable_S11 = self.butler.get(
-            "donutCatalogAstropy",
+            "donutTable",
             dataId=self.testDataIdS11,
             collections=[self.runName],
         )
         donutCatTable_S10 = self.butler.get(
-            "donutCatalogAstropy",
+            "donutTable",
             dataId=self.testDataIdS10,
             collections=[self.runName],
         )

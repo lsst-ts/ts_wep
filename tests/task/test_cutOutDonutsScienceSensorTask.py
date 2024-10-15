@@ -233,10 +233,10 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         )
 
         donutCatalogExtra = self.butler.get(
-            "donutCatalogAstropy", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutCatalogIntra = self.butler.get(
-            "donutCatalogAstropy", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
         )
         camera = self.butler.get(
             "camera",

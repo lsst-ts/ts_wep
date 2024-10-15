@@ -24,7 +24,7 @@ __all__ = ["DonutStampSelectorTaskConfig", "DonutStampSelectorTask"]
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-from astropy.table import Table
+from astropy.table import QTable
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import readConfigYaml
 from lsst.utils.timer import timeMethod
@@ -96,7 +96,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 - selected : `numpy.ndarray` of `bool`
                     Boolean array of stamps that were selected, same length as
                     donutStamps.
-                - donutsQuality : `pandas.DataFrame`
+                - donutsQuality : `astropy.table.QTable`
                     A table with calculated signal to noise measure and entropy
                     value per donut, together with selection outcome for all
                     input donuts.
@@ -146,7 +146,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 - selected : `numpy.ndarray` of `bool`
                     Boolean array of stamps that were selected, same length as
                     donutStamps.
-                - donutsQuality : `pandas.DataFrame`
+                - donutsQuality : `astropy.table.QTable`
                     A table with calculated signal to noise measure and entropy
                     value per donut, together with selection outcome for all
                     input donuts.
@@ -196,7 +196,10 @@ should be applied."
         selected = entropySelect * snSelect
 
         # store information about which donuts were selected
-        donutsQuality = Table(
+        # use QTable even though no units at the moment in
+        # case we end up adding more later we don't have to change
+        # data storage type in butler and rename
+        donutsQuality = QTable(
             data=[
                 snValue,
                 entropyValue,

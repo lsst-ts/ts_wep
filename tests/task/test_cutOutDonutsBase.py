@@ -310,7 +310,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         -------
         lsst.afw.image.Exposure
             Exposure related to given defocal type
-        pandas.DataFrame
+        astropy.table.QTable
             Donut Catalog for exposure
         """
 
@@ -323,7 +323,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "postISRCCD", dataId=dataId, collections=[self.runName]
         )
         donutCatalog = self.butler.get(
-            "donutCatalogAstropy", dataId=dataId, collections=[self.runName]
+            "donutTable", dataId=dataId, collections=[self.runName]
         )
 
         return exposure, donutCatalog

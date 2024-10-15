@@ -154,12 +154,12 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             collections=[f"{runName}"],
         )
         donutCatTable_S11 = pipelineButler.get(
-            "donutCatalogAstropy",
+            "donutTable",
             dataId={"instrument": "LSSTCam", "detector": 94, "visit": exposureId},
             collections=[f"{runName}"],
         )
         donutCatTable_S10 = pipelineButler.get(
-            "donutCatalogAstropy",
+            "donutTable",
             dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
             collections=[f"{runName}"],
         )
@@ -239,7 +239,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
     def testDonutCatalogGeneration(self):
         """
-        Test that task creates a dataframe with detector information.
+        Test that task creates a QTable with detector information.
         """
 
         # Create list of deferred loaders for the ref cat

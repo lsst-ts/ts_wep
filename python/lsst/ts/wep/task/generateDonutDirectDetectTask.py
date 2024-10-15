@@ -68,7 +68,7 @@ class GenerateDonutDirectDetectTaskConnections(
             "instrument",
         ),
         storageClass="AstropyQTable",
-        name="donutCatalogAstropy",
+        name="donutTable",
     )
     camera = connectionTypes.PrerequisiteInput(
         name="camera",

@@ -113,7 +113,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             collections=[f"{self.runName}"],
         )
         directDetectCat = self.butler.get(
-            "directDetectDonutCatalogAstropy",
+            "directDetectDonutTable",
             dataId=self.dataIdExtra,
             collections=[f"{self.runName}"],
         )
@@ -373,7 +373,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         """Verify that outputs with given names are stored in butler."""
 
         directDetectCat = self.butler.get(
-            "directDetectDonutCatalogAstropy",
+            "directDetectDonutTable",
             dataId=self.dataIdExtra,
             collections=[f"{self.runName}"],
         )

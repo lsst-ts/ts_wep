@@ -80,7 +80,7 @@ def donutCatalogToAstropy(
     donutCatalog=None, filterName=None, blendCentersX=None, blendCentersY=None
 ):
     """
-    Reformat afwCatalog into a pandas dataframe sorted by flux with
+    Reformat afwCatalog into an astropy QTable sorted by flux with
     the brightest objects at the top.
 
     Parameters
@@ -88,7 +88,7 @@ def donutCatalogToAstropy(
     donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`, optional
         lsst.afw.table.SimpleCatalog object returned by the
         ReferenceObjectLoader search over the detector footprint.
-        If None then it will return an empty dataframe.
+        If None then it will return an empty QTable.
         (the default is None.)
     filterName : `str` or `None`, optional
         Name of camera filter. If donutCatalog is not None then

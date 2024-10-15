@@ -132,10 +132,10 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         )
         # Get the donut catalogs for each detector
         donutCatalogExtra = self.butler.get(
-            "donutCatalogAstropy", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutCatalogIntra = self.butler.get(
-            "donutCatalogAstropy", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
         )
         # Get the camera from the butler
         camera = self.butler.get(

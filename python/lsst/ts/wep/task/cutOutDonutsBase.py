@@ -67,7 +67,7 @@ class CutOutDonutsBaseTaskConnections(
             "instrument",
         ),
         storageClass="AstropyQTable",
-        name="donutCatalogAstropy",
+        name="donutTable",
         multiple=True,
     )
     camera = connectionTypes.PrerequisiteInput(
