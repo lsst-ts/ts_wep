@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-11.5.2:
+
+-------------
+11.5.2
+-------------
+
+* Added a ComCamSim production pipeline for testing purposes.
+
 .. _lsst.ts.wep-11.5.1:
 
 -------------
