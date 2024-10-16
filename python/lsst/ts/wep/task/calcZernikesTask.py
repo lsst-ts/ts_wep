@@ -31,8 +31,7 @@ import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-import pandas as pd
-from astropy.table import QTable
+from astropy.table import QTable, vstack
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -78,17 +77,11 @@ class CalcZernikesTaskConnections(
         storageClass="AstropyTable",
         name="zernikes",
     )
-    donutsExtraQuality = connectionTypes.Output(
-        doc="Quality information for extra-focal donuts",
+    donutQualityTable = connectionTypes.Output(
+        doc="Quality information for donuts",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="DataFrame",
-        name="donutsExtraQuality",
-    )
-    donutsIntraQuality = connectionTypes.Output(
-        doc="Quality information for intra-focal donuts",
-        dimensions=("visit", "detector", "instrument"),
-        storageClass="DataFrame",
-        name="donutsIntraQuality",
+        storageClass="AstropyQTable",
+        name="donutQualityTable",
     )
 
 
@@ -184,12 +177,19 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
     def empty(self):
         """Return empty results if no donuts are available."""
+        qualityTableCols = [
+            "SN",
+            "ENTROPY",
+            "ENTROPY_SELECT",
+            "SN_SELECT",
+            "FINAL_SELECT",
+            "DEFOCAL_TYPE",
+        ]
         return pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(self.maxNollIndex - 3, np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(self.maxNollIndex - 3, np.nan)),
             zernikes=self.initZkTable(),
-            donutsExtraQuality=pd.DataFrame([]),
-            donutsIntraQuality=pd.DataFrame([]),
+            donutQualityTable=QTable({name: [] for name in qualityTableCols}),
         )
 
     @timeMethod
@@ -209,10 +209,14 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             self.log.info("Running Donut Stamp Selector")
             selectionExtra = self.donutStampSelector.run(donutStampsExtra)
             selectionIntra = self.donutStampSelector.run(donutStampsIntra)
-            donutsExtraQuality = selectionExtra.donutsQuality
-            donutsIntraQuality = selectionIntra.donutsQuality
+            donutExtraQuality = selectionExtra.donutsQuality
+            donutIntraQuality = selectionIntra.donutsQuality
             donutStampsExtra = selectionExtra.donutStampsSelect
             donutStampsIntra = selectionIntra.donutStampsSelect
+
+            donutExtraQuality["DEFOCAL_TYPE"] = "extra"
+            donutIntraQuality["DEFOCAL_TYPE"] = "intra"
+            donutQualityTable = vstack([donutExtraQuality, donutIntraQuality])
 
             # If no donuts get selected, also return Zernike
             # coefficients as nan.
@@ -223,8 +227,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 self.log.info("No donut stamps were selected.")
                 return self.empty()
         else:
-            donutsExtraQuality = pd.DataFrame([])
-            donutsIntraQuality = pd.DataFrame([])
+            donutQualityTable = QTable([])
 
         # Estimate Zernikes from the collection of selected stamps
         zkCoeffRaw = self.estimateZernikes.run(donutStampsExtra, donutStampsIntra)
@@ -319,6 +322,5 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),
             outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
             zernikes=zkTable,
-            donutsExtraQuality=donutsExtraQuality,
-            donutsIntraQuality=donutsIntraQuality,
+            donutQualityTable=donutQualityTable,
         )

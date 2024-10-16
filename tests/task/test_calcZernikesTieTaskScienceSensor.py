@@ -24,7 +24,6 @@ import os
 import astropy.units as u
 import lsst.utils.tests
 import numpy as np
-import pandas as pd
 from astropy.table import QTable
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task import (
@@ -139,8 +138,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         )
         structNormal = self.task.run(donutStampsIntra, donutStampsExtra)
 
-        # check that 5 elements are created
-        self.assertEqual(len(structNormal), 5)
+        # check that 4 elements are created
+        self.assertEqual(len(structNormal), 4)
 
         zkAvg1 = structNormal.outputZernikesAvg[0]
         zkAvgRow = structNormal.zernikes[structNormal.zernikes["label"] == "average"][0]
@@ -188,30 +187,38 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         self.task.doDonutStampSelector = True
         structSelect = self.task.run(donutStampsIntra, donutStampsExtra)
         # check that donut quality is reported for all donuts
-        self.assertEqual(len(structSelect.donutsExtraQuality), len(donutStampsExtra))
-        self.assertEqual(len(structSelect.donutsIntraQuality), len(donutStampsIntra))
+        self.assertEqual(
+            len(structSelect.donutQualityTable),
+            len(donutStampsExtra) + len(donutStampsIntra),
+        )
+        # Check DEFOCAL_TYPE assigned properly
+        extra_count = len(
+            np.where(structSelect.donutQualityTable["DEFOCAL_TYPE"] == "extra")[0]
+        )
+        self.assertEqual(extra_count, len(donutStampsExtra))
 
         # check that all desired quantities are included
-        colnames = list(structSelect.donutsIntraQuality.columns)
+        colnames = list(structSelect.donutQualityTable.columns)
         desired_colnames = [
             "SN",
             "ENTROPY",
             "ENTROPY_SELECT",
             "SN_SELECT",
             "FINAL_SELECT",
+            "DEFOCAL_TYPE",
         ]
         np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
         # test null run
         structNull = self.task.run([], [])
+        print(structNull)
 
         for struct in [structNormal, structNull]:
             # test that in accordance with declared connections,
-            # donut quality tables are pandas dataFrame,
+            # donut quality table is an astropy QTable,
             # and Zernikes are numpy arrays
             # both for normal run and for null run
-            self.assertIsInstance(struct.donutsIntraQuality, pd.DataFrame)
-            self.assertIsInstance(struct.donutsExtraQuality, pd.DataFrame)
+            self.assertIsInstance(struct.donutQualityTable, QTable)
             self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
             self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
             self.assertIsInstance(struct.zernikes, QTable)

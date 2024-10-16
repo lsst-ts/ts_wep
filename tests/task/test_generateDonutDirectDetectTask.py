@@ -25,7 +25,7 @@ from copy import copy
 import lsst.afw.image as afwImage
 import lsst.utils.tests
 import numpy as np
-import pandas as pd
+from astropy.table import QTable, vstack
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.generateDonutDirectDetectTask import (
     GenerateDonutDirectDetectTask,
@@ -123,16 +123,15 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         x_center = np.arange(15)
         y_center = 0.5 * np.arange(15)
         flux = 10000.0 * np.ones(15)
-        donutCat = pd.DataFrame(
-            data=list(zip(x_center, y_center, x_center, y_center, flux)),
-            columns=[
-                "centroid_x",
-                "centroid_y",
-                "blend_centroid_x",
-                "blend_centroid_y",
-                "source_flux",
-            ],
-        )
+        data = [x_center, y_center, flux]
+        names = [
+            "centroid_x",
+            "centroid_y",
+            "source_flux",
+        ]
+        donutCat = QTable(data={x: y for x, y in zip(names, data)})
+        donutCat.meta["blend_centroid_x"] = x_center
+        donutCat.meta["blend_centroid_y"] = y_center
         # update the donut catalog
         donutCatUpd = self.task.updateDonutCatalog(donutCat, testExposure)
 
@@ -144,10 +143,10 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "coord_ra",
             "coord_dec",
             "source_flux",
-            "blend_centroid_x",
-            "blend_centroid_y",
         ]
-        self.assertEqual(np.sum(np.in1d(newColumns, list(donutCatUpd.columns))), 8)
+        self.assertCountEqual(newColumns, donutCatUpd.columns)
+        metaKeys = ["blend_centroid_x", "blend_centroid_y"]
+        self.assertCountEqual(donutCatUpd.meta.keys(), metaKeys)
 
     def testTaskRun(self):
         """
@@ -192,10 +191,12 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "centroid_y",
             "detector",
             "source_flux",
-            "blend_centroid_x",
-            "blend_centroid_y",
         ]
         self.assertCountEqual(taskOutNoSrc.donutCatalog.columns, expected_columns)
+        self.assertCountEqual(
+            taskOutNoSrc.donutCatalog.meta.keys(),
+            ["blend_centroid_x", "blend_centroid_y", "visit_info"],
+        )
 
         # Run detection with different sources in each exposure
         exposure_S10 = self.butler.get(
@@ -213,22 +214,22 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         )
 
         # Test that the length of catalogs is as expected
-        outputDf = pd.concat([taskOut_S11.donutCatalog, taskOut_S10.donutCatalog])
-        self.assertEqual(len(outputDf), 6)
+        outputTable = vstack([taskOut_S11.donutCatalog, taskOut_S10.donutCatalog])
+        self.assertEqual(len(outputTable), 6)
 
         # Test that the interactive output is as expected
         self.assertCountEqual(
-            outputDf.columns,
+            outputTable.columns,
             expected_columns,
         )
         # Test against truth the centroid for all sources
         tolerance = 15  # pixels
 
-        result_y = np.sort(outputDf["centroid_y"].values)
+        result_y = np.sort(outputTable["centroid_y"].value)
         truth_y = np.sort(np.array([3196, 2198, 398, 2196, 3197, 398]))
         diff_y = np.sum(result_y - truth_y)
 
-        result_x = np.sort(outputDf["centroid_x"].values)
+        result_x = np.sort(outputTable["centroid_x"].value)
         truth_x = np.sort(np.array([3815, 2814, 617, 2811, 3812, 614]))
         diff_x = np.sum(result_x - truth_x)
 
@@ -240,39 +241,39 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         Test that the task runs in a pipeline.
         """
         # Test instrument matches
-        donutCatDf_S11 = self.butler.get(
-            "donutCatalog",
+        donutCatTable_S11 = self.butler.get(
+            "donutTable",
             dataId=self.testDataIdS11,
             collections=[self.runName],
         )
-        donutCatDf_S10 = self.butler.get(
-            "donutCatalog",
+        donutCatTable_S10 = self.butler.get(
+            "donutTable",
             dataId=self.testDataIdS10,
             collections=[self.runName],
         )
 
         # Check 2 unblended sources in each detector
         # and 1 source much brighter than blend so is "isolated"
-        self.assertEqual(len(donutCatDf_S11), 3)
-        self.assertEqual(len(donutCatDf_S10), 3)
+        self.assertEqual(len(donutCatTable_S11), 3)
+        self.assertEqual(len(donutCatTable_S10), 3)
 
         # Test that brighter sources are at the top of the list
         np.testing.assert_array_equal(
-            np.arange(3), np.argsort(donutCatDf_S10["source_flux"].values)[::-1]
+            np.arange(3), np.argsort(donutCatTable_S10["source_flux"].value)[::-1]
         )
         np.testing.assert_array_equal(
-            np.arange(3), np.argsort(donutCatDf_S11["source_flux"].values)[::-1]
+            np.arange(3), np.argsort(donutCatTable_S11["source_flux"].value)[::-1]
         )
 
         # Check correct detector names
-        self.assertEqual(np.unique(donutCatDf_S11["detector"]), "R22_S11")
-        self.assertEqual(np.unique(donutCatDf_S10["detector"]), "R22_S10")
+        self.assertEqual(np.unique(donutCatTable_S11["detector"]), "R22_S11")
+        self.assertEqual(np.unique(donutCatTable_S10["detector"]), "R22_S10")
 
         # Check outputs are correct
-        outputDf = pd.concat([donutCatDf_S11, donutCatDf_S10])
-        self.assertEqual(len(outputDf), 6)
+        outputTable = vstack([donutCatTable_S11, donutCatTable_S10])
+        self.assertEqual(len(outputTable), 6)
         self.assertCountEqual(
-            outputDf.columns,
+            outputTable.columns,
             [
                 "coord_ra",
                 "coord_dec",
@@ -280,23 +281,26 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
                 "centroid_y",
                 "detector",
                 "source_flux",
-                "blend_centroid_x",
-                "blend_centroid_y",
             ],
         )
 
         tolerance = 15  # pixels
 
-        result_y = np.sort(outputDf["centroid_y"].values)
+        result_y = np.sort(outputTable["centroid_y"].value)
         truth_y = np.sort(np.array([3196, 2198, 398, 2196, 3197, 398]))
         diff_y = np.sum(result_y - truth_y)
 
-        result_x = np.sort(outputDf["centroid_x"].values)
+        result_x = np.sort(outputTable["centroid_x"].value)
         truth_x = np.sort(np.array([3815, 2814, 617, 2811, 3812, 614]))
         diff_x = np.sum(result_x - truth_x)
 
         self.assertLess(diff_x, tolerance)
         self.assertLess(diff_y, tolerance)
+
+        self.assertCountEqual(
+            outputTable.meta.keys(),
+            ["blend_centroid_x", "blend_centroid_y", "visit_info"],
+        )
 
     @classmethod
     def tearDownClass(cls):

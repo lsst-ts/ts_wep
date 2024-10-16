@@ -25,14 +25,16 @@ __all__ = [
     "GenerateDonutDirectDetectTask",
 ]
 
+import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
-import pandas as pd
+from astropy.table import QTable
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
 from lsst.ts.wep.utils import (
     DefocalType,
     createTemplateForDetector,
@@ -65,8 +67,8 @@ class GenerateDonutDirectDetectTaskConnections(
             "detector",
             "instrument",
         ),
-        storageClass="DataFrame",
-        name="donutCatalog",
+        storageClass="AstropyQTable",
+        name="donutTable",
     )
     camera = connectionTypes.PrerequisiteInput(
         name="camera",
@@ -154,7 +156,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        donutCat : pandas.DataFrame
+        donutCat : astropy.table.QTable
             The donut catalog from running DonutDetector,
             contains columns 'y_center', 'x_center'
         exposure : lsst.afw.image.Exposure
@@ -162,7 +164,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         Returns
         -------
-        donutCat : pandas.DataFrame
+        donutCat : astropy.table.QTable
             Donut catalog with reorganized content.
         """
         # EstimateZernikes expects the following column names:
@@ -174,8 +176,8 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         # pass the boresight ra, dec
         wcs = exposure.getWcs()
-        x = np.array(donutCat["centroid_x"].values)
-        y = np.array(donutCat["centroid_y"].values)
+        x = np.array(donutCat["centroid_x"])
+        y = np.array(donutCat["centroid_y"])
 
         x = np.zeros(0)
         for row in donutCat["centroid_x"]:
@@ -183,8 +185,8 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         ra, dec = wcs.pixelToSkyArray(x, y, degrees=False)
 
-        donutCat["coord_ra"] = ra
-        donutCat["coord_dec"] = dec
+        donutCat["coord_ra"] = ra * u.rad
+        donutCat["coord_dec"] = dec * u.rad
 
         donutCatUpd = donutCat[
             [
@@ -193,15 +195,18 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
                 "centroid_x",
                 "centroid_y",
                 "detector",
-                "source_flux",
-                "blend_centroid_x",
-                "blend_centroid_y",
             ]
         ]
+        donutCatUpd["source_flux"] = donutCat["source_flux"] * u.nJy
+        fluxSort = np.argsort(donutCatUpd["source_flux"])[::-1]
+        donutCatUpd.meta["blend_centroid_x"] = [
+            donutCat.meta["blend_centroid_x"][idx] for idx in fluxSort
+        ]
+        donutCatUpd.meta["blend_centroid_y"] = [
+            donutCat.meta["blend_centroid_y"][idx] for idx in fluxSort
+        ]
 
-        donutCatUpd = donutCatUpd.sort_values(
-            "source_flux", ascending=False
-        ).reset_index(drop=True)
+        donutCatUpd.sort("source_flux", reverse=True)
 
         return donutCatUpd
 
@@ -246,31 +251,27 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             cutoutPadding=self.config.initialCutoutPadding,
         )
         if len(objData.detectedCatalog) > 0:
-            donutDf = pd.DataFrame.from_dict(objData.detectedCatalog, orient="index")
+            donutTable = QTable(rows=list(objData.detectedCatalog.values()))
             # Use the aperture flux with a 70 pixel aperture
-            donutDf[f"{bandLabel}_flux"] = donutDf["apFlux70"]
+            donutTable[f"{bandLabel}_flux"] = donutTable["apFlux70"]
 
             # Run the donut selector task.
             if self.config.doDonutSelection:
                 self.log.info("Running Donut Selector")
                 donutSelection = self.donutSelector.run(
-                    donutDf, exposure.detector, bandLabel
+                    donutTable, exposure.detector, bandLabel
                 )
-                donutCatSelected = donutDf[donutSelection.selected].reset_index(
-                    drop=True
-                )
-                donutCatSelected["blend_centroid_x"] = donutSelection.blendCentersX
-                donutCatSelected["blend_centroid_y"] = donutSelection.blendCentersY
+                donutCatSelected = donutTable[donutSelection.selected]
+                donutCatSelected.meta["blend_centroid_x"] = donutSelection.blendCentersX
+                donutCatSelected.meta["blend_centroid_y"] = donutSelection.blendCentersY
             else:
                 # if donut selector was not run,
                 # set the required columns to be empty
-                donutDf["blend_centroid_x"] = ""
-                donutDf["blend_centroid_y"] = ""
-                donutCatSelected = donutDf
+                donutTable.meta["blend_centroid_x"] = ""
+                donutTable.meta["blend_centroid_y"] = ""
+                donutCatSelected = donutTable
 
-            donutCatSelected.rename(
-                columns={f"{bandLabel}_flux": "source_flux"}, inplace=True
-            )
+            donutCatSelected.rename_column(f"{bandLabel}_flux", "source_flux")
 
             # update column names and content
             donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
@@ -289,9 +290,11 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
                 "centroid_y",
                 "detector",
                 "source_flux",
-                "blend_centroid_x",
-                "blend_centroid_y",
             ]
-            donutCatUpd = pd.DataFrame(columns=donutCatalogColumns)
+            donutCatUpd = QTable(names=donutCatalogColumns)
+            donutCatUpd.meta["blend_centroid_x"] = ""
+            donutCatUpd.meta["blend_centroid_y"] = ""
+
+        donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
 
         return pipeBase.Struct(donutCatalog=donutCatUpd)

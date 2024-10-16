@@ -36,9 +36,9 @@ WEP Pipeline Outline
 
    Butler Accessible Output:
 
-   - ``donutCatalog``
+   - ``donutTable``
 
-     - A ``pandas dataframe`` with source locations and magnitudes.
+     - An ``astropy.table.QTable`` with source locations and magnitudes.
 
 2. **Cut out postage stamps.**
 

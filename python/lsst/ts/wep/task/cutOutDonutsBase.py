@@ -66,8 +66,8 @@ class CutOutDonutsBaseTaskConnections(
             "detector",
             "instrument",
         ),
-        storageClass="DataFrame",
-        name="donutCatalog",
+        storageClass="AstropyQTable",
+        name="donutTable",
         multiple=True,
     )
     camera = connectionTypes.PrerequisiteInput(
@@ -477,7 +477,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         ----------
         exposure : lsst.afw.image.Exposure
             Post-ISR image with defocal donuts sources.
-        donutCatalog : pandas.DataFrame
+        donutCatalog : astropy.table.QTable
             Source catalog for the pointing.
         defocalType : enum 'DefocalType'
             Defocal type of the donut image.
@@ -495,6 +495,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         detectorName = detector.getName()
         bandLabel = exposure.filter.bandLabel
         visitId = exposure.getInfo().getVisitInfo().id
+        catalogMeta = donutCatalog.meta
 
         # Run background subtraction
         self.subtractBackground.run(exposure=exposure).background
@@ -533,8 +534,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
         # Keep track of recentering failures
         recenterFlags = np.zeros(len(donutCatalog), dtype=int)
-        xCenters = donutCatalog["centroid_x"].values
-        yCenters = donutCatalog["centroid_y"].values
+        xCenters = donutCatalog["centroid_x"].value
+        yCenters = donutCatalog["centroid_y"].value
         (
             finalDonutX,
             finalDonutY,
@@ -571,7 +572,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Value of entropy
         stampsEntropy = list()
 
-        for donutRow in donutCatalog.to_records():
+        for idx, donutRow in enumerate(donutCatalog):
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
             # on the donut
@@ -585,7 +586,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                     "Donut Recentering Failed. Flagging and "
                     + f"not shifting center of stamp for {defocalType.value}-focal "
                     + f"source at {(donutRow['centroid_x'], donutRow['centroid_y'])}. "
-                    + f"Catalog index: {donutRow.index}. "
+                    + f"Catalog row: {donutRow.index}. "
                     + f"Proposed Shift: {(donutRow['xShift'], donutRow['yShift'])}."
                 )
 
@@ -604,7 +605,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             blendStrY = ""
 
             for blend_cx, blend_cy in zip(
-                donutRow["blend_centroid_x"], donutRow["blend_centroid_y"]
+                catalogMeta["blend_centroid_x"][idx],
+                catalogMeta["blend_centroid_y"][idx],
             ):
                 blend_final_x = blend_cx + donutRow["xShift"]
                 blend_final_y = blend_cy + donutRow["yShift"]
@@ -621,11 +623,11 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             finalBlendYList.append(blendStrY)
 
             # Prepare blend centroid position information
-            if len(donutRow["blend_centroid_x"]) > 0:
+            if len(catalogMeta["blend_centroid_x"][idx]) > 0:
                 blendCentroidPositions = np.array(
                     [
-                        donutRow["blend_centroid_x"] + donutRow["xShift"],
-                        donutRow["blend_centroid_y"] + donutRow["yShift"],
+                        catalogMeta["blend_centroid_x"][idx] + donutRow["xShift"],
+                        catalogMeta["blend_centroid_y"][idx] + donutRow["yShift"],
                     ]
                 ).T
             else:
@@ -647,8 +649,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
                 sky_position=lsst.geom.SpherePoint(
-                    donutRow["coord_ra"],
-                    donutRow["coord_dec"],
+                    donutRow["coord_ra"].value,
+                    donutRow["coord_dec"].value,
                     lsst.geom.radians,
                 ),
                 centroid_position=centroid_position,
@@ -675,8 +677,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Calculate the difference between original centroid and final centroid
         catalogLength = len(donutCatalog)
         stampsMetadata = PropertyList()
-        stampsMetadata["RA_DEG"] = np.degrees(donutCatalog["coord_ra"].values)
-        stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"].values)
+        stampsMetadata["RA_DEG"] = np.degrees(donutCatalog["coord_ra"].value)
+        stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"].value)
         stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
         stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
         stampsMetadata["VISIT"] = np.array([visitId] * catalogLength, dtype=int)
@@ -689,13 +691,13 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the donut flux as magnitude
         if len(donutCatalog["source_flux"]) > 0:
             stampsMetadata["MAG"] = (
-                donutCatalog["source_flux"].values * u.nJy
+                donutCatalog["source_flux"].value * u.nJy
             ).to_value(u.ABmag)
         else:
             stampsMetadata["MAG"] = np.array([])
         # Save the original centroid values
-        stampsMetadata["CENT_X0"] = np.array(donutCatalog["centroid_x"].values)
-        stampsMetadata["CENT_Y0"] = np.array(donutCatalog["centroid_y"].values)
+        stampsMetadata["CENT_X0"] = np.array(donutCatalog["centroid_x"].value)
+        stampsMetadata["CENT_Y0"] = np.array(donutCatalog["centroid_y"].value)
         # Save the centroid values
         stampsMetadata["CENT_X"] = donutCatalog["finalDonutX"]
         stampsMetadata["CENT_Y"] = donutCatalog["finalDonutY"]

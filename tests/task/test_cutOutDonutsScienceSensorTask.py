@@ -24,7 +24,7 @@ from copy import copy
 
 import lsst.utils.tests
 import numpy as np
-import pandas as pd
+from astropy.table import QTable
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
@@ -233,10 +233,10 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         )
 
         donutCatalogExtra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutCatalogIntra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
         )
         camera = self.butler.get(
             "camera",
@@ -245,7 +245,15 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         )
 
         # Test return values when no sources in catalog
-        noSrcDonutCatalog = pd.DataFrame(columns=donutCatalogExtra.columns)
+        columns = [
+            "coord_ra",
+            "coord_dec",
+            "centroid_x",
+            "centroid_y",
+            "source_flux",
+            "detector",
+        ]
+        noSrcDonutCatalog = QTable({column: [] for column in columns})
         testOutNoSrc = self.task.run(
             [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )

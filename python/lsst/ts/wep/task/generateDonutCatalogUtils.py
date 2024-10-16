@@ -19,9 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["runSelection", "donutCatalogToDataFrame"]
+__all__ = ["runSelection", "donutCatalogToAstropy", "addVisitInfoToCatTable"]
 
-import pandas as pd
+import astropy.units as u
+import lsst.afw.image as afwImage
+import numpy as np
+from astropy.table import QTable
 
 
 def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
@@ -73,11 +76,11 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
         )
 
 
-def donutCatalogToDataFrame(
+def donutCatalogToAstropy(
     donutCatalog=None, filterName=None, blendCentersX=None, blendCentersY=None
 ):
     """
-    Reformat afwCatalog into a pandas dataframe sorted by flux with
+    Reformat afwCatalog into an astropy QTable sorted by flux with
     the brightest objects at the top.
 
     Parameters
@@ -85,7 +88,7 @@ def donutCatalogToDataFrame(
     donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`, optional
         lsst.afw.table.SimpleCatalog object returned by the
         ReferenceObjectLoader search over the detector footprint.
-        If None then it will return an empty dataframe.
+        If None then it will return an empty QTable.
         (the default is None.)
     filterName : `str` or `None`, optional
         Name of camera filter. If donutCatalog is not None then
@@ -103,7 +106,7 @@ def donutCatalogToDataFrame(
 
     Returns
     -------
-    `pandas.DataFrame`
+    `astropy.table.QTable`
         Complete catalog of reference sources in the pointing.
 
     Raises
@@ -167,17 +170,56 @@ def donutCatalogToDataFrame(
             )
             raise ValueError(blendErrMsg)
 
-    fieldObjects = pd.DataFrame([])
-    fieldObjects["coord_ra"] = ra
-    fieldObjects["coord_dec"] = dec
+    flux_sort = np.argsort(sourceFlux)[::-1]
+
+    fieldObjects = QTable()
+    fieldObjects["coord_ra"] = ra * u.rad
+    fieldObjects["coord_dec"] = dec * u.rad
     fieldObjects["centroid_x"] = centroidX
     fieldObjects["centroid_y"] = centroidY
-    fieldObjects["source_flux"] = sourceFlux
-    fieldObjects["blend_centroid_x"] = blendCX
-    fieldObjects["blend_centroid_y"] = blendCY
+    fieldObjects["source_flux"] = sourceFlux * u.nJy
 
-    fieldObjects = fieldObjects.sort_values("source_flux", ascending=False).reset_index(
-        drop=True
-    )
+    fieldObjects.sort("source_flux", reverse=True)
+
+    fieldObjects.meta["blend_centroid_x"] = [blendCX[idx] for idx in flux_sort]
+    fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
 
     return fieldObjects
+
+
+def addVisitInfoToCatTable(exposure: afwImage.Exposure, donutCat: QTable):
+    """
+    Add visit info from the exposure object to the catalog QTable metadata.
+    This should include all information we will need downstream in the
+    WEP tasks that would otherwise require loading VisitInfo from the butler.
+
+    Parameters
+    ----------
+    exposure : lsst.afw.image.Exposure
+        Image with donut sources that go in to the accompanying catalog.
+    donutCat : astropy.table.QTable
+        Donut catalog for given exposure.
+
+    Returns
+    -------
+    `astropy.table.QTable`
+        Catalog with relevant exposure metadata added to catalog metadata.
+    """
+
+    visitInfo = exposure.visitInfo
+
+    catVisitInfo = dict()
+    visitRaDec = visitInfo.boresightRaDec
+    catVisitInfo["boresight_ra"] = visitRaDec.getRa().asDegrees() * u.deg
+    catVisitInfo["boresight_dec"] = visitRaDec.getDec().asDegrees() * u.deg
+    catVisitInfo["boresight_rot_angle"] = (
+        visitInfo.boresightRotAngle.asDegrees() * u.deg
+    )
+    catVisitInfo["boresight_par_angle"] = (
+        visitInfo.boresightParAngle.asDegrees() * u.deg
+    )
+    catVisitInfo["mjd"] = visitInfo.date.toAstropy().mjd
+    catVisitInfo["visit_id"] = visitInfo.id
+    donutCat.meta["visit_info"] = catVisitInfo
+
+    return donutCat
