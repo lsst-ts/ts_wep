@@ -130,27 +130,27 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
                 "centroid_x",
                 "centroid_y",
                 "source_flux",
-                "blend_centroid_x",
-                "blend_centroid_y",
                 "detector",
             ],
         )
+        self.assertCountEqual(
+            donutCatalog.meta.keys(),
+            ["blend_centroid_x", "blend_centroid_y"],
+        )
         self.assertEqual(np.unique(donutCatalog["detector"]), detectorName)
         self.assertCountEqual(
-            donutCatalog["coord_ra"], np.ravel([cat0["coord_ra"], cat1["coord_ra"]])
+            donutCatalog["coord_ra"].value,
+            np.ravel([cat0["coord_ra"], cat1["coord_ra"]]),
         )
         self.assertCountEqual(
-            donutCatalog["coord_dec"], np.ravel([cat0["coord_dec"], cat1["coord_dec"]])
+            donutCatalog["coord_dec"].value,
+            np.ravel([cat0["coord_dec"], cat1["coord_dec"]]),
         )
-        refFluxes = (np.array([15.0, 15.0, 15.0, 17.5]) * units.ABmag).to_value(
-            units.nJy
-        )
-        np.testing.assert_almost_equal(
-            donutCatalog["source_flux"], refFluxes, decimal=5
+        refFluxes = np.array([15.0, 15.0, 15.0, 17.5]) * units.ABmag
+        self.assertCountEqual(donutCatalog["source_flux"], refFluxes.to(units.nJy))
+        np.testing.assert_array_equal(
+            [[]] * 4, list(donutCatalog.meta["blend_centroid_x"])
         )
         np.testing.assert_array_equal(
-            [[]] * 4, list(donutCatalog["blend_centroid_x"].values)
-        )
-        np.testing.assert_array_equal(
-            [[]] * 4, list(donutCatalog["blend_centroid_y"].values)
+            [[]] * 4, list(donutCatalog.meta["blend_centroid_y"])
         )

@@ -28,7 +28,7 @@ import lsst.afw.image as afwImage
 import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
 import numpy as np
-import pandas as pd
+from astropy.table import QTable
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
@@ -157,7 +157,7 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
-        donutCatalogs: typing.List[pd.DataFrame],
+        donutCatalogs: typing.List[QTable],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
         cameraName = camera.getName()

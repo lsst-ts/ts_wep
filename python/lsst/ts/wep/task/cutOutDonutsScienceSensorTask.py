@@ -32,7 +32,7 @@ import lsst.afw.image as afwImage
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
-import pandas as pd
+from astropy.table import QTable
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
@@ -230,7 +230,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
-        donutCatalog: typing.List[pd.DataFrame],
+        donutCatalog: typing.List[QTable],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
         # Determine which exposure is intra-/extra-focal

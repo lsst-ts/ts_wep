@@ -30,12 +30,12 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
-import pandas as pd
+from astropy.table import QTable
 from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
-    donutCatalogToDataFrame,
+    donutCatalogToAstropy,
     runSelection,
 )
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
@@ -72,8 +72,8 @@ class GenerateDonutFromRefitWcsTaskConnections(
             "detector",
             "instrument",
         ),
-        storageClass="DataFrame",
-        name="directDetectDonutCatalog",
+        storageClass="AstropyQTable",
+        name="directDetectDonutTable",
     )
     astromRefCat = connectionTypes.PrerequisiteInput(
         doc="Reference catalog to use for astrometry",
@@ -104,8 +104,8 @@ class GenerateDonutFromRefitWcsTaskConnections(
             "detector",
             "instrument",
         ),
-        storageClass="DataFrame",
-        name="donutCatalog",
+        storageClass="AstropyQTable",
+        name="donutTable",
     )
 
 
@@ -179,7 +179,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
         Parameters
         ----------
-        catalog : `pandas.Dataframe`
+        catalog : `astropy.table.QTable`
             Catalog containing donut sources already detected
             on the exposure.
 
@@ -234,10 +234,10 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             src.set(sourceIdKey, i)
 
             # set ra,dec
-            ra = lsst.geom.Angle(catalog["coord_ra"].iloc[i], lsst.geom.radians)
+            ra = lsst.geom.Angle(catalog["coord_ra"][i].value, lsst.geom.radians)
             src.set(sourceRAKey, ra)
 
-            dec = lsst.geom.Angle(catalog["coord_dec"].iloc[i], lsst.geom.radians)
+            dec = lsst.geom.Angle(catalog["coord_dec"][i].value, lsst.geom.radians)
             src.set(sourceDecKey, dec)
 
             # set raErr, decErr
@@ -247,7 +247,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             else:
                 # use the existing coord_raErr column
                 raErr = lsst.geom.Angle(
-                    catalog["coord_raErr"].iloc[i], lsst.geom.radians
+                    catalog["coord_raErr"][i].value, lsst.geom.radians
                 )
             src.set(sourceRaErrKey, raErr)
 
@@ -257,18 +257,18 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             else:
                 # use the existing coord_decErr column
                 decErr = lsst.geom.Angle(
-                    catalog["coord_decErr"].iloc[i], lsst.geom.radians
+                    catalog["coord_decErr"][i].value, lsst.geom.radians
                 )
             src.set(sourceDecErrKey, decErr)
 
             # set the x,y centroid
-            x = catalog["centroid_x"].iloc[i]
-            y = catalog["centroid_y"].iloc[i]
+            x = catalog["centroid_x"][i]
+            y = catalog["centroid_y"][i]
             point = lsst.geom.Point2D(x, y)
             src.set(sourceCentroidKey, point)
 
             # set the flux and assume some small 1% flux error
-            flux = catalog["source_flux"].iloc[i]
+            flux = catalog["source_flux"][i].value
             src.set(sourceInstFluxKey, flux)
 
             fluxErr = abs(flux / 100.0)  # ensure positive error
@@ -281,7 +281,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         self,
         astromRefCat: typing.List[afwTable.SimpleCatalog],
         exposure: afwImage.Exposure,
-        fitDonutCatalog: pd.DataFrame,
+        fitDonutCatalog: QTable,
         photoRefCat: typing.List[afwTable.SimpleCatalog],
     ) -> pipeBase.Struct:
         astromRefObjLoader = ReferenceObjectLoader(
@@ -385,7 +385,7 @@ and direct detect catalog as output."
                     donutSelectorTask,
                 )
 
-                donutCatalog = donutCatalogToDataFrame(
+                donutCatalog = donutCatalogToAstropy(
                     refSelection, filterName, blendCentersX, blendCentersY
                 )
                 self.metadata["refCatalogSuccess"] = True
