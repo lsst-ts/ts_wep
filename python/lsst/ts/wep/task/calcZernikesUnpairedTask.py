@@ -25,10 +25,12 @@ __all__ = [
     "CalcZernikesUnpairedTask",
 ]
 
+import astropy.units as u
+from astropy.table import QTable
 import lsst.pipe.base as pipeBase
 import numpy as np
-import pandas as pd
 from lsst.pipe.base import connectionTypes
+from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import DefocalType
@@ -57,11 +59,17 @@ class CalcZernikesUnpairedTaskConnections(
         storageClass="NumpyArray",
         name="zernikeEstimateAvg",
     )
-    donutsQuality = connectionTypes.Output(
+    zernikes = connectionTypes.Output(
+        doc="Zernike Coefficients for individual donuts and average over donuts",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyTable",
+        name="zernikes",
+    )
+    donutQualityTable = connectionTypes.Output(
         doc="Quality information for donuts",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="DataFrame",
-        name="donutsQuality",
+        storageClass="AstropyQTable",
+        name="donutQualityTable",
     )
 
 
@@ -72,40 +80,18 @@ class CalcZernikesUnpairedTaskConfig(
     pass
 
 
-class CalcZernikesUnpairedTask(pipeBase.PipelineTask):
+class CalcZernikesUnpairedTask(CalcZernikesTask):
     """Calculate Zernikes using unpaired donuts."""
 
     ConfigClass = CalcZernikesUnpairedTaskConfig
     _DefaultName = "calcZernikesUnpairedTask"
 
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-        # Create subtasks
-        self.estimateZernikes = self.config.estimateZernikes
-        self.makeSubtask("estimateZernikes")
-
-        self.combineZernikes = self.config.combineZernikes
-        self.makeSubtask("combineZernikes")
-
-        self.donutStampSelector = self.config.donutStampSelector
-        self.makeSubtask("donutStampSelector")
-
-        self.doDonutStampSelector = self.config.doDonutStampSelector
-
     @timeMethod
     def run(self, donutStamps: DonutStamps) -> pipeBase.Struct:
-        # Get jmax
-        jmax = self.estimateZernikes.config.maxNollIndex
-
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if len(donutStamps) == 0:
-            return pipeBase.Struct(
-                outputZernikesRaw=np.full(jmax - 4, np.nan),
-                outputZernikesAvg=np.full(jmax - 4, np.nan),
-                donutsQuality=pd.DataFrame([]),
-            )
+            return self.empty()
 
         # Run donut selection
         if self.doDonutStampSelector:
@@ -115,32 +101,138 @@ class CalcZernikesUnpairedTask(pipeBase.PipelineTask):
             # If no donuts get selected, return NaNs
             if len(selection.donutStampsSelect) == 0:
                 self.log.info("No donut stamps were selected.")
-                return pipeBase.Struct(
-                    outputZernikesRaw=np.full(jmax - 4, np.nan),
-                    outputZernikesAvg=np.full(jmax - 4, np.nan),
-                    donutsQuality=pd.DataFrame([]),
-                )
+                return self.empty()
 
             # Save selection and quality
             selectedDonuts = selection.donutStampsSelect
-            donutsQuality = selection.donutsQuality
+            donutQualityTable = selection.donutsQuality
         else:
             selectedDonuts = donutStamps
-            donutsQuality = pd.DataFrame([])
+            donutQualityTable = QTable([])
 
         # Assign stamps to either intra or extra
         if selectedDonuts[0].wep_im.defocalType == DefocalType.Extra:
             extraStamps = selectedDonuts
             intraStamps = []
+            if len(donutQualityTable) > 0:
+                donutQualityTable["DEFOCAL_TYPE"] = "extra"
         else:
             extraStamps = []
             intraStamps = selectedDonuts
+            if len(donutQualityTable) > 0:
+                donutQualityTable["DEFOCAL_TYPE"] = "intra"
 
         # Estimate Zernikes
         zkCoeffRaw = self.estimateZernikes.run(extraStamps, intraStamps)
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
+
+        # Create the Table of results
+        zkTable = self.initZkTable()
+        zkTable.add_row(
+            {
+                "label": "average",
+                "used": True,
+                **{
+                    f"Z{j}": zkCoeffCombined.combinedZernikes[j - 4] * u.micron
+                    for j in range(4, self.maxNollIndex + 1)
+                },
+                "intra_field": np.nan,
+                "extra_field": np.nan,
+                "intra_centroid": np.nan,
+                "extra_centroid": np.nan,
+                "intra_mag": np.nan,
+                "extra_mag": np.nan,
+                "intra_sn": np.nan,
+                "extra_sn": np.nan,
+                "intra_entropy": np.nan,
+                "extra_entropy": np.nan,
+            }
+        )
+        for i, (intra, extra, zk, flag) in enumerate(
+            zip(
+                donutStamps,
+                zkCoeffRaw.zernikes,
+                zkCoeffCombined.flags,
+            )
+        ):
+            row = dict()
+            row["label"] = f"pair{i+1}"
+            row["used"] = not flag
+            row.update(
+                {f"Z{j}": zk[j - 4] * u.micron for j in range(4, self.maxNollIndex + 1)}
+            )
+            row["intra_field"] = (
+                np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+            ) if len(intraStamps) > 0 else (
+                np.array(np.nan, dtype=pos2f_dtype) * u.deg
+            )
+            row["extra_field"] = (
+                np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+            ) if len(extraStamps) > 0 else (
+                np.array(np.nan, dtype=pos2f_dtype) * u.deg
+            )
+            row["intra_centroid"] = (
+                np.array(
+                    (intra.centroid_position.x, intra.centroid_position.y),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
+            ) if len(intraStamps) > 0 else (
+                np.array(
+                    (np.nan, np.nan),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
+            )
+            row["extra_centroid"] = (
+                np.array(
+                    (extra.centroid_position.x, extra.centroid_position.y),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
+            ) if len(extraStamps) > 0 else (
+                np.array(
+                    (np.nan, np.nan),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
+            )
+            for key in ["MAG", "SN", "ENTROPY"]:
+                for stamps, foc in [
+                    (intraStamps, "intra"),
+                    (extraStamps, "extra"),
+                ]:
+                    if len(stamps) > 0 and key in stamps.metadata:
+                        val = stamps.metadata.getArray(key)[i]
+                    else:
+                        val = np.nan
+                    row[f"{foc}_{key.lower()}"] = val
+            zkTable.add_row(row)
+
+        zkTable.meta["intra"] = {}
+        zkTable.meta["extra"] = {}
+
+        for dict_, stamps in [
+            (zkTable.meta["intra"], intraStamps),
+            (zkTable.meta["extra"], extraStamps),
+        ]:
+            if len(stamps) > 0:
+                dict_["det_name"] = stamps.metadata["DET_NAME"]
+                dict_["visit"] = stamps.metadata["VISIT"]
+                dict_["dfc_dist"] = stamps.metadata["DFC_DIST"]
+                dict_["band"] = stamps.metadata["BANDPASS"]
+            else:
+                dict_["det_name"] = ""
+                dict_["visit"] = ""
+                dict_["dfc_dist"] = ""
+                dict_["band"] = ""
+
+
+        zkTable.meta["cam_name"] = selectedDonuts.metadata["CAM_NAME"]
+
         return pipeBase.Struct(
-            outputZernikesAvg=np.array(zkCoeffCombined.combinedZernikes),
-            outputZernikesRaw=np.array(zkCoeffRaw.zernikes),
-            donutsQuality=donutsQuality,
+            outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),
+            outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
+            zernikes=zkTable,
+            donutQualityTable=donutQualityTable,
         )
