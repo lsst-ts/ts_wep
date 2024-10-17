@@ -27,7 +27,6 @@ __all__ = [
 
 
 import typing
-from copy import copy
 
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
