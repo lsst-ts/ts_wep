@@ -222,6 +222,22 @@ class ExposurePairer(pipeBase.Task):
         extraTable = extraTable[~np.isin(extraTable["exposure"], pairTable["extra"])]
         intraTable = intraTable[~np.isin(intraTable["exposure"], pairTable["intra"])]
 
+        print("\n"*5)
+        print("LOOK HERE!!!")
+        print("\n"*5)
+        print("pairTable")
+        pairTable.pprint_all()
+        print("\n"*5)
+        print("intraTable")
+        intraTable.pprint_all()
+        print("\n"*5)
+        print("extraTable")
+        extraTable.pprint_all()
+        print("\n"*5)
+        print("focalTable")
+        focalTable.pprint_all()
+        print("\n"*5)
+
         return {
             "pairTable": pairTable,
             "unusedIntraTable": intraTable,
