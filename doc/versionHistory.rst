@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.0.1:
+
+-------------
+12.0.1
+-------------
+
+* Fix PairTask FocusZ units from mm to um.
+
 .. _lsst.ts.wep-12.0.0:
 
 -------------
