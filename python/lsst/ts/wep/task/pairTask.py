@@ -164,6 +164,9 @@ class ExposurePairer(pipeBase.Task):
                 best_n_inliers = n_extra + n_focal + n_intra
                 best_offset = offset
 
+        print(f"n_extra: {n_extra}")
+        print(f"n_focal: {n_focal}")
+        print(f"n_intra: {n_intra}")
         extraTable = table[np.abs(table["focusZ"] - best_offset) < thresh]
         focalTable = table[np.abs(table["focusZ"] - best_offset + separation) < thresh]
         intraTable = table[
@@ -185,6 +188,27 @@ class ExposurePairer(pipeBase.Task):
 
         pairTable = Table(dtype=dtype)
 
+        print("\n" * 5)
+        print("LOOK HERE BEFORE LOGIC NEARBY!!!")
+        print("\n" * 5)
+        print("pairTable")
+        pairTable.pprint_all()
+        print("\n" * 5)
+        print("intraTable")
+        intraTable.pprint_all()
+        print("\n" * 5)
+        print("extraTable")
+        extraTable.pprint_all()
+        print("\n" * 5)
+        print("focalTable")
+        focalTable.pprint_all()
+        print("\n" * 5)
+
+        # Print thresholds
+        print(f"pointingTHreshold: {self.config.pointingThreshold}")
+        print(f"timeThreshold: {self.config.timeThreshold}")
+        print(f"rotationThreshold: {self.config.rotationThreshold}")
+
         for row in extraTable:
             if self.config.ignoreThresholds:
                 nearby = np.ones(len(intraTable), dtype=bool)
@@ -193,14 +217,17 @@ class ExposurePairer(pipeBase.Task):
                     np.abs(intraTable["mjd"] - row["mjd"]) * 86400
                     < self.config.timeThreshold
                 )
+                print(f"nearby after timeThreshold: {nearby}")
                 nearby &= (
                     np.abs(intraTable["rtp"] - row["rtp"])
                     < self.config.rotationThreshold
                 )
+                print(f"nearby after rotationThreshold: {nearby}")
                 nearby &= (
                     row["radec"].separation(intraTable["radec"]).arcsec
                     < self.config.pointingThreshold
                 )
+                print(f"nearby after pointingThreshold: {nearby}")
             if np.any(nearby):
                 nearbyTable = intraTable[nearby]
                 # Pick the nearest remaining point in radec
@@ -223,21 +250,21 @@ class ExposurePairer(pipeBase.Task):
         extraTable = extraTable[~np.isin(extraTable["exposure"], pairTable["extra"])]
         intraTable = intraTable[~np.isin(intraTable["exposure"], pairTable["intra"])]
 
-        print("\n"*5)
+        print("\n" * 5)
         print("LOOK HERE!!!")
-        print("\n"*5)
+        print("\n" * 5)
         print("pairTable")
         pairTable.pprint_all()
-        print("\n"*5)
+        print("\n" * 5)
         print("intraTable")
         intraTable.pprint_all()
-        print("\n"*5)
+        print("\n" * 5)
         print("extraTable")
         extraTable.pprint_all()
-        print("\n"*5)
+        print("\n" * 5)
         print("focalTable")
         focalTable.pprint_all()
-        print("\n"*5)
+        print("\n" * 5)
 
         return {
             "pairTable": pairTable,
