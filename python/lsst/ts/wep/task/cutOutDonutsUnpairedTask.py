@@ -28,10 +28,10 @@ __all__ = [
 
 import typing
 
+from astropy.table import QTable
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
 import lsst.pipe.base as pipeBase
-import pandas as pd
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.cutOutDonutsBase import (
@@ -60,8 +60,8 @@ class CutOutDonutsUnpairedTaskConnections(
             "detector",
             "instrument",
         ),
-        storageClass="DataFrame",
-        name="donutCatalog",
+        storageClass="AstropyQTable",
+        name="donutTable",
         multiple=True,
     )
     camera = connectionTypes.PrerequisiteInput(
@@ -101,7 +101,7 @@ class CutOutDonutsUnpairedTask(CutOutDonutsBaseTask):
     def run(
         self,
         exposures: typing.List[afwImage.Exposure],
-        donutCatalog: typing.List[pd.DataFrame],
+        donutCatalog: typing.List[QTable],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
         # Loop over exposures (and corresponding catalogs)

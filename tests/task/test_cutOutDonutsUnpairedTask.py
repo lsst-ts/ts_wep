@@ -29,7 +29,6 @@ from lsst.ts.wep.task.cutOutDonutsUnpairedTask import (
     CutOutDonutsUnpairedTaskConfig,
 )
 from lsst.ts.wep.utils import (
-    DefocalType,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
@@ -131,10 +130,10 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         )
         # Get the donut catalogs for each detector
         donutCatalogExtra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutCatalogIntra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
         )
         # Get the camera from the butler
         camera = self.butler.get(

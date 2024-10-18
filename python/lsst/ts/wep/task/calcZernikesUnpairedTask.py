@@ -30,11 +30,15 @@ from astropy.table import QTable
 import lsst.pipe.base as pipeBase
 import numpy as np
 from lsst.pipe.base import connectionTypes
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTaskConfig
+from lsst.ts.wep.task.calcZernikesTask import (
+    CalcZernikesTask,
+    CalcZernikesTaskConfig,
+    pos2f_dtype,
+)
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
+from itertools import zip_longest
 
 
 class CalcZernikesUnpairedTaskConnections(
@@ -149,8 +153,9 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             }
         )
         for i, (intra, extra, zk, flag) in enumerate(
-            zip(
-                donutStamps,
+            zip_longest(
+                intraStamps,
+                extraStamps,
                 zkCoeffRaw.zernikes,
                 zkCoeffCombined.flags,
             )
@@ -162,37 +167,37 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
                 {f"Z{j}": zk[j - 4] * u.micron for j in range(4, self.maxNollIndex + 1)}
             )
             row["intra_field"] = (
-                np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
-            ) if len(intraStamps) > 0 else (
                 np.array(np.nan, dtype=pos2f_dtype) * u.deg
+            ) if intra is None else (
+                np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
             )
             row["extra_field"] = (
-                np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
-            ) if len(extraStamps) > 0 else (
                 np.array(np.nan, dtype=pos2f_dtype) * u.deg
+            ) if extra is None else (
+                np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
             )
             row["intra_centroid"] = (
                 np.array(
-                    (intra.centroid_position.x, intra.centroid_position.y),
+                    (np.nan, np.nan),
                     dtype=pos2f_dtype,
                 )
                 * u.pixel
-            ) if len(intraStamps) > 0 else (
+            ) if intra is None else (
                 np.array(
-                    (np.nan, np.nan),
+                    (intra.centroid_position.x, intra.centroid_position.y),
                     dtype=pos2f_dtype,
                 )
                 * u.pixel
             )
             row["extra_centroid"] = (
                 np.array(
-                    (extra.centroid_position.x, extra.centroid_position.y),
+                    (np.nan, np.nan),
                     dtype=pos2f_dtype,
                 )
                 * u.pixel
-            ) if len(extraStamps) > 0 else (
+            ) if extra is None else (
                 np.array(
-                    (np.nan, np.nan),
+                    (extra.centroid_position.x, extra.centroid_position.y),
                     dtype=pos2f_dtype,
                 )
                 * u.pixel
