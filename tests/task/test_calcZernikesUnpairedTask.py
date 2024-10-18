@@ -31,11 +31,8 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CalcZernikesUnpairedTask,
     CalcZernikesUnpairedTaskConfig,
-    EstimateZernikesTieTask,
     EstimateZernikesDanishTask,
-)
-from lsst.ts.wep.utils import (
-    getModulePath,
+    EstimateZernikesTieTask,
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -43,6 +40,7 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
 
 class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
     @classmethod
@@ -152,14 +150,18 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 task = CalcZernikesUnpairedTask(config=config)
                 structNormal = task.run(stamps)
 
-                #import pytest; pytest.set_trace()
+                # import pytest; pytest.set_trace()
 
                 # check that 4 elements are created
                 self.assertEqual(len(structNormal), 4)
 
                 zkAvg1 = structNormal.outputZernikesAvg[0]
-                zkAvgRow = structNormal.zernikes[structNormal.zernikes["label"] == "average"][0]
-                zkAvg2 = np.array([zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
+                zkAvgRow = structNormal.zernikes[
+                    structNormal.zernikes["label"] == "average"
+                ][0]
+                zkAvg2 = np.array(
+                    [zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
+                )
                 self.assertFloatsAlmostEqual(zkAvg1, zkAvg2, rtol=1e-7, atol=0)
 
                 zkRaw1 = structNormal.outputZernikesRaw
@@ -188,7 +190,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "intra_entropy",
                     "extra_entropy",
                 ]
-                self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
+                self.assertLessEqual(
+                    set(desired_colnames), set(structNormal.zernikes.colnames)
+                )
 
                 # Check metadata keys exist
                 self.assertIn("cam_name", structNormal.zernikes.meta)
@@ -218,7 +222,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
                 ]
-                np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
+                np.testing.assert_array_equal(
+                    np.sort(colnames), np.sort(desired_colnames)
+                )
 
                 # test null run
                 structNull = task.run([])
@@ -233,4 +239,3 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
                     self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
                     self.assertIsInstance(struct.zernikes, QTable)
-

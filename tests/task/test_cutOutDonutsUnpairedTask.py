@@ -35,6 +35,7 @@ from lsst.ts.wep.utils import (
     writePipetaskCmd,
 )
 
+
 class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
     @classmethod
     def setUpClass(cls):

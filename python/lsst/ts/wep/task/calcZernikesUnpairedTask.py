@@ -25,10 +25,12 @@ __all__ = [
     "CalcZernikesUnpairedTask",
 ]
 
+from itertools import zip_longest
+
 import astropy.units as u
-from astropy.table import QTable
 import lsst.pipe.base as pipeBase
 import numpy as np
+from astropy.table import QTable
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import (
     CalcZernikesTask,
@@ -38,7 +40,6 @@ from lsst.ts.wep.task.calcZernikesTask import (
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
-from itertools import zip_longest
 
 
 class CalcZernikesUnpairedTaskConnections(
@@ -167,40 +168,48 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
                 {f"Z{j}": zk[j - 4] * u.micron for j in range(4, self.maxNollIndex + 1)}
             )
             row["intra_field"] = (
-                np.array(np.nan, dtype=pos2f_dtype) * u.deg
-            ) if intra is None else (
-                np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+                (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
+                if intra is None
+                else (np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg)
             )
             row["extra_field"] = (
-                np.array(np.nan, dtype=pos2f_dtype) * u.deg
-            ) if extra is None else (
-                np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+                (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
+                if extra is None
+                else (np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg)
             )
             row["intra_centroid"] = (
-                np.array(
-                    (np.nan, np.nan),
-                    dtype=pos2f_dtype,
+                (
+                    np.array(
+                        (np.nan, np.nan),
+                        dtype=pos2f_dtype,
+                    )
+                    * u.pixel
                 )
-                * u.pixel
-            ) if intra is None else (
-                np.array(
-                    (intra.centroid_position.x, intra.centroid_position.y),
-                    dtype=pos2f_dtype,
+                if intra is None
+                else (
+                    np.array(
+                        (intra.centroid_position.x, intra.centroid_position.y),
+                        dtype=pos2f_dtype,
+                    )
+                    * u.pixel
                 )
-                * u.pixel
             )
             row["extra_centroid"] = (
-                np.array(
-                    (np.nan, np.nan),
-                    dtype=pos2f_dtype,
+                (
+                    np.array(
+                        (np.nan, np.nan),
+                        dtype=pos2f_dtype,
+                    )
+                    * u.pixel
                 )
-                * u.pixel
-            ) if extra is None else (
-                np.array(
-                    (extra.centroid_position.x, extra.centroid_position.y),
-                    dtype=pos2f_dtype,
+                if extra is None
+                else (
+                    np.array(
+                        (extra.centroid_position.x, extra.centroid_position.y),
+                        dtype=pos2f_dtype,
+                    )
+                    * u.pixel
                 )
-                * u.pixel
             )
             for key in ["MAG", "SN", "ENTROPY"]:
                 for stamps, foc in [
@@ -231,7 +240,6 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
                 dict_["visit"] = ""
                 dict_["dfc_dist"] = ""
                 dict_["band"] = ""
-
 
         zkTable.meta["cam_name"] = selectedDonuts.metadata["CAM_NAME"]
 

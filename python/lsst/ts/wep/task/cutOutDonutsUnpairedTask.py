@@ -28,10 +28,10 @@ __all__ = [
 
 import typing
 
-from astropy.table import QTable
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
 import lsst.pipe.base as pipeBase
+from astropy.table import QTable
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.cutOutDonutsBase import (
