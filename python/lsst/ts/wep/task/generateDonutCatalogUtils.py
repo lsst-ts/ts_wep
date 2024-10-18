@@ -19,7 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["runSelection", "donutCatalogToAstropy", "addVisitInfoToCatTable"]
+__all__ = [
+    "runSelection",
+    "donutCatalogToAstropy",
+    "addVisitInfoToCatTable",
+    "convertDictToVisitInfo",
+]
 
 import astropy.units as u
 import numpy as np
@@ -245,6 +250,7 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable):
         visitInfo.observatory.getLongitude().asDegrees() * u.deg
     )
     catVisitInfo["ERA"] = visitInfo.era.asDegrees() * u.deg
+    catVisitInfo["exposure_time"] = visitInfo.exposureTime * u.s
 
     donutCat.meta["visit_info"] = catVisitInfo
 
@@ -255,8 +261,8 @@ def convertDictToVisitInfo(
     info: dict,
 ) -> VisitInfo:
     """
-    Convert a dictionary (as from astropy metadata added by addVisitInfoToCatTable) back
-    into a VisitInfo object.
+    Convert a dictionary (as from astropy metadata added by
+    addVisitInfoToCatTable) back into a VisitInfo object.
 
     Parameters
     ----------
@@ -269,6 +275,7 @@ def convertDictToVisitInfo(
         VisitInfo object with the same information as the input dictionary.
     """
     kwargs = {
+        "id": info["visit_id"],
         "date": DateTime(info["mjd"], system=DateTime.MJD, scale=DateTime.TAI),
         "boresightRaDec": SpherePoint(
             info["boresight_ra"].to_value(u.rad) * radians,
@@ -288,5 +295,6 @@ def convertDictToVisitInfo(
             info["observatory_elevation"].to_value(u.m),
         ),
         "era": info["ERA"].to_value(u.rad) * radians,
+        "exposureTime": info["exposure_time"].to_value(u.s),
     }
     return VisitInfo(**kwargs)
