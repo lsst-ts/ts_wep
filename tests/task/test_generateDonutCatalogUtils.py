@@ -348,6 +348,16 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "boresight_par_angle",
             "mjd",
             "visit_id",
+            "boresight_alt",
+            "boresight_az",
+            "rot_type_name",
+            "rot_type_value",
+            "focus_z",
+            "instrument_label",
+            "observatory_elevation",
+            "observatory_latitude",
+            "observatory_longitude",
+            "ERA"
         ]
 
         self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
