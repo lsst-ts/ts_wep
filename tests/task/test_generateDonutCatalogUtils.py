@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import datetime
 import os
 import unittest
 
@@ -205,13 +206,8 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             donutCatSmall,
             "g",
         )
-        print(fieldObjectsBlends)
-        print(fieldObjectsBlends[1])
-        print(fieldObjectsBlends.dtype)
         fieldObjectsBlends.meta["blend_centroid_x"][1].append(5)
         fieldObjectsBlends.meta["blend_centroid_y"][1].append(3)
-        print(fieldObjectsBlends)
-        print(fieldObjectsBlends[1])
         self.assertListEqual(
             fieldObjectsBlends.meta["blend_centroid_x"], [[], [5], [], []]
         )
@@ -263,11 +259,9 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         blendCentersX[1].append(blendValsX[1])
         blendCentersY[1].append(blendValsY[1])
-        print(donutCatSmall)
         fieldObjectsTwoBlends = donutCatalogToAstropy(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
-        print(fieldObjectsTwoBlends)
         self.assertListEqual(
             list(fieldObjectsTwoBlends.meta["blend_centroid_x"]),
             [[blendValsX[0]], [], [blendValsX[1]], []],
@@ -360,6 +354,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "observatory_latitude",
             "observatory_longitude",
             "ERA",
+            "exposure_time",
         ]
 
         self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
@@ -374,11 +369,41 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         roundTripVisitInfo = convertDictToVisitInfo(catTableWithMeta.meta["visit_info"])
 
         self.assertTrue(isinstance(roundTripVisitInfo, VisitInfo))
-        # Test a few keys
+        # Test keys and results are the same from VisitInfo round trip
         self.assertEqual(roundTripVisitInfo.focusZ, testExposure.visitInfo.focusZ)
+        self.assertEqual(roundTripVisitInfo.id, testExposure.visitInfo.id)
         self.assertEqual(
             roundTripVisitInfo.boresightRaDec, testExposure.visitInfo.boresightRaDec
         )
+        if testExposure.visitInfo.boresightAzAlt.isFinite():
+            # Test that they are equal if they are not nan
+            self.assertEqual(
+                roundTripVisitInfo.boresightAzAlt, testExposure.visitInfo.boresightAzAlt
+            )
+        else:
+            # If testExposure has nan value, round trip should as well
+            self.assertFalse(roundTripVisitInfo.boresightAzAlt.isFinite())
         self.assertEqual(
             roundTripVisitInfo.instrumentLabel, testExposure.visitInfo.instrumentLabel
         )
+        self.assertEqual(
+            roundTripVisitInfo.boresightParAngle,
+            testExposure.visitInfo.boresightParAngle,
+        )
+        self.assertEqual(
+            roundTripVisitInfo.boresightRotAngle,
+            testExposure.visitInfo.boresightRotAngle,
+        )
+        self.assertEqual(roundTripVisitInfo.rotType, testExposure.visitInfo.rotType)
+        self.assertEqual(
+            roundTripVisitInfo.exposureTime, testExposure.visitInfo.exposureTime
+        )
+        self.assertAlmostEqual(
+            roundTripVisitInfo.date.toPython(),
+            testExposure.visitInfo.date.toPython(),
+            delta=datetime.timedelta(seconds=1e-3),
+        )
+        self.assertEqual(
+            roundTripVisitInfo.observatory, testExposure.visitInfo.observatory
+        )
+        self.assertEqual(roundTripVisitInfo.era, testExposure.visitInfo.era)
