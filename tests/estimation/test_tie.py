@@ -244,17 +244,12 @@ class TestTieAlgorithm(unittest.TestCase):
         zkTrue, intra, extra = forwardModelPair()
 
         # Estimate with singles and pairs
-        tie = TieAlgorithm(requiresPairs=False)
+        tie = TieAlgorithm()
         zkPair = tie.estimateZk(intra, extra)
         zkIntra = tie.estimateZk(intra)
         self.assertLess(np.sqrt(np.sum((zkPair - zkIntra) ** 2)), 0.25e-6)
         zkExtra = tie.estimateZk(extra)
         self.assertLess(np.sqrt(np.sum((zkPair - zkExtra) ** 2)), 0.25e-6)
-
-        # Check that requiring pairs works
-        tie = TieAlgorithm(requiresPairs=True)
-        with self.assertRaises(ValueError):
-            tie.estimateZk(intra)
 
 
 if __name__ == "__main__":
