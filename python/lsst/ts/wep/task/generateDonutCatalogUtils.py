@@ -255,8 +255,8 @@ def convertDictToVisitInfo(
     info: dict,
 ) -> VisitInfo:
     """
-    Convert a dictionary (as from astropy metadata added by addVisitInfoToCatTable) back
-    into a VisitInfo object.
+    Convert a dictionary (as from astropy metadata added by 
+    addVisitInfoToCatTable) back into a VisitInfo object.
 
     Parameters
     ----------
