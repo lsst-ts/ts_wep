@@ -121,7 +121,7 @@ class ExposurePairer(pipeBase.Task):
             instrument = next(iter(visitInfos.values())).instrumentLabel
             match instrument:
                 case "LSSTCam" | "LSSTComCam" | "LSSTComCamSim":
-                    separation = 1.5
+                    separation = 1500.0
                 case "LATISS":
                     separation = -0.8
 
