@@ -19,7 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["runSelection", "donutCatalogToAstropy", "addVisitInfoToCatTable"]
+__all__ = [
+    "runSelection",
+    "donutCatalogToAstropy",
+    "addVisitInfoToCatTable",
+    "convertDictToVisitInfo",
+]
 
 import astropy.units as u
 import numpy as np
@@ -255,7 +260,7 @@ def convertDictToVisitInfo(
     info: dict,
 ) -> VisitInfo:
     """
-    Convert a dictionary (as from astropy metadata added by 
+    Convert a dictionary (as from astropy metadata added by
     addVisitInfoToCatTable) back into a VisitInfo object.
 
     Parameters

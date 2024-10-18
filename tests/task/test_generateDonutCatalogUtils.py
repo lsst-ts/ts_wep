@@ -24,12 +24,14 @@ import unittest
 
 import lsst.geom
 from astropy.table import QTable
+from lsst.afw.image import VisitInfo
 from lsst.daf import butler as dafButler
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.ts.wep.task import DonutSourceSelectorTask, DonutSourceSelectorTaskConfig
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
     addVisitInfoToCatTable,
+    convertDictToVisitInfo,
     donutCatalogToAstropy,
     runSelection,
 )
@@ -357,8 +359,26 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "observatory_elevation",
             "observatory_latitude",
             "observatory_longitude",
-            "ERA"
+            "ERA",
         ]
 
         self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
+        # Test columns are all present
         self.assertCountEqual(visitInfoKeys, catTableWithMeta.meta["visit_info"].keys())
+
+    def testConvertDictToVisitInfo(self):
+
+        donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
+        fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
+        catTableWithMeta = addVisitInfoToCatTable(testExposure, fieldObjects)
+        roundTripVisitInfo = convertDictToVisitInfo(catTableWithMeta.meta["visit_info"])
+
+        self.assertTrue(isinstance(roundTripVisitInfo, VisitInfo))
+        # Test a few keys
+        self.assertEqual(roundTripVisitInfo.focusZ, testExposure.visitInfo.focusZ)
+        self.assertEqual(
+            roundTripVisitInfo.boresightRaDec, testExposure.visitInfo.boresightRaDec
+        )
+        self.assertEqual(
+            roundTripVisitInfo.instrumentLabel, testExposure.visitInfo.instrumentLabel
+        )
