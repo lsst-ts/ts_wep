@@ -250,6 +250,7 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable):
         visitInfo.observatory.getLongitude().asDegrees() * u.deg
     )
     catVisitInfo["ERA"] = visitInfo.era.asDegrees() * u.deg
+    catVisitInfo["exposure_time"] = visitInfo.exposureTime * u.s
 
     donutCat.meta["visit_info"] = catVisitInfo
 
@@ -274,6 +275,7 @@ def convertDictToVisitInfo(
         VisitInfo object with the same information as the input dictionary.
     """
     kwargs = {
+        "id": info["visit_id"],
         "date": DateTime(info["mjd"], system=DateTime.MJD, scale=DateTime.TAI),
         "boresightRaDec": SpherePoint(
             info["boresight_ra"].to_value(u.rad) * radians,
@@ -293,5 +295,6 @@ def convertDictToVisitInfo(
             info["observatory_elevation"].to_value(u.m),
         ),
         "era": info["ERA"].to_value(u.rad) * radians,
+        "exposureTime": info["exposure_time"].to_value(u.s),
     }
     return VisitInfo(**kwargs)
