@@ -311,11 +311,34 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             dict_["visit"] = stamps.metadata["VISIT"]
             dict_["dfc_dist"] = stamps.metadata["DFC_DIST"]
             dict_["band"] = stamps.metadata["BANDPASS"]
+            dict_["boresight_rot_angle_rad"] = stamps.metadata[
+                "BORESIGHT_ROT_ANGLE_RAD"
+            ]
+            dict_["boresight_par_angle_rad"] = stamps.metadata[
+                "BORESIGHT_PAR_ANGLE_RAD"
+            ]
+            dict_["boresight_alt_rad"] = stamps.metadata[
+                "BORESIGHT_ALT_RAD"
+            ]
+            dict_["boresight_az_rad"] = stamps.metadata[
+                "BORESIGHT_AZ_RAD"
+            ]
+            dict_["boresight_ra_rad"] = stamps.metadata[
+                "BORESIGHT_RA_RAD"
+            ]
+            dict_["boresight_dec_rad"] = stamps.metadata[
+                "BORESIGHT_DEC_RAD"
+            ]
 
         zkTable.meta["cam_name"] = donutStampsIntra.metadata["CAM_NAME"]
+        zkTable.meta["mjd"] = donutStampsIntra.metadata["MJD"]
         assert (
             donutStampsIntra.metadata["CAM_NAME"]
             == donutStampsExtra.metadata["CAM_NAME"]
+        )
+        assert (
+            donutStampsIntra.metadata["MJD"]
+            == donutStampsExtra.metadata["MJD"]
         )
 
         return pipeBase.Struct(

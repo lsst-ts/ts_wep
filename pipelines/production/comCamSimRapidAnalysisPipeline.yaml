@@ -30,10 +30,10 @@ tasks:
       # Turn off slow steps in ISR
       doBrighterFatter: false
       doCrosstalk: false
-  aggregateZernikesTask:
-    class: lsst.donut.viz.AggregateZernikesTask
-  aggregateDonutCatalogsTask:
-    class: lsst.donut.viz.AggregateDonutCatalogsTask
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesTask:
+    class: lsst.donut.viz.AggregateDonutTablesTask
   aggregateAOSVisitTableTask:
     class: lsst.donut.viz.AggregateAOSVisitTableTask
   plotAOSTask:
@@ -61,8 +61,8 @@ subsets:
       and estimates the Zernike coefficients from the donut pairs.
   step2a:
     subset:
-      - aggregateZernikesTask
-      - aggregateDonutCatalogsTask
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask
