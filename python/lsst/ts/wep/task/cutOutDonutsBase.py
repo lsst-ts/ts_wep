@@ -714,24 +714,24 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         stampsMetadata["X0"] = donutCatalog["xCorner"]
         stampsMetadata["Y0"] = donutCatalog["yCorner"]
         # Save visit info
-        stampsMetadata["BORESIGHT_ROT_ANGLE_RAD"] = donutCatalog.meta["visit_info"][
-            "boresight_rot_angle"
-        ].to(u.rad).value
-        stampsMetadata["BORESIGHT_PAR_ANGLE_RAD"] = donutCatalog.meta["visit_info"][
-            "boresight_par_angle"
-        ].to(u.rad).value
-        stampsMetadata["BORESIGHT_ALT_RAD"] = donutCatalog.meta["visit_info"][
-            "boresight_alt"
-        ].to(u.rad).value
-        stampsMetadata["BORESIGHT_AZ_RAD"] = donutCatalog.meta["visit_info"][
-            "boresight_az"
-        ].to(u.rad).value
-        stampsMetadata["BORESIGHT_RA_RAD"] = donutCatalog.meta["visit_info"][
-            "boresight_ra"
-        ].to(u.rad).value
-        stampsMetadata["BORESIGHT_DEC_RAD"] = donutCatalog.meta["visit_info"][
-            "boresight_dec"
-        ].to(u.rad).value
+        stampsMetadata["BORESIGHT_ROT_ANGLE_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_rot_angle"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_PAR_ANGLE_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_par_angle"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_ALT_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_alt"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_AZ_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_az"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_RA_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_ra"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_DEC_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_dec"].to(u.rad).value
+        )
         stampsMetadata["MJD"] = donutCatalog.meta["visit_info"]["mjd"]
 
         if len(finalStamps) > 0:
