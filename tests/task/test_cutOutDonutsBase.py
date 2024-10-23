@@ -410,6 +410,13 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "PEAK_HEIGHT",
+            "MJD",
+            "BORESIGHT_ROT_ANGLE_RAD",
+            "BORESIGHT_PAR_ANGLE_RAD",
+            "BORESIGHT_ALT_RAD",
+            "BORESIGHT_AZ_RAD",
+            "BORESIGHT_RA_RAD",
+            "BORESIGHT_DEC_RAD",
         ]
         self.assertCountEqual(metadata, expectedMetadata)
 

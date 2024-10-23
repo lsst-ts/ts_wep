@@ -211,7 +211,6 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         # test null run
         structNull = self.task.run([], [])
-        print(structNull)
 
         for struct in [structNormal, structNull]:
             # test that in accordance with declared connections,

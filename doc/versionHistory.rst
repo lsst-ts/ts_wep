@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.2.0:
+
+-------------
+12.2.0
+-------------
+
+* Update pipelines to use zernikes table instead of separate raw, avg zernike arrays.
+* Propogate visit info from donut table into donutStamps to avoid calling visitInfo from the butler.
+
 .. _lsst.ts.wep-12.1.0:
 
 -------------

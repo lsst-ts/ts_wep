@@ -118,6 +118,14 @@ class DonutStampSelectorTask(pipeBase.Task):
                         if result.selected[i]
                     ]
                 )
+        for key, val in donutStamps.metadata.items():
+            if key.startswith("BORESIGHT"):
+                selectedStamps.metadata[key] = val
+            elif key == "MJD":
+                selectedStamps.metadata[key] = val
+            else:
+                continue
+
         return pipeBase.Struct(
             donutStampsSelect=selectedStamps,
             selected=result.selected,
