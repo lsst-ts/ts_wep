@@ -119,9 +119,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                     ]
                 )
         for key, val in donutStamps.metadata.items():
-            if key.startswith("BORESIGHT"):
-                selectedStamps.metadata[key] = val
-            elif key == "MJD":
+            if key.startswith("BORESIGHT") or key == "MJD":
                 selectedStamps.metadata[key] = val
             else:
                 continue
