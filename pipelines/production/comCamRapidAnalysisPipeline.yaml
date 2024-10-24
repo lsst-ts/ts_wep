@@ -30,22 +30,22 @@ tasks:
       # Turn off slow steps in ISR
       doBrighterFatter: false
       doCrosstalk: false
-  aggregateZernikesTask:
-    class: lsst.donut.viz.AggregateZernikesTask
-  aggregateDonutCatalogsTask:
-    class: lsst.donut.viz.AggregateDonutCatalogsTask
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesTask:
+    class: lsst.donut.viz.AggregateDonutTablesTask
   aggregateAOSVisitTableTask:
     class: lsst.donut.viz.AggregateAOSVisitTableTask
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: true
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
   plotDonutTask:
     class: lsst.donut.viz.PlotDonutTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: true
 
 # Define pipeline steps
 subsets:
@@ -56,13 +56,13 @@ subsets:
       - cutOutDonutsScienceSensorGroupTask
       - calcZernikesTask
     description: |
-      This step processes the input images with ISR, 
-      finds and cuts out the donut stamps, 
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
   step2a:
     subset:
-      - aggregateZernikesTask
-      - aggregateDonutCatalogsTask
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask

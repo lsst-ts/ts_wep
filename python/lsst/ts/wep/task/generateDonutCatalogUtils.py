@@ -19,12 +19,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["runSelection", "donutCatalogToAstropy", "addVisitInfoToCatTable"]
+__all__ = [
+    "runSelection",
+    "donutCatalogToAstropy",
+    "addVisitInfoToCatTable",
+    "convertDictToVisitInfo",
+]
 
 import astropy.units as u
-import lsst.afw.image as afwImage
 import numpy as np
 from astropy.table import QTable
+from lsst.afw.coord import Observatory
+from lsst.afw.image import Exposure, RotType, VisitInfo
+from lsst.daf.base import DateTime
+from lsst.geom import SpherePoint, degrees, radians
 
 
 def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
@@ -187,11 +195,12 @@ def donutCatalogToAstropy(
     return fieldObjects
 
 
-def addVisitInfoToCatTable(exposure: afwImage.Exposure, donutCat: QTable):
+def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable):
     """
     Add visit info from the exposure object to the catalog QTable metadata.
     This should include all information we will need downstream in the
-    WEP tasks that would otherwise require loading VisitInfo from the butler.
+    WEP / donut_viz tasks that would otherwise require loading VisitInfo from
+    the butler.
 
     Parameters
     ----------
@@ -209,17 +218,83 @@ def addVisitInfoToCatTable(exposure: afwImage.Exposure, donutCat: QTable):
     visitInfo = exposure.visitInfo
 
     catVisitInfo = dict()
+
     visitRaDec = visitInfo.boresightRaDec
     catVisitInfo["boresight_ra"] = visitRaDec.getRa().asDegrees() * u.deg
     catVisitInfo["boresight_dec"] = visitRaDec.getDec().asDegrees() * u.deg
+
+    visitAzAlt = visitInfo.boresightAzAlt
+    catVisitInfo["boresight_alt"] = visitAzAlt.getLatitude().asDegrees() * u.deg
+    catVisitInfo["boresight_az"] = visitAzAlt.getLongitude().asDegrees() * u.deg
+
     catVisitInfo["boresight_rot_angle"] = (
         visitInfo.boresightRotAngle.asDegrees() * u.deg
     )
+    catVisitInfo["rot_type_name"] = visitInfo.rotType.name
+    catVisitInfo["rot_type_value"] = visitInfo.rotType.value
+
     catVisitInfo["boresight_par_angle"] = (
         visitInfo.boresightParAngle.asDegrees() * u.deg
     )
-    catVisitInfo["mjd"] = visitInfo.date.toAstropy().mjd
+
+    catVisitInfo["focus_z"] = visitInfo.focusZ * u.mm
+    catVisitInfo["mjd"] = visitInfo.date.toAstropy().tai.mjd
     catVisitInfo["visit_id"] = visitInfo.id
+    catVisitInfo["instrument_label"] = visitInfo.instrumentLabel
+
+    catVisitInfo["observatory_elevation"] = visitInfo.observatory.getElevation() * u.m
+    catVisitInfo["observatory_latitude"] = (
+        visitInfo.observatory.getLatitude().asDegrees() * u.deg
+    )
+    catVisitInfo["observatory_longitude"] = (
+        visitInfo.observatory.getLongitude().asDegrees() * u.deg
+    )
+    catVisitInfo["ERA"] = visitInfo.era.asDegrees() * u.deg
+    catVisitInfo["exposure_time"] = visitInfo.exposureTime * u.s
+
     donutCat.meta["visit_info"] = catVisitInfo
 
     return donutCat
+
+
+def convertDictToVisitInfo(
+    info: dict,
+) -> VisitInfo:
+    """
+    Convert a dictionary (as from astropy metadata added by
+    addVisitInfoToCatTable) back into a VisitInfo object.
+
+    Parameters
+    ----------
+    info : dict
+        Dictionary of visit info.
+
+    Returns
+    -------
+    `lsst.afw.image.VisitInfo`
+        VisitInfo object with the same information as the input dictionary.
+    """
+    kwargs = {
+        "id": info["visit_id"],
+        "date": DateTime(info["mjd"], system=DateTime.MJD, scale=DateTime.TAI),
+        "boresightRaDec": SpherePoint(
+            info["boresight_ra"].to_value(u.rad) * radians,
+            info["boresight_dec"].to_value(u.rad) * radians,
+        ),
+        "boresightAzAlt": SpherePoint(
+            info["boresight_az"].to_value(u.rad) * radians,
+            info["boresight_alt"].to_value(u.rad) * radians,
+        ),
+        "boresightRotAngle": info["boresight_rot_angle"].to_value(u.rad) * radians,
+        "rotType": RotType(info["rot_type_value"]),
+        "focusZ": info["focus_z"].to_value(u.mm),
+        "instrumentLabel": info["instrument_label"],
+        "observatory": Observatory(
+            info["observatory_longitude"].to_value(u.deg) * degrees,
+            info["observatory_latitude"].to_value(u.deg) * degrees,
+            info["observatory_elevation"].to_value(u.m),
+        ),
+        "era": info["ERA"].to_value(u.rad) * radians,
+        "exposureTime": info["exposure_time"].to_value(u.s),
+    }
+    return VisitInfo(**kwargs)
