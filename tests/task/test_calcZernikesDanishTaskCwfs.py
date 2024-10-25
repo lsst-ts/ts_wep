@@ -249,7 +249,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
         )
 
-       # First estimate without pairs
+        # First estimate without pairs
         zkAllExtra = self.task.estimateZernikes.run(donutStampsExtra, []).zernikes
         zkAvgExtra = self.task.combineZernikes.run(zkAllExtra).combinedZernikes
         zkAllIntra = self.task.estimateZernikes.run([], donutStampsIntra).zernikes
@@ -273,6 +273,4 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
         # Check that the averages are similar
         zkAvgUnpaired = np.mean([zkAvgExtra, zkAvgIntra], axis=0)
-        self.assertLess(
-            np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30
-        )
+        self.assertLess(np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30)

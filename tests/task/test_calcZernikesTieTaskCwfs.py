@@ -268,6 +268,4 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # Check that the averages are similar
         zkAvgUnpaired = np.mean([zkAvgExtra, zkAvgIntra], axis=0)
-        self.assertLess(
-            np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30
-        )
+        self.assertLess(np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30)
