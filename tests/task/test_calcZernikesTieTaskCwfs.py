@@ -259,8 +259,8 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         # Check that all have same number of Zernike coeffs
         self.assertEqual(zkAllExtra.shape[1], zkAllPairs.shape[1])
         self.assertEqual(zkAllIntra.shape[1], zkAllPairs.shape[1])
-        self.assertEqual(zkAvgExtra.shape[1], zkAvgPairs.shape[1])
-        self.assertEqual(zkAvgIntra.shape[1], zkAvgPairs.shape[1])
+        self.assertEqual(len(zkAvgExtra), len(zkAvgPairs))
+        self.assertEqual(len(zkAvgIntra), len(zkAvgPairs))
 
         # Check that unpaired is at least as long as paired
         self.assertGreaterEqual(zkAllExtra.shape[0], zkAllPairs.shape[0])
