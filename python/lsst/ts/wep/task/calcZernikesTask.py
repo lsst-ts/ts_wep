@@ -58,7 +58,6 @@ class CalcZernikesTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
     )
-
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
         dimensions=("visit", "detector", "instrument"),

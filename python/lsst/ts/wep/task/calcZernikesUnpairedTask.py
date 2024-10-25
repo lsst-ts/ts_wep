@@ -67,7 +67,7 @@ class CalcZernikesUnpairedTaskConnections(
     zernikes = connectionTypes.Output(
         doc="Zernike Coefficients for individual donuts and average over donuts",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="AstropyTable",
+        storageClass="AstropyQTable",
         name="zernikes",
     )
     donutQualityTable = connectionTypes.Output(
