@@ -234,25 +234,6 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
             combinedZernikesStruct.flags, np.zeros(len(testArr))
         )
 
-    def testRequiresPairs(self):
-        # Load the test data
-        donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
-        donutStampsExtra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
-        )
-        donutStampsIntra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
-        )
-
-        # Estimating without pairs while requiresPairs is True should fail
-        self.config.estimateZernikes.usePairs = False
-        with self.assertRaises(ValueError):
-            self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
-
-        # Now set requiresPairs False
-        self.config.estimateZernikes.requiresPairs = False
-        self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
-
     def testWithAndWithoutPairs(self):
         # Load the test data
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
@@ -264,27 +245,27 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         )
 
         # First estimate without pairs
-        self.config.estimateZernikes.usePairs = False
-        self.config.estimateZernikes.requiresPairs = False
-        zkAllWithoutPairs = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
-        zkAvgWithoutPairs = self.task.combineZernikes.run(
-            zkAllWithoutPairs
-        ).combinedZernikes
+        zkAllExtra = self.task.estimateZernikes.run(donutStampsExtra, []).zernikes
+        zkAvgExtra = self.task.combineZernikes.run(zkAllExtra).combinedZernikes
+        zkAllIntra = self.task.estimateZernikes.run([], donutStampsIntra).zernikes
+        zkAvgIntra = self.task.combineZernikes.run(zkAllIntra).combinedZernikes
 
         # Now estimate with pairs
-        self.config.estimateZernikes.usePairs = True
-        zkAllWithPairs = self.task.estimateZernikes.run(
+        zkAllPairs = self.task.estimateZernikes.run(
             donutStampsExtra, donutStampsIntra
         ).zernikes
-        zkAvgWithPairs = self.task.combineZernikes.run(zkAllWithPairs).combinedZernikes
+        zkAvgPairs = self.task.combineZernikes.run(zkAllPairs).combinedZernikes
 
-        # Check that without pairs has at least twice the number of zernikes
-        self.assertEqual(zkAllWithoutPairs.shape[1], zkAllWithPairs.shape[1])
-        self.assertGreaterEqual(zkAllWithoutPairs.shape[0], 2 * zkAllWithPairs.shape[0])
+        # Check that all have same number of Zernike coeffs
+        self.assertEqual(zkAllExtra.shape[1], zkAllPairs.shape[1])
+        self.assertEqual(zkAllIntra.shape[1], zkAllPairs.shape[1])
+        self.assertEqual(len(zkAvgExtra), len(zkAvgPairs))
+        self.assertEqual(len(zkAvgIntra), len(zkAvgPairs))
+
+        # Check that unpaired is at least as long as paired
+        self.assertGreaterEqual(zkAllExtra.shape[0], zkAllPairs.shape[0])
+        self.assertGreaterEqual(zkAllIntra.shape[0], zkAllPairs.shape[0])
 
         # Check that the averages are similar
-        self.assertLess(
-            np.sqrt(np.sum(np.square(zkAvgWithPairs - zkAvgWithoutPairs))), 0.30
-        )
+        zkAvgUnpaired = np.mean([zkAvgExtra, zkAvgIntra], axis=0)
+        self.assertLess(np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30)

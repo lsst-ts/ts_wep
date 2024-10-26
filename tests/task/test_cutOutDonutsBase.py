@@ -187,10 +187,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         ) = self._generateTestExposures()
         centerCoordX = centerCoord[0]
         centerCoordY = centerCoord[1]
-        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
-            self.task.calculateFinalCentroids(
-                centeredExp, template, centerCoordX, centerCoordY
-            )
+        (
+            centerX,
+            centerY,
+            cornerX,
+            cornerY,
+            initCornerX,
+            initCornerY,
+            peakHeight,
+        ) = self.task.calculateFinalCentroids(
+            centeredExp, template, centerCoordX, centerCoordY
         )
         # For centered donut final center and final corner should be
         # half stamp width apart
@@ -218,10 +224,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         ) = self._generateTestExposures()
         centerCoordX = centerCoord[0]
         centerCoordY = centerCoord[1]
-        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
-            self.task.calculateFinalCentroids(
-                edgeExp, template, centerCoordX, centerCoordY
-            )
+        (
+            centerX,
+            centerY,
+            cornerX,
+            cornerY,
+            initCornerX,
+            initCornerY,
+            peakHeight,
+        ) = self.task.calculateFinalCentroids(
+            edgeExp, template, centerCoordX, centerCoordY
         )
         # For donut stamp that would go off the top corner of the exposure
         # then the stamp should start at (0, 0) instead

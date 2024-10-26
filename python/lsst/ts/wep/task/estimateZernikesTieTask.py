@@ -97,24 +97,12 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
         + "lsst.ts.wep.imageMapper.ImageMapper.createPupilMasks(). "
         + "(the default is an emtpy dictionary)",
     )
-    requiresPairs = pexConfig.Field(
-        dtype=bool,
-        default=True,
-        doc="Whether to allow Zernike estimation with a single donut. If True, "
-        + "pairs are required. (the default is True)",
-    )
     modelPupilKernelSize = pexConfig.Field(
         dtype=float,
         default=2,
         doc="The size of the Gaussian kernel to convolve with the model pupil "
         + "when estimating Zernikes with a single donut. "
         + "(the default is 2)",
-    )
-    binning = pexConfig.Field(
-        dtype=int,
-        default=1,
-        doc="Binning factor to apply to the donut stamps before estimating "
-        + "Zernike coefficients. A value of 1 means no binning.",
     )
 
 

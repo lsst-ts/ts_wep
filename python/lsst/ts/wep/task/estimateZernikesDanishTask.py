@@ -38,12 +38,6 @@ class EstimateZernikesDanishConfig(EstimateZernikesBaseConfig):
         doc="A dictionary containing any of the keyword arguments for "
         + "scipy.optimize.least_squares, except `fun`, `x0`, `jac`, or `args`.",
     )
-    binning = pexConfig.Field(
-        dtype=int,
-        default=1,
-        doc="Binning factor to apply to the donut stamps before estimating "
-        + "Zernike coefficients. A value of 1 means no binning.",
-    )
 
 
 class EstimateZernikesDanishTask(EstimateZernikesBaseTask):

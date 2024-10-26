@@ -250,24 +250,27 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         )
 
         # First estimate without pairs
-        self.config.estimateZernikes.usePairs = False
-        zkAllWithoutPairs = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
-        zkAvgWithoutPairs = self.task.combineZernikes.run(
-            zkAllWithoutPairs
-        ).combinedZernikes
+        zkAllExtra = self.task.estimateZernikes.run(donutStampsExtra, []).zernikes
+        zkAvgExtra = self.task.combineZernikes.run(zkAllExtra).combinedZernikes
+        zkAllIntra = self.task.estimateZernikes.run([], donutStampsIntra).zernikes
+        zkAvgIntra = self.task.combineZernikes.run(zkAllIntra).combinedZernikes
 
         # Now estimate with pairs
-        self.config.estimateZernikes.usePairs = True
-        zkAllWithPairs = self.task.estimateZernikes.run(
+        zkAllPairs = self.task.estimateZernikes.run(
             donutStampsExtra, donutStampsIntra
         ).zernikes
-        zkAvgWithPairs = self.task.combineZernikes.run(zkAllWithPairs).combinedZernikes
+        zkAvgPairs = self.task.combineZernikes.run(zkAllPairs).combinedZernikes
 
-        # Check that without pairs has at least twice the number of zernikes
-        self.assertEqual(zkAllWithoutPairs.shape[1], zkAllWithPairs.shape[1])
-        self.assertGreaterEqual(zkAllWithoutPairs.shape[0], 2 * zkAllWithPairs.shape[0])
+        # Check that all have same number of Zernike coeffs
+        self.assertEqual(zkAllExtra.shape[1], zkAllPairs.shape[1])
+        self.assertEqual(zkAllIntra.shape[1], zkAllPairs.shape[1])
+        self.assertEqual(len(zkAvgExtra), len(zkAvgPairs))
+        self.assertEqual(len(zkAvgIntra), len(zkAvgPairs))
 
-        # Check that the averages are the same
-        self.assertTrue(np.allclose(zkAvgWithoutPairs, zkAvgWithPairs))
+        # Check that unpaired is at least as long as paired
+        self.assertGreaterEqual(zkAllExtra.shape[0], zkAllPairs.shape[0])
+        self.assertGreaterEqual(zkAllIntra.shape[0], zkAllPairs.shape[0])
+
+        # Check that the averages are similar
+        zkAvgUnpaired = np.mean([zkAvgExtra, zkAvgIntra], axis=0)
+        self.assertLess(np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30)

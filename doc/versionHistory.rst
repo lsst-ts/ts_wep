@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.3.0:
+
+-------------
+12.3.0
+-------------
+
+* Added CutOutDonutsUnpairedTask and CalcZernikesUnpairedTask
+
 .. _lsst.ts.wep-12.2.0:
 
 -------------
