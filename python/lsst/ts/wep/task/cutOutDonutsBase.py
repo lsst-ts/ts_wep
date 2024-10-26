@@ -572,6 +572,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Value of entropy
         stampsEntropy = list()
 
+        # Fraction of bad pixels
+        fracBadPixels = list()
+
         for idx, donutRow in enumerate(donutCatalog):
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
@@ -671,6 +674,10 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)
             isEffective.append(eff)
             stampsEntropy.append(entro)
+
+            # Calculate fraction of bad pixels
+            bits = finalStamp.mask.getPlaneBitMask(("SAT", "BAD", "NO_DATA"))
+            fracBadPixels.append(np.mean(np.bitwise_and(finalStamp.mask.array, bits)))
 
             finalStamps.append(donutStamp)
 
@@ -781,4 +788,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
         # Save the peak of the correlated image
         stampsMetadata["PEAK_HEIGHT"] = peakHeight
+
+        # Save the fraction of bad pixels
+        stampsMetadata["FRAC_BAD_PIX"] = np.array(fracBadPixels).astype(float)
+
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)

@@ -422,6 +422,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "PEAK_HEIGHT",
+            "FRAC_BAD_PIX",
             "MJD",
             "BORESIGHT_ROT_ANGLE_RAD",
             "BORESIGHT_PAR_ANGLE_RAD",
@@ -447,6 +448,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "PEAK_HEIGHT",
+            "FRAC_BAD_PIX",
         ]:
             self.assertEqual(
                 len(donutStamps), len(donutStamps.metadata.getArray(measure))

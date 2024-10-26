@@ -105,10 +105,13 @@ class CalcZernikesTaskConfig(
         ),
     )
     donutStampSelector = pexConfig.ConfigurableField(
-        target=DonutStampSelectorTask, doc="How to select donut stamps."
+        target=DonutStampSelectorTask,
+        doc="How to select donut stamps.",
     )
     doDonutStampSelector = pexConfig.Field(
-        doc="Whether or not to run donut stamp selector.", dtype=bool, default=False
+        doc="Whether or not to run donut stamp selector.",
+        dtype=bool,
+        default=True,
     )
 
 

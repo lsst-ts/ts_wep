@@ -6,6 +6,16 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.4.0:
+
+-------------
+12.4.0
+-------------
+
+* Added a threshold on fraction-of-bad-pixels to DonutStampSelectorTask
+* Modified DonutStampSelectorTaskConfig so that, by default, selections are run on fraction-of-bad-pixels and signal-to-noise ratio.
+* Modified CalcZernikesTask so that DonutStampSelectorTask is run by default
+
 .. _lsst.ts.wep-12.3.0:
 
 -------------
