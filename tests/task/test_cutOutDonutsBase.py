@@ -519,3 +519,19 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         )
         infoMsg += "of the image; reducing the amount of donut mask dilation to 99"
         self.assertEqual(infoMsg, cm.output[0])
+
+    def testBadPixelMaskDefinitions(self):
+        # Load test data
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+
+        # Flag donut pixels as bad
+        self.config.badPixelMaskDefinitions=["DONUT"]
+        task = CutOutDonutsBaseTask(config=self.config, name="Flag donut pix as bad")
+        donutStamps = task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+
+        # Check that all the stamps have "bad" pixels
+        # (because we flagged donut pixels as bad)
+        fracBadPix = np.asarray(donutStamps.metadata.getArray("FRAC_BAD_PIX"))
+        self.assertTrue(np.all(fracBadPix > 0))

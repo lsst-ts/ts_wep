@@ -147,6 +147,11 @@ class CutOutDonutsBaseTaskConfig(
         dtype=int,
         default=3,
     )
+    badPixelMaskDefinitions = pexConfig.ListField(
+        doc="List of mask values flagged as 'bad' for Zernike estimation.",
+        dtype=str,
+        default=["SAT", "BAD", "NO_DATA"],
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -676,7 +681,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             stampsEntropy.append(entro)
 
             # Calculate fraction of bad pixels
-            bits = finalStamp.mask.getPlaneBitMask(("SAT", "BAD", "NO_DATA"))
+            bits = finalStamp.mask.getPlaneBitMask(self.config.badPixelMaskDefinitions)
             fracBadPixels.append(np.mean(np.bitwise_and(finalStamp.mask.array, bits)))
 
             finalStamps.append(donutStamp)
