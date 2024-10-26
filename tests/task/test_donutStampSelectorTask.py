@@ -128,7 +128,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # so we select all donuts
         self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 3)
 
-        # by default, SNR selection happens and uses yaml config values 
+        # by default, SNR selection happens and uses yaml config values
         # so that all donuts here would get selected
         self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
 
