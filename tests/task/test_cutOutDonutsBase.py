@@ -499,6 +499,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
         # Add blend to mask
         stamp.wep_im.blendOffsets = [[-50, -60]]
+        stamp.makeMask(self.task.instConfigFile, self.task.opticalModel)
         sn_dict = self.task.calculateSN(stamp)
         for val in sn_dict.values():
             self.assertFalse(np.isnan(val))

@@ -19,7 +19,7 @@ tasks:
     config:
       estimateZernikes.maxNollIndex: 28
       estimateZernikes.saveHistory: False
-      estimateZernikes.maskKwargs: {'doMaskBlends': False}
+      estimateZernikes.maskKwargs: { "doMaskBlends": False }
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
@@ -29,6 +29,10 @@ tasks:
       ampOffset.doApplyAmpOffset: false
       # Turn off slow steps in ISR
       doBrighterFatter: false
+      # Mask saturated pixels,
+      # but turn off quadratic crosstalk because it's currently broken
+      doSaturation: True
+      crosstalk.doQuadraticCrosstalkCorrection: False
   aggregateZernikeTablesTask:
     class: lsst.donut.viz.AggregateZernikeTablesTask
   aggregateDonutTablesTask:

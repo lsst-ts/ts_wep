@@ -358,8 +358,17 @@ class DonutStamp(AbstractStamp):
         nRot = int(eulerZ // 90)
         stampMask = np.rot90(stampMask, -nRot)
 
-        # Add back to the original mask
-        stampMask += self.stamp_im.mask.array
+        # First make sure the mask doesn't already have donut/blend bits
+        # This is so if this function gets called multiple times, the donut
+        # and blend bits don't get re-added.
+        mask0 = self.stamp_im.mask.array.copy()
+        bit = self.stamp_im.mask.getMaskPlaneDict()["DONUT"]
+        mask0 &= ~(1 << bit)
+        bit = self.stamp_im.mask.getMaskPlaneDict()["BLEND"]
+        mask0 &= ~(1 << bit)
+
+        # Add original mask to the new mask
+        stampMask += mask0
 
         # Save mask
         self.stamp_im.setMask(afwImage.Mask(stampMask.copy()))

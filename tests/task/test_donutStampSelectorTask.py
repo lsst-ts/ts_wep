@@ -123,7 +123,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # test defaults
         selection = self.task.selectStamps(donutStampsIntra)
         donutsQuality = selection.donutsQuality
-
+        
         # by default, config.selectWithEntropy is False,
         # so we select all donuts
         self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 3)
@@ -132,16 +132,17 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # so that all donuts here would get selected
         self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
 
-        # by default, fraction-of-bad-pixels happens
-        # these donuts are all fine, so all are selected
-        self.assertEqual(np.sum(donutsQuality["FRAC_BAD_PIX_SELECT"]), 3)
+        # by default, it thresholds on fraction-of-bad-pixels
+        # only one of these test donuts is selected
+        self.assertEqual(np.sum(donutsQuality["FRAC_BAD_PIX_SELECT"]), 1)
 
-        # Test that overall selection also shows all three donuts
-        self.assertEqual(np.sum(donutsQuality["FINAL_SELECT"]), 3)
-        self.assertEqual(np.sum(selection.selected), 3)
+        # Test that overall selection also shows only one donut
+        self.assertEqual(np.sum(donutsQuality["FINAL_SELECT"]), 1)
+        self.assertEqual(np.sum(selection.selected), 1)
 
         # switch on selectWithEntropy,
         # set config.maxEntropy so that one donut is selected
+        self.config.selectWithFracBadPixels = False
         self.config.selectWithEntropy = True
         entropyThreshold = 2.85
         self.config.maxEntropy = entropyThreshold
@@ -171,14 +172,6 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # test that the SN of selected donuts is indeed above the threshold
         for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]]:
             self.assertLess(minSignalToNoise, v)
-
-        # Make sure that stamps with bad pixels are cut
-        badPix = np.asarray(donutStampsIntra.metadata.getArray("FRAC_BAD_PIX"))
-        badPix[0] = 0.1
-        donutStampsIntra.metadata.set("FRAC_BAD_PIX", badPix)
-        selection = self.task.selectStamps(donutStampsIntra)
-        donutsQuality = selection.donutsQuality
-        self.assertEqual(np.sum(donutsQuality["FRAC_BAD_PIX_SELECT"]), 2)
 
         # finally turn all selections off and make sure everything is selected
         self.config.selectWithEntropy = False
