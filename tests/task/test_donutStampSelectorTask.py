@@ -161,7 +161,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # test custom SNR thresholds
         self.config.selectWithEntropy = False
         self.config.useCustomSnLimit = True
-        minSignalToNoise = 1585
+        minSignalToNoise = 1658
         self.config.minSignalToNoise = minSignalToNoise
         task = DonutStampSelectorTask(config=self.config, name="SN Task")
         selection = task.selectStamps(donutStampsIntra)

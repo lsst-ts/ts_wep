@@ -110,7 +110,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
         self.assertEqual(type(self.task.donutStampSelector), DonutStampSelectorTask)
-        self.assertEqual(self.task.doDonutStampSelector, False)
+        self.assertEqual(self.task.doDonutStampSelector, True)
 
     def testEstimateZernikes(self):
         donutStampsExtra = self.butler.get(
@@ -204,6 +204,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "ENTROPY",
             "ENTROPY_SELECT",
             "SN_SELECT",
+            "FRAC_BAD_PIX",
+            "FRAC_BAD_PIX_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
         ]

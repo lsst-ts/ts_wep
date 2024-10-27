@@ -219,6 +219,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "ENTROPY",
                     "ENTROPY_SELECT",
                     "SN_SELECT",
+                    "FRAC_BAD_PIX",
+                    "FRAC_BAD_PIX_SELECT",
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
                 ]
