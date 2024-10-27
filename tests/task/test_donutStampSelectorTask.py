@@ -123,7 +123,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # test defaults
         selection = self.task.selectStamps(donutStampsIntra)
         donutsQuality = selection.donutsQuality
-        
+
         # by default, config.selectWithEntropy is False,
         # so we select all donuts
         self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 3)
