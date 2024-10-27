@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.4.0:
+
+-------------
+12.4.0
+-------------
+
+* Updated to use new ISR task (lsst.ip.isr.IsrTask --> lsst.ip.isr.IsrTaskLSST)
+
 .. _lsst.ts.wep-12.3.0:
 
 -------------
