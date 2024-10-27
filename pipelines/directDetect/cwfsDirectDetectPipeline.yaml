@@ -8,27 +8,19 @@ instrument: lsst.obs.lsst.LsstCam
 # and then specify the class name corresponding to that task
 tasks:
   isr:
-    class: lsst.ip.isr.isrTask.IsrTask
-    # Below we specify the configuration settings we want to use
-    # when running the task in this pipeline. Since our data doesn't
-    # include bias or flats we only want to use doApplyGains and
-    # doOverscan in our isr task.
+    class: lsst.ip.isr.IsrTaskLSST
     config:
-      connections.outputExposure: "postISRCCD"
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: true
+      ampOffset.doApplyAmpOffset: false
+      # Turn off slow steps in ISR
+      doBrighterFatter: false
+      doCrosstalk: false
+      # Turn off flats, biases, darks because we don't have these in test repo
       doBias: False
-      doVariance: False
-      doLinearize: False
-      doCrosstalk: False
-      doDefect: False
-      doNanMasking: False
-      doInterpolate: False
-      doBrighterFatter: False
       doDark: False
       doFlat: False
-      doApplyGains: True
-      doFringe: False
-      doOverscan: True
-      python: OverscanCorrectionTask.ConfigClass.fitType = 'MEDIAN'
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
@@ -40,4 +32,4 @@ tasks:
     config:
       estimateZernikes.maxNollIndex: 28
       estimateZernikes.saveHistory: False
-      estimateZernikes.maskKwargs: {'doMaskBlends': False}
+      estimateZernikes.maskKwargs: { "doMaskBlends": False }
