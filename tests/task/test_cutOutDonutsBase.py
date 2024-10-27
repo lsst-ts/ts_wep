@@ -525,7 +525,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
 
         # Flag donut pixels as bad
-        self.config.badPixelMaskDefinitions=["DONUT"]
+        self.config.badPixelMaskDefinitions = ["DONUT"]
         task = CutOutDonutsBaseTask(config=self.config, name="Flag donut pix as bad")
         donutStamps = task.cutOutStamps(
             exposure, donutCatalog, DefocalType.Extra, self.cameraName
