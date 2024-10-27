@@ -343,7 +343,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
              A dictionary of calculated quantities
         """
 
-        stamp.makeMask(self.instConfigFile, self.opticalModel)
         imageArray = stamp.stamp_im.image.array
         mask = stamp.stamp_im.mask
         varianceArray = stamp.stamp_im.variance.array
@@ -437,6 +436,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             "ttl_noise_bkgnd_variance": ttlNoiseBkgndVariance,
             "ttl_noise_donut_variance": ttlNoiseDonutVariance,
         }
+
         return snDict
 
     def filterBadRecentering(self, xShifts, yShifts):
@@ -671,6 +671,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                 bandpass=bandLabel,
                 archive_element=linear_wcs,
             )
+
+            # Create image mask
+            donutStamp.makeMask(self.instConfigFile, self.opticalModel)
 
             # Calculate the S/N per stamp
             snQuant.append(self.calculateSN(donutStamp))
