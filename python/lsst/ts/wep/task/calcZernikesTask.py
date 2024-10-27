@@ -286,7 +286,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     * u.pixel
                 )
             )
-            for key in ["MAG", "SN", "ENTROPY"]:
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX"]:
                 for stamps, foc in [
                     (intraStamps, "intra"),
                     (extraStamps, "extra"),

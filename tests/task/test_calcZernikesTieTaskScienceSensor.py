@@ -171,6 +171,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "extra_sn",
             "intra_entropy",
             "extra_entropy",
+            "intra_frac_bad_pix",
+            "extra_frac_bad_pix",
         ]
         self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
 
