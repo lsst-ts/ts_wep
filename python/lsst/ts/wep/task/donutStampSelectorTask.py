@@ -217,7 +217,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         else:
             self.log.warning("No fraction-of-bad-pixels cut.")
 
-        # AND statement: choose only donuts that satisfy all selected conditions
+        # choose only donuts that satisfy all selected conditions
         selected = entropySelect * snSelect * fracBadPixSelect
 
         # store information about which donuts were selected
