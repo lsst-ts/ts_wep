@@ -150,7 +150,7 @@ class CutOutDonutsBaseTaskConfig(
     badPixelMaskDefinitions = pexConfig.ListField(
         doc="List of mask values flagged as 'bad' for Zernike estimation.",
         dtype=str,
-        default=["SAT", "BAD", "NO_DATA"],
+        default=["SAT", "BAD", "NO_DATA", "INTRP"],
     )
 
 

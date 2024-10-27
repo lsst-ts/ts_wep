@@ -162,6 +162,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("extra_sn", "<f4"),
             ("intra_entropy", "<f4"),
             ("extra_entropy", "<f4"),
+            ("intra_frac_bad_pix", "<f4"),
+            ("extra_frac_bad_pix", "<f4"),
         ]
         for j in range(4, self.maxNollIndex + 1):
             dtype.append((f"Z{j}", "<f4"))
