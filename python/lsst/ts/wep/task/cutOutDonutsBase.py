@@ -682,7 +682,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
             # Calculate fraction of bad pixels
             bits = finalStamp.mask.getPlaneBitMask(self.config.badPixelMaskDefinitions)
-            fracBadPixels.append(np.mean(np.bitwise_and(finalStamp.mask.array, bits)))
+            badPixels = np.bitwise_and(finalStamp.mask.array, bits) > 0
+            fracBadPixels.append(np.mean(badPixels))
 
             finalStamps.append(donutStamp)
 
