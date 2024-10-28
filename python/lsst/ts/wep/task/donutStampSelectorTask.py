@@ -175,7 +175,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         entropyValue = np.full(len(donutStamps), np.nan)
         if "ENTROPY" in list(donutStamps.metadata):
             fillVals = np.asarray(donutStamps.metadata.getArray("ENTROPY"))
-            entropyValue[:len(fillVals)] = fillVals
+            entropyValue[: len(fillVals)] = fillVals
             if self.config.selectWithEntropy:
                 entropySelect = entropyValue < self.config.maxEntropy
         else:
@@ -189,7 +189,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         snValue = np.full(len(donutStamps), np.nan)
         if "SN" in list(donutStamps.metadata):
             fillVals = np.asarray(donutStamps.metadata.getArray("SN"))
-            snValue[:len(fillVals)] = fillVals
+            snValue[: len(fillVals)] = fillVals
             if self.config.selectWithSignalToNoise:
                 # Use user defined SN cutoff or the filter-dependent
                 # defaults, depending on useCustomSnLimit
@@ -216,7 +216,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         fracBadPix = np.full(len(donutStamps), np.nan)
         if "FRAC_BAD_PIX" in list(donutStamps.metadata):
             fillVals = np.asarray(donutStamps.metadata.getArray("FRAC_BAD_PIX"))
-            fracBadPix[:len(fillVals)] = fillVals
+            fracBadPix[: len(fillVals)] = fillVals
             if self.config.selectWithFracBadPixels:
                 fracBadPixSelect = fracBadPix <= self.config.maxFracBadPixels
         else:
