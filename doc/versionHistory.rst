@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.4.2:
+
+-------------
+12.4.2
+-------------
+
+* Increase stamp size in Rapid Analysis pipeline to avoid clipping donut edges.
+
 .. _lsst.ts.wep-12.4.1:
 
 -------------
