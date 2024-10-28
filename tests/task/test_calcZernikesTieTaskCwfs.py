@@ -269,3 +269,15 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         # Check that the averages are similar
         zkAvgUnpaired = np.mean([zkAvgExtra, zkAvgIntra], axis=0)
         self.assertLess(np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30)
+
+    def testUnevenPairs(self):
+        # Test for when you have more of either extra or intra
+        # Load the test data
+        stampsExtra = self.donutStampsExtra
+        stampsIntra = self.donutStampsIntra
+
+        # Increase length of extra list
+        stampsExtra.extend([stampsExtra[0]])
+
+        # Now estimate Zernikes
+        self.task.run(stampsExtra, stampsIntra)
