@@ -12,16 +12,16 @@ tasks:
       python: |
         from lsst.ts.wep.task.pairTask import GroupPairer
         config.pairer.retarget(GroupPairer)
-      donutStampSize: 160
+      donutStampSize: 200
       initialCutoutPadding: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       estimateZernikes.maxNollIndex: 28
       estimateZernikes.saveHistory: False
-      estimateZernikes.maskKwargs: {'doMaskBlends': False}
+      estimateZernikes.maskKwargs: { "doMaskBlends": False }
   isr:
-    class: lsst.ip.isr.IsrTask
+    class: lsst.ip.isr.IsrTaskLSST
     config:
       # Although we don't have to apply the amp offset corrections, we do want
       # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
@@ -29,23 +29,26 @@ tasks:
       ampOffset.doApplyAmpOffset: false
       # Turn off slow steps in ISR
       doBrighterFatter: false
-      doCrosstalk: false
-  aggregateZernikesTask:
-    class: lsst.donut.viz.AggregateZernikesTask
-  aggregateDonutCatalogsTask:
-    class: lsst.donut.viz.AggregateDonutCatalogsTask
+      # Mask saturated pixels,
+      # but turn off quadratic crosstalk because it's currently broken
+      doSaturation: True
+      crosstalk.doQuadraticCrosstalkCorrection: False
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesTask:
+    class: lsst.donut.viz.AggregateDonutTablesTask
   aggregateAOSVisitTableTask:
     class: lsst.donut.viz.AggregateAOSVisitTableTask
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: true
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
   plotDonutTask:
     class: lsst.donut.viz.PlotDonutTask
     config:
-      doRubinTVUpload: false
+      doRubinTVUpload: true
 
 # Define pipeline steps
 subsets:
@@ -56,13 +59,13 @@ subsets:
       - cutOutDonutsScienceSensorGroupTask
       - calcZernikesTask
     description: |
-      This step processes the input images with ISR, 
-      finds and cuts out the donut stamps, 
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
       and estimates the Zernike coefficients from the donut pairs.
   step2a:
     subset:
-      - aggregateZernikesTask
-      - aggregateDonutCatalogsTask
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask

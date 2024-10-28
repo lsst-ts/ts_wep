@@ -187,10 +187,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         ) = self._generateTestExposures()
         centerCoordX = centerCoord[0]
         centerCoordY = centerCoord[1]
-        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
-            self.task.calculateFinalCentroids(
-                centeredExp, template, centerCoordX, centerCoordY
-            )
+        (
+            centerX,
+            centerY,
+            cornerX,
+            cornerY,
+            initCornerX,
+            initCornerY,
+            peakHeight,
+        ) = self.task.calculateFinalCentroids(
+            centeredExp, template, centerCoordX, centerCoordY
         )
         # For centered donut final center and final corner should be
         # half stamp width apart
@@ -218,10 +224,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         ) = self._generateTestExposures()
         centerCoordX = centerCoord[0]
         centerCoordY = centerCoord[1]
-        centerX, centerY, cornerX, cornerY, initCornerX, initCornerY, peakHeight = (
-            self.task.calculateFinalCentroids(
-                edgeExp, template, centerCoordX, centerCoordY
-            )
+        (
+            centerX,
+            centerY,
+            cornerX,
+            cornerY,
+            initCornerX,
+            initCornerY,
+            peakHeight,
+        ) = self.task.calculateFinalCentroids(
+            edgeExp, template, centerCoordX, centerCoordY
         )
         # For donut stamp that would go off the top corner of the exposure
         # then the stamp should start at (0, 0) instead
@@ -410,6 +422,14 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "PEAK_HEIGHT",
+            "FRAC_BAD_PIX",
+            "MJD",
+            "BORESIGHT_ROT_ANGLE_RAD",
+            "BORESIGHT_PAR_ANGLE_RAD",
+            "BORESIGHT_ALT_RAD",
+            "BORESIGHT_AZ_RAD",
+            "BORESIGHT_RA_RAD",
+            "BORESIGHT_DEC_RAD",
         ]
         self.assertCountEqual(metadata, expectedMetadata)
 
@@ -428,6 +448,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "PEAK_HEIGHT",
+            "FRAC_BAD_PIX",
         ]:
             self.assertEqual(
                 len(donutStamps), len(donutStamps.metadata.getArray(measure))
@@ -478,6 +499,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
         # Add blend to mask
         stamp.wep_im.blendOffsets = [[-50, -60]]
+        stamp.makeMask(self.task.instConfigFile, self.task.opticalModel)
         sn_dict = self.task.calculateSN(stamp)
         for val in sn_dict.values():
             self.assertFalse(np.isnan(val))
@@ -498,3 +520,19 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         )
         infoMsg += "of the image; reducing the amount of donut mask dilation to 99"
         self.assertEqual(infoMsg, cm.output[0])
+
+    def testBadPixelMaskDefinitions(self):
+        # Load test data
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+
+        # Flag donut pixels as bad
+        self.config.badPixelMaskDefinitions = ["DONUT"]
+        task = CutOutDonutsBaseTask(config=self.config, name="Flag donut pix as bad")
+        donutStamps = task.cutOutStamps(
+            exposure, donutCatalog, DefocalType.Extra, self.cameraName
+        )
+
+        # Check that all the stamps have "bad" pixels
+        # (because we flagged donut pixels as bad)
+        fracBadPix = np.asarray(donutStamps.metadata.getArray("FRAC_BAD_PIX"))
+        self.assertTrue(np.all(fracBadPix > 0))

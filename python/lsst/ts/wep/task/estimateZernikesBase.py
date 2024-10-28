@@ -69,12 +69,11 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         + "to the Noll index. In this case, indices 0-3 are always set to zero, "
         + "because they are not estimated by our pipeline.",
     )
-    usePairs = pexConfig.Field(
-        dtype=bool,
-        default=True,
-        doc="Whether to estimate Zernike coefficients from pairs of donut "
-        + "stamps. If False, Zernikes are estimated from individual donuts. "
-        + "Note the TIE algorithm requires pairs of donuts.",
+    binning = pexConfig.Field(
+        dtype=int,
+        default=1,
+        doc="Binning factor to apply to the donut stamps before estimating "
+        + "Zernike coefficients. A value of 1 means no binning.",
     )
     saveHistory = pexConfig.Field(
         dtype=bool,
@@ -243,8 +242,12 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             microns.
         """
         # Get the instrument
-        camName = donutStampsExtra[0].cam_name
-        detectorName = donutStampsExtra[0].detector_name
+        if len(donutStampsExtra) > 0:
+            refStamp = donutStampsExtra[0]
+        else:
+            refStamp = donutStampsIntra[0]
+        camName = refStamp.cam_name
+        detectorName = refStamp.detector_name
         instrument = getTaskInstrument(
             camName,
             detectorName,
@@ -265,7 +268,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             saveHistory=self.config.saveHistory,
         )
 
-        if self.config.usePairs:
+        if len(donutStampsExtra) > 0 and len(donutStampsIntra) > 0:
             zernikes = self.estimateFromPairs(
                 donutStampsExtra,
                 donutStampsIntra,
@@ -275,8 +278,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             if wfEst.algo.requiresPairs:
                 raise ValueError(
                     f"Wavefront algorithm `{wfEst.algo.__class__.__name__}` "
-                    "requires pairs of donuts. Please set usePairs=True in "
-                    "the task config."
+                    "requires pairs of donuts."
                 )
             zernikes = self.estimateFromIndivStamps(
                 donutStampsExtra,

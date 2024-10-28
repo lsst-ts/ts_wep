@@ -6,6 +6,58 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.4.2:
+
+-------------
+12.4.2
+-------------
+
+* Increase stamp size in Rapid Analysis pipeline to avoid clipping donut edges.
+
+.. _lsst.ts.wep-12.4.1:
+
+-------------
+12.4.1
+-------------
+
+* Fixed bug where CalcZernikesTask fails when the number of intra/extra stamps is not equal
+
+.. _lsst.ts.wep-12.4.0:
+
+-------------
+12.4.0
+-------------
+
+* Added a threshold on fraction-of-bad-pixels to DonutStampSelectorTask
+* Modified DonutStampSelectorTaskConfig so that, by default, selections are run on fraction-of-bad-pixels and signal-to-noise ratio.
+* Modified CalcZernikesTask so that DonutStampSelectorTask is run by default
+* Fixed bug where DM mask bits weren't persisting in DonutStamp
+
+.. _lsst.ts.wep-12.3.0:
+
+-------------
+12.3.0
+-------------
+
+* Added CutOutDonutsUnpairedTask and CalcZernikesUnpairedTask
+
+.. _lsst.ts.wep-12.2.0:
+
+-------------
+12.2.0
+-------------
+
+* Update pipelines to use zernikes table instead of separate raw, avg zernike arrays.
+* Propogate visit info from donut table into donutStamps to avoid calling visitInfo from the butler.
+
+.. _lsst.ts.wep-12.1.0:
+
+-------------
+12.1.0
+-------------
+
+* Change zernikes butler storage format to QTable.
+
 .. _lsst.ts.wep-12.0.0:
 
 -------------

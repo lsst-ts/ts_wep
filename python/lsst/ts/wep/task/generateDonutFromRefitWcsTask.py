@@ -35,6 +35,7 @@ from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
+    addVisitInfoToCatTable,
     donutCatalogToAstropy,
     runSelection,
 )
@@ -400,5 +401,6 @@ and direct detect catalog as output."
         donutCatalog["detector"] = np.array(
             [detectorName] * len(donutCatalog), dtype=str
         )
+        donutCatalog = addVisitInfoToCatTable(exposure, donutCatalog)
 
         return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)

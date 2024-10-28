@@ -38,9 +38,15 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
     )
     selectWithSignalToNoise = pexConfig.Field(
         dtype=bool,
-        default=False,
-        doc="Whether to use signal to noise ratio in deciding to use the donut."
+        default=True,
+        doc="Whether to use signal to noise ratio in deciding to use the donut. "
         + "By default the values from snLimitStar.yaml config file are used.",
+    )
+    selectWithFracBadPixels = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Whether to use fraction of bad pixels in deciding to use the donut. "
+        + "Bad pixels correspond to mask values of 'SAT', 'BAD', 'NO_DATA'.",
     )
     useCustomSnLimit = pexConfig.Field(
         dtype=bool,
@@ -62,13 +68,17 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
         default=3.5,
         doc=str("The entropy threshold to use (keep donuts only below the threshold)."),
     )
+    maxFracBadPixels = pexConfig.Field(
+        dtype=float,
+        default=0.0,
+        doc=str("Maximum fraction of bad pixels in selected donuts."),
+    )
 
 
 class DonutStampSelectorTask(pipeBase.Task):
     """
     Donut Stamp Selector uses information about donut stamp calculated at
-    the stamp cutting out stage to select those that fulfill entropy
-    and/or signal-to-noise criteria.
+    the stamp cutting out stage to select those that specified criteria.
     """
 
     ConfigClass = DonutStampSelectorTaskConfig
@@ -97,9 +107,9 @@ class DonutStampSelectorTask(pipeBase.Task):
                     Boolean array of stamps that were selected, same length as
                     donutStamps.
                 - donutsQuality : `astropy.table.QTable`
-                    A table with calculated signal to noise measure and entropy
-                    value per donut, together with selection outcome for all
-                    input donuts.
+                    A table with calculated signal to noise measure, entropy
+                    value per donut, and fraction of bad pixels, together with
+                    selection outcome for all input donuts.
 
         """
         result = self.selectStamps(donutStamps)
@@ -109,7 +119,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         )
         selectedStamps._refresh_metadata()
         # Need to copy a few other fields by hand
-        for k in ["SN", "ENTROPY", "VISIT"]:
+        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "VISIT"]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
                     [
@@ -118,6 +128,12 @@ class DonutStampSelectorTask(pipeBase.Task):
                         if result.selected[i]
                     ]
                 )
+        for key, val in donutStamps.metadata.items():
+            if key.startswith("BORESIGHT") or key == "MJD":
+                selectedStamps.metadata[key] = val
+            else:
+                continue
+
         return pipeBase.Struct(
             donutStampsSelect=selectedStamps,
             selected=result.selected,
@@ -151,29 +167,29 @@ class DonutStampSelectorTask(pipeBase.Task):
                     value per donut, together with selection outcome for all
                     input donuts.
         """
-
         # Which donuts to use for Zernike estimation
         # initiate these by selecting all donuts
         entropySelect = np.ones(len(donutStamps), dtype="bool")
 
         # Collect the entropy information if available
+        entropyValue = np.full(len(donutStamps), np.nan)
         if "ENTROPY" in list(donutStamps.metadata):
-            entropyValue = np.asarray(donutStamps.metadata.getArray("ENTROPY"))
+            fillVals = np.asarray(donutStamps.metadata.getArray("ENTROPY"))
+            entropyValue[: len(fillVals)] = fillVals
             if self.config.selectWithEntropy:
                 entropySelect = entropyValue < self.config.maxEntropy
         else:
-            self.log.warning(
-                "No entropy cut. Checking if signal-to-noise \
-should be applied."
-            )
+            self.log.warning("No entropy cut. Checking other conditions.")
+
         # By default select all donuts,  only overwritten
         # if selectWithSignalToNoise is True
         snSelect = np.ones(len(donutStamps), dtype="bool")
 
         # collect the SN information if available
+        snValue = np.full(len(donutStamps), np.nan)
         if "SN" in list(donutStamps.metadata):
-            snValue = np.asarray(donutStamps.metadata.getArray("SN"))
-
+            fillVals = np.asarray(donutStamps.metadata.getArray("SN"))
+            snValue[: len(fillVals)] = fillVals
             if self.config.selectWithSignalToNoise:
                 # Use user defined SN cutoff or the filter-dependent
                 # defaults, depending on useCustomSnLimit
@@ -188,12 +204,26 @@ should be applied."
                 # Select using the given threshold
                 snSelect = snThreshold < snValue
         else:
-            self.log.warning("No signal-to-noise selection applied.")
-        # AND condition : if both selectWithEntropy
-        # and selectWithSignalToNoise, then
-        # only donuts that pass with SN criterion as well
-        # as entropy criterion are selected
-        selected = entropySelect * snSelect
+            self.log.warning(
+                "No signal-to-noise selection applied. Checking other conditions"
+            )
+
+        # By default select all donuts,  only overwritten
+        # if selectWithFracBadPixels is True
+        fracBadPixSelect = np.ones(len(donutStamps), dtype="bool")
+
+        # collect fraction-of-bad-pixels information if available
+        fracBadPix = np.full(len(donutStamps), np.nan)
+        if "FRAC_BAD_PIX" in list(donutStamps.metadata):
+            fillVals = np.asarray(donutStamps.metadata.getArray("FRAC_BAD_PIX"))
+            fracBadPix[: len(fillVals)] = fillVals
+            if self.config.selectWithFracBadPixels:
+                fracBadPixSelect = fracBadPix <= self.config.maxFracBadPixels
+        else:
+            self.log.warning("No fraction-of-bad-pixels cut.")
+
+        # choose only donuts that satisfy all selected conditions
+        selected = entropySelect * snSelect * fracBadPixSelect
 
         # store information about which donuts were selected
         # use QTable even though no units at the moment in
@@ -203,11 +233,21 @@ should be applied."
             data=[
                 snValue,
                 entropyValue,
+                fracBadPix,
                 snSelect,
                 entropySelect,
+                fracBadPixSelect,
                 selected,
             ],
-            names=["SN", "ENTROPY", "SN_SELECT", "ENTROPY_SELECT", "FINAL_SELECT"],
+            names=[
+                "SN",
+                "ENTROPY",
+                "FRAC_BAD_PIX",
+                "SN_SELECT",
+                "ENTROPY_SELECT",
+                "FRAC_BAD_PIX_SELECT",
+                "FINAL_SELECT",
+            ],
         )
 
         self.log.info("Selected %d/%d donut stamps", selected.sum(), len(donutStamps))

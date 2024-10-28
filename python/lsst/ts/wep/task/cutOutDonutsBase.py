@@ -147,6 +147,11 @@ class CutOutDonutsBaseTaskConfig(
         dtype=int,
         default=3,
     )
+    badPixelMaskDefinitions = pexConfig.ListField(
+        doc="List of mask values flagged as 'bad' for Zernike estimation.",
+        dtype=str,
+        default=["SAT", "BAD", "NO_DATA", "INTRP"],
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -338,7 +343,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
              A dictionary of calculated quantities
         """
 
-        stamp.makeMask(self.instConfigFile, self.opticalModel)
         imageArray = stamp.stamp_im.image.array
         mask = stamp.stamp_im.mask
         varianceArray = stamp.stamp_im.variance.array
@@ -432,6 +436,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             "ttl_noise_bkgnd_variance": ttlNoiseBkgndVariance,
             "ttl_noise_donut_variance": ttlNoiseDonutVariance,
         }
+
         return snDict
 
     def filterBadRecentering(self, xShifts, yShifts):
@@ -572,6 +577,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Value of entropy
         stampsEntropy = list()
 
+        # Fraction of bad pixels
+        fracBadPixels = list()
+
         for idx, donutRow in enumerate(donutCatalog):
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
@@ -664,6 +672,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                 archive_element=linear_wcs,
             )
 
+            # Create image mask
+            donutStamp.makeMask(self.instConfigFile, self.opticalModel)
+
             # Calculate the S/N per stamp
             snQuant.append(self.calculateSN(donutStamp))
 
@@ -671,6 +682,11 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)
             isEffective.append(eff)
             stampsEntropy.append(entro)
+
+            # Calculate fraction of bad pixels
+            bits = finalStamp.mask.getPlaneBitMask(self.config.badPixelMaskDefinitions)
+            badPixels = np.bitwise_and(finalStamp.mask.array, bits) > 0
+            fracBadPixels.append(np.mean(badPixels))
 
             finalStamps.append(donutStamp)
 
@@ -713,6 +729,26 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the corner values
         stampsMetadata["X0"] = donutCatalog["xCorner"]
         stampsMetadata["Y0"] = donutCatalog["yCorner"]
+        # Save visit info
+        stampsMetadata["BORESIGHT_ROT_ANGLE_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_rot_angle"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_PAR_ANGLE_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_par_angle"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_ALT_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_alt"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_AZ_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_az"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_RA_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_ra"].to(u.rad).value
+        )
+        stampsMetadata["BORESIGHT_DEC_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_dec"].to(u.rad).value
+        )
+        stampsMetadata["MJD"] = donutCatalog.meta["visit_info"]["mjd"]
 
         if len(finalStamps) > 0:
             self.metadata[f"recenterFlags{defocalType.value.capitalize()}"] = list(
@@ -761,4 +797,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
         # Save the peak of the correlated image
         stampsMetadata["PEAK_HEIGHT"] = peakHeight
+
+        # Save the fraction of bad pixels
+        stampsMetadata["FRAC_BAD_PIX"] = np.array(fracBadPixels).astype(float)
+
         return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
