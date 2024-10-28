@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.4.1:
+
+-------------
+12.4.1
+-------------
+
+* Fixed bug where CalcZernikesTask fails when the number of intra/extra stamps is not equal
+
 .. _lsst.ts.wep-12.4.0:
 
 -------------

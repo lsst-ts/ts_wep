@@ -238,6 +238,12 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 zkCoeffCombined.flags,
             )
         ):
+            # If zk is None, we need to stop. This can happen when running
+            # paired Zernike estimation and the number of intra/extra stamps
+            # is not the same
+            if zk is None:
+                break
+
             row = dict()
             row["label"] = f"pair{i+1}"
             row["used"] = not flag
