@@ -105,10 +105,13 @@ class CalcZernikesTaskConfig(
         ),
     )
     donutStampSelector = pexConfig.ConfigurableField(
-        target=DonutStampSelectorTask, doc="How to select donut stamps."
+        target=DonutStampSelectorTask,
+        doc="How to select donut stamps.",
     )
     doDonutStampSelector = pexConfig.Field(
-        doc="Whether or not to run donut stamp selector.", dtype=bool, default=False
+        doc="Whether or not to run donut stamp selector.",
+        dtype=bool,
+        default=True,
     )
 
 
@@ -159,6 +162,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("extra_sn", "<f4"),
             ("intra_entropy", "<f4"),
             ("extra_entropy", "<f4"),
+            ("intra_frac_bad_pix", "<f4"),
+            ("extra_frac_bad_pix", "<f4"),
         ]
         for j in range(4, self.maxNollIndex + 1):
             dtype.append((f"Z{j}", "<f4"))
@@ -283,7 +288,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     * u.pixel
                 )
             )
-            for key in ["MAG", "SN", "ENTROPY"]:
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX"]:
                 for stamps, foc in [
                     (intraStamps, "intra"),
                     (extraStamps, "extra"),

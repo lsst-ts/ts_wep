@@ -130,7 +130,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
             # Check that results are similar
             diff = np.sqrt(np.sum((meanZk - pairedZk) ** 2))
-            self.assertLess(diff, 0.16)
+            self.assertLess(diff, 0.17)
 
     def testTable(self):
         # Load data from butler
@@ -219,6 +219,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "ENTROPY",
                     "ENTROPY_SELECT",
                     "SN_SELECT",
+                    "FRAC_BAD_PIX",
+                    "FRAC_BAD_PIX_SELECT",
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
                 ]
