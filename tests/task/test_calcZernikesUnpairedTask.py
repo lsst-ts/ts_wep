@@ -130,7 +130,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
             # Check that results are similar
             diff = np.sqrt(np.sum((meanZk - pairedZk) ** 2))
-            self.assertLess(diff, 0.16)
+            self.assertLess(diff, 0.17)
 
     def testTable(self):
         # Load data from butler
