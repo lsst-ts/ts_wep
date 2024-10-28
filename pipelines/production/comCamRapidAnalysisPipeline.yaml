@@ -12,7 +12,7 @@ tasks:
       python: |
         from lsst.ts.wep.task.pairTask import GroupPairer
         config.pairer.retarget(GroupPairer)
-      donutStampSize: 160
+      donutStampSize: 200
       initialCutoutPadding: 40
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
