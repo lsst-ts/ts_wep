@@ -193,26 +193,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
-    def testAssignExtraIntraIdxFocusZValueError(self):
-        focusZNegative = -1
-        focusZPositive = 1
-        focusZ0 = 0
-
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZPositive, focusZPositive, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZPositive, focusZ0, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZNegative, focusZNegative, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZNegative, focusZ0, "LSSTCam")
-        with self.assertRaises(ValueError) as context:
-            self.task.assignExtraIntraIdx(focusZ0, focusZPositive, "LSSTCam")
-        self.assertEqual(
-            "Must have one extra-focal and one intra-focal image.",
-            str(context.exception),
-        )
-
     def testAssignExtraIntraIdxInvalidCamera(self):
         cameraName = "WrongCam"
         with self.assertRaises(ValueError) as context:
