@@ -301,12 +301,7 @@ class DonutStamp(AbstractStamp):
     ):
         """Create the mask for the image.
 
-        Note the mask is returned in the original coordinate system of the info
-        that came from the butler (i.e. the DVCS, and the CWFSs are rotated
-        with respect to the science sensors). See sitcomtn-003.lsst.io for more
-        information.
-
-        Also note that technically the image masks depend on the optical
+        Note that technically the image masks depend on the optical
         aberrations, but this function assumes the aberrations are zero.
 
         Parameters
@@ -362,6 +357,18 @@ class DonutStamp(AbstractStamp):
         eulerZ = -detector.getOrientation().getYaw().asDegrees()
         nRot = int(eulerZ // 90)
         stampMask = np.rot90(stampMask, -nRot)
+
+        # First make sure the mask doesn't already have donut/blend bits
+        # This is so if this function gets called multiple times, the donut
+        # and blend bits don't get re-added.
+        mask0 = self.stamp_im.mask.array.copy()
+        bit = self.stamp_im.mask.getMaskPlaneDict()["DONUT"]
+        mask0 &= ~(1 << bit)
+        bit = self.stamp_im.mask.getMaskPlaneDict()["BLEND"]
+        mask0 &= ~(1 << bit)
+
+        # Add original mask to the new mask
+        stampMask += mask0
 
         # Save mask
         self.stamp_im.setMask(afwImage.Mask(stampMask.copy()))

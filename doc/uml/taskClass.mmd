@@ -19,6 +19,11 @@ GenerateDonutCatalogWcsTaskConfig *-- DonutSourceSelectorTask
 GenerateDonutCatalogWcsTaskConfig *-- GenerateDonutCatalogWcsTaskConnections
 GenerateDonutCatalogWcsTask *-- GenerateDonutCatalogWcsTaskConfig
 DonutStamps *-- DonutStamp
+CutOutDonutsBaseTaskConfig <|-- CutOutDonutsUnpairedTaskConfig
+CutOutDonutsBaseTask <|-- CutOutDonutsUnpairedTask
+CutOutDonutsUnpairedTaskConfig *-- CutOutDonutsBaseTaskConnections
+CutOutDonutsUnpairedTask *-- CutOutDonutsUnpairedTaskConfig
+CutOutDonutsUnpairedTask ..> DonutStamps
 CutOutDonutsBaseTaskConfig <|-- CutOutDonutsCwfsTaskConfig
 CutOutDonutsBaseTask <|-- CutOutDonutsCwfsTask
 CutOutDonutsCwfsTaskConfig *-- CutOutDonutsBaseTaskConnections
@@ -40,6 +45,10 @@ CalcZernikesTaskConfig *-- CombineZernikesSigmaClipTask
 CalcZernikesTaskConfig *-- CalcZernikesTaskConnections
 CalcZernikesTask *-- CalcZernikesTaskConfig
 CalcZernikesTask ..> DonutStamps
+CalcZernikesUnpairedTaskConfig *-- CombineZernikesSigmaClipTask
+CalcZernikesUnpairedTaskConfig *-- CalcZernikesUnpairedTaskConnections
+CalcZernikesUnpairedTask *-- CalcZernikesUnpairedTaskConfig
+CalcZernikesUnpairedTask ..> DonutStamps
 GenerateDonutFromRefitWcsTaskConfig *-- GenerateDonutFromRefitWcsTaskConnections
 GenerateDonutCatalogWcsTaskConfig <|-- GenerateDonutFromRefitWcsTaskConfig
 GenerateDonutFromRefitWcsTask *-- GenerateDonutFromRefitWcsTaskConfig

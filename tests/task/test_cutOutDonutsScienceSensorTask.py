@@ -30,6 +30,7 @@ from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
 )
+from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
 from lsst.ts.wep.utils import (
     DefocalType,
     getModulePath,
@@ -192,26 +193,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
-    def testAssignExtraIntraIdxFocusZValueError(self):
-        focusZNegative = -1
-        focusZPositive = 1
-        focusZ0 = 0
-
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZPositive, focusZPositive, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZPositive, focusZ0, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZNegative, focusZNegative, "LSSTCam")
-        with self.assertRaises(ValueError):
-            self.task.assignExtraIntraIdx(focusZNegative, focusZ0, "LSSTCam")
-        with self.assertRaises(ValueError) as context:
-            self.task.assignExtraIntraIdx(focusZ0, focusZPositive, "LSSTCam")
-        self.assertEqual(
-            "Must have one extra-focal and one intra-focal image.",
-            str(context.exception),
-        )
-
     def testAssignExtraIntraIdxInvalidCamera(self):
         cameraName = "WrongCam"
         with self.assertRaises(ValueError) as context:
@@ -254,6 +235,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "detector",
         ]
         noSrcDonutCatalog = QTable({column: [] for column in columns})
+        noSrcDonutCatalog = addVisitInfoToCatTable(exposureExtra, noSrcDonutCatalog)
         testOutNoSrc = self.task.run(
             [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
@@ -321,6 +303,13 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "PEAK_HEIGHT",
+            "MJD",
+            "BORESIGHT_ROT_ANGLE_RAD",
+            "BORESIGHT_PAR_ANGLE_RAD",
+            "BORESIGHT_ALT_RAD",
+            "BORESIGHT_AZ_RAD",
+            "BORESIGHT_RA_RAD",
+            "BORESIGHT_DEC_RAD",
         ]
         # Test that all expected metadata is included in the butler
         self.assertEqual(

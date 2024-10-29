@@ -95,46 +95,54 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # Test the default config values
         self.OrigTask = DonutStampSelectorTask(config=self.config, name="Orig Task")
         self.assertEqual(self.OrigTask.config.selectWithEntropy, False)
-        self.assertEqual(self.OrigTask.config.selectWithSignalToNoise, False)
+        self.assertEqual(self.OrigTask.config.selectWithSignalToNoise, True)
+        self.assertEqual(self.OrigTask.config.selectWithFracBadPixels, True)
         self.assertEqual(self.OrigTask.config.useCustomSnLimit, False)
 
         # Test changing configs
         self.config.selectWithEntropy = True
-        self.config.selectWithSignalToNoise = True
+        self.config.selectWithSignalToNoise = False
+        self.config.selectWithFracBadPixels = False
         self.config.minSignalToNoise = 999
         self.config.maxEntropy = 4
+        self.config.maxFracBadPixels = 0.2
         self.ModifiedTask = DonutStampSelectorTask(config=self.config, name="Mod Task")
 
         self.assertEqual(self.ModifiedTask.config.selectWithEntropy, True)
-        self.assertEqual(self.ModifiedTask.config.selectWithSignalToNoise, True)
+        self.assertEqual(self.ModifiedTask.config.selectWithSignalToNoise, False)
+        self.assertEqual(self.ModifiedTask.config.selectWithFracBadPixels, False)
         self.assertEqual(self.ModifiedTask.config.minSignalToNoise, 999)
         self.assertEqual(self.ModifiedTask.config.maxEntropy, 4)
+        self.assertEqual(self.ModifiedTask.config.maxFracBadPixels, 0.2)
 
     def testSelectStamps(self):
         donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        # test default: no donuts are excluded
+        # test defaults
         selection = self.task.selectStamps(donutStampsIntra)
+        donutsQuality = selection.donutsQuality
 
-        # by default,  config.selectWithEntropy is False,
+        # by default, config.selectWithEntropy is False,
         # so we select all donuts
-        self.assertEqual(np.sum(selection.donutsQuality["ENTROPY_SELECT"]), 3)
+        self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 3)
 
-        # by default, config.selectWithSignalToNoise is False,
-        # so we select all donuts
-        self.assertEqual(np.sum(selection.donutsQuality["SN_SELECT"]), 3)
+        # by default, SNR selection happens and uses yaml config values
+        # so that all donuts here would get selected
+        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
 
-        # The final selection is the union of what was selected
-        # according to SN selection and entropy selection
-        self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 3)
+        # by default, it thresholds on fraction-of-bad-pixels
+        # only one of these test donuts is selected
+        self.assertEqual(np.sum(donutsQuality["FRAC_BAD_PIX_SELECT"]), 1)
 
-        # Test that identical information is conveyed here
-        self.assertEqual(np.sum(selection.selected), 3)
+        # Test that overall selection also shows only one donut
+        self.assertEqual(np.sum(donutsQuality["FINAL_SELECT"]), 1)
+        self.assertEqual(np.sum(selection.selected), 1)
 
         # switch on selectWithEntropy,
         # set config.maxEntropy so that one donut is selected
+        self.config.selectWithFracBadPixels = False
         self.config.selectWithEntropy = True
         entropyThreshold = 2.85
         self.config.maxEntropy = entropyThreshold
@@ -151,18 +159,8 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
             entropyThreshold,
         )
 
-        # switch on selectWithSignalToNoise
-        self.config.selectWithSignalToNoise = True
-        task = DonutStampSelectorTask(config=self.config, name="SN Task")
-        selection = task.selectStamps(donutStampsIntra)
-        donutsQuality = selection.donutsQuality
-
-        # by default we use the yaml config values so that
-        # all donuts here would get selected
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
-
-        # test that if we use the custom threshold,
-        # some donuts won't get selected
+        # test custom SNR thresholds
+        self.config.selectWithEntropy = False
         self.config.useCustomSnLimit = True
         minSignalToNoise = 1658
         self.config.minSignalToNoise = minSignalToNoise
@@ -175,48 +173,28 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]]:
             self.assertLess(minSignalToNoise, v)
 
+        # finally turn all selections off and make sure everything is selected
+        self.config.selectWithEntropy = False
+        self.config.selectWithSignalToNoise = False
+        self.config.selectWithFracBadPixels = False
+        task = DonutStampSelectorTask(config=self.config, name="All off")
+        selection = task.selectStamps(donutStampsIntra)
+        self.assertEqual(np.sum(selection.donutsQuality["ENTROPY_SELECT"]), 3)
+        self.assertEqual(np.sum(selection.donutsQuality["SN_SELECT"]), 3)
+        self.assertEqual(np.sum(selection.donutsQuality["FRAC_BAD_PIX_SELECT"]), 3)
+        self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 3)
+
     def testTaskRun(self):
         donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        # test default: no donuts are excluded
+
+        # test defaults
         taskOut = self.task.run(donutStampsIntra)
         donutsQuality = taskOut.donutsQuality
         selected = taskOut.selected
         donutStampsSelect = taskOut.donutStampsSelect
 
-        # Test that the length of the donutStamps is as expected
-        self.assertEqual(len(donutStampsSelect), 3)
-
-        # by default,  config.selectWithEntropy is False,
-        # so we select all donuts
-        self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 3)
-
-        # by default, config.selectWithSignalToNoise is False,
-        # so we select all donuts
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
-
-        # The final selection is the union of what was selected
-        # according to SN selection and entropy selection
-        self.assertEqual(np.sum(donutsQuality["FINAL_SELECT"]), 3)
-
-        # Test that identical information is conveyed here
-        self.assertEqual(np.sum(selected), 3)
-
-        # switch on selectWithEntropy,
-        # set config.maxEntropy so that one donut is selected
-        self.config.selectWithEntropy = True
-        entropyThreshold = 2.85
-        self.config.maxEntropy = entropyThreshold
-
-        task = DonutStampSelectorTask(config=self.config, name="Entropy Task")
-        taskOut = task.run(donutStampsIntra)
-        donutsQuality = taskOut.donutsQuality
-        self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 1)
-
-        # also test that the entropy of the selected donut
-        # is indeed below threshold
-        self.assertLess(
-            donutsQuality["ENTROPY"][donutsQuality["ENTROPY_SELECT"]],
-            entropyThreshold,
-        )
+        # Test that final selection numbers match
+        self.assertEqual(len(donutStampsSelect), selected.sum())
+        self.assertEqual(len(donutStampsSelect), donutsQuality["FINAL_SELECT"].sum())
