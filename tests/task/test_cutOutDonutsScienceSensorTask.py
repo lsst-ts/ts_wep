@@ -30,7 +30,6 @@ from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
 )
-from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
 from lsst.ts.wep.utils import (
     DefocalType,
     getModulePath,
@@ -255,7 +254,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "detector",
         ]
         noSrcDonutCatalog = QTable({column: [] for column in columns})
-        noSrcDonutCatalog = addVisitInfoToCatTable(exposureExtra, noSrcDonutCatalog)
         testOutNoSrc = self.task.run(
             [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
         )
@@ -323,13 +321,6 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "PEAK_HEIGHT",
-            "MJD",
-            "BORESIGHT_ROT_ANGLE_RAD",
-            "BORESIGHT_PAR_ANGLE_RAD",
-            "BORESIGHT_ALT_RAD",
-            "BORESIGHT_AZ_RAD",
-            "BORESIGHT_RA_RAD",
-            "BORESIGHT_DEC_RAD",
         ]
         # Test that all expected metadata is included in the butler
         self.assertEqual(

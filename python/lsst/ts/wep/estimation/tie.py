@@ -88,6 +88,9 @@ class TieAlgorithm(WfAlgorithm):
         To see possibilities, see the docstring for
         lsst.ts.wep.imageMapper.ImageMapper.createPupilMasks().
         (the default is None)
+    requiresPairs : bool, optional
+        Whether to allow Zernike estimation with a single donut. If True,
+        pairs are required. (the default is True)
     modelPupilKernelSize : float, optional
         The size of the Gaussian kernel to convolve with the model pupil
         when estimating Zernikes with a single donut.
@@ -107,6 +110,7 @@ class TieAlgorithm(WfAlgorithm):
         centerBinary: bool = True,
         convergeTol: float = 1e-9,
         maskKwargs: Optional[dict] = None,
+        requiresPairs: bool = True,
         modelPupilKernelSize: float = 2,
         binning: int = 1,
     ) -> None:
@@ -118,13 +122,28 @@ class TieAlgorithm(WfAlgorithm):
         self.centerBinary = centerBinary
         self.convergeTol = convergeTol
         self.maskKwargs = maskKwargs
+        self.requiresPairs = requiresPairs
         self.modelPupilKernelSize = modelPupilKernelSize
         self.binning = binning
 
     @property
     def requiresPairs(self) -> bool:
         """Whether the algorithm requires pairs to estimate Zernikes."""
-        return False
+        return self._requiresPairs
+
+    @requiresPairs.setter
+    def requiresPairs(self, value: bool) -> None:
+        """Set whether the algorithm requires pairs to estimate Zernikes.
+
+        Parameters
+        ----------
+        value : bool
+            Whether to allow Zernike estimation with a single donut.
+            If True, pairs are required.
+        """
+        if not isinstance(value, bool):
+            raise TypeError("requiresPairs must be a bool.")
+        self._requiresPairs = value
 
     @property
     def opticalModel(self) -> str:
