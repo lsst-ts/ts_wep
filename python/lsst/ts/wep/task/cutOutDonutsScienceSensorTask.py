@@ -183,22 +183,12 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         """
 
         if cameraName in ["LSSTCam", "LSSTComCam", "LSSTComCamSim"]:
-            errorStr = "Must have one extra-focal and one intra-focal image."
-            if focusZVal0 < 0:
-                # Check that other image does not have same defocal direction
-                if focusZVal1 <= 0:
-                    raise ValueError(errorStr)
+            if focusZVal0 < focusZVal1:
                 extraExpIdx = 1
                 intraExpIdx = 0
-            elif focusZVal0 > 0:
-                # Check that other image does not have same defocal direction
-                if focusZVal1 >= 0:
-                    raise ValueError(errorStr)
+            else:
                 extraExpIdx = 0
                 intraExpIdx = 1
-            else:
-                # Need to be defocal images ('FOCUSZ != 0')
-                raise ValueError(errorStr)
         elif cameraName == "LATISS":
             errorStr = "Must have two images with different FOCUSZ parameter."
             if focusZVal0 != focusZVal1:

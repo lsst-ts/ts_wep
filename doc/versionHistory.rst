@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.5.0:
+
+-------------
+12.5.0
+-------------
+
+* Enable CutOutDonutsScienceSensorTask to operate for a pair with same-sign focusZ.
+
 .. _lsst.ts.wep-12.4.2:
 
 -------------
