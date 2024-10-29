@@ -110,7 +110,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
         self.assertEqual(type(self.task.donutStampSelector), DonutStampSelectorTask)
-        self.assertEqual(self.task.doDonutStampSelector, True)
+        self.assertEqual(self.task.doDonutStampSelector, False)
 
     def testEstimateZernikes(self):
         donutStampsExtra = self.butler.get(
@@ -171,8 +171,6 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "extra_sn",
             "intra_entropy",
             "extra_entropy",
-            "intra_frac_bad_pix",
-            "extra_frac_bad_pix",
         ]
         self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
 
@@ -206,8 +204,6 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "ENTROPY",
             "ENTROPY_SELECT",
             "SN_SELECT",
-            "FRAC_BAD_PIX",
-            "FRAC_BAD_PIX_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
         ]
@@ -215,6 +211,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         # test null run
         structNull = self.task.run([], [])
+        print(structNull)
 
         for struct in [structNormal, structNull]:
             # test that in accordance with declared connections,

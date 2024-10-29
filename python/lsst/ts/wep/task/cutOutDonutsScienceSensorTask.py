@@ -39,7 +39,6 @@ from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTaskConnections,
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
 from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
 
@@ -49,6 +48,13 @@ from .pairTask import ExposurePairer
 class CutOutDonutsScienceSensorTaskConnections(
     CutOutDonutsBaseTaskConnections, dimensions=("detector", "instrument")
 ):
+    visitInfos = ct.Input(
+        doc="Exposure VisitInfos",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="VisitInfo",
+        name="postISRCCD.visitInfo",
+        multiple=True,
+    )
     donutVisitPairTable = ct.Input(
         doc="Visit pair table",
         dimensions=("instrument",),
@@ -113,10 +119,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         camera = butlerQC.get(inputRefs.camera)
 
         visitInfoDict = {
-            v.dataId["visit"]: convertDictToVisitInfo(
-                butlerQC.get(v).meta["visit_info"]
-            )
-            for v in inputRefs.donutCatalog
+            v.dataId["exposure"]: butlerQC.get(v) for v in inputRefs.visitInfos
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
