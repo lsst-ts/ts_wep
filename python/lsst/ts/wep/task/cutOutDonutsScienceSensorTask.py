@@ -183,7 +183,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         """
 
         if cameraName in ["LSSTCam", "LSSTComCam", "LSSTComCamSim"]:
-            if focusZVal0 < 0:
+            if focusZVal0 < focusZVal1:
                 extraExpIdx = 1
                 intraExpIdx = 0
             else:
