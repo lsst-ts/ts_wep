@@ -100,6 +100,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.OrigTask.config.useCustomSnLimit, False)
 
         # Test changing configs
+        self.config.maxSelect = 10
         self.config.selectWithEntropy = True
         self.config.selectWithSignalToNoise = False
         self.config.selectWithFracBadPixels = False
@@ -108,6 +109,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.config.maxFracBadPixels = 0.2
         self.ModifiedTask = DonutStampSelectorTask(config=self.config, name="Mod Task")
 
+        self.assertEqual(self.ModifiedTask.config.maxSelect, 10)
         self.assertEqual(self.ModifiedTask.config.selectWithEntropy, True)
         self.assertEqual(self.ModifiedTask.config.selectWithSignalToNoise, False)
         self.assertEqual(self.ModifiedTask.config.selectWithFracBadPixels, False)
@@ -173,7 +175,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]]:
             self.assertLess(minSignalToNoise, v)
 
-        # finally turn all selections off and make sure everything is selected
+        # turn all selections off and make sure everything is selected
         self.config.selectWithEntropy = False
         self.config.selectWithSignalToNoise = False
         self.config.selectWithFracBadPixels = False
@@ -183,6 +185,15 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(np.sum(selection.donutsQuality["SN_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["FRAC_BAD_PIX_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 3)
+
+        # set maxSelect = 1 and make sure the final selection is only 1
+        self.config.maxSelect = 1
+        task = DonutStampSelectorTask(config=self.config, name="maxSelect=1")
+        selection = task.selectStamps(donutStampsIntra)
+        self.assertEqual(np.sum(selection.donutsQuality["ENTROPY_SELECT"]), 3)
+        self.assertEqual(np.sum(selection.donutsQuality["SN_SELECT"]), 3)
+        self.assertEqual(np.sum(selection.donutsQuality["FRAC_BAD_PIX_SELECT"]), 3)
+        self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 1)
 
     def testTaskRun(self):
         donutStampsIntra = self.butler.get(
