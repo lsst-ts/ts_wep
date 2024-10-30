@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.6.0:
+
+-------------
+12.6.0
+-------------
+
+* Added maxSelect config to DonutStampsSelector
+
 .. _lsst.ts.wep-12.5.0:
 
 -------------

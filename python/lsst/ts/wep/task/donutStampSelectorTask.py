@@ -31,6 +31,11 @@ from lsst.utils.timer import timeMethod
 
 
 class DonutStampSelectorTaskConfig(pexConfig.Config):
+    maxSelect = pexConfig.Field(
+        dtype=int,
+        default=5,
+        doc="Maximum number of donut stamps to select. If -1, all are selected.",
+    )
     selectWithEntropy = pexConfig.Field(
         dtype=bool,
         default=False,
@@ -224,6 +229,10 @@ class DonutStampSelectorTask(pipeBase.Task):
 
         # choose only donuts that satisfy all selected conditions
         selected = entropySelect * snSelect * fracBadPixSelect
+
+        # make sure we don't select more than maxSelect
+        if self.config.maxSelect != -1:
+            selected[np.cumsum(selected) > self.config.maxSelect] = False
 
         # store information about which donuts were selected
         # use QTable even though no units at the moment in

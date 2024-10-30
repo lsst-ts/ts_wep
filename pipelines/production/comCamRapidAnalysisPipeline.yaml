@@ -5,7 +5,7 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.useCustomMagLimit: True
-      donutSelector.sourceLimit: 5
+      donutSelector.sourceLimit: 20
   cutOutDonutsScienceSensorGroupTask:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:
@@ -20,6 +20,7 @@ tasks:
       estimateZernikes.maxNollIndex: 28
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
+      donutStampSelector.maxSelect: 5
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
