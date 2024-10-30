@@ -60,7 +60,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCutoutsFamPipeline.yaml"
+            testPipelineConfigDir, "testDonutStampSelectorPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(
@@ -209,3 +209,11 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # Test that final selection numbers match
         self.assertEqual(len(donutStampsSelect), selected.sum())
         self.assertEqual(len(donutStampsSelect), donutsQuality["FINAL_SELECT"].sum())
+
+    def testPipelineRun(self):
+        # Config specifies maxSelect=1, so the Zernike table should only have
+        # 2 rows (average, and pair 1)
+        zernikes = self.butler.get(
+            "zernikes", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        self.assertEqual(len(zernikes), 2)
