@@ -6,13 +6,21 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.6.1:
+
+-------------
+12.6.1
+-------------
+
+* Added a unit test for specifying DonutStampSelector.config.maxSelect in a pipeline config yaml.
+
 .. _lsst.ts.wep-12.6.0:
 
 -------------
 12.6.0
 -------------
 
-* Added maxSelect config to DonutStampsSelector
+* Added maxSelect config to DonutStampSelector
 
 .. _lsst.ts.wep-12.5.0:
 
