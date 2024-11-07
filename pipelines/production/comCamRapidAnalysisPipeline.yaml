@@ -70,7 +70,7 @@ subsets:
   step2a:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesTask
+      - aggregateDonutTablesGroupTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask
