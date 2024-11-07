@@ -36,8 +36,12 @@ tasks:
       crosstalk.doQuadraticCrosstalkCorrection: False
   aggregateZernikeTablesTask:
     class: lsst.donut.viz.AggregateZernikeTablesTask
-  aggregateDonutTablesTask:
-    class: lsst.donut.viz.AggregateDonutTablesTask
+  aggregateDonutTablesGroupTask:
+      class: lsst.donut.viz.AggregateDonutTablesTask
+      config:
+          python: |
+              from lsst.ts.wep.task.pairTask import GroupPairer
+              config.pairer.retarget(GroupPairer)
   aggregateAOSVisitTableTask:
     class: lsst.donut.viz.AggregateAOSVisitTableTask
   plotAOSTask:
