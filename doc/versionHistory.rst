@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-12.7.0:
+
+-------------
+12.7.0
+-------------
+
+* Added requireConverge to TIE and defaulted to True in task
+* Fixed bug with None types in EstimateZernikeTask metadata histories
+
 .. _lsst.ts.wep-12.6.1:
 
 -------------

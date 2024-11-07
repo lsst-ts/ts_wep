@@ -95,6 +95,11 @@ class TieAlgorithm(WfAlgorithm):
     binning : int, optional
         Binning factor to apply to the donut stamps before estimating
         Zernike coefficients. The default value of 1 means no binning.
+        (the default is 1)
+    requireConverge : bool, optional
+        Whether to require that the TIE converges. If True, and the TIE
+        did not converge, the TIE returns NaNs.
+        (the default is False)
     """
 
     def __init__(
@@ -109,6 +114,7 @@ class TieAlgorithm(WfAlgorithm):
         maskKwargs: Optional[dict] = None,
         modelPupilKernelSize: float = 2,
         binning: int = 1,
+        requireConverge: bool = False,
     ) -> None:
         self.opticalModel = opticalModel
         self.maxIter = maxIter
@@ -120,6 +126,7 @@ class TieAlgorithm(WfAlgorithm):
         self.maskKwargs = maskKwargs
         self.modelPupilKernelSize = modelPupilKernelSize
         self.binning = binning
+        self.requireConverge = requireConverge
 
     @property
     def requiresPairs(self) -> bool:
@@ -428,6 +435,24 @@ class TieAlgorithm(WfAlgorithm):
         if value < 1:
             raise ValueError("binning must be greater than or equal to 1.")
         self._binning = value
+
+    @property
+    def requireConverge(self) -> int:
+        """Whether to require that the TIE converges."""
+        return self._requireConverge
+
+    @requireConverge.setter
+    def requireConverge(self, value: int) -> None:
+        """Whether to require that the TIE converges.
+
+        Parameters
+        ----------
+        value : bool
+            Whether to require that the TIE converges.
+        """
+        if not isinstance(value, bool):
+            raise TypeError("requireConverge must be a bool.")
+        self._requireConverge = value
 
     @property
     def history(self) -> dict:
@@ -866,5 +891,9 @@ class TieAlgorithm(WfAlgorithm):
             # If we've hit a caustic or converged, we will stop early
             if caustic or converged:
                 break
+
+        # If we never converged, return NaNs?
+        if self.requireConverge and not converged:
+            zkSum *= np.nan
 
         return zkSum

@@ -17,7 +17,9 @@ tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      estimateZernikes.maxNollIndex: 28
+      estimateZernikes.maxNollIndex: 22
+      estimateZernikes.convergeTol: 10.0e-9
+      estimateZernikes.requireConverge: True
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxSelect: 5
