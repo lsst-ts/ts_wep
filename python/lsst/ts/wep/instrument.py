@@ -25,11 +25,12 @@ __all__ = ["Instrument"]
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
 import batoid
 import numpy as np
-from lsst.ts.wep.utils import BandLabel, DefocalType, EnumDict, mergeConfigWithFile
+from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, EnumDict
+from lsst.ts.wep.utils.ioUtils import mergeConfigWithFile
 from scipy.optimize import minimize_scalar
 
 
@@ -735,7 +736,7 @@ class Instrument:
         Returns
         -------
         np.ndarray
-            The Zernike coefficients in meters
+            The Zernike coefficients in meters, starting with index 0
         """
         # Get the band enum
         band = BandLabel(band)
@@ -773,8 +774,7 @@ class Instrument:
         xAngle: float,
         yAngle: float,
         band: Union[BandLabel, str] = BandLabel.REF,
-        jmax: int = 78,
-        return4Up: bool = True,
+        nollIndices: Sequence = tuple(np.arange(4, 79)),
     ) -> np.ndarray:
         """Return the intrinsic Zernikes associated with the optical design.
 
@@ -788,25 +788,22 @@ class Instrument:
             The BandLabel Enum or corresponding string, specifying which batoid
             model to load. Only relevant if self.batoidModelName contains
             "{band}". (the default is BandLabel.REF)
-        jmax : int, optional
-            The maximum Noll index of the intrinsic Zernikes.
-            (the default is 78)
-        return4Up : bool, optional
-            Whether to only return the coefficients for Noll indices >= 4.
-            (the default is True)
+        nollIndices : np.ndarray, optional
+            Noll indices for which to return Zernikes.
+            (the default is indices 4-78)
 
         Returns
         -------
         np.ndarray
             The Zernike coefficients in meters
         """
-        zk = self._getIntrinsicZernikesCached(xAngle, yAngle, band, jmax).copy()
+        # Make sure this is an array
+        nollIndices = np.array(nollIndices)
 
-        if return4Up:
-            # Keep only Noll indices >= 4
-            zk = zk[4:]
+        # Retrieve cached Zernikes
+        zk = self._getIntrinsicZernikesCached(xAngle, yAngle, band, nollIndices.max())
 
-        return zk
+        return zk[nollIndices]
 
     @lru_cache(100)
     def _getIntrinsicZernikesTACached(
@@ -838,7 +835,7 @@ class Instrument:
         Returns
         -------
         np.ndarray
-            The Zernike coefficients in meters
+            The Zernike coefficients in meters, starting with index 0
 
         Notes
         -----
@@ -893,9 +890,8 @@ class Instrument:
         yAngle: float,
         defocalType: DefocalType,
         band: Union[BandLabel, str] = BandLabel.REF,
-        jmax: int = 78,
-        jmaxIntrinsic: int = 78,
-        return4Up: bool = True,
+        nollIndicesModel: Sequence = tuple(np.arange(4, 79)),
+        nollIndicesIntr: Sequence = tuple(np.arange(4, 79)),
     ) -> np.ndarray:
         """Return the Zernike coefficients associated with the off-axis model.
 
@@ -912,32 +908,34 @@ class Instrument:
             The BandLabel Enum or corresponding string, specifying which
             batoid model to load. Only relevant if self.batoidModelName
             contains "{band}". (the default is BandLabel.REF)
-        jmax : int, optional
-            The maximum Noll index of the off-axis model Zernikes.
-            (the default is 78)
-        jmaxIntrinsic : int, optional
-            The off-axis coefficients are calculated by subtracting the
-            intrinsic Zernikes from batoid.zernikeTA. This value sets the
-            maximum Noll index of the intrinsic Zernikes that are subtracted
-            from batoid.zernikeTA. It is usually the jmax of the Zernikes
-            being estimated by the wavefront estimators.
-            (the default is 78)
-        return4Up : bool, optional
-            Whether to only return the coefficients for Noll indices >= 4.
-            (the default is True)
+        nollIndicesModel : np.ndarray, optional
+            Noll indices of Zernikes retrieved for the off-axis model.
+            (the default is indices 4-78)
+        nollIndicesIntr : np.ndarray, optional
+            Noll indices of Zernikes you are estimating in the TIE or
+            Danish. The off-axis coefficients are calculated by retrieving
+            coefficients from batoid.zernikeTA, and then subtracting off the
+            intrinsic Zernikes for Noll indices you are estimating. This is
+            allows you to determine whether intrinsic Zernikes are included
+            in wavefront estimates when using WfEstimator.
+            (the default is indices 4-22).
 
         Returns
         -------
         np.ndarray
             The Zernike coefficients in meters, for Noll indices >= 4
         """
+        # Make sure these are arrays
+        nollIndicesModel = np.array(nollIndicesModel)
+        nollIndicesIntr = np.array(nollIndicesIntr)
+
         # Get zernikeTA
         zkTA = self._getIntrinsicZernikesTACached(
             xAngle,
             yAngle,
             defocalType,
             band,
-            jmax,
+            nollIndicesModel.max(),
         )
 
         # Get regular intrinsic zernikes
@@ -945,18 +943,15 @@ class Instrument:
             xAngle,
             yAngle,
             band,
-            min(jmax, jmaxIntrinsic),
+            nollIndicesIntr.max(),
         )
 
-        # Subtract the intrinsics from zernikeTA
-        offAxisCoeff = zkTA.copy()
-        offAxisCoeff[: zk.size] -= zk
+        # Subtract intrinsics from zernikeTA
+        offAxisCoeff = np.zeros(max(zkTA.size, zk.size), dtype=float)
+        offAxisCoeff[nollIndicesModel] = zkTA[nollIndicesModel]
+        offAxisCoeff[nollIndicesIntr] -= zk[nollIndicesIntr]
 
-        if return4Up:
-            # Keep only Noll indices >= 4
-            offAxisCoeff = offAxisCoeff[4:]
-
-        return offAxisCoeff
+        return offAxisCoeff[nollIndicesModel]
 
     @property
     def maskParams(self) -> dict:

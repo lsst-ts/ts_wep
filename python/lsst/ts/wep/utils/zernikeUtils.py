@@ -29,6 +29,8 @@ __all__ = [
     "getPsfGradPerZernike",
     "convertZernikesToPsfWidth",
     "getZernikeParity",
+    "makeSparse",
+    "makeDense",
 ]
 
 from typing import Optional
@@ -557,3 +559,88 @@ def getZernikeParity(jmin: int = 4, jmax: int = 22, axis: str = "x"):
             raise ValueError("axis must be either 'x' or 'y'.")
 
     return np.array(parity)
+
+
+def makeSparse(values: np.ndarray, nollIndices: np.ndarray) -> np.ndarray:
+    """Down-select the values array according to requested Noll indices.
+
+    For example, if values=[1, -2, 3, -4], nollIndices=[4, 5, 7], this
+    function returns [1, -2, -4].
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Array of values to be down-selected. Selection is applied to
+        the first axis, which must correspond to consecutive Noll
+        indices, starting with Noll index 4.
+    nollIndices : np.ndarray
+        Array of Noll indices to select. Must contain only indices >= 4.
+        Note these values must be unique, ascending, and >= 4.
+
+    Returns
+    -------
+    np.ndarray
+        Down-selected values
+    """
+    # Make sure these are arrays
+    values, nollIndices = np.array(values), np.array(nollIndices)
+
+    # Validate indices
+    if np.any(nollIndices < 4):
+        raise ValueError("nollIndices must be >= 4.")
+    if not np.array_equal(nollIndices, np.sort(np.unique(nollIndices))):
+        raise ValueError("Values in nollIndices must be unique and ascending.")
+
+    return values[nollIndices - 4]
+
+
+def makeDense(
+    values: np.ndarray,
+    nollIndices: np.ndarray,
+    jmax: int | None = None,
+) -> np.ndarray:
+    """Inserts sparse values into dense array of Zeroes.
+
+    For example, if values=[1, -2, -4], nollIndices=[4, 5, 7], this
+    function returns [1, -2, 0, -4].
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Array of sparse values that will be inserted into the dense array.
+    nollIndices : np.ndarray
+        Array of Noll indices to select. Must contain only indices >= 4.
+        Note these values must be unique, ascending, and >= 4.
+    jmax : int or None, optional
+        The maximum Noll index of the dense array. If None, the max value
+        of nollIndices is used. (the default is None)
+
+    Returns
+    -------
+    np.ndarray
+        A dense array of values, corresponding to Noll indices 4 - jmax.
+        Missing values are zero.
+    """
+    # Make sure these are arrays
+    values, nollIndices = np.array(values), np.array(nollIndices)
+
+    # Validate indices and set jmax
+    if np.any(nollIndices < 4):
+        raise ValueError("nollIndices must be >= 4.")
+    if not np.array_equal(nollIndices, np.sort(np.unique(nollIndices))):
+        raise ValueError("Values in nollIndices must be unique and ascending.")
+    jmax = nollIndices.max() if jmax is None else jmax
+    if jmax < 4:
+        raise ValueError("jmax must be >= 4.")
+
+    # Remove indices above jmax.
+    vals = values[nollIndices <= jmax]
+    idx = nollIndices[nollIndices <= jmax] - 4
+
+    # Create the dense array
+    dense = np.zeros_like(np.arange(4, jmax + 1), dtype=values.dtype)
+
+    # Insert values
+    dense[idx] = vals
+
+    return dense

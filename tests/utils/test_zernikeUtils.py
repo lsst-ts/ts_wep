@@ -30,6 +30,8 @@ from lsst.ts.wep.utils import (
     getModulePath,
     getPsfGradPerZernike,
     getZernikeParity,
+    makeDense,
+    makeSparse,
     zernikeEval,
     zernikeFit,
     zernikeGradEval,
@@ -185,6 +187,43 @@ class TestZernikeUtils(TestCase):
         yParity0 = getZernikeParity(jmin=0, axis="y")
         yParity4 = getZernikeParity(jmin=4, axis="y")
         self.assertTrue(np.allclose(yParity0[4:], yParity4))
+
+    def testSparseDense(self):
+        vals = np.arange(4, 23)
+        indices = np.array([4, 5, 6, 17])
+
+        # Get sparse values
+        sparse = makeSparse(vals, indices)
+        np.testing.assert_array_equal(sparse, indices)
+
+        # Make dense without explicit jmax
+        dense = makeDense(sparse, indices)
+        np.testing.assert_array_equal(dense[indices - 4], indices)
+        self.assertEqual(dense[-1], indices[-1])
+
+        # Make dense with explicit jmax
+        dense = makeDense(sparse, indices, 22)
+        np.testing.assert_array_equal(dense[indices - 4], vals[indices - 4])
+        self.assertEqual(len(dense), len(vals))
+        self.assertEqual(dense[-1], 0)
+
+        # Test fully dense does nothing
+        np.testing.assert_array_equal(vals, makeSparse(vals, vals))
+        np.testing.assert_array_equal(vals, makeDense(vals, vals))
+
+        # Test that these functions work with floats
+        floats = np.full_like(vals, 1e-9, dtype=float)
+        np.testing.assert_array_equal(floats, makeSparse(floats, vals))
+        np.testing.assert_array_equal(floats, makeDense(floats, vals))
+
+        # Test bad indices
+        for func in [makeSparse, makeDense]:
+            with self.assertRaises(ValueError):
+                func([1, 2, 3], [3, 4, 5])
+            with self.assertRaises(ValueError):
+                func([1, 2, 3], [4, 6, 5])
+            with self.assertRaises(ValueError):
+                func([1, 2, 3], [4, 6, 6])
 
 
 if __name__ == "__main__":

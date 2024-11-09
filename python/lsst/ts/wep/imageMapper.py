@@ -28,7 +28,7 @@ from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, PlaneType
 from lsst.ts.wep.utils.ioUtils import configClass
 from lsst.ts.wep.utils.miscUtils import centerWithTemplate, polygonContains
-from lsst.ts.wep.utils.zernikeUtils import zernikeGradEval
+from lsst.ts.wep.utils.zernikeUtils import makeDense, zernikeGradEval
 from scipy.interpolate import interpn
 from scipy.ndimage import binary_dilation, shift
 
@@ -118,6 +118,7 @@ class ImageMapper:
         uPupil: np.ndarray,
         vPupil: np.ndarray,
         zkCoeff: np.ndarray,
+        nollIndices: np.ndarray | None,
         image: Image,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Construct the forward mapping from the pupil to the image plane.
@@ -131,6 +132,11 @@ class ImageMapper:
         zkCoeff : np.ndarray
             The wavefront at the pupil, represented as Zernike coefficients
             in meters for Noll indices >= 4.
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
+            (the default is None)
         image : Image
             A stamp object containing the metadata required for the mapping.
 
@@ -150,6 +156,13 @@ class ImageMapper:
         RuntimeWarning
             If the optical model is not supported
         """
+        # Resolve the Noll indices
+        if nollIndices is None:
+            nollIndices = np.arange(4, len(zkCoeff) + 4)
+
+        # Turn zkCoeff into dense array, starting at Noll index 4
+        zkCoeff = makeDense(zkCoeff, nollIndices)
+
         # Get the Zernikes for the mapping
         if self.opticalModel == "onAxis" or self.opticalModel == "paraxial":
             zkMap = zkCoeff
@@ -159,7 +172,7 @@ class ImageMapper:
                 *image.fieldAngle,
                 image.defocalType,
                 image.bandLabel,
-                jmaxIntrinsic=len(zkCoeff) + 3,
+                nollIndicesIntr=nollIndices,
             )
 
             # Add these coefficients to the input coefficients
@@ -328,6 +341,7 @@ class ImageMapper:
         uImage: np.ndarray,
         vImage: np.ndarray,
         zkCoeff: np.ndarray,
+        nollIndices: np.ndarray | None,
         image: Image,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Construct the inverse mapping from the image plane to the pupil.
@@ -341,6 +355,11 @@ class ImageMapper:
         zkCoeff : np.ndarray
             The wavefront at the pupil, represented as Zernike coefficients
             in meters for Noll indices >= 4.
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
+            (the default is None)
         image : Image
             A stamp object containing the metadata required for the mapping.
 
@@ -371,6 +390,7 @@ class ImageMapper:
             uPupilTest,
             vPupilTest,
             zkCoeff,
+            nollIndices,
             image,
         )
 
@@ -411,6 +431,7 @@ class ImageMapper:
             uPupil,
             vPupil,
             zkCoeff,
+            nollIndices,
             image,
         )
 
@@ -430,6 +451,7 @@ class ImageMapper:
                 uPupil,
                 vPupil,
                 zkCoeff,
+                nollIndices,
                 image,
             )
 
@@ -458,6 +480,7 @@ class ImageMapper:
     def _getImageGridInsidePupil(
         self,
         zkCoeff: np.ndarray,
+        nollIndices: np.ndarray | None,
         image: Image,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Return image grid and mask for which pixels are inside the pupil.
@@ -469,6 +492,10 @@ class ImageMapper:
         zkCoeff : np.ndarray
             The wavefront at the pupil, represented as Zernike coefficients
             in meters for Noll indices >= 4.
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
         image : Image
             A stamp object containing the metadata required for the mapping.
 
@@ -488,6 +515,7 @@ class ImageMapper:
             uPupil,
             vPupil,
             zkCoeff,
+            nollIndices,
             image,
         )
         imageEdge = np.array([uImageEdge, vImageEdge]).T
@@ -1164,6 +1192,7 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: Optional[np.ndarray] = None,
+        nollIndices: Optional[np.ndarray] = None,
         *,
         isBinary: bool = True,
         dilate: int = 0,
@@ -1191,6 +1220,11 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default are the intrinsic Zernikes at the donut position)
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
+            (the default is None)
         isBinary : bool, optional
             Whether to return a binary mask. If False, a fractional mask is
             returned instead. (the default is True)
@@ -1240,7 +1274,9 @@ class ImageMapper:
             )
 
         # Get the image grid inside the pupil
-        uImage, vImage, inside = self._getImageGridInsidePupil(zkCoeff, image)
+        uImage, vImage, inside = self._getImageGridInsidePupil(
+            zkCoeff, nollIndices, image
+        )
 
         # Get the inverse mapping from image plane to pupil plane
         if _invMap is None:
@@ -1249,6 +1285,7 @@ class ImageMapper:
                 uImage[inside],
                 vImage[inside],
                 zkCoeff,
+                nollIndices,
                 image,
             )
         else:
@@ -1295,6 +1332,7 @@ class ImageMapper:
         defocalType: Union[DefocalType, str],
         bandLabel: Union[BandLabel, str] = BandLabel.REF,
         zkCoeff: Optional[np.ndarray] = None,
+        nollIndices: Optional[np.ndarray] = None,
     ) -> int:
         """Return size of the pupil projected onto the image plane (in pixels).
 
@@ -1320,6 +1358,11 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default are the intrinsic Zernikes at the donut position)
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
+            (the default is None)
 
         Returns
         -------
@@ -1348,6 +1391,7 @@ class ImageMapper:
             uPupil,
             vPupil,
             zkCoeff,
+            nollIndices,
             dummyImage,
         )
 
@@ -1364,6 +1408,7 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: Optional[np.ndarray] = None,
+        nollIndices: Optional[np.ndarray] = None,
         isBinary: bool = True,
         rMax: float = 10,
         **maskKwargs,
@@ -1384,6 +1429,11 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default are the intrinsic Zernikes at the donut position)
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
+            (the default is None)
         isBinary : bool, optional
             If True, a binary mask is used to estimate the center of the image,
             otherwise a forward model of the image is used. The latter will
@@ -1408,12 +1458,15 @@ class ImageMapper:
             self.createImageMasks(
                 stamp,
                 zkCoeff,
+                nollIndices,
                 isBinary=True,
                 **maskKwargs,
             )
             template = stamp.mask.copy()
         else:
-            template = self.mapPupilToImage(stamp, zkCoeff, **maskKwargs).image
+            template = self.mapPupilToImage(
+                stamp, zkCoeff, nollIndices, **maskKwargs
+            ).image
 
         # Center the image
         stamp.image = centerWithTemplate(stamp.image, template, rMax)
@@ -1424,6 +1477,7 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: Optional[np.ndarray] = None,
+        nollIndices: Optional[np.ndarray] = None,
         masks: Optional[Tuple[np.ndarray]] = None,
         **maskKwargs,
     ) -> Image:
@@ -1444,6 +1498,11 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default are the intrinsic Zernikes at the donut position)
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
+            (the default is None)
         masks : np.ndarray, optional
             You can provide the image masks if they have already been computed.
             This is just to speed up computation. If not provided, the masks
@@ -1465,13 +1524,18 @@ class ImageMapper:
             )
 
         # Get the image grid inside the pupil
-        uImage, vImage, inside = self._getImageGridInsidePupil(zkCoeff, stamp)
+        uImage, vImage, inside = self._getImageGridInsidePupil(
+            zkCoeff,
+            nollIndices,
+            stamp,
+        )
 
         # Construct the inverse mapping
         uPupil, vPupil, jac, jacDet = self._constructInverseMap(
             uImage[inside],
             vImage[inside],
             zkCoeff,
+            nollIndices,
             stamp,
         )
 
@@ -1483,6 +1547,7 @@ class ImageMapper:
             self.createImageMasks(
                 stamp,
                 zkCoeff,
+                nollIndices,
                 **maskKwargs,
                 _invMap=(uPupil, vPupil, jac, jacDet),
             )
@@ -1502,6 +1567,7 @@ class ImageMapper:
         self,
         image: Image,
         zkCoeff: Optional[np.ndarray] = None,
+        nollIndices: Optional[np.ndarray] = None,
         masks: Optional[np.ndarray] = None,
         **maskKwargs,
     ) -> Image:
@@ -1521,6 +1587,11 @@ class ImageMapper:
             The wavefront at the pupil, represented as Zernike coefficients
             in meters, for Noll indices >= 4.
             (the default are the intrinsic Zernikes at the donut position)
+        nollIndices : np.ndarray, optional
+            These are the Noll indices corresponding to the coefficients in
+            zkCoeff. If None, it is assumed zkCoeff contains coefficients
+            for consecutive indices starting with Noll index 4.
+            (the default is None)
         masks : np.ndarray, optional
             You can provide the image masks if they have already been computed.
             This is just to speed up computation. If not provided, the masks
@@ -1550,6 +1621,7 @@ class ImageMapper:
             uPupil,
             vPupil,
             zkCoeff,
+            nollIndices,
             stamp,
         )
 
