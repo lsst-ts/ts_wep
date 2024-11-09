@@ -17,10 +17,13 @@ tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      estimateZernikes.maxNollIndex: 28
+      estimateZernikes.maxNollIndex: 22
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxSelect: 5
+      python: |
+        from lsst.ts.wep.task import EstimateZernikesDanishTask
+        config.estimateZernikes.retarget(EstimateZernikesDanishTask)
   isr:
     class: lsst.ip.isr.IsrTaskLSST
     config:
