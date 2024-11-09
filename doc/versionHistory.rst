@@ -9,6 +9,14 @@ Version History
 .. _lsst.ts.wep-12.6.1:
 
 -------------
+12.6.2
+-------------
+
+* Update RA production pipeline to use group dimension in aggregate donut tables step.
+
+.. _lsst.ts.wep-12.6.1:
+
+-------------
 12.6.1
 -------------
 
