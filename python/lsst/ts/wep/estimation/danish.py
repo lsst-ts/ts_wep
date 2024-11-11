@@ -124,6 +124,7 @@ class DanishAlgorithm(WfAlgorithm):
         following entries
             - "image" - the image that is being fit
             - "variance" - the background variance that was used for fitting
+            - "nollIndices" - Noll indices for which Zernikes are estimated
             - "zkStart" - the starting Zernike coefficients
             - "lstsqResult" - dictionary of results returned by least_squares
             - "zkFit" - the Zernike coefficients fit to the donut
@@ -140,6 +141,7 @@ class DanishAlgorithm(WfAlgorithm):
         self,
         image: Image,
         zkStart: np.ndarray,
+        nollIndices: np.ndarray,
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
@@ -152,6 +154,8 @@ class DanishAlgorithm(WfAlgorithm):
             The ts_wep image of the donut stamp
         zkStart : np.ndarray
             The starting point for the Zernikes
+        nollIndices : np.ndarray
+            Noll indices for which to estimate Zernikes
         instrument : Instrument
             The ts_wep Instrument
         factory : danish.DonutFactory
@@ -170,22 +174,16 @@ class DanishAlgorithm(WfAlgorithm):
         if np.isfinite(image.blendOffsets).sum() > 0:
             warnings.warn("Danish is currently only setup for non-blended donuts.")
 
-        # Determine the maximum Noll index
-        jmax = len(zkStart) + 3
-
         # Create reference Zernikes by adding off-axis coefficients to zkStart
-        zkStart = np.pad(zkStart, (4, 0))
         offAxisCoeff = instrument.getOffAxisCoeff(
             *image.fieldAngle,
             image.defocalType,
             image.bandLabel,
-            jmaxIntrinsic=jmax,
-            return4Up=False,
+            nollIndicesModel=np.arange(0, 79),
+            nollIndicesIntr=nollIndices,
         )
-        size = max(zkStart.size, offAxisCoeff.size)
-        zkRef = np.zeros(size)
-        zkRef[: zkStart.size] = zkStart
-        zkRef[: offAxisCoeff.size] += offAxisCoeff
+        zkRef = offAxisCoeff.copy()
+        zkRef[nollIndices] += zkStart
 
         # Create the background mask if it does not exist
         if image.maskBackground is None:
@@ -213,14 +211,14 @@ class DanishAlgorithm(WfAlgorithm):
         model = danish.SingleDonutModel(
             factory,
             z_ref=zkRef,
-            z_terms=np.arange(4, jmax + 1),
+            z_terms=nollIndices,
             thx=np.deg2rad(image.fieldAngle[0]),
             thy=np.deg2rad(image.fieldAngle[1]),
             npix=img.shape[0],
         )
 
         # Create the initial guess for the model parameters
-        x0 = [0.0, 0.0, 1.0] + [0.0] * (jmax - 3)
+        x0 = [0.0, 0.0, 1.0] + [0.0] * len(nollIndices)
 
         # Use scipy to optimize the parameters
         try:
@@ -238,7 +236,7 @@ class DanishAlgorithm(WfAlgorithm):
             zkFit = np.array(zkFit)
 
             # Add the starting zernikes back into the result
-            zkSum = zkFit + zkStart[4:]
+            zkSum = zkFit + zkStart
 
             # Flag that we didn't hit GalSimFFTSizeError
             galSimFFTSizeError = False
@@ -258,8 +256,8 @@ class DanishAlgorithm(WfAlgorithm):
         except GalSimFFTSizeError:
             # Fill dummy objects
             result = None
-            zkFit = np.full(jmax - 3, np.nan)
-            zkSum = np.full(jmax - 3, np.nan)
+            zkFit = np.full_like(zkStart, np.nan)
+            zkSum = np.full_like(zkStart, np.nan)
             if saveHistory:
                 modelImage = np.full_like(img, np.nan)
 
@@ -271,6 +269,7 @@ class DanishAlgorithm(WfAlgorithm):
             hist = {
                 "image": img.copy(),
                 "variance": backgroundStd**2,
+                "nollIndices": nollIndices.copy(),
                 "zkStart": zkStart.copy(),
                 "lstsqResult": result,
                 "zkFit": zkFit.copy(),
@@ -290,6 +289,7 @@ class DanishAlgorithm(WfAlgorithm):
         I2: Optional[Image],
         zkStartI1: np.ndarray,
         zkStartI2: Optional[np.ndarray],
+        nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
     ) -> np.ndarray:
@@ -305,6 +305,8 @@ class DanishAlgorithm(WfAlgorithm):
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
             The starting Zernikes for I2 (in meters, for Noll indices >= 4)
+        nollIndices : np.ndarray
+            Noll indices for which you wish to estimate Zernike coefficients.
         instrument : Instrument
             The Instrument object associated with the DonutStamps.
         saveHistory : bool
@@ -334,6 +336,7 @@ class DanishAlgorithm(WfAlgorithm):
         zk1, hist[I1.defocalType.value] = self._estimateSingleZk(
             I1,
             zkStartI1,
+            nollIndices,
             instrument,
             factory,
             saveHistory,
@@ -344,6 +347,7 @@ class DanishAlgorithm(WfAlgorithm):
             zk2, hist[I2.defocalType.value] = self._estimateSingleZk(
                 I2,
                 zkStartI2,
+                nollIndices,
                 instrument,
                 factory,
                 saveHistory,

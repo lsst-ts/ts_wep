@@ -13,7 +13,7 @@ Version History
 -------------
 
 * enabled sparse Zernike estimation
-* removed jmax and return4Up configs in favor of nollIndices configs
+* removed most jmax and return4Up configs in favor of nollIndices configs
 * removed return4Up from estimator WfEstimator and WfAlgorithm
 * added makeSparse and makeDense to Zernike utils
 

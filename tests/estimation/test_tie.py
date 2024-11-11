@@ -113,6 +113,7 @@ class TestTieAlgorithm(unittest.TestCase):
                 "zkStartExtra",
                 "zkStartMean",
                 "pupil",
+                "nollIndices",
             ],
         )
         # All entries should all be arrays
