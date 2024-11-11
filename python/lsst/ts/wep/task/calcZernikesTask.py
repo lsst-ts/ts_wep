@@ -131,7 +131,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Create subtasks
         self.estimateZernikes = self.config.estimateZernikes
         self.makeSubtask("estimateZernikes")
-        self.maxNollIndex = self.estimateZernikes.config.maxNollIndex
+        self.nollIndices = self.estimateZernikes.config.nollIndices
 
         self.combineZernikes = self.config.combineZernikes
         self.makeSubtask("combineZernikes")
@@ -165,7 +165,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("intra_frac_bad_pix", "<f4"),
             ("extra_frac_bad_pix", "<f4"),
         ]
-        for j in range(4, self.maxNollIndex + 1):
+        for j in self.nollIndices:
             dtype.append((f"Z{j}", "<f4"))
 
         table = QTable(dtype=dtype)
@@ -175,7 +175,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         table["extra_field"].unit = u.deg
         table["intra_centroid"].unit = u.pixel
         table["extra_centroid"].unit = u.pixel
-        for j in range(4, self.maxNollIndex + 1):
+        for j in self.nollIndices:
             table[f"Z{j}"].unit = u.nm
 
         return table
@@ -215,8 +215,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "label": "average",
                 "used": True,
                 **{
-                    f"Z{j}": zkCoeffCombined.combinedZernikes[j - 4] * u.micron
-                    for j in range(4, self.maxNollIndex + 1)
+                    f"Z{j}": zkCoeffCombined.combinedZernikes[i] * u.micron
+                    for i, j in enumerate(self.nollIndices)
                 },
                 "intra_field": np.nan,
                 "extra_field": np.nan,
@@ -248,7 +248,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             row["label"] = f"pair{i+1}"
             row["used"] = not flag
             row.update(
-                {f"Z{j}": zk[j - 4] * u.micron for j in range(4, self.maxNollIndex + 1)}
+                {f"Z{j}": zk[i] * u.micron for i, j in enumerate(self.nollIndices)}
             )
             row["intra_field"] = (
                 (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
@@ -357,8 +357,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "DEFOCAL_TYPE",
         ]
         return pipeBase.Struct(
-            outputZernikesRaw=np.atleast_2d(np.full(self.maxNollIndex - 3, np.nan)),
-            outputZernikesAvg=np.atleast_2d(np.full(self.maxNollIndex - 3, np.nan)),
+            outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
+            outputZernikesAvg=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             zernikes=self.initZkTable(),
             donutQualityTable=QTable({name: [] for name in qualityTableCols}),
         )

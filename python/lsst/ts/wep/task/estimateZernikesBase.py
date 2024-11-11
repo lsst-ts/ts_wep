@@ -45,10 +45,11 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         dtype=str,
         optional=True,
     )
-    maxNollIndex = pexConfig.Field(
+    nollIndices = pexConfig.ListField(
         dtype=int,
-        default=28,
-        doc="The maximum Zernike Noll index estimated.",
+        default=tuple(range(4, 29)),
+        doc="Noll indices for which you wish to estimate Zernike coefficients. "
+        + "Note these values must be unique, ascending, and >= 4.",
     )
     startWithIntrinsic = pexConfig.Field(
         dtype=bool,
@@ -60,14 +61,11 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         default=False,
         doc="If True, returns wavefront deviation. If False, returns full OPD.",
     )
-    return4Up = pexConfig.Field(
-        dtype=bool,
-        default=True,
-        doc="If True, the returned Zernike coefficients start with Noll index 4. "
-        + "If False, they follow the Galsim convention of starting with index 0 "
-        + "(which is meaningless), so the array index of the output corresponds "
-        + "to the Noll index. In this case, indices 0-3 are always set to zero, "
-        + "because they are not estimated by our pipeline.",
+    binning = pexConfig.Field(
+        dtype=int,
+        default=1,
+        doc="Binning factor to apply to the donut stamps before estimating "
+        + "Zernike coefficients. A value of 1 means no binning.",
     )
     saveHistory = pexConfig.Field(
         dtype=bool,
@@ -254,10 +252,9 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             algoName=self.wfAlgoName,
             algoConfig=self.wfAlgoConfig,
             instConfig=instrument,
-            jmax=self.config.maxNollIndex,
+            nollIndices=self.config.nollIndices,
             startWithIntrinsic=self.config.startWithIntrinsic,
             returnWfDev=self.config.returnWfDev,
-            return4Up=self.config.return4Up,
             units="um",
             saveHistory=self.config.saveHistory,
         )
