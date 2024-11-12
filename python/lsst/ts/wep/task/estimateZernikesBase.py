@@ -69,12 +69,6 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         + "to the Noll index. In this case, indices 0-3 are always set to zero, "
         + "because they are not estimated by our pipeline.",
     )
-    binning = pexConfig.Field(
-        dtype=int,
-        default=1,
-        doc="Binning factor to apply to the donut stamps before estimating "
-        + "Zernike coefficients. A value of 1 means no binning.",
-    )
     saveHistory = pexConfig.Field(
         dtype=bool,
         default=False,
