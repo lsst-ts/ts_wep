@@ -61,12 +61,6 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         default=False,
         doc="If True, returns wavefront deviation. If False, returns full OPD.",
     )
-    binning = pexConfig.Field(
-        dtype=int,
-        default=1,
-        doc="Binning factor to apply to the donut stamps before estimating "
-        + "Zernike coefficients. A value of 1 means no binning.",
-    )
     saveHistory = pexConfig.Field(
         dtype=bool,
         default=False,
