@@ -49,7 +49,9 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         dtype=int,
         default=tuple(range(4, 29)),
         doc="Noll indices for which you wish to estimate Zernike coefficients. "
-        + "Note these values must be unique, ascending, and >= 4.",
+        + "Note these values must be unique, ascending, >= 4, and azimuthal pairs "
+        + "must be complete. For example, if nollIndices contains 5, it must also "
+        + "contain 6 (because 5 and 6 are the azimuthal pairs for astigmatism).",
     )
     startWithIntrinsic = pexConfig.Field(
         dtype=bool,

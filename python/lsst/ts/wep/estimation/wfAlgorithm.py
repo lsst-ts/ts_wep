@@ -26,7 +26,12 @@ from typing import Optional, Sequence
 
 import numpy as np
 from lsst.ts.wep import Image, Instrument
-from lsst.ts.wep.utils import convertZernikesToPsfWidth, makeDense, makeSparse
+from lsst.ts.wep.utils import (
+    checkNollIndices,
+    convertZernikesToPsfWidth,
+    makeDense,
+    makeSparse,
+)
 
 
 class WfAlgorithm(ABC):
@@ -131,10 +136,7 @@ class WfAlgorithm(ABC):
                 raise ValueError("I1 and I2 must be on opposite sides of focus.")
 
         # Validate nollIndices
-        if any(nollIndices < 4):
-            raise ValueError("nollIndices must be >= 4.")
-        if not np.array_equal(nollIndices, np.sort(np.unique(nollIndices))):
-            raise ValueError("Values in nollIndices must be unique and ascending.")
+        checkNollIndices(nollIndices)
 
         # Validate the instrument
         if not isinstance(instrument, Instrument):

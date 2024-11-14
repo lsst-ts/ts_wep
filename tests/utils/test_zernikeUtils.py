@@ -24,6 +24,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.utils import (
+    checkNollIndices,
     convertZernikesToPsfWidth,
     createZernikeBasis,
     createZernikeGradBasis,
@@ -224,6 +225,35 @@ class TestZernikeUtils(TestCase):
                 func([1, 2, 3], [4, 6, 5])
             with self.assertRaises(ValueError):
                 func([1, 2, 3], [4, 6, 6])
+
+    def testCheckNollIndices(self):
+        # These values should all pass
+        checkNollIndices(np.array([4]))
+        checkNollIndices(np.array([4, 5, 6]))
+        checkNollIndices(np.array([20, 21]))
+        checkNollIndices(np.array([11, 20, 21, 22]))
+
+        # The rest should fail...
+
+        # < 4
+        with self.assertRaises(ValueError):
+            checkNollIndices(np.array([3, 4, 5, 6]))
+        # not unique
+        with self.assertRaises(ValueError):
+            checkNollIndices(np.array([4, 5, 6, 6]))
+        # not ascending
+        with self.assertRaises(ValueError):
+            checkNollIndices(np.array([4, 6, 5]))
+
+        # missing azimuthal pairs
+        with self.assertRaises(ValueError):
+            checkNollIndices(np.array([4, 5]))
+        with self.assertRaises(ValueError):
+            checkNollIndices(np.array([4, 5, 11]))
+        with self.assertRaises(ValueError):
+            checkNollIndices(np.array([4, 5, 20, 21]))
+        with self.assertRaises(ValueError):
+            checkNollIndices(np.array([4, 5, 6, 20]))
 
 
 if __name__ == "__main__":

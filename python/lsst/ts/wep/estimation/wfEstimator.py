@@ -27,7 +27,7 @@ import numpy as np
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
-from lsst.ts.wep.utils import configClass
+from lsst.ts.wep.utils import checkNollIndices, configClass
 
 
 class WfEstimator:
@@ -165,10 +165,7 @@ class WfEstimator:
             ascending, and >= 4. (the default is indices 4-22)
         """
         value = np.array(value)
-        if any(value < 4):
-            raise ValueError("nollIndices must be >= 4.")
-        if not np.array_equal(value, np.sort(np.unique(value))):
-            raise ValueError("Values in nollIndices must be unique and ascending.")
+        checkNollIndices(value)
         self._nollIndices = value
 
     @property

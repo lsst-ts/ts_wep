@@ -152,7 +152,7 @@ class TestWfAlgorithm(unittest.TestCase):
 
         # Test bad Noll indices
         testSettings = goodSettings.copy()
-        testSettings["nollIndices"] = np.array([3, 4, 5])
+        testSettings["nollIndices"] = np.array([4, 5])
         with self.assertRaises(ValueError):
             wfAlg._validateInputs(**testSettings)
 

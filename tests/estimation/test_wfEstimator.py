@@ -54,6 +54,8 @@ class TestWfEstimator(unittest.TestCase):
             WfEstimator(nollIndices=[4, 6, 5])
         with self.assertRaises(ValueError):
             WfEstimator(nollIndices=[4, 5, 5])
+        with self.assertRaises(ValueError):
+            WfEstimator(nollIndices=[4, 5])
 
     def testBadStartWithIntrinsic(self):
         with self.assertRaises(TypeError):
@@ -82,13 +84,13 @@ class TestWfEstimator(unittest.TestCase):
             zk0 = wfEst.estimateZk(intra, extra)
             self.assertEqual(len(zk0), 3)
 
-            # Estimate with [4, 5, 6, 22]
-            wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 10, 11], units="m")
+            # Estimate with [4, 5, 6, 20, 21]
+            wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 20, 21], units="m")
             zk1 = wfEst.estimateZk(intra, extra)
             self.assertEqual(len(zk1), 5)
 
             #  Make sure results are pretty similar for [4, 5, 6]
-            self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 75e-9)
+            self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 10e-9)
 
     def testStartWithIntrinsic(self):
         # Get the test data

@@ -31,6 +31,7 @@ __all__ = [
     "getZernikeParity",
     "makeSparse",
     "makeDense",
+    "checkNollIndices",
 ]
 
 from typing import Optional
@@ -644,3 +645,52 @@ def makeDense(
     dense[idx] = vals
 
     return dense
+
+
+def checkNollIndices(nollIndices: np.ndarray) -> None:
+    """Check that Noll indices meet requirements.
+
+    Parameters
+    ----------
+        nollIndices : np.ndarray
+            Array of Noll indices.
+
+    Raises
+    ------
+    ValueError
+        If nollIndices contains values less than 4, if they're not ascending
+        and unique, and if azimuthal pairs are not complete.
+    """
+    # Simple checks on values
+    if any(nollIndices < 4):
+        raise ValueError("nollIndices must be >= 4.")
+    if not np.array_equal(nollIndices, np.sort(np.unique(nollIndices))):
+        raise ValueError("Values in nollIndices must be unique and ascending.")
+
+    # Now we will make sure azimuthal pairs are complete...
+
+    # Create grid of Noll indices from 4 to jmax, as well as az. symm.
+    # We select jmax that is greater than max value in Noll indices
+    # and is also azimuthally symmetric. This is so that once we
+    # downselect to indices without azimuthal symmetry, we are guaranteed
+    # to have an even number of indices in our grid.
+    grid = np.array([4])
+    az = np.array([0])
+    while grid[-1] < nollIndices.max() or az[-1] != 0:
+        grid = np.append(grid, grid[-1] + 1)
+        az = np.append(az, galsim.zernike.noll_to_zern(grid[-1])[1])
+
+    # Remove azimuthally symmetric indices
+    grid = grid[np.where(az != 0)]
+
+    # Now consecutive Noll indices are azimuthal pairs
+    # Create mapping between these
+    paired_grid = grid.reshape(-1, 2)
+    pairs = {i: j for i, j in paired_grid} | {j: i for i, j in paired_grid}
+
+    # Check all pairs are complete
+    for j in nollIndices:
+        if j in pairs and pairs[j] not in nollIndices:
+            raise ValueError(
+                f"Noll index {j} is missing azimuthal pair, Noll index {pairs[j]}."
+            )
