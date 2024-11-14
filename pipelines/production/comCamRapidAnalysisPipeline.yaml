@@ -17,7 +17,7 @@ tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      estimateZernikes.maxNollIndex: 22
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 20, 21, 27, 28]
       estimateZernikes.convergeTol: 10.0e-9
       estimateZernikes.requireConverge: True
       estimateZernikes.saveHistory: False
