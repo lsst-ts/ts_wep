@@ -1,8 +1,24 @@
-description: rapid analysis pipeline for ComCamSim
-instrument: lsst.obs.lsst.LsstComCamSim
+description: Run WEP + DonutViz daily at USDF
+instrument: lsst.obs.lsst.LsstComCam
 imports:
   - $TS_WEP_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
   - $TS_WEP_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
+
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.useCustomMagLimit: True
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: false
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: false
 
 # Define pipeline steps
 subsets:
@@ -19,7 +35,7 @@ subsets:
   step2a:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesTask
+      - aggregateDonutTablesGroupTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask

@@ -1,8 +1,16 @@
-description: rapid analysis pipeline for ComCamSim
-instrument: lsst.obs.lsst.LsstComCamSim
+description: rapid analysis pipeline for ComCam w/ danish zernike estimation
+instrument: lsst.obs.lsst.LsstComCam
 imports:
   - $TS_WEP_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
   - $TS_WEP_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
+
+tasks:
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      python: |
+        from lsst.ts.wep.task import  EstimateZernikesDanishTask
+        config.estimateZernikes.retarget(EstimateZernikesDanishTask)
 
 # Define pipeline steps
 subsets:
@@ -19,7 +27,7 @@ subsets:
   step2a:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesTask
+      - aggregateDonutTablesGroupTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask

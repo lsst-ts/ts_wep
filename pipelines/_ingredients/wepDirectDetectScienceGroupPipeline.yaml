@@ -1,0 +1,50 @@
+description: wep direct detect pipeline
+
+tasks:
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 20
+  cutOutDonutsScienceSensorGroupTask:
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      python: |
+        from lsst.ts.wep.task.pairTask import GroupPairer
+        config.pairer.retarget(GroupPairer)
+      donutStampSize: 200
+      initialCutoutPadding: 40
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 20, 21, 22, 27, 28]
+      estimateZernikes.convergeTol: 10.0e-9
+      estimateZernikes.requireConverge: True
+      estimateZernikes.saveHistory: False
+      estimateZernikes.maskKwargs: { "doMaskBlends": False }
+      donutStampSelector.maxSelect: 5
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
+    config:
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: true
+      ampOffset.doApplyAmpOffset: false
+      # Turn off slow steps in ISR
+      doBrighterFatter: false
+      # Mask saturated pixels,
+      # but turn off quadratic crosstalk because it's currently broken
+      doSaturation: True
+      crosstalk.doQuadraticCrosstalkCorrection: False
+
+subsets:
+  wepDirectDetect:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsScienceSensorGroupTask
+      - calcZernikesTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
