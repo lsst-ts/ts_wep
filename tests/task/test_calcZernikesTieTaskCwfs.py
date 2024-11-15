@@ -321,8 +321,8 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
             donutStampsExtra, donutStampsIntra
         ).zernikes[0]
 
-        # Estimate Zernikes 4, 5, 6, 10, 11
-        self.task.config.estimateZernikes.nollIndices = [4, 5, 6, 10, 11]
+        # Estimate Zernikes 4, 5, 6, 20, 21
+        self.task.config.estimateZernikes.nollIndices = [4, 5, 6, 20, 21]
         zk1 = self.task.estimateZernikes.run(
             donutStampsExtra, donutStampsIntra
         ).zernikes[0]
@@ -331,5 +331,6 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         self.assertEqual(len(zk0), 3)
         self.assertEqual(len(zk1), 5)
 
-        # Check that 4, 5, 6 are independent of 10, 11
-        self.assertTrue(np.all(np.abs(zk1[:3] - zk0) < 0.035))
+        # Check that 4, 5, 6 are independent of 20, 21 at less
+        self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 0.020)
+        # self.assertTrue(np.all(np.abs(zk1[:3] - zk0) < 0.035))
