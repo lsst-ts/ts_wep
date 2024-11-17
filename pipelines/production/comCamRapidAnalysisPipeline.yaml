@@ -4,6 +4,20 @@ imports:
   - $TS_WEP_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
   - $TS_WEP_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
 
+tasks:
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+      estimateZernikes.convergeTol: 10.0e-9
+      estimateZernikes.compGain: 0.75
+      estimateZernikes.compSequence: [4, 4, 6, 6, 13, 13, 13, 13]
+      estimateZernikes.maxIter: 50
+      estimateZernikes.requireConverge: True
+      estimateZernikes.saveHistory: False
+      estimateZernikes.maskKwargs: { "doMaskBlends": False }
+      donutStampSelector.maxSelect: 5
+
 # Define pipeline steps
 subsets:
   step1:

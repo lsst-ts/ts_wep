@@ -9,8 +9,9 @@ tasks:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
       python: |
-        from lsst.ts.wep.task import  EstimateZernikesDanishTask
+        from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
+      donutStampSelector.maxSelect: 2
 
 # Define pipeline steps
 subsets:

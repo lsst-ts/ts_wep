@@ -17,9 +17,12 @@ tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 20, 21, 22, 27, 28]
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 27, 28]
       estimateZernikes.convergeTol: 10.0e-9
       estimateZernikes.requireConverge: True
+      estimateZernikes.compGain: 0.75
+      estimateZernikes.compSequence: [4, 4, 6, 6, 13, 13, 13, 13]
+      estimateZernikes.maxIter: 50
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxSelect: 5
