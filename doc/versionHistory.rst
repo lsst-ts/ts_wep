@@ -6,6 +6,17 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.0.0:
+
+-------------
+13.0.0
+-------------
+
+* enabled sparse Zernike estimation
+* removed most jmax and return4Up configs in favor of nollIndices configs
+* removed return4Up from estimator WfEstimator and WfAlgorithm
+* added makeSparse and makeDense to Zernike utils
+
 .. _lsst.ts.wep-12.7.0:
 
 -------------

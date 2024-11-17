@@ -47,9 +47,15 @@ class TestWfEstimator(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             WfEstimator(instConfig="fake")
 
-    def testBadJmax(self):
+    def testBadNollIndices(self):
         with self.assertRaises(ValueError):
-            WfEstimator(jmax=2)
+            WfEstimator(nollIndices=[3, 4, 5])
+        with self.assertRaises(ValueError):
+            WfEstimator(nollIndices=[4, 6, 5])
+        with self.assertRaises(ValueError):
+            WfEstimator(nollIndices=[4, 5, 5])
+        with self.assertRaises(ValueError):
+            WfEstimator(nollIndices=[4, 5])
 
     def testBadStartWithIntrinsic(self):
         with self.assertRaises(TypeError):
@@ -59,10 +65,6 @@ class TestWfEstimator(unittest.TestCase):
         with self.assertRaises(TypeError):
             WfEstimator(returnWfDev="fake")
 
-    def testBadReturn4Up(self):
-        with self.assertRaises(TypeError):
-            WfEstimator(return4Up="fake")
-
     def testBadUnits(self):
         with self.assertRaises(ValueError):
             WfEstimator(units="parsecs")
@@ -71,22 +73,24 @@ class TestWfEstimator(unittest.TestCase):
         with self.assertRaises(TypeError):
             WfEstimator(saveHistory="fake")
 
-    def testDifferentJmax(self):
+    def testDifferentNollIndices(self):
         # Get the test data
         zkTrue, intra, extra = forwardModelPair()
 
         # Test every wavefront algorithm
         for name in WfAlgorithmName:
-            # Estimate with jmax=22
-            wfEst = WfEstimator(algoName=name, jmax=22, units="m")
-            zk22 = wfEst.estimateZk(intra, extra)
+            # Estimate [4, 5, 6]
+            wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6], units="m")
+            zk0 = wfEst.estimateZk(intra, extra)
+            self.assertEqual(len(zk0), 3)
 
-            # Estimate with jmax=28
-            wfEst = WfEstimator(algoName=name, jmax=28, units="m")
-            zk28 = wfEst.estimateZk(intra, extra)
+            # Estimate with [4, 5, 6, 20, 21]
+            wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 20, 21], units="m")
+            zk1 = wfEst.estimateZk(intra, extra)
+            self.assertEqual(len(zk1), 5)
 
-            #  Make sure results are pretty similar up to Noll index 22
-            self.assertLess(np.sqrt(np.sum(np.square(zk28[:-6] - zk22))), 75e-9)
+            #  Make sure results are pretty similar for [4, 5, 6]
+            self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 10e-9)
 
     def testStartWithIntrinsic(self):
         # Get the test data
@@ -122,28 +126,11 @@ class TestWfEstimator(unittest.TestCase):
             # Make sure that OPD = wf dev + intrinsics
             zkInt = wfEst.instrument.getIntrinsicZernikes(
                 *intra.fieldAngle,
-                jmax=len(opd) + 3,
+                nollIndices=np.arange(opd.size) + 4,
             )
 
             # Make sure the results are identical
             self.assertTrue(np.allclose(opd, wfDev + zkInt))
-
-    def testReturn4Up(self):
-        # Get the test data
-        zkTrue, intra, extra = forwardModelPair()
-
-        # Test every wavefront algorithm
-        for name in WfAlgorithmName:
-            # Get estimate starting with Noll index 4
-            wfEst = WfEstimator(algoName=name, return4Up=True)
-            zk4up = wfEst.estimateZk(intra, extra)
-
-            # Get estimate starting with Noll index 0
-            wfEst = WfEstimator(algoName=name, return4Up=False)
-            zk0up = wfEst.estimateZk(intra, extra)
-
-            # Make sure the results are identical
-            self.assertTrue(np.allclose(zk4up, zk0up[4:]))
 
     def testUnits(self):
         # Get the test data

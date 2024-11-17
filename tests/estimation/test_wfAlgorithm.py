@@ -90,7 +90,7 @@ class TestWfAlgorithm(unittest.TestCase):
         goodSettings = {
             "I1": intra,
             "I2": extra,
-            "jmax": 28,
+            "nollIndices": np.arange(4, 23),
             "instrument": Instrument(),
             "startWithIntrinsic": True,
             "returnWfDev": False,
@@ -150,12 +150,9 @@ class TestWfAlgorithm(unittest.TestCase):
         with self.assertRaises(ValueError):
             wfAlg._validateInputs(**testSettings)
 
-        # Test bad jmax
+        # Test bad Noll indices
         testSettings = goodSettings.copy()
-        testSettings["jmax"] = "fake"
-        with self.assertRaises(TypeError):
-            wfAlg._validateInputs(**testSettings)
-        testSettings["jmax"] = 3
+        testSettings["nollIndices"] = np.array([4, 5])
         with self.assertRaises(ValueError):
             wfAlg._validateInputs(**testSettings)
 

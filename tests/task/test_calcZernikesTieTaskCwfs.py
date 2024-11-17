@@ -304,3 +304,33 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # Everything should be NaN because we did not converge
         self.assertTrue(np.isnan(zernikes).all())
+
+    def testNollIndices(self):
+        # Load the stamps
+        donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
+        donutStampsExtra = DonutStamps.readFits(
+            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
+        )
+        donutStampsIntra = DonutStamps.readFits(
+            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
+        )
+
+        # Estimate Zernikes 4, 5, 6
+        self.task.config.estimateZernikes.nollIndices = [4, 5, 6]
+        zk0 = self.task.estimateZernikes.run(
+            donutStampsExtra, donutStampsIntra
+        ).zernikes[0]
+
+        # Estimate Zernikes 4, 5, 6, 20, 21
+        self.task.config.estimateZernikes.nollIndices = [4, 5, 6, 20, 21]
+        zk1 = self.task.estimateZernikes.run(
+            donutStampsExtra, donutStampsIntra
+        ).zernikes[0]
+
+        # Check lengths
+        self.assertEqual(len(zk0), 3)
+        self.assertEqual(len(zk1), 5)
+
+        # Check that 4, 5, 6 are independent of 20, 21 at less
+        self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 0.020)
+        # self.assertTrue(np.all(np.abs(zk1[:3] - zk0) < 0.035))
