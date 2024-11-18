@@ -21,13 +21,13 @@
 
 __all__ = ["WfEstimator"]
 
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import numpy as np
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
-from lsst.ts.wep.utils import configClass
+from lsst.ts.wep.utils import checkNollIndices, configClass
 
 
 class WfEstimator:
@@ -53,9 +53,10 @@ class WfEstimator:
         If a dictionary, it is assumed to hold keywords for configuration.
         If an Instrument object, that object is just used.
         (the default is "policy:instrument/LsstCam.yaml")
-    jmax : int, optional
-        The maximum Zernike Noll index to estimate.
-        (the default is 22)
+    nollIndices : Sequence, optional
+        List, tuple, or array of Noll indices for which you wish to
+        estimate Zernike coefficients. Note these values must be unique,
+        ascending, and >= 4. (the default is indices 4-22)
     startWithIntrinsic : bool, optional
         Whether to start the Zernike estimation process from the intrinsic
         Zernikes rather than zero.
@@ -65,14 +66,6 @@ class WfEstimator:
         deviation is returned. The wavefront deviation is defined as
         the OPD - intrinsic Zernikes.
         (the default is False)
-    return4Up : bool, optional
-        If True, the returned Zernike coefficients start with
-        Noll index 4. If False, they follow the Galsim convention
-        of starting with index 0 (which is meaningless), so the
-        array index of the output corresponds to the Noll index.
-        In this case, indices 0-3 are always set to zero, because
-        they are not estimated by our pipeline.
-        (the default is True)
     units : str, optional
         Units in which the Zernike coefficients are returned.
         Options are "m", "um", "nm", or "arcsec".
@@ -89,10 +82,9 @@ class WfEstimator:
         algoName: str = "tie",
         algoConfig: Union[dict, WfAlgorithm, None] = None,
         instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
-        jmax: int = 22,
+        nollIndices: Sequence = tuple(np.arange(4, 23)),
         startWithIntrinsic: bool = True,
         returnWfDev: bool = False,
-        return4Up: bool = True,
         units: str = "um",
         saveHistory: bool = False,
     ) -> None:
@@ -101,10 +93,9 @@ class WfEstimator:
         self.instrument = configClass(instConfig, Instrument)
 
         # Set the other parameters
-        self.jmax = jmax
+        self.nollIndices = nollIndices
         self.startWithIntrinsic = startWithIntrinsic
         self.returnWfDev = returnWfDev
-        self.return4Up = return4Up
         self.units = units
         self.saveHistory = saveHistory
 
@@ -158,28 +149,24 @@ class WfEstimator:
         self._instrument = value
 
     @property
-    def jmax(self) -> int:
-        """Return the maximum Zernike Noll index that will be estimated."""
-        return self._jmax
+    def nollIndices(self) -> np.ndarray:
+        """Return the Noll indices for which Zernikes are estimated."""
+        return self._nollIndices
 
-    @jmax.setter
-    def jmax(self, value: int) -> None:
-        """Set jmax
+    @nollIndices.setter
+    def nollIndices(self, value: Sequence) -> None:
+        """Set the Noll indices for which the Zernikes are estimated.
 
         Parameters
         ----------
-        value : int
-            The maximum Zernike Noll index to estimate.
-
-        Raises
-        ------
-        ValueError
-            If jmax is < 4
+        nollIndices : Sequence, optional
+            List, tuple, or array of Noll indices for which you wish to
+            estimate Zernike coefficients. Note these values must be unique,
+            ascending, and >= 4. (the default is indices 4-22)
         """
-        value = int(value)
-        if value < 4:
-            raise ValueError("jmax must be greater than or equal to 4.")
-        self._jmax = value
+        value = np.array(value)
+        checkNollIndices(value)
+        self._nollIndices = value
 
     @property
     def startWithIntrinsic(self) -> bool:
@@ -229,34 +216,6 @@ class WfEstimator:
         if not isinstance(value, bool):
             raise TypeError("returnWfDev must be a bool.")
         self._returnWfDev = value
-
-    @property
-    def return4Up(self) -> bool:
-        """Whether to return Zernikes starting with Noll index 4."""
-        return self._return4Up
-
-    @return4Up.setter
-    def return4Up(self, value: bool) -> None:
-        """Set return4Up.
-
-        Parameters
-        ----------
-        value : bool
-            If True, the returned Zernike coefficients start with
-            Noll index 4. If False, they follow the Galsim convention
-            of starting with index 0 (which is meaningless), so the
-            array index of the output corresponds to the Noll index.
-            In this case, indices 0-3 are always set to zero, because
-            they are not estimated by our pipeline.
-
-        Raises
-        ------
-        TypeError
-            If the value is not a boolean
-        """
-        if not isinstance(value, bool):
-            raise TypeError("return4Up must be a bool.")
-        self._return4Up = value
 
     @property
     def units(self) -> str:
@@ -337,11 +296,10 @@ class WfEstimator:
         return self.algo.estimateZk(
             I1=I1,
             I2=I2,
-            jmax=self.jmax,
+            nollIndices=self.nollIndices,
             instrument=self.instrument,
             startWithIntrinsic=self.startWithIntrinsic,
             returnWfDev=self.returnWfDev,
-            return4Up=self.return4Up,
             units=self.units,
             saveHistory=self.saveHistory,
         )

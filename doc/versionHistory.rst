@@ -6,6 +6,34 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.0.0:
+
+-------------
+13.0.0
+-------------
+
+* enabled sparse Zernike estimation
+* removed most jmax and return4Up configs in favor of nollIndices configs
+* removed return4Up from estimator WfEstimator and WfAlgorithm
+* added makeSparse and makeDense to Zernike utils
+
+.. _lsst.ts.wep-12.7.0:
+
+-------------
+12.7.0
+-------------
+
+* Added requireConverge to TIE and defaulted to True in task
+* Fixed bug with None types in EstimateZernikeTask metadata histories
+
+.. _lsst.ts.wep-12.6.1:
+
+-------------
+12.6.2
+-------------
+
+* Update RA production pipeline to use group dimension in aggregate donut tables step.
+
 .. _lsst.ts.wep-12.6.1:
 
 -------------

@@ -104,6 +104,18 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
         + "when estimating Zernikes with a single donut. "
         + "(the default is 2)",
     )
+    binning = pexConfig.Field(
+        dtype=int,
+        default=1,
+        doc="Binning factor to apply to the donut stamps before estimating "
+        + "Zernike coefficients. A value of 1 means no binning.",
+    )
+    requireConverge = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Whether to require that the TIE converges. "
+        + "If True, and the TIE did not converge, the TIE returns NaNs. ",
+    )
 
 
 class EstimateZernikesTieTask(EstimateZernikesBaseTask):

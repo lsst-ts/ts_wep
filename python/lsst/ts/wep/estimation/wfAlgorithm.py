@@ -22,11 +22,16 @@
 __all__ = ["WfAlgorithm"]
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 from lsst.ts.wep import Image, Instrument
-from lsst.ts.wep.utils import convertZernikesToPsfWidth
+from lsst.ts.wep.utils import (
+    checkNollIndices,
+    convertZernikesToPsfWidth,
+    makeDense,
+    makeSparse,
+)
 
 
 class WfAlgorithm(ABC):
@@ -66,8 +71,8 @@ class WfAlgorithm(ABC):
     def _validateInputs(
         self,
         I1: Image,
-        I2: Optional[Image],
-        jmax: int,
+        I2: Image | None,
+        nollIndices: np.ndarray,
         instrument: Instrument,
         startWithIntrinsic: bool,
         returnWfDev: bool,
@@ -80,20 +85,22 @@ class WfAlgorithm(ABC):
         ----------
         I1 : DonutStamp
             An Image object containing an intra- or extra-focal donut image.
-        I2 : DonutStamp, optional
+        I2 : DonutStamp or None
             A second image, on the opposite side of focus from I1.
-        jmax : int, optional
-            The maximum Zernike Noll index to estimate.
-        instrument : Instrument, optional
+        nollIndices : np.ndarray
+            List, tuple, or array of Noll indices for which you wish to
+            estimate Zernike coefficients. Note these values must be unique,
+            ascending, and >= 4.
+        instrument : Instrument
             The Instrument object associated with the DonutStamps.
-        startWithIntrinsic : bool, optional
+        startWithIntrinsic : bool
             Whether to start the Zernike estimation process from the intrinsic
             Zernikes rather than zero.
-        returnWfDev : bool, optional
+        returnWfDev : bool
             If False, the full OPD is returned. If True, the wavefront
             deviation is returned. The wavefront deviation is defined as
             the OPD - intrinsic Zernikes.
-        units : str, optional
+        units : str
             Units in which the Zernike amplitudes are returned.
             Options are "m", "nm", "um", or "arcsecs".
 
@@ -128,11 +135,8 @@ class WfAlgorithm(ABC):
             if I2.defocalType == I1.defocalType:
                 raise ValueError("I1 and I2 must be on opposite sides of focus.")
 
-        # Validate jmax
-        if not isinstance(jmax, int):
-            raise TypeError("jmax must be an integer.")
-        if jmax < 4:
-            raise ValueError("jmax must be greater than or equal to 4.")
+        # Validate nollIndices
+        checkNollIndices(nollIndices)
 
         # Validate the instrument
         if not isinstance(instrument, Instrument):
@@ -164,6 +168,7 @@ class WfAlgorithm(ABC):
         I2: Optional[Image],
         zkStartI1: np.ndarray,
         zkStartI2: Optional[np.ndarray],
+        nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
     ) -> np.ndarray:
@@ -183,6 +188,8 @@ class WfAlgorithm(ABC):
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
             The starting Zernikes for I2 (in meters, for Noll indices >= 4)
+        nollIndices : np.ndarray
+            Noll indices for which you wish to estimate Zernike coefficients.
         instrument : Instrument
             The Instrument object associated with the DonutStamps.
         saveHistory : bool
@@ -202,11 +209,10 @@ class WfAlgorithm(ABC):
         self,
         I1: Image,
         I2: Optional[Image] = None,
-        jmax: int = 22,
+        nollIndices: Sequence = tuple(np.arange(4, 23)),
         instrument: Instrument = Instrument(),
         startWithIntrinsic: bool = True,
         returnWfDev: bool = False,
-        return4Up: bool = True,
         units: str = "m",
         saveHistory: bool = False,
     ) -> np.ndarray:
@@ -219,9 +225,10 @@ class WfAlgorithm(ABC):
         I2 : DonutStamp, optional
             A second image, on the opposite side of focus from I1.
             (the default is None)
-        jmax : int, optional
-            The maximum Zernike Noll index to estimate.
-            (the default is 22)
+        nollIndices : Sequence, optional
+            List, tuple, or array of Noll indices for which you wish to
+            estimate Zernike coefficients. Note these values must be unique,
+            ascending, and >= 4. (the default is indices 4-22)
         instrument : Instrument, optional
             The Instrument object associated with the DonutStamps.
             (the default is the default Instrument)
@@ -232,14 +239,6 @@ class WfAlgorithm(ABC):
             If False, the full OPD is returned. If True, the wavefront
             deviation is returned. The wavefront deviation is defined as
             the OPD - intrinsic Zernikes. (the default is False)
-        return4Up : bool, optional
-            If True, the returned Zernike coefficients start with
-            Noll index 4. If False, they follow the Galsim convention
-            of starting with index 0 (which is meaningless), so the
-            array index of the output corresponds to the Noll index.
-            In this case, indices 0-3 are always set to zero, because
-            they are not estimated by our pipeline.
-            (the default is True)
         units : str, optional
             Units in which the Zernike amplitudes are returned.
             Options are "m", "nm", "um", or "arcsecs".
@@ -255,11 +254,14 @@ class WfAlgorithm(ABC):
         np.ndarray
             Zernike coefficients estimated from the image (or pair of images)
         """
+        # Convert nollIndices to an array
+        nollIndices = np.array(nollIndices)
+
         # Validate the inputs
         self._validateInputs(
             I1,
             I2,
-            jmax,
+            nollIndices,
             instrument,
             startWithIntrinsic,
             returnWfDev,
@@ -272,12 +274,16 @@ class WfAlgorithm(ABC):
             zkIntrinsicI1 = instrument.getIntrinsicZernikes(
                 *I1.fieldAngle,
                 I1.bandLabel,
-                jmax,
+                nollIndices,
             )
             zkIntrinsicI2 = (
                 None
                 if I2 is None
-                else instrument.getIntrinsicZernikes(*I2.fieldAngle, I2.bandLabel, jmax)
+                else instrument.getIntrinsicZernikes(
+                    *I2.fieldAngle,
+                    I2.bandLabel,
+                    nollIndices,
+                )
             )
 
         # Determine the Zernikes to start with
@@ -285,8 +291,8 @@ class WfAlgorithm(ABC):
             zkStartI1 = zkIntrinsicI1
             zkStartI2 = zkIntrinsicI2
         else:
-            zkStartI1 = np.zeros(jmax - 3)
-            zkStartI2 = np.zeros(jmax - 3)
+            zkStartI1 = np.zeros_like(nollIndices, dtype=float)
+            zkStartI2 = None if I2 is None else np.zeros_like(nollIndices, dtype=float)
 
         # Clear the algorithm history
         self._history = {}
@@ -297,6 +303,7 @@ class WfAlgorithm(ABC):
             I2=I2,
             zkStartI1=zkStartI1,
             zkStartI2=zkStartI2,
+            nollIndices=nollIndices,
             instrument=instrument,
             saveHistory=saveHistory,
         )
@@ -318,16 +325,14 @@ class WfAlgorithm(ABC):
         elif units == "nm":
             zk *= 1e9
         elif units == "arcsec":
+            zk = makeDense(zk, nollIndices)
             zk = convertZernikesToPsfWidth(
                 zernikes=zk * 1e6,
                 diameter=instrument.diameter,
                 obscuration=instrument.obscuration,
             )
+            zk = makeSparse(zk, nollIndices)
         else:  # pragma: no cover
             raise RuntimeError(f"Conversion to unit '{units}' not supported.")
-
-        # Pad array so that array index = Noll index?
-        if not return4Up:
-            zk = np.pad(zk, (4, 0))
 
         return zk

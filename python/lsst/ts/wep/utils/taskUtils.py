@@ -446,7 +446,8 @@ def convertHistoryToMetadata(history: dict) -> pipeBase.TaskMetadata:
     """
     if isinstance(history, dict):
         history = {
-            str(key): convertHistoryToMetadata(val) for key, val in history.items()
+            str(key): ("None" if val is None else convertHistoryToMetadata(val))
+            for key, val in history.items()
         }
         history = pipeBase.TaskMetadata.from_dict(history)
     elif isinstance(history, np.ndarray):
@@ -493,9 +494,11 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata) -> dict:
                 for key, val in metadata.items()
             }
 
-    # Convert numeric strings back to floats and ints
+    # Convert "None" strings back to None and numeric strings to floats/ints
     elif isinstance(metadata, str):
-        if "." in metadata:
+        if metadata == "None":
+            metadata = None
+        elif "." in metadata:
             try:
                 metadata = float(metadata)
             except:  # noqa: E722

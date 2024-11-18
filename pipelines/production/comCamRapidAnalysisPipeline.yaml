@@ -17,7 +17,9 @@ tasks:
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
-      estimateZernikes.maxNollIndex: 28
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 20, 21, 27, 28]
+      estimateZernikes.convergeTol: 10.0e-9
+      estimateZernikes.requireConverge: True
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxSelect: 5
@@ -36,8 +38,12 @@ tasks:
       crosstalk.doQuadraticCrosstalkCorrection: False
   aggregateZernikeTablesTask:
     class: lsst.donut.viz.AggregateZernikeTablesTask
-  aggregateDonutTablesTask:
-    class: lsst.donut.viz.AggregateDonutTablesTask
+  aggregateDonutTablesGroupTask:
+      class: lsst.donut.viz.AggregateDonutTablesTask
+      config:
+          python: |
+              from lsst.ts.wep.task.pairTask import GroupPairer
+              config.pairer.retarget(GroupPairer)
   aggregateAOSVisitTableTask:
     class: lsst.donut.viz.AggregateAOSVisitTableTask
   plotAOSTask:
@@ -66,7 +72,7 @@ subsets:
   step2a:
     subset:
       - aggregateZernikeTablesTask
-      - aggregateDonutTablesTask
+      - aggregateDonutTablesGroupTask
       - aggregateAOSVisitTableTask
       - plotAOSTask
       - aggregateDonutStampsTask

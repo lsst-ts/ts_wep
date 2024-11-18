@@ -32,6 +32,7 @@ from lsst.ts.wep.utils import (
     binArray,
     createZernikeBasis,
     createZernikeGradBasis,
+    makeSparse,
 )
 from scipy.ndimage import gaussian_filter
 
@@ -95,6 +96,11 @@ class TieAlgorithm(WfAlgorithm):
     binning : int, optional
         Binning factor to apply to the donut stamps before estimating
         Zernike coefficients. The default value of 1 means no binning.
+        (the default is 1)
+    requireConverge : bool, optional
+        Whether to require that the TIE converges. If True, and the TIE
+        did not converge, the TIE returns NaNs.
+        (the default is False)
     """
 
     def __init__(
@@ -109,6 +115,7 @@ class TieAlgorithm(WfAlgorithm):
         maskKwargs: Optional[dict] = None,
         modelPupilKernelSize: float = 2,
         binning: int = 1,
+        requireConverge: bool = False,
     ) -> None:
         self.opticalModel = opticalModel
         self.maxIter = maxIter
@@ -120,6 +127,7 @@ class TieAlgorithm(WfAlgorithm):
         self.maskKwargs = maskKwargs
         self.modelPupilKernelSize = modelPupilKernelSize
         self.binning = binning
+        self.requireConverge = requireConverge
 
     @property
     def requiresPairs(self) -> bool:
@@ -430,6 +438,24 @@ class TieAlgorithm(WfAlgorithm):
         self._binning = value
 
     @property
+    def requireConverge(self) -> int:
+        """Whether to require that the TIE converges."""
+        return self._requireConverge
+
+    @requireConverge.setter
+    def requireConverge(self, value: int) -> None:
+        """Whether to require that the TIE converges.
+
+        Parameters
+        ----------
+        value : bool
+            Whether to require that the TIE converges.
+        """
+        if not isinstance(value, bool):
+            raise TypeError("requireConverge must be a bool.")
+        self._requireConverge = value
+
+    @property
     def history(self) -> dict:
         """The algorithm history.
 
@@ -447,6 +473,8 @@ class TieAlgorithm(WfAlgorithm):
                               full OPD.
             - "pupil" - model pupil image, in the case where only one image
                         was passed to the estimator.
+            - "nollIndices" - array of Noll indices corresponding to the
+                              estimated Zernikes values.
 
         Each iteration of the solver is then stored under indices >= 1.
         The entry for each iteration is also a dictionary, containing
@@ -570,7 +598,7 @@ class TieAlgorithm(WfAlgorithm):
         self,
         I0: np.ndarray,
         dIdz: np.ndarray,
-        jmax: int,
+        nollIndices: np.ndarray,
         instrument: Instrument,
     ) -> np.ndarray:
         """Solve the TIE directly using a Zernike expansion.
@@ -581,8 +609,8 @@ class TieAlgorithm(WfAlgorithm):
             The beam intensity at the exit pupil
         dIdz : np.ndarray
             The z-derivative of the beam intensity across the exit pupil
-        jmax : int
-            The maximum Zernike Noll index to estimate
+        nollIndices : np.ndarray
+            Noll indices for which you wish to estimate Zernike coefficients.
         instrument : Instrument, optional
             The Instrument object associated with the DonutStamps.
             (the default is the default Instrument)
@@ -593,8 +621,11 @@ class TieAlgorithm(WfAlgorithm):
             Numpy array of the Zernike coefficients estimated from the image
             or pair of images, in nm.
         """
-        # Get Zernike Bases
+        # Get the pupil grid
         uPupil, vPupil = instrument.createPupilGrid()
+
+        # Get Zernike Bases
+        jmax = nollIndices.max()
         zk = createZernikeBasis(
             uPupil,
             vPupil,
@@ -607,6 +638,11 @@ class TieAlgorithm(WfAlgorithm):
             jmax=jmax,
             obscuration=instrument.obscuration,
         )
+
+        # Down-select to the Zernikes we are solving for
+        zk = makeSparse(zk, nollIndices)
+        dzkdu = makeSparse(dzkdu, nollIndices)
+        dzkdv = makeSparse(dzkdv, nollIndices)
 
         # Calculate quantities for the linear system
         # See Equations 43-45 of https://sitcomtn-111.lsst.io
@@ -626,6 +662,7 @@ class TieAlgorithm(WfAlgorithm):
         I2: Optional[Image],  # type: ignore[override]
         zkStartI1: np.ndarray,
         zkStartI2: Optional[np.ndarray],
+        nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
     ) -> np.ndarray:
@@ -642,6 +679,8 @@ class TieAlgorithm(WfAlgorithm):
         zkStartI2 : np.ndarray or None
             The starting Zernikes for I2 (in meters, for Noll indices >= 4)
             Can be None.
+        nollIndices : np.ndarray
+            Noll indices for which you wish to estimate Zernike coefficients.
         instrument : Instrument
             The Instrument object associated with the DonutStamps.
         saveHistory : bool
@@ -660,9 +699,11 @@ class TieAlgorithm(WfAlgorithm):
         RuntimeError
             If the solver is not supported
         """
+        # Rescale instrument pixel size to account for binning
         if self.binning > 1:
             instrument = instrument.copy()
             instrument.pixelSize *= self.binning
+
         # Create the ImageMapper for centering and image compensation
         imageMapper = ImageMapper(instConfig=instrument, opticalModel=self.opticalModel)
 
@@ -674,6 +715,7 @@ class TieAlgorithm(WfAlgorithm):
             zkStartI2,
         )
 
+        # Bin images to reduce resolution?
         if self.binning > 1:
             if intra is not None:
                 intra.image = binArray(intra.image, self.binning)
@@ -706,6 +748,7 @@ class TieAlgorithm(WfAlgorithm):
                 "zkStartExtra": None if extra is None else zkStartExtra.copy(),
                 "zkStartMean": zkStartMean.copy(),
                 "pupil": None if pupil is None else pupil.copy(),
+                "nollIndices": nollIndices.copy(),
             }
 
         # Initialize Zernike arrays at zero
@@ -719,7 +762,7 @@ class TieAlgorithm(WfAlgorithm):
         compSequence = iter(self.compSequence)
 
         # Determine the maximum Noll index we will solve for
-        jmax = len(zkStartMean) + 3
+        jmax = nollIndices.max()
 
         # Set the caustic and converged flags to False
         caustic = False
@@ -735,7 +778,7 @@ class TieAlgorithm(WfAlgorithm):
             # The gain scales how much of previous residual we incorporate
             # Everything past jmaxComp is set to zero
             zkComp += self.compGain * zkResid
-            zkComp[(jmaxComp - 3) :] = 0
+            zkComp[nollIndices > jmaxComp] = 0
 
             # Center the images
             recenter = (i == 0) or (np.max(np.abs(zkComp - zkCenter)) > self.centerTol)
@@ -748,6 +791,7 @@ class TieAlgorithm(WfAlgorithm):
                     else imageMapper.centerOnProjection(
                         intra,
                         zkCenter + zkStartIntra,
+                        nollIndices,
                         isBinary=self.centerBinary,
                         **self.maskKwargs,
                     )
@@ -758,6 +802,7 @@ class TieAlgorithm(WfAlgorithm):
                     else imageMapper.centerOnProjection(
                         extra,
                         zkCenter + zkStartExtra,
+                        nollIndices,
                         isBinary=self.centerBinary,
                         **self.maskKwargs,
                     )
@@ -770,6 +815,7 @@ class TieAlgorithm(WfAlgorithm):
                 else imageMapper.mapImageToPupil(
                     intraCent,
                     zkComp + zkStartIntra,
+                    nollIndices,
                     masks=None if i == 0 else intraComp.masks,  # noqa: F821
                     **self.maskKwargs,
                 )
@@ -780,6 +826,7 @@ class TieAlgorithm(WfAlgorithm):
                 else imageMapper.mapImageToPupil(
                     extraCent,
                     zkComp + zkStartExtra,
+                    nollIndices,
                     masks=None if i == 0 else extraComp.masks,  # noqa: F821
                     **self.maskKwargs,
                 )
@@ -817,7 +864,7 @@ class TieAlgorithm(WfAlgorithm):
                 )
 
                 # Estimate the Zernikes
-                zkResid = self._expSolve(I0, dIdz, jmax, instrument)
+                zkResid = self._expSolve(I0, dIdz, nollIndices, instrument)
 
                 # If estimating with a single donut, double the coefficients
                 # This is because the simulated pupil image is aberration free
@@ -866,5 +913,9 @@ class TieAlgorithm(WfAlgorithm):
             # If we've hit a caustic or converged, we will stop early
             if caustic or converged:
                 break
+
+        # If we never converged, return NaNs?
+        if self.requireConverge and not converged:
+            zkSum *= np.nan
 
         return zkSum
