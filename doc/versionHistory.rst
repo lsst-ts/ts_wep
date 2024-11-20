@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.0.1:
+
+-------------
+13.0.1
+-------------
+
+* Reorganize pipelines and add daily processing and danish pipelines.
+
 .. _lsst.ts.wep-13.0.0:
 
 -------------
