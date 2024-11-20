@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.0.2:
+
+-------------
+13.0.2
+-------------
+
+* Use _refresh_metadata in cutOutStamps function so DonutStamps have correct set of metadata when running cutOutDonuts tasks interactively.
+
 .. _lsst.ts.wep-13.0.1:
 
 -------------
