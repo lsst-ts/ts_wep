@@ -310,6 +310,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "BORESIGHT_AZ_RAD",
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
+            "BANDPASS",
         ]
         # Test that all expected metadata is included in the butler
         self.assertEqual(

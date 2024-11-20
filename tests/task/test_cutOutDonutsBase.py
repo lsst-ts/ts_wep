@@ -430,6 +430,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "BORESIGHT_AZ_RAD",
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
+            "BANDPASS",
         ]
         self.assertCountEqual(metadata, expectedMetadata)
 

@@ -690,20 +690,10 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
             finalStamps.append(donutStamp)
 
-        # Calculate the difference between original centroid and final centroid
+        # Add additional information into metadata
         catalogLength = len(donutCatalog)
         stampsMetadata = PropertyList()
-        stampsMetadata["RA_DEG"] = np.degrees(donutCatalog["coord_ra"].value)
-        stampsMetadata["DEC_DEG"] = np.degrees(donutCatalog["coord_dec"].value)
-        stampsMetadata["DET_NAME"] = np.array([detectorName] * catalogLength, dtype=str)
-        stampsMetadata["CAM_NAME"] = np.array([cameraName] * catalogLength, dtype=str)
         stampsMetadata["VISIT"] = np.array([visitId] * catalogLength, dtype=int)
-        stampsMetadata["DFC_TYPE"] = np.array(
-            [defocalType.value] * catalogLength, dtype=str
-        )
-        stampsMetadata["DFC_DIST"] = np.array(
-            [instrument.defocalOffset * 1e3] * catalogLength
-        )
         # Save the donut flux as magnitude
         if len(donutCatalog["source_flux"]) > 0:
             stampsMetadata["MAG"] = (
@@ -714,21 +704,12 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the original centroid values
         stampsMetadata["CENT_X0"] = np.array(donutCatalog["centroid_x"].value)
         stampsMetadata["CENT_Y0"] = np.array(donutCatalog["centroid_y"].value)
-        # Save the centroid values
-        stampsMetadata["CENT_X"] = donutCatalog["finalDonutX"]
-        stampsMetadata["CENT_Y"] = donutCatalog["finalDonutY"]
         # Save the centroid shift
         stampsMetadata["CENT_DX"] = donutCatalog["xShift"]
         stampsMetadata["CENT_DY"] = donutCatalog["yShift"]
         stampsMetadata["CENT_DR"] = np.sqrt(
             donutCatalog["xShift"] ** 2 + donutCatalog["yShift"] ** 2
         )
-        # Save the centroid positions of blended sources
-        stampsMetadata["BLEND_CX"] = np.array(finalBlendXList, dtype=str)
-        stampsMetadata["BLEND_CY"] = np.array(finalBlendYList, dtype=str)
-        # Save the corner values
-        stampsMetadata["X0"] = donutCatalog["xCorner"]
-        stampsMetadata["Y0"] = donutCatalog["yCorner"]
         # Save visit info
         stampsMetadata["BORESIGHT_ROT_ANGLE_RAD"] = (
             donutCatalog.meta["visit_info"]["boresight_rot_angle"].to(u.rad).value
@@ -801,4 +782,11 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the fraction of bad pixels
         stampsMetadata["FRAC_BAD_PIX"] = np.array(fracBadPixels).astype(float)
 
-        return DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
+        finalDonutStamps = DonutStamps(
+            finalStamps, metadata=stampsMetadata, use_archive=True
+        )
+        # Refresh to pull original metadata into stamps
+        # Necessary when running full pipeline interactively.
+        finalDonutStamps._refresh_metadata()
+
+        return finalDonutStamps
