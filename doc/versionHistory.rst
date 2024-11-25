@@ -6,7 +6,15 @@
 Version History
 ##################
 
-.. _lsst.ts.wep-13.0.2:
+.. _lsst.ts.wep-13.0.3:
+
+-------------
+13.0.3
+-------------
+
+* Task plotPsfFromZern added in comCamRapidAnalysisPipeline and comCamRapidAnalysisDanishPipeline.
+
+.. _lsst.ts.wep-13.0.3:
 
 -------------
 13.0.2

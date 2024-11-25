@@ -38,6 +38,7 @@ subsets:
       - plotAOSTask
       - aggregateDonutStampsTask
       - plotDonutTask
+      - plotPsfZernTask
     description: |
       AOS Donut visualization plotting tasks. This step generates plots
       (including the pyramid residual and donut gallery) and
