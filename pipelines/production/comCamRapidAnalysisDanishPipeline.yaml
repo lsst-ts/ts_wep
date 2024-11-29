@@ -12,6 +12,7 @@ tasks:
         from lsst.ts.wep.task import EstimateZernikesDanishTask
         config.estimateZernikes.retarget(EstimateZernikesDanishTask)
       donutStampSelector.maxSelect: 2
+      donutStampSelector.maxFracBadPixels: 2.0e-4
 
 # Define pipeline steps
 subsets:
