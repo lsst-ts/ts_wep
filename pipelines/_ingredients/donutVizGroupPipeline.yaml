@@ -1,0 +1,42 @@
+description: donut viz pipeline tasks
+
+tasks:
+  aggregateZernikeTablesTask:
+    class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesGroupTask:
+      class: lsst.donut.viz.AggregateDonutTablesTask
+      config:
+          python: |
+              from lsst.ts.wep.task.pairTask import GroupPairer
+              config.pairer.retarget(GroupPairer)
+  aggregateAOSVisitTableTask:
+    class: lsst.donut.viz.AggregateAOSVisitTableTask
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: true
+  aggregateDonutStampsTask:
+    class: lsst.donut.viz.AggregateDonutStampsTask
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: true
+  plotPsfZernTask:
+    class: lsst.donut.viz.PlotPsfZernTask
+    config:
+      doRubinTVUpload: true
+
+subsets:
+  donutVizGroups:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesGroupTask
+      - aggregateAOSVisitTableTask
+      - plotAOSTask
+      - aggregateDonutStampsTask
+      - plotDonutTask
+      - plotPsfZernTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.

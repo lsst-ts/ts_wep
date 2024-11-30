@@ -6,6 +6,39 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.0.4:
+
+-------------
+13.0.4
+-------------
+
+* Increased maxFracBadPixels in pipelines to 8 pixels per 200^2.
+* Updated configs for TIE and Danish production pipelines to reflect current defaults
+
+.. _lsst.ts.wep-13.0.3:
+
+-------------
+13.0.3
+-------------
+
+* Task plotPsfFromZern added in comCamRapidAnalysisPipeline and comCamRapidAnalysisDanishPipeline.
+
+.. _lsst.ts.wep-13.0.3:
+
+-------------
+13.0.2
+-------------
+
+* Use _refresh_metadata in cutOutStamps function so DonutStamps have correct set of metadata when running cutOutDonuts tasks interactively.
+
+.. _lsst.ts.wep-13.0.1:
+
+-------------
+13.0.1
+-------------
+
+* Reorganize pipelines and add daily processing and danish pipelines.
+
 .. _lsst.ts.wep-13.0.0:
 
 -------------
