@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.0.5:
+
+-------------
+13.0.5
+-------------
+
+* Set saveHistory=True in the Danish production pipeline
+
 .. _lsst.ts.wep-13.0.4:
 
 -------------
