@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.3.0:
+
+-------------
+13.3.0
+-------------
+
+* Add donut quality tables to outputs even when there are no donuts that pass so that we can match it up to the donut stamps and understand rejections.
+
 .. _lsst.ts.wep-13.2.0:
 
 -------------
