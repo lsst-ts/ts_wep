@@ -82,8 +82,9 @@ class TestModelUtils(unittest.TestCase):
         self.assertTrue(np.allclose(0, zk2))
 
         # Divergent Zernikes
-        with self.assertRaises(ValueError):
-            forwardModelPair(zkNorm=1e9, zkMax=1e9)
+        _, intra, extra = forwardModelPair(zkNorm=1e9, zkMax=1e9)
+        self.assertFalse(np.isfinite(intra.image).any())
+        self.assertFalse(np.isfinite(extra.image).any())
 
     def testBlends(self):
         # Just going to test that blends get added by looking at flux
@@ -96,6 +97,17 @@ class TestModelUtils(unittest.TestCase):
         self.assertTrue(intra1.image.sum() < intra2.image.sum())
         self.assertTrue(extra1.image.sum() < extra2.image.sum())
 
+        # Ensure that flux ratios work
+        _, intra3, extra3 = forwardModelPair(
+            blendOffsetsIntra=((40, 30),),
+            blendOffsetsExtra=((40, 30),),
+            blendRatiosIntra=[0.1],
+            blendRatiosExtra=[2.0],
+        )
+        self.assertTrue(intra1.image.sum() < intra3.image.sum())
+        self.assertTrue(intra3.image.sum() < intra2.image.sum())
+        self.assertTrue(extra2.image.sum() < extra3.image.sum())
+
         # Make sure that blendOffsets is robust to 1D specification
         _, intra1, extra1 = forwardModelPair(blendOffsetsIntra=(40, 30))
         _, intra2, extra2 = forwardModelPair(blendOffsetsIntra=((40, 30),))
@@ -107,3 +119,9 @@ class TestModelUtils(unittest.TestCase):
         _, intra2, extra2 = forwardModelPair(seeing=1, skyLevel=0)
         self.assertTrue(np.sum(intra1.image > 0) < np.sum(intra2.image > 0))
         self.assertTrue(np.sum(extra1.image > 0) < np.sum(extra2.image > 0))
+
+    def testMiscenter(self):
+        # Move extrafocal donut all the way out of frame
+        _, intra, extra = forwardModelPair(skyLevel=0, miscenterExtra=(500, 0))
+        self.assertTrue(intra.image.sum() > 0)
+        self.assertTrue(np.isclose(extra.image.sum(), 0))
