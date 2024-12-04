@@ -13,6 +13,7 @@ Version History
 -------------
 
 * Set saveHistory=True and loosen convergence criteria in the Danish production pipeline
+
 * Upgrades to the forward modeling util, including specifying flux ratios for blends, miscentering donuts, and simulating "flat" donuts without intensity patterns
 * Fixed bug in forward modeling util when adding noise to large flux values
 
