@@ -44,6 +44,12 @@ class EstimateZernikesDanishConfig(EstimateZernikesBaseConfig):
         doc="Binning factor to apply to the donut stamps before estimating "
         + "Zernike coefficients. A value of 1 means no binning.",
     )
+    jointFitPair = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Whether to jointly fit intra/extra pairs, when a pair is provided. "
+        + "If False, Zernikes are estimated for each individually, then averaged. ",
+    )
 
 
 class EstimateZernikesDanishTask(EstimateZernikesBaseTask):
