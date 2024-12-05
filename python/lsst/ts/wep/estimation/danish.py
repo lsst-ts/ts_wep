@@ -281,7 +281,7 @@ class DanishAlgorithm(WfAlgorithm):
             result = dict(result)
 
             # Unpack the parameters
-            dx, dy, fwhm, *zkFit = result.x
+            dx, dy, fwhm, *zkFit = result["x"]
             zkFit = np.array(zkFit)
 
             # Add the starting zernikes back into the result
@@ -436,7 +436,7 @@ class DanishAlgorithm(WfAlgorithm):
             result = dict(result)
 
             # Unpack the parameters
-            dxs, dys, fwhm, zkFit = model.unpack_params(result.x)
+            dxs, dys, fwhm, zkFit = model.unpack_params(result["x"])
 
             # Add the starting zernikes back into the result
             zkSum = zkFit + np.nanmean([zkStartI1, zkStartI2], axis=0)
