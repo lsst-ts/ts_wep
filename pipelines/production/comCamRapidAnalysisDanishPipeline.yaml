@@ -17,6 +17,10 @@ tasks:
       estimateZernikes.nollIndices:
         [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 27, 28]
       estimateZernikes.saveHistory: true
+      estimateZernikes.lstsqKwargs:
+        ftol: 1.0e-3
+        xtol: 1.0e-3
+        gtol: 1.0e-3
 
 # Define pipeline steps
 subsets:
