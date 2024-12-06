@@ -106,11 +106,15 @@ def forwardModelPair(
     miscenterIntra : tuple, optional
         The amount by which the intrafocal donut is miscentered. A tuple of
         (dx, dy) in pixels. If None, a random value between +/- 2 is used
-        for each. (the default is None)
+        for each. Note the random non-zero offsets are default to avoid
+        pixel aliasing effects when examining ensembles of wavefront
+        estimation errors. (the default is None)
     miscenterExtra : tuple, optional
         The amount by which the extrafocal donut is miscentered. A tuple of
         (dx, dy) in pixels. If None, a random value between +/- 2 is used
-        for each. (the default is None)
+        for each. Note the random non-zero offsets are default to avoid
+        pixel aliasing effects when examining ensembles of wavefront
+        estimation errors. (the default is None)
     blendOffsetsIntra : Iterable or None, optional
         The blend offsets of the intrafocal donut.
         (the default is None)
