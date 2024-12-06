@@ -485,7 +485,7 @@ class DanishAlgorithm(WfAlgorithm):
                 "image": imgs[1].copy(),
                 "variance": skyLevels[1],
                 "nollIndices": nollIndices.copy(),
-                "zkStart": zkStartI1.copy(),
+                "zkStart": zkStartI2.copy(),
                 "lstsqResult": result,
                 "zkFit": zkFit.copy(),
                 "zkSum": zkSum.copy(),
