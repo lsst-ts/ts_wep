@@ -6,13 +6,15 @@
 Version History
 ##################
 
-.. _lsst.ts.wep-13.0.5:
+.. _lsst.ts.wep-13.1.0:
 
 -------------
-13.0.5
+13.1.0
 -------------
 
-* Set saveHistory=True and looser convergence criteria in the Danish production pipeline
+* Set saveHistory=True and loosen convergence criteria in the Danish production pipeline
+* Upgrades to the forward modeling util, including specifying flux ratios for blends, miscentering donuts, and simulating "flat" donuts without intensity patterns
+* Fixed bug in forward modeling util when adding noise to large flux values
 
 .. _lsst.ts.wep-13.0.4:
 
@@ -31,7 +33,7 @@ Version History
 
 * Task plotPsfFromZern added in comCamRapidAnalysisPipeline and comCamRapidAnalysisDanishPipeline.
 
-.. _lsst.ts.wep-13.0.3:
+.. _lsst.ts.wep-13.0.2:
 
 -------------
 13.0.2
