@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.2.0:
+
+-------------
+13.2.0
+-------------
+
+* Implemented joint-fitting of donut pairs with Danish.
+
 .. _lsst.ts.wep-13.1.0:
 
 -------------
