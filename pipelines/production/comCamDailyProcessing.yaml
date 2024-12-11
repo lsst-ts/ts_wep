@@ -14,7 +14,6 @@ tasks:
 subsets:
   step1:
     subset:
-      - isr
       - generateDonutDirectDetectTask
       - cutOutDonutsScienceSensorGroupTask
       - calcZernikesTask
