@@ -21,6 +21,18 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: true
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: true
+  plotPsfZernTask:
+    class: lsst.donut.viz.PlotPsfZernTask
+    config:
+      doRubinTVUpload: true
 
 # Define pipeline steps
 subsets:

@@ -13,6 +13,7 @@ Version History
 -------------
 
 * Add donut quality tables to outputs even when there are no donuts that pass so that we can match it up to the donut stamps and understand rejections.
+* Change default pipeline setting to false for rubinTV upload.
 
 .. _lsst.ts.wep-13.2.0:
 
