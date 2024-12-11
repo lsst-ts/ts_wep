@@ -225,6 +225,13 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
             self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
             self.assertIsInstance(struct.zernikes, QTable)
+        self.assertEqual(len(structNormal.donutQualityTable), 6)
+        self.assertEqual(len(structNull.donutQualityTable), 0)
+
+        self.config.donutStampSelector.maxSelect = 0
+        self.task = CalcZernikesTask(config=self.config)
+        structAllDonutsFail = self.task.run(donutStampsIntra, donutStampsExtra)
+        self.assertEqual(len(structAllDonutsFail.donutQualityTable), 6)
 
     def testGetCombinedZernikes(self):
         testArr = np.zeros((2, 19))

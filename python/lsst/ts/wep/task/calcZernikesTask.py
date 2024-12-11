@@ -349,7 +349,20 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
     def empty(self, qualityTable=None) -> pipeBase.Struct:
         """Return empty results if no donuts are available. If
         it is a result of no quality donuts we still include the
-        quality table results instead of an empty quality table."""
+        quality table results instead of an empty quality table.
+
+        Parameters
+        ----------
+        qualityTable : astropy.table.QTable
+            Quality table created with donut stamp input.
+
+        Returns
+        -------
+        lsst.pipe.base.Struct
+            Empty output tables for zernikes. Empty quality table
+            if no donuts. Otherwise contains quality table
+            with donuts that all failed to pass quality check.
+        """
         qualityTableCols = [
             "SN",
             "ENTROPY",
