@@ -26,19 +26,6 @@ tasks:
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxSelect: 5
-  isr:
-    class: lsst.ip.isr.IsrTaskLSST
-    config:
-      # Although we don't have to apply the amp offset corrections, we do want
-      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
-      doAmpOffset: true
-      ampOffset.doApplyAmpOffset: false
-      # Turn off slow steps in ISR
-      doBrighterFatter: false
-      # Mask saturated pixels,
-      # but turn off quadratic crosstalk because it's currently broken
-      doSaturation: True
-      crosstalk.doQuadraticCrosstalkCorrection: False
 
 subsets:
   wepDirectDetect:
