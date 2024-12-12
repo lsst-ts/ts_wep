@@ -9,22 +9,11 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.useCustomMagLimit: True
-  plotAOSTask:
-    class: lsst.donut.viz.PlotAOSTask
-    config:
-      doRubinTVUpload: false
-  aggregateDonutStampsTask:
-    class: lsst.donut.viz.AggregateDonutStampsTask
-  plotDonutTask:
-    class: lsst.donut.viz.PlotDonutTask
-    config:
-      doRubinTVUpload: false
 
 # Define pipeline steps
 subsets:
   step1:
     subset:
-      - isr
       - generateDonutDirectDetectTask
       - cutOutDonutsScienceSensorGroupTask
       - calcZernikesTask

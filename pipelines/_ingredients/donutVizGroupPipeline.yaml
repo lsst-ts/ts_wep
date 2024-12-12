@@ -14,17 +14,17 @@ tasks:
   plotAOSTask:
     class: lsst.donut.viz.PlotAOSTask
     config:
-      doRubinTVUpload: true
+      doRubinTVUpload: false
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
   plotDonutTask:
     class: lsst.donut.viz.PlotDonutTask
     config:
-      doRubinTVUpload: true
+      doRubinTVUpload: false
   plotPsfZernTask:
     class: lsst.donut.viz.PlotPsfZernTask
     config:
-      doRubinTVUpload: true
+      doRubinTVUpload: false
 
 subsets:
   donutVizGroups:
