@@ -39,15 +39,3 @@ tasks:
       estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxSelect: 5
-
-subsets:
-  wepDirectDetect:
-    subset:
-      - isr
-      - generateDonutDirectDetectTask
-      - cutOutDonutsScienceSensorGroupTask
-      - calcZernikesTask
-    description: |
-      This step processes the input images with ISR,
-      finds and cuts out the donut stamps,
-      and estimates the Zernike coefficients from the donut pairs.
