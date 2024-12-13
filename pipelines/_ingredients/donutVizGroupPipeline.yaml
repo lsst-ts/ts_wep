@@ -25,18 +25,3 @@ tasks:
     class: lsst.donut.viz.PlotPsfZernTask
     config:
       doRubinTVUpload: false
-
-subsets:
-  donutVizGroups:
-    subset:
-      - aggregateZernikeTablesTask
-      - aggregateDonutTablesGroupTask
-      - aggregateAOSVisitTableTask
-      - plotAOSTask
-      - aggregateDonutStampsTask
-      - plotDonutTask
-      - plotPsfZernTask
-    description: |
-      AOS Donut visualization plotting tasks. This step generates plots
-      (including the pyramid residual and donut gallery) and
-      tables for the AOS visit.
