@@ -9,6 +9,18 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.useCustomMagLimit: True
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 27, 28]
+      estimateZernikes.convergeTol: 10.0e-9
+      estimateZernikes.compGain: 0.75
+      estimateZernikes.compSequence: [4, 4, 6, 6, 13, 13, 13, 13]
+      estimateZernikes.maxIter: 50
+      estimateZernikes.requireConverge: True
+      estimateZernikes.saveHistory: True
+      estimateZernikes.maskKwargs: { "doMaskBlends": False }
+      donutStampSelector.maxFracBadPixels: 2.0e-4
 
 # Define pipeline steps
 subsets:
@@ -16,12 +28,15 @@ subsets:
     subset:
       - generateDonutDirectDetectTask
       - cutOutDonutsScienceSensorGroupTask
+    description: |
+      This step takes the input postISR images then
+      finds and cuts out the donut stamps.
+  step1b:
+    subset:
       - calcZernikesTask
     description: |
-      This step processes the input images with ISR,
-      finds and cuts out the donut stamps,
-      and estimates the Zernike coefficients from the donut pairs.
-  step2a:
+      This step runs the Zernike calculation with danish.
+  step2:
     subset:
       - aggregateZernikeTablesTask
       - aggregateDonutTablesGroupTask
