@@ -9,6 +9,7 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: -1
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -24,6 +25,7 @@ tasks:
         ftol: 1.0e-3
         xtol: 1.0e-3
         gtol: 1.0e-3
+      donutStampSelector.maxSelect: -1
 
 # Define pipeline steps
 subsets:
