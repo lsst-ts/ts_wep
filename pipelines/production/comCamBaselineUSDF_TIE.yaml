@@ -9,6 +9,7 @@ tasks:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
       donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: -1
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -21,6 +22,7 @@ tasks:
       estimateZernikes.saveHistory: True
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxFracBadPixels: 2.0e-4
+      donutStampSelector.maxSelect: -1
 
 # Define pipeline steps
 subsets:
