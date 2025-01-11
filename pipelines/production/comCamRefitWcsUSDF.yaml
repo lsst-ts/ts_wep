@@ -1,0 +1,31 @@
+description: RefitWCS pipeline for ComCam
+instrument: lsst.obs.lsst.LsstComCam
+tasks:
+  generateDonutFromRefitWcsTask:
+    class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
+    config:
+      connections.astromRefCat: "gaia_dr3_20230707"
+      connections.photoRefCat: "the_monster_20240904"
+      connections.exposure: "postISRCCD"
+      connections.outputExposure: "postFitPostISRCCD"
+      connections.fitDonutCatalog: "donutTable"
+      connections.donutCatalog: "refitWcsDonutTable"
+      donutSelector.useCustomMagLimit: True
+      astromRefFilter: "phot_g_mean"
+      photoRefFilterPrefix: "monster_SynthLSST"
+      astromTask.referenceSelector.doMagLimit: False
+      astromTask.maxIter: 3
+      astromTask.matcher.maxOffsetPix: 2000
+      astromTask.matcher.maxRotationDeg: 3.0
+      failTask: True
+      # donutSelector.unblendedSeparation: 1
+  cutOutDonutsScienceSensorGroupTask:
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      connections.exposures: "postFitPostISRCCD"
+      connections.donutCatalog: "refitWcsDonutTable"
+      python: |
+        from lsst.ts.wep.task.pairTask import GroupPairer
+        config.pairer.retarget(GroupPairer)
+      donutStampSize: 200
+      initialCutoutPadding: 40
