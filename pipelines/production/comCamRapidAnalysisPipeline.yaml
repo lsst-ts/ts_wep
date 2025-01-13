@@ -5,6 +5,19 @@ imports:
   - $TS_WEP_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
 
 tasks:
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
+    config:
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: true
+      ampOffset.doApplyAmpOffset: false
+      # Turn off slow steps in ISR
+      doBrighterFatter: false
+      # Mask saturated pixels,
+      # but turn off quadratic crosstalk because it's currently broken
+      doSaturation: True
+      crosstalk.doQuadraticCrosstalkCorrection: False
   calcZernikesTask:
     class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
     config:
@@ -18,6 +31,18 @@ tasks:
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxSelect: 5
       donutStampSelector.maxFracBadPixels: 2.0e-4
+  plotAOSTask:
+    class: lsst.donut.viz.PlotAOSTask
+    config:
+      doRubinTVUpload: true
+  plotDonutTask:
+    class: lsst.donut.viz.PlotDonutTask
+    config:
+      doRubinTVUpload: true
+  plotPsfZernTask:
+    class: lsst.donut.viz.PlotPsfZernTask
+    config:
+      doRubinTVUpload: true
 
 # Define pipeline steps
 subsets:

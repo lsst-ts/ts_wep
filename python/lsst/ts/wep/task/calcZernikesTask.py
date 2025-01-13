@@ -346,8 +346,23 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         return zkTable
 
-    def empty(self) -> pipeBase.Struct:
-        """Return empty results if no donuts are available."""
+    def empty(self, qualityTable=None) -> pipeBase.Struct:
+        """Return empty results if no donuts are available. If
+        it is a result of no quality donuts we still include the
+        quality table results instead of an empty quality table.
+
+        Parameters
+        ----------
+        qualityTable : astropy.table.QTable
+            Quality table created with donut stamp input.
+
+        Returns
+        -------
+        lsst.pipe.base.Struct
+            Empty output tables for zernikes. Empty quality table
+            if no donuts. Otherwise contains quality table
+            with donuts that all failed to pass quality check.
+        """
         qualityTableCols = [
             "SN",
             "ENTROPY",
@@ -356,11 +371,15 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
         ]
+        if qualityTable is None:
+            donutQualityTable = QTable({name: [] for name in qualityTableCols})
+        else:
+            donutQualityTable = qualityTable
         return pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             zernikes=self.initZkTable(),
-            donutQualityTable=QTable({name: [] for name in qualityTableCols}),
+            donutQualityTable=donutQualityTable,
         )
 
     @timeMethod
@@ -396,7 +415,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 or len(selectionIntra.donutStampsSelect) == 0
             ):
                 self.log.info("No donut stamps were selected.")
-                return self.empty()
+                return self.empty(qualityTable=donutQualityTable)
         else:
             donutQualityTable = QTable([])
 

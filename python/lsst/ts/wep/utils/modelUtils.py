@@ -45,10 +45,16 @@ def forwardModelPair(
     bandLabel: str = "r",
     fieldAngleIntra: Union[tuple, None] = None,
     fieldAngleExtra: Union[tuple, None] = None,
+    miscenterIntra: Union[tuple, None] = None,
+    miscenterExtra: Union[tuple, None] = None,
     blendOffsetsIntra: Union[np.ndarray, tuple, list, None] = None,
     blendOffsetsExtra: Union[np.ndarray, tuple, list, None] = None,
+    blendRatiosIntra: Union[np.ndarray, tuple, list, None] = None,
+    blendRatiosExtra: Union[np.ndarray, tuple, list, None] = None,
     instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
     nPix: int = 180,
+    opticalModel: str = "offAxis",
+    flat: bool = False,
 ) -> Tuple[np.ndarray, Image, Image]:
     """Forward model a pair of donuts.
 
@@ -97,17 +103,41 @@ def forwardModelPair(
         only specified for the intra or extrafocal donut, both donuts use
         that angle. If neither is specified, the same random angle is used
         for both. (the default is None)
+    miscenterIntra : tuple, optional
+        The amount by which the intrafocal donut is miscentered. A tuple of
+        (dx, dy) in pixels. If None, a random value between +/- 2 is used
+        for each. Note the random non-zero offsets are default to avoid
+        pixel aliasing effects when examining ensembles of wavefront
+        estimation errors. (the default is None)
+    miscenterExtra : tuple, optional
+        The amount by which the extrafocal donut is miscentered. A tuple of
+        (dx, dy) in pixels. If None, a random value between +/- 2 is used
+        for each. Note the random non-zero offsets are default to avoid
+        pixel aliasing effects when examining ensembles of wavefront
+        estimation errors. (the default is None)
     blendOffsetsIntra : Iterable or None, optional
         The blend offsets of the intrafocal donut.
         (the default is None)
     blendOffsetsExtra : Iterable or None, optional
         The blend offsets of the extrafocal donut.
         (the default is None)
+    blendRatiosIntra : Iterable or None, optional
+        Flux ratios of the blends to the central star. If None, 1 is assumed
+        for all. (the default is None)
+    blendRatiosExtra : Iterable or None, optional
+        Flux ratios of the blends to the central star. If None, 1 is assumed
+        for all. (the default is None)
     instConfig : str, dict, or Instrument, optional
         The instrument config for the image mapper.
         (the default is "policy:instruments/LsstCam.yaml")
     nPix : int, optional
         The size of the images. (the default is 180)
+    opticalModel : str, optional
+        Which optical model to use for the ImageMapper. Can be "offAxis",
+        "onAxis", or "paraxial". (the default is "offAxis")
+    flat : bool, optional
+        Whether to remove surface brightness fluctuations from the donut.
+        (the default is False)
 
     Returns
     -------
@@ -119,7 +149,7 @@ def forwardModelPair(
         The extrafocal image
     """
     # Create the ImageMapper that will forward model the images
-    mapper = ImageMapper(instConfig=instConfig)
+    mapper = ImageMapper(instConfig=instConfig, opticalModel=opticalModel)
 
     # And the random number generators
     rng = np.random.default_rng(seed)
@@ -181,22 +211,34 @@ def forwardModelPair(
     )
     # Add blends
     if blendOffsetsIntra is None:
-        nBlends = 0
+        blendRatiosIntra = [0]
     else:
         offsets = np.atleast_2d(blendOffsetsIntra)
-        nBlends = len(offsets)
+        blendRatiosIntra = (
+            np.ones(offsets.shape[0]) if blendRatiosIntra is None else blendRatiosIntra
+        )
         centralDonut = intraStamp.image.copy()
-        for blendShift in offsets:
-            intraStamp.image += shift(centralDonut, blendShift[::-1])
+        for blendShift, ratio in zip(offsets, blendRatiosIntra):
+            intraStamp.image += ratio * shift(centralDonut, blendShift[::-1])
+    # Flatten surface brightness?
+    if flat:
+        mapper.createImageMasks(intraStamp, zkCoeff, isBinary=False)
+        intraStamp.image = np.clip(intraStamp.mask + intraStamp.maskBlends, 0, 1)
+    # Normalize the flux
+    intraStamp.image *= fluxIntra * (1 + sum(blendRatiosIntra)) / intraStamp.image.sum()
+    # Miscenter image
+    _miscenterIntra = rng.uniform(-2, 2, size=2)
+    miscenterIntra = _miscenterIntra if miscenterIntra is None else miscenterIntra
+    intraStamp.image = shift(intraStamp.image, miscenterIntra[::-1])
     # Convolve with Kolmogorov atmosphere
     if seeing > 0:
         intraStamp.image = convolve(intraStamp.image, atmKernel, mode="same")
-    # Normalize the flux
-    intraStamp.image *= fluxIntra * (1 + nBlends) / intraStamp.image.sum()
-    # Poisson noise
+    # Pseudo-Poissonian noise
     intraStamp.image += background
     intraStamp.image = np.clip(intraStamp.image, 0, None)
-    intraStamp.image = rng.poisson(intraStamp.image).astype(float)
+    intraStamp.image += rng.normal(size=intraStamp.image.shape) * np.sqrt(
+        intraStamp.image
+    )
     intraStamp.image -= background
 
     # Now the extrafocal image
@@ -212,22 +254,34 @@ def forwardModelPair(
     )
     # Add blends
     if blendOffsetsExtra is None:
-        nBlends = 0
+        blendRatiosExtra = [0]
     else:
         offsets = np.atleast_2d(blendOffsetsExtra)
-        nBlends = len(offsets)
+        blendRatiosExtra = (
+            np.ones(offsets.shape[0]) if blendRatiosExtra is None else blendRatiosExtra
+        )
         centralDonut = extraStamp.image.copy()
-        for blendShift in offsets:
-            extraStamp.image += shift(centralDonut, blendShift[::-1])
+        for blendShift, ratio in zip(offsets, blendRatiosExtra):
+            extraStamp.image += ratio * shift(centralDonut, blendShift[::-1])
+    # Flatten surface brightness?
+    if flat:
+        mapper.createImageMasks(extraStamp, zkCoeff, isBinary=False)
+        extraStamp.image = np.clip(extraStamp.mask + extraStamp.maskBlends, 0, 1)
+    # Normalize the flux
+    extraStamp.image *= fluxExtra * (1 + sum(blendRatiosExtra)) / extraStamp.image.sum()
+    # Miscenter image
+    _miscenterExtra = rng.uniform(-2, 2, size=2)
+    miscenterExtra = _miscenterExtra if miscenterExtra is None else miscenterExtra
+    extraStamp.image = shift(extraStamp.image, miscenterExtra[::-1])
     # Convolve with Kolmogorov atmosphere
     if seeing > 0:
         extraStamp.image = convolve(extraStamp.image, atmKernel, mode="same")
-    # Normalize the flux
-    extraStamp.image *= fluxExtra / extraStamp.image.sum()
-    # Poisson noise
+    # Pseudo-Poissonian noise
     extraStamp.image += background
     extraStamp.image = np.clip(extraStamp.image, 0, None)
-    extraStamp.image = rng.poisson(extraStamp.image).astype(float)
+    extraStamp.image += rng.normal(size=extraStamp.image.shape) * np.sqrt(
+        extraStamp.image
+    )
     extraStamp.image -= background
 
     return zkCoeff, intraStamp, extraStamp

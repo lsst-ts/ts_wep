@@ -6,6 +6,33 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.3.0:
+
+-------------
+13.3.0
+-------------
+
+* Add donut quality tables to outputs even when there are no donuts that pass so that we can match it up to the donut stamps and understand rejections.
+* Change default pipeline setting to false for rubinTV upload.
+
+.. _lsst.ts.wep-13.2.0:
+
+-------------
+13.2.0
+-------------
+
+* Implemented joint-fitting of donut pairs with Danish.
+
+.. _lsst.ts.wep-13.1.0:
+
+-------------
+13.1.0
+-------------
+
+* Set saveHistory=True and loosen convergence criteria in the Danish production pipeline
+* Upgrades to the forward modeling util, including specifying flux ratios for blends, miscentering donuts, and simulating "flat" donuts without intensity patterns
+* Fixed bug in forward modeling util when adding noise to large flux values
+
 .. _lsst.ts.wep-13.0.4:
 
 -------------
@@ -23,7 +50,7 @@ Version History
 
 * Task plotPsfFromZern added in comCamRapidAnalysisPipeline and comCamRapidAnalysisDanishPipeline.
 
-.. _lsst.ts.wep-13.0.3:
+.. _lsst.ts.wep-13.0.2:
 
 -------------
 13.0.2
