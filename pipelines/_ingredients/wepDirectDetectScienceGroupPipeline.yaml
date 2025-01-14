@@ -1,6 +1,8 @@
 description: wep direct detect pipeline
 
 tasks:
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
   generateDonutDirectDetectTask:
     class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
     config:
