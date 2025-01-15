@@ -3,6 +3,8 @@ description: donut viz pipeline tasks
 tasks:
   aggregateZernikeTablesTask:
     class: lsst.donut.viz.AggregateZernikeTablesTask
+  aggregateDonutTablesTask:
+      class: lsst.donut.viz.AggregateDonutTablesTask
   aggregateDonutTablesGroupTask:
       class: lsst.donut.viz.AggregateDonutTablesTask
       config:
