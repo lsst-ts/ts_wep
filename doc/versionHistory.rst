@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.3.1:
+
+-------------
+13.3.1
+-------------
+
+* Add isr configs back into default pipelines.
+
 .. _lsst.ts.wep-13.3.0:
 
 -------------

@@ -3,6 +3,9 @@ instrument: lsst.obs.lsst.LsstComCamSim
 imports:
   - $TS_WEP_DIR/pipelines/_ingredients/wepDirectDetectScienceGroupPipeline.yaml
   - $TS_WEP_DIR/pipelines/_ingredients/donutVizGroupPipeline.yaml
+tasks:
+  aggregateDonutTablesTask:
+      class: lsst.donut.viz.AggregateDonutTablesTask
 
 # Define pipeline steps
 subsets:
