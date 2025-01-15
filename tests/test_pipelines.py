@@ -20,8 +20,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-from pathlib import Path
 from glob import glob
+from pathlib import Path
 
 from lsst.pipe.base import Pipeline
 from lsst.utils import getPackageDir
