@@ -34,6 +34,11 @@ from lsst.ts.wep.utils.ioUtils import mergeConfigWithFile
 from scipy.optimize import minimize_scalar
 
 
+@lru_cache(10)
+def _getBatoidModelFromFileName(filename):
+    return batoid.Optic.fromYaml(filename)
+
+
 class Instrument:
     """Object with relevant geometry of the primary mirror and focal plane.
 
@@ -196,7 +201,6 @@ class Instrument:
 
     def clearCaches(self) -> None:
         """Clear the Batoid caches."""
-        self.getBatoidModel.cache_clear()
         self._getIntrinsicZernikesCached.cache_clear()
         self._getIntrinsicZernikesTACached.cache_clear()
         self._focalLengthBatoid = None
@@ -600,7 +604,6 @@ class Instrument:
             )
 
         # Clear relevant caches
-        self.getBatoidModel.cache_clear()
         self._getIntrinsicZernikesCached.cache_clear()
         self._getIntrinsicZernikesTACached.cache_clear()
         self._focalLengthBatoid = None
@@ -679,7 +682,6 @@ class Instrument:
         self._getIntrinsicZernikesTACached.cache_clear()
         self._defocalOffsetBatoid = None
 
-    @lru_cache(10)
     def getBatoidModel(
         self, band: Union[BandLabel, str] = BandLabel.REF
     ) -> batoid.Optic:
@@ -706,7 +708,7 @@ class Instrument:
         batoidModelName = self.batoidModelName.format(band=band.value)
 
         # Load the Batoid model
-        return batoid.Optic.fromYaml(batoidModelName + ".yaml")
+        return _getBatoidModelFromFileName(batoidModelName + ".yaml")
 
     @lru_cache(100)
     def _getIntrinsicZernikesCached(
