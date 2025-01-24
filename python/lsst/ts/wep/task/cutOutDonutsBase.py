@@ -287,7 +287,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             initBBox = lsst.geom.Box2I(
                 initCornerPoint, lsst.geom.Extent2I(initialCutoutSize)
             )
-            initialCutout = copy(exposure[initBBox])
+            initialCutout = exposure[initBBox]
 
             # Find the centroid by finding the max point in an initial
             # cutout convolved with a template
