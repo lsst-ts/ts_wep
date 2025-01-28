@@ -220,13 +220,13 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             An empty donut table with correct columns.
         """
         donutColumns = [
-                "coord_ra",
-                "coord_dec",
-                "centroid_x",
-                "centroid_y",
-                "detector",
-                "source_flux",
-            ]
+            "coord_ra",
+            "coord_dec",
+            "centroid_x",
+            "centroid_y",
+            "detector",
+            "source_flux",
+        ]
         donutTable = QTable(names=donutColumns)
         donutTable.meta["blend_centroid_x"] = ""
         donutTable.meta["blend_centroid_y"] = ""
@@ -306,7 +306,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             # donut table
             else:
                 self.log.warning(
-                "No sources selected in the exposure. Returning an empty donut catalog."
+                    "No sources selected in the exposure. Returning an empty donut catalog."
                 )
                 donutCatUpd = self.emptyTable()
         else:
