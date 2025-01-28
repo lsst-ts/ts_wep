@@ -148,6 +148,23 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         metaKeys = ["blend_centroid_x", "blend_centroid_y"]
         self.assertCountEqual(donutCatUpd.meta.keys(), metaKeys)
 
+    def testEmptyTable(self):
+
+        testTable = self.task.emptyTable()
+
+        # Test that there are no rows, but all columns are present
+        self.assertEqual(len(testTable), 0)
+
+        expected_columns = [
+                    "coord_ra",
+                    "coord_dec",
+                    "centroid_x",
+                    "centroid_y",
+                    "detector",
+                    "source_flux",
+                ]
+        self.assertCountEqual(testTable.columns, expected_columns)
+
     def testTaskRun(self):
         """
         Test that the task runs interactively.
@@ -193,9 +210,12 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "source_flux",
         ]
         self.assertCountEqual(taskOutNoSrc.donutCatalog.columns, expected_columns)
+
+        # Test that all expected metadata keys are present
+        expected_metakeys = ["blend_centroid_x", "blend_centroid_y", "visit_info"]
         self.assertCountEqual(
-            taskOutNoSrc.donutCatalog.meta.keys(),
-            ["blend_centroid_x", "blend_centroid_y", "visit_info"],
+            taskOutNoSrc.donutCatalog.meta.keys(), expected_metakeys
+            ,
         )
 
         # Run detection with different sources in each exposure
@@ -235,6 +255,26 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
 
         self.assertLess(diff_x, tolerance)
         self.assertLess(diff_y, tolerance)
+
+        # Test behavior if no sources get selected
+        # This setting will select no donuts
+        # on that exposure
+        self.task.config.donutSelector.maxFieldDist = 0
+
+        # Run the task
+        taskOut_S10_noSel = self.task.run(
+                        exposure_S10,
+                        camera,
+                    )
+
+        # Test that there are no rows, but all columns are present
+        self.assertCountEqual(taskOut_S10_noSel.donutCatalog.columns, expected_columns)
+
+        # Test that all expected metadata keys are present
+        self.assertCountEqual(
+            taskOut_S10_noSel.donutCatalog.meta.keys(), expected_metakeys
+            ,
+        )
 
     def testTaskRunPipeline(self):
         """
