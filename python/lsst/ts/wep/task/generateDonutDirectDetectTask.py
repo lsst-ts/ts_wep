@@ -210,6 +210,28 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
         return donutCatUpd
 
+    def emptyTable(self):
+        """Return empty donut table if no donuts got
+        detected or selected.
+
+        Returns
+        -------
+        astropy.table.QTable
+            An empty donut table with correct columns.
+        """
+        donutColumns = [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "detector",
+                "source_flux",
+            ]
+        donutTable = QTable(names=donutColumns)
+        donutTable.meta["blend_centroid_x"] = ""
+        donutTable.meta["blend_centroid_y"] = ""
+        return donutTable
+
     @timeMethod
     def run(self, exposure, camera):
         camName = camera.getName()
@@ -273,27 +295,26 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
 
             donutCatSelected.rename_column(f"{bandLabel}_flux", "source_flux")
 
-            # update column names and content
-            donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
-            donutCatUpd["detector"] = np.array(
-                [detectorName] * len(donutCatUpd), dtype=str
-            )
+            # If at least one donut got selected, update the column names
+            # and content
+            if len(donutCatSelected) > 0:
+                donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
+                donutCatUpd["detector"] = np.array(
+                    [detectorName] * len(donutCatUpd), dtype=str
+                )
+            # If no donuts got selected, issue a warning and return an enpy
+            # donut table
+            else:
+                self.log.warning(
+                "No sources selected in the exposure. Returning an empty donut catalog."
+                )
+                donutCatUpd = self.emptyTable()
         else:
 
             self.log.warning(
                 "No sources found in the exposure. Returning an empty donut catalog."
             )
-            donutCatalogColumns = [
-                "coord_ra",
-                "coord_dec",
-                "centroid_x",
-                "centroid_y",
-                "detector",
-                "source_flux",
-            ]
-            donutCatUpd = QTable(names=donutCatalogColumns)
-            donutCatUpd.meta["blend_centroid_x"] = ""
-            donutCatUpd.meta["blend_centroid_y"] = ""
+            donutCatUpd = self.emptyTable()
 
         donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
 
