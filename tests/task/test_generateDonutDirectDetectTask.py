@@ -148,6 +148,19 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         metaKeys = ["blend_centroid_x", "blend_centroid_y"]
         self.assertCountEqual(donutCatUpd.meta.keys(), metaKeys)
 
+        # test that the catalog created without
+        # source selection will work
+        donutCatNoSel = QTable(data={x: y for x, y in zip(names, data)})
+        donutCatNoSel.meta["blend_centroid_x"] = ""
+        donutCatNoSel.meta["blend_centroid_y"] = ""
+        self.task.config.doDonutSelection = False
+
+        # update the donut catalog
+        donutCatUpd = self.task.updateDonutCatalog(donutCatNoSel, testExposure)
+
+        # check that the new columns are present
+        self.assertCountEqual(newColumns, donutCatUpd.columns)
+
     def testEmptyTable(self):
 
         testTable = self.task.emptyTable()
@@ -262,18 +275,31 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.task.config.donutSelector.maxFieldDist = 0
 
         # Run the task
-        taskOut_S10_noSel = self.task.run(
+        taskOut_S10_noSources = self.task.run(
             exposure_S10,
             camera,
         )
 
         # Test that there are no rows, but all columns are present
-        self.assertCountEqual(taskOut_S10_noSel.donutCatalog.columns, expected_columns)
+        self.assertCountEqual(
+            taskOut_S10_noSources.donutCatalog.columns, expected_columns
+        )
 
         # Test that all expected metadata keys are present
         self.assertCountEqual(
-            taskOut_S10_noSel.donutCatalog.meta.keys(),
+            taskOut_S10_noSources.donutCatalog.meta.keys(),
             expected_metakeys,
+        )
+
+        # Test the behavior when source selection is turned off
+        self.task.config.doDonutSelection = False
+        taskOut_S11_noSelection = self.task.run(
+            exposure_S11,
+            camera,
+        )
+        # Check that the expected columns are present
+        self.assertCountEqual(
+            taskOut_S11_noSelection.donutCatalog.columns, expected_columns
         )
 
     def testTaskRunPipeline(self):
