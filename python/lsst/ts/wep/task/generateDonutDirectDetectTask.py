@@ -199,12 +199,17 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         ]
         donutCatUpd["source_flux"] = donutCat["source_flux"] * u.nJy
         fluxSort = np.argsort(donutCatUpd["source_flux"])[::-1]
-        donutCatUpd.meta["blend_centroid_x"] = [
-            donutCat.meta["blend_centroid_x"][idx] for idx in fluxSort
-        ]
-        donutCatUpd.meta["blend_centroid_y"] = [
-            donutCat.meta["blend_centroid_y"][idx] for idx in fluxSort
-        ]
+        # It is possible for catalog to have multiple sources
+        # detected, but with source selection turned off
+        # the QTable metadata of `blend_centroid_x` and
+        # `blend_centroid_y` will be empty.
+        if self.config.doDonutSelection:
+            donutCatUpd.meta["blend_centroid_x"] = [
+                donutCat.meta["blend_centroid_x"][idx] for idx in fluxSort
+            ]
+            donutCatUpd.meta["blend_centroid_y"] = [
+                donutCat.meta["blend_centroid_y"][idx] for idx in fluxSort
+            ]
 
         donutCatUpd.sort("source_flux", reverse=True)
 
