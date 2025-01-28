@@ -307,7 +307,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
                 donutCatUpd["detector"] = np.array(
                     [detectorName] * len(donutCatUpd), dtype=str
                 )
-            # If no donuts got selected, issue a warning and return an enpy
+            # If no donuts got selected, issue a warning and return an empty
             # donut table
             else:
                 self.log.warning(
