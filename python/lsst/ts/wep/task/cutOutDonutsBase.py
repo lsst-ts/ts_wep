@@ -611,7 +611,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             # Save centroid positions as str so we can store in header
             blendStrX = ""
             blendStrY = ""
-            if len(catalogMeta["blend_centroid_x"])>0:
+            if len(catalogMeta["blend_centroid_x"]) > 0:
                 for blend_cx, blend_cy in zip(
                     catalogMeta["blend_centroid_x"][idx],
                     catalogMeta["blend_centroid_y"][idx],
