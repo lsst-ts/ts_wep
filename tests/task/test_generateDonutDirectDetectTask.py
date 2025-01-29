@@ -301,6 +301,21 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertCountEqual(
             taskOut_S11_noSelection.donutCatalog.columns, expected_columns
         )
+        # Check that the length of catalogs is as expected
+        outputTableNoSel = taskOut_S11_noSelection.donutCatalog
+        self.assertEqual(len(outputTableNoSel), 3)
+
+        # Test against truth the centroid for all sources
+        result_y = np.sort(outputTableNoSel["centroid_y"].value)
+        truth_y = np.sort(np.array([3196, 2196, 398]))
+        diff_y = np.sum(result_y - truth_y)
+
+        result_x = np.sort(outputTableNoSel["centroid_x"].value)
+        truth_x = np.sort(np.array([3812, 2814, 618]))
+        diff_x = np.sum(result_x - truth_x)
+
+        self.assertLess(diff_x, tolerance)
+        self.assertLess(diff_y, tolerance)
 
     def testTaskRunPipeline(self):
         """
