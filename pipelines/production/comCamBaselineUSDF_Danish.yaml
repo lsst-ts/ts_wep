@@ -20,7 +20,7 @@ tasks:
       estimateZernikes.binning: 2
       estimateZernikes.nollIndices:
         [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 27, 28]
-      estimateZernikes.saveHistory: true
+      estimateZernikes.saveHistory: False
       estimateZernikes.lstsqKwargs:
         ftol: 1.0e-3
         xtol: 1.0e-3
@@ -31,10 +31,11 @@ tasks:
 subsets:
   step1a:
     subset:
+      - isr
       - generateDonutDirectDetectTask
       - cutOutDonutsScienceSensorGroupTask
     description: |
-      This step takes the input postISR images then
+      This step makes the input postISR images then
       finds and cuts out the donut stamps.
   step1b:
     subset:
