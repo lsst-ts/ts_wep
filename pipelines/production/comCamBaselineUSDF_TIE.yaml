@@ -19,7 +19,7 @@ tasks:
       estimateZernikes.compSequence: [4, 4, 6, 6, 13, 13, 13, 13]
       estimateZernikes.maxIter: 50
       estimateZernikes.requireConverge: True
-      estimateZernikes.saveHistory: True
+      estimateZernikes.saveHistory: False
       estimateZernikes.maskKwargs: { "doMaskBlends": False }
       donutStampSelector.maxFracBadPixels: 2.0e-4
       donutStampSelector.maxSelect: -1
@@ -28,10 +28,11 @@ tasks:
 subsets:
   step1:
     subset:
+      - isr
       - generateDonutDirectDetectTask
       - cutOutDonutsScienceSensorGroupTask
     description: |
-      This step takes the input postISR images then
+      This step makes the input postISR images then
       finds and cuts out the donut stamps.
   step1b:
     subset:
