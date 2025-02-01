@@ -282,6 +282,11 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             # Use the aperture flux with a 70 pixel aperture
             donutTable[f"{bandLabel}_flux"] = donutTable["apFlux70"]
 
+            # Set the required columns to be empty, unless
+            # overwritten by donutSelector below
+            donutTable.meta["blend_centroid_x"] = ""
+            donutTable.meta["blend_centroid_y"] = ""
+
             # Run the donut selector task.
             if self.config.doDonutSelection:
                 self.log.info("Running Donut Selector")
@@ -292,10 +297,6 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
                 donutCatSelected.meta["blend_centroid_x"] = donutSelection.blendCentersX
                 donutCatSelected.meta["blend_centroid_y"] = donutSelection.blendCentersY
             else:
-                # if donut selector was not run,
-                # set the required columns to be empty
-                donutTable.meta["blend_centroid_x"] = ""
-                donutTable.meta["blend_centroid_y"] = ""
                 donutCatSelected = donutTable
 
             donutCatSelected.rename_column(f"{bandLabel}_flux", "source_flux")
