@@ -608,10 +608,13 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             # Save MaskedImage to stamp
             finalStamp = finalCutout.getMaskedImage()
 
-            # Save centroid positions as str so we can store in header
-            blendStrX = ""
-            blendStrY = ""
+            # Set that as default, unless overwritten
+            blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
+
             if len(catalogMeta["blend_centroid_x"]) > 0:
+                # Save centroid positions as str so we can store in header
+                blendStrX = ""
+                blendStrY = ""
                 for blend_cx, blend_cy in zip(
                     catalogMeta["blend_centroid_x"][idx],
                     catalogMeta["blend_centroid_y"][idx],
@@ -630,8 +633,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                 finalBlendXList.append(blendStrX)
                 finalBlendYList.append(blendStrY)
 
-            # Prepare blend centroid position information
-            if len(catalogMeta["blend_centroid_x"]) > 0:
+                # Prepare blend centroid position information
                 if len(catalogMeta["blend_centroid_x"][idx]) > 0:
                     blendCentroidPositions = np.array(
                         [
@@ -639,10 +641,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                             catalogMeta["blend_centroid_y"][idx] + donutRow["yShift"],
                         ]
                     ).T
-                else:
-                    blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
-            else:
-                blendCentroidPositions = np.array([["nan"], ["nan"]], dtype=float).T
+
             # Get the local linear WCS for the donut stamp
             # Be careful to get the cd matrix from the linearized WCS instead
             # of the one from the full WCS.
