@@ -674,7 +674,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             )
 
             # Create image mask
-            donutStamp.makeMask(self.instConfigFile, self.opticalModel)
+            donutStamp.makeMask(instrument, self.opticalModel)
 
             # Calculate the S/N per stamp
             snQuant.append(self.calculateSN(donutStamp))
