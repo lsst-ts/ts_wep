@@ -757,13 +757,13 @@ class Instrument:
             wavelength = self.wavelength[BandLabel.REF]
 
         # Get the intrinsic Zernikes in wavelengths
-        zkIntrinsic = batoid.zernike(
+        zkIntrinsic = batoid.zernikeGQ(
             batoidModel,
             *np.deg2rad([xAngle, yAngle]),
             wavelength,
             jmax=jmax,
             eps=batoidModel.pupilObscuration,
-            nx=128,
+            rings=12,
         )
 
         # Multiply by wavelength to get Zernikes in meters
