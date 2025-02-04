@@ -182,7 +182,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
                 "coord_dec",
                 "centroid_x",
                 "centroid_y",
-                "source_flux",
+                "g_flux",
                 "detector",
             ],
         )
@@ -231,7 +231,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
-        self.assertCountEqual(outputTable["source_flux"].value, fluxTruth)
+        self.assertCountEqual(outputTable["g_flux"].value, fluxTruth)
 
         # Clean up
         cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
@@ -317,4 +317,4 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
-        self.assertCountEqual(outputTable["source_flux"].value, fluxTruth)
+        self.assertCountEqual(outputTable["g_flux"].value, fluxTruth)

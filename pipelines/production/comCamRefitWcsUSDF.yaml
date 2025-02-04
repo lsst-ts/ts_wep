@@ -13,6 +13,7 @@ tasks:
       donutSelector.useCustomMagLimit: True
       astromRefFilter: "phot_g_mean"
       photoRefFilterPrefix: "monster_SynthLSST"
+      catalogFilterList: ["monster_SynthLSST_u", "monster_SynthLSST_g", "monster_SynthLSST_r", "monster_SynthLSST_i", "monster_SynthLSST_z", "monster_SynthLSST_y"]
       astromTask.referenceSelector.doMagLimit: False
       astromTask.maxIter: 3
       astromTask.matcher.maxOffsetPix: 2000

@@ -148,6 +148,11 @@ class GenerateDonutFromRefitWcsTaskConfig(
         dtype=str,
         optional=True,
     )
+    catalogFilterList = pexConfig.ListField(
+        dtype=str,
+        doc="Filters from reference catalog to include in donut catalog.",
+        default=["lsst_u", "lsst_g", "lsst_r", "lsst_i", "lsst_z", "lsst_y"],
+    )
     failTask = pexConfig.Field(
         doc="Fail if error raised.",
         dtype=bool,
@@ -324,7 +329,6 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 exposure=exposure,
             )
             scatter = astromResult.scatterOnSky.asArcseconds()
-            print(scatter, self.config.maxFitScatter)
             if scatter < self.config.maxFitScatter:
                 successfulFit = True
                 self.metadata["wcsFitSuccess"] = True
@@ -345,8 +349,8 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 exposure.setWcs(originalWcs)
                 donutCatalog = fitDonutCatalog
                 self.log.warning(
-                    "Returning original exposure and WCS \
-    and direct detect catalog as output."
+                    "Returning original exposure and WCS and "
+                    "direct detect catalog as output."
                 )
 
         if successfulFit:
@@ -388,7 +392,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             if f"{filterName}_flux" not in photoRefCat[0].get().schema:
                 filterFailMsg = (
                     "Photometric Reference Catalog does not contain "
-                    + f"photoRefFilter: {filterName}"
+                    f"photoRefFilter: {filterName}"
                 )
                 self.log.warning(filterFailMsg)
                 donutCatalog = fitDonutCatalog
@@ -410,17 +414,35 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                     filterName,
                     donutSelectorTask,
                 )
-
-                filterName = [
-                    f"{self.config.photoRefFilterPrefix}_{band}"
-                    for band in ["u", "g", "r", "i", "z", "y"]
+                # Create list of filters to include in final catalog
+                filterList = self.config.catalogFilterList
+                availableRefFilters = [
+                    col[:-5]
+                    for col in refSelection.schema.getNames()
+                    if col.endswith("_flux")
                 ]
+
+                # Validate all requested filters exist
+                missing_filters = set(filterList) - set(availableRefFilters)
+                if missing_filters:
+                    raise TaskError(
+                        f"Filter(s) {missing_filters} not in available columns"
+                        " in reference catalog. Check catalogFilterList config "
+                        f"(currently set as {filterList}). "
+                        f"Available ref catalog filters are {availableRefFilters}."
+                    )
+
+                # Add photoRefFilter if not present and get its index
+                if filterName not in filterList:
+                    filterList.append(filterName)
+                sortFilterIdx = filterList.index(filterName)
+
                 donutCatalog = donutCatalogToAstropy(
                     refSelection,
-                    filterName,
+                    filterList,
                     blendCentersX,
                     blendCentersY,
-                    sortFilterIdx=2,
+                    sortFilterIdx=sortFilterIdx,
                 )
                 self.metadata["refCatalogSuccess"] = True
             # Except RuntimeError caused when no reference catalog

@@ -29,6 +29,7 @@ import lsst.afw.image as afwImage
 import numpy as np
 from astropy.table import QTable
 from lsst.daf import butler as dafButler
+from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task import (
     DonutStamps,
     GenerateDonutFromRefitWcsTask,
@@ -165,6 +166,8 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
         self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
         self.config.astromRefFilter = "g"
+        self.config.photoRefFilter = "g"
+        self.config.catalogFilterList = []
         task = GenerateDonutFromRefitWcsTask(config=self.config)
 
         # Fit the WCS with the task since Phosim fit will be off
@@ -210,6 +213,29 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
 
         # Test that detector names are present
         self.assertEqual(np.unique(fitCatalog["detector"]), "R22_S11")
+
+    def testConfigCatalogFilterListErr(self):
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+
+        self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
+        self.config.astromTask.referenceSelector.magLimit.maximum = 16.0
+        self.config.astromRefFilter = "g"
+        self.config.photoRefFilter = "g"
+        self.config.catalogFilterList = ["lsst_u"]
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
+
+        # Test that requesting a filter in the donut catalog
+        # that isn't in the reference catalog raises an error
+        errMsg = str(
+            "Filter(s) {'lsst_u'} not in available columns in "
+            "reference catalog. Check catalogFilterList config "
+            "(currently set as ['lsst_u']). "
+            "Available ref catalog filters are ['g']."
+        )
+
+        with self.assertRaises(TaskError) as context:
+            task.run(dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs)
+        self.assertEqual(str(context.exception), errMsg)
 
     def testWcsFailure(self):
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()

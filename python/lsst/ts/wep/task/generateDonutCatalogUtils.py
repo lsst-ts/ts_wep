@@ -85,8 +85,8 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
 
 
 def donutCatalogToAstropy(
-    donutCatalog=None,
-    filterName=None,
+    donutCatalog,
+    filterName,
     blendCentersX=None,
     blendCentersY=None,
     sortFilterIdx=0,
@@ -97,13 +97,13 @@ def donutCatalogToAstropy(
 
     Parameters
     ----------
-    donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`, optional
+    donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`
         lsst.afw.table.SimpleCatalog object returned by the
         ReferenceObjectLoader search over the detector footprint.
         If None then it will return an empty QTable.
         (the default is None.)
-    filterName : `list` or `None`, optional
-        Name of catalog flux filters. If donutCatalog is not None then
+    filterName : `str` or `list` of `str`
+        Name of catalog flux filter(s). If donutCatalog is not None then
         this cannot be None. (the default is None.)
     blendCentersX : `list` or `None`, optional
         X pixel position of centroids for blended objects. List
@@ -139,14 +139,15 @@ def donutCatalogToAstropy(
     dec = list()
     centroidX = list()
     centroidY = list()
-    sourceFlux = list()
-    blendCX = list()
-    blendCY = list()
+
+    # If just given a single filter, change to list for compatibility.
+    # This is to ensure backwards compatibility with older versions.
+    # If we want to break backwards compatibility for other things we
+    # could eventually change this.
+    if isinstance(filterName, str):
+        filterName = [filterName]
 
     if donutCatalog is not None:
-        filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
-        if filterName is None:
-            raise ValueError(filterErrMsg)
         ra = donutCatalog["coord_ra"]
         dec = donutCatalog["coord_dec"]
         centroidX = donutCatalog["centroid_x"]
@@ -185,20 +186,24 @@ def donutCatalogToAstropy(
             )
             raise ValueError(blendErrMsg)
 
-    flux_sort = np.argsort(sourceFlux[sortFilterIdx])[::-1]
-
     fieldObjects = QTable()
     fieldObjects["coord_ra"] = ra * u.rad
     fieldObjects["coord_dec"] = dec * u.rad
     fieldObjects["centroid_x"] = centroidX
     fieldObjects["centroid_y"] = centroidY
-    for idx in range(len(filterName)):
-        fieldObjects[f"{filterName[idx]}_flux"] = sourceFlux[idx] * u.nJy
 
-    fieldObjects.sort(f"{filterName[sortFilterIdx]}_flux", reverse=True)
-
-    fieldObjects.meta["blend_centroid_x"] = [blendCX[idx] for idx in flux_sort]
-    fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
+    if len(fieldObjects) > 0:
+        flux_sort = np.argsort(sourceFlux[sortFilterIdx])[::-1]
+        for idx in range(len(filterName)):
+            fieldObjects[f"{filterName[idx]}_flux"] = sourceFlux[idx] * u.nJy
+        fieldObjects = fieldObjects[flux_sort]
+        fieldObjects.meta["blend_centroid_x"] = [blendCX[idx] for idx in flux_sort]
+        fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
+    else:
+        for idx in range(len(filterName)):
+            fieldObjects[f"{filterName[idx]}_flux"] = list() * u.nJy
+        fieldObjects.meta["blend_centroid_x"] = list()
+        fieldObjects.meta["blend_centroid_y"] = list()
 
     return fieldObjects
 
