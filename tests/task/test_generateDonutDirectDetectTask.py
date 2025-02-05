@@ -148,6 +148,36 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         metaKeys = ["blend_centroid_x", "blend_centroid_y"]
         self.assertCountEqual(donutCatUpd.meta.keys(), metaKeys)
 
+        # test that the catalog created without
+        # source selection will work
+        donutCatNoSel = QTable(data={x: y for x, y in zip(names, data)})
+        donutCatNoSel.meta["blend_centroid_x"] = ""
+        donutCatNoSel.meta["blend_centroid_y"] = ""
+        self.task.config.doDonutSelection = False
+
+        # update the donut catalog
+        donutCatUpd = self.task.updateDonutCatalog(donutCatNoSel, testExposure)
+
+        # check that the new columns are present
+        self.assertCountEqual(newColumns, donutCatUpd.columns)
+
+    def testEmptyTable(self):
+
+        testTable = self.task.emptyTable()
+
+        # Test that there are no rows, but all columns are present
+        self.assertEqual(len(testTable), 0)
+
+        expected_columns = [
+            "coord_ra",
+            "coord_dec",
+            "centroid_x",
+            "centroid_y",
+            "detector",
+            "source_flux",
+        ]
+        self.assertCountEqual(testTable.columns, expected_columns)
+
     def testTaskRun(self):
         """
         Test that the task runs interactively.
@@ -193,9 +223,12 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "source_flux",
         ]
         self.assertCountEqual(taskOutNoSrc.donutCatalog.columns, expected_columns)
+
+        # Test that all expected metadata keys are present
+        expected_metakeys = ["blend_centroid_x", "blend_centroid_y", "visit_info"]
         self.assertCountEqual(
             taskOutNoSrc.donutCatalog.meta.keys(),
-            ["blend_centroid_x", "blend_centroid_y", "visit_info"],
+            expected_metakeys,
         )
 
         # Run detection with different sources in each exposure
@@ -231,6 +264,54 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
 
         result_x = np.sort(outputTable["centroid_x"].value)
         truth_x = np.sort(np.array([3815, 2814, 617, 2811, 3812, 614]))
+        diff_x = np.sum(result_x - truth_x)
+
+        self.assertLess(diff_x, tolerance)
+        self.assertLess(diff_y, tolerance)
+
+        # Test behavior if no sources get selected
+        # This setting will select no donuts
+        # on that exposure
+        self.task.config.donutSelector.maxFieldDist = 0
+
+        # Run the task
+        taskOut_S10_noSources = self.task.run(
+            exposure_S10,
+            camera,
+        )
+
+        # Test that there are no rows, but all columns are present
+        self.assertCountEqual(
+            taskOut_S10_noSources.donutCatalog.columns, expected_columns
+        )
+
+        # Test that all expected metadata keys are present
+        self.assertCountEqual(
+            taskOut_S10_noSources.donutCatalog.meta.keys(),
+            expected_metakeys,
+        )
+
+        # Test the behavior when source selection is turned off
+        self.task.config.doDonutSelection = False
+        taskOut_S11_noSelection = self.task.run(
+            exposure_S11,
+            camera,
+        )
+        # Check that the expected columns are present
+        self.assertCountEqual(
+            taskOut_S11_noSelection.donutCatalog.columns, expected_columns
+        )
+        # Check that the length of catalogs is as expected
+        outputTableNoSel = taskOut_S11_noSelection.donutCatalog
+        self.assertEqual(len(outputTableNoSel), 3)
+
+        # Test against truth the centroid for all sources
+        result_y = np.sort(outputTableNoSel["centroid_y"].value)
+        truth_y = np.sort(np.array([3196, 2196, 398]))
+        diff_y = np.sum(result_y - truth_y)
+
+        result_x = np.sort(outputTableNoSel["centroid_x"].value)
+        truth_x = np.sort(np.array([3812, 2814, 618]))
         diff_x = np.sum(result_x - truth_x)
 
         self.assertLess(diff_x, tolerance)
