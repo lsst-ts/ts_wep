@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.3.3:
+
+-------------
+13.3.3
+-------------
+
+* Clean up and reformat USDF pipelines.
+
 .. _lsst.ts.wep-13.3.2:
 
 -------------
