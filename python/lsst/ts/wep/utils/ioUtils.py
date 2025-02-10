@@ -35,6 +35,7 @@ __all__ = [
 import inspect
 import os
 import re
+from functools import lru_cache
 from typing import Any, Union
 
 import numpy as np
@@ -88,6 +89,7 @@ def resolveRelativeConfigPath(path: str) -> str:
     return os.path.join(getConfigDir(), path)
 
 
+@lru_cache(10)
 def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
     """Read the config yaml file and return the corresponding dictionary.
 

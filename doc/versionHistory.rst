@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.3.4:
+
+-------------
+13.3.4
+-------------
+
+* Speed up cutOutDonuts tasks.
+
 .. _lsst.ts.wep-13.3.3:
 
 -------------
