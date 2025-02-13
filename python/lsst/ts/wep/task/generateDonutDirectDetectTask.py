@@ -123,6 +123,9 @@ class GenerateDonutDirectDetectTaskConfig(
     doDonutSelection = pexConfig.Field(
         doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
+    edgeMargin = pexConfig.Field(
+        doc="Size of detector edge margin in pixels", dtype=int, default=80
+    )
 
 
 class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
@@ -270,9 +273,15 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
             isBinary=True,
         )
 
+        # Trim the exposure by the margin
+        edgeMargin = self.config.edgeMargin
+        bbox = exposure.getBBox()
+        trimmedBBox = bbox.erodedBy(edgeMargin)
+        exposureTrim = exposure[trimmedBBox].clone()
+
         # Run the measurement task
         objData = self.measurementTask.run(
-            exposure,
+            exposureTrim,
             template,
             donutDiameter=np.ceil(instrument.donutDiameter).astype(int),
             cutoutPadding=self.config.initialCutoutPadding,
