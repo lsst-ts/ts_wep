@@ -158,6 +158,9 @@ class GenerateDonutFromRefitWcsTaskConfig(
         dtype=bool,
         default=False,
     )
+    edgeMargin = pexConfig.Field(
+        doc="Size of detector edge margin in pixels", dtype=int, default=80
+    )
 
     # Took these defaults from atmospec/centroiding which I used
     # as a template for implementing WCS fitting in a task.
@@ -407,12 +410,14 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 donutSelectorTask = (
                     self.donutSelector if self.config.doDonutSelection is True else None
                 )
+                edgeMargin = self.config.edgeMargin
                 refSelection, blendCentersX, blendCentersY = runSelection(
                     photoRefObjLoader,
                     detector,
                     exposure.wcs,
                     filterName,
                     donutSelectorTask,
+                    edgeMargin,
                 )
                 # Create list of filters to include in final catalog
                 filterList = self.config.catalogFilterList
