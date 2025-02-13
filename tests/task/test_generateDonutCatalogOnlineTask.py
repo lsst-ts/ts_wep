@@ -79,10 +79,12 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
     def testValidateConfigs(self):
         self.config.filterName = "r"
         self.config.doDonutSelection = False
+        self.config.edgeMargin = 100
         task = GenerateDonutCatalogOnlineTask(config=self.config)
 
         self.assertEqual(task.config.filterName, "r")
         self.assertEqual(task.config.doDonutSelection, False)
+        self.assertEqual(task.config.edgeMargin, 100)
 
     def testGetRefObjLoader(self):
         refCatList = self._getRefCat()
