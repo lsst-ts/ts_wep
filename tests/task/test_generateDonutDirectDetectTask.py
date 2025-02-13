@@ -103,6 +103,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
     def testValidateConfigs(self):
         # Test config in task
         self.config.opticalModel = "another"
+        self.config.edgeMargin = 100
         # Test config in measurement sub task
         self.config.measurementTask.nSigmaDetection = 5.0
         # Test config in source selector sub task
@@ -110,6 +111,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.task = GenerateDonutDirectDetectTask(config=self.config)
 
         self.assertEqual(self.task.config.opticalModel, "another")
+        self.assertEqual(self.task.config.edgeMargin, 100)
         self.assertEqual(self.task.config.measurementTask.nSigmaDetection, 5.0)
         self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
 
