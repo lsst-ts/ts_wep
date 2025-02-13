@@ -35,7 +35,7 @@ from lsst.daf.base import DateTime
 from lsst.geom import SpherePoint, degrees, radians
 
 
-def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
+def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask, edgeMargin):
     """
     Match the detector area to the reference catalog
     and then run the LSST DM reference selection task.
@@ -57,6 +57,9 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
         Task to run the donut source selection algorithm. If set to None,
         the catalog will be the exact same as the reference catalogs without
         any donut selection algorithm applied.
+    edgeMargin: `int`
+        The width of the margin by which we decrease bbox to avoid edge
+        source selection.
 
     Returns
     -------
@@ -71,7 +74,8 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
     """
 
     bbox = detector.getBBox()
-    donutCatalog = refObjLoader.loadPixelBox(bbox, wcs, filterName).refCat
+    trimmedBBox = bbox.erodedBy(edgeMargin)
+    donutCatalog = refObjLoader.loadPixelBox(trimmedBBox, wcs, filterName).refCat
 
     if donutSelectorTask is None:
         return donutCatalog, [[]] * len(donutCatalog), [[]] * len(donutCatalog)
