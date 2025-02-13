@@ -35,7 +35,9 @@ from lsst.daf.base import DateTime
 from lsst.geom import SpherePoint, degrees, radians
 
 
-def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask, edgeMargin):
+def runSelection(
+    refObjLoader, detector, wcs, filterName, donutSelectorTask, edgeMargin
+):
     """
     Match the detector area to the reference catalog
     and then run the LSST DM reference selection task.
