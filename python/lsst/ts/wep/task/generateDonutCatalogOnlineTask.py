@@ -107,7 +107,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         # refObjLoader handles the interaction with the butler repository
         # needed to get the pieces of the reference catalogs we need.
         refObjLoader = self.getRefObjLoader(refCatalogs)
-        margin = self.config.edgeMargin
+        edgeMargin = self.config.edgeMargin
         filterName = self.config.filterName
 
         try:
@@ -121,7 +121,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
                 detectorWcs,
                 filterName,
                 donutSelectorTask,
-                margin,
+                edgeMargin,
             )
 
         # Except RuntimeError caused when no reference catalog
