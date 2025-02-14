@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.4.1:
+
+-------------
+13.4.1
+-------------
+
+* Cache Zernike bases to speed up TIE algorithm.
+
 .. _lsst.ts.wep-13.4.0:
 
 -------------
