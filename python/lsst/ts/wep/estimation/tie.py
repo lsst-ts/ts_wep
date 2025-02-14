@@ -621,23 +621,9 @@ class TieAlgorithm(WfAlgorithm):
             Numpy array of the Zernike coefficients estimated from the image
             or pair of images, in nm.
         """
-        # Get the pupil grid
-        uPupil, vPupil = instrument.createPupilGrid()
-
-        # Get Zernike Bases
         jmax = nollIndices.max()
-        zk = createZernikeBasis(
-            uPupil,
-            vPupil,
-            jmax=jmax,
-            obscuration=instrument.obscuration,
-        )
-        dzkdu, dzkdv = createZernikeGradBasis(
-            uPupil,
-            vPupil,
-            jmax=jmax,
-            obscuration=instrument.obscuration,
-        )
+        zk = instrument.createZernikeBasis(jmax=jmax)
+        dzkdu, dzkdv = instrument.createZernikeGradBasis(jmax=jmax)
 
         # Down-select to the Zernikes we are solving for
         zk = makeSparse(zk, nollIndices)
