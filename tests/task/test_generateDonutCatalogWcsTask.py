@@ -67,10 +67,12 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
     def testValidateConfigs(self):
         self.config.doDonutSelection = False
         self.config.anyFilterMapsToThis = "phot_g_mean"
+        self.config.edgeMargin = 100
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         self.assertEqual(self.task.config.doDonutSelection, False)
         self.assertEqual(self.task.config.anyFilterMapsToThis, "phot_g_mean")
+        self.assertEqual(self.task.config.edgeMargin, 100)
 
     def testAnyFilterMapsToThis(self):
         self.config.anyFilterMapsToThis = "r"

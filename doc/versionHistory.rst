@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.4.0:
+
+-------------
+13.4.0
+-------------
+
+* Safeguard against edge donuts at detection stage with edgeMargin parameter.
+
 .. _lsst.ts.wep-13.3.4:
 
 -------------

@@ -116,8 +116,9 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         # If we have a magLimit at 17 we should cut out
         # the one source at 17.5.
+        edgeMargin = 60
         donutCatBrighterThan17, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", donutSelectorTask
+            refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
         )
         self.assertEqual(len(donutCatBrighterThan17), 3)
 
@@ -128,9 +129,24 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         donutSelectorConfig.unblendedSeparation = 1
         donutSelectorTask = DonutSourceSelectorTask(config=donutSelectorConfig)
         donutCatFull, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", donutSelectorTask
+            refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
         )
         self.assertEqual(len(donutCatFull), 4)
+
+        # If we set the margin to a large value we will exclude
+        # most sources from the catalog
+        edgeMargin = 1000
+        donutCatSmall, blendX, blendY = runSelection(
+            refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
+        )
+        self.assertEqual(len(donutCatSmall), 1)
+
+        # This will happen even if we turn off donut selection
+        edgeMargin = 1000
+        donutCatSmall, blendX, blendY = runSelection(
+            refObjLoader, detector, wcs, "g", None, edgeMargin
+        )
+        self.assertEqual(len(donutCatSmall), 1)
 
     def testRunSelectionNoTask(self):
         refObjLoader = self._createRefObjLoader()
@@ -150,7 +166,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         # When passing None instead of a DonutSourceSelectorTask
         # we should get the full catalog without cuts.
         unchangedCat, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", None
+            refObjLoader, detector, wcs, "g", None, 60
         )
         self.assertEqual(len(unchangedCat), 4)
         self.assertEqual(blendX, [[]] * 4)

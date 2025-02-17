@@ -144,6 +144,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
     def testValidateConfigs(self):
         # Test some defaults
         self.assertEqual(self.config.maxFitScatter, 1.0)
+        self.assertEqual(self.config.edgeMargin, 80)
         self.assertEqual(self.config.astromTask.referenceSelector.magLimit.maximum, 15)
         self.assertEqual(self.config.astromRefFilter, "phot_g_mean")
 
@@ -152,6 +153,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.config.astromTask.matcher.maxOffsetPix = 2500
         self.config.astromRefFilter = "g"
         self.config.photoRefFilter = "g"
+        self.config.edgeMargin = 400
 
         # Test new settings
         task = GenerateDonutFromRefitWcsTask(config=self.config)
@@ -159,6 +161,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertEqual(task.config.astromTask.matcher.maxOffsetPix, 2500)
         self.assertEqual(task.config.astromRefFilter, "g")
         self.assertEqual(task.config.photoRefFilter, "g")
+        self.assertEqual(task.config.edgeMargin, 400)
 
     def testTaskFit(self):
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()

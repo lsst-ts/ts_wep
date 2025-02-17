@@ -45,6 +45,9 @@ class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
     doDonutSelection = pexConfig.Field(
         doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
+    edgeMargin = pexConfig.Field(
+        doc="Size of detector edge margin in pixels", dtype=int, default=80
+    )
 
 
 class GenerateDonutCatalogOnlineTask(pipeBase.Task):
@@ -104,7 +107,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         # refObjLoader handles the interaction with the butler repository
         # needed to get the pieces of the reference catalogs we need.
         refObjLoader = self.getRefObjLoader(refCatalogs)
-
+        edgeMargin = self.config.edgeMargin
         filterName = self.config.filterName
 
         try:
@@ -113,7 +116,12 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
                 self.donutSelector if self.config.doDonutSelection is True else None
             )
             refSelection, blendCentersX, blendCentersY = runSelection(
-                refObjLoader, detector, detectorWcs, filterName, donutSelectorTask
+                refObjLoader,
+                detector,
+                detectorWcs,
+                filterName,
+                donutSelectorTask,
+                edgeMargin,
             )
 
         # Except RuntimeError caused when no reference catalog
