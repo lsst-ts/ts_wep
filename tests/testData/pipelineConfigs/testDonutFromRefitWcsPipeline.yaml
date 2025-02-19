@@ -42,6 +42,7 @@ tasks:
       astromRefFilter: "g"
       astromTask.referenceSelector.doMagLimit: False
       donutSelector.unblendedSeparation: 1
+      catalogFilterList: ["g"]
   cutOutDonutsScienceSensorTask:
     class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
     config:

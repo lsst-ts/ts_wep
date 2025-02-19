@@ -79,10 +79,12 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
     def testValidateConfigs(self):
         self.config.filterName = "r"
         self.config.doDonutSelection = False
+        self.config.edgeMargin = 100
         task = GenerateDonutCatalogOnlineTask(config=self.config)
 
         self.assertEqual(task.config.filterName, "r")
         self.assertEqual(task.config.doDonutSelection, False)
+        self.assertEqual(task.config.edgeMargin, 100)
 
     def testGetRefObjLoader(self):
         refCatList = self._getRefCat()
@@ -129,7 +131,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
                 "coord_dec",
                 "centroid_x",
                 "centroid_y",
-                "source_flux",
+                "g_flux",
                 "detector",
             ],
         )
@@ -147,7 +149,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
             np.ravel([cat0["coord_dec"], cat1["coord_dec"]]),
         )
         refFluxes = np.array([15.0, 15.0, 15.0, 17.5]) * units.ABmag
-        self.assertCountEqual(donutCatalog["source_flux"], refFluxes.to(units.nJy))
+        self.assertCountEqual(donutCatalog["g_flux"], refFluxes.to(units.nJy))
         np.testing.assert_array_equal(
             [[]] * 4, list(donutCatalog.meta["blend_centroid_x"])
         )

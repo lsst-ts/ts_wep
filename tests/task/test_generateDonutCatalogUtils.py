@@ -116,8 +116,9 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         # If we have a magLimit at 17 we should cut out
         # the one source at 17.5.
+        edgeMargin = 60
         donutCatBrighterThan17, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", donutSelectorTask
+            refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
         )
         self.assertEqual(len(donutCatBrighterThan17), 3)
 
@@ -128,9 +129,24 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         donutSelectorConfig.unblendedSeparation = 1
         donutSelectorTask = DonutSourceSelectorTask(config=donutSelectorConfig)
         donutCatFull, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", donutSelectorTask
+            refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
         )
         self.assertEqual(len(donutCatFull), 4)
+
+        # If we set the margin to a large value we will exclude
+        # most sources from the catalog
+        edgeMargin = 1000
+        donutCatSmall, blendX, blendY = runSelection(
+            refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
+        )
+        self.assertEqual(len(donutCatSmall), 1)
+
+        # This will happen even if we turn off donut selection
+        edgeMargin = 1000
+        donutCatSmall, blendX, blendY = runSelection(
+            refObjLoader, detector, wcs, "g", None, edgeMargin
+        )
+        self.assertEqual(len(donutCatSmall), 1)
 
     def testRunSelectionNoTask(self):
         refObjLoader = self._createRefObjLoader()
@@ -150,7 +166,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         # When passing None instead of a DonutSourceSelectorTask
         # we should get the full catalog without cuts.
         unchangedCat, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", None
+            refObjLoader, detector, wcs, "g", None, 60
         )
         self.assertEqual(len(unchangedCat), 4)
         self.assertEqual(blendX, [[]] * 4)
@@ -159,6 +175,27 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
     def testDonutCatalogToAstropy(self):
         donutCatSmall = self._createTestDonutCat()
 
+        fieldObjects = donutCatalogToAstropy(donutCatSmall, ["g"])
+        self.assertEqual(len(fieldObjects), 4)
+        self.assertCountEqual(
+            fieldObjects.columns,
+            [
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                "g_flux",
+            ],
+        )
+        self.assertCountEqual(
+            fieldObjects.meta.keys(),
+            [
+                "blend_centroid_x",
+                "blend_centroid_y",
+            ],
+        )
+
+        # Test that behavior is the same when filterName is a str
         fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
         self.assertEqual(len(fieldObjects), 4)
         self.assertCountEqual(
@@ -168,7 +205,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 "coord_dec",
                 "centroid_x",
                 "centroid_y",
-                "source_flux",
+                "g_flux",
             ],
         )
         self.assertCountEqual(
@@ -180,20 +217,20 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
 
         # Test that None returns an empty QTable
-        fieldObjectsNone = donutCatalogToAstropy()
+        fieldObjectsNone = donutCatalogToAstropy(None, "g")
         self.assertEqual(len(fieldObjectsNone), 0)
         self.assertCountEqual(
-            fieldObjects.columns,
+            fieldObjectsNone.columns,
             [
                 "coord_ra",
                 "coord_dec",
                 "centroid_x",
                 "centroid_y",
-                "source_flux",
+                "g_flux",
             ],
         )
         self.assertCountEqual(
-            fieldObjects.meta.keys(),
+            fieldObjectsNone.meta.keys(),
             [
                 "blend_centroid_x",
                 "blend_centroid_y",
@@ -282,12 +319,6 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "blend_centroid_y",
         ]
         donutCatZero = QTable(names=columnList)
-
-        # Test donutCatalog supplied but no filterName
-        filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
-        with self.assertRaises(ValueError) as context:
-            donutCatalogToAstropy(donutCatZero)
-        self.assertTrue(filterErrMsg in str(context.exception))
 
         # Test blendCenters are both supplied or both left as None
         blendErrMsg = (

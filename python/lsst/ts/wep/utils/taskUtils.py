@@ -35,7 +35,7 @@ import os
 import shlex
 import subprocess
 from contextlib import ExitStack
-from typing import Union
+from typing import Optional, Union
 
 import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
@@ -339,7 +339,7 @@ def createTemplateForDetector(
     detector: Detector,
     defocalType: DefocalType,
     bandLabel: Union[BandLabel, str] = BandLabel.REF,
-    instrument: Instrument = Instrument(),
+    instrument: Optional[Instrument] = None,
     opticalModel: str = "offAxis",
     padding: int = 5,
     isBinary: bool = True,
@@ -384,6 +384,9 @@ def createTemplateForDetector(
     np.ndarray
         The donut template array.
     """
+    if instrument is None:
+        instrument = Instrument()
+
     # Create the Image mapper
     imageMapper = ImageMapper(instConfig=instrument, opticalModel=opticalModel)
 

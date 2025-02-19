@@ -97,6 +97,9 @@ class GenerateDonutCatalogWcsTaskConfig(
     doDonutSelection = pexConfig.Field(
         doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
+    edgeMargin = pexConfig.Field(
+        doc="Size of detector edge margin in pixels", dtype=int, default=80
+    )
     # When matching photometric filters are not available in
     # the reference catalog (e.g. Gaia) use anyFilterMapsToThis
     # to get sources out of the catalog.
@@ -163,6 +166,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         detector = exposure.getDetector()
         detectorWcs = exposure.getWcs()
         anyFilterMapsToThis = self.config.anyFilterMapsToThis
+        edgeMargin = self.config.edgeMargin
         filterName = (
             exposure.filter.bandLabel
             if anyFilterMapsToThis is None
@@ -176,7 +180,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                 self.donutSelector if self.config.doDonutSelection is True else None
             )
             refSelection, blendCentersX, blendCentersY = runSelection(
-                refObjLoader, detector, detectorWcs, filterName, donutSelectorTask
+                refObjLoader,
+                detector,
+                detectorWcs,
+                filterName,
+                donutSelectorTask,
+                edgeMargin,
             )
 
         # Except RuntimeError caused when no reference catalog

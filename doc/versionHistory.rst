@@ -6,6 +6,30 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-13.4.0:
+
+-------------
+13.4.0
+-------------
+
+* Safeguard against edge donuts at detection stage with edgeMargin parameter.
+
+.. _lsst.ts.wep-13.3.4:
+
+-------------
+13.3.4
+-------------
+
+* Speed up cutOutDonuts tasks.
+
+.. _lsst.ts.wep-13.3.3:
+
+-------------
+13.3.3
+-------------
+
+* Clean up and reformat USDF pipelines.
+
 .. _lsst.ts.wep-13.3.2:
 
 -------------

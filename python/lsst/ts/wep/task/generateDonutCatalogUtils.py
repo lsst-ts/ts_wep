@@ -35,7 +35,9 @@ from lsst.daf.base import DateTime
 from lsst.geom import SpherePoint, degrees, radians
 
 
-def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
+def runSelection(
+    refObjLoader, detector, wcs, filterName, donutSelectorTask, edgeMargin
+):
     """
     Match the detector area to the reference catalog
     and then run the LSST DM reference selection task.
@@ -57,6 +59,9 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
         Task to run the donut source selection algorithm. If set to None,
         the catalog will be the exact same as the reference catalogs without
         any donut selection algorithm applied.
+    edgeMargin: `int`
+        The width of the margin by which we decrease bbox to avoid edge
+        source selection.
 
     Returns
     -------
@@ -71,7 +76,8 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
     """
 
     bbox = detector.getBBox()
-    donutCatalog = refObjLoader.loadPixelBox(bbox, wcs, filterName).refCat
+    trimmedBBox = bbox.erodedBy(edgeMargin)
+    donutCatalog = refObjLoader.loadPixelBox(trimmedBBox, wcs, filterName).refCat
 
     if donutSelectorTask is None:
         return donutCatalog, [[]] * len(donutCatalog), [[]] * len(donutCatalog)
@@ -85,7 +91,11 @@ def runSelection(refObjLoader, detector, wcs, filterName, donutSelectorTask):
 
 
 def donutCatalogToAstropy(
-    donutCatalog=None, filterName=None, blendCentersX=None, blendCentersY=None
+    donutCatalog,
+    filterName,
+    blendCentersX=None,
+    blendCentersY=None,
+    sortFilterIdx=0,
 ):
     """
     Reformat afwCatalog into an astropy QTable sorted by flux with
@@ -93,24 +103,27 @@ def donutCatalogToAstropy(
 
     Parameters
     ----------
-    donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`, optional
+    donutCatalog : `lsst.afw.table.SimpleCatalog` or `None`
         lsst.afw.table.SimpleCatalog object returned by the
         ReferenceObjectLoader search over the detector footprint.
         If None then it will return an empty QTable.
         (the default is None.)
-    filterName : `str` or `None`, optional
-        Name of camera filter. If donutCatalog is not None then
+    filterName : `str` or `list` of `str`
+        Name of catalog flux filter(s). If donutCatalog is not None then
         this cannot be None. (the default is None.)
     blendCentersX : `list` or `None`, optional
-            X pixel position of centroids for blended objects. List
-            should be the same length as the donutCatalog. If
-            blendCentersY is not None then this cannot be None. (the default
-            is None.)
+        X pixel position of centroids for blended objects. List
+        should be the same length as the donutCatalog. If
+        blendCentersY is not None then this cannot be None. (the default
+        is None.)
     blendCentersY : `list` or `None`, optional
-            Y pixel position of centroids for blended objects. List
-            should be the same length as the donutCatalog. If
-            blendCentersX is not None then this cannot be None. (the default
-            is None.)
+        Y pixel position of centroids for blended objects. List
+        should be the same length as the donutCatalog. If
+        blendCentersX is not None then this cannot be None. (the default
+        is None.)
+    sortFilterIdx : int, optional
+        Index for which filter in filterName to sort the entire catalog
+        by brightness. (the default is 0.)
 
     Returns
     -------
@@ -132,24 +145,25 @@ def donutCatalogToAstropy(
     dec = list()
     centroidX = list()
     centroidY = list()
-    sourceFlux = list()
-    blendCX = list()
-    blendCY = list()
+
+    # If just given a single filter, change to list for compatibility.
+    # This is to ensure backwards compatibility with older versions.
+    # If we want to break backwards compatibility for other things we
+    # could eventually change this.
+    if isinstance(filterName, str):
+        filterName = [filterName]
 
     if donutCatalog is not None:
-        filterErrMsg = "If donutCatalog is not None then filterName cannot be None."
-        if filterName is None:
-            raise ValueError(filterErrMsg)
         ra = donutCatalog["coord_ra"]
         dec = donutCatalog["coord_dec"]
         centroidX = donutCatalog["centroid_x"]
         centroidY = donutCatalog["centroid_y"]
-        sourceFlux = donutCatalog[f"{filterName}_flux"]
+        sourceFlux = [donutCatalog[f"{fName}_flux"] for fName in filterName]
 
         if (blendCentersX is None) and (blendCentersY is None):
             blendCX = list()
             blendCY = list()
-            for idx in range(len(donutCatalog)):
+            for _ in range(len(donutCatalog)):
                 blendCX.append(list())
                 blendCY.append(list())
         elif isinstance(blendCentersX, list) and isinstance(blendCentersY, list):
@@ -178,19 +192,24 @@ def donutCatalogToAstropy(
             )
             raise ValueError(blendErrMsg)
 
-    flux_sort = np.argsort(sourceFlux)[::-1]
-
     fieldObjects = QTable()
     fieldObjects["coord_ra"] = ra * u.rad
     fieldObjects["coord_dec"] = dec * u.rad
     fieldObjects["centroid_x"] = centroidX
     fieldObjects["centroid_y"] = centroidY
-    fieldObjects["source_flux"] = sourceFlux * u.nJy
 
-    fieldObjects.sort("source_flux", reverse=True)
-
-    fieldObjects.meta["blend_centroid_x"] = [blendCX[idx] for idx in flux_sort]
-    fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
+    if len(fieldObjects) > 0:
+        flux_sort = np.argsort(sourceFlux[sortFilterIdx])[::-1]
+        for idx in range(len(filterName)):
+            fieldObjects[f"{filterName[idx]}_flux"] = sourceFlux[idx] * u.nJy
+        fieldObjects = fieldObjects[flux_sort]
+        fieldObjects.meta["blend_centroid_x"] = [blendCX[idx] for idx in flux_sort]
+        fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
+    else:
+        for idx in range(len(filterName)):
+            fieldObjects[f"{filterName[idx]}_flux"] = list() * u.nJy
+        fieldObjects.meta["blend_centroid_x"] = list()
+        fieldObjects.meta["blend_centroid_y"] = list()
 
     return fieldObjects
 

@@ -210,7 +210,7 @@ class WfAlgorithm(ABC):
         I1: Image,
         I2: Optional[Image] = None,
         nollIndices: Sequence = tuple(np.arange(4, 23)),
-        instrument: Instrument = Instrument(),
+        instrument: Optional[Instrument] = None,
         startWithIntrinsic: bool = True,
         returnWfDev: bool = False,
         units: str = "m",
@@ -254,6 +254,9 @@ class WfAlgorithm(ABC):
         np.ndarray
             Zernike coefficients estimated from the image (or pair of images)
         """
+        if instrument is None:
+            instrument = Instrument()
+
         # Convert nollIndices to an array
         nollIndices = np.array(nollIndices)
 

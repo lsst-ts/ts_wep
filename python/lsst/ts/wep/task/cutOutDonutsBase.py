@@ -287,7 +287,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             initBBox = lsst.geom.Box2I(
                 initCornerPoint, lsst.geom.Extent2I(initialCutoutSize)
             )
-            initialCutout = copy(exposure[initBBox])
+            initialCutout = exposure[initBBox]
 
             # Find the centroid by finding the max point in an initial
             # cutout convolved with a template
@@ -674,7 +674,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             )
 
             # Create image mask
-            donutStamp.makeMask(self.instConfigFile, self.opticalModel)
+            donutStamp.makeMask(instrument, self.opticalModel)
 
             # Calculate the S/N per stamp
             snQuant.append(self.calculateSN(donutStamp))
@@ -696,10 +696,18 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         stampsMetadata = PropertyList()
         stampsMetadata["VISIT"] = np.array([visitId] * catalogLength, dtype=int)
         # Save the donut flux as magnitude
-        if len(donutCatalog["source_flux"]) > 0:
-            stampsMetadata["MAG"] = (
-                donutCatalog["source_flux"].value * u.nJy
-            ).to_value(u.ABmag)
+        fluxLabel = next(
+            (
+                colName
+                for colName in donutCatalog.columns
+                if colName.endswith(f"{bandLabel}_flux")
+            ),
+            None,
+        )
+        if fluxLabel is not None and len(donutCatalog[fluxLabel]) > 0:
+            stampsMetadata["MAG"] = (donutCatalog[fluxLabel].value * u.nJy).to_value(
+                u.ABmag
+            )
         else:
             stampsMetadata["MAG"] = np.array([])
         # Save the original centroid values
