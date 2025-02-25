@@ -24,6 +24,7 @@ from copy import copy
 
 import lsst.utils.tests
 from lsst.daf import butler as dafButler
+from lsst.daf.butler import DatasetNotFoundError
 from lsst.ts.wep.task.cutOutDonutsCwfsTask import (
     CutOutDonutsCwfsTask,
     CutOutDonutsCwfsTaskConfig,
@@ -36,7 +37,6 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
-from lsst.daf.butler import DatasetNotFoundError
 
 
 class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
@@ -191,11 +191,15 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
         )
 
-        for donutStamp, cutOutStamp in zip(taskOutExtra.donutStampsExtra, testExtraStamps):
+        for donutStamp, cutOutStamp in zip(
+            taskOutExtra.donutStampsExtra, testExtraStamps
+        ):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
-        for donutStamp, cutOutStamp in zip(taskOutIntra.donutStampsIntra, testIntraStamps):
+        for donutStamp, cutOutStamp in zip(
+            taskOutIntra.donutStampsIntra, testIntraStamps
+        ):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
@@ -273,8 +277,12 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
                 "donutStampsExtra", dataId=self.dataIdIntra, collections=[self.runName]
             )
 
-        for butlerStamp, taskStamp in zip(donutStampsExtra_extraId, taskOutExtra.donutStampsExtra):
+        for butlerStamp, taskStamp in zip(
+            donutStampsExtra_extraId, taskOutExtra.donutStampsExtra
+        ):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)
 
-        for butlerStamp, taskStamp in zip(donutStampsIntra_intraId, taskOutIntra.donutStampsIntra):
+        for butlerStamp, taskStamp in zip(
+            donutStampsIntra_intraId, taskOutIntra.donutStampsIntra
+        ):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)

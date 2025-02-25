@@ -21,15 +21,12 @@
 
 __all__ = ["CutOutDonutsCwfsTaskConfig", "CutOutDonutsCwfsTask"]
 
-import typing
 
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
-import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
-from lsst.pipe.base import connectionTypes
-import numpy as np
 from astropy.table import QTable
+from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
@@ -72,6 +69,7 @@ class CutOutDonutsCwfsTaskConnections(
         name="donutStampsIntra",
     )
 
+
 class CutOutDonutsCwfsTaskConfig(
     CutOutDonutsBaseTaskConfig,
     pipelineConnections=CutOutDonutsCwfsTaskConnections,
@@ -108,83 +106,6 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         # See LCA-13381 for definition
         self.extraFocalNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
         self.intraFocalNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
-
-    # def runQuantum(
-    #     self,
-    #     butlerQC: pipeBase.QuantumContext,
-    #     inputRefs: pipeBase.InputQuantizedConnection,
-    #     outputRefs: pipeBase.OutputQuantizedConnection,
-    # ):
-    #     """
-    #     We need to be able to take pairs of detectors from the full
-    #     set of detector exposures and run the task. Then we need to put
-    #     the outputs back into the butler repository with
-    #     the appropriate butler dataIds.
-
-    #     For the `outputZernikesRaw` and `outputZernikesAvg`
-    #     we only have one set of values per pair of wavefront detectors
-    #     so we put this in the dataId associated with the
-    #     extra-focal detector.
-    #     """
-
-    #     camera = butlerQC.get(inputRefs.camera)
-
-    #     # Get the detector IDs for the wavefront sensors so
-    #     # that we can appropriately match up pairs of detectors
-    #     if camera.getName() == "LSSTCam":
-    #         detectorMap = (
-    #             obs_lsst.translators.lsstCam.LsstCamTranslator.detector_mapping()
-    #         )
-    #     else:
-    #         raise ValueError(f"{camera.getName()} is not a valid camera name.")
-
-    #     extraFocalIds = [detectorMap[detName][0] for detName in self.extraFocalNames]
-    #     intraFocalIds = [detectorMap[detName][0] for detName in self.intraFocalNames]
-
-    #     detectorIdArr = np.array(
-    #         [exp.dataId["detector"] for exp in inputRefs.exposures]
-    #     )
-    #     donutCatIdArr = np.array(
-    #         [dCat.dataId["detector"] for dCat in inputRefs.donutCatalog]
-    #     )
-
-    #     # Find cwfs detectors in the list of detectors being processed
-    #     runExtraIds = list(set(detectorIdArr).intersection(extraFocalIds))
-    #     runExtraIds.sort()
-    #     runIntraIds = list(set(detectorIdArr).intersection(intraFocalIds))
-    #     runIntraIds.sort()
-    #     if len(runExtraIds) != len(runIntraIds):
-    #         raise ValueError("Unequal number of intra and extra focal detectors.")
-
-    #     for extraId, intraId in zip(runExtraIds, runIntraIds):
-    #         if abs(extraId - intraId) != 1:
-    #             raise ValueError("Intra and extra focal detectors not adjacent.")
-    #         extraListIdx = np.where(detectorIdArr == extraId)[0][0]
-    #         intraListIdx = np.where(detectorIdArr == intraId)[0][0]
-    #         dCatExtraIdx = np.where(donutCatIdArr == extraId)[0][0]
-    #         dCatIntraIdx = np.where(donutCatIdArr == intraId)[0][0]
-    #         expInputs = butlerQC.get(
-    #             [inputRefs.exposures[extraListIdx], inputRefs.exposures[intraListIdx]]
-    #         )
-    #         dCatInputs = butlerQC.get(
-    #             [
-    #                 inputRefs.donutCatalog[dCatExtraIdx],
-    #                 inputRefs.donutCatalog[dCatIntraIdx],
-    #             ]
-    #         )
-    #         # each time we pass exactly one pair of
-    #         # exposures and donut catalogs
-    #         outputs = self.run(expInputs, dCatInputs, camera)
-
-    #         butlerQC.put(
-    #             outputs.donutStampsExtra, outputRefs.donutStampsExtra[extraListIdx]
-    #         )
-    #         # Assign both outputs to the same dataId so that we can run
-    #         # Zernike estimation fully in parallel through the dataIds
-    #         # of the extra-focal detectors using CalcZernikesTask.
-    #         butlerQC.put(
-    #             outputs.donutStampsIntra, outputRefs.donutStampsIntra[extraListIdx]
-    #         )
 
     @timeMethod
     def run(

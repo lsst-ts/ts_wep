@@ -21,4 +21,5 @@ from .generateDonutCatalogWcsTask import *
 from .generateDonutDirectDetectTask import *
 from .generateDonutFromRefitWcsTask import *
 from .pairTask import *
+from .reassignCwfsCutoutsTask import *
 from .refCatalogInterface import *
