@@ -105,13 +105,13 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
         self.butler = dafButler.Butler(self.repoDir)
         self.registry = self.butler.registry
 
-        self.dataIdExtra = {
+        self.dataIdIntra = {
             "instrument": "LATISS",
             "detector": 0,
             "exposure": 2021090800488,
             "visit": 2021090800488,
         }
-        self.dataIdIntra = {
+        self.dataIdExtra = {
             "instrument": "LATISS",
             "detector": 0,
             "exposure": 2021090800487,
