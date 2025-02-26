@@ -329,6 +329,35 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
                 len(donutStamps), len(donutStamps.metadata.getArray(measure))
             )
 
+    @staticmethod
+    def compareMetadata(metadata1, metadata2):
+        for k, v in metadata1.items():
+            if k.startswith("LSST BUTLER"):
+                continue
+            try:
+                v2 = metadata2[k]
+            except KeyError:
+                # key not in metadata2, so unequal.
+                return False
+
+            if isinstance(v, (int, float, np.number)):
+                if not isinstance(v2, (int, float, np.number)):
+                    return False
+
+                # Special case since nan != nan
+                if np.isnan(v):
+                    if np.isnan(v2):
+                        continue
+                    else:
+                        return False
+
+                if v != v2:
+                    return False
+            else:
+                if v != v2:
+                    return False
+        return True
+
     def testTaskRunTablePairer(self):
         # Get everything via the extra ID
         intraStamps1 = self.butler.get(
@@ -345,8 +374,12 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.run2Name]
         )
 
-        assert intraStamps1.metadata == intraStamps2.metadata
-        assert extraStamps1.metadata == extraStamps2.metadata
+        for md1, md2 in [
+            (intraStamps1.metadata, intraStamps2.metadata),
+            (extraStamps1.metadata, extraStamps2.metadata),
+        ]:
+            self.assertTrue(self.compareMetadata(md1, md2))
+
         for s1, s2 in zip(intraStamps1, intraStamps2):
             self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)
         for s1, s2 in zip(extraStamps1, extraStamps2):
@@ -368,8 +401,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.run3Name]
         )
 
-        assert intraStamps1.metadata == intraStamps3.metadata
-        assert extraStamps1.metadata == extraStamps3.metadata
+        for md1, md3 in [
+            (intraStamps1.metadata, intraStamps3.metadata),
+            (extraStamps1.metadata, extraStamps3.metadata),
+        ]:
+            self.assertTrue(self.compareMetadata(md1, md3))
         for s1, s3 in zip(intraStamps1, intraStamps3):
             self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)
         for s1, s3 in zip(extraStamps1, extraStamps3):

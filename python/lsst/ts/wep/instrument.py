@@ -33,6 +33,8 @@ from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, EnumDict
 from lsst.ts.wep.utils.ioUtils import mergeConfigWithFile
 from scipy.optimize import minimize_scalar
 
+from .utils.zernikeUtils import createZernikeBasis, createZernikeGradBasis
+
 
 @lru_cache(10)
 def _getBatoidModelFromFileName(filename):
@@ -254,6 +256,8 @@ class Instrument:
             if value <= 0:
                 raise ValueError("diameter must be positive.")
         self._diameter = value
+        self.createZernikeBasis.cache_clear()
+        self.createZernikeGradBasis.cache_clear()
 
     @property
     def radius(self) -> float:
@@ -338,6 +342,8 @@ class Instrument:
             if value <= 0:
                 raise ValueError("focalLength must be positive.")
         self._focalLength = value
+        self.createZernikeBasis.cache_clear()
+        self.createZernikeGradBasis.cache_clear()
 
     @property
     def focalRatio(self) -> float:
@@ -417,6 +423,8 @@ class Instrument:
 
         # Clear relevant caches
         self._getIntrinsicZernikesTACached.cache_clear()
+        self.createZernikeBasis.cache_clear()
+        self.createZernikeGradBasis.cache_clear()
 
     @property
     def pupilOffset(self) -> float:
@@ -449,6 +457,8 @@ class Instrument:
         if value <= 0:
             raise ValueError("pixelSize must be positive.")
         self._pixelSize = value
+        self.createZernikeBasis.cache_clear()
+        self.createZernikeGradBasis.cache_clear()
 
     @property
     def pixelScale(self) -> float:
@@ -1048,6 +1058,20 @@ class Instrument:
         uPupil, vPupil = np.meshgrid(grid, grid)
 
         return uPupil, vPupil
+
+    @lru_cache(100)
+    def createZernikeBasis(self, jmax):
+        uPupil, vPupil = self.createPupilGrid()
+        return createZernikeBasis(
+            uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
+        )
+
+    @lru_cache(100)
+    def createZernikeGradBasis(self, jmax):
+        uPupil, vPupil = self.createPupilGrid()
+        return createZernikeGradBasis(
+            uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
+        )
 
     def createImageGrid(self, nPixels: int) -> Tuple[np.ndarray, np.ndarray]:
         """Create an (nPixel x nPixel) grid for the image.
