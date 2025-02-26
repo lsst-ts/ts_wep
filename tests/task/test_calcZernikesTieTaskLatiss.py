@@ -100,6 +100,28 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
 
     def setUp(self):
         self.config = CalcZernikesTaskConfig()
+        self.config.doDonutStampSelector = False
+        self.config.estimateZernikes.nollIndices = [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+        ]
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = dafButler.Butler(self.repoDir)
