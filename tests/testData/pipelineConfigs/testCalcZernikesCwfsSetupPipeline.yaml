@@ -36,8 +36,6 @@ tasks:
   cutOutDonutsCwfsTask:
     class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
     config:
-      connections.donutStampsExtra: "donutStampsExtraCwfs"
-      connections.donutStampsIntra: "donutStampsIntraCwfs"
       # And here we specify the configuration settings originally defined in
       # CutOutDonutsCwfsTaskConfig.
       # Test CWFS pipeline works when specifying instrument parameters.

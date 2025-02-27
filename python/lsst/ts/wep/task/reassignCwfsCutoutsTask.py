@@ -138,10 +138,8 @@ class ReassignCwfsCutoutsTask(pipeBase.PipelineTask):
         )
 
         # Find cwfs detectors in the list of detectors being processed
-        runExtraIds = list(set(detectorIdArrExtra).intersection(extraFocalIds))
-        runExtraIds.sort()
-        runIntraIds = list(set(detectorIdArrIntra).intersection(intraFocalIds))
-        runIntraIds.sort()
+        runExtraIds = sorted(set(detectorIdArrExtra).intersection(extraFocalIds))
+        runIntraIds = sorted(set(detectorIdArrIntra).intersection(intraFocalIds))
 
         if len(runExtraIds) != len(runIntraIds):
             raise ValueError("Unequal number of intra and extra focal detectors.")

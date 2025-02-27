@@ -55,18 +55,21 @@ class CutOutDonutsCwfsTaskConnections(
         ),
         storageClass="AstropyQTable",
         name="donutTable",
+        multiple=False,
     )
     donutStampsExtra = connectionTypes.Output(
         doc="Extra-focal Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
-        name="donutStampsExtra",
+        name="donutStampsExtraCwfs",
+        multiple=False,
     )
     donutStampsIntra = connectionTypes.Output(
         doc="Intra-focal Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
-        name="donutStampsIntra",
+        name="donutStampsIntraCwfs",
+        multiple=False,
     )
 
 
@@ -123,7 +126,7 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
             defocalType = DefocalType.Extra
         elif detectorName in self.intraFocalNames:
             defocalType = DefocalType.Intra
-        elif defocalType is None:
+        else:
             raise ValueError("Detector provided is not a corner wavefront sensor.")
 
         donutStampsOut = self.cutOutStamps(
@@ -136,23 +139,10 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if len(donutStampsOut) == 0:
-            if defocalType == DefocalType.Extra:
-                return pipeBase.Struct(
-                    donutStampsExtra=DonutStamps([]),
-                )
-            else:
-                return pipeBase.Struct(
-                    donutStampsIntra=DonutStamps([]),
-                )
-
-        # Return extra-focal DonutStamps, intra-focal DonutStamps and
-        # Zernike coefficient numpy array as Struct that can be saved to
-        # Gen 3 repository all with the same dataId.
-        if defocalType == DefocalType.Extra:
-            return pipeBase.Struct(
-                donutStampsExtra=donutStampsOut,
-            )
-        else:
-            return pipeBase.Struct(
-                donutStampsIntra=donutStampsOut,
-            )
+            donutStampsOut = DonutStamps([])
+        key = (
+            "donutStampsExtra"
+            if defocalType == DefocalType.Extra
+            else "donutStampsIntra"
+        )
+        return pipeBase.Struct(**{key: donutStampsOut})

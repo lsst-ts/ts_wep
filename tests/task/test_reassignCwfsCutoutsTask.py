@@ -67,7 +67,7 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         cls.instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         cls.pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testReassignCwfsCutoutsPipeline.yaml"
+            testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
         )
 
         pipeCmd = writePipetaskCmd(

@@ -262,19 +262,23 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
 
         # Compare the interactive run to pipetask run results
         donutStampsExtra_extraId = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutStampsExtraCwfs", dataId=self.dataIdExtra, collections=[self.runName]
         )
         with self.assertRaises(DatasetNotFoundError):
             self.butler.get(
-                "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+                "donutStampsIntraCwfs",
+                dataId=self.dataIdExtra,
+                collections=[self.runName],
             )
 
         donutStampsIntra_intraId = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutStampsIntraCwfs", dataId=self.dataIdIntra, collections=[self.runName]
         )
         with self.assertRaises(DatasetNotFoundError):
             self.butler.get(
-                "donutStampsExtra", dataId=self.dataIdIntra, collections=[self.runName]
+                "donutStampsExtraCwfs",
+                dataId=self.dataIdIntra,
+                collections=[self.runName],
             )
 
         for butlerStamp, taskStamp in zip(
