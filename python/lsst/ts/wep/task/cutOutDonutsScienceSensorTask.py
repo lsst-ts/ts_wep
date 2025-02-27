@@ -49,6 +49,13 @@ from .pairTask import ExposurePairer
 class CutOutDonutsScienceSensorTaskConnections(
     CutOutDonutsBaseTaskConnections, dimensions=("detector", "instrument")
 ):
+    exposures = ct.Input(
+        doc="Input exposure to make measurements on",
+        dimensions=("exposure", "detector", "instrument"),
+        storageClass="Exposure",
+        name="postISRCCD",
+        multiple=True,
+    )
     donutVisitPairTable = ct.Input(
         doc="Visit pair table",
         dimensions=("instrument",),
