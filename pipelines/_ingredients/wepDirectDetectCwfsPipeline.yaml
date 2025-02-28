@@ -1,0 +1,47 @@
+description: wep direct detect pipeline for wavefront sensors
+
+tasks:
+  isr:
+    class: lsst.ip.isr.IsrTaskLSST
+    config:
+      # Although we don't have to apply the amp offset corrections, we do want
+      # to compute them for analyzeAmpOffsetMetadata to report on as metrics.
+      doAmpOffset: False
+      ampOffset.doApplyAmpOffset: False
+      # Turn off slow steps in ISR
+      doBrighterFatter: False
+      # Mask saturated pixels,
+      # but turn off quadratic crosstalk because it's currently broken
+      doSaturation: False # True
+      crosstalk.doQuadraticCrosstalkCorrection: True
+      qa.saveStats: False
+      doStandardStatistics: False
+      doInterpolate: False
+      doVariance: False
+      doDeferredCharge: False
+      doDefect: False
+      doApplyGains: False
+      doBias: False
+      doFlat: False
+      doDark: False
+      doLinearize: False
+      doSuspect: False
+      doSetBadRegions: False
+      doBootstrap: True
+      doCrosstalk: False
+      doITLEdgeBleedMask: False
+  generateDonutDirectDetectTask:
+    class: lsst.ts.wep.task.generateDonutDirectDetectTask.GenerateDonutDirectDetectTask
+    config:
+      donutSelector.useCustomMagLimit: True
+      donutSelector.sourceLimit: 20
+  cutOutDonutsCwfsTask:
+    class: lsst.ts.wep.task.cutOutDonutsCwfsTask.CutOutDonutsCwfsTask
+    config:
+      # And here we specify the configuration settings originally defined in
+      # CutOutDonutsCwfsTaskConfig.
+      # Test CWFS pipeline works when specifying instrument parameters.
+      donutStampSize: 160
+      initialCutoutPadding: 40
+  reassignCwfsCutoutsTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask

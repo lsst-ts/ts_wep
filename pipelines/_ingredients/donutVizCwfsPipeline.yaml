@@ -17,8 +17,8 @@ tasks:
       doRubinTVUpload: False
   aggregateDonutStampsTask:
     class: lsst.donut.viz.AggregateDonutStampsTask
-  plotDonutTask:
-    class: lsst.donut.viz.PlotDonutTask
+  plotDonutCwfsTask:
+    class: lsst.donut.viz.PlotDonutCwfsTask
     config:
       doRubinTVUpload: False
   plotPsfZernTask:
