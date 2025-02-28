@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.0.1:
+
+-------------
+14.0.1
+-------------
+
+* Add initial draft LSSTCam production pipelines for testing.
+
 .. _lsst.ts.wep-14.0.0:
 
 -------------

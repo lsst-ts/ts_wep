@@ -1,0 +1,45 @@
+description: rapid analysis pipeline for LSSTCam
+instrument: lsst.obs.lsst.LsstCam
+imports:
+  - $TS_WEP_DIR/pipelines/_ingredients/wepDirectDetectCwfsPipeline.yaml
+  - $TS_WEP_DIR/pipelines/_ingredients/donutVizCwfsPipeline.yaml
+tasks:
+  calcZernikesTask:
+    class: lsst.ts.wep.task.calcZernikesTask.CalcZernikesTask
+    config:
+      estimateZernikes.nollIndices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 27, 28]
+      estimateZernikes.convergeTol: 10.0e-9
+      estimateZernikes.compGain: 0.75
+      estimateZernikes.compSequence: [4, 4, 6, 6, 13, 13, 13, 13]
+      estimateZernikes.maxIter: 50
+      estimateZernikes.requireConverge: True
+      estimateZernikes.saveHistory: False
+      estimateZernikes.maskKwargs: { "doMaskBlends": False }
+      donutStampSelector.maxFracBadPixels: 2.0e-4
+      donutStampSelector.maxSelect: 5
+
+# Define pipeline steps
+subsets:
+  step1:
+    subset:
+      - isr
+      - generateDonutDirectDetectTask
+      - cutOutDonutsCwfsTask
+      - reassignCwfsCutoutsTask
+      - calcZernikesTask
+    description: |
+      This step processes the input images with ISR,
+      finds and cuts out the donut stamps,
+      and estimates the Zernike coefficients from the donut pairs.
+  step2a:
+    subset:
+      - aggregateZernikeTablesTask
+      - aggregateDonutTablesGroupTask
+      - aggregateAOSVisitTableTask
+      - plotAOSTask
+      - aggregateDonutStampsTask
+      - plotDonutCwfsTask
+    description: |
+      AOS Donut visualization plotting tasks. This step generates plots
+      (including the pyramid residual and donut gallery) and
+      tables for the AOS visit.
