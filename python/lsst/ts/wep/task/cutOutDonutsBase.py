@@ -52,13 +52,6 @@ from scipy.signal import correlate
 class CutOutDonutsBaseTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("exposure", "instrument")
 ):
-    exposures = connectionTypes.Input(
-        doc="Input exposure to make measurements on",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="Exposure",
-        name="postISRCCD",
-        multiple=True,
-    )
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
         dimensions=(

@@ -24,10 +24,12 @@ from copy import copy
 
 import lsst.utils.tests
 from lsst.daf import butler as dafButler
+from lsst.daf.butler import DatasetNotFoundError
 from lsst.ts.wep.task.cutOutDonutsCwfsTask import (
     CutOutDonutsCwfsTask,
     CutOutDonutsCwfsTaskConfig,
 )
+from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
     DefocalType,
     getModulePath,
@@ -171,12 +173,14 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
 
         # Test normal behavior: both exposure and donut catalog
         # order is tested for in the task
-        taskOut = self.task.run(
-            [copy(exposureIntra), copy(exposureExtra)],
-            [
-                donutCatalogExtra,
-                donutCatalogIntra,
-            ],
+        taskOutExtra = self.task.run(
+            copy(exposureExtra),
+            donutCatalogExtra,
+            camera,
+        )
+        taskOutIntra = self.task.run(
+            copy(exposureIntra),
+            donutCatalogIntra,
             camera,
         )
 
@@ -187,14 +191,53 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
         )
 
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
+        for donutStamp, cutOutStamp in zip(
+            taskOutExtra.donutStampsExtra, testExtraStamps
+        ):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
+        for donutStamp, cutOutStamp in zip(
+            taskOutIntra.donutStampsIntra, testIntraStamps
+        ):
             self.assertMaskedImagesAlmostEqual(
                 donutStamp.stamp_im, cutOutStamp.stamp_im
             )
+
+        # Test that only one set of donut stamps are returned for each
+        self.assertEqual(len(taskOutExtra), 1)
+        self.assertEqual(len(taskOutIntra), 1)
+
+    def testEmptyCatalog(self):
+
+        (
+            exposureExtra,
+            exposureIntra,
+            donutCatalogExtra,
+            donutCatalogIntra,
+            camera,
+        ) = self._getDataFromButler()
+
+        # Empty catalog of data
+        donutCatalogExtra = donutCatalogExtra[:0]
+        donutCatalogIntra = donutCatalogIntra[:0]
+
+        # Test empty catalog behavior for both extra and intra focal
+        taskOutEmptyCat = self.task.run(
+            copy(exposureExtra),
+            donutCatalogExtra,
+            camera,
+        )
+        taskOutEmptyCatIntra = self.task.run(
+            copy(exposureIntra),
+            donutCatalogIntra,
+            camera,
+        )
+
+        self.assertIsInstance(taskOutEmptyCat.donutStampsExtra, DonutStamps)
+        self.assertEqual(len(taskOutEmptyCat.donutStampsExtra), 0)
+        self.assertIsInstance(taskOutEmptyCatIntra.donutStampsIntra, DonutStamps)
+        self.assertEqual(len(taskOutEmptyCatIntra.donutStampsIntra), 0)
 
     def testPipeline(self):
         (
@@ -206,64 +249,44 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         ) = self._getDataFromButler()
 
         # Test normal behavior
-        taskOut = self.task.run(
-            [copy(exposureIntra), copy(exposureExtra)],
-            [donutCatalogExtra, donutCatalogIntra],
+        taskOutExtra = self.task.run(
+            copy(exposureExtra),
+            donutCatalogExtra,
             camera,
         )
-        # Test that order of donut catalogs is tested just like exposures
-        taskOutReorder = self.task.run(
-            [copy(exposureIntra), copy(exposureExtra)],
-            [donutCatalogIntra, donutCatalogExtra],
+        taskOutIntra = self.task.run(
+            copy(exposureIntra),
+            donutCatalogIntra,
             camera,
         )
-
-        # One way is to ensure that both donut arrays are identical
-        for stampNormal, stampReorder in zip(
-            taskOut.donutStampsExtra, taskOutReorder.donutStampsExtra
-        ):
-            self.assertMaskedImagesAlmostEqual(
-                stampNormal.stamp_im, stampReorder.stamp_im
-            )
-        for stampNormal, stampReorder in zip(
-            taskOut.donutStampsIntra, taskOutReorder.donutStampsIntra
-        ):
-            self.assertMaskedImagesAlmostEqual(
-                stampNormal.stamp_im, stampReorder.stamp_im
-            )
-
-        # Test that legacy dataset works as well (without "detector" column)
-        donutCatalogExtra.remove_column("detector")
-        donutCatalogIntra.remove_column("detector")
-
-        taskOutLegacy = self.task.run(
-            [copy(exposureExtra), copy(exposureIntra)],
-            [donutCatalogExtra, donutCatalogIntra],
-            camera,
-        )
-        # The donuts should be identical
-        for legacyStamp, normalStamp in zip(
-            taskOutLegacy.donutStampsExtra, taskOut.donutStampsExtra
-        ):
-            self.assertMaskedImagesAlmostEqual(
-                legacyStamp.stamp_im, normalStamp.stamp_im
-            )
-        for legacyStamp, normalStamp in zip(
-            taskOutLegacy.donutStampsIntra, taskOut.donutStampsIntra
-        ):
-            self.assertMaskedImagesAlmostEqual(
-                legacyStamp.stamp_im, normalStamp.stamp_im
-            )
 
         # Compare the interactive run to pipetask run results
-        donutStampsExtra = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        donutStampsExtra_extraId = self.butler.get(
+            "donutStampsExtraCwfs", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        donutStampsIntra = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
-        )
+        with self.assertRaises(DatasetNotFoundError):
+            self.butler.get(
+                "donutStampsIntraCwfs",
+                dataId=self.dataIdExtra,
+                collections=[self.runName],
+            )
 
-        for butlerStamp, taskStamp in zip(donutStampsExtra, taskOut.donutStampsExtra):
+        donutStampsIntra_intraId = self.butler.get(
+            "donutStampsIntraCwfs", dataId=self.dataIdIntra, collections=[self.runName]
+        )
+        with self.assertRaises(DatasetNotFoundError):
+            self.butler.get(
+                "donutStampsExtraCwfs",
+                dataId=self.dataIdIntra,
+                collections=[self.runName],
+            )
+
+        for butlerStamp, taskStamp in zip(
+            donutStampsExtra_extraId, taskOutExtra.donutStampsExtra
+        ):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)
-        for butlerStamp, taskStamp in zip(donutStampsIntra, taskOut.donutStampsIntra):
+
+        for butlerStamp, taskStamp in zip(
+            donutStampsIntra_intraId, taskOutIntra.donutStampsIntra
+        ):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)

@@ -27,13 +27,7 @@ from typing import Iterable, Optional, Union
 import numpy as np
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
-from lsst.ts.wep.utils import (
-    DefocalType,
-    binArray,
-    createZernikeBasis,
-    createZernikeGradBasis,
-    makeSparse,
-)
+from lsst.ts.wep.utils import DefocalType, binArray, makeSparse
 from scipy.ndimage import gaussian_filter
 
 
@@ -621,23 +615,9 @@ class TieAlgorithm(WfAlgorithm):
             Numpy array of the Zernike coefficients estimated from the image
             or pair of images, in nm.
         """
-        # Get the pupil grid
-        uPupil, vPupil = instrument.createPupilGrid()
-
-        # Get Zernike Bases
         jmax = nollIndices.max()
-        zk = createZernikeBasis(
-            uPupil,
-            vPupil,
-            jmax=jmax,
-            obscuration=instrument.obscuration,
-        )
-        dzkdu, dzkdv = createZernikeGradBasis(
-            uPupil,
-            vPupil,
-            jmax=jmax,
-            obscuration=instrument.obscuration,
-        )
+        zk = instrument.createZernikeBasis(jmax=jmax)
+        dzkdu, dzkdv = instrument.createZernikeGradBasis(jmax=jmax)
 
         # Down-select to the Zernikes we are solving for
         zk = makeSparse(zk, nollIndices)

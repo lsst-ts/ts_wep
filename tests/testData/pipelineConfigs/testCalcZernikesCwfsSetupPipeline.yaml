@@ -38,6 +38,8 @@ tasks:
     config:
       # And here we specify the configuration settings originally defined in
       # CutOutDonutsCwfsTaskConfig.
-      # Test with default instrument configuration parameters
+      # Test CWFS pipeline works when specifying instrument parameters.
       donutStampSize: 160
       initialCutoutPadding: 40
+  reassignCwfsCutoutsTask:
+    class: lsst.ts.wep.task.reassignCwfsCutoutsTask.ReassignCwfsCutoutsTask

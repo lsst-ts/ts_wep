@@ -6,6 +6,23 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.0.0:
+
+-------------
+14.0.0
+-------------
+
+* Change CutOutDonutsCwfsTask to run on a single detector at a time.
+* Add ReassignCwfsCutoutsTask to gather cwfs donutStamps and reassign pair of intra and extra-focal stamps to extra-focal ids.
+
+.. _lsst.ts.wep-13.4.1:
+
+-------------
+13.4.1
+-------------
+
+* Cache Zernike bases to speed up TIE algorithm.
+
 .. _lsst.ts.wep-13.4.0:
 
 -------------

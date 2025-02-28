@@ -24,7 +24,6 @@ import os
 import tempfile
 
 import lsst.utils.tests
-import pandas as pd
 import pytest
 from lsst.daf import butler as dafButler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
@@ -151,11 +150,11 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
             "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
-        donutCatalogExtra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdExtra, collections=[self.runName]
+        donutTableExtra = self.butler.get(
+            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        donutCatalogIntra = self.butler.get(
-            "donutCatalog", dataId=self.dataIdIntra, collections=[self.runName]
+        donutTableIntra = self.butler.get(
+            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
         )
         camera = self.butler.get(
             "camera",
@@ -164,9 +163,10 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         )
 
         # Test return values when no sources in catalog
-        noSrcDonutCatalog = pd.DataFrame(columns=donutCatalogExtra.columns)
+        noSrcDonutTable = donutTableExtra.copy()
+        noSrcDonutTable.remove_rows(slice(None))
         testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
+            [exposureExtra, exposureIntra], [noSrcDonutTable] * 2, camera
         )
 
         self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
@@ -175,25 +175,25 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         # Test normal behavior
         taskOut = self.task.run(
             [exposureExtra, exposureIntra],
-            [donutCatalogExtra, donutCatalogIntra],
+            [donutTableExtra, donutTableIntra],
             camera,
         )
 
         # Make sure donut catalog actually has sources to test
-        self.assertGreater(len(donutCatalogExtra), 0)
-        self.assertGreater(len(donutCatalogIntra), 0)
+        self.assertGreater(len(donutTableExtra), 0)
+        self.assertGreater(len(donutTableIntra), 0)
         # Test they have the same number of sources
-        self.assertEqual(len(donutCatalogExtra), len(donutCatalogIntra))
+        self.assertEqual(len(donutTableExtra), len(donutTableIntra))
 
         # Check that donut catalog sources are all cut out
-        self.assertEqual(len(taskOut.donutStampsExtra), len(donutCatalogExtra))
-        self.assertEqual(len(taskOut.donutStampsIntra), len(donutCatalogIntra))
+        self.assertEqual(len(taskOut.donutStampsExtra), len(donutTableExtra))
+        self.assertEqual(len(taskOut.donutStampsIntra), len(donutTableIntra))
 
         testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, donutCatalogExtra, DefocalType.Extra, camera.getName()
+            exposureExtra, donutTableExtra, DefocalType.Extra, camera.getName()
         )
         testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
+            exposureIntra, donutTableIntra, DefocalType.Intra, camera.getName()
         )
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):

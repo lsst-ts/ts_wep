@@ -150,6 +150,9 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **GenerateDonutCatalogUtils**: Common utility functions for the GenerateDonutCatalog...Tasks.
 * **ExposurePairer**: Subtask to pair intra- and extra-focal exposures heuristically.
 * **TablePairer**: Subtask to pair intra- and extra-focal exposures manually from a table.  Use generatePairTable.py script as a useful starting point.
+* **ReassignCwfsCutoutsTask**: PipelineTask to pair intra and extra-focal donut stamps assigned to the same extra-focal dataId.
+* **ReassignCwfsCutoutsTaskConfig**: Configuration for ReassignCwfsCutoutsTask.
+* **ReassignCwfsCutoutsTaskConnections**: Connections for ReassignCwfsCutoutsTask.
 
 .. _WEP_modules_wep_utils:
 
