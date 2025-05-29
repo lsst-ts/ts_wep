@@ -81,7 +81,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 # Test estimation with pairs and single donuts:
                 for images in [[intra, extra], [intra], [extra]]:
                     # Estimate Zernikes (in meters)
-                    zkEst = dan.estimateZk(*images)
+                    zkEst, _ = dan.estimateZk(*images)
 
                     # Check that results are fairly accurate
                     self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
@@ -120,7 +120,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 # Test estimation with pairs and single donuts:
                 for images in [[intra, extra], [intra], [extra]]:
                     # Estimate Zernikes (in meters)
-                    zkEst = danBin.estimateZk(*images, saveHistory=True)
+                    zkEst, _ = danBin.estimateZk(*images, saveHistory=True)
                     self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
                     # Test that we binned the images.

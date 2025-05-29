@@ -40,15 +40,15 @@ from lsst.ts.wep.utils import (
 def estimate_zk_pair(args):
     """Estimate Zernike coefficients for a pair of donuts."""
     donutExtra, donutIntra, wfEstimator = args
-    zk = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
-    return zk, wfEstimator.history
+    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
+    return zk, zkMeta, wfEstimator.history
 
 
 def estimate_zk_single(args):
     """Estimate Zernike coefficients for a single donut."""
     donut, wfEstimator = args
-    zk = wfEstimator.estimateZk(donut.wep_im)
-    return zk, wfEstimator.history
+    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im)
+    return zk, zkMeta, wfEstimator.history
 
 
 class EstimateZernikesBaseConfig(pexConfig.Config):
@@ -149,7 +149,11 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         with mp.Pool(processes=numCores) as pool:
             results = pool.map(estimate_zk_pair, args)
 
-        zkList, histories = zip(*results)
+        zkList, zkMetaList, histories = zip(*results)
+        zkMeta = {key: [] for key in zkMetaList[0].keys()}
+        for zkMetaSingle in zkMetaList:
+            for key, value in zkMetaSingle.items():
+                zkMeta[key].append(value)
 
         zkArray = np.array(zkList)
 
@@ -161,7 +165,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         }
         self.metadata["history"] = histories_dict
 
-        return zkArray
+        return zkArray, zkMeta
 
     def estimateFromIndivStamps(
         self,
@@ -199,7 +203,11 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         with mp.Pool(processes=numCores) as pool:
             results = pool.map(estimate_zk_single, args)
 
-        zkList, histories = zip(*results)
+        zkList, zkMetaList, histories = zip(*results)
+        zkMeta = {key: [] for key in zkMetaList[0].keys()}
+        for zkMetaSingle in zkMetaList:
+            for key, value in zkMetaSingle.items():
+                zkMeta[key].append(value)
 
         zkArray = np.array(zkList)
 
@@ -212,7 +220,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             )
         self.metadata["history"] = histories_dict
 
-        return zkArray
+        return zkArray, zkMeta
 
     def run(
         self,
@@ -266,7 +274,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         self.log.info("Using %d cores", numCores)
         if len(donutStampsExtra) > 0 and len(donutStampsIntra) > 0:
-            zernikes = self.estimateFromPairs(
+            zernikes, zkMeta = self.estimateFromPairs(
                 donutStampsExtra, donutStampsIntra, wfEst, numCores=numCores
             )
         else:
@@ -275,8 +283,8 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
                     f"Wavefront algorithm `{wfEst.algo.__class__.__name__}` "
                     "requires pairs of donuts."
                 )
-            zernikes = self.estimateFromIndivStamps(
+            zernikes, zkMeta = self.estimateFromIndivStamps(
                 donutStampsExtra, donutStampsIntra, wfEst, numCores=numCores
             )
 
-        return pipeBase.Struct(zernikes=zernikes)
+        return pipeBase.Struct(zernikes=zernikes, wfEstInfo=zkMeta)

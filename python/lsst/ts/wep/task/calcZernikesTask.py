@@ -622,6 +622,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             zkCoeffRaw,
             zkCoeffCombined,
         )
+        zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
         return pipeBase.Struct(
             outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),

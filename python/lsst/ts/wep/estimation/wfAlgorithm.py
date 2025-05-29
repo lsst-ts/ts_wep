@@ -301,7 +301,7 @@ class WfAlgorithm(ABC):
         self._history = {}
 
         # Estimate the Zernikes
-        zk = self._estimateZk(
+        zk, zkMeta = self._estimateZk(
             I1=I1,
             I2=I2,
             zkStartI1=zkStartI1,
@@ -338,4 +338,4 @@ class WfAlgorithm(ABC):
         else:  # pragma: no cover
             raise RuntimeError(f"Conversion to unit '{units}' not supported.")
 
-        return zk
+        return zk, zkMeta

@@ -924,4 +924,6 @@ class TieAlgorithm(WfAlgorithm):
         if self.requireConverge and not converged:
             zkSum *= np.nan
 
-        return zkSum
+        zkMeta = {"caustic": bool(caustic), "converged": bool(converged)}
+
+        return zkSum, zkMeta

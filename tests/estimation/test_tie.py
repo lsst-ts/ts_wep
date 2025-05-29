@@ -78,7 +78,7 @@ class TestTieAlgorithm(unittest.TestCase):
             self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
             # Test with binning
-            zkEst = tieBin.estimateZk(intra, extra, saveHistory=True)
+            zkEst, _ = tieBin.estimateZk(intra, extra, saveHistory=True)
             self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
             # Test that we binned the images.

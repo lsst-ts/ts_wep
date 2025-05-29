@@ -330,7 +330,10 @@ class DanishAlgorithm(WfAlgorithm):
         else:
             hist = {}
 
-        return zkSum, hist
+        # Save final fwhm value in metadata
+        zkMeta = {"fwhm": fwhm}
+
+        return zkSum, hist, zkMeta
 
     def _estimatePairZk(
         self,
@@ -496,7 +499,10 @@ class DanishAlgorithm(WfAlgorithm):
         else:
             hist = {}
 
-        return zkSum, hist
+        # Save final fwhm value in metadata
+        zkMeta = {"fwhm": fwhm}
+
+        return zkSum, hist, zkMeta
 
     def _estimateZk(
         self,
@@ -549,7 +555,7 @@ class DanishAlgorithm(WfAlgorithm):
             hist = {}
 
             # Estimate for I1
-            zk1, hist[I1.defocalType.value] = self._estimateSingleZk(
+            zk1, hist[I1.defocalType.value], zk1Meta = self._estimateSingleZk(
                 I1,
                 zkStartI1,
                 nollIndices,
@@ -560,7 +566,7 @@ class DanishAlgorithm(WfAlgorithm):
 
             if I2 is not None:
                 # If I2 provided, estimate for that donut as well
-                zk2, hist[I2.defocalType.value] = self._estimateSingleZk(
+                zk2, hist[I2.defocalType.value], zk2Meta = self._estimateSingleZk(
                     I2,
                     zkStartI2,
                     nollIndices,
@@ -571,13 +577,15 @@ class DanishAlgorithm(WfAlgorithm):
 
                 # Average the Zernikes
                 zk = np.mean([zk1, zk2], axis=0)
+                zkMeta = {"fwhm": np.mean([zk1Meta["fwhm"], zk2Meta["fwhm"]])}
             else:
                 zk = zk1
+                zkMeta = zk1Meta
 
             hist["zk"] = zk
 
         else:
-            zk, hist = self._estimatePairZk(
+            zk, hist, zkMeta = self._estimatePairZk(
                 I1,
                 I2,
                 zkStartI1,
@@ -591,4 +599,4 @@ class DanishAlgorithm(WfAlgorithm):
         if saveHistory:
             self._history = hist
 
-        return zk
+        return zk, zkMeta
