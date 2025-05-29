@@ -291,3 +291,47 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         # Check that the averages are similar
         zkAvgUnpaired = np.mean([zkAvgExtra, zkAvgIntra], axis=0)
         self.assertLess(np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30)
+
+    def testTableMetadata(self):
+        # First estimate without pairs
+        emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
+        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps).zernikes
+        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra).zernikes
+
+        # Check metadata keys exist for extra case
+        self.assertIn("cam_name", zkCalcExtra.meta)
+        for k in ["intra", "extra"]:
+            dict_ = zkCalcExtra.meta[k]
+            self.assertIn("det_name", dict_)
+            self.assertIn("visit", dict_)
+            self.assertIn("dfc_dist", dict_)
+            self.assertIn("band", dict_)
+            self.assertEqual(dict_["mjd"], self.donutStampsExtra.metadata["MJD"])
+
+        # Check metadata keys exist for intra case
+        self.assertIn("cam_name", zkCalcIntra.meta)
+        for k in ["intra", "extra"]:
+            dict_ = zkCalcIntra.meta[k]
+            self.assertIn("det_name", dict_)
+            self.assertIn("visit", dict_)
+            self.assertIn("dfc_dist", dict_)
+            self.assertIn("band", dict_)
+            self.assertEqual(dict_["mjd"], self.donutStampsIntra.metadata["MJD"])
+
+        # Now estimate with pairs
+        zkCalcPairs = self.task.run(
+            self.donutStampsExtra, self.donutStampsIntra
+        ).zernikes
+
+        # Check metadata keys exist for pairs case
+        self.assertIn("cam_name", zkCalcPairs.meta)
+        for stamps, k in zip(
+            [self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]
+        ):
+            dict_ = zkCalcPairs.meta[k]
+            if k == stamps.metadata["DFC_TYPE"]:
+                self.assertIn("det_name", dict_)
+                self.assertIn("visit", dict_)
+                self.assertIn("dfc_dist", dict_)
+                self.assertIn("band", dict_)
+                self.assertEqual(dict_["mjd"], stamps.metadata["MJD"])
