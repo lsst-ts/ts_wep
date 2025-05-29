@@ -145,7 +145,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         )
         selectedStamps._refresh_metadata()
         # Need to copy a few other fields by hand
-        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "VISIT"]:
+        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
                     [
@@ -155,7 +155,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                     ]
                 )
         for key, val in donutStamps.metadata.items():
-            if key.startswith("BORESIGHT") or key == "MJD":
+            if key.startswith("BORESIGHT") or key in ["MJD", "VISIT", "DFC_DIST", "DET_NAME", "BANDPASS"]:
                 selectedStamps.metadata[key] = val
             else:
                 continue

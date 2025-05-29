@@ -110,11 +110,13 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
 
         # Assign stamps to either intra or extra
         if selectedDonuts[0].wep_im.defocalType == DefocalType.Extra:
+            self.stampsExtra = selectedDonuts
             extraStamps = selectedDonuts
             intraStamps = DonutStamps([])
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
         else:
+            self.stampsIntra = selectedDonuts
             extraStamps = DonutStamps([])
             intraStamps = selectedDonuts
             if len(donutQualityTable) > 0:

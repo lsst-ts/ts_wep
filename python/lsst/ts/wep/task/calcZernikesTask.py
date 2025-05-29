@@ -156,6 +156,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         self.doDonutStampSelector = self.config.doDonutStampSelector
 
+        # Initialize the donut stamps to None
+        self.stampsExtra = None
+        self.stampsIntra = None
+
     def initZkTable(self) -> QTable:
         """Initialize the table to store the Zernike coefficients
 
@@ -327,45 +331,66 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     row[f"{foc}_{key.lower()}"] = val
             zkTable.add_row(row)
 
-        zkTable.meta["intra"] = {}
-        zkTable.meta["extra"] = {}
-
-        for dict_, stamps in [
-            (zkTable.meta["intra"], intraStamps),
-            (zkTable.meta["extra"], extraStamps),
-        ]:
-            dict_["det_name"] = "" if len(stamps) == 0 else stamps.metadata["DET_NAME"]
-            dict_["visit"] = "" if len(stamps) == 0 else stamps.metadata["VISIT"]
-            dict_["dfc_dist"] = "" if len(stamps) == 0 else stamps.metadata["DFC_DIST"]
-            dict_["band"] = "" if len(stamps) == 0 else stamps.metadata["BANDPASS"]
-            dict_["boresight_rot_angle_rad"] = (
-                "" if len(stamps) == 0 else stamps.metadata["BORESIGHT_ROT_ANGLE_RAD"]
-            )
-            dict_["boresight_par_angle_rad"] = (
-                "" if len(stamps) == 0 else stamps.metadata["BORESIGHT_PAR_ANGLE_RAD"]
-            )
-            dict_["boresight_alt_rad"] = (
-                "" if len(stamps) == 0 else stamps.metadata["BORESIGHT_ALT_RAD"]
-            )
-            dict_["boresight_az_rad"] = (
-                "" if len(stamps) == 0 else stamps.metadata["BORESIGHT_AZ_RAD"]
-            )
-            dict_["boresight_ra_rad"] = (
-                "" if len(stamps) == 0 else stamps.metadata["BORESIGHT_RA_RAD"]
-            )
-            dict_["boresight_dec_rad"] = (
-                "" if len(stamps) == 0 else stamps.metadata["BORESIGHT_DEC_RAD"]
-            )
-            dict_["mjd"] = "" if len(stamps) == 0 else stamps.metadata["MJD"]
-
-        if len(intraStamps) > 0:
-            zkTable.meta["cam_name"] = intraStamps.metadata["CAM_NAME"]
-        else:
-            zkTable.meta["cam_name"] = extraStamps.metadata["CAM_NAME"]
-        if len(intraStamps) > 0 and len(extraStamps) > 0:
-            assert intraStamps.metadata["CAM_NAME"] == extraStamps.metadata["CAM_NAME"]
+        zkTable.meta = self.createZkTableMetadata()
 
         return zkTable
+
+    def createZkTableMetadata(self):
+        """Create the metadata for the Zernike table.
+
+        Returns
+        -------
+        metadata : dict
+            Metadata for the Zernike table
+        """
+        meta = {}
+        meta["intra"] = {}
+        meta["extra"] = {}
+        cam_name = None
+
+        if self.stampsIntra is None and self.stampsExtra is None:
+            raise ValueError(
+                "No stamps available. Cannot create metadata."
+            )
+
+        for dict_, stamps in [
+            (meta["intra"], self.stampsIntra),
+            (meta["extra"], self.stampsExtra),
+        ]:
+            if stamps is None:
+                continue
+            dict_["det_name"] = stamps.metadata["DET_NAME"]
+            dict_["visit"] = stamps.metadata["VISIT"]
+            dict_["dfc_dist"] =stamps.metadata["DFC_DIST"]
+            dict_["band"] = stamps.metadata["BANDPASS"]
+            dict_["boresight_rot_angle_rad"] = (
+                stamps.metadata["BORESIGHT_ROT_ANGLE_RAD"]
+            )
+            dict_["boresight_par_angle_rad"] = (
+                stamps.metadata["BORESIGHT_PAR_ANGLE_RAD"]
+            )
+            dict_["boresight_alt_rad"] = (
+               stamps.metadata["BORESIGHT_ALT_RAD"]
+            )
+            dict_["boresight_az_rad"] = (
+                 stamps.metadata["BORESIGHT_AZ_RAD"]
+            )
+            dict_["boresight_ra_rad"] = (
+                stamps.metadata["BORESIGHT_RA_RAD"]
+            )
+            dict_["boresight_dec_rad"] = (
+                stamps.metadata["BORESIGHT_DEC_RAD"]
+            )
+            dict_["mjd"] = stamps.metadata["MJD"]
+            if cam_name is None:
+                cam_name = stamps.metadata["CAM_NAME"]
+
+        meta["cam_name"] = cam_name
+
+        if self.stampsIntra is not None and self.stampsExtra is not None:
+            assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]
+
+        return meta
 
     def empty(self, qualityTable=None, zernikeTable=None) -> pipeBase.Struct:
         """Return empty results if no donuts are available. If
@@ -401,6 +426,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         if zernikeTable is None:
             zkTable = self.initZkTable()
+            zkTable.meta = self.createZkTableMetadata()
         else:
             zkTable = zernikeTable
 
@@ -411,17 +437,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             donutQualityTable=donutQualityTable,
         )
 
-    def runQuantum(
-        self,
-        butlerQC: QuantumContext,
-        inputRefs: InputQuantizedConnection,
-        outputRefs: OutputQuantizedConnection,
-    ):
-        inputs = butlerQC.get(inputRefs)
-        outputs = self.run(**inputs, numCores=butlerQC.resources.num_cores)
-        butlerQC.put(outputs, outputRefs)
-
-    def getZ4FromDonutRadius(self, donutStampsExtra, donutStampsIntra, qualityTable=None):
+    def getZ4FromDonutRadius(self, qualityTable=None):
         """Get the Z4 from the donut radius and return a zkTable with the avg
         Zernike coefficients with the computed Z4 and all other Zernikes 0.
         This is used when no donuts are available or when the donut stamp
@@ -431,10 +447,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         Parameters
         ----------
-        donutStampsExtra : DonutStamps
-            The extrafocal stamps
-        donutStampsIntra : DonutStamps
-            The intrafocal stamps
         qualityTable : astropy.table.QTable
             Quality table created with donut stamp input.
 
@@ -444,13 +456,13 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             Struct with the Zernike coefficients from fitting the donut radius
             and the quality table. See self.empty above for full contents.
         """
-        if len(donutStampsExtra) == 0 and len(donutStampsIntra) == 0:
+        if len(self.stampsExtra) == 0 and len(self.stampsIntra) == 0:
             return self.empty(qualityTable=qualityTable)
 
-        if len(donutStampsExtra) > 0:
-            refStamp = donutStampsExtra[0]
+        if len(self.stampsExtra) > 0:
+            refStamp = self.stampsExtra[0]
         else:
-            refStamp = donutStampsIntra[0]
+            refStamp = self.stampsIntra[0]
         camName = refStamp.cam_name
         detectorName = refStamp.detector_name
         instrument = getTaskInstrument(
@@ -460,7 +472,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         )
 
         # Fit donut radius for both intra and extra stamps
-        radii_struct = self.fitDonutRadius.run(donutStampsExtra, donutStampsIntra)
+        radii_struct = self.fitDonutRadius.run(self.stampsExtra, self.stampsIntra)
         # Remove the fits that failed
         valid_radii = radii_struct.donutRadiiTable[radii_struct.donutRadiiTable["FAIL_FLAG"] == 0]
 
@@ -534,7 +546,20 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_max_power_grad": np.nan,
             }
         )
+
+        zkTable.meta = self.createZkTableMetadata()
+
         return self.empty(zernikeTable=zkTable, qualityTable=qualityTable)
+
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ):
+        inputs = butlerQC.get(inputRefs)
+        outputs = self.run(**inputs, numCores=butlerQC.resources.num_cores)
+        butlerQC.put(outputs, outputRefs)
 
     @timeMethod
     def run(
@@ -546,18 +571,17 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # If no donuts are in the donutCatalog for a set of exposures
         # in one of the sides of focus, then attempt to get the zernikes
         # by fitting the donut radius. If that fails, return empty struct.
-        if len(donutStampsExtra) == 0 or len(donutStampsIntra) == 0:
-            return self.getZ4FromDonutRadius(
-                donutStampsExtra,
-                donutStampsIntra
-            )
+        self.stampsExtra = donutStampsExtra
+        self.stampsIntra = donutStampsIntra
+        if len(self.stampsExtra) == 0 or len(self.stampsIntra) == 0:
+            return self.getZ4FromDonutRadius()
 
         # Run donut stamp selection. By default all donut stamps are selected
         # and we are provided with donut quality table.
         if self.doDonutStampSelector:
             self.log.info("Running Donut Stamp Selector")
-            selectionExtra = self.donutStampSelector.run(donutStampsExtra)
-            selectionIntra = self.donutStampSelector.run(donutStampsIntra)
+            selectionExtra = self.donutStampSelector.run(self.stampsExtra)
+            selectionIntra = self.donutStampSelector.run(self.stampsIntra)
             donutExtraQuality = selectionExtra.donutsQuality
             donutIntraQuality = selectionIntra.donutsQuality
             selectedExtraStamps = selectionExtra.donutStampsSelect
@@ -576,13 +600,15 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ):
                 self.log.info("No donut stamps were selected. Fitting donut radius.")
                 empty_struct = self.getZ4FromDonutRadius(
-                    donutStampsExtra,
-                    donutStampsIntra,
                     qualityTable=donutQualityTable
                 )
                 return empty_struct
         else:
             donutQualityTable = QTable([])
+
+        # Update stampsExtra and stampsIntra with the selected donuts
+        self.stampsExtra = selectedExtraStamps
+        self.stampsIntra = selectedIntraStamps
 
         # Estimate Zernikes from the collection of selected stamps
         zkCoeffRaw = self.estimateZernikes.run(

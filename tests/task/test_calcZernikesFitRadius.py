@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+from copy import copy
 
 import lsst.utils.tests
 import numpy as np
@@ -113,8 +114,9 @@ class TestCalcZernikesFitRadius(lsst.utils.tests.TestCase):
         # We are passing empty donutStamps in intra so the zernikes
         # table should only contain the zernikesFromDonutRadius in
         # the average row.
+        donutStampsEmpty = DonutStamps([], metadata=copy(self.donutStampsExtra.metadata))
         struct = self.task.run(
-            self.donutStampsExtra, DonutStamps([])
+            self.donutStampsExtra, donutStampsEmpty
         )
         zkTable = struct.zernikes
         self.assertEqual(len(zkTable), 1.0)

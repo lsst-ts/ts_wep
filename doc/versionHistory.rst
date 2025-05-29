@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.8.0:
+
+-------------
+ 14.8.0
+-------------
+
+* Change metadata in donut stamps to only accept one value of visit level metadata.
+* Adjust metadata of other outputs.
+
 .. _lsst.ts.wep-14.7.0:
 
 -------------
