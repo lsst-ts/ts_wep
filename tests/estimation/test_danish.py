@@ -132,3 +132,17 @@ class TestDanishAlgorithm(unittest.TestCase):
                         self.assertEqual(
                             danBin.history["extra"]["image"].shape, binned_shape
                         )
+
+    def testMetadata(self):
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+
+        # Estimate with singles and pairs
+        dan = DanishAlgorithm()
+        zkPair, pairMeta = dan.estimateZk(intra, extra)
+        zkIntra, intraMeta = dan.estimateZk(intra)
+        zkExtra, extraMeta = dan.estimateZk(extra)
+
+        # Check metadata
+        for metaDict in pairMeta, intraMeta, extraMeta:
+            self.assertEqual(["fwhm"], list(metaDict.keys()))
+            self.assertAlmostEqual(metaDict['fwhm'], 1.06, delta=0.01)
