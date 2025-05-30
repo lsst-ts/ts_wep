@@ -24,6 +24,7 @@ __all__ = ["EstimateZernikesBaseConfig", "EstimateZernikesBaseTask"]
 import abc
 import itertools
 import multiprocessing as mp
+from typing import Tuple
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -120,7 +121,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         donutStampsIntra: DonutStamps,
         wfEstimator: WfEstimator,
         numCores: int = 1,
-    ) -> np.array:
+    ) -> Tuple[np.array, dict]:
         """Estimate Zernike coefficients from pairs of donut stamps.
 
         Parameters
@@ -140,6 +141,11 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             Numpy array of estimated Zernike coefficients. The first
             axis indexes donut pairs while the second axis indexes the
             Noll coefficients.
+        dict
+            Metadata containing extra output from Zernike estimation.
+            Each key is a type of output from the Zernike estimation
+            method selected and contains a list of values,
+            one for each pair of donuts.
         """
         # Loop over pairs in a multiprocessing pool
         args = [
@@ -173,7 +179,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         donutStampsIntra: DonutStamps,
         wfEstimator: WfEstimator,
         numCores: int = 1,
-    ) -> np.array:
+    ) -> Tuple[np.array, dict]:
         """Estimate Zernike coefficients from individual donut stamps.
 
         Parameters
@@ -194,6 +200,11 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             axis indexes donut stamps, starting with extrafocal stamps,
             followed by intrafocal stamps. The second axis indexes the
             Noll coefficients.
+        dict
+            Metadata containing extra output from Zernike estimation.
+            Each key is a type of output from the Zernike estimation
+            method selected and contains a list of values,
+            one for each donut.
         """
         # Loop over individual donut stamps with a process pool
         args = [
@@ -227,7 +238,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
         numCores: int = 1,
-    ) -> np.ndarray:
+    ) -> pipeBase.Struct:
         """Estimate Zernike coefficients (in microns) from the donut stamps.
 
         Parameters
@@ -245,7 +256,9 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             A struct containing "zernikes", which is a 2D numpy array,
             where the first axis indexes the pair of DonutStamps and the
             second axis indexes the Zernikes coefficients. The units are
-            microns.
+            microns. Also contains "wfEstInfo", which is a dictionary
+            containing metadata with extra output from the wavefront
+            estimation algorithm.
         """
         # Get the instrument
         if len(donutStampsExtra) > 0:

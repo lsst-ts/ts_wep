@@ -224,7 +224,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict]:
+    ) -> Tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for a single donut stamp.
 
         Parameters
@@ -248,6 +248,8 @@ class DanishAlgorithm(WfAlgorithm):
             The Zernike coefficients (in meters) for Noll indices >= 4
         dict
             The single-stamp history. This is empty if saveHistory is False.
+        dict
+            Output from the danish algorithm to pass on as metadata.
         """
         img, angle, zkRef, backgroundStd = self._prepDanish(
             image=image,
@@ -345,7 +347,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict]:
+    ) -> Tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for pairs of donut stamps.
 
         Parameters
@@ -371,12 +373,12 @@ class DanishAlgorithm(WfAlgorithm):
 
         Returns
         -------
-        Returns
-        -------
         np.ndarray
             The Zernike coefficients (in meters) for Noll indices >= 4
         dict
             The single-stamp history. This is empty if saveHistory is False.
+        dict
+            Output from the danish algorithm to pass on as metadata.
         """
         # Prep quantities for both images
         img1, angle1, zkRef1, backgroundStd1 = self._prepDanish(
@@ -513,7 +515,7 @@ class DanishAlgorithm(WfAlgorithm):
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
         Parameters
@@ -540,6 +542,8 @@ class DanishAlgorithm(WfAlgorithm):
         np.ndarray
             Zernike coefficients for the provided Noll indices, estimated from
             the images, in meters.
+        dict
+            Output from the danish algorithm to pass on as metadata.
         """
         # Create the Danish donut factory
         factory = danish.DonutFactory(
