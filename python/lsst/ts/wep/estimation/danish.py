@@ -224,7 +224,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict]:
+    ) -> Tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for a single donut stamp.
 
         Parameters
@@ -248,6 +248,8 @@ class DanishAlgorithm(WfAlgorithm):
             The Zernike coefficients (in meters) for Noll indices >= 4
         dict
             The single-stamp history. This is empty if saveHistory is False.
+        dict
+            Output from the danish algorithm to pass on as metadata.
         """
         img, angle, zkRef, backgroundStd = self._prepDanish(
             image=image,
@@ -330,7 +332,10 @@ class DanishAlgorithm(WfAlgorithm):
         else:
             hist = {}
 
-        return zkSum, hist
+        # Save final fwhm value in metadata
+        zkMeta = {"fwhm": fwhm}
+
+        return zkSum, hist, zkMeta
 
     def _estimatePairZk(
         self,
@@ -342,7 +347,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict]:
+    ) -> Tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for pairs of donut stamps.
 
         Parameters
@@ -368,12 +373,12 @@ class DanishAlgorithm(WfAlgorithm):
 
         Returns
         -------
-        Returns
-        -------
         np.ndarray
             The Zernike coefficients (in meters) for Noll indices >= 4
         dict
             The single-stamp history. This is empty if saveHistory is False.
+        dict
+            Output from the danish algorithm to pass on as metadata.
         """
         # Prep quantities for both images
         img1, angle1, zkRef1, backgroundStd1 = self._prepDanish(
@@ -496,7 +501,10 @@ class DanishAlgorithm(WfAlgorithm):
         else:
             hist = {}
 
-        return zkSum, hist
+        # Save final fwhm value in metadata
+        zkMeta = {"fwhm": fwhm}
+
+        return zkSum, hist, zkMeta
 
     def _estimateZk(
         self,
@@ -507,7 +515,7 @@ class DanishAlgorithm(WfAlgorithm):
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
         Parameters
@@ -534,6 +542,8 @@ class DanishAlgorithm(WfAlgorithm):
         np.ndarray
             Zernike coefficients for the provided Noll indices, estimated from
             the images, in meters.
+        dict
+            Output from the danish algorithm to pass on as metadata.
         """
         # Create the Danish donut factory
         factory = danish.DonutFactory(
@@ -549,7 +559,7 @@ class DanishAlgorithm(WfAlgorithm):
             hist = {}
 
             # Estimate for I1
-            zk1, hist[I1.defocalType.value] = self._estimateSingleZk(
+            zk1, hist[I1.defocalType.value], zk1Meta = self._estimateSingleZk(
                 I1,
                 zkStartI1,
                 nollIndices,
@@ -560,7 +570,7 @@ class DanishAlgorithm(WfAlgorithm):
 
             if I2 is not None:
                 # If I2 provided, estimate for that donut as well
-                zk2, hist[I2.defocalType.value] = self._estimateSingleZk(
+                zk2, hist[I2.defocalType.value], zk2Meta = self._estimateSingleZk(
                     I2,
                     zkStartI2,
                     nollIndices,
@@ -571,13 +581,15 @@ class DanishAlgorithm(WfAlgorithm):
 
                 # Average the Zernikes
                 zk = np.mean([zk1, zk2], axis=0)
+                zkMeta = {"fwhm": np.mean([zk1Meta["fwhm"], zk2Meta["fwhm"]])}
             else:
                 zk = zk1
+                zkMeta = zk1Meta
 
             hist["zk"] = zk
 
         else:
-            zk, hist = self._estimatePairZk(
+            zk, hist, zkMeta = self._estimatePairZk(
                 I1,
                 I2,
                 zkStartI1,
@@ -591,4 +603,4 @@ class DanishAlgorithm(WfAlgorithm):
         if saveHistory:
             self._history = hist
 
-        return zk
+        return zk, zkMeta

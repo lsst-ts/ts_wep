@@ -81,7 +81,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 # Test estimation with pairs and single donuts:
                 for images in [[intra, extra], [intra], [extra]]:
                     # Estimate Zernikes (in meters)
-                    zkEst = dan.estimateZk(*images)
+                    zkEst, _ = dan.estimateZk(*images)
 
                     # Check that results are fairly accurate
                     self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
@@ -120,7 +120,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 # Test estimation with pairs and single donuts:
                 for images in [[intra, extra], [intra], [extra]]:
                     # Estimate Zernikes (in meters)
-                    zkEst = danBin.estimateZk(*images, saveHistory=True)
+                    zkEst, _ = danBin.estimateZk(*images, saveHistory=True)
                     self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
                     # Test that we binned the images.
@@ -132,3 +132,17 @@ class TestDanishAlgorithm(unittest.TestCase):
                         self.assertEqual(
                             danBin.history["extra"]["image"].shape, binned_shape
                         )
+
+    def testMetadata(self):
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+
+        # Estimate with singles and pairs
+        dan = DanishAlgorithm()
+        zkPair, pairMeta = dan.estimateZk(intra, extra)
+        zkIntra, intraMeta = dan.estimateZk(intra)
+        zkExtra, extraMeta = dan.estimateZk(extra)
+
+        # Check metadata
+        for metaDict in pairMeta, intraMeta, extraMeta:
+            self.assertEqual(["fwhm"], list(metaDict.keys()))
+            self.assertAlmostEqual(metaDict['fwhm'], 1.06, delta=0.01)

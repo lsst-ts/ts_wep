@@ -22,7 +22,7 @@
 __all__ = ["TieAlgorithm"]
 
 import inspect
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional, Union, Tuple
 
 import numpy as np
 from lsst.ts.wep import Image, ImageMapper, Instrument
@@ -671,7 +671,7 @@ class TieAlgorithm(WfAlgorithm):
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
         Parameters
@@ -699,6 +699,8 @@ class TieAlgorithm(WfAlgorithm):
         np.ndarray
             Zernike coefficients (for Noll indices >= 4) estimated from
             the images, in meters.
+        dict
+            Output from the TIE algorithm to pass on as metadata.
 
         Raises
         ------
@@ -924,4 +926,6 @@ class TieAlgorithm(WfAlgorithm):
         if self.requireConverge and not converged:
             zkSum *= np.nan
 
-        return zkSum
+        zkMeta = {"caustic": bool(caustic), "converged": bool(converged)}
+
+        return zkSum, zkMeta

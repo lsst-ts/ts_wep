@@ -375,6 +375,9 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # Check metadata keys exist for pairs case
         self.assertIn("cam_name", zkCalcPairs.meta)
+        self.assertIn("estimatorInfo", zkCalcPairs.meta)
+        self.assertCountEqual(["caustic", "converged"], list(zkCalcPairs.meta["estimatorInfo"].keys()))
+        self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["caustic"]))
         for stamps, k in zip(
             [self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]
         ):

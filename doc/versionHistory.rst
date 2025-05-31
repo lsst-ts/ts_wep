@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.9.0:
+
+-------------
+ 14.9.0
+-------------
+
+* Add metadata from estimator outputs to zernikes table metadata.
+
 .. _lsst.ts.wep-14.8.0:
 
 -------------
