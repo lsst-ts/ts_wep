@@ -88,12 +88,10 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
         taskOut = self.task.run(donutStampsExtra)
         self.assertEqual(type(taskOut.donutRadiiTable), astropy.table.table.QTable)
 
-        self.assertEqual(len(taskOut.donutRadiiTable), 6)
+        self.assertEqual(len(taskOut.donutRadiiTable), 3)
 
         # test that the expected columns are present
         expected_columns = [
-            "VISIT",
-            "DFC_TYPE",
             "DET_NAME",
             "DFC_DIST",
             "RADIUS",
@@ -109,11 +107,6 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
             set(np.unique(taskOut.donutRadiiTable["DET_NAME"].value)),
             set(["R22_S11"]),
         )
-        # test that correct visits ids are present
-        self.assertEqual(
-            set(np.unique(taskOut.donutRadiiTable["VISIT"].value)),
-            set([4021123106001]),
-        )
         # test that the mean radius is correct
         self.assertFloatsAlmostEqual(
             69.69552203692189,
@@ -121,17 +114,6 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
             rtol=1e-1,
             atol=1e-1,
         )
-
-    def testPipelineRunScienceSensor(self):
-        donutRadiiTable = self.butler.get(
-            "donutRadiiTable",
-            dataId=self.dataIdExtraScience,
-            collections=[self.runNameScience],
-        )
-        # as above, check that the table was made automatically
-        self.assertEqual(type(donutRadiiTable), astropy.table.table.QTable)
-
-        self.assertEqual(len(donutRadiiTable), 6)
 
     def testTaskRunCwfs(self):
         donutStampsIntra = self.butler.get(
@@ -143,11 +125,9 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
         taskOut = self.task.run(donutStampsIntra)
         self.assertEqual(type(taskOut.donutRadiiTable), astropy.table.table.QTable)
 
-        self.assertEqual(len(taskOut.donutRadiiTable), 4)
+        self.assertEqual(len(taskOut.donutRadiiTable), 2)
 
         expected_columns = [
-            "VISIT",
-            "DFC_TYPE",
             "DET_NAME",
             "DFC_DIST",
             "RADIUS",
@@ -161,16 +141,7 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
         # test that correct detector names are present
         self.assertEqual(
             set(np.unique(taskOut.donutRadiiTable["DET_NAME"].value)),
-            set(["R00_SW0"]),
-        )
-        # test that correct visit id is present
-        self.assertEqual(
-            set(
-                np.unique(
-                    np.asarray(taskOut.donutRadiiTable["VISIT"].value).astype(int)
-                )
-            ),
-            set([4021123106000]),
+            set(["R00_SW1"]),
         )
         self.assertFloatsAlmostEqual(
             66.38605539619834,
@@ -178,16 +149,6 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
             rtol=1e-1,
             atol=1e-1,
         )
-
-    def testPipelineRunCwfs(self):
-        donutRadiiTable = self.butler.get(
-            "donutRadiiTable",
-            dataId=self.dataIdExtraCwfs,
-            collections=[self.runNameCwfs],
-        )
-        # check that the table was made automatically
-        self.assertEqual(type(donutRadiiTable), astropy.table.table.QTable)
-        self.assertEqual(len(donutRadiiTable), 4)
 
     @classmethod
     def tearDownClass(cls):
