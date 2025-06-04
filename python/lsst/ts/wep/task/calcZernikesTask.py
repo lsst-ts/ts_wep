@@ -27,7 +27,6 @@ __all__ = [
 
 import abc
 from itertools import zip_longest
-
 import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -39,14 +38,11 @@ from lsst.pipe.base import (
     QuantumContext,
     connectionTypes,
 )
-from lsst.ts.wep.utils.enumUtils import DefocalType
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
 from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
-from lsst.ts.wep.task.fitDonutRadiusTask import FitDonutRadiusTask
 from lsst.utils.timer import timeMethod
-from lsst.ts.wep.utils import getTaskInstrument
 
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 
@@ -116,10 +112,6 @@ class CalcZernikesTaskConfig(
         target=DonutStampSelectorTask,
         doc="How to select donut stamps.",
     )
-    fitDonutRadius = pexConfig.ConfigurableField(
-        target=FitDonutRadiusTask,
-        doc="How to estimate donut radius.",
-    )
     doDonutStampSelector = pexConfig.Field(
         doc="Whether or not to run donut stamp selector.",
         dtype=bool,
@@ -150,9 +142,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         self.donutStampSelector = self.config.donutStampSelector
         self.makeSubtask("donutStampSelector")
-
-        self.fitDonutRadius = self.config.fitDonutRadius
-        self.makeSubtask("fitDonutRadius")
 
         self.doDonutStampSelector = self.config.doDonutStampSelector
 
@@ -319,7 +308,13 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     * u.pixel
                 )
             )
-            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+            for key in [
+                "MAG",
+                "SN",
+                "ENTROPY",
+                "FRAC_BAD_PIX",
+                "MAX_POWER_GRAD"
+            ]:
                 for stamps, foc in [
                     (intraStamps, "intra"),
                     (extraStamps, "extra"),
@@ -417,6 +412,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "ENTROPY_SELECT",
             "SN_SELECT",
             "FINAL_SELECT",
+            "RADIUS",
+            "X_PIX_LEFT_EDGE",
+            "X_PIX_RIGHT_EDGE",
             "DEFOCAL_TYPE",
         ]
         if qualityTable is None:
@@ -436,120 +434,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             zernikes=zkTable,
             donutQualityTable=donutQualityTable,
         )
-
-    def getZ4FromDonutRadius(self, qualityTable=None):
-        """Get the Z4 from the donut radius and return a zkTable with the avg
-        Zernike coefficients with the computed Z4 and all other Zernikes 0.
-        This is used when no donuts are available or when the donut stamp
-        selector fails to select any donuts.
-        The Z4 is computed from the median radius of the donuts that were
-        successfully fit with fitDonutRadiusTask.
-
-        Parameters
-        ----------
-        qualityTable : astropy.table.QTable
-            Quality table created with donut stamp input.
-
-        Returns
-        -------
-        struct : lsst.pipe.base.Struct
-            Struct with the Zernike coefficients from fitting the donut radius
-            and the quality table. See self.empty above for full contents.
-        """
-        if len(self.stampsExtra) == 0 and len(self.stampsIntra) == 0:
-            return self.empty(qualityTable=qualityTable)
-
-        if len(self.stampsExtra) > 0:
-            refStamp = self.stampsExtra[0]
-        else:
-            refStamp = self.stampsIntra[0]
-        camName = refStamp.cam_name
-        detectorName = refStamp.detector_name
-        instrument = getTaskInstrument(
-            camName,
-            detectorName,
-            self.estimateZernikes.config.instConfigFile,
-        )
-
-        # Fit donut radius for both intra and extra stamps
-        radii_struct = self.fitDonutRadius.run(self.stampsExtra, self.stampsIntra)
-        # Remove the fits that failed
-        valid_radii = radii_struct.donutRadiiTable[radii_struct.donutRadiiTable["FAIL_FLAG"] == 0]
-
-        if len(valid_radii) == 0:
-            self.log.info("No donuts were successfully fit. Returning empty struct.")
-            return self.empty(qualityTable=qualityTable)
-
-        n_intra = len(valid_radii[valid_radii["DFC_TYPE"] == DefocalType.Intra.value])
-        n_extra = len(valid_radii[valid_radii["DFC_TYPE"] == DefocalType.Extra.value])
-        self.log.info(f"Number of intra donuts successfully fit: {n_intra}")
-        self.log.info(f"Number of extra donuts successfully fit: {n_extra}")
-
-        # We will only use the fits of the side of focus that has more donuts.
-        dominant_type = DefocalType.Intra.value if n_intra >= n_extra else DefocalType.Extra.value
-        dominant_radii = valid_radii[valid_radii["DFC_TYPE"] == dominant_type]["RADIUS"]
-        median_radius = np.median(dominant_radii.value)
-        self.log.info(f"Median donut radius (in pixels): {median_radius}.")
-
-        # Compute the defocus offset from the median radius
-        # We multiply by sqrt(4 * f^2 - 1) * pixel_scale to get the defocus
-        # offset in meters, and subtract the nominal defocus of the wavefront
-        # sensors.
-        median_offset = (
-            median_radius * np.sqrt(4 * instrument.focalRatio**2 - 1)
-            * instrument.pixelSize
-            - instrument.defocalOffset
-        )
-        self.log.info(f"Defocus offset computed from donut radii: {median_offset*1e6} um.")
-
-        # If the dominant type is intra, the donuts are biggest in the
-        # extra-focal sensor, so we need to move in minus direction.
-        # If the dominant type is extra, the donuts are biggest in the
-        # intra-focal sensor, so we need to move in plus direction.
-        # We are assuming here that we are not so defocused that both
-        # donuts are larger than the default size. If that were the
-        # case, we would expect fitDonutRadius to fail and return an
-        # empty struct earlier.
-        if dominant_type == DefocalType.Intra.value:
-            Z4 = instrument.offsetToZ4Defocus(median_offset)
-        else:
-            Z4 = instrument.offsetToZ4Defocus(-median_offset)
-        self.log.info(f"Z4 defocus computed from fitting zernikes: {Z4}.")
-
-        # Generate zernike vector with only Z4
-        # and set all other Zernikes to 0
-        zernikes = np.zeros(len(self.nollIndices))
-        zernikes[self.nollIndices.index(4)] = Z4
-
-        zkTable = self.initZkTable()
-        zkTable.add_row(
-            {
-                "label": "average",
-                "used": True,
-                **{
-                    f"Z{j}": zernikes[i] * u.micron
-                    for i, j in enumerate(self.nollIndices)
-                },
-                "intra_field": np.nan,
-                "extra_field": np.nan,
-                "intra_centroid": np.nan,
-                "extra_centroid": np.nan,
-                "intra_mag": np.nan,
-                "extra_mag": np.nan,
-                "intra_sn": np.nan,
-                "extra_sn": np.nan,
-                "intra_entropy": np.nan,
-                "extra_entropy": np.nan,
-                "intra_frac_bad_pix": np.nan,
-                "extra_frac_bad_pix": np.nan,
-                "intra_max_power_grad": np.nan,
-                "extra_max_power_grad": np.nan,
-            }
-        )
-
-        zkTable.meta = self.createZkTableMetadata()
-
-        return self.empty(zernikeTable=zkTable, qualityTable=qualityTable)
 
     def runQuantum(
         self,
@@ -574,7 +458,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = donutStampsExtra
         self.stampsIntra = donutStampsIntra
         if len(self.stampsExtra) == 0 or len(self.stampsIntra) == 0:
-            return self.getZ4FromDonutRadius()
+            return self.empty()
 
         # Run donut stamp selection. By default all donut stamps are selected
         # and we are provided with donut quality table.
@@ -598,11 +482,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 len(selectedExtraStamps) == 0
                 or len(selectedIntraStamps) == 0
             ):
-                self.log.info("No donut stamps were selected. Fitting donut radius.")
-                empty_struct = self.getZ4FromDonutRadius(
-                    qualityTable=donutQualityTable
-                )
-                return empty_struct
+                self.log.info("No donut stamps were selected.")
+                return self.empty(qualityTable=donutQualityTable)
         else:
             donutQualityTable = QTable([])
 

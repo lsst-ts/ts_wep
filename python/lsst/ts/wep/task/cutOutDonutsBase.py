@@ -35,6 +35,7 @@ import numpy as np
 from lsst.afw.geom import makeSkyWcs
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.ts.wep.task.fitDonutRadiusTask import FitDonutRadiusTask
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
@@ -130,6 +131,10 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         default=["SAT", "BAD", "NO_DATA", "INTRP"],
     )
+    fitDonutRadius = pexConfig.ConfigurableField(
+        target=FitDonutRadiusTask,
+        doc="How to estimate donut radius.",
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -168,6 +173,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.maxRecenterDistance = self.config.maxRecenterDistance
         # Set Variance Plane Warning only once
         self.varianceWarningSet = False
+
+        self.fitDonutRadius = self.config.fitDonutRadius
+        self.makeSubtask("fitDonutRadius")
 
     def shiftCenters(self, centerArr, boundary, distance):
         """Shift the centers of sources if the distance to
@@ -809,6 +817,12 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the entropy-based quality measure
         stampsMetadata["EFFECTIVE"] = np.array(isEffective).astype(int)
         stampsMetadata["ENTROPY"] = np.array(stampsEntropy)
+
+        # Save the donut radius metrics
+        fitResults = self.fitDonutRadius.run(finalStamps)
+        stampsMetadata["RADIUS"] = np.array(fitResults.donutRadiiTable["RADIUS"])
+        stampsMetadata["X_PIX_LEFT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_LEFT_EDGE"])
+        stampsMetadata["X_PIX_RIGHT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_RIGHT_EDGE"])
 
         # Save the peak of the correlated image
         stampsMetadata["PEAK_HEIGHT"] = peakHeight

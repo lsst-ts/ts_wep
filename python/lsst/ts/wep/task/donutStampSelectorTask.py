@@ -145,7 +145,15 @@ class DonutStampSelectorTask(pipeBase.Task):
         )
         selectedStamps._refresh_metadata()
         # Need to copy a few other fields by hand
-        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+        for k in [
+            "SN",
+            "ENTROPY",
+            "FRAC_BAD_PIX",
+            "MAX_POWER_GRAD",
+            "RADIUS",
+            "X_PIX_LEFT_EDGE",
+            "X_PIX_RIGHT_EDGE"
+        ]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
                     [
@@ -212,6 +220,20 @@ class DonutStampSelectorTask(pipeBase.Task):
             self.log.warning(
                 "selectWithEntropy==True but ENTROPY not in stamp metadata."
             )
+
+        # Collect the donut radius metric information if available
+        donutRadii = np.full(len(donutStamps), np.nan)
+        stampsLeftEdges = np.full(len(donutStamps), np.nan)
+        stampsRightEdges = np.full(len(donutStamps), np.nan)
+        if "RADIUS" in list(donutStamps.metadata):
+            fillVals = np.asarray(donutStamps.metadata.getArray("RADIUS"))
+            donutRadii[: len(fillVals)] = fillVals
+
+            fillVals = np.asarray(donutStamps.metadata.getArray("X_PIX_LEFT_EDGE"))
+            stampsLeftEdges[: len(fillVals)] = fillVals
+
+            fillVals = np.asarray(donutStamps.metadata.getArray("X_PIX_RIGHT_EDGE"))
+            stampsRightEdges[: len(fillVals)] = fillVals
 
         # By default select all donuts,  only overwritten
         # if selectWithSignalToNoise is True
@@ -308,6 +330,9 @@ class DonutStampSelectorTask(pipeBase.Task):
                 entropySelect,
                 fracBadPixSelect,
                 maxPowerGradSelect,
+                donutRadii,
+                stampsLeftEdges,
+                stampsRightEdges,
                 selected,
             ],
             names=[
@@ -319,6 +344,9 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "ENTROPY_SELECT",
                 "FRAC_BAD_PIX_SELECT",
                 "MAX_POWER_GRAD_SELECT",
+                "RADIUS",
+                "X_PIX_LEFT_EDGE",
+                "X_PIX_RIGHT_EDGE",
                 "FINAL_SELECT",
             ],
         )

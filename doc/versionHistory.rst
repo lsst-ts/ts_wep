@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.10.0:
+
+-------------
+ 14.10.0
+-------------
+
+* Add donut radius, left edge and right edge to metadata of donutStamps.
+* Refactor fitDonutRadiusTask to be a regular task and take donutStamps as input.
+  
 .. _lsst.ts.wep-14.9.0:
 
 -------------
