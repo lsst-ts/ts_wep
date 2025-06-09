@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.11.0:
+
+-------------
+ 14.11.0
+-------------
+
+* Fix adding new metadata in generateDonutFromRefitWcsTask
+
 .. _lsst.ts.wep-14.10.0:
 
 -------------
