@@ -216,14 +216,12 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         sourceSchema = afwTable.SourceTable.makeMinimalSchema()
         measBase.SingleFrameMeasurementTask(schema=sourceSchema)  # expand the schema
         # add coord_raErr,  coord_decErr to the schema
-        sourceSchema.addField(
-            afwTable.Field["F"](
-                name="coord_raErr", doc="position err in ra", units="rad"
-            ),
-        )
-        sourceSchema.addField(
-            afwTable.Field["F"](
-                name="coord_decErr", doc="position err in dec", units="rad"
+        for c in ['ra','dec']:
+            name = f"coord_{c}Err"
+            if name not in sourceSchema.getNames():
+                sourceSchema.addField(
+                afwTable.Field["F"](
+                name=name, doc=f"position err in {c}", units="rad"
             ),
         )
 
