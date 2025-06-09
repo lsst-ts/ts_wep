@@ -435,6 +435,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "RADIUS",
             "X_PIX_LEFT_EDGE",
             "X_PIX_RIGHT_EDGE",
+            "RADIUS_FAIL_FLAG",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
             "MAX_POWER_GRAD",
@@ -466,6 +467,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "RADIUS",
             "X_PIX_LEFT_EDGE",
             "X_PIX_RIGHT_EDGE",
+            "RADIUS_FAIL_FLAG",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
         ]:

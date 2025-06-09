@@ -158,7 +158,8 @@ class DonutStampSelectorTask(pipeBase.Task):
             "MAX_POWER_GRAD",
             "RADIUS",
             "X_PIX_LEFT_EDGE",
-            "X_PIX_RIGHT_EDGE"
+            "X_PIX_RIGHT_EDGE",
+            "RADIUS_FAIL_FLAG",
         ]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
@@ -231,6 +232,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         donutRadii = np.full(len(donutStamps), np.nan)
         stampsLeftEdges = np.full(len(donutStamps), np.nan)
         stampsRightEdges = np.full(len(donutStamps), np.nan)
+        donutRadiiFailFlags = np.zeros(len(donutStamps), dtype="bool")
         if "RADIUS" in list(donutStamps.metadata):
             fillVals = np.asarray(donutStamps.metadata.getArray("RADIUS"))
             donutRadii[: len(fillVals)] = fillVals
@@ -240,6 +242,11 @@ class DonutStampSelectorTask(pipeBase.Task):
 
             fillVals = np.asarray(donutStamps.metadata.getArray("X_PIX_RIGHT_EDGE"))
             stampsRightEdges[: len(fillVals)] = fillVals
+
+            fillVals = np.asarray(
+                donutStamps.metadata.getArray("RADIUS_FAIL_FLAG")
+            )
+            donutRadiiFailFlags[: len(fillVals)] = fillVals
 
         # By default select all donuts,  only overwritten
         # if selectWithSignalToNoise is True
@@ -349,6 +356,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 donutRadii,
                 stampsLeftEdges,
                 stampsRightEdges,
+                donutRadiiFailFlags,
                 selected,
             ],
             names=[
@@ -363,6 +371,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "RADIUS",
                 "X_PIX_LEFT_EDGE",
                 "X_PIX_RIGHT_EDGE",
+                "RADIUS_FAIL_FLAG",
                 "FINAL_SELECT",
             ],
         )

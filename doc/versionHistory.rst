@@ -23,6 +23,14 @@ Version History
 * Fix adding new metadata in generateDonutFromRefitWcsTask
 * Update cutOutDonutsBase test value due to ISR changes
 
+.. _lsst.ts.wep-14.10.1:
+
+-------------
+ 14.10.0
+-------------
+
+* Add donut radius fail flag to donut quality tables.
+  
 .. _lsst.ts.wep-14.10.0:
 
 -------------
