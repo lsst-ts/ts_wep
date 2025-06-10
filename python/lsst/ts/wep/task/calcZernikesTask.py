@@ -113,7 +113,13 @@ class CalcZernikesTaskConfig(
         doc="How to select donut stamps.",
     )
     doDonutStampSelector = pexConfig.Field(
-        doc="Whether or not to run donut stamp selector.",
+        doc="Whether or not to run donut stamp selector."
+        + "If this is False, then we do not get donutQualityTable."
+        + "(The default is True). It is also possible to run"
+        + "donut stamp selector (with this config set to True), but"
+        + "turn off doSelection config inside the donut stamp selector,"
+        + "which would return all donuts as selected, as well as"
+        + "returning a quality table.",
         dtype=bool,
         default=True,
     )
@@ -460,8 +466,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if len(self.stampsExtra) == 0 or len(self.stampsIntra) == 0:
             return self.empty()
 
-        # Run donut stamp selection. By default all donut stamps are selected
-        # and we are provided with donut quality table.
+        # Run donut stamp selection. By default, doSelection is turned on,
+        # and we select only donuts that pass the criteria.
+        # We are always provided with donut quality table.
         if self.doDonutStampSelector:
             self.log.info("Running Donut Stamp Selector")
             selectionExtra = self.donutStampSelector.run(self.stampsExtra)
@@ -470,7 +477,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             donutIntraQuality = selectionIntra.donutsQuality
             selectedExtraStamps = selectionExtra.donutStampsSelect
             selectedIntraStamps = selectionIntra.donutStampsSelect
-
             donutExtraQuality["DEFOCAL_TYPE"] = "extra"
             donutIntraQuality["DEFOCAL_TYPE"] = "intra"
             donutQualityTable = vstack([donutExtraQuality, donutIntraQuality])
@@ -485,7 +491,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 self.log.info("No donut stamps were selected.")
                 return self.empty(qualityTable=donutQualityTable)
         else:
+            self.log.info("Not running Donut Stamp Selector")
             donutQualityTable = QTable([])
+            selectedExtraStamps = self.stampsExtra
+            selectedIntraStamps = self.stampsIntra
 
         # Update stampsExtra and stampsIntra with the selected donuts
         self.stampsExtra = selectedExtraStamps
@@ -493,7 +502,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         # Estimate Zernikes from the collection of selected stamps
         zkCoeffRaw = self.estimateZernikes.run(
-            selectedExtraStamps, selectedIntraStamps, numCores=numCores
+            self.stampsExtra, self.stampsIntra, numCores=numCores
         )
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
