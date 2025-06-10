@@ -105,6 +105,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.OrigTask.config.selectWithFracBadPixels, True)
         self.assertEqual(self.OrigTask.config.selectWithMaxPowerGrad, True)
         self.assertEqual(self.OrigTask.config.useCustomSnLimit, False)
+        self.assertEqual(self.OrigTask.config.doSelection, True)
 
         # Test changing configs
         self.config.maxSelect = 10
@@ -115,6 +116,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.config.maxEntropy = 4
         self.config.maxFracBadPixels = 0.2
         self.config.maxPowerGradThresh = 0.002
+        self.config.doSelection = False
         self.ModifiedTask = DonutStampSelectorTask(config=self.config, name="Mod Task")
 
         self.assertEqual(self.ModifiedTask.config.maxSelect, 10)
@@ -125,6 +127,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.ModifiedTask.config.maxEntropy, 4)
         self.assertEqual(self.ModifiedTask.config.maxFracBadPixels, 0.2)
         self.assertEqual(self.ModifiedTask.config.maxPowerGradThresh, 0.002)
+        self.assertEqual(self.ModifiedTask.config.doSelection, False)
 
     def testSelectStamps(self):
         donutStampsIntra = self.butler.get(
@@ -169,6 +172,11 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         donutsQuality = selection.donutsQuality
         self.assertEqual(np.sum(donutsQuality["ENTROPY_SELECT"]), 1)
 
+        # check that the metadata got attached to the donut quality
+        d1 = self.config.toDict()
+        d2 = donutsQuality.meta['DonutStampSelectorTaskConfig']
+        self.assertDictEqual(d1,d2)
+
         # also test that the entropy of the selected donut
         # is indeed below threshold
         self.assertLess(
@@ -212,6 +220,12 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(np.sum(selection.donutsQuality["FRAC_BAD_PIX_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["MAX_POWER_GRAD_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 1)
+
+        # test that if we turn off selection, all donuts get selected
+        self.config.doSelection = False
+        task = DonutStampSelectorTask(config=self.config, name="Select all")
+        selection = task.selectStamps(donutStampsIntra)
+        self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 3)
 
     def testTaskRun(self):
         donutStampsIntra = self.butler.get(
