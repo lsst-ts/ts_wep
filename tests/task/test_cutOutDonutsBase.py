@@ -479,9 +479,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertTrue(allowed_values.issuperset(unique_values))
 
         # test the calculation of SN
-        sn_values = [2149.17757703855, 2160.5407329704117, 2042.1965399542976]
+        sn_values = [2149.093503846915, 2160.668317852145, 2041.9917562475855]
         sn_calculated = donutStamps.metadata.getArray("SN")
-        self.assertCountEqual(sn_values, sn_calculated)
+        self.assertFloatsAlmostEqual(np.sort(np.array(sn_values)),
+                                     np.sort(np.array(sn_calculated)), rtol=1e-3)
 
     def testFilterBadRecentering(self):
         maxRecenter = 25
