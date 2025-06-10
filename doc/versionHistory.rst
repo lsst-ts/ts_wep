@@ -6,13 +6,14 @@
 Version History
 ##################
 
-.. _lsst.ts.wep-14.11.0:
+.. _lsst.ts.wep-14.10.1:
 
 -------------
- 14.11.0
+ 14.10.1
 -------------
 
 * Fix adding new metadata in generateDonutFromRefitWcsTask
+* Update cutOutDonutsBase test value due to ISR changes
 
 .. _lsst.ts.wep-14.10.0:
 
