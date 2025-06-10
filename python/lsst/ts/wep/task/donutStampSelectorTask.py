@@ -99,6 +99,12 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
             + "to be selected."
         ),
     )
+    doSelection =  pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Do any donut stamp selection? If this is False then we return the donut quality table,"
+        + " but allow all donut stamps to be selected.",
+    )
 
 
 class DonutStampSelectorTask(pipeBase.Task):
@@ -310,11 +316,21 @@ class DonutStampSelectorTask(pipeBase.Task):
             )
 
         # choose only donuts that satisfy all selected conditions
-        selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect
+        if self.config.doSelection:
+            selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect
+            self.log.info(
+                    f"{sum(selected)} of {len(selected)} donuts "
+                    "passed combined selection criteria."
+                )
+              # make sure we don't select more than maxSelect
+            if self.config.maxSelect != -1:
+                selected[np.cumsum(selected) > self.config.maxSelect] = False
 
-        # make sure we don't select more than maxSelect
-        if self.config.maxSelect != -1:
-            selected[np.cumsum(selected) > self.config.maxSelect] = False
+        else:
+            selected = np.ones(len(donutStamps), dtype="bool")
+            self.log.info(
+                    "Donut stamp selector is off."
+                )
 
         # store information about which donuts were selected
         # use QTable even though no units at the moment in
@@ -350,7 +366,9 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "FINAL_SELECT",
             ],
         )
-
+        # Add all configuration used for selection criteria as metadata;
+        # that way it doesn't have to be pulled from calcZernikes config
+        donutsQuality.meta = {"DonutStampSelectorTaskConfig": self.config.toDict()}
         self.log.info("Selected %d/%d donut stamps", selected.sum(), len(donutStamps))
 
         return pipeBase.Struct(selected=selected, donutsQuality=donutsQuality)
