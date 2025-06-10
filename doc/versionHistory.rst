@@ -5,6 +5,14 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-14.11.0:
+
+-------------
+ 14.11.0
+-------------
+
+* Fix behavior of calcZernikesTask when doDonutStampSelector is False.
+* Add doSelection config to donutStampSelectorTaskConfig.
 
 .. _lsst.ts.wep-14.10.1:
 
