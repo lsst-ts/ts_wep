@@ -263,10 +263,24 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if len(donutStampsExtra) == 0:
-            return pipeBase.Struct(
-                donutStampsExtra=DonutStamps([]),
-                donutStampsIntra=DonutStamps([]),
+            donutStampsExtra = DonutStamps([])
+            donutStampsExtra = self.addVisitLevelMetadata(
+                exposures[extraExpIdx],
+                donutStampsExtra,
+                donutCatalog[extraExpIdx],
+                DefocalType.Extra,
             )
+            donutStampsExtra.use_archive = False
+
+        if len(donutStampsIntra) == 0:
+            donutStampsIntra = DonutStamps([])
+            donutStampsIntra = self.addVisitLevelMetadata(
+                exposures[intraExpIdx],
+                donutStampsIntra,
+                donutCatalog[intraExpIdx],
+                DefocalType.Intra,
+            )
+            donutStampsIntra.use_archive = False
 
         # Return extra-focal DonutStamps, intra-focal DonutStamps and
         # Zernike coefficient numpy array as Struct that can be saved to

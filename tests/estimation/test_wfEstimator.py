@@ -94,7 +94,7 @@ class TestWfEstimator(unittest.TestCase):
             wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6], units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst.algo.optimizeLinAlg = False
-                zk0 = wfEst.estimateZk(intra, extra)
+                zk0, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-1,
@@ -103,7 +103,7 @@ class TestWfEstimator(unittest.TestCase):
                     "max_nfev": 10,
                     "verbose": 2,
                 }
-                zk0 = wfEst.estimateZk(
+                zk0, _ = wfEst.estimateZk(
                     intra,
                     extra,
                 )
@@ -113,7 +113,7 @@ class TestWfEstimator(unittest.TestCase):
             wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 20, 21], units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst.algo.optimizeLinAlg = False
-                zk1 = wfEst.estimateZk(intra, extra)
+                zk1, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-1,
@@ -123,7 +123,7 @@ class TestWfEstimator(unittest.TestCase):
                     "verbose": 2,
                 }
 
-                zk1 = wfEst.estimateZk(intra, extra)
+                zk1, _ = wfEst.estimateZk(intra, extra)
             self.assertEqual(len(zk1), 5)
 
             #  Make sure results are pretty similar for [4, 5, 6]
@@ -140,7 +140,7 @@ class TestWfEstimator(unittest.TestCase):
             if name == WfAlgorithmName.TIE:
                 wfEst = WfEstimator(algoName=name, startWithIntrinsic=True, units="m")
                 wfEst.algo.optimizeLinAlg = False
-                zk0 = wfEst.estimateZk(intra, extra)
+                zk0, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-1,
@@ -149,13 +149,13 @@ class TestWfEstimator(unittest.TestCase):
                     "max_nfev": 10,
                     "verbose": 2,
                 }
-                zk0 = wfEst.estimateZk(intra, extra)
+                zk0, _ = wfEst.estimateZk(intra, extra)
 
             # Estimate starting with zeros
             wfEst = WfEstimator(algoName=name, startWithIntrinsic=False, units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst.algo.optimizeLinAlg = False
-                zk1 = wfEst.estimateZk(intra, extra)
+                zk1, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-1,
@@ -164,7 +164,7 @@ class TestWfEstimator(unittest.TestCase):
                     "max_nfev": 10,
                     "verbose": 2,
                 }
-                zk1 = wfEst.estimateZk(intra, extra)
+                zk1, _ = wfEst.estimateZk(intra, extra)
 
             # Make sure the results are pretty similar
             self.assertLess(np.sqrt(np.sum(np.square(zk1 - zk0))), 80e-9)
@@ -179,7 +179,7 @@ class TestWfEstimator(unittest.TestCase):
             wfEst = WfEstimator(algoName=name, returnWfDev=False, units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst.algo.optimizeLinAlg = False
-                opd = wfEst.estimateZk(intra, extra)
+                opd, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-1,
@@ -188,13 +188,13 @@ class TestWfEstimator(unittest.TestCase):
                     "max_nfev": 10,
                     "verbose": 2,
                 }
-                opd = wfEst.estimateZk(intra, extra)
+                opd, _ = wfEst.estimateZk(intra, extra)
 
             # Estimate wavefront deviation
             wfEst = WfEstimator(algoName=name, returnWfDev=True, units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst.algo.optimizeLinAlg = False
-                wfDev = wfEst.estimateZk(intra, extra)
+                wfDev, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-1,
@@ -203,7 +203,7 @@ class TestWfEstimator(unittest.TestCase):
                     "max_nfev": 10,
                     "verbose": 2,
                 }
-                wfDev = wfEst.estimateZk(intra, extra)
+                wfDev, _ = wfEst.estimateZk(intra, extra)
 
             # Make sure that OPD = wf dev + intrinsics
             zkInt = wfEst.instrument.getIntrinsicZernikes(
@@ -226,7 +226,7 @@ class TestWfEstimator(unittest.TestCase):
                 wfEst = WfEstimator(algoName=name, units=units)
                 if name == WfAlgorithmName.TIE:
                     wfEst.algo.optimizeLinAlg = False
-                    zk[units] = wfEst.estimateZk(intra, extra)
+                    zk[units], _ = wfEst.estimateZk(intra, extra)
                 else:
                     wfEst.algo.lstsqKwargs = {
                         "ftol": 1e-1,
@@ -235,7 +235,7 @@ class TestWfEstimator(unittest.TestCase):
                         "max_nfev": 10,
                         "verbose": 2,
                     }
-                    zk[units] = wfEst.estimateZk(intra, extra)
+                    zk[units], _ = wfEst.estimateZk(intra, extra)
 
             self.assertTrue(np.allclose(zk["m"], zk["um"] / 1e6))
             self.assertTrue(np.allclose(zk["m"], zk["nm"] / 1e9))

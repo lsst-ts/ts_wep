@@ -22,7 +22,7 @@
 __all__ = ["WfAlgorithm"]
 
 from abc import ABC, abstractmethod
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 from lsst.ts.wep import Image, Instrument
@@ -171,7 +171,7 @@ class WfAlgorithm(ABC):
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, dict]:
         """Private Zernike estimation method that should be subclassed.
 
         Note that unlike the public method, this method MUST return the
@@ -202,6 +202,9 @@ class WfAlgorithm(ABC):
         np.ndarray
             Zernike coefficients representing the OPD in meters,
             for Noll indices >= 4.
+        dict
+            Metadata containing extra output from wavefront
+            estimation algorithm.
         """
         ...
 
@@ -215,7 +218,7 @@ class WfAlgorithm(ABC):
         returnWfDev: bool = False,
         units: str = "m",
         saveHistory: bool = False,
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
         Parameters
@@ -253,6 +256,9 @@ class WfAlgorithm(ABC):
         -------
         np.ndarray
             Zernike coefficients estimated from the image (or pair of images)
+        dict
+            Metadata containing extra output from wavefront estimation
+            algorithm.
         """
         if instrument is None:
             instrument = Instrument()
@@ -301,7 +307,7 @@ class WfAlgorithm(ABC):
         self._history = {}
 
         # Estimate the Zernikes
-        zk = self._estimateZk(
+        zk, zkMeta = self._estimateZk(
             I1=I1,
             I2=I2,
             zkStartI1=zkStartI1,
@@ -338,4 +344,4 @@ class WfAlgorithm(ABC):
         else:  # pragma: no cover
             raise RuntimeError(f"Conversion to unit '{units}' not supported.")
 
-        return zk
+        return zk, zkMeta

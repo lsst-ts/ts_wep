@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+from copy import copy
 
 import astropy.units as u
 import lsst.utils.tests
@@ -32,6 +33,7 @@ from lsst.ts.wep.task import (
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
     DonutStampSelectorTask,
+    DonutStamps
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -217,11 +219,17 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "MAX_POWER_GRAD_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
+            "RADIUS",
+            "X_PIX_LEFT_EDGE",
+            "X_PIX_RIGHT_EDGE"
         ]
         np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
         # test null run
-        structNull = self.task.run([], [])
+        structNull = self.task.run(
+            DonutStamps([], metadata=copy(donutStampsExtra.metadata)),
+            DonutStamps([], metadata=copy(donutStampsExtra.metadata))
+        )
 
         for struct in [structNormal, structNull]:
             # test that in accordance with declared connections,

@@ -5,6 +5,49 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-14.11.0:
+
+-------------
+ 14.11.0
+-------------
+
+* Fix behavior of calcZernikesTask when doDonutStampSelector is False.
+* Add doSelection config to donutStampSelectorTaskConfig.
+
+.. _lsst.ts.wep-14.10.1:
+
+-------------
+ 14.10.1
+-------------
+
+* Fix adding new metadata in generateDonutFromRefitWcsTask
+* Update cutOutDonutsBase test value due to ISR changes
+
+.. _lsst.ts.wep-14.10.0:
+
+-------------
+ 14.10.0
+-------------
+
+* Add donut radius, left edge and right edge to metadata of donutStamps.
+* Refactor fitDonutRadiusTask to be a regular task and take donutStamps as input.
+  
+.. _lsst.ts.wep-14.9.0:
+
+-------------
+ 14.9.0
+-------------
+
+* Add metadata from estimator outputs to zernikes table metadata.
+
+.. _lsst.ts.wep-14.8.0:
+
+-------------
+ 14.8.0
+-------------
+
+* Change metadata in donut stamps to only accept one value of visit level metadata.
+* Adjust metadata of other outputs.
 
 .. _lsst.ts.wep-14.7.0:
 

@@ -340,4 +340,52 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # Check that 4, 5, 6 are independent of 20, 21 at less
         self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 0.020)
-        # self.assertTrue(np.all(np.abs(zk1[:3] - zk0) < 0.035))
+        self.assertTrue(np.all(np.abs(zk1[:3] - zk0) < 0.035))
+
+    def testTableMetadata(self):
+        # First estimate without pairs
+        emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
+        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps).zernikes
+        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra).zernikes
+
+        # Check metadata keys exist for extra case
+        self.assertIn("cam_name", zkCalcExtra.meta)
+        for k in ["intra", "extra"]:
+            dict_ = zkCalcExtra.meta[k]
+            self.assertIn("det_name", dict_)
+            self.assertIn("visit", dict_)
+            self.assertIn("dfc_dist", dict_)
+            self.assertIn("band", dict_)
+            self.assertEqual(dict_["mjd"], self.donutStampsExtra.metadata["MJD"])
+
+        # Check metadata keys exist for intra case
+        self.assertIn("cam_name", zkCalcIntra.meta)
+        for k in ["intra", "extra"]:
+            dict_ = zkCalcIntra.meta[k]
+            self.assertIn("det_name", dict_)
+            self.assertIn("visit", dict_)
+            self.assertIn("dfc_dist", dict_)
+            self.assertIn("band", dict_)
+            self.assertEqual(dict_["mjd"], self.donutStampsIntra.metadata["MJD"])
+
+        # Now estimate with pairs
+        zkCalcPairs = self.task.run(
+            self.donutStampsExtra, self.donutStampsIntra
+        ).zernikes
+
+        # Check metadata keys exist for pairs case
+        self.assertIn("cam_name", zkCalcPairs.meta)
+        self.assertIn("estimatorInfo", zkCalcPairs.meta)
+        self.assertCountEqual(["caustic", "converged"], list(zkCalcPairs.meta["estimatorInfo"].keys()))
+        self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["caustic"]))
+        for stamps, k in zip(
+            [self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]
+        ):
+            dict_ = zkCalcPairs.meta[k]
+            if k == stamps.metadata["DFC_TYPE"]:
+                self.assertIn("det_name", dict_)
+                self.assertIn("visit", dict_)
+                self.assertIn("dfc_dist", dict_)
+                self.assertIn("band", dict_)
+                self.assertEqual(dict_["mjd"], stamps.metadata["MJD"])
+

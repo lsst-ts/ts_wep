@@ -25,10 +25,12 @@ import lsst.utils.tests
 import numpy as np
 from lsst.afw import image as afwImage
 from lsst.daf import butler as dafButler
+from lsst.daf.base import PropertySet
 from lsst.obs.lsst import LsstCam
-from lsst.ts.wep.task.cutOutDonutsBase import (
+from lsst.ts.wep.task import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,
+    DonutStamps,
 )
 from lsst.ts.wep.utils import (
     DefocalType,
@@ -430,6 +432,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "NOISE_VAR_DONUT",
             "EFFECTIVE",
             "ENTROPY",
+            "RADIUS",
+            "X_PIX_LEFT_EDGE",
+            "X_PIX_RIGHT_EDGE",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
             "MAX_POWER_GRAD",
@@ -458,6 +463,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "NOISE_VAR_DONUT",
             "EFFECTIVE",
             "ENTROPY",
+            "RADIUS",
+            "X_PIX_LEFT_EDGE",
+            "X_PIX_RIGHT_EDGE",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
         ]:
@@ -471,9 +479,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertTrue(allowed_values.issuperset(unique_values))
 
         # test the calculation of SN
-        sn_values = [2149.17757703855, 2160.5407329704117, 2042.1965399542976]
+        sn_values = [2149.093503846915, 2160.668317852145, 2041.9917562475855]
         sn_calculated = donutStamps.metadata.getArray("SN")
-        self.assertCountEqual(sn_values, sn_calculated)
+        self.assertFloatsAlmostEqual(np.sort(np.array(sn_values)),
+                                     np.sort(np.array(sn_calculated)), rtol=1e-3)
 
     def testFilterBadRecentering(self):
         maxRecenter = 25
@@ -547,3 +556,41 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # (because we flagged donut pixels as bad)
         fracBadPix = np.asarray(donutStamps.metadata.getArray("FRAC_BAD_PIX"))
         self.assertTrue(np.all(fracBadPix > 0))
+
+    def testAddVisitLevelMetadata(self):
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+
+        donutStamps = DonutStamps([])
+        self.assertEqual(donutStamps.metadata, None)
+
+        donutStamps = self.task.addVisitLevelMetadata(
+            exposure, donutStamps, donutCatalog, DefocalType.Extra
+        )
+        # Check that metadata is a PropertySet
+        self.assertIsInstance(donutStamps.metadata, PropertySet)
+
+        # Check metadata keys
+        key_list = [
+            "BANDPASS",
+            "DFC_DIST",
+            "DFC_TYPE",
+            "DET_NAME",
+            "CAM_NAME",
+            "VISIT",
+            "MJD",
+            "BORESIGHT_ROT_ANGLE_RAD",
+            "BORESIGHT_PAR_ANGLE_RAD",
+            "BORESIGHT_ALT_RAD",
+            "BORESIGHT_AZ_RAD",
+            "BORESIGHT_RA_RAD",
+            "BORESIGHT_DEC_RAD",
+        ]
+        self.assertCountEqual(key_list,list(donutStamps.metadata.keys()))
+
+        # Test a few values
+        self.assertEqual(
+            donutStamps.metadata.get("BANDPASS"), exposure.filter.bandLabel
+        )
+        self.assertEqual(
+            donutStamps.metadata.get("VISIT"), self.dataIdExtra["visit"]
+        )

@@ -203,10 +203,13 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 self.assertIn("cam_name", structNormal.zernikes.meta)
                 for k in ["intra", "extra"]:
                     dict_ = structNormal.zernikes.meta[k]
-                    self.assertIn("det_name", dict_)
-                    self.assertIn("visit", dict_)
-                    self.assertIn("dfc_dist", dict_)
-                    self.assertIn("band", dict_)
+                    if k == stamps.metadata['DFC_TYPE']:
+                        self.assertIn("det_name", dict_)
+                        self.assertIn("visit", dict_)
+                        self.assertIn("dfc_dist", dict_)
+                        self.assertIn("band", dict_)
+                    else:
+                        self.assertEqual(dict_, {})
 
                 # Turn on the donut stamp selector
                 task.doDonutStampSelector = True
@@ -230,6 +233,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "MAX_POWER_GRAD_SELECT",
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
+                    "RADIUS",
+                    "X_PIX_LEFT_EDGE",
+                    "X_PIX_RIGHT_EDGE"
                 ]
                 np.testing.assert_array_equal(
                     np.sort(colnames), np.sort(desired_colnames)
@@ -237,7 +243,6 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
                 # test null run
                 structNull = task.run([])
-                print(structNull)
 
                 for struct in [structNormal, structNull]:
                     # test that in accordance with declared connections,

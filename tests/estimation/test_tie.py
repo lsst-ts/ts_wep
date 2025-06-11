@@ -72,13 +72,13 @@ class TestTieAlgorithm(unittest.TestCase):
             tieBin = TieAlgorithm(binning=2, optimizeLinAlg=False)
 
             # Estimate Zernikes (in meters)
-            zkEst = tie.estimateZk(intra, extra)
+            zkEst, _ = tie.estimateZk(intra, extra)
 
             # Check that results are fairly accurate
             self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
             # Test with binning
-            zkEst = tieBin.estimateZk(intra, extra, saveHistory=True)
+            zkEst, _ = tieBin.estimateZk(intra, extra, saveHistory=True)
             self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
             # Test that we binned the images.
@@ -188,7 +188,7 @@ class TestTieAlgorithm(unittest.TestCase):
         # Zernikes are being compensated, so we will have to search where jmax
         # lies in the compSequence
         tie = TieAlgorithm(convergeTol=np.inf, optimizeLinAlg=False)
-        zkEst = tie.estimateZk(intra, extra, saveHistory=True)
+        zkEst, _ = tie.estimateZk(intra, extra, saveHistory=True)
         hist = tie.history
         jmax = len(zkEst) + 3
         compAll = np.where(tie.compSequence >= jmax)[0]
@@ -246,11 +246,26 @@ class TestTieAlgorithm(unittest.TestCase):
 
         # Estimate with singles and pairs
         tie = TieAlgorithm(optimizeLinAlg=False)
-        zkPair = tie.estimateZk(intra, extra)
-        zkIntra = tie.estimateZk(intra)
+        zkPair, pairMeta = tie.estimateZk(intra, extra)
+        zkIntra, intraMeta = tie.estimateZk(intra)
         self.assertLess(np.sqrt(np.sum((zkPair - zkIntra) ** 2)), 0.25e-6)
-        zkExtra = tie.estimateZk(extra)
+        zkExtra, extraMeta = tie.estimateZk(extra)
         self.assertLess(np.sqrt(np.sum((zkPair - zkExtra) ** 2)), 0.25e-6)
+
+    def testMetadata(self):
+        zkTrue, intra, extra = forwardModelPair()
+
+        # Estimate with singles and pairs
+        tie = TieAlgorithm(convergeTol=0, optimizeLinAlg=False)
+        zkPair, pairMeta = tie.estimateZk(intra, extra)
+        zkIntra, intraMeta = tie.estimateZk(intra)
+        zkExtra, extraMeta = tie.estimateZk(extra)
+
+        # Check metadata
+        for metaDict in pairMeta, intraMeta, extraMeta:
+            self.assertEqual(["caustic", "converged"], list(metaDict.keys()))
+            self.assertEqual(metaDict['caustic'], False)
+            self.assertEqual(metaDict["converged"], False)
 
 
 if __name__ == "__main__":

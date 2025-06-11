@@ -35,6 +35,7 @@ import numpy as np
 from lsst.afw.geom import makeSkyWcs
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.ts.wep.task.fitDonutRadiusTask import FitDonutRadiusTask
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
@@ -130,6 +131,10 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         default=["SAT", "BAD", "NO_DATA", "INTRP"],
     )
+    fitDonutRadius = pexConfig.ConfigurableField(
+        target=FitDonutRadiusTask,
+        doc="How to estimate donut radius.",
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -168,6 +173,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.maxRecenterDistance = self.config.maxRecenterDistance
         # Set Variance Plane Warning only once
         self.varianceWarningSet = False
+
+        self.fitDonutRadius = self.config.fitDonutRadius
+        self.makeSubtask("fitDonutRadius")
 
     def shiftCenters(self, centerArr, boundary, distance):
         """Shift the centers of sources if the distance to
@@ -452,6 +460,70 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         shiftFailureIdx = np.where(totalShifts > self.maxRecenterDistance)[0]
         return shiftFailureIdx
 
+    def addVisitLevelMetadata(self, exposure, inputDonutStamps, donutCatalog, defocalType):
+        """
+        Get visit level metadata and save in the donutStamps object.
+
+        Parameters
+        ----------
+        exposure : lsst.afw.image.Exposure
+            Exposure to get metadata from.
+        inputDonutStamps : DonutStamps
+            DonutStamps object to save metadata in.
+        donutCatalog : astropy.table.QTable
+            Source catalog for the pointing.
+        defocalType : enum 'DefocalType'
+            Defocal type of the donut image.
+
+        Returns
+        -------
+        DonutStamps
+            DonutStamps object with metadata added.
+        """
+        if inputDonutStamps.metadata is None:
+            inputDonutStamps.metadata = PropertyList()
+
+        visitInfo = exposure.getInfo().getVisitInfo()
+        detector = exposure.getDetector()
+        detectorName = detector.getName()
+        bandLabel = exposure.filter.bandLabel
+        cameraName = donutCatalog.meta['visit_info']['instrument_label']
+
+        instrument = getTaskInstrument(
+            cameraName,
+            detectorName,
+            self.instConfigFile,
+        )
+        inputDonutStamps.metadata["BANDPASS"] = bandLabel
+        inputDonutStamps.metadata["DFC_DIST"] = instrument.defocalOffset * 1e3
+        inputDonutStamps.metadata["DFC_TYPE"] = defocalType.value
+        inputDonutStamps.metadata["DET_NAME"] = detectorName
+        inputDonutStamps.metadata["VISIT"] = donutCatalog.meta['visit_info']['visit_id']
+        inputDonutStamps.metadata["MJD"] =  visitInfo.date.toAstropy().tai.mjd
+        inputDonutStamps.metadata["CAM_NAME"] = cameraName
+
+        # Save visit info
+        inputDonutStamps.metadata["BORESIGHT_ROT_ANGLE_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_rot_angle"].to(u.rad).value
+        )
+        inputDonutStamps.metadata["BORESIGHT_PAR_ANGLE_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_par_angle"].to(u.rad).value
+        )
+        inputDonutStamps.metadata["BORESIGHT_ALT_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_alt"].to(u.rad).value
+        )
+        inputDonutStamps.metadata["BORESIGHT_AZ_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_az"].to(u.rad).value
+        )
+        inputDonutStamps.metadata["BORESIGHT_RA_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_ra"].to(u.rad).value
+        )
+        inputDonutStamps.metadata["BORESIGHT_DEC_RAD"] = (
+            donutCatalog.meta["visit_info"]["boresight_dec"].to(u.rad).value
+        )
+
+        return inputDonutStamps
+
     def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
         """
         Cut out postage stamps for sources in catalog.
@@ -477,7 +549,6 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         detector = exposure.getDetector()
         detectorName = detector.getName()
         bandLabel = exposure.filter.bandLabel
-        visitId = exposure.getInfo().getVisitInfo().id
         catalogMeta = donutCatalog.meta
 
         # Run background subtraction
@@ -675,9 +746,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             finalStamps.append(donutStamp)
 
         # Add additional information into metadata
-        catalogLength = len(donutCatalog)
         stampsMetadata = PropertyList()
-        stampsMetadata["VISIT"] = np.array([visitId] * catalogLength, dtype=int)
+
         # Save the donut flux as magnitude
         fluxLabel = next(
             (
@@ -702,26 +772,6 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         stampsMetadata["CENT_DR"] = np.sqrt(
             donutCatalog["xShift"] ** 2 + donutCatalog["yShift"] ** 2
         )
-        # Save visit info
-        stampsMetadata["BORESIGHT_ROT_ANGLE_RAD"] = (
-            donutCatalog.meta["visit_info"]["boresight_rot_angle"].to(u.rad).value
-        )
-        stampsMetadata["BORESIGHT_PAR_ANGLE_RAD"] = (
-            donutCatalog.meta["visit_info"]["boresight_par_angle"].to(u.rad).value
-        )
-        stampsMetadata["BORESIGHT_ALT_RAD"] = (
-            donutCatalog.meta["visit_info"]["boresight_alt"].to(u.rad).value
-        )
-        stampsMetadata["BORESIGHT_AZ_RAD"] = (
-            donutCatalog.meta["visit_info"]["boresight_az"].to(u.rad).value
-        )
-        stampsMetadata["BORESIGHT_RA_RAD"] = (
-            donutCatalog.meta["visit_info"]["boresight_ra"].to(u.rad).value
-        )
-        stampsMetadata["BORESIGHT_DEC_RAD"] = (
-            donutCatalog.meta["visit_info"]["boresight_dec"].to(u.rad).value
-        )
-        stampsMetadata["MJD"] = donutCatalog.meta["visit_info"]["mjd"]
 
         if len(finalStamps) > 0:
             self.metadata[f"recenterFlags{defocalType.value.capitalize()}"] = list(
@@ -768,6 +818,12 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         stampsMetadata["EFFECTIVE"] = np.array(isEffective).astype(int)
         stampsMetadata["ENTROPY"] = np.array(stampsEntropy)
 
+        # Save the donut radius metrics
+        fitResults = self.fitDonutRadius.run(finalStamps)
+        stampsMetadata["RADIUS"] = np.array(fitResults.donutRadiiTable["RADIUS"])
+        stampsMetadata["X_PIX_LEFT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_LEFT_EDGE"])
+        stampsMetadata["X_PIX_RIGHT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_RIGHT_EDGE"])
+
         # Save the peak of the correlated image
         stampsMetadata["PEAK_HEIGHT"] = peakHeight
 
@@ -784,5 +840,12 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Refresh to pull original metadata into stamps
         # Necessary when running full pipeline interactively.
         finalDonutStamps._refresh_metadata()
+
+        finalDonutStamps = self.addVisitLevelMetadata(
+            exposure,
+            finalDonutStamps,
+            donutCatalog,
+            defocalType,
+        )
 
         return finalDonutStamps
