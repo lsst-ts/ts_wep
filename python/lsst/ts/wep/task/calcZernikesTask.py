@@ -421,6 +421,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "RADIUS",
             "X_PIX_LEFT_EDGE",
             "X_PIX_RIGHT_EDGE",
+            "RADIUS_FAIL_FLAG",
             "DEFOCAL_TYPE",
         ]
         if qualityTable is None:

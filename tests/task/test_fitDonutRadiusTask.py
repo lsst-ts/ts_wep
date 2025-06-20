@@ -107,6 +107,10 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
             set(np.unique(taskOut.donutRadiiTable["DET_NAME"].value)),
             set(["R22_S11"]),
         )
+        self.assertEqual(
+            set(np.unique(taskOut.donutRadiiTable['FAIL_FLAG'].value)),
+            set([0]),
+        )
         # test that the mean radius is correct
         self.assertFloatsAlmostEqual(
             69.69552203692189,
@@ -142,6 +146,10 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
         self.assertEqual(
             set(np.unique(taskOut.donutRadiiTable["DET_NAME"].value)),
             set(["R00_SW1"]),
+        )
+        self.assertEqual(
+            set(np.unique(taskOut.donutRadiiTable['FAIL_FLAG'].value)),
+            set([0]),
         )
         self.assertFloatsAlmostEqual(
             66.38605539619834,

@@ -823,6 +823,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         stampsMetadata["RADIUS"] = np.array(fitResults.donutRadiiTable["RADIUS"])
         stampsMetadata["X_PIX_LEFT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_LEFT_EDGE"])
         stampsMetadata["X_PIX_RIGHT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_RIGHT_EDGE"])
+        stampsMetadata["RADIUS_FAIL_FLAG"] = np.array(fitResults.donutRadiiTable["FAIL_FLAG"])
 
         # Save the peak of the correlated image
         stampsMetadata["PEAK_HEIGHT"] = peakHeight
