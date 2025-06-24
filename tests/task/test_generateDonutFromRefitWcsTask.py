@@ -412,7 +412,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             collections=[f"{self.runName}"],
         )
         finalExp_S11 = self.butler.get(
-            "postISRCCD",
+            "post_isr_image",
             dataId=self.dataIdExtra,
             collections=[f"{self.runName}"],
         )

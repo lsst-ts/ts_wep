@@ -215,10 +215,10 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         # Grab two exposures from the same detector at two different visits to
         # get extra and intra
         exposureExtra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+            "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
         )
         exposureIntra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
+            "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
         donutCatalogExtra = self.butler.get(

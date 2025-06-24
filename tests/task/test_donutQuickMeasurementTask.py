@@ -101,7 +101,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
             "visit": self.expNum,
         }
         self.postIsrExp = self.butler.get(
-            "postISRCCD", dataId=testDataId, collections=self.runName
+            "post_isr_image", dataId=testDataId, collections=self.runName
         )
 
     def _getTemplate(self):

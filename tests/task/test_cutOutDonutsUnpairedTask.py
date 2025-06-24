@@ -115,10 +115,10 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
     def _getDataFromButler(self):
         # Grab two exposures from the same visits of adjacent detectors
         exposureExtra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.baseRunName]
+            "post_isr_image", dataId=self.dataIdExtra, collections=[self.baseRunName]
         )
         exposureIntra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdIntra, collections=[self.baseRunName]
+            "post_isr_image", dataId=self.dataIdIntra, collections=[self.baseRunName]
         )
         # Get the donut catalogs for each detector
         donutCatalogExtra = self.butler.get(

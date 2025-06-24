@@ -343,7 +343,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             dataId = self.dataIdIntra
 
         exposure = self.butler.get(
-            "postISRCCD", dataId=dataId, collections=[self.runName]
+            "post_isr_image", dataId=dataId, collections=[self.runName]
         )
         donutCatalog = self.butler.get(
             "donutTable", dataId=dataId, collections=[self.runName]

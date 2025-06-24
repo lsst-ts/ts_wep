@@ -136,7 +136,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         # Test instrument matches
         pipelineButler = dafButler.Butler(self.repoDir)
         s11_wcs = pipelineButler.get(
-            "postISRCCD.wcs",
+            "post_isr_image.wcs",
             dataId={
                 "instrument": "LSSTCam",
                 "detector": 94,
@@ -146,7 +146,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             collections=[f"{runName}"],
         )
         s10_wcs = pipelineButler.get(
-            "postISRCCD.wcs",
+            "post_isr_image.wcs",
             dataId={
                 "instrument": "LSSTCam",
                 "detector": 93,

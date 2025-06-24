@@ -124,10 +124,10 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
     def _getDataFromButler(self):
         # Grab two exposures from the same visits of adjacent detectors
         exposureExtra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+            "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
         )
         exposureIntra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
+            "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
         )
         # Get the donut catalogs for each detector
         donutCatalogExtra = self.butler.get(
