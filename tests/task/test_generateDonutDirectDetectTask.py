@@ -197,7 +197,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         # Read a real exposure and substitute the
         # image component with the background noise
         exposure_S11 = self.butler.get(
-            "postISRCCD",
+            "post_isr_image",
             dataId=self.testDataIdS11,
             collections=[self.baseRunName],
         )
@@ -243,7 +243,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
 
         # Run detection with different sources in each exposure
         exposure_S10 = self.butler.get(
-            "postISRCCD",
+            "post_isr_image",
             dataId=self.testDataIdS10,
             collections=[self.baseRunName],
         )

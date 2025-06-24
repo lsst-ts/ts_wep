@@ -5,6 +5,14 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-14.12.0:
+
+-------------
+ 14.12.0
+-------------
+
+* Update default exposure connection to post_isr_image from postISRCCD in pipelines and tasks.
+
 .. _lsst.ts.wep-14.11.0:
 
 -------------

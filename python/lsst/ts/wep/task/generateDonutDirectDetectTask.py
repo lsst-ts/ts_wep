@@ -53,7 +53,7 @@ class GenerateDonutDirectDetectTaskConnections(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="postISRCCD",
+        name="post_isr_image",
     )
     donutCatalog = connectionTypes.Output(
         doc="Donut Locations",

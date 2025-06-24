@@ -96,7 +96,7 @@ class GenerateDonutFromRefitWcsTaskConnections(
         doc="Output exposure with new WCS",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="postISRCCD",
+        name="post_isr_image",
     )
     donutCatalog = connectionTypes.Output(
         doc="Donut Locations",

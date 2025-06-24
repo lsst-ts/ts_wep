@@ -50,7 +50,7 @@ class CutOutDonutsUnpairedTaskConnections(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="postISRCCD",
+        name="post_isr_image",
         multiple=True,
     )
     donutCatalog = connectionTypes.Input(
