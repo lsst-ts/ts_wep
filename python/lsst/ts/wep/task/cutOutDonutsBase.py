@@ -552,7 +552,15 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         catalogMeta = donutCatalog.meta
 
         # Run background subtraction
+        exp_copy = exposure.clone()
         self.subtractBackground.run(exposure=exposure).background
+        # Test that variance isn't wildly large compared to the mean
+        # background value. This avoids problems with danish when
+        # the sum of the donut data in the stamp is negative.
+        bgTaskMean = exposure.metadata['BGMEAN']
+        bgTaskVar = exposure.metadata['BGVAR']
+        if bgTaskVar < 50 * bgTaskMean:
+            exposure = exp_copy
 
         # Load the instrument
         instrument = getTaskInstrument(
