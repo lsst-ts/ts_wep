@@ -3,9 +3,11 @@ import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import QTable
 from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.utils import binArray
 from lsst.utils.timer import timeMethod
 from scipy.ndimage import gaussian_filter
 from scipy.signal import find_peaks
+from skimage.measure import profile_line
 
 __all__ = [
     "FitDonutRadiusTaskConfig",
@@ -47,6 +49,14 @@ class FitDonutRadiusTaskConfig(pexConfig.Config):
         0 and 1).",
         default=0.8,
     )
+    nAngles = pexConfig.Field[int](
+        doc="Number of angles for cross-sections.",
+        default=10,
+    )
+    binning = pexConfig.Field[int](
+        doc="Binning applied to each donut postage stamp.",
+        default=1,
+    )
 
 class FitDonutRadiusTask(pipeBase.Task):
     ConfigClass = FitDonutRadiusTaskConfig
@@ -54,6 +64,7 @@ class FitDonutRadiusTask(pipeBase.Task):
     """
     Run donut radius fitting.
     """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -63,6 +74,8 @@ class FitDonutRadiusTask(pipeBase.Task):
         self.minPeakHeight = self.config.minPeakHeight
         self.leftDefault = self.config.leftDefault
         self.rightDefault = self.config.rightDefault
+        self.nAngles = self.config.nAngles
+        self.binning = self.config.binning
 
     def empty(self) -> pipeBase.Struct:
         """Return empty table if no donut stamps are available.
@@ -111,7 +124,9 @@ class FitDonutRadiusTask(pipeBase.Task):
         failedFlagArray = []
 
         for stamp in stampSet:
-            xLeft, xRight, donutRadius, flag = self.fit_radius(stamp.stamp_im.image.array)
+            xLeft, xRight, donutRadius, flag = self.fit_radius(
+                stamp.stamp_im.image.array
+            )
             radiiArray.append(donutRadius)
             leftEdgeArray.append(xLeft)
             rightEdgeArray.append(xRight)
@@ -132,7 +147,7 @@ class FitDonutRadiusTask(pipeBase.Task):
 
         return pipeBase.Struct(donutRadiiTable=donutRadiiTable)
 
-    def fit_radius(self, image):
+    def fit_radius(self, image: np.array):
         """
         Find peaks and widths of smoothed donut cross-section.
         The donut cross-section is normalized, and
@@ -160,8 +175,9 @@ class FitDonutRadiusTask(pipeBase.Task):
             a warning is logged).
 
         """
-        halfWidth = int(len(image) / 2)
-        y_cross = image[halfWidth, :]
+        if self.binning > 1:
+            image = binArray(image, self.binning)
+        y_cross = self.get_median_profile(image, nangles=self.nAngles)
         y_cross_norm = np.array(y_cross) / max(y_cross)
         fail_flag = 0
         # convolve with Gaussian filter to smooth out the cross-section
@@ -211,4 +227,47 @@ class FitDonutRadiusTask(pipeBase.Task):
         # donut radius is half of the distance
         # between two edges
         radius = (right_edge - left_edge) / 2.0
+
+        # if the image was binned, need to return to original scale
+        if self.binning > 1:
+            radius = radius * self.binning
         return left_edge, right_edge, radius, fail_flag
+
+    def get_line_profile(self, image: np.ndarray, angle_deg: float = 0):
+
+        # Center of image
+        center = np.array(image.shape) // 2
+
+        # Length of the cross-section line
+        length = len(image)  # number of pixels to sample
+
+        # Angle in degrees
+        angle_rad = np.deg2rad(angle_deg)
+
+        # Compute endpoints
+        dx = np.cos(angle_rad) * length / 2
+        dy = np.sin(angle_rad) * length / 2
+
+        start = (center[0] - dy, center[1] - dx)
+        end = (center[0] + dy, center[1] + dx)
+
+        # Extract profile
+        profile = profile_line(
+            image,
+            start,
+            end,
+            mode="constant",
+        )
+
+        if len(profile) > length:
+            profile = profile[:length]
+        return profile
+
+    def get_median_profile(self, image: np.ndarray, nangles: int = 20):
+        angles = np.linspace(0, 180, nangles)
+        profiles = []
+        for angle in angles:
+            profile = self.get_line_profile(image, angle)
+            profiles.append(profile)
+        profiles = np.array(profiles)
+        return np.median(profiles, axis=0)
