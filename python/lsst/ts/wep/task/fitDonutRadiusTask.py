@@ -58,6 +58,7 @@ class FitDonutRadiusTaskConfig(pexConfig.Config):
         default=1,
     )
 
+
 class FitDonutRadiusTask(pipeBase.Task):
     ConfigClass = FitDonutRadiusTaskConfig
     _DefaultName = "FitDonutRadius"
@@ -175,6 +176,7 @@ class FitDonutRadiusTask(pipeBase.Task):
             a warning is logged).
 
         """
+        # apply image binning if needed
         if self.binning > 1:
             image = binArray(image, self.binning)
         y_cross = self.get_median_profile(image, nangles=self.nAngles)
@@ -231,6 +233,8 @@ class FitDonutRadiusTask(pipeBase.Task):
         # if the image was binned, need to return to original scale
         if self.binning > 1:
             radius = radius * self.binning
+            left_edge = left_edge * self.binning
+            right_edge = right_edge * self.binning
         return left_edge, right_edge, radius, fail_flag
 
     def get_line_profile(self, image: np.ndarray, angle_deg: float = 0):
