@@ -66,17 +66,23 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
         self.assertEqual(self.OrigTask.filterSigma, 3)
         self.assertEqual(self.OrigTask.minPeakWidth, 5)
         self.assertEqual(self.OrigTask.minPeakHeight, 0.3)
+        self.assertEqual(self.OrigTask.nAngles, 10)
+        self.assertEqual(self.OrigTask.binning, 1)
 
         # Test changing configs
         self.config.widthMultiplier = 2.00
         self.config.filterSigma = 4
         self.config.minPeakWidth = 7
         self.config.minPeakHeight = 0.8
+        self.config.nAngles = 20
+        self.config.binning = 2
         self.ModifiedTask = FitDonutRadiusTask(config=self.config, name="Mod Task")
         self.assertEqual(self.ModifiedTask.widthMultiplier, 2.00)
         self.assertEqual(self.ModifiedTask.filterSigma, 4)
         self.assertEqual(self.ModifiedTask.minPeakWidth, 7)
         self.assertEqual(self.ModifiedTask.minPeakHeight, 0.8)
+        self.assertEqual(self.ModifiedTask.nAngles, 20)
+        self.assertEqual(self.ModifiedTask.binning, 2)
 
     def testTaskRunScienceSensor(self):
         donutStampsExtra = self.butler.get(
