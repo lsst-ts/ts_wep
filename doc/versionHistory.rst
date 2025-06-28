@@ -5,6 +5,14 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-14.13.0:
+
+-------------
+ 14.13.0
+-------------
+
+* Fix fitDonutRadiusTask to use median of cuts at different angles.
+
 .. _lsst.ts.wep-14.12.0:
 
 -------------

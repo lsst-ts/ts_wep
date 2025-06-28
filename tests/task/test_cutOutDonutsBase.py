@@ -70,12 +70,14 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
             collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
             instrument = "lsst.obs.lsst.LsstCam"
-            pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testBasePipeline.yaml"
-            )
+            pipelineYaml = os.path.join(testPipelineConfigDir, "testBasePipeline.yaml")
 
             pipeCmd = writePipetaskCmd(
-                cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
             )
             # Make sure we are using the right exposure+detector combinations
             pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
@@ -289,13 +291,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             donutStamps = self.task.cutOutStamps(
                 exp, catalog, DefocalType.Extra, self.cameraName
             )
-        # Test that there are warnings for two objects
-        # since first object should pass
-        self.assertEqual(len(cm.output), 2)
+
         # All donuts except the first one should have unchanged values
+        # Pick only the recentering warnings
         recenteringWarnings = [
             warn for warn in cm.output if "Donut Recentering " in warn
         ]
+        # Test that there are recentering warnings for two objects
+        # since first object should pass
+        self.assertEqual(len(recenteringWarnings), 2)
+
         for stamp, catRow, logMsg, xShift, yShift in zip(
             donutStamps[1:],
             catalog[1:],
@@ -483,8 +488,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # test the calculation of SN
         sn_values = [2149.093503846915, 2160.668317852145, 2041.9917562475855]
         sn_calculated = donutStamps.metadata.getArray("SN")
-        self.assertFloatsAlmostEqual(np.sort(np.array(sn_values)),
-                                     np.sort(np.array(sn_calculated)), rtol=1e-3)
+        self.assertFloatsAlmostEqual(
+            np.sort(np.array(sn_values)), np.sort(np.array(sn_calculated)), rtol=1e-3
+        )
 
     def testFilterBadRecentering(self):
         maxRecenter = 25
@@ -587,12 +593,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
         ]
-        self.assertCountEqual(key_list,list(donutStamps.metadata.keys()))
+        self.assertCountEqual(key_list, list(donutStamps.metadata.keys()))
 
         # Test a few values
         self.assertEqual(
             donutStamps.metadata.get("BANDPASS"), exposure.filter.bandLabel
         )
-        self.assertEqual(
-            donutStamps.metadata.get("VISIT"), self.dataIdExtra["visit"]
-        )
+        self.assertEqual(donutStamps.metadata.get("VISIT"), self.dataIdExtra["visit"])
