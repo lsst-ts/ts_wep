@@ -552,15 +552,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         catalogMeta = donutCatalog.meta
 
         # Run background subtraction
-        exp_copy = exposure.clone()
         self.subtractBackground.run(exposure=exposure).background
-        # Test that variance isn't wildly large compared to the mean
-        # background value. This avoids problems with danish when
-        # the sum of the donut data in the stamp is negative.
-        bgTaskMean = exposure.metadata['BGMEAN']
-        bgTaskVar = exposure.metadata['BGVAR']
-        if bgTaskVar < 50 * bgTaskMean:
-            exposure = exp_copy
 
         # Load the instrument
         instrument = getTaskInstrument(
@@ -734,6 +726,10 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
             # Calculate the S/N per stamp
             snQuant.append(self.calculateSN(donutStamp))
+
+            # Add back in measured mean background to get mean background
+            # to zero. danish expects the background to be subtracted out.
+            donutStamp.stamp_im.image.array += snQuant[-1]['background_image_mean']
 
             # Store entropy-based measure of donut quality
             eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)
