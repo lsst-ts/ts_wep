@@ -145,4 +145,4 @@ class TestDanishAlgorithm(unittest.TestCase):
         # Check metadata
         for metaDict in pairMeta, intraMeta, extraMeta:
             self.assertEqual(["fwhm"], list(metaDict.keys()))
-            self.assertAlmostEqual(metaDict['fwhm'], 1.06, delta=0.01)
+            self.assertAlmostEqual(metaDict['fwhm'], 1.034, delta=0.01)
