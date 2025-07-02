@@ -199,6 +199,10 @@ class DanishAlgorithm(WfAlgorithm):
         background = image.image[maskBackground]
         q75, q25 = np.percentile(background, [75, 25])
         backgroundStd = (q75 - q25) / 1.349
+        # danish expects background to be subtracted out, so we
+        # subtract the median background value from the image.
+        backgroundMedian = np.median(background)
+        image.image -= backgroundMedian
 
         # Get the image array
         img = image.image

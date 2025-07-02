@@ -727,10 +727,6 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             # Calculate the S/N per stamp
             snQuant.append(self.calculateSN(donutStamp))
 
-            # Add back in measured mean background to get mean background
-            # to zero. danish expects the background to be subtracted out.
-            donutStamp.stamp_im.image.array += snQuant[-1]['background_image_mean']
-
             # Store entropy-based measure of donut quality
             eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)
             isEffective.append(eff)
