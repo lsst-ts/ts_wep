@@ -73,7 +73,9 @@ class ReassignCwfsCutoutsTaskConnections(
                     data_id, detector=data_id["detector"] - 1
                 )
 
-                assert extra_focal_data_id in seen or extra_focal_data_id in to_do
+                assert (
+                    extra_focal_data_id in seen or extra_focal_data_id in to_do
+                ), f"DataId {extra_focal_data_id} not found in seen or to_do sets."
 
                 inputs = adjuster.get_inputs(data_id)
                 adjuster.add_input(
