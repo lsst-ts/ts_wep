@@ -24,6 +24,7 @@ import unittest
 
 import numpy as np
 from lsst.ts.wep.utils import (
+    calcAOSResid,
     checkNollIndices,
     convertZernikesToPsfWidth,
     createZernikeBasis,
@@ -125,6 +126,20 @@ class TestZernikeUtils(TestCase):
         # Finally check converting array of 1's returns the coefficients
         coeffs = convertZernikesToPsfWidth(np.ones(19))
         self.assertTrue(np.allclose(coeffs, getPsfGradPerZernike()))
+
+    def testCalcAOSResid(self):
+        # Create array of 1's (units: micron)
+        # This represents a very large wavefront error
+        zk = np.ones(8)
+
+        # Convert to PSF FWHM contribution
+        zk_fwhm = convertZernikesToPsfWidth(zk)
+
+        # Calculate AOS residual
+        aos_resid = np.sqrt(np.sum(np.square(zk_fwhm)))
+
+        # This should over-estimate the corrected value
+        self.assertGreater(aos_resid, calcAOSResid(zk))
 
     def testGetZernikeParity(self):
         xParity = getZernikeParity()

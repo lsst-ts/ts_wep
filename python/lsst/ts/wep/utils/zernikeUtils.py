@@ -28,6 +28,8 @@ __all__ = [
     "zernikeFit",
     "getPsfGradPerZernike",
     "convertZernikesToPsfWidth",
+    "correctAOSResid",
+    "calcAOSResid",
     "getZernikeParity",
     "makeSparse",
     "makeDense",
@@ -461,8 +463,8 @@ def convertZernikesToPsfWidth(
     FWHM allows for easier physical interpretation of Zernike amplitudes and
     the performance of the AOS system.
 
-    For example, image we have a true set of zernikes, [Z4, Z5, Z6], such that
-    ConvertZernikesToPsfWidth([Z4, Z5, Z6]) = [0.1, -0.2, 0.3] arcsecs.
+    For example, imagine we have a true set of zernikes, [Z4, Z5, Z6], such
+    that ConvertZernikesToPsfWidth([Z4, Z5, Z6]) = [0.1, -0.2, 0.3] arcsecs.
     These Zernike perturbations increase the PSF FWHM by
     sqrt[(0.1)^2 + (-0.2)^2 + (0.3)^2] ~ 0.37 arcsecs.
 
@@ -478,12 +480,7 @@ def convertZernikesToPsfWidth(
     for RSS(dFWHM) > 0.20 arcsecs. Beyond this point, the approximation tends
     to overestimate the PSF degradation. In other words, if
     sqrt(sum( dFWHM^2 )) > 0.20 arcsec, it is likely that dFWHM is
-    over-estimated. However, the point beyond which this breakdown begins
-    (and whether the approximation over- or under-estimates dFWHM) can change,
-    depending on which Zernikes have large amplitudes. In general, if you have
-    large Zernike amplitudes, proceed with caution!
-    Note that if the amplitudes Z_est and Z_true are large, this is okay, as
-    long as |Z_est - Z_true| is small.
+    over-estimated. Use correctAOSResid to correct for this over-estimation.
 
     For a notebook demonstrating where the approximation breaks down:
     https://gist.github.com/jfcrenshaw/24056516cfa3ce0237e39507674a43e1
@@ -513,6 +510,75 @@ def convertZernikesToPsfWidth(
     dFWHM = conversion_factors * zernikes
 
     return dFWHM
+
+
+def correctAOSResid(aos_resid: float | np.ndarray) -> float | np.ndarray:
+    """Correct the AOS residual for over-estimation.
+
+    This correction is empirically fit in
+    https://gist.github.com/jfcrenshaw/24056516cfa3ce0237e39507674a43e1
+
+    Parameters
+    ----------
+    aos_resid : float or np.ndarray
+        The AOS residual in arcseconds
+
+    Returns
+    -------
+    float or np.ndarray
+        The corrected AOS residual
+    """
+    return 1.06 * np.log(1 + aos_resid)
+
+
+def calcAOSResid(
+    zernikes: np.ndarray,
+    diameter: float = 8.36,
+    obscuration: float = 0.612,
+    jmin: int = 4,
+) -> float | np.ndarray:
+    """Calculate the AOS residual for the wavefront error.
+
+    The AOS residual quantifies how much the wavefront error contributes
+    in quadrature to the PSF FWHM
+
+    Parameters
+    ----------
+    zernikes : np.ndarray
+        Zernike amplitudes (in microns), starting with Noll index `jmin`.
+        Either a 1D array of zernike amplitudes, or a 2D array, where each row
+        corresponds to a different set of amplitudes.
+    diameter : float
+        The diameter of the telescope aperture, in meters.
+        (the default, 8.36, corresponds to the LSST primary mirror)
+    obscuration : float
+        Central obscuration of telescope aperture (i.e. R_outer / R_inner).
+        (the default, 0.612, corresponds to the LSST primary mirror)
+    jmin : int
+        The minimum Zernike Noll index, inclusive. Must be >= 0. The
+        max Noll index is inferred from `jmin` and the length of `zernikes`.
+        (the default is 4, which ignores piston, x & y offsets, and tilt.)
+
+    Returns
+    -------
+    float or np.ndarray
+        The AOS residual in arcseconds
+    """
+    # Convert Zernikes to their PSF FWHM contributions
+    zk_fwhm = convertZernikesToPsfWidth(
+        zernikes=zernikes,
+        diameter=diameter,
+        obscuration=obscuration,
+        jmin=jmin,
+    )
+
+    # Sum in quadrature
+    aos_resid = np.sqrt(np.sum(np.square(zk_fwhm), axis=-1))
+
+    # Correct the residual
+    aos_resid = correctAOSResid(aos_resid)
+
+    return aos_resid
 
 
 def getZernikeParity(jmin: int = 4, jmax: int = 22, axis: str = "x"):
