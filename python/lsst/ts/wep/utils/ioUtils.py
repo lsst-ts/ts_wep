@@ -129,7 +129,7 @@ def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
 
     # Iteratively load imports and merge configs
     imports = np.atleast_1d(config.pop("imports", []))
-    importedConfig = dict()
+    importedConfig: dict = dict()
     if imports.size > 0 and (imports.ndim != 1 or imports.dtype.kind not in ["U", "S"]):
         raise ValueError("'imports' must map to a string or list of strings")
     for path in imports:
@@ -247,7 +247,7 @@ def configClass(config: Union[str, dict, None, Any], classObj: Any) -> Any:
         )
 
 
-def getObsLsstCmdTaskConfigDir():
+def getObsLsstCmdTaskConfigDir() -> str:
     """Get the obs_lsst command line task configuration directory.
 
     Returns
@@ -259,7 +259,7 @@ def getObsLsstCmdTaskConfigDir():
     return os.path.join(getPackageDir("obs_lsst"), "config")
 
 
-def writeFile(filePath, content):
+def writeFile(filePath: str, content: str) -> None:
     """Write the content to file.
 
     Parameters
@@ -274,7 +274,7 @@ def writeFile(filePath, content):
         file.write(content)
 
 
-def readPhoSimSettingData(folderPath, fileName, atype):
+def readPhoSimSettingData(folderPath: str, fileName: str, atype: str) -> dict:
     """Read the PhoSim setting data (segmentation or focal plane layout).
 
     Parameters

@@ -36,7 +36,7 @@ from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
 
 
-def _circleResid(params: tuple, x, y):
+def _circleResid(params: tuple, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """Residual function for fitting a circle.
 
     Note this is for a circle centered on the x-axis.
@@ -60,7 +60,15 @@ def _circleResid(params: tuple, x, y):
     return resid[np.isfinite(resid)]
 
 
-def _fitCircle(xPupil, yPupil, xItem, yItem, rPupilOut, rPupilIn, rEdge):
+def _fitCircle(
+    xPupil: np.ndarray,
+    yPupil: np.ndarray,
+    xItem: np.ndarray,
+    yItem: np.ndarray,
+    rPupilOut: float,
+    rPupilIn: float,
+    rEdge: float,
+) -> tuple[float, float]:
     """Fit a circle to the item edge on the pupil.
 
     This function works by taking pairs of points on the pupil and
@@ -166,7 +174,7 @@ def _fitCircle(xPupil, yPupil, xItem, yItem, rPupilOut, rPupilIn, rEdge):
         return np.nan, np.nan
 
 
-def _fitEdges(thx, optic, wavelength):
+def _fitEdges(thx: float, optic: batoid.CompoundOptic, wavelength: float) -> dict:
     """Fit circles to edges of optical items on pupil for all items in optic.
 
     This function is for a specific field angle. It operates by covering
@@ -236,7 +244,7 @@ def _fitEdges(thx, optic, wavelength):
     xPupil, yPupil = rays.x, rays.y
 
     # Create a dictionary to hold all the fits
-    fits = dict()
+    fits: dict = dict()
 
     # Loop over each item
     for name in trace:
@@ -261,7 +269,9 @@ def _fitEdges(thx, optic, wavelength):
             outerClear, innerClear = False, True
 
         # Get radii of obscuration
-        rOuter = getattr(obsc, "radius", None) or getattr(obsc, "outer", None)
+        rOuter = getattr(obsc, "radius", None)
+        if rOuter is None:
+            rOuter = getattr(obsc, "outer", np.nan)
         rInner = getattr(obsc, "inner", np.nan)
 
         # Fit the outer radius
@@ -382,7 +392,7 @@ def pruneMaskModel(
     maskModel: dict,
     thetaMax: Optional[float] = None,
     dTheta: float = 1e-3,
-) -> None:
+) -> dict:
     """Prune the mask model so only necessary elements remain.
 
     Parameters
@@ -403,11 +413,11 @@ def pruneMaskModel(
     """
     # Determine thetaMax
     if thetaMax is None:
-        thetaMax = []
+        thetaMaxList = []
         for item in maskModel:
             for edge in maskModel[item]:
-                thetaMax.append(maskModel[item][edge]["thetaMax"])
-        thetaMax = np.nanmax(thetaMax)
+                thetaMaxList.append(maskModel[item][edge]["thetaMax"])
+        thetaMax = np.nanmax(thetaMaxList)
 
     # Create a grid of field angles
     thetas = np.arange(0, thetaMax + dTheta, dTheta)

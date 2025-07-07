@@ -36,7 +36,7 @@ class WfAlgorithmFactory:
     def createWfAlgorithm(
         algoName: Union[WfAlgorithmName, str],
         algoConfig: Union[dict, WfAlgorithm, None] = None,
-    ):
+    ) -> WfAlgorithm:
         """Return a configured WfAlgorithm.
 
         Parameters

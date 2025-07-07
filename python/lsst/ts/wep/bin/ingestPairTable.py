@@ -28,7 +28,7 @@ from astropy.table import Table
 from lsst.daf.butler import Butler, CollectionType, DatasetType, DimensionUniverse
 
 
-def main():
+def main() -> None:
     tz = time.strftime("%z")
     logging.basicConfig(
         format="%(levelname)s %(asctime)s.%(msecs)03d" + tz + " - %(message)s",
@@ -71,7 +71,7 @@ def main():
     table = Table.read(args.pairs)
 
     logger.info(f"Writing pair table to butler collection {args.output_collection}")
-    butler = Butler(args.butler_config, writeable=True)
+    butler = Butler.from_config(args.butler_config, writeable=True)
 
     # Register if needed
     logger.info("Registering donutVisitPairTable dataset type")

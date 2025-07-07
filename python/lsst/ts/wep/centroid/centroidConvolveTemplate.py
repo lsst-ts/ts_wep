@@ -34,11 +34,11 @@ class CentroidConvolveTemplate(CentroidDefault):
     """CentroidDefault child class to get the centroid of donut by
     convolution with a template donut image."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(CentroidConvolveTemplate, self).__init__()
         self._centRandomWalk = CentroidRandomWalk()
 
-    def getImgBinary(self, imgDonut):
+    def getImgBinary(self, imgDonut: np.ndarray) -> np.ndarray:
         """Get the binary image.
 
         Parameters
@@ -54,7 +54,12 @@ class CentroidConvolveTemplate(CentroidDefault):
 
         return self._centRandomWalk.getImgBinary(imgDonut)
 
-    def getCenterAndR(self, imgDonut, templateDonut=None, peakThreshold=0.95):
+    def getCenterAndR(
+        self,
+        imgDonut: np.ndarray,
+        templateDonut: np.ndarray | None = None,
+        peakThreshold: float = 0.95,
+    ) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius.
 
         Parameters
@@ -95,8 +100,11 @@ class CentroidConvolveTemplate(CentroidDefault):
         )
 
     def getCenterAndRfromImgBinary(
-        self, imgBinary, templateBinary=None, peakThreshold=0.95
-    ):
+        self,
+        imgBinary: np.ndarray,
+        templateBinary: np.ndarray | None = None,
+        peakThreshold: float = 0.95,
+    ) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius.
 
         Parameters
@@ -134,12 +142,12 @@ class CentroidConvolveTemplate(CentroidDefault):
 
     def getCenterAndRfromTemplateConv(
         self,
-        imageBinary,
-        templateImgBinary=None,
-        nDonuts=1,
-        peakThreshold=0.95,
-        dbscanEps=5.0,
-    ):
+        imageBinary: np.ndarray,
+        templateImgBinary: np.ndarray | None = None,
+        nDonuts: int = 1,
+        peakThreshold: float = 0.95,
+        dbscanEps: float = 5.0,
+    ) -> tuple[list[float], list[float], float]:
         """
         Get the centers of the donuts by convolving a binary template image
         with the binary image of the donut or donuts.

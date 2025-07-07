@@ -26,7 +26,9 @@ from scipy.stats import entropy
 
 
 class DonutImageCheck(object):
-    def __init__(self, numOfBins=256, entroThres=3.5, returnEntro=False):
+    def __init__(
+        self, numOfBins: int = 256, entroThres: float = 3.5, returnEntro: bool = False
+    ) -> None:
         """Donut image check class to judge the donut image is effective or
         not.
 
@@ -50,7 +52,7 @@ class DonutImageCheck(object):
         # Whether to return the calculated value
         self.returnEntro = returnEntro
 
-    def isEffDonut(self, donutImg):
+    def isEffDonut(self, donutImg: np.ndarray) -> tuple[bool, float] | bool:
         """Is effective donut image or not.
 
         Parameters

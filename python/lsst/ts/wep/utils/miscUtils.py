@@ -39,7 +39,7 @@ from scipy.signal import correlate
 from scipy.stats import binned_statistic
 
 
-def searchDonutPos(img):
+def searchDonutPos(img: np.ndarray) -> tuple[float, float]:
     """Search the position of donut on image.
 
     Parameters
@@ -62,7 +62,7 @@ def searchDonutPos(img):
     return realcx, realcy
 
 
-def rotMatrix(thetaDegrees):
+def rotMatrix(thetaDegrees: float) -> np.ndarray:
     """Create a 2-d rotation matrix for given angle.
 
     Parameters
@@ -80,7 +80,7 @@ def rotMatrix(thetaDegrees):
     return np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
 
 
-def padArray(inArray, dim):
+def padArray(inArray: np.ndarray, dim: int) -> np.ndarray:
     """Extend the boundary of image.
 
     For example, the input image is 120x120 matrix. This function will create
@@ -127,7 +127,7 @@ def padArray(inArray, dim):
     return out
 
 
-def extractArray(inArray, dim):
+def extractArray(inArray: np.ndarray, dim: int) -> np.ndarray:
     """Extract the central image.
 
     For example, the input image is a 140x140 matrix. This function will

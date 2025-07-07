@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing import Optional, Tuple, Union
+from typing import Any
 
 import galsim
 import numpy as np
@@ -65,7 +65,7 @@ class ImageMapper:
 
     def __init__(
         self,
-        instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
+        instConfig: str | dict | Instrument = "policy:instruments/LsstCam.yaml",
         opticalModel: str = "offAxis",
     ) -> None:
         self._instrument = configClass(instConfig, Instrument)
@@ -120,7 +120,7 @@ class ImageMapper:
         zkCoeff: np.ndarray,
         nollIndices: np.ndarray | None,
         image: Image,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Construct the forward mapping from the pupil to the image plane.
 
         Parameters
@@ -343,7 +343,7 @@ class ImageMapper:
         zkCoeff: np.ndarray,
         nollIndices: np.ndarray | None,
         image: Image,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Construct the inverse mapping from the image plane to the pupil.
 
         Parameters
@@ -482,7 +482,7 @@ class ImageMapper:
         zkCoeff: np.ndarray,
         nollIndices: np.ndarray | None,
         image: Image,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Return image grid and mask for which pixels are inside the pupil.
 
         Note the pupil considered is the pupil mapped to the image plane.
@@ -541,7 +541,7 @@ class ImageMapper:
         uPupilCirc: float,
         vPupilCirc: float,
         rPupilCirc: float,
-        fwdMap: Optional[tuple] = None,
+        fwdMap: tuple | None = None,
     ) -> np.ndarray:
         """Return a fractional mask for a single circle.
 
@@ -703,7 +703,7 @@ class ImageMapper:
         image: Image,
         uPupil: np.ndarray,
         vPupil: np.ndarray,
-        fwdMap: Optional[tuple] = None,
+        fwdMap: tuple | None = None,
     ) -> np.ndarray:
         """Loop through mask elements to create the mask.
 
@@ -937,7 +937,7 @@ class ImageMapper:
         mask: np.ndarray[float],
         isBinary: bool,
         dilate: int,
-        dilateBlends: Union[int, str],
+        dilateBlends: int | str,
         autoDilateMaxIter: int,
         autoDilateFracChange: float,
         doMaskBlends: bool,
@@ -1031,7 +1031,7 @@ class ImageMapper:
         image: Image,
         isBinary: bool,
         dilate: int,
-        dilateBlends: Union[int, str],
+        dilateBlends: int | str,
         ignorePlane: bool,
         isPupilMask: bool,
     ) -> None:
@@ -1100,7 +1100,7 @@ class ImageMapper:
         *,
         isBinary: bool = True,
         dilate: int = 0,
-        dilateBlends: Union[int, str] = 0,
+        dilateBlends: int | str = 0,
         autoDilateMaxIter: int = 8,
         autoDilateFracChange: float = 5e-3,
         doMaskBlends: bool = False,
@@ -1191,8 +1191,8 @@ class ImageMapper:
     def createImageMasks(
         self,
         image: Image,
-        zkCoeff: Optional[np.ndarray] = None,
-        nollIndices: Optional[np.ndarray] = None,
+        zkCoeff: np.ndarray | None = None,
+        nollIndices: np.ndarray | None = None,
         *,
         isBinary: bool = True,
         dilate: int = 0,
@@ -1201,7 +1201,7 @@ class ImageMapper:
         autoDilateFracChange: float = 5e-3,
         doMaskBlends: bool = False,
         ignorePlane: bool = False,
-        _invMap: Optional[tuple] = None,
+        _invMap: tuple | None = None,
     ) -> None:
         """Create source mask, blend mask, and background mask on image plane.
 
@@ -1328,11 +1328,11 @@ class ImageMapper:
 
     def getProjectionSize(
         self,
-        fieldAngle: Union[np.ndarray, tuple, list],
-        defocalType: Union[DefocalType, str],
-        bandLabel: Union[BandLabel, str] = BandLabel.REF,
-        zkCoeff: Optional[np.ndarray] = None,
-        nollIndices: Optional[np.ndarray] = None,
+        fieldAngle: np.ndarray | tuple | list,
+        defocalType: DefocalType | str,
+        bandLabel: BandLabel | str = BandLabel.REF,
+        zkCoeff: np.ndarray | None = None,
+        nollIndices: np.ndarray | None = None,
     ) -> int:
         """Return size of the pupil projected onto the image plane (in pixels).
 
@@ -1407,11 +1407,11 @@ class ImageMapper:
     def centerOnProjection(
         self,
         image: Image,
-        zkCoeff: Optional[np.ndarray] = None,
-        nollIndices: Optional[np.ndarray] = None,
+        zkCoeff: np.ndarray | None = None,
+        nollIndices: np.ndarray | None = None,
         isBinary: bool = True,
         rMax: float = 10,
-        **maskKwargs,
+        **maskKwargs: Any,
     ) -> Image:
         """Center the stamp on a projection of the pupil.
 
@@ -1476,10 +1476,10 @@ class ImageMapper:
     def mapPupilToImage(
         self,
         image: Image,
-        zkCoeff: Optional[np.ndarray] = None,
-        nollIndices: Optional[np.ndarray] = None,
-        masks: Optional[Tuple[np.ndarray]] = None,
-        **maskKwargs,
+        zkCoeff: np.ndarray | None = None,
+        nollIndices: np.ndarray | None = None,
+        masks: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None,
+        **maskKwargs: Any,
     ) -> Image:
         """Map the pupil to the image plane.
 
@@ -1566,10 +1566,10 @@ class ImageMapper:
     def mapImageToPupil(
         self,
         image: Image,
-        zkCoeff: Optional[np.ndarray] = None,
-        nollIndices: Optional[np.ndarray] = None,
-        masks: Optional[np.ndarray] = None,
-        **maskKwargs,
+        zkCoeff: np.ndarray | None = None,
+        nollIndices: np.ndarray | None = None,
+        masks: np.ndarray | None = None,
+        **maskKwargs: Any,
     ) -> Image:
         """Map a stamp from the image to the pupil plane.
 

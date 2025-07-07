@@ -515,7 +515,7 @@ def convertZernikesToPsfWidth(
     return dFWHM
 
 
-def getZernikeParity(jmin: int = 4, jmax: int = 22, axis: str = "x"):
+def getZernikeParity(jmin: int = 4, jmax: int = 22, axis: str = "x") -> np.ndarray:
     """Return the parity of the Zernike polynomials (Noll index >= 4).
 
     Parameters
