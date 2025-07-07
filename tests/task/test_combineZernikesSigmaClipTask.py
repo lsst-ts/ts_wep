@@ -31,11 +31,11 @@ from lsst.ts.wep.task.combineZernikesSigmaClipTask import (
 
 
 class TestCombineZernikesSigmaClipTask(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CombineZernikesSigmaClipTaskConfig()
         self.task = CombineZernikesSigmaClipTask()
 
-    def prepareTestData(self):
+    def prepareTestData(self) -> tuple[np.ndarray, np.ndarray]:
         inputArray = np.ones((101, 10))
         inputArray[50:100] += 2.0
         inputArray[100] += 100.0
@@ -43,7 +43,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         outputFlags[100] = 1
         return inputArray, outputFlags
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.assertEqual(
             {"sigma": 3.0, "stdfunc": "mad_std", "maxiters": 1},
             self.task.sigmaClipKwargs,
@@ -57,7 +57,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertEqual(0.005, self.task.stdMin)
         self.assertEqual(5, self.task.maxZernClip)
 
-    def testCombineZernikes(self):
+    def testCombineZernikes(self) -> None:
         zernikeArray, trueFlags = self.prepareTestData()
         combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
         np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
@@ -95,7 +95,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         np.testing.assert_array_equal(trueFlags, testFlags)
         self.assertTrue(isinstance(testFlags[0], numbers.Integral))
 
-    def testCombineZernikesEffectiveMaxZernClip(self):
+    def testCombineZernikesEffectiveMaxZernClip(self) -> None:
         testWhileZernikeArray = np.ones((3, 10))
         testWhileZernikeArray[0, 4] = 3
         testWhileZernikeArray[1, 3] = 3
@@ -113,7 +113,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         np.testing.assert_array_equal(trueFlags, testFlags)
         self.assertTrue(isinstance(testFlags[0], numbers.Integral))
 
-    def testTaskRun(self):
+    def testTaskRun(self) -> None:
         zernikeArray, trueFlags = self.prepareTestData()
         combinedZernikesStruct = self.task.run(zernikeArray)
         self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)

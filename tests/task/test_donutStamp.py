@@ -35,7 +35,7 @@ from scipy.ndimage import rotate
 
 
 class TestDonutStamp(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.nStamps = 3
         self.stampSize = 32
         self.testStamps, self.testMetadata = self._makeStamps(
@@ -45,7 +45,9 @@ class TestDonutStamp(unittest.TestCase):
             self.nStamps, self.stampSize, testDefaults=True
         )
 
-    def _makeStamps(self, nStamps, stampSize, testDefaults=False):
+    def _makeStamps(
+        self, nStamps: int, stampSize: int, testDefaults: bool = False
+    ) -> tuple[list, dict]:
         randState = np.random.RandomState(42)
         stampList = []
 
@@ -86,7 +88,7 @@ class TestDonutStamp(unittest.TestCase):
 
         return stampList, metadata
 
-    def testFactory(self):
+    def testFactory(self) -> None:
         randState = np.random.RandomState(42)
         for i in range(self.nStamps):
             donutStamp = DonutStamp.factory(self.testStamps[i], self.testMetadata, i)
@@ -127,9 +129,8 @@ class TestDonutStamp(unittest.TestCase):
 
             self.assertIsInstance(donutStamp.wep_im, Image)
 
-    def testFactoryMetadataDefaults(self):
-        """
-        Some metadata values have been added since the original
+    def testFactoryMetadataDefaults(self) -> None:
+        """Some metadata values have been added since the original
         version of DonutStamp was created. When this occurs
         we need to set a default value to fill in the metadata
         to allow the butler to read old repositories.
@@ -152,7 +153,7 @@ class TestDonutStamp(unittest.TestCase):
             bandpass = donutStamp.bandpass
             self.assertEqual(bandpass, "")
 
-    def testGetCamera(self):
+    def testGetCamera(self) -> None:
         donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0)
 
         donutStamp.cam_name = "LSSTCam"
@@ -175,7 +176,7 @@ class TestDonutStamp(unittest.TestCase):
         with self.assertRaises(ValueError, msg=errMessage):
             donutStamp.getCamera()
 
-    def testGetLinearWCS(self):
+    def testGetLinearWCS(self) -> None:
         wcs = lsst.afw.geom.makeSkyWcs(
             lsst.geom.Point2D(0.0, 0.0),
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
@@ -184,7 +185,7 @@ class TestDonutStamp(unittest.TestCase):
         donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0, wcs)
         self.assertEqual(wcs, donutStamp.getLinearWCS())
 
-    def testCalcFieldXY(self):
+    def testCalcFieldXY(self) -> None:
         donutStamp = DonutStamp(
             self.testStamps[0],
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
@@ -226,7 +227,7 @@ class TestDonutStamp(unittest.TestCase):
                 self.assertEqual(fieldAngle[0], np.degrees(trueFieldAngleX))
                 self.assertEqual(fieldAngle[1], np.degrees(trueFieldAngleY))
 
-    def testMakeMask(self):
+    def testMakeMask(self) -> None:
         donutStamp = DonutStamp(
             afwImage.MaskedImageF(160, 160),
             lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
@@ -257,13 +258,16 @@ class TestDonutStamp(unittest.TestCase):
         # Donut at center of focal plane should be symmetric
         np.testing.assert_array_equal(mask.array[:159], mask.array[-159:][::-1])
 
-    def testWepImage(self):
+    def testWepImage(self) -> None:
         # Goal: test the transformations that occur during WepImage creation
         rng = np.random.default_rng(0)
         camera = obs_lsst.LsstCam().getCamera()
 
         # Define a function that will test everything for the WEP Image
-        def _testWepImage(raft, sensor):
+        def _testWepImage(
+            raft: str,
+            sensor: str,
+        ) -> None:
             # Get the detector
             detName = f"{raft}_{sensor}"
             detector = camera.get(detName)

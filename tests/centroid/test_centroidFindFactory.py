@@ -33,23 +33,23 @@ from lsst.ts.wep.utils import CentroidFindType
 class TestCentroidFindFactory(unittest.TestCase):
     """Test the CentroidFindFactory class."""
 
-    def testCreateCentroidFindRandomWalk(self):
+    def testCreateCentroidFindRandomWalk(self) -> None:
         centroidFind = CentroidFindFactory.createCentroidFind(
             CentroidFindType.RandomWalk
         )
         self.assertTrue(isinstance(centroidFind, CentroidRandomWalk))
 
-    def testCreateCentroidFindOtsu(self):
+    def testCreateCentroidFindOtsu(self) -> None:
         centroidFind = CentroidFindFactory.createCentroidFind(CentroidFindType.Otsu)
         self.assertTrue(isinstance(centroidFind, CentroidOtsu))
 
-    def testCreateCentroidFindConvolveTemplate(self):
+    def testCreateCentroidFindConvolveTemplate(self) -> None:
         centroidFind = CentroidFindFactory.createCentroidFind(
             CentroidFindType.ConvolveTemplate
         )
         self.assertTrue(isinstance(centroidFind, CentroidConvolveTemplate))
 
-    def testCreateCentroidFindWrongType(self):
+    def testCreateCentroidFindWrongType(self) -> None:
         self.assertRaises(
             ValueError, CentroidFindFactory.createCentroidFind, "wrongType"
         )

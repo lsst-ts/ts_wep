@@ -25,7 +25,7 @@ import astropy.units as u
 import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
@@ -43,8 +43,13 @@ from lsst.ts.wep.utils import (
 
 
 class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+    cameraName: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Generate donutCatalog needed for task.
         """
@@ -55,7 +60,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         cls.runName = "run1"
@@ -82,12 +87,12 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
-    def setUp(self):
-        self.butler = dafButler.Butler(self.repoDir)
+    def setUp(self) -> None:
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -103,7 +108,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             "visit": 4021123106002,
         }
 
-    def testWithAndWithoutPairs(self):
+    def testWithAndWithoutPairs(self) -> None:
         # Load data from butler
         donutStampsExtra = self.butler.get(
             "donutStamps", dataId=self.dataIdExtra, collections=[self.runName]
@@ -135,7 +140,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             diff = np.sqrt(np.sum((meanZk - pairedZk) ** 2))
             self.assertLess(diff, 0.17)
 
-    def testTable(self):
+    def testTable(self) -> None:
         # Load data from butler
         donutStampsExtra = self.butler.get(
             "donutStamps", dataId=self.dataIdExtra, collections=[self.runName]
@@ -163,7 +168,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 zkAvg2 = np.array(
                     [zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
                 )
-                self.assertFloatsAlmostEqual(zkAvg1, zkAvg2, rtol=1e-6, atol=0)
+                np.testing.assert_allclose(zkAvg1, zkAvg2, rtol=1e-6, atol=0)
 
                 zkRaw1 = structNormal.outputZernikesRaw
                 zkRaw2 = np.full_like(zkRaw1, np.nan)
@@ -175,7 +180,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                         [row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
                     )
                     i += 1
-                self.assertFloatsAlmostEqual(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
+                np.testing.assert_allclose(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
 
                 # verify remaining desired columns exist in zernikes table
                 desired_colnames = [
@@ -203,7 +208,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 self.assertIn("cam_name", structNormal.zernikes.meta)
                 for k in ["intra", "extra"]:
                     dict_ = structNormal.zernikes.meta[k]
-                    if k == stamps.metadata['DFC_TYPE']:
+                    if k == stamps.metadata["DFC_TYPE"]:
                         self.assertIn("det_name", dict_)
                         self.assertIn("visit", dict_)
                         self.assertIn("dfc_dist", dict_)

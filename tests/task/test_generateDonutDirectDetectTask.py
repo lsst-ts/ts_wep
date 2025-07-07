@@ -26,7 +26,7 @@ import lsst.afw.image as afwImage
 import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable, vstack
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task.generateDonutDirectDetectTask import (
     GenerateDonutDirectDetectTask,
     GenerateDonutDirectDetectTaskConfig,
@@ -40,8 +40,13 @@ from lsst.ts.wep.utils import (
 
 
 class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+    baseRunName: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Run the pipeline only once since it takes a
         couple minutes with the ISR.
@@ -52,7 +57,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
         cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
 
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
 
         # Check that run doesn't already exist due to previous improper cleanup
@@ -83,16 +88,16 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = GenerateDonutDirectDetectTaskConfig()
         self.task = GenerateDonutDirectDetectTask(config=self.config)
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.testDataIdS10 = {
@@ -108,7 +113,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "visit": 4021123106001,
         }
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         # Test config in task
         self.config.opticalModel = "another"
         self.config.edgeMargin = 100
@@ -123,7 +128,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.config.measurementTask.nSigmaDetection, 5.0)
         self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
 
-    def testUpdateDonutCatalog(self):
+    def testUpdateDonutCatalog(self) -> None:
 
         testExposure = self.butler.get(
             "raw", dataId=self.testDataIdS10, collections=["LSSTCam/raw/all"]
@@ -171,7 +176,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         # check that the new columns are present
         self.assertCountEqual(newColumns, donutCatUpd.columns)
 
-    def testEmptyTable(self):
+    def testEmptyTable(self) -> None:
 
         testTable = self.task.emptyTable()
 
@@ -188,7 +193,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         ]
         self.assertCountEqual(testTable.columns, expected_columns)
 
-    def testTaskRun(self):
+    def testTaskRun(self) -> None:
         """
         Test that the task runs interactively.
         """
@@ -327,7 +332,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertLess(diff_x, tolerance)
         self.assertLess(diff_y, tolerance)
 
-    def testTaskRunPipeline(self):
+    def testTaskRunPipeline(self) -> None:
         """
         Test that the task runs in a pipeline.
         """

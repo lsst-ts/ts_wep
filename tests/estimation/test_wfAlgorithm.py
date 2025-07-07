@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
+from typing import Any
 
 import numpy as np
 from lsst.ts.wep import Image, Instrument
@@ -29,7 +30,7 @@ from lsst.ts.wep.estimation import WfAlgorithm
 class TestWfAlgorithm(unittest.TestCase):
     """Test the WfAlgorithm base class."""
 
-    def testMustSubclass(self):
+    def testMustSubclass(self) -> None:
         with self.assertRaises(TypeError) as err:
             WfAlgorithm()
 
@@ -40,7 +41,7 @@ class TestWfAlgorithm(unittest.TestCase):
         self.assertIn("_estimateZk", error_message)
         self.assertIn("requiresPairs", error_message)
 
-    def testHistDocstringRequired(self):
+    def testHistDocstringRequired(self) -> None:
         with self.assertRaises(AttributeError) as err:
 
             class DummyWfAlg(WfAlgorithm):
@@ -48,7 +49,7 @@ class TestWfAlgorithm(unittest.TestCase):
                 def requiresPairs(self) -> bool:
                     return False
 
-                def _estimateZk(self, *args, **kwargs) -> np.ndarray:
+                def _estimateZk(self, *args: Any, **kwargs: Any) -> np.ndarray:
                     return np.zeros(19)
 
         self.assertEqual(
@@ -58,7 +59,7 @@ class TestWfAlgorithm(unittest.TestCase):
             + "the contents of the history dictionary.",
         )
 
-    def testValidateInputs(self):
+    def testValidateInputs(self) -> None:
         # Create a dummy WfAlgorithm class
         class DummyWfAlg(WfAlgorithm):
             @property
@@ -70,7 +71,7 @@ class TestWfAlgorithm(unittest.TestCase):
                 """Docstring"""
                 return super().history
 
-            def _estimateZk(self, *args, **kwargs) -> np.ndarray:
+            def _estimateZk(self, *args: Any, **kwargs: Any) -> np.ndarray:
                 return np.zeros(19)
 
         wfAlg = DummyWfAlg()

@@ -28,7 +28,7 @@ enforce_single_threading()
 
 import lsst.utils.tests
 import numpy as np
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
@@ -46,8 +46,12 @@ from lsst.ts.wep.utils import (
 
 
 class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Generate donutCatalog needed for task.
         """
@@ -58,7 +62,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if "pretest_run_cwfs" in collectionsList:
@@ -86,17 +90,17 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
         self.config.estimateZernikes.retarget(EstimateZernikesDanishTask)
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -118,7 +122,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.assertEqual(type(self.task.estimateZernikes), EstimateZernikesDanishTask)
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
@@ -127,14 +131,14 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
-    def testEstimateZernikes(self):
+    def testEstimateZernikes(self) -> None:
         zernCoeff = self.task.estimateZernikes.run(
             self.donutStampsExtra, self.donutStampsIntra
         ).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 25))
 
-    def testEstimateCornerZernikes(self):
+    def testEstimateCornerZernikes(self) -> None:
         """
         Test the rotated corner sensors (R04 and R40) and make sure no changes
         upstream in obs_lsst have created issues in Zernike estimation.
@@ -240,7 +244,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.35
         )
 
-    def testGetCombinedZernikes(self):
+    def testGetCombinedZernikes(self) -> None:
         testArr = np.zeros((2, 25))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
@@ -251,7 +255,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             combinedZernikesStruct.flags, np.zeros(len(testArr))
         )
 
-    def testWithAndWithoutPairs(self):
+    def testWithAndWithoutPairs(self) -> None:
         # Load the test data
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
         donutStampsExtra = DonutStamps.readFits(
@@ -292,7 +296,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         zkAvgUnpaired = np.mean([zkAvgExtra, zkAvgIntra], axis=0)
         self.assertLess(np.sqrt(np.sum(np.square(zkAvgPairs - zkAvgUnpaired))), 0.30)
 
-    def testTableMetadata(self):
+    def testTableMetadata(self) -> None:
         # First estimate without pairs
         emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
         zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps).zernikes

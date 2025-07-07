@@ -21,6 +21,7 @@
 
 import os
 import unittest
+from typing import Union
 
 from lsst.ts.wep.utils import (
     configClass,
@@ -36,11 +37,11 @@ from lsst.ts.wep.utils import (
 class TestIoUtils(unittest.TestCase):
     """Test the IO utility functions."""
 
-    def testGetConfigDir(self):
+    def testGetConfigDir(self) -> None:
         ansConfigDir = os.path.join(getModulePath(), "policy")
         self.assertEqual(getConfigDir(), ansConfigDir)
 
-    def testResolveRelativeConfigPath(self):
+    def testResolveRelativeConfigPath(self) -> None:
         testPath = "test/path.yaml"
         resolvedPath = resolveRelativeConfigPath(testPath)
 
@@ -52,7 +53,7 @@ class TestIoUtils(unittest.TestCase):
         # Check that adding "policy:" to the front returns the same result
         self.assertEqual(resolvedPath, resolveRelativeConfigPath(f"policy:{testPath}"))
 
-    def testMergeConfigWithFile(self):
+    def testMergeConfigWithFile(self) -> None:
         # Config file used for tests
         configFile = f"{getModulePath()}/tests/testData/testConfigFile.yaml"
 
@@ -65,7 +66,7 @@ class TestIoUtils(unittest.TestCase):
 
         # Test loading while overriding a default
         keys = list(config)
-        override = {key: None for key in keys[:-1]}
+        override: dict[str, Union[None, str]] = {key: None for key in keys[:-1]}
         override[keys[-1]] = "override"
         mergedConfig = mergeConfigWithFile(configFile, **override)
         for key in keys[:-1]:
@@ -81,7 +82,7 @@ class TestIoUtils(unittest.TestCase):
         with self.assertRaises(KeyError):
             mergeConfigWithFile(configFile, **{key: None for key in keys[:-1]})
 
-    def testConfigClass(self):
+    def testConfigClass(self) -> None:
         # Should fail if second argument is not a class
         with self.assertRaises(TypeError):
             configClass(1, 1)
@@ -102,7 +103,7 @@ class TestIoUtils(unittest.TestCase):
         with self.assertRaises(TypeError):
             configClass(123, dict)
 
-    def testGetObsLsstCmdTaskConfigDir(self):
+    def testGetObsLsstCmdTaskConfigDir(self) -> None:
         obsLsstCmdTaskConfirDir = getObsLsstCmdTaskConfigDir()
         configNormPath = os.path.normpath(obsLsstCmdTaskConfirDir)
         configNormPathList = configNormPath.split(os.sep)

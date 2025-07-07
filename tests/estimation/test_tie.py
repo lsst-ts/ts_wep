@@ -29,37 +29,37 @@ from lsst.ts.wep.utils.modelUtils import forwardModelPair
 class TestTieAlgorithm(unittest.TestCase):
     """Test TieAlgorithm."""
 
-    def testBadOpticalModel(self):
+    def testBadOpticalModel(self) -> None:
         with self.assertRaises(ValueError):
             TieAlgorithm(opticalModel="fake")
 
-    def testBadMaxIter(self):
+    def testBadMaxIter(self) -> None:
         with self.assertRaises(TypeError):
             TieAlgorithm(maxIter=10.2)
         with self.assertRaises(ValueError):
             TieAlgorithm(maxIter=-1)
 
-    def testBadCompSequence(self):
+    def testBadCompSequence(self) -> None:
         with self.assertRaises(ValueError):
             TieAlgorithm(compSequence=np.zeros((2, 3)))
 
-    def testBadCompGain(self):
+    def testBadCompGain(self) -> None:
         with self.assertRaises(ValueError):
             TieAlgorithm(compGain=-1)
 
-    def testBadCenterBinary(self):
+    def testBadCenterBinary(self) -> None:
         with self.assertRaises(TypeError):
             TieAlgorithm(centerBinary="fake")
 
-    def testBadConvergeTol(self):
+    def testBadConvergeTol(self) -> None:
         with self.assertRaises(ValueError):
             TieAlgorithm(convergeTol=-1)
 
-    def testBadMaskKwargs(self):
+    def testBadMaskKwargs(self) -> None:
         with self.assertRaises(TypeError):
             TieAlgorithm(maskKwargs="fake")
 
-    def testAccuracy(self):
+    def testAccuracy(self) -> None:
         for seed in [12345, 23451, 34512, 45123, 51234]:
             # Get the test data
             zkTrue, intra, extra = forwardModelPair(seed=seed)
@@ -87,7 +87,7 @@ class TestTieAlgorithm(unittest.TestCase):
             self.assertEqual(tieBin.history[1]["intraCent"].shape, binned_shape)
             self.assertEqual(tieBin.history[1]["extraCent"].shape, binned_shape)
 
-    def testSaveHistory(self):
+    def testSaveHistory(self) -> None:
         # Run the algorithm
         zkTrue, intra, extra = forwardModelPair()
         tie = TieAlgorithm(optimizeLinAlg=False)
@@ -148,7 +148,7 @@ class TestTieAlgorithm(unittest.TestCase):
             # Check that was all that was in the history
             self.assertEqual(len(iteration), 0)
 
-    def testRecenter(self):
+    def testRecenter(self) -> None:
         # Run the algorithm with no recenter tolerance
         zkTrue, intra, extra = forwardModelPair()
         tie = TieAlgorithm(centerTol=0, optimizeLinAlg=False)
@@ -170,7 +170,7 @@ class TestTieAlgorithm(unittest.TestCase):
             self.assertTrue(np.allclose(hist[i]["intraCent"], hist[1]["intraCent"]))
             self.assertTrue(np.allclose(hist[i]["extraCent"], hist[1]["extraCent"]))
 
-    def testConvergeTol(self):
+    def testConvergeTol(self) -> None:
         zkTrue, intra, extra = forwardModelPair()
 
         # TIE with zero tolerance; check number of iterations matches maxIter
@@ -202,7 +202,7 @@ class TestTieAlgorithm(unittest.TestCase):
         # And that the converge flag is True
         self.assertTrue(hist[max(hist)]["converged"])
 
-    def testCaustic(self):
+    def testCaustic(self) -> None:
         zkTrue, intra, extra = forwardModelPair()
 
         # Use a huge gain to force a caustic
@@ -221,7 +221,7 @@ class TestTieAlgorithm(unittest.TestCase):
         self.assertTrue(all(np.isfinite(finalIter["zkBest"])))
         self.assertTrue(np.allclose(finalIter["zkBest"], hist[max(hist) - 1]["zkBest"]))
 
-    def testMaskBlends(self):
+    def testMaskBlends(self) -> None:
         zkTrue, intra, extra = forwardModelPair()
 
         # Add a blend offset
@@ -241,7 +241,7 @@ class TestTieAlgorithm(unittest.TestCase):
 
         self.assertGreater(mask1.sum(), mask2.sum())
 
-    def testSingleDonut(self):
+    def testSingleDonut(self) -> None:
         zkTrue, intra, extra = forwardModelPair()
 
         # Estimate with singles and pairs
@@ -252,7 +252,7 @@ class TestTieAlgorithm(unittest.TestCase):
         zkExtra, extraMeta = tie.estimateZk(extra)
         self.assertLess(np.sqrt(np.sum((zkPair - zkExtra) ** 2)), 0.25e-6)
 
-    def testMetadata(self):
+    def testMetadata(self) -> None:
         zkTrue, intra, extra = forwardModelPair()
 
         # Estimate with singles and pairs
@@ -264,7 +264,7 @@ class TestTieAlgorithm(unittest.TestCase):
         # Check metadata
         for metaDict in pairMeta, intraMeta, extraMeta:
             self.assertEqual(["caustic", "converged"], list(metaDict.keys()))
-            self.assertEqual(metaDict['caustic'], False)
+            self.assertEqual(metaDict["caustic"], False)
             self.assertEqual(metaDict["converged"], False)
 
 

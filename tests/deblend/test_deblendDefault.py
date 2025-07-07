@@ -30,10 +30,10 @@ from lsst.ts.wep.utils import getModulePath
 class TestDeblendDefault(unittest.TestCase):
     """Test the DeblendDefault class."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.deblend = DeblendDefault()
 
-    def testGenerateMultiDonutWithWrongInputs(self):
+    def testGenerateMultiDonutWithWrongInputs(self) -> None:
         img = np.random.rand(4, 4)
         self.assertRaises(
             ValueError, self.deblend.generateMultiDonut, img, -1.3, 0.3, 45.0
@@ -49,7 +49,7 @@ class TestDeblendDefault(unittest.TestCase):
             ValueError, self.deblend.generateMultiDonut, img, 1.3, 1.3, 45.0
         )
 
-    def testGenerateMultiDonut(self):
+    def testGenerateMultiDonut(self) -> None:
         template = self._getTemplate()
         (
             image,
@@ -63,7 +63,7 @@ class TestDeblendDefault(unittest.TestCase):
         self.assertAlmostEqual(neighborX, 130.58742823, places=7)
         self.assertAlmostEqual(neighborY, 130.58742823, places=7)
 
-    def _getTemplate(self):
+    def _getTemplate(self) -> np.ndarray:
         imageFilePath = os.path.join(
             getModulePath(),
             "tests",
@@ -74,7 +74,7 @@ class TestDeblendDefault(unittest.TestCase):
         )
         return np.loadtxt(imageFilePath)
 
-    def testDeblendDonut(self):
+    def testDeblendDonut(self) -> None:
         self.assertRaises(NotImplementedError, self.deblend.deblendDonut, [], [])
 
 

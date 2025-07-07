@@ -31,10 +31,10 @@ from lsst.ts.wep.utils import createTemplateForDetector
 class TestDonutDetector(unittest.TestCase):
     """Test the DonutDetector class."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.donutDetector = DonutDetector()
 
-    def _makeData(self, imgSize, donutSep):
+    def _makeData(self, imgSize: int, donutSep: int) -> tuple[np.ndarray, np.ndarray]:
         # Create the template
         camera = LsstCam().getCamera()
         detector = camera.get("R22_S11")
@@ -62,7 +62,7 @@ class TestDonutDetector(unittest.TestCase):
 
         return template, blendedImg
 
-    def testIdentifyBlendedDonuts(self):
+    def testIdentifyBlendedDonuts(self) -> None:
         testDataFrame = pd.DataFrame()
         testDataFrame["x_center"] = [50.0, 100.0, 120.0]
         testDataFrame["y_center"] = [100.0, 100.0, 100.0]
@@ -93,7 +93,7 @@ class TestDonutDetector(unittest.TestCase):
             labeledDf["y_blend_center"].values.tolist(), [[], [100.0], [100.0]]
         )
 
-    def testDetectDonuts(self):
+    def testDetectDonuts(self) -> None:
         template, testImg = self._makeData(480, 60)
         donutDf = self.donutDetector.detectDonuts(testImg, template, 126)
 

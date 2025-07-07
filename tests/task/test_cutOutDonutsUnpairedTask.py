@@ -22,8 +22,11 @@
 import os
 from copy import copy
 
+import lsst.afw.image as afwImage
 import lsst.utils.tests
-from lsst.daf import butler as dafButler
+from astropy.table import QTable
+from lsst.afw.cameraGeom import Camera
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task.cutOutDonutsUnpairedTask import (
     CutOutDonutsUnpairedTask,
     CutOutDonutsUnpairedTaskConfig,
@@ -37,8 +40,14 @@ from lsst.ts.wep.utils import (
 
 
 class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+    visitNum: int
+    baseRunName: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Run the pipeline only once since it takes a
         couple minutes with the ISR.
@@ -52,7 +61,7 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         cls.visitNum = 4021123106000
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if "pretest_run_cwfs" in collectionsList:
@@ -87,16 +96,16 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CutOutDonutsUnpairedTaskConfig()
         self.task = CutOutDonutsUnpairedTask(config=self.config)
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -112,7 +121,9 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
             "visit": self.visitNum,
         }
 
-    def _getDataFromButler(self):
+    def _getDataFromButler(
+        self,
+    ) -> tuple[afwImage.Exposure, afwImage.Exposure, QTable, QTable, Camera]:
         # Grab two exposures from the same visits of adjacent detectors
         exposureExtra = self.butler.get(
             "post_isr_image", dataId=self.dataIdExtra, collections=[self.baseRunName]
@@ -142,7 +153,7 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
             camera,
         )
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.task = CutOutDonutsUnpairedTask(config=self.config)
@@ -150,7 +161,7 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
 
-    def testPipeline(self):
+    def testPipeline(self) -> None:
         (
             exposureExtra,
             exposureIntra,
@@ -175,6 +186,6 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         )
 
         for butlerStamp, taskStamp in zip(donutStampsExtra, taskOut.donutStamps[0]):
-            self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)
+            self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
         for butlerStamp, taskStamp in zip(donutStampsIntra, taskOut.donutStamps[1]):
-            self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)
+            self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore

@@ -28,7 +28,7 @@ import astropy.units as u
 import lsst.afw.image as afwImage
 import numpy as np
 from astropy.table import QTable
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task import (
     DonutStamps,
@@ -45,8 +45,13 @@ from lsst.ts.wep.utils import (
 
 
 class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
+    runName: str
+    repoDir: str
+    cameraName: str
+    testDataDir: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Run the pipeline once so we can test outputs in
         multiple tests.
@@ -59,7 +64,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         cls.runName = "run1"
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if cls.runName in collectionsList:
@@ -82,16 +87,16 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = GenerateDonutFromRefitWcsTaskConfig()
         self.task = GenerateDonutFromRefitWcsTask(config=self.config)
         self.logger = logging.getLogger("lsst.generateDonutFromRefitWcsTask")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -107,7 +112,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             "visit": 4021123106009,
         }
 
-    def _getInputData(self):
+    def _getInputData(self) -> tuple[afwImage.ExposureF, QTable, list]:
         preFitExp_S11 = self.butler.get(
             "preFitPostISRCCD",
             dataId=self.dataIdExtra,
@@ -141,7 +146,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
 
         return preFitExp_S11, directDetectCat, dataRefs
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         # Test some defaults
         self.assertEqual(self.config.maxFitScatter, 1.0)
         self.assertEqual(self.config.edgeMargin, 80)
@@ -163,7 +168,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertEqual(task.config.photoRefFilter, "g")
         self.assertEqual(task.config.edgeMargin, 400)
 
-    def testTaskFit(self):
+    def testTaskFit(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
@@ -217,7 +222,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         # Test that detector names are present
         self.assertEqual(np.unique(fitCatalog["detector"]), "R22_S11")
 
-    def testConfigCatalogFilterListErr(self):
+    def testConfigCatalogFilterListErr(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
         self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
@@ -240,7 +245,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             task.run(dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs)
         self.assertEqual(str(context.exception), errMsg)
 
-    def testWcsFailure(self):
+    def testWcsFailure(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
         # Set cutoff so there will be no sources and fit will fail
@@ -291,7 +296,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertFalse(task.metadata["wcsFitSuccess"])
         self.assertFalse(task.metadata["refCatalogSuccess"])
 
-    def testRefCatalogFailureWithNoCatalogs(self):
+    def testRefCatalogFailureWithNoCatalogs(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
         # Set up task
@@ -343,7 +348,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertTrue(task.metadata["wcsFitSuccess"])
         self.assertFalse(task.metadata["refCatalogSuccess"])
 
-    def testRefCatalogFailureWithNonExistentPhotoRefFilter(self):
+    def testRefCatalogFailureWithNonExistentPhotoRefFilter(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
         # Set up task
@@ -398,7 +403,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertTrue(task.metadata["wcsFitSuccess"])
         self.assertFalse(task.metadata["refCatalogSuccess"])
 
-    def testPipelineOutputsInButler(self):
+    def testPipelineOutputsInButler(self) -> None:
         """Verify that outputs with given names are stored in butler."""
 
         directDetectCat = self.butler.get(
@@ -444,7 +449,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         self.assertTrue(isinstance(zernOutAvg_S11, np.ndarray))
         self.assertTrue(isinstance(zernOutRaw_S11, np.ndarray))
 
-    def testMetadataFlags(self):
+    def testMetadataFlags(self) -> None:
         """Test that flags for successful WCS fit and successful
         donut catalog generation from reference catalog are recorded."""
         wcsTaskMetadata = self.butler.get(
@@ -462,7 +467,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             wcsTaskMetadata["generateDonutFromRefitWcsTask"]["refCatalogSuccess"]
         )
 
-    def testFormatDonutCatalog(self):
+    def testFormatDonutCatalog(self) -> None:
         """Test the formatDonutCatalog function that creates
         an intermediate afwTable from donut catalog."""
 

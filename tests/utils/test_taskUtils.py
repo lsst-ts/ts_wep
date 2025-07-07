@@ -19,15 +19,27 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import datetime
 import inspect
+import os
 import unittest
 
 import lsst.obs.lsst as obs_lsst
 import numpy as np
+from astropy.table import QTable
+from lsst.afw.image import VisitInfo
+from lsst.daf.butler import Butler
+from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.ts.wep import Instrument
+from lsst.ts.wep.task.generateDonutCatalogUtils import (
+    addVisitInfoToCatTable,
+    donutCatalogToAstropy,
+)
 from lsst.ts.wep.utils import (
+    convertDictToVisitInfo,
     createTemplateForDetector,
     getCameraFromButlerName,
+    getModulePath,
     getTaskInstrument,
     writeCleanUpRepoCmd,
     writePipetaskCmd,
@@ -38,15 +50,70 @@ from scipy.ndimage import binary_opening
 class TestTaskUtils(unittest.TestCase):
     """Test the task utility functions."""
 
+    def setUp(self) -> None:
+        moduleDir = getModulePath()
+        self.testDataDir = os.path.join(moduleDir, "tests", "testData")
+        self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
+        self.centerRaft = ["R22_S10", "R22_S11"]
+
+        self.butler = Butler.from_config(self.repoDir)
+        self.registry = self.butler.registry
+
+    def _getRefCat(self) -> list:
+        refCatList = list()
+        datasetGenerator = self.registry.queryDatasets(
+            datasetType="cal_ref_cat", collections=["refcats/gen2"]
+        ).expanded()
+        for ref in datasetGenerator:
+            refCatList.append(
+                self.butler.getDeferred(ref, collections=["refcats/gen2"])
+            )
+
+        return refCatList
+
+    def _createRefObjLoader(self) -> ReferenceObjectLoader:
+        refCatalogList = self._getRefCat()
+        refObjLoader = ReferenceObjectLoader(
+            dataIds=[ref.dataId for ref in refCatalogList],
+            refCats=refCatalogList,
+        )
+        return refObjLoader
+
+    def _createTestDonutCat(self, returnExposure: bool = False) -> QTable:
+        refObjLoader = self._createRefObjLoader()
+
+        # Check that our refObjLoader loads the available objects
+        # within a given footprint from a sample exposure
+        testDataId = {
+            "instrument": "LSSTCam",
+            "detector": 94,
+            "exposure": 4021123106001,
+        }
+        testExposure = self.butler.get(
+            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
+        )
+        # From the test data provided this will create
+        # a catalog of 4 objects.
+        donutCatSmall = refObjLoader.loadPixelBox(
+            testExposure.getBBox(),
+            testExposure.getWcs(),
+            testExposure.filter.bandLabel,
+        )
+
+        if returnExposure is False:
+            return donutCatSmall.refCat
+        else:
+            return donutCatSmall.refCat, testExposure
+
     def _writePipetaskCmd(
         self,
-        repoName,
-        instrument,
-        collections,
-        runName,
-        taskName=None,
-        pipelineName=None,
-    ):
+        repoName: str,
+        instrument: str,
+        collections: str,
+        runName: str,
+        taskName: str | None = None,
+        pipelineName: str | None = None,
+    ) -> str:
         # Write the part of the command that is always included
         testCmd = f"pipetask run -b {repoName} -i {collections} "
         testCmd += f"--instrument {instrument} "
@@ -62,13 +129,13 @@ class TestTaskUtils(unittest.TestCase):
 
         return testCmd
 
-    def _writeCleanUpCmd(self, repoName, runName):
+    def _writeCleanUpCmd(self, repoName: str, runName: str) -> str:
         testCmd = f"butler remove-runs {repoName} {runName}"
         testCmd += " --no-confirm"
 
         return testCmd
 
-    def testWritePipetaskCmd(self):
+    def testWritePipetaskCmd(self) -> None:
         repoName = "testRepo"
         instrument = "lsst.obs.lsst.LsstCam"
         collections = "refcats"
@@ -101,14 +168,14 @@ class TestTaskUtils(unittest.TestCase):
             writePipetaskCmd(repoName, runName, instrument, collections)
         self.assertTrue(assertMsg in str(context.exception))
 
-    def testWriteCleanUpRepoCmd(self):
+    def testWriteCleanUpRepoCmd(self) -> None:
         repoName = "testRepo"
         runName = "run2"
 
         testCmd = self._writeCleanUpCmd(repoName, runName)
         self.assertEqual(testCmd, writeCleanUpRepoCmd(repoName, runName))
 
-    def testGetCameraFromButlerName(self):
+    def testGetCameraFromButlerName(self) -> None:
         # Test camera loading
         self.assertEqual(
             obs_lsst.LsstCam().getCamera(), getCameraFromButlerName("LSSTCam")
@@ -126,9 +193,9 @@ class TestTaskUtils(unittest.TestCase):
             getCameraFromButlerName(badCamType)
         self.assertEqual(str(context.exception), errMsg)
 
-    def testGetTaskInstrument(self):
+    def testGetTaskInstrument(self) -> None:
         # def a function to compare two instruments
-        def assertInstEqual(inst1, inst2):
+        def assertInstEqual(inst1: Instrument, inst2: Instrument) -> None:
             # Get the attributes to test
             sig = inspect.signature(Instrument)
             attributes = list(sig.parameters.keys())
@@ -166,7 +233,7 @@ class TestTaskUtils(unittest.TestCase):
         famcam = getTaskInstrument("LSSTCam", "R22_S01")
         self.assertEqual(famcam.batoidOffsetOptic, "LSSTCamera")
 
-    def testCreateTemplateForDetector(self):
+    def testCreateTemplateForDetector(self) -> None:
         # Get the LSST camera
         camera = obs_lsst.LsstCam().getCamera()
 
@@ -190,3 +257,50 @@ class TestTaskUtils(unittest.TestCase):
                 )
                 diff = binary_opening(template - templateRef, iterations=2)
                 assert np.allclose(diff, 0)
+
+    def testConvertDictToVisitInfo(self) -> None:
+
+        donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
+        fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
+        catTableWithMeta = addVisitInfoToCatTable(testExposure, fieldObjects)
+        roundTripVisitInfo = convertDictToVisitInfo(catTableWithMeta.meta["visit_info"])
+
+        self.assertTrue(isinstance(roundTripVisitInfo, VisitInfo))
+        # Test keys and results are the same from VisitInfo round trip
+        self.assertEqual(roundTripVisitInfo.focusZ, testExposure.visitInfo.focusZ)
+        self.assertEqual(roundTripVisitInfo.id, testExposure.visitInfo.id)
+        self.assertEqual(
+            roundTripVisitInfo.boresightRaDec, testExposure.visitInfo.boresightRaDec
+        )
+        if testExposure.visitInfo.boresightAzAlt.isFinite():
+            # Test that they are equal if they are not nan
+            self.assertEqual(
+                roundTripVisitInfo.boresightAzAlt, testExposure.visitInfo.boresightAzAlt
+            )
+        else:
+            # If testExposure has nan value, round trip should as well
+            self.assertFalse(roundTripVisitInfo.boresightAzAlt.isFinite())
+        self.assertEqual(
+            roundTripVisitInfo.instrumentLabel, testExposure.visitInfo.instrumentLabel
+        )
+        self.assertEqual(
+            roundTripVisitInfo.boresightParAngle,
+            testExposure.visitInfo.boresightParAngle,
+        )
+        self.assertEqual(
+            roundTripVisitInfo.boresightRotAngle,
+            testExposure.visitInfo.boresightRotAngle,
+        )
+        self.assertEqual(roundTripVisitInfo.rotType, testExposure.visitInfo.rotType)
+        self.assertEqual(
+            roundTripVisitInfo.exposureTime, testExposure.visitInfo.exposureTime
+        )
+        self.assertAlmostEqual(
+            roundTripVisitInfo.date.toPython(),
+            testExposure.visitInfo.date.toPython(),
+            delta=datetime.timedelta(seconds=1e-3),
+        )
+        self.assertEqual(
+            roundTripVisitInfo.observatory, testExposure.visitInfo.observatory
+        )
+        self.assertEqual(roundTripVisitInfo.era, testExposure.visitInfo.era)

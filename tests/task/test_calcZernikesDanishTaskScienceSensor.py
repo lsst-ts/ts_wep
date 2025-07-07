@@ -28,7 +28,7 @@ enforce_single_threading()
 
 import lsst.utils.tests
 import numpy as np
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
@@ -45,8 +45,12 @@ from lsst.ts.wep.utils import (
 
 
 class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Generate donutCatalog needed for task.
         """
@@ -57,7 +61,7 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
         cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if "pretest_run_science" in collectionsList:
@@ -75,7 +79,11 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
             )
 
             pipeCmd = writePipetaskCmd(
-                cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
             )
             # Make sure we are using the right exposure+detector combinations
             pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
@@ -83,17 +91,17 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
             runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
         self.config.estimateZernikes.retarget(EstimateZernikesDanishTask)
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -109,7 +117,7 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
             "visit": 4021123106002,
         }
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.assertEqual(type(self.task.estimateZernikes), EstimateZernikesDanishTask)
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
@@ -118,7 +126,7 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
-    def testEstimateZernikes(self):
+    def testEstimateZernikes(self) -> None:
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
@@ -135,7 +143,7 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 25))
 
-    def testGetCombinedZernikes(self):
+    def testGetCombinedZernikes(self) -> None:
         testArr = np.zeros((2, 25))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
