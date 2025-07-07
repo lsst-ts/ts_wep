@@ -3,7 +3,7 @@ clang-format: false
 flake8: false
 format-xmllint: true
 isort: false
-mypy: false
+mypy: true
 check-yaml: true
 check-xml: true
 ruff: true
