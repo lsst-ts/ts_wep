@@ -25,7 +25,7 @@ __all__ = [
     "CutOutDonutsScienceSensorTask",
 ]
 
-import typing
+from typing import Any
 
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
@@ -39,15 +39,14 @@ from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTaskConnections,
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.generateDonutCatalogUtils import convertDictToVisitInfo
-from lsst.ts.wep.utils import DefocalType
+from lsst.ts.wep.utils import DefocalType, convertDictToVisitInfo
 from lsst.utils.timer import timeMethod
 
 from .pairTask import ExposurePairer
 
 
 class CutOutDonutsScienceSensorTaskConnections(
-    CutOutDonutsBaseTaskConnections, dimensions=("detector", "instrument")
+    CutOutDonutsBaseTaskConnections, dimensions=("detector", "instrument")  # type: ignore
 ):
     exposures = ct.Input(
         doc="Input exposure to make measurements on",
@@ -77,26 +76,28 @@ class CutOutDonutsScienceSensorTaskConnections(
         multiple=True,
     )
 
-    def __init__(self, *, config=None):
+    def __init__(self, *, config: Any | None = None) -> None:
         super().__init__(config=config)
-        if not config.pairer.target._needsPairTable:
-            del self.donutVisitPairTable
-        if config.pairer.target._needsGroupDimension:
-            # Note that when running with the GroupPairer you might also need
-            # to change the name of the task in the pipeline yaml file (the
-            # yaml key under `tasks` that points to
-            # `CutOutDonutsScienceSensorTask`) to avoid dataset type dimension
-            # conflicts with CutOutDonutsScienceSensorTask executions that
-            # were run without the group pairer (and hence without the `group`
-            # input dimension).
-            self.dimensions.add("group")
+        if config is not None:
+            if not config.pairer.target._needsPairTable:
+                del self.donutVisitPairTable
+            if config.pairer.target._needsGroupDimension:
+                # Note that when running with the GroupPairer you might
+                # also need to change the name of the task in the
+                # pipeline yaml file (the yaml key under `tasks` that
+                # points to `CutOutDonutsScienceSensorTask`) to avoid
+                # dataset type dimension conflicts
+                # with CutOutDonutsScienceSensorTask
+                # executions that were run without the group pairer
+                # (and hence without the `group` input dimension).
+                self.dimensions.add("group")
 
 
 class CutOutDonutsScienceSensorTaskConfig(
     CutOutDonutsBaseTaskConfig,
-    pipelineConnections=CutOutDonutsScienceSensorTaskConnections,
+    pipelineConnections=CutOutDonutsScienceSensorTaskConnections,  # type: ignore
 ):
-    pairer = pexConfig.ConfigurableField(
+    pairer: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=ExposurePairer,
         doc="Task to pair up intra- and extra-focal exposures",
     )
@@ -109,8 +110,9 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
 
     ConfigClass = CutOutDonutsScienceSensorTaskConfig
     _DefaultName = "CutOutDonutsScienceSensorTask"
+    config: CutOutDonutsScienceSensorTaskConfig
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.makeSubtask("pairer")
 
@@ -119,7 +121,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
-    ):
+    ) -> None:
         """
         We need to be able to take pairs of detectors from the full
         set of detector exposures and run the task. Then we need to put
@@ -131,6 +133,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         so we put this in the dataId associated with the
         extra-focal detector.
         """
+
         camera = butlerQC.get(inputRefs.camera)
 
         visitInfoDict = {
@@ -172,7 +175,9 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
                 ],  # Intentionally use extra id for intra stamps here
             )
 
-    def assignExtraIntraIdx(self, focusZVal0, focusZVal1, cameraName):
+    def assignExtraIntraIdx(
+        self, focusZVal0: float, focusZVal1: float, cameraName: str
+    ) -> tuple[int, int]:
         """
         Identify which exposure in the list is the extra-focal and which
         is the intra-focal based upon `FOCUSZ` parameter in header.
@@ -237,8 +242,8 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
     @timeMethod
     def run(
         self,
-        exposures: typing.List[afwImage.Exposure],
-        donutCatalog: typing.List[QTable],
+        exposures: list[afwImage.Exposure],
+        donutCatalog: list[QTable],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
         # Determine which exposure is intra-/extra-focal

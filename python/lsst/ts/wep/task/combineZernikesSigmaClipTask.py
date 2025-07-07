@@ -21,6 +21,8 @@
 
 __all__ = ["CombineZernikesSigmaClipTaskConfig", "CombineZernikesSigmaClipTask"]
 
+from typing import Any
+
 import lsst.pex.config as pexConfig
 import numpy as np
 from lsst.ts.wep.task.combineZernikesBase import (
@@ -35,15 +37,15 @@ class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
     Configuration for combining Zernike coefficients with sigma clipping.
     """
 
-    sigmaClipKwargs = pexConfig.DictField(
+    sigmaClipKwargs: pexConfig.DictField = pexConfig.DictField(
         keytype=str, default=dict(), doc="Arguments for astropy.stats.sigma_clip."
     )
-    stdMin = pexConfig.Field(
+    stdMin: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=0.005,
         doc="Minimum threshold for clipping the standard deviation in um.",
     )
-    maxZernClip = pexConfig.Field(
+    maxZernClip: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=3,
         doc="""When looking for outliers to clip. Check the first
@@ -60,9 +62,11 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
     """
 
     ConfigClass = CombineZernikesSigmaClipTaskConfig
+    config: CombineZernikesSigmaClipTaskConfig
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
         # Set the sigma_clip settings from the config
         self.sigmaClipKwargs = {"sigma": 3.0, "maxiters": 1, "stdfunc": "mad_std"}
         for key, val in self.config.sigmaClipKwargs.items():
@@ -70,7 +74,9 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.maxZernClip = self.config.maxZernClip
         self.stdMin = self.config.stdMin
 
-    def combineZernikes(self, zernikeArray):
+    def combineZernikes(
+        self, zernikeArray: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         sigArray = conditionalSigmaClip(
             zernikeArray, sigmaClipKwargs=self.sigmaClipKwargs, stdMin=self.stdMin
         )

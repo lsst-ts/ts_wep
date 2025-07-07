@@ -37,7 +37,7 @@ from lsst.utils.timer import timeMethod
 
 class CalcZernikesUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "detector", "instrument"),
+    dimensions=("visit", "detector", "instrument"),  # type: ignore
 ):
     donutStamps = connectionTypes.Input(
         doc="Defocused Donut Postage Stamp Images",
@@ -73,7 +73,7 @@ class CalcZernikesUnpairedTaskConnections(
 
 class CalcZernikesUnpairedTaskConfig(
     CalcZernikesTaskConfig,
-    pipelineConnections=CalcZernikesUnpairedTaskConnections,
+    pipelineConnections=CalcZernikesUnpairedTaskConnections,  # type: ignore
 ):
     pass
 

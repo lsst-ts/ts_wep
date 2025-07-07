@@ -24,7 +24,7 @@ __all__ = ["EstimateZernikesBaseConfig", "EstimateZernikesBaseTask"]
 import abc
 import itertools
 import multiprocessing as mp
-from typing import Tuple
+from typing import Any
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -38,14 +38,18 @@ from lsst.ts.wep.utils import (
 )
 
 
-def estimate_zk_pair(args):
+def estimate_zk_pair(
+    args: tuple[DonutStamps, DonutStamps, WfEstimator]
+) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a pair of donuts."""
     donutExtra, donutIntra, wfEstimator = args
     zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
     return zk, zkMeta, wfEstimator.history
 
 
-def estimate_zk_single(args):
+def estimate_zk_single(
+    args: tuple[DonutStamps, WfEstimator]
+) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a single donut."""
     donut, wfEstimator = args
     zk, zkMeta = wfEstimator.estimateZk(donut.wep_im)
@@ -53,7 +57,7 @@ def estimate_zk_single(args):
 
 
 class EstimateZernikesBaseConfig(pexConfig.Config):
-    instConfigFile = pexConfig.Field(
+    instConfigFile: pexConfig.Field = pexConfig.Field(
         doc="Path to a instrument configuration file to override the instrument "
         + "configuration. If begins with 'policy:' the path will be understood as "
         + "relative to the ts_wep policy directory. If not provided, the default "
@@ -61,7 +65,7 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         dtype=str,
         optional=True,
     )
-    nollIndices = pexConfig.ListField(
+    nollIndices: pexConfig.Field = pexConfig.ListField(
         dtype=int,
         default=tuple(range(4, 29)),
         doc="Noll indices for which you wish to estimate Zernike coefficients. "
@@ -69,17 +73,17 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         + "must be complete. For example, if nollIndices contains 5, it must also "
         + "contain 6 (because 5 and 6 are the azimuthal pairs for astigmatism).",
     )
-    startWithIntrinsic = pexConfig.Field(
+    startWithIntrinsic: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
         doc="Whether to start Zernike estimation from the intrinsic Zernikes.",
     )
-    returnWfDev = pexConfig.Field(
+    returnWfDev: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="If True, returns wavefront deviation. If False, returns full OPD.",
     )
-    saveHistory = pexConfig.Field(
+    saveHistory: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="Whether to save the algorithm history in the task metadata. "
@@ -94,8 +98,9 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
     ConfigClass = EstimateZernikesBaseConfig
     _DefaultName = "estimateZernikes"
+    config: EstimateZernikesBaseConfig
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
     @property
@@ -121,7 +126,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         donutStampsIntra: DonutStamps,
         wfEstimator: WfEstimator,
         numCores: int = 1,
-    ) -> Tuple[np.array, dict]:
+    ) -> tuple[np.array, dict]:
         """Estimate Zernike coefficients from pairs of donut stamps.
 
         Parameters
@@ -156,7 +161,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             results = pool.map(estimate_zk_pair, args)
 
         zkList, zkMetaList, histories = zip(*results)
-        zkMeta = {key: [] for key in zkMetaList[0].keys()}
+        zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}
         for zkMetaSingle in zkMetaList:
             for key, value in zkMetaSingle.items():
                 zkMeta[key].append(value)
@@ -179,7 +184,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         donutStampsIntra: DonutStamps,
         wfEstimator: WfEstimator,
         numCores: int = 1,
-    ) -> Tuple[np.array, dict]:
+    ) -> tuple[np.array, dict]:
         """Estimate Zernike coefficients from individual donut stamps.
 
         Parameters
@@ -215,7 +220,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             results = pool.map(estimate_zk_single, args)
 
         zkList, zkMetaList, histories = zip(*results)
-        zkMeta = {key: [] for key in zkMetaList[0].keys()}
+        zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}
         for zkMetaSingle in zkMetaList:
             for key, value in zkMetaSingle.items():
                 zkMeta[key].append(value)

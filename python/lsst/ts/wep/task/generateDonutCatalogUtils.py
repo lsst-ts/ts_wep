@@ -23,21 +23,26 @@ __all__ = [
     "runSelection",
     "donutCatalogToAstropy",
     "addVisitInfoToCatTable",
-    "convertDictToVisitInfo",
 ]
 
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable
-from lsst.afw.coord import Observatory
-from lsst.afw.image import Exposure, RotType, VisitInfo
-from lsst.daf.base import DateTime
-from lsst.geom import SpherePoint, degrees, radians
+from lsst.afw.cameraGeom import Detector
+from lsst.afw.geom import SkyWcs
+from lsst.afw.image import Exposure
+from lsst.meas.algorithms import ReferenceObjectLoader
+from lsst.ts.wep.task import DonutSourceSelectorTask
 
 
 def runSelection(
-    refObjLoader, detector, wcs, filterName, donutSelectorTask, edgeMargin
-):
+    refObjLoader: ReferenceObjectLoader,
+    detector: Detector,
+    wcs: SkyWcs,
+    filterName: str,
+    donutSelectorTask: DonutSourceSelectorTask,
+    edgeMargin: int,
+) -> tuple[QTable, list, list]:
     """
     Match the detector area to the reference catalog
     and then run the LSST DM reference selection task.
@@ -91,12 +96,12 @@ def runSelection(
 
 
 def donutCatalogToAstropy(
-    donutCatalog,
-    filterName,
-    blendCentersX=None,
-    blendCentersY=None,
-    sortFilterIdx=0,
-):
+    donutCatalog: QTable,
+    filterName: str | list[str],
+    blendCentersX: list | None = None,
+    blendCentersY: list | None = None,
+    sortFilterIdx: int = 0,
+) -> QTable:
     """
     Reformat afwCatalog into an astropy QTable sorted by flux with
     the brightest objects at the top.
@@ -161,8 +166,8 @@ def donutCatalogToAstropy(
         sourceFlux = [donutCatalog[f"{fName}_flux"] for fName in filterName]
 
         if (blendCentersX is None) and (blendCentersY is None):
-            blendCX = list()
-            blendCY = list()
+            blendCX: list = list()
+            blendCY: list = list()
             for _ in range(len(donutCatalog)):
                 blendCX.append(list())
                 blendCY.append(list())
@@ -214,7 +219,7 @@ def donutCatalogToAstropy(
     return fieldObjects
 
 
-def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable):
+def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable) -> QTable:
     """
     Add visit info from the exposure object to the catalog QTable metadata.
     This should include all information we will need downstream in the
@@ -274,46 +279,3 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable):
     donutCat.meta["visit_info"] = catVisitInfo
 
     return donutCat
-
-
-def convertDictToVisitInfo(
-    info: dict,
-) -> VisitInfo:
-    """
-    Convert a dictionary (as from astropy metadata added by
-    addVisitInfoToCatTable) back into a VisitInfo object.
-
-    Parameters
-    ----------
-    info : dict
-        Dictionary of visit info.
-
-    Returns
-    -------
-    `lsst.afw.image.VisitInfo`
-        VisitInfo object with the same information as the input dictionary.
-    """
-    kwargs = {
-        "id": info["visit_id"],
-        "date": DateTime(info["mjd"], system=DateTime.MJD, scale=DateTime.TAI),
-        "boresightRaDec": SpherePoint(
-            info["boresight_ra"].to_value(u.rad) * radians,
-            info["boresight_dec"].to_value(u.rad) * radians,
-        ),
-        "boresightAzAlt": SpherePoint(
-            info["boresight_az"].to_value(u.rad) * radians,
-            info["boresight_alt"].to_value(u.rad) * radians,
-        ),
-        "boresightRotAngle": info["boresight_rot_angle"].to_value(u.rad) * radians,
-        "rotType": RotType(info["rot_type_value"]),
-        "focusZ": info["focus_z"].to_value(u.mm),
-        "instrumentLabel": info["instrument_label"],
-        "observatory": Observatory(
-            info["observatory_longitude"].to_value(u.deg) * degrees,
-            info["observatory_latitude"].to_value(u.deg) * degrees,
-            info["observatory_elevation"].to_value(u.m),
-        ),
-        "era": info["ERA"].to_value(u.rad) * radians,
-        "exposureTime": info["exposure_time"].to_value(u.s),
-    }
-    return VisitInfo(**kwargs)

@@ -26,22 +26,26 @@ __all__ = [
 ]
 
 from copy import copy
+from typing import Any
 
 import astropy.units as u
 import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from astropy.table import QTable
 from lsst.afw.geom import makeSkyWcs
+from lsst.afw.image import Exposure
 from lsst.daf.base import PropertyList
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
-from lsst.ts.wep.task.fitDonutRadiusTask import FitDonutRadiusTask
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.task.fitDonutRadiusTask import FitDonutRadiusTask
 from lsst.ts.wep.utils import (
+    DefocalType,
     calcStampPowerSpectrum,
     createTemplateForDetector,
     getTaskInstrument,
@@ -51,7 +55,7 @@ from scipy.signal import correlate
 
 
 class CutOutDonutsBaseTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("exposure", "instrument")
+    pipeBase.PipelineTaskConnections, dimensions=("exposure", "instrument")  # type: ignore
 ):
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
@@ -75,13 +79,13 @@ class CutOutDonutsBaseTaskConnections(
 
 
 class CutOutDonutsBaseTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=CutOutDonutsBaseTaskConnections
+    pipeBase.PipelineTaskConfig, pipelineConnections=CutOutDonutsBaseTaskConnections  # type: ignore
 ):
     # Config setting for pipeline task with defaults
-    donutStampSize = pexConfig.Field(
+    donutStampSize: pexConfig.Field = pexConfig.Field(
         doc="Size of donut stamps in pixels", dtype=int, default=160
     )
-    initialCutoutPadding = pexConfig.Field(
+    initialCutoutPadding: pexConfig.Field = pexConfig.Field(
         doc=str(
             "Additional padding in pixels on each side of the initial "
             + "postage stamp of donutStampSize to make sure we have a "
@@ -91,12 +95,12 @@ class CutOutDonutsBaseTaskConfig(
         dtype=int,
         default=5,
     )
-    opticalModel = pexConfig.Field(
+    opticalModel: pexConfig.Field = pexConfig.Field(
         doc="Specify the optical model (offAxis, onAxis).",
         dtype=str,
         default="offAxis",
     )
-    instConfigFile = pexConfig.Field(
+    instConfigFile: pexConfig.Field = pexConfig.Field(
         doc="Path to a instrument configuration file to override the instrument "
         + "configuration. If begins with 'policy:' the path will be understood as "
         + "relative to the ts_wep policy directory. If not provided, the default "
@@ -104,34 +108,34 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         optional=True,
     )
-    subtractBackground = pexConfig.ConfigurableField(
+    subtractBackground: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=lsst.meas.algorithms.SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
     )
-    maxRecenterDistance = pexConfig.Field(
+    maxRecenterDistance: pexConfig.Field = pexConfig.Field(
         doc="Maximum distance (in pixels) to shift donut stamp centroid when "
         + "performing recentering step with convolution.",
         dtype=int,
         default=20,
     )
-    sourceErosionIter = pexConfig.Field(
+    sourceErosionIter: pexConfig.Field = pexConfig.Field(
         doc="How many iterations of binary erosion to run on the image mask "
         + "to calculate mean donut signal (The default is 1).",
         dtype=int,
         default=1,
     )
-    bkgDilationIter = pexConfig.Field(
+    bkgDilationIter: pexConfig.Field = pexConfig.Field(
         doc="How many iterations of binary dilation to run on the image mask "
         + "to calculate the background variance (The default is 3).",
         dtype=int,
         default=3,
     )
-    badPixelMaskDefinitions = pexConfig.ListField(
+    badPixelMaskDefinitions: pexConfig.ListField = pexConfig.ListField(
         doc="List of mask values flagged as 'bad' for Zernike estimation.",
         dtype=str,
         default=["SAT", "BAD", "NO_DATA", "INTRP"],
     )
-    fitDonutRadius = pexConfig.ConfigurableField(
+    fitDonutRadius: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=FitDonutRadiusTask,
         doc="How to estimate donut radius.",
     )
@@ -146,8 +150,10 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
     ConfigClass = CutOutDonutsBaseTaskConfig
     # _DefaultName implemented here in subclass
+    config: CutOutDonutsBaseTaskConfig
+    subtractBackground: lsst.meas.algorithms.SubtractBackgroundTask
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         # Set final size (in pixels) of postage stamp images returned as
@@ -177,7 +183,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.fitDonutRadius = self.config.fitDonutRadius
         self.makeSubtask("fitDonutRadius")
 
-    def shiftCenters(self, centerArr, boundary, distance):
+    def shiftCenters(
+        self, centerArr: np.ndarray, boundary: float, distance: float
+    ) -> np.ndarray:
         """Shift the centers of sources if the distance to
         boundary is less than required.
 
@@ -206,7 +214,21 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
         return centerArrCopy
 
-    def calculateFinalCentroids(self, exposure, template, xCenters, yCenters):
+    def calculateFinalCentroids(
+        self,
+        exposure: Exposure,
+        template: np.ndarray,
+        xCenters: np.ndarray,
+        yCenters: np.ndarray,
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+    ]:
         """
         Recentroid donuts from catalog values by convolving with template.
         Also return the appropriate corner values for the final donutStamps
@@ -314,7 +336,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             np.array(peakHeight),
         )
 
-    def calculateSN(self, stamp):
+    def calculateSN(self, stamp: DonutStamp) -> dict:
         """
         Calculate signal-to-noise ratio.
 
@@ -425,7 +447,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
         return snDict
 
-    def filterBadRecentering(self, xShifts, yShifts):
+    def filterBadRecentering(
+        self, xShifts: np.ndarray, yShifts: np.ndarray
+    ) -> np.ndarray:
         """Filter out donuts that are recentered far away from the median
         shift of all donuts. The median is subtracted to account for a constant
         shift due to any constant offsets from the WCS used to calculate
@@ -460,7 +484,13 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         shiftFailureIdx = np.where(totalShifts > self.maxRecenterDistance)[0]
         return shiftFailureIdx
 
-    def addVisitLevelMetadata(self, exposure, inputDonutStamps, donutCatalog, defocalType):
+    def addVisitLevelMetadata(
+        self,
+        exposure: Exposure,
+        inputDonutStamps: DonutStamps,
+        donutCatalog: QTable,
+        defocalType: DefocalType,
+    ) -> DonutStamps:
         """
         Get visit level metadata and save in the donutStamps object.
 
@@ -487,7 +517,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         detector = exposure.getDetector()
         detectorName = detector.getName()
         bandLabel = exposure.filter.bandLabel
-        cameraName = donutCatalog.meta['visit_info']['instrument_label']
+        cameraName = donutCatalog.meta["visit_info"]["instrument_label"]
 
         instrument = getTaskInstrument(
             cameraName,
@@ -498,8 +528,8 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         inputDonutStamps.metadata["DFC_DIST"] = instrument.defocalOffset * 1e3
         inputDonutStamps.metadata["DFC_TYPE"] = defocalType.value
         inputDonutStamps.metadata["DET_NAME"] = detectorName
-        inputDonutStamps.metadata["VISIT"] = donutCatalog.meta['visit_info']['visit_id']
-        inputDonutStamps.metadata["MJD"] =  visitInfo.date.toAstropy().tai.mjd
+        inputDonutStamps.metadata["VISIT"] = donutCatalog.meta["visit_info"]["visit_id"]
+        inputDonutStamps.metadata["MJD"] = visitInfo.date.toAstropy().tai.mjd
         inputDonutStamps.metadata["CAM_NAME"] = cameraName
 
         # Save visit info
@@ -524,7 +554,13 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
         return inputDonutStamps
 
-    def cutOutStamps(self, exposure, donutCatalog, defocalType, cameraName):
+    def cutOutStamps(
+        self,
+        exposure: Exposure,
+        donutCatalog: QTable,
+        defocalType: DefocalType,
+        cameraName: str,
+    ) -> DonutStamps:
         """
         Cut out postage stamps for sources in catalog.
 
@@ -675,9 +711,6 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                 if len(blendStrX) > 0:
                     blendStrX = blendStrX[:-1]
                     blendStrY = blendStrY[:-1]
-                else:
-                    blendStrX = None
-                    blendStrY = None
                 finalBlendXList.append(blendStrX)
                 finalBlendYList.append(blendStrY)
 
@@ -821,9 +854,15 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the donut radius metrics
         fitResults = self.fitDonutRadius.run(finalStamps)
         stampsMetadata["RADIUS"] = np.array(fitResults.donutRadiiTable["RADIUS"])
-        stampsMetadata["X_PIX_LEFT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_LEFT_EDGE"])
-        stampsMetadata["X_PIX_RIGHT_EDGE"] = np.array(fitResults.donutRadiiTable["X_PIX_RIGHT_EDGE"])
-        stampsMetadata["RADIUS_FAIL_FLAG"] = np.array(fitResults.donutRadiiTable["FAIL_FLAG"])
+        stampsMetadata["X_PIX_LEFT_EDGE"] = np.array(
+            fitResults.donutRadiiTable["X_PIX_LEFT_EDGE"]
+        )
+        stampsMetadata["X_PIX_RIGHT_EDGE"] = np.array(
+            fitResults.donutRadiiTable["X_PIX_RIGHT_EDGE"]
+        )
+        stampsMetadata["RADIUS_FAIL_FLAG"] = np.array(
+            fitResults.donutRadiiTable["FAIL_FLAG"]
+        )
 
         # Save the peak of the correlated image
         stampsMetadata["PEAK_HEIGHT"] = peakHeight

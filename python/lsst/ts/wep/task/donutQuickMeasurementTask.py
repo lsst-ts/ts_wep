@@ -22,10 +22,12 @@
 __all__ = ["DonutQuickMeasurementTaskConfig", "DonutQuickMeasurementTask"]
 
 from copy import copy
+from typing import Any
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from lsst.afw.image import Exposure
 from lsst.meas.base import MeasurementError
 from lsst.pipe.tasks.quickFrameMeasurement import (
     QuickFrameMeasurementTask,
@@ -35,7 +37,7 @@ from scipy.signal import correlate
 
 
 class DonutQuickMeasurementTaskConfig(QuickFrameMeasurementTaskConfig):
-    initialCutoutPadding = pexConfig.Field(
+    initialCutoutPadding: pexConfig.Field = pexConfig.Field(
         doc=str(
             "Additional padding in pixels on each side of initial "
             + "`donutDiameter` guess for template postage stamp size "
@@ -44,7 +46,7 @@ class DonutQuickMeasurementTaskConfig(QuickFrameMeasurementTaskConfig):
         dtype=int,
         default=5,
     )
-    doPreConvolution = pexConfig.Field(
+    doPreConvolution: pexConfig.Field = pexConfig.Field(
         doc=str(
             "Perform a preconvolution of the image with a donut model? "
             + "(The default is True.)"
@@ -58,7 +60,18 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
     ConfigClass = DonutQuickMeasurementTaskConfig
     _DefaultName = "donutQuickMeasurementTask"
 
-    def run(self, exp, template=None, donutDiameter=None, cutoutPadding=None):
+    config: DonutQuickMeasurementTaskConfig
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    def run(
+        self,
+        exp: Exposure,
+        template: np.ndarray | None = None,
+        donutDiameter: int | None = None,
+        cutoutPadding: int | None = None,
+    ) -> pipeBase.Struct:
         """
         Run method for the task. This task runs a quick detection and
         measurement scheme to detect donuts in images based upon

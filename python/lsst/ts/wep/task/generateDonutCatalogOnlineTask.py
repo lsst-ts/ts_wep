@@ -22,10 +22,13 @@
 __all__ = ["GenerateDonutCatalogOnlineTaskConfig", "GenerateDonutCatalogOnlineTask"]
 
 import warnings
+from typing import Any
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from lsst.afw.cameraGeom import Detector
+from lsst.afw.geom import SkyWcs
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
@@ -38,14 +41,16 @@ from lsst.utils.timer import timeMethod
 class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
     """Configuration for GenerateDonutCatalogOnlineTask."""
 
-    filterName = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
-    donutSelector = pexConfig.ConfigurableField(
+    filterName: pexConfig.Field = pexConfig.Field(
+        doc="Reference filter", dtype=str, default="g"
+    )
+    donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutSourceSelectorTask, doc="How to select donut targets."
     )
-    doDonutSelection = pexConfig.Field(
+    doDonutSelection: pexConfig.Field = pexConfig.Field(
         doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
-    edgeMargin = pexConfig.Field(
+    edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Size of detector edge margin in pixels", dtype=int, default=80
     )
 
@@ -68,14 +73,16 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
 
     ConfigClass = GenerateDonutCatalogOnlineTaskConfig
     _DefaultName = "generateDonutCatalogOnlineTask"
+    config: GenerateDonutCatalogOnlineTaskConfig
+    donutSelector: DonutSourceSelectorTask
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
-    def getRefObjLoader(self, refCatalogList):
+    def getRefObjLoader(self, refCatalogList: list) -> ReferenceObjectLoader:
         """
         Create a `ReferenceObjectLoader` from available reference catalogs
         in the repository.
@@ -103,7 +110,12 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         return refObjLoader
 
     @timeMethod
-    def run(self, refCatalogs, detector, detectorWcs) -> pipeBase.Struct:
+    def run(
+        self,
+        refCatalogs: list,
+        detector: Detector,
+        detectorWcs: SkyWcs,
+    ) -> pipeBase.Struct:
         # refObjLoader handles the interaction with the butler repository
         # needed to get the pieces of the reference catalogs we need.
         refObjLoader = self.getRefObjLoader(refCatalogs)

@@ -21,13 +21,16 @@
 
 __all__ = ["DonutSourceSelectorTaskConfig", "DonutSourceSelectorTask"]
 
+from typing import Any
+
 import astropy.units as u
 import lsst.geom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
 import pandas as pd
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
+from astropy.table import Table
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Detector
 from lsst.meas.algorithms.sourceSelector import _getFieldFromCatalog
 from lsst.ts.wep.utils import readConfigYaml
 from lsst.utils.timer import timeMethod
@@ -35,58 +38,58 @@ from sklearn.neighbors import NearestNeighbors
 
 
 class DonutSourceSelectorTaskConfig(pexConfig.Config):
-    xCoordField = pexConfig.Field(
+    xCoordField: pexConfig.Field = pexConfig.Field(
         dtype=str, default="centroid_x", doc="Name of x-coordinate column."
     )
-    yCoordField = pexConfig.Field(
+    yCoordField: pexConfig.Field = pexConfig.Field(
         dtype=str, default="centroid_y", doc="Name of y-coordinate column."
     )
-    useCustomMagLimit = pexConfig.Field(
+    useCustomMagLimit: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="Apply user-defined magnitude limit? If this is False then the code"
         + " will default to use the magnitude values in policy:magLimitStar.yaml.",
     )
-    magMax = pexConfig.Field(
+    magMax: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=99.0,
         doc="Maximum magnitude for selection. Only used if useCustomMagLimit is True.",
     )
-    magMin = pexConfig.Field(
+    magMin: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=-99.0,
         doc="Minimum magnitude for selection. Only used if useCustomMagLimit is True.",
     )
     # For information on where this default maxFieldDist comes from see details
     # in ts_analysis_notebooks/aos/vignetting.
-    maxFieldDist = pexConfig.Field(
+    maxFieldDist: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=1.808,
         doc="Maximum distance from center of focal plane (in degrees).",
     )
-    unblendedSeparation = pexConfig.Field(
+    unblendedSeparation: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=160,
         doc="Distance in pixels between two donut centers for them to be considered unblended. "
         + "This setting and minBlendedSeparation will both be affected by the defocal distance.",
     )
-    minBlendedSeparation = pexConfig.Field(
+    minBlendedSeparation: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=120,
         doc="Minimum separation in pixels between blended donut centers. "
         + "This setting and unblendedSeparation will both be affected by the defocal distance.",
     )
-    isolatedMagDiff = pexConfig.Field(
+    isolatedMagDiff: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=2,
         doc="Min. difference in magnitude for 'isolated' star.",
     )
-    sourceLimit = pexConfig.Field(
+    sourceLimit: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=-1,
         doc="Maximum number of desired sources (default is -1 which will give all in catalog).",
     )
-    maxBlended = pexConfig.Field(
+    maxBlended: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=0,
         doc="Number of blended objects (defined by unblendedSeparation and isolatedMagDiff) "
@@ -106,11 +109,17 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
     ConfigClass = DonutSourceSelectorTaskConfig
     _DefaultName = "donutSourceSelectorTask"
+    config: DonutSourceSelectorTaskConfig
 
-    def __init__(self, **kwargs):
-        pipeBase.Task.__init__(self, **kwargs)
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
-    def run(self, sourceCat, detector, filterName):
+    def run(
+        self,
+        sourceCat: lsst.afw.table.SourceCatalog,
+        detector: Detector,
+        filterName: str,
+    ) -> pipeBase.Struct:
         """Select sources and return them.
 
         Parameters
@@ -157,7 +166,12 @@ class DonutSourceSelectorTask(pipeBase.Task):
         )
 
     @timeMethod
-    def selectSources(self, sourceCat, detector, filterName):
+    def selectSources(
+        self,
+        sourceCat: lsst.afw.table.SourceCatalog | pd.DataFrame | Table,
+        detector: lsst.afw.cameraGeom.Detector,
+        filterName: str,
+    ) -> pipeBase.Struct:
         """
         Run the source selection algorithm and return the indices to keep
         in the original catalog.
@@ -262,8 +276,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
             raise ValueError(errMsg)
 
         maxBlended = self.config.maxBlended
-        blendCentersX = [list() for _ in range(len(magSortedDf))]
-        blendCentersY = [list() for _ in range(len(magSortedDf))]
+        blendCentersX: list = [list() for _ in range(len(magSortedDf))]
+        blendCentersY: list = [list() for _ in range(len(magSortedDf))]
         sourcesKept = 0
         # Go through catalog with nearest neighbor information
         # and keep sources that match our configuration settings
