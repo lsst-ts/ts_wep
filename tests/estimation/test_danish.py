@@ -40,12 +40,12 @@ except (AttributeError, ImportError):  # noqa: E402
 class TestDanishAlgorithm(unittest.TestCase):
     """Test DanishAlgorithm."""
 
-    def testBadLstsqKwargs(self):
+    def testBadLstsqKwargs(self) -> None:
         for kwarg in ["fun", "x0", "jac", "args"]:
             with self.assertRaises(KeyError):
                 DanishAlgorithm(lstsqKwargs={kwarg: None})
 
-    def testGoodLstsqKwargs(self):
+    def testGoodLstsqKwargs(self) -> None:
         # Create estimator
         dan = DanishAlgorithm(lstsqKwargs={"max_nfev": 1})
 
@@ -60,7 +60,7 @@ class TestDanishAlgorithm(unittest.TestCase):
             if key != "zk":
                 self.assertEqual(hist["lstsqResult"]["nfev"], 1)
 
-    def testAccuracyWithoutBinning(self):
+    def testAccuracyWithoutBinning(self) -> None:
         for jointFitPair in [True, False]:
             # Try several different random seeds
             for seed in [12345, 23451]:
@@ -86,7 +86,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                     # Check that results are fairly accurate
                     self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
-    def testAccuracyWithBinning(self):
+    def testAccuracyWithBinning(self) -> None:
         for jointFitPair in [True, False]:
             # Try several different random seeds
             for seed in [12345, 23451]:
@@ -133,7 +133,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                             danBin.history["extra"]["image"].shape, binned_shape
                         )
 
-    def testMetadata(self):
+    def testMetadata(self) -> None:
         zkTrue, intra, extra = forwardModelPair(seed=42)
 
         # Estimate with singles and pairs
@@ -145,4 +145,4 @@ class TestDanishAlgorithm(unittest.TestCase):
         # Check metadata
         for metaDict in pairMeta, intraMeta, extraMeta:
             self.assertEqual(["fwhm"], list(metaDict.keys()))
-            self.assertAlmostEqual(metaDict['fwhm'], 1.034, delta=0.01)
+            self.assertAlmostEqual(metaDict["fwhm"], 1.034, delta=0.01)

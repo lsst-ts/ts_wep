@@ -25,7 +25,7 @@ from copy import copy
 import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
@@ -41,8 +41,18 @@ from lsst.ts.wep.utils import (
 
 
 class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+    visitNum: int
+    baseRunName: str
+    pairTableName: str
+    run2Name: str
+    run3Name: str
+    cameraName: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Run the pipeline only once since it takes a
         couple minutes with the ISR.
@@ -58,7 +68,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         cls.cameraName = "LSSTCam"
 
         # Check that runs don't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         cleanUpList = [cls.pairTableName, cls.run2Name, cls.run3Name]
@@ -85,7 +95,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             )
 
             pipeCmd = writePipetaskCmd(
-                cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
             )
             pipeCmd += " -d 'exposure IN (4021123106001..4021123106007)'"
             runProgram(pipeCmd)
@@ -125,11 +139,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
         runProgram(pipeCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CutOutDonutsScienceSensorTaskConfig()
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -145,7 +159,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "visit": 4021123106002,
         }
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
@@ -153,7 +167,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
 
-    def testAssignExtraIntraIdxLsstCam(self):
+    def testAssignExtraIntraIdxLsstCam(self) -> None:
         focusZNegative = -1
         focusZPositive = 1
 
@@ -169,7 +183,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
-    def testAssignExtraIntraIdxLsstComCam(self):
+    def testAssignExtraIntraIdxLsstComCam(self) -> None:
         focusZNegative = -1
         focusZPositive = 1
 
@@ -185,7 +199,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
-    def testAssignExtraIntraIdxLsstComCamSim(self):
+    def testAssignExtraIntraIdxLsstComCamSim(self) -> None:
         focusZNegative = -1
         focusZPositive = 1
 
@@ -201,7 +215,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
-    def testAssignExtraIntraIdxInvalidCamera(self):
+    def testAssignExtraIntraIdxInvalidCamera(self) -> None:
         cameraName = "WrongCam"
         with self.assertRaises(ValueError) as context:
             self.task.assignExtraIntraIdx(-1, 1, cameraName)
@@ -211,7 +225,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         )
         self.assertEqual(errorStr, str(context.exception))
 
-    def testTaskRun(self):
+    def testTaskRun(self) -> None:
         # Grab two exposures from the same detector at two different visits to
         # get extra and intra
         exposureExtra = self.butler.get(
@@ -266,13 +280,9 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         )
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
-            self.assertMaskedImagesAlmostEqual(
-                donutStamp.stamp_im, cutOutStamp.stamp_im
-            )
+            self.assertMaskedImagesAlmostEqual(donutStamp.stamp_im, cutOutStamp.stamp_im)  # type: ignore
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
-            self.assertMaskedImagesAlmostEqual(
-                donutStamp.stamp_im, cutOutStamp.stamp_im
-            )
+            self.assertMaskedImagesAlmostEqual(donutStamp.stamp_im, cutOutStamp.stamp_im)  # type: ignore
 
         # Check that the new metadata is stored in butler
         donutStamps = self.butler.get(
@@ -338,7 +348,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             )
 
     @staticmethod
-    def compareMetadata(metadata1, metadata2):
+    def compareMetadata(metadata1: dict, metadata2: dict) -> bool:
         for k, v in metadata1.items():
             if k.startswith("LSST BUTLER"):
                 continue
@@ -366,7 +376,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
                     return False
         return True
 
-    def testTaskRunTablePairer(self):
+    def testTaskRunTablePairer(self) -> None:
         # Get everything via the extra ID
         intraStamps1 = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
@@ -389,11 +399,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             self.assertTrue(self.compareMetadata(md1, md2))
 
         for s1, s2 in zip(intraStamps1, intraStamps2):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)  # type: ignore
         for s1, s2 in zip(extraStamps1, extraStamps2):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)  # type: ignore
 
-    def testTaskRunGroupPairer(self):
+    def testTaskRunGroupPairer(self) -> None:
         # Get everything via the extra ID
         intraStamps1 = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
@@ -415,12 +425,12 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         ]:
             self.assertTrue(self.compareMetadata(md1, md3))
         for s1, s3 in zip(intraStamps1, intraStamps3):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)  # type: ignore
         for s1, s3 in zip(extraStamps1, extraStamps3):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)
+            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)  # type: ignore
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         tearDownRunList = [cls.pairTableName, cls.run2Name, cls.run3Name]
         if cls.runName == "run1":
             tearDownRunList.append(cls.runName)

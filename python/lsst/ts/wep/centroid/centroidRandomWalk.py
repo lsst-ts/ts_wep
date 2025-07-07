@@ -29,7 +29,7 @@ class CentroidRandomWalk(CentroidDefault):
     """CentroidDefault child class to get the centroid of donut by the
     random walk model."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Minimum effective signal
         self.minEffSignal = 1e-8
 
@@ -39,7 +39,7 @@ class CentroidRandomWalk(CentroidDefault):
         # Random seed
         self.seed = 1000
 
-    def getImgBinary(self, imgDonut):
+    def getImgBinary(self, imgDonut: np.ndarray) -> np.ndarray:
         """Get the binary image.
 
         Parameters
@@ -60,7 +60,7 @@ class CentroidRandomWalk(CentroidDefault):
 
         return imgBinary
 
-    def _calcThreshold(self, imgDonut):
+    def _calcThreshold(self, imgDonut: np.ndarray) -> float:
         """Calculate the threshold to decide the effective signal.
 
         Parameters

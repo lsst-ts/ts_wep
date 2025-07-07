@@ -28,15 +28,17 @@ from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
 
 
 class TestCombineZernikesBaseTask(unittest.TestCase):
-    def testAbstractClassTypeError(self):
+    def testAbstractClassTypeError(self) -> None:
         # Without a combineZernikes method the class
         # should not be built
         with self.assertRaises(TypeError):
             CombineZernikesBaseTask()
 
-    def testSubclassWorks(self):
+    def testSubclassWorks(self) -> None:
         class TestCombineClass(CombineZernikesBaseTask):
-            def combineZernikes(self, zernikeArray):
+            def combineZernikes(
+                self, zernikeArray: np.ndarray
+            ) -> tuple[np.ndarray, np.ndarray]:
                 return zernikeArray, np.ones(len(zernikeArray))
 
         task = TestCombineClass()

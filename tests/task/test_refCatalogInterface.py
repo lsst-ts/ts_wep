@@ -22,13 +22,13 @@
 import os
 import unittest
 
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task.refCatalogInterface import RefCatalogInterface
 from lsst.ts.wep.utils import getModulePath
 
 
 class TestRefCatalogInterface(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.boresightRa = 0.03
         self.boresightDec = -0.02
         self.boresightRotAng = 90.0
@@ -39,9 +39,9 @@ class TestRefCatalogInterface(unittest.TestCase):
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
 
-    def testGetHtmIds(self):
+    def testGetHtmIds(self) -> None:
         """Test that the correct htmIds are returned."""
 
         # Test default radius
@@ -51,7 +51,7 @@ class TestRefCatalogInterface(unittest.TestCase):
         smallRadIds = [131072, 188416, 196608, 253952]
         self.assertCountEqual(self.refCatInterface.getHtmIds(radius=0.2), smallRadIds)
 
-    def testGetDataRefs(self):
+    def testGetDataRefs(self) -> None:
         """Test that the dataRefs are gathered correctly."""
 
         htmIds = self.refCatInterface.getHtmIds()
@@ -64,7 +64,7 @@ class TestRefCatalogInterface(unittest.TestCase):
         self.assertEqual(len(dataRefs), 7)
         self.assertEqual(len(dataIds), 7)
 
-    def testGetDetectorWcs(self):
+    def testGetDetectorWcs(self) -> None:
         """Test setting up a WCS for the pointing."""
 
         camera = self.butler.get(

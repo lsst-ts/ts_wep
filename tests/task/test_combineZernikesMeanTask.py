@@ -28,22 +28,22 @@ from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 
 
 class TestCombineZernikesMeanTask(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.task = CombineZernikesMeanTask()
 
-    def prepareTestArray(self):
+    def prepareTestArray(self) -> np.ndarray:
         inputArray = np.ones((2, 10))
         inputArray[1] += 2.0
         return inputArray
 
-    def testCombineZernikes(self):
+    def testCombineZernikes(self) -> None:
         zernikeArray = self.prepareTestArray()
         combinedZernikes, flags = self.task.combineZernikes(zernikeArray)
         np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
         np.testing.assert_array_equal(np.zeros(2), flags)
         self.assertTrue(isinstance(flags[0], numbers.Integral))
 
-    def testTaskRun(self):
+    def testTaskRun(self) -> None:
         zernikeArray = self.prepareTestArray()
         combinedZernikesStruct = self.task.run(zernikeArray)
         self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)

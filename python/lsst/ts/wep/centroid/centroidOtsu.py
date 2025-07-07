@@ -21,6 +21,7 @@
 
 __all__ = ["CentroidOtsu"]
 
+import numpy as np
 from lsst.ts.wep.centroid.centroidDefault import CentroidDefault
 from skimage.filters import threshold_otsu
 
@@ -29,11 +30,11 @@ class CentroidOtsu(CentroidDefault):
     """CentroidDefault child class to get the centroid of donut by the
     Otsu's method."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Number of bins in the histogram
         self.numOfBins = 256
 
-    def getImgBinary(self, imgDonut):
+    def getImgBinary(self, imgDonut: np.ndarray) -> np.ndarray:
         """Get the binary image.
 
         Parameters

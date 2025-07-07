@@ -24,7 +24,7 @@ import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE
 
 
-def getMappingFromFieldXY(fieldXY):
+def getMappingFromFieldXY(fieldXY: np.ndarray) -> dict:
     """Map the sensor and field index based on the distance between the
     positions of sensor and field.
 

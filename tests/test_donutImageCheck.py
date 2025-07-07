@@ -30,10 +30,10 @@ from lsst.ts.wep.utils import getModulePath
 class TestDonutImageCheck(unittest.TestCase):
     """Test the DonutImageCheck class."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.donutImgCheck = DonutImageCheck()
 
-    def testIsEffDonutWithEffImg(self):
+    def testIsEffDonutWithEffImg(self) -> None:
         imgFile = os.path.join(
             getModulePath(),
             "tests",
@@ -70,14 +70,14 @@ class TestDonutImageCheck(unittest.TestCase):
         # test that now we only get the boolean as before
         self.assertTrue(self.donutImgCheck.isEffDonut(donutImg))
 
-    def testIsEffDonutWithConstImg(self):
+    def testIsEffDonutWithConstImg(self) -> None:
         zeroDonutImg = np.zeros((120, 120))
         self.assertFalse(self.donutImgCheck.isEffDonut(zeroDonutImg))
 
         onesDonutImg = np.ones((120, 120))
         self.assertFalse(self.donutImgCheck.isEffDonut(onesDonutImg))
 
-    def testIsEffDonutWithRandImg(self):
+    def testIsEffDonutWithRandImg(self) -> None:
         donutImg = np.random.rand(120, 120)
         self.assertFalse(self.donutImgCheck.isEffDonut(donutImg))
 

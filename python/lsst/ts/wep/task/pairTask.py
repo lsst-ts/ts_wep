@@ -29,6 +29,7 @@ __all__ = [
 ]
 
 import typing
+from typing import Any
 
 import lsst.afw.image as afwImage
 import lsst.pex.config as pexConfig
@@ -45,22 +46,22 @@ class IntraExtraIdxPair(typing.NamedTuple):
 
 
 class ExposurePairerConfig(pexConfig.Config):
-    timeThreshold = pexConfig.Field[float](
+    timeThreshold: pexConfig.Field = pexConfig.Field[float](
         doc="Maximum time difference between paired intra- and extra-focal exposures (s)",
         default=300,
     )
 
-    pointingThreshold = pexConfig.Field[float](
+    pointingThreshold: pexConfig.Field = pexConfig.Field[float](
         doc="Maximum pointing difference between paired intra- and extra-focal exposures (arcsec)",
         default=60,
     )
 
-    rotationThreshold = pexConfig.Field[float](
+    rotationThreshold: pexConfig.Field = pexConfig.Field[float](
         doc="Maximum rotator angle difference between paired intra- and extra-focal exposures (deg)",
         default=1.0,
     )
 
-    ignoreThresholds = pexConfig.Field[bool](
+    ignoreThresholds: pexConfig.Field = pexConfig.Field[bool](
         doc=(
             "If True, ignore time, pointing, and rotation thresholds.  Useful when grouping by "
             "exposure.group"
@@ -68,25 +69,25 @@ class ExposurePairerConfig(pexConfig.Config):
         default=False,
     )
 
-    doOverrideSeparation = pexConfig.Field[bool](
+    doOverrideSeparation: pexConfig.Field = pexConfig.Field[bool](
         doc="Whether to override expected intra-focal to focal separation",
         default=False,
     )
 
-    overrideSeparation = pexConfig.Field[float](
+    overrideSeparation: pexConfig.Field = pexConfig.Field[float](
         doc="Expected extra-focal to focal separation (mm).  Note that this is signed such that "
         "a positive value means an extra-focal exposure has a greater focusZ value than an "
         "intra-focal exposure.",
         default=1.5,
     )
 
-    groupingThreshold = pexConfig.Field[float](
+    groupingThreshold: pexConfig.Field = pexConfig.Field[float](
         doc="Threshold for assigning visit to intra/extra/focal group as a fraction of the expected "
         "intra-focal to focal separation.",
         default=0.1,
     )
 
-    forceUniquePairs = pexConfig.Field[bool](
+    forceUniquePairs: pexConfig.Field = pexConfig.Field[bool](
         doc="If True, force each extra exposure to be paired with a unique intra exposure.",
         default=True,
     )
@@ -97,6 +98,10 @@ class ExposurePairer(pipeBase.Task):
     _DefaultName = "exposurePairer"
     _needsPairTable = False
     _needsGroupDimension = False
+    config: ExposurePairerConfig
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     def makeTables(
         self,
@@ -269,11 +274,11 @@ class TablePairer(pipeBase.Task):
 
 
 class GroupPairerConfig(ExposurePairerConfig):
-    def setDefaults(self):
+    def setDefaults(self) -> None:
         super().setDefaults()
         self.ignoreThresholds = True
 
-    def validate(self):
+    def validate(self) -> None:
         super().validate()
 
         if not self.ignoreThresholds:

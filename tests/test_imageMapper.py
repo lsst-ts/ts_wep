@@ -21,10 +21,11 @@
 
 import itertools
 import unittest
+from typing import Any
 
 import batoid
 import numpy as np
-from lsst.ts.wep import Image, ImageMapper
+from lsst.ts.wep import Image, ImageMapper, Instrument
 from scipy.ndimage import binary_erosion, binary_opening, shift
 
 
@@ -32,7 +33,9 @@ class TestImageMapper(unittest.TestCase):
     """Test the ImageMapper class."""
 
     @staticmethod
-    def _createImageWithBatoid(nPixels, fieldAngle, defocalType, instrument):
+    def _createImageWithBatoid(
+        nPixels: int, fieldAngle: float, defocalType: str, instrument: Instrument
+    ) -> np.ndarray:
         """Create a simple image with Batoid.
 
         Note the resulting image has aliasing artifacts.
@@ -106,16 +109,16 @@ class TestImageMapper(unittest.TestCase):
 
         return batoidImage
 
-    def testCreateWithDefaults(self):
+    def testCreateWithDefaults(self) -> None:
         ImageMapper()
 
-    def testBadOpticalModel(self):
+    def testBadOpticalModel(self) -> None:
         with self.assertRaises(TypeError):
             ImageMapper(opticalModel=1)
         with self.assertRaises(ValueError):
             ImageMapper(opticalModel="bad")
 
-    def testCreatePupilMaskCenter(self):
+    def testCreatePupilMaskCenter(self) -> None:
         # Create the mapper and pull out the instrument
         mapper = ImageMapper()
         inst = mapper.instrument
@@ -130,7 +133,7 @@ class TestImageMapper(unittest.TestCase):
         mapper.createPupilMasks(image, isBinary=True)
         self.assertTrue(np.allclose(image.mask, truth))
 
-    def testCreatePupilMaskOffCenter(self):
+    def testCreatePupilMaskOffCenter(self) -> None:
         # Create the mapper and pull out the instrument
         mapper = ImageMapper()
         inst = mapper.instrument
@@ -182,7 +185,7 @@ class TestImageMapper(unittest.TestCase):
 
         self.assertTrue(np.allclose(diff, 0))
 
-    def testCreateImageMaskOffCenter(self):
+    def testCreateImageMaskOffCenter(self) -> None:
         for defocalType in ["intra", "extra"]:
             # Create the mapper and pull out the instrument
             mapper = ImageMapper()
@@ -219,7 +222,7 @@ class TestImageMapper(unittest.TestCase):
 
             self.assertLess(fracDiff, 0.01)
 
-    def testCenterOnProjection(self):
+    def testCenterOnProjection(self) -> None:
         # Forward model an image
         mapper = ImageMapper()
         inst = mapper.instrument
@@ -253,7 +256,7 @@ class TestImageMapper(unittest.TestCase):
         )
         self.assertTrue(np.allclose(recentered.image, image.image))
 
-    def testMapPupilToImage(self):
+    def testMapPupilToImage(self) -> None:
         for defocalType in ["intra", "extra"]:
             # Create the mapper and pull out the instrument
             mapper = ImageMapper()
@@ -291,7 +294,7 @@ class TestImageMapper(unittest.TestCase):
 
             self.assertLess(absMeanDiff, 0.01)
 
-    def testRoundTrip(self):
+    def testRoundTrip(self) -> None:
         rng = np.random.default_rng(0)
 
         for opticalModel, fieldAngle, defocalType, zk in itertools.product(
@@ -326,7 +329,7 @@ class TestImageMapper(unittest.TestCase):
             self.assertLess(diff.sum() / pupil.sum(), 0.02)
             self.assertLess(diff.max(), 1)
 
-    def testMaskBlends(self):
+    def testMaskBlends(self) -> None:
         # Create the image mapper
         mapper = ImageMapper()
         inst = mapper.instrument
@@ -374,7 +377,7 @@ class TestImageMapper(unittest.TestCase):
             < mapper.mapPupilToImage(image, doMaskBlends=False).image.sum()
         )
 
-    def testDilate(self):
+    def testDilate(self) -> None:
         # Create the image mapper
         mapper = ImageMapper()
         inst = mapper.instrument
@@ -417,7 +420,7 @@ class TestImageMapper(unittest.TestCase):
             mask0.sum(),
         )
 
-    def testDilateBlends(self):
+    def testDilateBlends(self) -> None:
         # Create the image mapper
         mapper = ImageMapper()
         inst = mapper.instrument
@@ -472,11 +475,11 @@ class TestImageMapper(unittest.TestCase):
             mask0.sum(),
         )
 
-    def testCreateBlendMask(self):
+    def testCreateBlendMask(self) -> None:
         mapper = ImageMapper()
         inst = mapper.instrument
 
-        def _testCreateBlendMask(isIntra: bool, isPupilMask: bool):
+        def _testCreateBlendMask(isIntra: bool, isPupilMask: bool) -> None:
             try:
                 # Create a dummy image
                 image = Image(
@@ -537,11 +540,11 @@ class TestImageMapper(unittest.TestCase):
         _testCreateBlendMask(isIntra=True, isPupilMask=True)
         _testCreateBlendMask(isIntra=False, isPupilMask=True)
 
-    def testAutoDilateBlendMask(self):
+    def testAutoDilateBlendMask(self) -> None:
         mapper = ImageMapper()
         inst = mapper.instrument
 
-        def _testAutoDilate(isIntra: bool, isPupilMask: bool):
+        def _testAutoDilate(isIntra: bool, isPupilMask: bool) -> None:
             # Create a dummy image
             image = Image(
                 np.zeros((inst.nPupilPixels, inst.nPupilPixels)),
@@ -595,7 +598,7 @@ class TestImageMapper(unittest.TestCase):
         _testAutoDilate(isIntra=True, isPupilMask=True)
         _testAutoDilate(isIntra=False, isPupilMask=True)
 
-    def testGetProjectionSize(self):
+    def testGetProjectionSize(self) -> None:
         mapper = ImageMapper()
 
         # Check against tested values
@@ -604,7 +607,7 @@ class TestImageMapper(unittest.TestCase):
         self.assertEqual(mapper.getProjectionSize((1.2, 0.3), "intra"), 143)
         self.assertEqual(mapper.getProjectionSize((1.2, 0.3), "extra"), 146)
 
-    def testBatoidRaytraceResiduals(self):
+    def testBatoidRaytraceResiduals(self) -> None:
         # Define sets of configurations to test
         instruments = [
             "policy:instruments/LsstCam.yaml",
@@ -625,7 +628,7 @@ class TestImageMapper(unittest.TestCase):
         defocalTypes = ["intra", "extra"]
 
         # Function that maps config to required precision (% of pixel size)
-        def maxPercent(**kwargs):
+        def maxPercent(**kwargs: Any) -> float:
             if "Lsst" in instConfig and model == "onAxis":
                 return 25
             else:
@@ -727,7 +730,7 @@ class TestImageMapper(unittest.TestCase):
                         f"pixel, exceeding the maximum value of {mp}%."
                     )
 
-    def testDilatedBlendedMasks(self):
+    def testDilatedBlendedMasks(self) -> None:
         """
         Blended masks are created by copying the source mask, dilating it,
         and shifting it to the positions of the blends. If you dilate the

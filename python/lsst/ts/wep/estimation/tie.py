@@ -22,7 +22,7 @@
 __all__ = ["TieAlgorithm"]
 
 import inspect
-from typing import Iterable, Optional, Union, Tuple
+from typing import Iterable
 
 import numpy as np
 from lsst.ts.wep import Image, ImageMapper, Instrument
@@ -110,7 +110,7 @@ class TieAlgorithm(WfAlgorithm):
         centerTol: float = 1e-9,
         centerBinary: bool = True,
         convergeTol: float = 1e-9,
-        maskKwargs: Optional[dict] = None,
+        maskKwargs: dict | None = None,
         modelPupilKernelSize: float = 2,
         binning: int = 1,
         requireConverge: bool = False,
@@ -123,7 +123,7 @@ class TieAlgorithm(WfAlgorithm):
         self.centerTol = centerTol
         self.centerBinary = centerBinary
         self.convergeTol = convergeTol
-        self.maskKwargs = maskKwargs
+        self.maskKwargs = maskKwargs if maskKwargs is not None else {}
         self.modelPupilKernelSize = modelPupilKernelSize
         self.binning = binning
         self.requireConverge = requireConverge
@@ -246,11 +246,11 @@ class TieAlgorithm(WfAlgorithm):
         ValueError
             If the value is not an iterable
         """
-        value = np.array(value, dtype=int)
-        if value.ndim != 1:
+        arrayValue = np.array(value, dtype=int)
+        if arrayValue.ndim != 1:
             raise ValueError("compSequence must be a 1D iterable.")
 
-        self._compSequence = value
+        self._compSequence = arrayValue
 
     @property
     def compGain(self) -> float:
@@ -354,7 +354,7 @@ class TieAlgorithm(WfAlgorithm):
         return self._maskKwargs
 
     @maskKwargs.setter
-    def maskKwargs(self, value: Union[dict, None]) -> None:
+    def maskKwargs(self, value: dict | None) -> None:
         """Set dict of keyword args passed to ImageMapper.createPupilMasks().
 
         Parameters
@@ -522,9 +522,9 @@ class TieAlgorithm(WfAlgorithm):
     @staticmethod
     def _assignIntraExtra(
         I1: Image,
-        I2: Union[Image, None],
+        I2: Image | None,
         zkStartI1: np.ndarray,
-        zkStartI2: Union[np.ndarray, None],
+        zkStartI2: np.ndarray | None,
     ) -> tuple:
         """Assign I1 and I2 to intra and extra.
 
@@ -561,10 +561,12 @@ class TieAlgorithm(WfAlgorithm):
         if I2 is not None:
             if I2.defocalType == DefocalType.Intra:
                 intra = I2.copy()
-                zkStartIntra = zkStartI2.copy()
+                if zkStartI2 is not None:
+                    zkStartIntra = zkStartI2.copy()
             else:
                 extra = I2.copy()
-                zkStartExtra = zkStartI2.copy()
+                if zkStartI2 is not None:
+                    zkStartExtra = zkStartI2.copy()
 
         return intra, extra, zkStartIntra, zkStartExtra
 
@@ -665,13 +667,13 @@ class TieAlgorithm(WfAlgorithm):
     def _estimateZk(
         self,
         I1: Image,
-        I2: Optional[Image],  # type: ignore[override]
+        I2: Image | None,  # type: ignore[override]
         zkStartI1: np.ndarray,
-        zkStartI2: Optional[np.ndarray],
+        zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict]:
+    ) -> tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
         Parameters
@@ -817,7 +819,7 @@ class TieAlgorithm(WfAlgorithm):
                 )
 
             # Compensate images using the Zernikes
-            intraComp = (
+            intraComp: Image = (
                 pupil
                 if intraCent is None
                 else imageMapper.mapImageToPupil(
@@ -828,7 +830,7 @@ class TieAlgorithm(WfAlgorithm):
                     **self.maskKwargs,
                 )
             )
-            extraComp = (
+            extraComp: Image = (
                 pupil
                 if extraCent is None
                 else imageMapper.mapImageToPupil(

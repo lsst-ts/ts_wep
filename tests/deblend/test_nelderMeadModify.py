@@ -28,10 +28,10 @@ from lsst.ts.wep.deblend.nelderMeadModify import feval, nelderMeadModify
 class TestNelderMeadModify(unittest.TestCase):
     """Test the nelderMeadModify function."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.func = lambda x, y, c: abs(x**2 + y**2 - c)
 
-    def testFunc(self):
+    def testFunc(self) -> None:
         vars = (1, 2, 1)
         self.assertEqual(feval(self.func, vars), 4)
 

@@ -36,7 +36,7 @@ from scipy.ndimage import shift
 class TestMiscUtils(unittest.TestCase):
     """Test the miscellaneous utility functions."""
 
-    def testRotMatrix(self):
+    def testRotMatrix(self) -> None:
         # Test rotation with 0 degrees
         testTheta1 = 0
         rotMatrix1 = np.array([[1, 0], [0, 1]])
@@ -52,7 +52,7 @@ class TestMiscUtils(unittest.TestCase):
         rotMatrix3 = np.array([[0.707107, -0.707107], [0.707107, 0.707107]])
         np.testing.assert_array_almost_equal(rotMatrix3, rotMatrix(testTheta3))
 
-    def testPadArray(self):
+    def testPadArray(self) -> None:
         imgDim = 10
         padPixelSize = 20
 
@@ -60,13 +60,15 @@ class TestMiscUtils(unittest.TestCase):
 
         self.assertEqual(imgPadded.shape[0], imgDim + padPixelSize)
 
-    def _padRandomImg(self, imgDim, padPixelSize):
+    def _padRandomImg(
+        self, imgDim: int, padPixelSize: int
+    ) -> tuple[np.ndarray, np.ndarray]:
         img = np.random.rand(imgDim, imgDim)
         imgPadded = padArray(img, imgDim + padPixelSize)
 
         return img, imgPadded
 
-    def testExtractArray(self):
+    def testExtractArray(self) -> None:
         imgDim = 10
         padPixelSize = 20
         img, imgPadded = self._padRandomImg(imgDim, padPixelSize)
@@ -75,7 +77,7 @@ class TestMiscUtils(unittest.TestCase):
 
         self.assertEqual(imgExtracted.shape[0], imgDim)
 
-    def testCenterWithTemplate(self):
+    def testCenterWithTemplate(self) -> None:
         # Create a template to use for correlating
         template = np.pad(np.ones((40, 40)), 5)
 
@@ -110,7 +112,7 @@ class TestMiscUtils(unittest.TestCase):
         self.assertTrue(np.abs(dx) < 0.5)
         self.assertTrue(np.abs(dy) < 0.5)
 
-    def testPolygonContains(self):
+    def testPolygonContains(self) -> None:
         # First a small test
         grid = np.arange(6).astype(float)
         x, y = np.meshgrid(grid, grid)
@@ -138,7 +140,7 @@ class TestMiscUtils(unittest.TestCase):
         with self.assertRaises(ValueError):
             polygonContains(x, y, poly.T)
 
-    def testConditionalSigmaClipping(self):
+    def testConditionalSigmaClipping(self) -> None:
         # Create a sample array where:
         # - The first column has low variability
         # and should not be clipped.

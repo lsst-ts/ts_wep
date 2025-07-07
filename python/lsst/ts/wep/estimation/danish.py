@@ -22,7 +22,6 @@
 __all__ = ["DanishAlgorithm"]
 
 import warnings
-from typing import Optional, Tuple, Union
 
 import danish
 import numpy as np
@@ -58,12 +57,12 @@ class DanishAlgorithm(WfAlgorithm):
 
     def __init__(
         self,
-        lstsqKwargs: Optional[dict] = None,
+        lstsqKwargs: dict | None = None,
         binning: int = 1,
         jointFitPair: bool = True,
     ) -> None:
         self.binning = binning
-        self.lstsqKwargs = lstsqKwargs
+        self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
         self.jointFitPair = jointFitPair
 
     @property
@@ -97,7 +96,7 @@ class DanishAlgorithm(WfAlgorithm):
         return self._lstsqKwargs
 
     @lstsqKwargs.setter
-    def lstsqKwargs(self, value: Union[dict, None]) -> None:
+    def lstsqKwargs(self, value: dict | None) -> None:
         """Set the keyword arguments for scipy.optimize.least_squares.
 
         Parameters
@@ -173,7 +172,7 @@ class DanishAlgorithm(WfAlgorithm):
         zkStart: np.ndarray,
         nollIndices: np.ndarray,
         instrument: Instrument,
-    ):
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
         # Warn about using Danish for blended donuts
         if np.isfinite(image.blendOffsets).sum() > 0:
             warnings.warn("Danish is currently only setup for non-blended donuts.")
@@ -228,7 +227,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict, dict]:
+    ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for a single donut stamp.
 
         Parameters
@@ -344,14 +343,14 @@ class DanishAlgorithm(WfAlgorithm):
     def _estimatePairZk(
         self,
         I1: Image,
-        I2: Optional[Image],
+        I2: Image | None,
         zkStartI1: np.ndarray,
-        zkStartI2: Optional[np.ndarray],
+        zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict, dict]:
+    ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for pairs of donut stamps.
 
         Parameters
@@ -437,7 +436,7 @@ class DanishAlgorithm(WfAlgorithm):
         # set bounds between 0.1 and 5.0 arcsec.
         bounds = [[-np.inf, np.inf]] * (5 + len(dzTerms))
         bounds[4] = [0.1, 5.0]
-        bounds = list(zip(*bounds))
+        bounds = [list(b) for b in zip(*bounds)]
 
         # Use scipy to optimize the parameters
         try:
@@ -497,17 +496,18 @@ class DanishAlgorithm(WfAlgorithm):
                 "model": modelImages[0],
                 "GalSimFFTSizeError": galSimFFTSizeError,
             }
-            hist[I2.defocalType.value] = {
-                "image": imgs[1].copy(),
-                "variance": skyLevels[1],
-                "nollIndices": nollIndices.copy(),
-                "zkStart": zkStartI2.copy(),
-                "lstsqResult": result,
-                "zkFit": zkFit.copy(),
-                "zkSum": zkSum.copy(),
-                "model": modelImages[1],
-                "GalSimFFTSizeError": galSimFFTSizeError,
-            }
+            if I2 is not None and zkStartI2 is not None:
+                hist[I2.defocalType.value] = {
+                    "image": imgs[1].copy(),
+                    "variance": skyLevels[1],
+                    "nollIndices": nollIndices.copy(),
+                    "zkStart": zkStartI2.copy(),
+                    "lstsqResult": result,
+                    "zkFit": zkFit.copy(),
+                    "zkSum": zkSum.copy(),
+                    "model": modelImages[1],
+                    "GalSimFFTSizeError": galSimFFTSizeError,
+                }
 
         else:
             hist = {}
@@ -520,13 +520,13 @@ class DanishAlgorithm(WfAlgorithm):
     def _estimateZk(
         self,
         I1: Image,
-        I2: Optional[Image],
+        I2: Image | None,
         zkStartI1: np.ndarray,
-        zkStartI2: Optional[np.ndarray],
+        zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
-    ) -> Tuple[np.ndarray, dict]:
+    ) -> tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
         Parameters

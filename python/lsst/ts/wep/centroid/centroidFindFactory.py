@@ -32,7 +32,9 @@ class CentroidFindFactory(object):
     of donut."""
 
     @staticmethod
-    def createCentroidFind(centroidFindType):
+    def createCentroidFind(
+        centroidFindType: CentroidFindType,
+    ) -> CentroidConvolveTemplate | CentroidOtsu | CentroidRandomWalk:
         """Create the centroid find object.
 
         Parameters

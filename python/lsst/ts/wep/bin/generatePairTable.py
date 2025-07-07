@@ -26,7 +26,7 @@ from lsst.daf.butler import Butler
 from lsst.ts.wep.task.pairTask import ExposurePairer, ExposurePairerConfig
 
 
-def main():
+def main() -> None:
     parser = ArgumentParser()
     parser.add_argument(
         "-b",
@@ -110,7 +110,7 @@ def main():
 
     args = parser.parse_args()
 
-    butler = Butler(args.butler_config, collections=args.collection)
+    butler = Butler.from_config(args.butler_config, collections=args.collection)
 
     doOverrideSeparation = False
     overrideSeparation = 1.5

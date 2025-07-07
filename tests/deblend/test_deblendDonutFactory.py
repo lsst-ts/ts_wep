@@ -29,11 +29,11 @@ from lsst.ts.wep.utils import DeblendDonutType
 class TestDeblendDonutFactory(unittest.TestCase):
     """Test the DeblendDonutFactory class."""
 
-    def testCreateDeblendAdapt(self):
+    def testCreateDeblendAdapt(self) -> None:
         deblendDonut = DeblendDonutFactory.createDeblendDonut(DeblendDonutType.Adapt)
         self.assertTrue(isinstance(deblendDonut, DeblendAdapt))
 
-    def testCreateDeblendDonutWrongType(self):
+    def testCreateDeblendDonutWrongType(self) -> None:
         self.assertRaises(
             ValueError, DeblendDonutFactory.createDeblendDonut, "wrongType"
         )

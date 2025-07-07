@@ -64,7 +64,7 @@ class WfAlgorithm(ABC):
         # Note I have not written a real docstring here, so that I can force
         # subclasses to write a new docstring for this method
         if getattr(self, "_history", None) is None:
-            self._history = dict()
+            self._history: dict = dict()
 
         return self._history
 

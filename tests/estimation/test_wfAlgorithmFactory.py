@@ -28,7 +28,7 @@ from lsst.ts.wep.utils import WfAlgorithmName
 class TestWfAlgorithmFactory(unittest.TestCase):
     """Test the WfAlgorithmFactory class."""
 
-    def testCreateTieAlgorithm(self):
+    def testCreateTieAlgorithm(self) -> None:
         # Make sure it returns the correct type
         self.assertIsInstance(WfAlgorithmFactory.createWfAlgorithm("tie"), TieAlgorithm)
         self.assertIsInstance(
@@ -40,7 +40,7 @@ class TestWfAlgorithmFactory(unittest.TestCase):
         algo = WfAlgorithmFactory.createWfAlgorithm("tie", {"maxIter": 30})
         self.assertEqual(algo.maxIter, 30)
 
-    def testCreateDanishAlgorithm(self):
+    def testCreateDanishAlgorithm(self) -> None:
         # Make sure it returns the correct type
         self.assertIsInstance(
             WfAlgorithmFactory.createWfAlgorithm("danish"), DanishAlgorithm
@@ -56,7 +56,7 @@ class TestWfAlgorithmFactory(unittest.TestCase):
         )
         self.assertEqual(algo.lstsqKwargs["ftol"], 1e-5)
 
-    def testBadAlgoName(self):
+    def testBadAlgoName(self) -> None:
         with self.assertRaises(ValueError):
             WfAlgorithmFactory.createWfAlgorithm("fake")
 

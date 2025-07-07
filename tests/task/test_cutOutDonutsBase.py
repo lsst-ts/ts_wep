@@ -23,9 +23,10 @@ import os
 
 import lsst.utils.tests
 import numpy as np
+from astropy.table import QTable
 from lsst.afw import image as afwImage
-from lsst.daf import butler as dafButler
 from lsst.daf.base import PropertySet
+from lsst.daf.butler import Butler
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task import (
     CutOutDonutsBaseTask,
@@ -44,8 +45,13 @@ from scipy.signal import correlate
 
 
 class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
+    runName: str
+    repoDir: str
+    cameraName: str
+    testDataDir: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Generate donutCatalog needed for task.
         """
@@ -57,7 +63,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         cls.cameraName = "LSSTCam"
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if "pretest_run_science" in collectionsList:
@@ -85,16 +91,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CutOutDonutsBaseTaskConfig()
         self.task = CutOutDonutsBaseTask(config=self.config, name="Base Task")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -110,7 +116,11 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "visit": 4021123106002,
         }
 
-    def _generateTestExposures(self):
+    def _generateTestExposures(
+        self,
+    ) -> tuple[
+        afwImage.ExposureF, np.ndarray, np.ndarray, afwImage.ExposureF, np.ndarray
+    ]:
         # Generate donut template
         camera = LsstCam.getCamera()
         template = createTemplateForDetector(camera.get("R22_S11"), "extra")
@@ -161,7 +171,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
         return centeredExp, centerCoordArr, template, offCenterExp, offCenterCoordArr
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.assertEqual(self.task.donutStampSize, 160)
         self.assertEqual(self.task.initialCutoutPadding, 5)
         self.assertEqual(self.task.opticalModel, "offAxis")
@@ -179,7 +189,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.opticalModel, "onAxis")
         self.assertEqual(self.task.maxRecenterDistance, 10)
 
-    def testShiftCenters(self):
+    def testShiftCenters(self) -> None:
         centerArr = np.array([190.0, 10.0, 100.0, 100.0])
         centerUpperLimit = self.task.shiftCenters(centerArr, 200.0, 20.0)
         np.testing.assert_array_equal(centerUpperLimit, [180.0, 10.0, 100.0, 100.0])
@@ -190,7 +200,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         centerNoChangeLower = self.task.shiftCenters(centerNoChangeUpper, 200.0, 20.0)
         np.testing.assert_array_equal(centerNoChangeLower, [180.0, 20.0, 100.0, 100.0])
 
-    def testCalculateFinalCentroids(self):
+    def testCalculateFinalCentroids(self) -> None:
         (
             centeredExp,
             centerCoord,
@@ -225,9 +235,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(initCornerY, cornerY)
 
         # Also check the peak height for the centered exposure
-        self.assertFloatsAlmostEqual(peakHeight, 9472.0, rtol=0, atol=3e-4)
+        np.testing.assert_allclose(peakHeight, 9472.0, rtol=0, atol=3e-4)
 
-    def testCalcFinalCentroidsOnEdge(self):
+    def testCalcFinalCentroidsOnEdge(self) -> None:
         (
             centeredExp,
             centerCoord,
@@ -256,9 +266,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         np.testing.assert_array_equal(cornerX, np.array([0, initCornerX[1]]))
         np.testing.assert_array_equal(cornerY, np.array([0, initCornerY[1]]))
         # Also check the peak height for the off-center exposure
-        self.assertFloatsAlmostEqual(peakHeight, [8944.0, 9472.0], rtol=0, atol=3e-4)
+        np.testing.assert_allclose(peakHeight, [8944.0, 9472.0], rtol=0, atol=3e-4)
 
-    def testMaxRecenter(self):
+    def testMaxRecenter(self) -> None:
         maxRecenter = 5
         exp, catalog = self._getExpAndCatalog(DefocalType.Extra)
         # Shift image so that recentering will fail when cutting out
@@ -324,7 +334,9 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.task.cutOutStamps(exp, catalog, DefocalType.Intra, self.cameraName)
         self.assertEqual(self.task.metadata.arrays["recenterFlagsIntra"], [0, 1, 1])
 
-    def _getExpAndCatalog(self, defocalType):
+    def _getExpAndCatalog(
+        self, defocalType: DefocalType
+    ) -> tuple[afwImage.ExposureF, QTable]:
         """
         Helper function to get exposure and donutCatalog for
         testing cutOutStamps.
@@ -356,7 +368,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
         return exposure, donutCatalog
 
-    def testBackgroundSubtractionApplied(self):
+    def testBackgroundSubtractionApplied(self) -> None:
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
         with self.assertRaises(KeyError):
             exposure.getMetadata()["BGMEAN"]
@@ -368,7 +380,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # exposure metadata.
         self.assertIsInstance(exposure.getMetadata()["BGMEAN"], float)
 
-    def testCutOutStampsTaskRunNormal(self):
+    def testCutOutStampsTaskRunNormal(self) -> None:
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
         donutStamps = self.task.cutOutStamps(
             exposure, donutCatalog, DefocalType.Extra, self.cameraName
@@ -394,7 +406,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             pt = stamp.centroid_position
             for offset in [(0, 0), (10, -20), (-30, 40), (50, 60)]:
                 pt_offset = pt + lsst.geom.Extent2D(*offset)
-                self.assertFloatsAlmostEqual(
+                np.testing.assert_allclose(
                     exposure_wcs.pixelToSky(pt_offset)
                     .separation(stamp_wcs.pixelToSky(pt_offset))
                     .asArcseconds(),
@@ -488,11 +500,11 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # test the calculation of SN
         sn_values = [2149.093503846915, 2160.668317852145, 2041.9917562475855]
         sn_calculated = donutStamps.metadata.getArray("SN")
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             np.sort(np.array(sn_values)), np.sort(np.array(sn_calculated)), rtol=1e-3
         )
 
-    def testFilterBadRecentering(self):
+    def testFilterBadRecentering(self) -> None:
         maxRecenter = 25
         self.task.maxRecenterDistance = maxRecenter
         xShift = np.array([10, 10, 0])
@@ -513,7 +525,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.metadata.scalars["medianXShift"], medX)
         self.assertEqual(self.task.metadata.scalars["medianYShift"], medY)
 
-    def testCalculateSNWithBlends(self):
+    def testCalculateSNWithBlends(self) -> None:
         """Test that blends work with the masking routines used in calculateSN.
         We previously found that blends can end up in an infinite loop or
         result in nan values for SN."""
@@ -534,7 +546,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Blended pixels should be excluded from the original donut mask now
         self.assertTrue(orig_sn_dict["n_px_mask"] > sn_dict["n_px_mask"])
 
-    def testCalculateSNWithLargeMask(self):
+    def testCalculateSNWithLargeMask(self) -> None:
         """Test that dilation correction loop runs and logs correctly."""
 
         self.task.bkgDilationIter = 100
@@ -549,7 +561,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         infoMsg += "of the image; reducing the amount of donut mask dilation to 99"
         self.assertEqual(infoMsg, cm.output[0])
 
-    def testBadPixelMaskDefinitions(self):
+    def testBadPixelMaskDefinitions(self) -> None:
         # Load test data
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
 
@@ -565,7 +577,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         fracBadPix = np.asarray(donutStamps.metadata.getArray("FRAC_BAD_PIX"))
         self.assertTrue(np.all(fracBadPix > 0))
 
-    def testAddVisitLevelMetadata(self):
+    def testAddVisitLevelMetadata(self) -> None:
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
 
         donutStamps = DonutStamps([])

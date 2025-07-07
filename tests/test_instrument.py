@@ -32,63 +32,63 @@ from lsst.ts.wep.utils import getConfigDir, readConfigYaml
 class TestInstrument(unittest.TestCase):
     """Test the Instrument class."""
 
-    def testCreateWithDefaults(self):
+    def testCreateWithDefaults(self) -> None:
         Instrument()
 
-    def testCreateFromAllPolicyFiles(self):
+    def testCreateFromAllPolicyFiles(self) -> None:
         instConfigPath = Path(getConfigDir()) / "instruments"
         paths = instConfigPath.glob("*.yaml")
 
         for path in paths:
             Instrument(str(path))
 
-    def testBadDiameter(self):
+    def testBadDiameter(self) -> None:
         with self.assertRaises(ValueError):
             Instrument(diameter=-1)
 
-    def testBadObscuration(self):
+    def testBadObscuration(self) -> None:
         with self.assertRaises(ValueError):
             Instrument(obscuration=-1)
         with self.assertRaises(ValueError):
             Instrument(obscuration=2)
 
-    def testBadFocalLength(self):
+    def testBadFocalLength(self) -> None:
         with self.assertRaises(ValueError):
             Instrument(focalLength=-1)
 
-    def testBadDefocalOffset(self):
+    def testBadDefocalOffset(self) -> None:
         with self.assertRaises(ValueError):
             Instrument(defocalOffset="bad")
 
-    def testBadPixelSize(self):
+    def testBadPixelSize(self) -> None:
         with self.assertRaises(ValueError):
             Instrument(pixelSize=-1)
 
-    def testBadWavelength(self):
+    def testBadWavelength(self) -> None:
         with self.assertRaises(TypeError):
             Instrument(wavelength="bad")
         with self.assertRaises(ValueError):
             Instrument(wavelength={"u": 500e-9})
 
-    def testBadBatoidModelName(self):
+    def testBadBatoidModelName(self) -> None:
         with self.assertRaises(TypeError):
             Instrument(batoidModelName=-1)
 
-    def testBadRefBand(self):
+    def testBadRefBand(self) -> None:
         with self.assertRaises(ValueError):
             Instrument(refBand="bad")
 
-    def testNoBatoidModel(self):
+    def testNoBatoidModel(self) -> None:
         inst = Instrument()
         inst.batoidModelName = None
         batoidModel = inst.getBatoidModel()
         self.assertIsNone(batoidModel)
 
-    def testGetBatoidModel(self):
+    def testGetBatoidModel(self) -> None:
         batoidModel = Instrument().getBatoidModel()
         self.assertIsInstance(batoidModel, CompoundOptic)
 
-    def testBadBatoidOffsetOptic(self):
+    def testBadBatoidOffsetOptic(self) -> None:
         with self.assertRaises(RuntimeError):
             inst = Instrument()
             inst.batoidModelName = None
@@ -98,13 +98,13 @@ class TestInstrument(unittest.TestCase):
         with self.assertRaises(ValueError):
             Instrument(batoidOffsetOptic="fake")
 
-    def testBadBatoidOffsetValue(self):
+    def testBadBatoidOffsetValue(self) -> None:
         with self.assertRaises(RuntimeError):
             inst = Instrument()
             inst.batoidModelName = None
             inst.batoidOffsetValue = 1
 
-    def testGetIntrinsicZernikes(self):
+    def testGetIntrinsicZernikes(self) -> None:
         inst = Instrument()
 
         # First check the shape
@@ -121,7 +121,7 @@ class TestInstrument(unittest.TestCase):
         close = np.isclose(inst.getIntrinsicZernikes(1, 1), intrZk, atol=0)
         self.assertFalse(np.any(close))
 
-    def testGetOffAxisCoeff(self):
+    def testGetOffAxisCoeff(self) -> None:
         inst = Instrument()
 
         # First check the shape
@@ -144,21 +144,21 @@ class TestInstrument(unittest.TestCase):
         close = np.isclose(inst.getOffAxisCoeff(0, 0, "intra"), coeff, atol=0)
         self.assertTrue(np.all(~close))
 
-    def testBadMaskParams(self):
+    def testBadMaskParams(self) -> None:
         with self.assertRaises(TypeError):
             Instrument(maskParams="bad")
 
-    def testDefaultMaskParams(self):
+    def testDefaultMaskParams(self) -> None:
         inst = Instrument()
         inst.maskParams = None
         self.assertEqual(inst.maskParams, dict())
 
-    def testCreatePupilGrid(self):
+    def testCreatePupilGrid(self) -> None:
         uImage, vImage = Instrument().createPupilGrid()
         self.assertEqual(uImage.shape, vImage.shape)
         self.assertTrue(np.allclose(uImage, vImage.T))
 
-    def testCreateImageGrid(self):
+    def testCreateImageGrid(self) -> None:
         inst = Instrument()
 
         uImage, vImage = inst.createImageGrid(160)
@@ -170,35 +170,35 @@ class TestInstrument(unittest.TestCase):
 
         self.assertTrue(np.allclose(uImage, vImage.T))
 
-    def testRadius(self):
+    def testRadius(self) -> None:
         inst = Instrument()
         self.assertTrue(np.isclose(inst.radius, 4.18, rtol=1e-3))
 
-    def testArea(self):
+    def testArea(self) -> None:
         inst = Instrument()
         self.assertTrue(np.isclose(inst.area, 34.33, rtol=1e-3))
 
-    def testFocalRatio(self):
+    def testFocalRatio(self) -> None:
         inst = Instrument()
         self.assertTrue(np.isclose(inst.focalRatio, 1.234, rtol=1e-3))
 
-    def testPupilOffset(self):
+    def testPupilOffset(self) -> None:
         inst = Instrument()
         self.assertTrue(np.isclose(inst.pupilOffset, 10.312**2 / 1.5e-3, rtol=1e-3))
 
-    def testPixelScale(self):
+    def testPixelScale(self) -> None:
         inst = Instrument()
         self.assertTrue(np.isclose(inst.pixelScale, 0.2, rtol=1e-3))
 
-    def testDonutRadius(self):
+    def testDonutRadius(self) -> None:
         inst = Instrument()
         self.assertTrue(np.isclose(inst.donutRadius, 66.512, rtol=1e-3))
 
-    def testDonutDiameter(self):
+    def testDonutDiameter(self) -> None:
         inst = Instrument()
         self.assertTrue(np.isclose(inst.donutDiameter, 2 * 66.512, rtol=1e-3))
 
-    def testPullFromBatoid(self):
+    def testPullFromBatoid(self) -> None:
         inst = Instrument(
             configFile=None,
             diameter=None,
@@ -220,16 +220,16 @@ class TestInstrument(unittest.TestCase):
         self.assertTrue(np.isclose(inst.focalLength, lsst.focalLength, rtol=1e-3))
         self.assertTrue(np.isclose(inst.defocalOffset, lsst.defocalOffset, rtol=1e-3))
 
-    def testDefocalOffsetCalculation(self):
+    def testDefocalOffsetCalculation(self) -> None:
         inst = Instrument("policy:instruments/AuxTel.yaml")
         inst.batoidOffsetValue = 0.8e-3
         self.assertTrue(np.isclose(inst.defocalOffset, 34.94e-3, rtol=1e-3))
 
-    def test_offsetToZ4Defocus(self):
+    def test_offsetToZ4Defocus(self) -> None:
         inst = Instrument("policy:instruments/LsstCam.yaml")
         self.assertAlmostEqual(inst.offsetToZ4Defocus(0.8e-3), 20.2943, places=4)
 
-    def testImports(self):
+    def testImports(self) -> None:
         # Get LSST and ComCam instruments
         lsst = Instrument("policy:instruments/LsstCam.yaml")
         comcam = Instrument("policy:instruments/ComCam.yaml")

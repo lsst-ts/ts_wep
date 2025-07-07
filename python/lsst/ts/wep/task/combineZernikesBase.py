@@ -23,6 +23,7 @@ __all__ = ["CombineZernikesBaseConfig", "CombineZernikesBaseTask"]
 
 import abc
 import logging
+from typing import Any
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -43,11 +44,11 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
     ConfigClass = CombineZernikesBaseConfig
     _DefaultName = "combineZernikes"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         pipeBase.Task.__init__(self, **kwargs)
-        self.log = logging.getLogger(type(self).__name__)
+        self.log = logging.getLogger(type(self).__name__)  # type: ignore
 
-    def run(self, zernikeArray):
+    def run(self, zernikeArray: np.ndarray) -> pipeBase.Struct:
         """
         Combine the zernikes from the input array of Zernike
         coefficients from each individual donut pair.
@@ -93,7 +94,9 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         return pipeBase.Struct(combinedZernikes=combinedZernikes, flags=flags)
 
     @abc.abstractmethod
-    def combineZernikes(self, zernikeArray):
+    def combineZernikes(
+        self, zernikeArray: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Class specific algorithm to combine the Zernike
         coefficients from each individual donut pair into

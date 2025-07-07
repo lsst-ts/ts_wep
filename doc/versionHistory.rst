@@ -5,6 +5,15 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-14.14.0:
+
+-------------
+ 14.14.0
+-------------
+
+* Mypy the entire ts_wep repository.
+
 .. _lsst.ts.wep-14.13.1:
 
 -------------

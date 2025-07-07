@@ -27,7 +27,7 @@ from lsst.ts.wep.utils.enumUtils import BandLabel, EnumDict
 class TestEnumUtils(unittest.TestCase):
     """Test the Enum utils."""
 
-    def testEnumDict(self):
+    def testEnumDict(self) -> None:
         # First create a dictionary with BandLabel enums as keys
         bandDict = {BandLabel(band): i for i, band in enumerate("ugrizy")}
 

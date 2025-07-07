@@ -21,6 +21,8 @@
 
 __all__ = ["DonutStampSelectorTaskConfig", "DonutStampSelectorTask"]
 
+from typing import Any
+
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
@@ -31,29 +33,29 @@ from lsst.utils.timer import timeMethod
 
 
 class DonutStampSelectorTaskConfig(pexConfig.Config):
-    maxSelect = pexConfig.Field(
+    maxSelect: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=5,
         doc="Maximum number of donut stamps to select. If -1, all are selected.",
     )
-    selectWithEntropy = pexConfig.Field(
+    selectWithEntropy: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="Whether to use entropy in deciding to use the donut.",
     )
-    selectWithSignalToNoise = pexConfig.Field(
+    selectWithSignalToNoise: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
         doc="Whether to use signal to noise ratio in deciding to use the donut. "
         + "By default the values from snLimitStar.yaml config file are used.",
     )
-    selectWithFracBadPixels = pexConfig.Field(
+    selectWithFracBadPixels: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
         doc="Whether to use fraction of bad pixels in deciding to use the donut. "
         + "Bad pixels correspond to mask values of 'SAT', 'BAD', 'NO_DATA'.",
     )
-    selectWithMaxPowerGrad = pexConfig.Field(
+    selectWithMaxPowerGrad: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
         doc="Whether to use the max of the gradient of the stamp power spectrum "
@@ -65,13 +67,13 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
         + "reject galaxy-donuts which are very blurry and therefore have most "
         + "of their power at low k.",
     )
-    useCustomSnLimit = pexConfig.Field(
+    useCustomSnLimit: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
         doc="Apply user-defined signal to noise minimum cutoff? If this is False then the code"
         + " will default to use the minimum values in snLimitStar.yaml.",
     )
-    minSignalToNoise = pexConfig.Field(
+    minSignalToNoise: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=600,
         doc=str(
@@ -80,17 +82,17 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
             + " If used, it overrides values from snLimitStar.yaml."
         ),
     )
-    maxEntropy = pexConfig.Field(
+    maxEntropy: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=3.5,
         doc=str("The entropy threshold to use (keep donuts only below the threshold)."),
     )
-    maxFracBadPixels = pexConfig.Field(
+    maxFracBadPixels: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=0.0,
         doc=str("Maximum fraction of bad pixels in selected donuts."),
     )
-    maxPowerGradThresh = pexConfig.Field(
+    maxPowerGradThresh: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=1e-4,
         doc=str(
@@ -99,7 +101,7 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
             + "to be selected."
         ),
     )
-    doSelection =  pexConfig.Field(
+    doSelection: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
         doc="Do any donut stamp selection? If this is False then we return the donut quality table,"
@@ -115,11 +117,12 @@ class DonutStampSelectorTask(pipeBase.Task):
 
     ConfigClass = DonutStampSelectorTaskConfig
     _DefaultName = "donutStampSelectorTask"
+    config: DonutStampSelectorTaskConfig
 
-    def __init__(self, **kwargs):
-        pipeBase.Task.__init__(self, **kwargs)
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
-    def run(self, donutStamps):
+    def run(self, donutStamps: DonutStamps) -> pipeBase.Struct:
         """Select good stamps and return them together with quality table.
         By default all stamps are selected.
 
@@ -170,7 +173,13 @@ class DonutStampSelectorTask(pipeBase.Task):
                     ]
                 )
         for key, val in donutStamps.metadata.items():
-            if key.startswith("BORESIGHT") or key in ["MJD", "VISIT", "DFC_DIST", "DET_NAME", "BANDPASS"]:
+            if key.startswith("BORESIGHT") or key in [
+                "MJD",
+                "VISIT",
+                "DFC_DIST",
+                "DET_NAME",
+                "BANDPASS",
+            ]:
                 selectedStamps.metadata[key] = val
             else:
                 continue
@@ -182,7 +191,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         )
 
     @timeMethod
-    def selectStamps(self, donutStamps):
+    def selectStamps(self, donutStamps: DonutStamps) -> pipeBase.Struct:
         """
         Run the stamp selection algorithm and return the indices
         of donut stamps that that fulfill the selection criteria,
@@ -243,9 +252,7 @@ class DonutStampSelectorTask(pipeBase.Task):
             fillVals = np.asarray(donutStamps.metadata.getArray("X_PIX_RIGHT_EDGE"))
             stampsRightEdges[: len(fillVals)] = fillVals
 
-            fillVals = np.asarray(
-                donutStamps.metadata.getArray("RADIUS_FAIL_FLAG")
-            )
+            fillVals = np.asarray(donutStamps.metadata.getArray("RADIUS_FAIL_FLAG"))
             donutRadiiFailFlags[: len(fillVals)] = fillVals
 
         # By default select all donuts,  only overwritten
@@ -326,18 +333,16 @@ class DonutStampSelectorTask(pipeBase.Task):
         if self.config.doSelection:
             selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect
             self.log.info(
-                    f"{sum(selected)} of {len(selected)} donuts "
-                    "passed combined selection criteria."
-                )
-              # make sure we don't select more than maxSelect
+                f"{sum(selected)} of {len(selected)} donuts "
+                "passed combined selection criteria."
+            )
+            # make sure we don't select more than maxSelect
             if self.config.maxSelect != -1:
                 selected[np.cumsum(selected) > self.config.maxSelect] = False
 
         else:
             selected = np.ones(len(donutStamps), dtype="bool")
-            self.log.info(
-                    "Donut stamp selector is off."
-                )
+            self.log.info("Donut stamp selector is off.")
 
         # store information about which donuts were selected
         # use QTable even though no units at the moment in

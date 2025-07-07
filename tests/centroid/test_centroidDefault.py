@@ -29,15 +29,15 @@ from scipy.ndimage import generate_binary_structure, iterate_structure
 class TestCentroidDefault(unittest.TestCase):
     """Test the CentroidDefault class."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.centroid = CentroidDefault()
 
-    def testGetImgBinary(self):
+    def testGetImgBinary(self) -> None:
         self.assertRaises(
             NotImplementedError, self.centroid.getImgBinary, np.zeros((2, 2))
         )
 
-    def testGetCenterAndRfromImgBinary(self):
+    def testGetCenterAndRfromImgBinary(self) -> None:
         structOri = generate_binary_structure(2, 1).astype(int)
 
         iterations = 7

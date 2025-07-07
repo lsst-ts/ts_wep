@@ -33,13 +33,13 @@ __all__ = [
 
 from collections import UserDict
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Type
 
 
 class EnumDict(UserDict):
     """A dictionary that aliases Enums and their corresponding values."""
 
-    def __init__(self, enum: Enum, regularDict: Optional[dict] = None) -> None:
+    def __init__(self, enum: Type[Enum], regularDict: dict | None = None) -> None:
         super().__init__()
         self._enum = enum
         if regularDict is not None:

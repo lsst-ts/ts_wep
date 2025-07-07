@@ -41,24 +41,24 @@ except (AttributeError, ImportError):  # noqa: E402
 class TestWfEstimator(unittest.TestCase):
     """Test the wavefront estimator class."""
 
-    def testCreateWithDefaults(self):
+    def testCreateWithDefaults(self) -> None:
         WfEstimator()
 
-    def testBadAlgoName(self):
+    def testBadAlgoName(self) -> None:
         with self.assertRaises(ValueError):
             WfEstimator(algoName="fake")
 
-    def testBadAlgoConfig(self):
+    def testBadAlgoConfig(self) -> None:
         with self.assertRaises(TypeError):
             WfEstimator(algoConfig=1)
 
-    def testBadInstConfig(self):
+    def testBadInstConfig(self) -> None:
         with self.assertRaises(TypeError):
             WfEstimator(instConfig=1)
         with self.assertRaises(FileNotFoundError):
             WfEstimator(instConfig="fake")
 
-    def testBadNollIndices(self):
+    def testBadNollIndices(self) -> None:
         with self.assertRaises(ValueError):
             WfEstimator(nollIndices=[3, 4, 5])
         with self.assertRaises(ValueError):
@@ -68,23 +68,23 @@ class TestWfEstimator(unittest.TestCase):
         with self.assertRaises(ValueError):
             WfEstimator(nollIndices=[4, 5])
 
-    def testBadStartWithIntrinsic(self):
+    def testBadStartWithIntrinsic(self) -> None:
         with self.assertRaises(TypeError):
             WfEstimator(startWithIntrinsic="fake")
 
-    def testBadReturnWfDev(self):
+    def testBadReturnWfDev(self) -> None:
         with self.assertRaises(TypeError):
             WfEstimator(returnWfDev="fake")
 
-    def testBadUnits(self):
+    def testBadUnits(self) -> None:
         with self.assertRaises(ValueError):
             WfEstimator(units="parsecs")
 
-    def testBadSaveHistory(self):
+    def testBadSaveHistory(self) -> None:
         with self.assertRaises(TypeError):
             WfEstimator(saveHistory="fake")
 
-    def testDifferentNollIndices(self):
+    def testDifferentNollIndices(self) -> None:
         # Get the test data
         zkTrue, intra, extra = forwardModelPair()
 
@@ -129,7 +129,7 @@ class TestWfEstimator(unittest.TestCase):
             #  Make sure results are pretty similar for [4, 5, 6]
             self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 10e-9)
 
-    def testStartWithIntrinsic(self):
+    def testStartWithIntrinsic(self) -> None:
         # Get the test data
         zkTrue, intra, extra = forwardModelPair()
 
@@ -169,7 +169,7 @@ class TestWfEstimator(unittest.TestCase):
             # Make sure the results are pretty similar
             self.assertLess(np.sqrt(np.sum(np.square(zk1 - zk0))), 80e-9)
 
-    def testReturnWfDev(self):
+    def testReturnWfDev(self) -> None:
         # Get the test data
         zkTrue, intra, extra = forwardModelPair()
 
@@ -214,7 +214,7 @@ class TestWfEstimator(unittest.TestCase):
             # Make sure the results are identical
             self.assertTrue(np.allclose(opd, wfDev + zkInt))
 
-    def testUnits(self):
+    def testUnits(self) -> None:
         # Get the test data
         zkTrue, intra, extra = forwardModelPair()
 

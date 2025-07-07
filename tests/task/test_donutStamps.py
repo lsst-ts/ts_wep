@@ -33,12 +33,16 @@ from lsst.ts.wep.utils import DefocalType
 
 
 class TestDonutStamps(lsst.utils.tests.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.nStamps = 3
         self.stampSize = 100
         self.donutStamps = self._makeDonutStamps(self.nStamps, self.stampSize)
 
-    def _makeDonutStamps(self, nStamps, stampSize):
+    def _makeDonutStamps(
+        self,
+        nStamps: int,
+        stampSize: int,
+    ) -> DonutStamps:
         randState = np.random.RandomState(42)
         stampList = []
 
@@ -88,7 +92,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         return DonutStamps(donutStampList, metadata=metadata)
 
     # Adapting some tests here from meas_algorithms/tests/test_stamps.py
-    def _roundtrip(self, donutStamps):
+    def _roundtrip(self, donutStamps: DonutStamps) -> None:
         """Round trip a DonutStamps object to disk and check values"""
         with tempfile.NamedTemporaryFile() as f:
             donutStamps.writeFits(f.name)
@@ -96,7 +100,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
             donutStamps2 = DonutStamps.readFitsWithOptions(f.name, options)
             self.assertEqual(len(donutStamps), len(donutStamps2))
             for stamp1, stamp2 in zip(donutStamps, donutStamps2):
-                self.assertMaskedImagesAlmostEqual(stamp1.stamp_im, stamp2.stamp_im)
+                self.assertMaskedImagesAlmostEqual(stamp1.stamp_im, stamp2.stamp_im)  # type: ignore
                 self.assertAlmostEqual(
                     stamp1.sky_position.getRa().asDegrees(),
                     stamp2.sky_position.getRa().asDegrees(),
@@ -117,25 +121,25 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
                 self.assertEqual(stamp1.defocal_distance, stamp2.defocal_distance)
                 self.assertEqual(stamp1.bandpass, stamp2.bandpass)
 
-    def testGetSkyPositions(self):
+    def testGetSkyPositions(self) -> None:
         skyPos = self.donutStamps.getSkyPositions()
         for idx in range(self.nStamps):
             self.assertEqual(skyPos[idx].getRa().asDegrees(), idx)
             self.assertEqual(skyPos[idx].getDec().asDegrees(), idx + 5)
 
-    def testGetXY0Positions(self):
+    def testGetXY0Positions(self) -> None:
         xyPos = self.donutStamps.getXY0Positions()
         for idx in range(self.nStamps):
             self.assertEqual(xyPos[idx].getX(), idx + 10)
             self.assertEqual(xyPos[idx].getY(), idx + 15)
 
-    def testGetCentroidPositions(self):
+    def testGetCentroidPositions(self) -> None:
         xyPos = self.donutStamps.getCentroidPositions()
         for idx in range(self.nStamps):
             self.assertEqual(xyPos[idx].getX(), idx + 20)
             self.assertEqual(xyPos[idx].getY(), idx + 25)
 
-    def testGetBlendCentroids(self):
+    def testGetBlendCentroids(self) -> None:
         xPos, yPos = self.donutStamps.getBlendCentroids()
         for idx in range(self.nStamps - 1):
             self.assertEqual(xPos[idx], f"{idx + 30:.2f}")
@@ -143,15 +147,15 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         self.assertEqual(xPos[-1], "nan")
         self.assertEqual(yPos[-1], "nan")
 
-    def testGetDetectorNames(self):
+    def testGetDetectorNames(self) -> None:
         detNames = self.donutStamps.getDetectorNames()
         self.assertListEqual(detNames, ["R22_S11"] * self.nStamps)
 
-    def testGetCameraNames(self):
+    def testGetCameraNames(self) -> None:
         camNames = self.donutStamps.getCameraNames()
         self.assertListEqual(camNames, ["LSSTCam"] * self.nStamps)
 
-    def testGetDefocalTypes(self):
+    def testGetDefocalTypes(self) -> None:
         defocalTypes = self.donutStamps.getDefocalTypes()
         halfStampIdx = int(self.nStamps / 2)
         self.assertListEqual(
@@ -163,16 +167,16 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
             [DefocalType.Extra.value] * int((self.nStamps - halfStampIdx)),
         )
 
-    def testGetDefocalDistances(self):
+    def testGetDefocalDistances(self) -> None:
         defocalDistances = self.donutStamps.getDefocalDistances()
         for idx in range(self.nStamps):
             self.assertEqual(defocalDistances[idx], 1.5)
 
-    def testGetBandpass(self):
+    def testGetBandpass(self) -> None:
         bandpasses = self.donutStamps.getBandpasses()
         self.assertListEqual(bandpasses, ["r"] * self.nStamps)
 
-    def testAppend(self):
+    def testAppend(self) -> None:
         """Test ability to append to a Stamps object"""
         self.donutStamps.append(self.donutStamps[0])
         # Check that the length is 1 longer
@@ -186,7 +190,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
             "Objects added must be a DonutStamp object.", str(context.exception)
         )
 
-    def testExtend(self):
+    def testExtend(self) -> None:
         donutStamps2 = copy(self.donutStamps)
         self.donutStamps.extend([stamp for stamp in donutStamps2])
         # Check that the length is twice as long
@@ -201,7 +205,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
             "Can only extend with DonutStamp objects.", str(context.exception)
         )
 
-    def testIOsub(self):
+    def testIOsub(self) -> None:
         """
         Test the class' write and readFits when passing on a bounding box.
         """
@@ -212,6 +216,4 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
             subStamps = DonutStamps.readFitsWithOptions(f.name, options)
             for stamp1, stamp2 in zip(self.donutStamps, subStamps):
                 self.assertEqual(bbox.getDimensions(), stamp2.stamp_im.getDimensions())
-                self.assertMaskedImagesAlmostEqual(
-                    stamp1.stamp_im[bbox], stamp2.stamp_im
-                )
+                self.assertMaskedImagesAlmostEqual(stamp1.stamp_im[bbox], stamp2.stamp_im)  # type: ignore

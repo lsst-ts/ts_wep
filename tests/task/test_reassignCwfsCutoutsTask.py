@@ -22,8 +22,7 @@
 import os
 
 import lsst.utils.tests
-from lsst.daf import butler as dafButler
-from lsst.daf.butler import DatasetNotFoundError
+from lsst.daf.butler import Butler, DatasetNotFoundError
 from lsst.ts.wep.task.cutOutDonutsCwfsTask import (
     CutOutDonutsCwfsTask,
     CutOutDonutsCwfsTaskConfig,
@@ -37,8 +36,12 @@ from lsst.ts.wep.utils import (
 
 
 class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Generate donutCatalog needed for task.
         """
@@ -49,7 +52,7 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
         cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if "pretest_run_cwfs" in collectionsList:
@@ -77,16 +80,16 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
             runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CutOutDonutsCwfsTaskConfig()
         self.task = CutOutDonutsCwfsTask(config=self.config)
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
         self.visitNum = 4021123106000
 
@@ -109,9 +112,9 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, self.testRunName)
             runProgram(cleanUpCmd)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         # Get Butler with updated registry
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.collectionsList = list(self.registry.queryCollections())
@@ -119,7 +122,7 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, self.testRunName)
             runProgram(cleanUpCmd)
 
-    def testPipeline(self):
+    def testPipeline(self) -> None:
 
         # Compare the interactive run to pipetask run results
         donutStampsExtra_extraId = self.butler.get(
@@ -139,15 +142,11 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
         for reassignStamp, origStamp in zip(
             donutStampsExtra_extraId, donutStampsExtraCwfs_extraId
         ):
-            self.assertMaskedImagesAlmostEqual(
-                reassignStamp.stamp_im, origStamp.stamp_im
-            )
+            self.assertMaskedImagesAlmostEqual(reassignStamp.stamp_im, origStamp.stamp_im)  # type: ignore
         for reassignStamp, origStamp in zip(
             donutStampsIntra_extraId, donutStampsIntraCwfs_intraId
         ):
-            self.assertMaskedImagesAlmostEqual(
-                reassignStamp.stamp_im, origStamp.stamp_im
-            )
+            self.assertMaskedImagesAlmostEqual(reassignStamp.stamp_im, origStamp.stamp_im)  # type: ignore
 
         # Test that the intra-focal id does not get reassigned stamps
         with self.assertRaises(DatasetNotFoundError):

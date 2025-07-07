@@ -21,6 +21,8 @@
 
 __all__ = ["DeblendDefault"]
 
+from typing import Any
+
 import numpy as np
 from lsst.ts.wep.centroid import CentroidFindFactory
 from lsst.ts.wep.utils import CentroidFindType
@@ -29,7 +31,9 @@ from lsst.ts.wep.utils import CentroidFindType
 class DeblendDefault(object):
     """Default deblend class."""
 
-    def generateMultiDonut(self, template, spaceCoef, magRatio, theta):
+    def generateMultiDonut(
+        self, template: np.ndarray, spaceCoef: float, magRatio: float, theta: float
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
         """Gemerate multiple donut images.
 
         Only one neightboring star will be generated for test, which is the
@@ -123,7 +127,12 @@ class DeblendDefault(object):
 
         return image, imageMain, imageNeighbor, newX, newY
 
-    def deblendDonut(self, imgToDeblend, iniGuessXY, **kwargs):
+    def deblendDonut(
+        self,
+        imgToDeblend: np.ndarray,
+        iniGuessXY: list[tuple],
+        **kwargs: Any,
+    ) -> tuple[np.ndarray, float, float]:
         """Deblend the donut image.
 
         Parameters

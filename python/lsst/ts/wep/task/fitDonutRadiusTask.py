@@ -1,3 +1,5 @@
+from typing import Any
+
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
@@ -16,34 +18,34 @@ __all__ = [
 
 
 class FitDonutRadiusTaskConfig(pexConfig.Config):
-    widthMultiplier = pexConfig.Field[float](
+    widthMultiplier: pexConfig.Field = pexConfig.Field[float](
         doc="Multiplier used to convert the width of peaks fitted \
          to donut cross-section to donut edge.",
         default=0.8,
     )
-    filterSigma = pexConfig.Field[float](
+    filterSigma: pexConfig.Field = pexConfig.Field[float](
         doc="Standard deviation of the Gaussian kernel \
         used to smooth out the donut cross-section prior to \
         using peak finder (in pixels).",
         default=3,
     )
-    minPeakWidth = pexConfig.Field[float](
+    minPeakWidth: pexConfig.Field = pexConfig.Field[float](
         doc="Required minimum width of peaks (in pixels) in \
         donut cross-section.",
         default=5,
     )
-    minPeakHeight = pexConfig.Field[float](
+    minPeakHeight: pexConfig.Field = pexConfig.Field[float](
         doc="Required minimum height of peaks in normalized \
         donut cross-section (i.e. must be between 0 and 1).",
         default=0.3,
     )
-    leftDefault = pexConfig.Field[float](
+    leftDefault: pexConfig.Field = pexConfig.Field[float](
         doc="Default position of the left edge of the donut \
         expressed as a fraction of image length (i.e. between \
         0 and 1).",
         default=0.1,
     )
-    rightDefault = pexConfig.Field[float](
+    rightDefault: pexConfig.Field = pexConfig.Field[float](
         doc="Default position of the right edge of the donut \
         expressed as a fraction of image length (i.e. between \
         0 and 1).",
@@ -62,11 +64,13 @@ class FitDonutRadiusTaskConfig(pexConfig.Config):
 class FitDonutRadiusTask(pipeBase.Task):
     ConfigClass = FitDonutRadiusTaskConfig
     _DefaultName = "FitDonutRadius"
+
+    config: FitDonutRadiusTaskConfig
     """
     Run donut radius fitting.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         self.widthMultiplier = self.config.widthMultiplier
@@ -148,7 +152,7 @@ class FitDonutRadiusTask(pipeBase.Task):
 
         return pipeBase.Struct(donutRadiiTable=donutRadiiTable)
 
-    def fit_radius(self, image: np.array):
+    def fit_radius(self, image: np.ndarray) -> tuple[float, float, float, int]:
         """
         Find peaks and widths of smoothed donut cross-section.
         The donut cross-section is normalized, and
@@ -237,8 +241,7 @@ class FitDonutRadiusTask(pipeBase.Task):
             right_edge = right_edge * self.binning
         return left_edge, right_edge, radius, fail_flag
 
-    def get_line_profile(self, image: np.ndarray, angle_deg: float = 0):
-
+    def get_line_profile(self, image: np.ndarray, angle_deg: float = 0) -> np.ndarray:
         # Center of image
         center = np.array(image.shape) // 2
 
@@ -267,7 +270,7 @@ class FitDonutRadiusTask(pipeBase.Task):
             profile = profile[:length]
         return profile
 
-    def get_median_profile(self, image: np.ndarray, nangles: int = 20):
+    def get_median_profile(self, image: np.ndarray, nangles: int = 20) -> np.ndarray:
         angles = np.linspace(0, 180, nangles)
         profiles = []
         for angle in angles:

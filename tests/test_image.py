@@ -30,14 +30,14 @@ class TestImage(unittest.TestCase):
     """Test the Image class."""
 
     @staticmethod
-    def _get_good_inputs():
+    def _get_good_inputs() -> dict:
         return {
             "image": np.zeros((160, 160)),
             "fieldAngle": (1, 2),
             "defocalType": "intra",
         }
 
-    def testBadImage(self):
+    def testBadImage(self) -> None:
         with self.assertRaises(TypeError):
             Image(None, (0, 0), "intra")
         with self.assertRaises(ValueError):
@@ -45,41 +45,41 @@ class TestImage(unittest.TestCase):
         with self.assertRaises(ValueError):
             Image(np.zeros((2, 4)), (0, 0), "intra")
 
-    def testBadFieldAngle(self):
+    def testBadFieldAngle(self) -> None:
         with self.assertRaises(ValueError):
             Image(np.zeros((160, 160)), (1, 2, 3), "intra")
 
-    def testBadDefocalType(self):
+    def testBadDefocalType(self) -> None:
         with self.assertRaises(TypeError):
             Image(np.zeros((160, 160)), (0, 0), 1)
 
-    def testBadBandLabel(self):
+    def testBadBandLabel(self) -> None:
         with self.assertRaises(TypeError):
             Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel=1)
 
-    def testBandLabelStringNotInEnum(self):
+    def testBandLabelStringNotInEnum(self) -> None:
         image = Image(
             np.zeros((160, 160)), (0, 0), "intra", bandLabel="NOT_AN_ENUMERATION"
         )
         assert image.bandLabel == BandLabel.REF
 
-    def testBadPlaneType(self):
+    def testBadPlaneType(self) -> None:
         with self.assertRaises(TypeError):
             Image(np.zeros((160, 160)), (0, 0), "intra", planeType=1)
 
-    def testBadBlendOffsets(self):
+    def testBadBlendOffsets(self) -> None:
         with self.assertRaises(ValueError):
             Image(np.zeros((160, 160)), (0, 0), "intra", blendOffsets=[1])
         with self.assertRaises(ValueError):
             Image(np.zeros((160, 160)), (0, 0), "intra", blendOffsets=[[1], [1], [1]])
 
-    def testBadMask(self):
+    def testBadMask(self) -> None:
         with self.assertRaises(TypeError):
             Image(np.zeros((160, 160)), (0, 0), "intra").mask = 1
         with self.assertRaises(ValueError):
             Image(np.zeros((160, 160)), (0, 0), "intra").mask = np.zeros((1, 1))
 
-    def testCopy(self):
+    def testCopy(self) -> None:
         rng = np.random.default_rng(0)
         image1 = Image(rng.normal(size=(160, 160)), (1, 2), "extra")
         image2 = image1.copy()
