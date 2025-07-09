@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.14.1:
+
+-------------
+ 14.14.1
+-------------
+
+* Add mypy as a dependency to ts_wep.
+
 .. _lsst.ts.wep-14.14.0:
 
 -------------
