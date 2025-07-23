@@ -112,6 +112,12 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "exposure": 4021123106001,
             "visit": 4021123106001,
         }
+        # Run task on empty exposure
+        self.camera = self.butler.get(
+            "camera",
+            dataId={"instrument": "LSSTCam"},
+            collections=["LSSTCam/calib/unbounded"],
+        )
 
     def testValidateConfigs(self) -> None:
         # Test config in task
@@ -127,6 +133,18 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.config.edgeMargin, 100)
         self.assertEqual(self.task.config.measurementTask.nSigmaDetection, 5.0)
         self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
+
+    def testBackgroundSubtractionApplied(self) -> None:
+        testExposure = self.butler.get(
+            "raw", dataId=self.testDataIdS10, collections=["LSSTCam/raw/all"]
+        )
+        with self.assertRaises(KeyError):
+            testExposure.getMetadata()["BGMEAN"]
+        self.task.run(testExposure, self.camera)
+        # background subtraction is automatically
+        # applied to the exposure. Thus, BGMEAN should now exist in the
+        # exposure metadata.
+        self.assertIsInstance(testExposure.getMetadata()["BGMEAN"], float)
 
     def testUpdateDonutCatalog(self) -> None:
 
@@ -215,15 +233,9 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         exposure_noSrc = copy(exposure_S11)
         exposure_noSrc.setMaskedImage(maskedImage)
 
-        # Run task on empty exposure
-        camera = self.butler.get(
-            "camera",
-            dataId={"instrument": "LSSTCam"},
-            collections=["LSSTCam/calib/unbounded"],
-        )
         taskOutNoSrc = self.task.run(
             exposure_noSrc,
-            camera,
+            self.camera,
         )
 
         # Test that there are no rows, but all columns are present
@@ -254,11 +266,11 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         )
         taskOut_S11 = self.task.run(
             exposure_S11,
-            camera,
+            self.camera,
         )
         taskOut_S10 = self.task.run(
             exposure_S10,
-            camera,
+            self.camera,
         )
 
         # Test that the length of catalogs is as expected
@@ -292,7 +304,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         # Run the task
         taskOut_S10_noSources = self.task.run(
             exposure_S10,
-            camera,
+            self.camera,
         )
 
         # Test that there are no rows, but all columns are present
@@ -310,7 +322,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.task.config.doDonutSelection = False
         taskOut_S11_noSelection = self.task.run(
             exposure_S11,
-            camera,
+            self.camera,
         )
         # Check that the expected columns are present
         self.assertCountEqual(
