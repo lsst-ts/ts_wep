@@ -37,6 +37,7 @@ from astropy.table import QTable
 from lsst.afw.cameraGeom import Camera
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.meas.algorithms import SubtractBackgroundTask
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
@@ -94,6 +95,10 @@ class GenerateDonutDirectDetectTaskConfig(
         target=DonutQuickMeasurementTask,
         doc="How to run source detection and measurement.",
     )
+    subtractBackground: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=SubtractBackgroundTask,
+        doc="Task to perform background subtraction.",
+    )
     opticalModel: pexConfig.Field = pexConfig.Field(
         doc="Specify the optical model (offAxis, onAxis).",
         dtype=str,
@@ -148,6 +153,9 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # Set up the donut selector task if we need it
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
+
+        # Set up background subtraction task
+        self.makeSubtask("subtractBackground")
 
         # Set which sensors are intra focal
         # to create correct template
@@ -294,6 +302,9 @@ That means that the provided exposure is very close to focus"
             donutCatUpd = self.emptyTable()
             donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
             return pipeBase.Struct(donutCatalog=donutCatUpd)
+
+        # Run background subtraction
+        self.subtractBackground.run(exposure=exposure)
 
         # Trim the exposure by the margin
         edgeMargin = self.config.edgeMargin

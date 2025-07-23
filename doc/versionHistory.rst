@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.15.0:
+
+-------------
+ 14.15.0
+-------------
+
+* Add background subtraction to generateDonutDirectDetectTask.
+
 .. _lsst.ts.wep-14.14.1:
 
 -------------
