@@ -143,6 +143,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
     config: GenerateDonutDirectDetectTaskConfig
     measurementTask: DonutQuickMeasurementTask
     donutSelector: DonutSourceSelectorTask
+    subtractBackground: SubtractBackgroundTask
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
