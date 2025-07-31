@@ -209,6 +209,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 blendCentersX=None,
                 blendCentersY=None,
             )
+        rejectLog = dict('edge'=[], 'fieldDist'=[])
 
         fluxField = f"{filterName}_flux"
         flux = _getFieldFromCatalog(sourceCat, fluxField)
@@ -289,16 +290,19 @@ class DonutSourceSelectorTask(pipeBase.Task):
             srcX = magSortedDf["x"].iloc[srcOn]
             srcY = magSortedDf["y"].iloc[srcOn]
             if trimmedBBox.contains(srcX, srcY) is False:
+                rejectLog['edge'].append(srcOn)
                 continue
 
             # If distance from field center is greater than
             # maxFieldDist discard the source and move on
             if magSortedDf["fieldDist"].iloc[srcOn] > self.config.maxFieldDist:
+                rejectLog['fieldDist'].append(srcOn)
                 continue
 
             # If this source's magnitude is outside our bounds then discard
             srcMag = magSortedDf["mag"].iloc[srcOn]
             if (srcMag > magMax) | (srcMag < magMin):
+                rejectLog['magCut'].append(srcOn)
                 continue
 
             # If there is no overlapping source keep
@@ -318,6 +322,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
                 # If this is the fainter source of the overlaps move on
                 if np.min(magDiff) < 0.0:
+                    rejectLog['faintOverlap'].append(srcOn)
                     continue
                 # If this source overlaps but is brighter than all its
                 # overlapping sources by minMagDiff then keep it
@@ -328,6 +333,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # within minMagDiff of the source magnitude
                 # are closer than minBlendedSeparation move on
                 elif np.sum(blendTooClose & magTooClose) > 0:
+                    rejectLog['blendTooClose'].append(srcOn)
                     continue
                 # If the number of overlapping sources with magnitudes close
                 # enough to count as blended is less than or equal to
@@ -367,6 +373,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     )
                     sourcesKept += 1
                 else:
+                    rejectLog['blendTooMany'].append(srcOn)
                     continue
 
             if (self.config.sourceLimit > 0) and (
