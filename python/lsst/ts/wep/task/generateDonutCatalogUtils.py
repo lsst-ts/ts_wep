@@ -33,6 +33,7 @@ from lsst.afw.geom import SkyWcs
 from lsst.afw.image import Exposure
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.ts.wep.task import DonutSourceSelectorTask
+from lsst.ts.wep.donutSizeCorrelator import DonutSizeCorrelator
 
 
 def runSelection(
@@ -275,6 +276,12 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable) -> QTable:
     )
     catVisitInfo["ERA"] = visitInfo.era.asDegrees() * u.deg
     catVisitInfo["exposure_time"] = visitInfo.exposureTime * u.s
+
+    # Estimate the donut diameter
+    correlator = DonutSizeCorrelator()
+    img = correlator.prepButlerExposure(exposure)
+    diameter, *_ = correlator.getDonutDiameter(img)
+    catVisitInfo["donut_radius"] = 0.5 * diameter
 
     donutCat.meta["visit_info"] = catVisitInfo
 
