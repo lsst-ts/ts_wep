@@ -238,10 +238,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "MAX_POWER_GRAD_SELECT",
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
-                    "RADIUS",
-                    "X_PIX_LEFT_EDGE",
-                    "X_PIX_RIGHT_EDGE",
-                    "RADIUS_FAIL_FLAG",
+                    "RADIUS"
                 ]
                 np.testing.assert_array_equal(
                     np.sort(colnames), np.sort(desired_colnames)
