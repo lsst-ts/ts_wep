@@ -158,11 +158,7 @@ class DonutStampSelectorTask(pipeBase.Task):
             "SN",
             "ENTROPY",
             "FRAC_BAD_PIX",
-            "MAX_POWER_GRAD",
-            "RADIUS",
-            "X_PIX_LEFT_EDGE",
-            "X_PIX_RIGHT_EDGE",
-            "RADIUS_FAIL_FLAG",
+            "MAX_POWER_GRAD"
         ]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
@@ -237,23 +233,11 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "selectWithEntropy==True but ENTROPY not in stamp metadata."
             )
 
-        # Collect the donut radius metric information if available
-        donutRadii = np.full(len(donutStamps), np.nan)
-        stampsLeftEdges = np.full(len(donutStamps), np.nan)
-        stampsRightEdges = np.full(len(donutStamps), np.nan)
-        donutRadiiFailFlags = np.zeros(len(donutStamps), dtype="bool")
+        # Collect the donut radius metric from stamps metadata
         if "RADIUS" in list(donutStamps.metadata):
-            fillVals = np.asarray(donutStamps.metadata.getArray("RADIUS"))
-            donutRadii[: len(fillVals)] = fillVals
-
-            fillVals = np.asarray(donutStamps.metadata.getArray("X_PIX_LEFT_EDGE"))
-            stampsLeftEdges[: len(fillVals)] = fillVals
-
-            fillVals = np.asarray(donutStamps.metadata.getArray("X_PIX_RIGHT_EDGE"))
-            stampsRightEdges[: len(fillVals)] = fillVals
-
-            fillVals = np.asarray(donutStamps.metadata.getArray("RADIUS_FAIL_FLAG"))
-            donutRadiiFailFlags[: len(fillVals)] = fillVals
+            donutRadii = np.ones(len(donutStamps)) * donutStamps.metadata["RADIUS"]
+        else:
+            donutRadii = np.zeros(len(donutStamps))
 
         # By default select all donuts,  only overwritten
         # if selectWithSignalToNoise is True
@@ -359,9 +343,6 @@ class DonutStampSelectorTask(pipeBase.Task):
                 fracBadPixSelect,
                 maxPowerGradSelect,
                 donutRadii,
-                stampsLeftEdges,
-                stampsRightEdges,
-                donutRadiiFailFlags,
                 selected,
             ],
             names=[
@@ -374,9 +355,6 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "FRAC_BAD_PIX_SELECT",
                 "MAX_POWER_GRAD_SELECT",
                 "RADIUS",
-                "X_PIX_LEFT_EDGE",
-                "X_PIX_RIGHT_EDGE",
-                "RADIUS_FAIL_FLAG",
                 "FINAL_SELECT",
             ],
         )

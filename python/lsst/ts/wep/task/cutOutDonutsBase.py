@@ -43,7 +43,6 @@ from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.fitDonutRadiusTask import FitDonutRadiusTask
 from lsst.ts.wep.utils import (
     DefocalType,
     calcStampPowerSpectrum,
@@ -135,10 +134,6 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         default=["SAT", "BAD", "NO_DATA", "INTRP"],
     )
-    fitDonutRadius: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=FitDonutRadiusTask,
-        doc="How to estimate donut radius.",
-    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -179,9 +174,6 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.maxRecenterDistance = self.config.maxRecenterDistance
         # Set Variance Plane Warning only once
         self.varianceWarningSet = False
-
-        self.fitDonutRadius = self.config.fitDonutRadius
-        self.makeSubtask("fitDonutRadius")
 
     def shiftCenters(
         self, centerArr: np.ndarray, boundary: float, distance: float
@@ -551,6 +543,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         inputDonutStamps.metadata["BORESIGHT_DEC_RAD"] = (
             donutCatalog.meta["visit_info"]["boresight_dec"].to(u.rad).value
         )
+        inputDonutStamps.metadata["RADIUS"] = (
+            donutCatalog.meta["visit_info"]["donut_radius"]
+        )
 
         return inputDonutStamps
 
@@ -850,19 +845,6 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the entropy-based quality measure
         stampsMetadata["EFFECTIVE"] = np.array(isEffective).astype(int)
         stampsMetadata["ENTROPY"] = np.array(stampsEntropy)
-
-        # Save the donut radius metrics
-        fitResults = self.fitDonutRadius.run(finalStamps)
-        stampsMetadata["RADIUS"] = np.array(fitResults.donutRadiiTable["RADIUS"])
-        stampsMetadata["X_PIX_LEFT_EDGE"] = np.array(
-            fitResults.donutRadiiTable["X_PIX_LEFT_EDGE"]
-        )
-        stampsMetadata["X_PIX_RIGHT_EDGE"] = np.array(
-            fitResults.donutRadiiTable["X_PIX_RIGHT_EDGE"]
-        )
-        stampsMetadata["RADIUS_FAIL_FLAG"] = np.array(
-            fitResults.donutRadiiTable["FAIL_FLAG"]
-        )
 
         # Save the peak of the correlated image
         stampsMetadata["PEAK_HEIGHT"] = peakHeight

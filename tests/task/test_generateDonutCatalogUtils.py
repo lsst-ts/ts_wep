@@ -383,6 +383,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "observatory_longitude",
             "ERA",
             "exposure_time",
+            "donut_radius"
         ]
 
         self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
