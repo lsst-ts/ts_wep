@@ -4,6 +4,7 @@
 # this will be a problem to import.
 try:
     from .donutDetector import DonutDetector
+    from .donutSizeCorrelator import DonutSizeCorrelator
     from .image import Image
     from .imageMapper import ImageMapper
     from .instrument import Instrument
