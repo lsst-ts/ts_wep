@@ -450,9 +450,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "EFFECTIVE",
             "ENTROPY",
             "RADIUS",
-            "X_PIX_LEFT_EDGE",
-            "X_PIX_RIGHT_EDGE",
-            "RADIUS_FAIL_FLAG",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
             "MAX_POWER_GRAD",
@@ -481,10 +478,6 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "NOISE_VAR_DONUT",
             "EFFECTIVE",
             "ENTROPY",
-            "RADIUS",
-            "X_PIX_LEFT_EDGE",
-            "X_PIX_RIGHT_EDGE",
-            "RADIUS_FAIL_FLAG",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
         ]:
@@ -604,6 +597,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "BORESIGHT_AZ_RAD",
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
+            "RADIUS"
         ]
         self.assertCountEqual(key_list, list(donutStamps.metadata.keys()))
 
