@@ -29,6 +29,7 @@ from lsst.ts.wep.utils import (
     padArray,
     polygonContains,
     rotMatrix,
+    binArray
 )
 from scipy.ndimage import shift
 
@@ -171,6 +172,61 @@ class TestMiscUtils(unittest.TestCase):
             processedArray[:, 1]
         ).any(), "Expected NaNs in the second column after clipping"
 
+    def testBinArray(self) -> None:
+        # Create a 4x4 test array
+        testArray = np.array([
+            [1, 2, 3, 4],
+            [5, 6, 7, 8],
+            [9, 10, 11, 12],
+            [13, 14, 15, 16]
+        ])
+        binning = 2
+
+        # Test 'mean' method
+        expectedMean = np.array([
+            [3.5, 5.5],
+            [11.5, 13.5]
+        ])
+        resultMean = binArray(testArray, binning, method="mean")
+        np.testing.assert_array_almost_equal(resultMean, expectedMean)
+
+        # Test 'median' method (same result as mean in this symmetrical case)
+        resultMedian = binArray(testArray, binning, method="median")
+        np.testing.assert_array_almost_equal(resultMedian, expectedMean)
+
+         # Simple 4x4 test array with hot pixel at (2,2)
+        baseArray = np.array([
+            [1, 1, 1, 1],
+            [1, 1, 1, 1],
+            [1, 1, 1000, 1],
+            [1, 1, 1, 1]
+        ])
+        binning = 2
+
+        # Test 'mean' result
+        resultMean = binArray(baseArray, binning, method="mean")
+        expectedMeanTopLeft = 1.0
+        expectedMeanBottomRight = (1000 + 1 + 1 + 1) / 4.0  # Hot pixel affects mean
+        self.assertAlmostEqual(resultMean[0, 0], expectedMeanTopLeft)
+        self.assertAlmostEqual(resultMean[1, 1], expectedMeanBottomRight)
+
+        # Test 'median' result
+        resultMedian = binArray(baseArray, binning, method="median")
+        expectedMedianBottomRight = 1.0  # Median unaffected by single outlier
+        self.assertAlmostEqual(resultMedian[0, 0], expectedMeanTopLeft)
+        self.assertAlmostEqual(resultMedian[1, 1], expectedMedianBottomRight)
+
+        # Verify that mean and median give *different* results due to outlier
+        self.assertNotAlmostEqual(resultMean[1, 1], resultMedian[1, 1])
+
+        # Test invalid method raises ValueError
+        with self.assertRaises(ValueError):
+            binArray(testArray, binning, method="sum")
+
+        # Test non-divisible array is cropped correctly
+        testArrayOdd = np.arange(25).reshape(5, 5)
+        resultOdd = binArray(testArrayOdd, binning, method="mean")
+        self.assertEqual(resultOdd.shape, (2, 2))
 
 if __name__ == "__main__":
     # Do the unit test
