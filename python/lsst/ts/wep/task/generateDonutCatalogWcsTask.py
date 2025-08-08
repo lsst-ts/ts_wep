@@ -183,7 +183,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             donutSelectorTask = (
                 self.donutSelector if self.config.doDonutSelection is True else None
             )
-            refSelection, blendCentersX, blendCentersY = runSelection(
+            refCatalog, refSelection, blendCentersX, blendCentersY, rejectFlags, rejectFlagsDict = runSelection(
                 refObjLoader,
                 detector,
                 detectorWcs,
@@ -199,17 +199,20 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                 "No catalogs cover this detector. Returning empty catalog.",
                 RuntimeWarning,
             )
+            refCatalog = None
             refSelection = None
             blendCentersX = None
             blendCentersY = None
 
+        selectedCat = refCatalog[refSelection] if refCatalog is not None else None
         fieldObjects = donutCatalogToAstropy(
-            refSelection, filterName, blendCentersX, blendCentersY
+            selectedCat, filterName, blendCentersX, blendCentersY
         )
+        donutRefs = donutCatalogToAstropy(refCatalog, filterName, [], [])
         fieldObjects["detector"] = np.array(
             [detector.getName()] * len(fieldObjects), dtype=str
         )
 
         fieldObjects = addVisitInfoToCatTable(exposure, fieldObjects)
 
-        return pipeBase.Struct(donutCatalog=fieldObjects)
+        return pipeBase.Struct(donutCatalog=fieldObjects, donutFullRefCat=donutRefs)

@@ -108,6 +108,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(list(testRejectFlags), np.zeros(4).tolist())
 
         # Test magMin
         self.config.magMin = self.magMin
@@ -115,6 +117,12 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, True, False, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        flagDict = testCatStruct.rejectFlagsDict
+        self.assertEqual(["edge", "fieldDist", "magCut",
+                      "faintOverlap", "blendTooClose", "blendTooMany",
+                      "sourceLimitReached"], list(flagDict.keys()))
+        self.assertEqual(list(testRejectFlags), [0, 0, flagDict['magCut'], 0])
 
         # Test magMax
         self.config.magMin = -99.0
@@ -123,6 +131,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, False, True, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(list(testRejectFlags), [0, flagDict['magCut'], 0, 0])
 
         # Test Defaults are used when useCustomMagLimit is turned off.
         self.config.useCustomMagLimit = False
@@ -130,6 +140,8 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, False, False, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(list(testRejectFlags), [0, flagDict['magCut'], flagDict['magCut'], 0])
 
     def testSelectSources(self) -> None:
         minimalCat, detector = self._createTestCat()
@@ -144,17 +156,26 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]] * 4)
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]] * 4)
+        testRejectFlags = testCatStruct.rejectFlags
+        flagDict = testCatStruct.rejectFlagsDict
+        self.assertEqual(list(testRejectFlags), np.zeros(4).tolist())
 
         # The first three donuts overlap but none are more than
         # isolatedMagDiff brighter than the rest so none are chosen
         self.config.isolatedMagDiff = 10.0
         self.config.unblendedSeparation = 100
+        self.config.minBlendedSeparation = 70
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], flagDict['blendTooClose'], 0]
+        )
 
         # Will now take the brightest of the three donuts
         # for a total of 2 selected donuts
@@ -166,6 +187,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[], []])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, 0]
+        )
 
         # Test that number of sources in catalog limited by sourceLimit
         # and that the brightest of the allowed donuts is chosen
@@ -175,6 +201,15 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, False])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [
+                flagDict['sourceLimitReached'],
+                flagDict['sourceLimitReached'],
+                0,
+                flagDict['sourceLimitReached']]
+        )
 
         # Test that sourceLimit can only be positive integer or -1
         self.config.sourceLimit = 0
@@ -194,6 +229,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, 0]
+        )
 
         # Test that two donuts on either end of the triplet that only
         # blend with one other donut are not accepted if maxBlended
@@ -205,6 +245,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['blendTooMany'], flagDict['faintOverlap'], flagDict['blendTooMany'], 0]
+        )
 
         # Test that two donuts on either end of the triplet that only
         # blend with one other donut are accepted even though
@@ -221,6 +266,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], [140.0], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [100.0], []])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [0, flagDict['faintOverlap'], 0, 0]
+        )
 
         # Lower unblendedSeparation so that the first two donuts
         # are the only blended ones. Test that the brighter of the
@@ -238,6 +288,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], [], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [], []])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [0, flagDict['faintOverlap'], 0, 0]
+        )
 
         # If we increase unblendedSeparation back to 100 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
@@ -252,6 +307,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], flagDict['blendTooMany'], 0]
+        )
 
         # Decrease isolatedMagDiff so that only one of the donuts
         # blended with the brightest donut falls within the range.
@@ -271,6 +331,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, 0]
+        )
 
         # If we increase isolatedMagDiff to once again include
         # both sources overlapping the brightest donut as blended
@@ -292,6 +357,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             self.assertListEqual(list(bX), trueBX)
         for bY, trueBY in zip(blendCentersY, [[100.0, 100.0], []]):
             self.assertListEqual(list(bY), trueBY)
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, 0]
+        )
 
         # Donut furthest from center is over 0.15 degrees from field center
         # and should get cut out when setting maxFieldDist to 0.15
@@ -302,6 +372,26 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, True, True, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['fieldDist'], 0, 0, 0]
+        )
+
+        # Unblended separation is used to measure if a donut is too close
+        # to the edge of the field of view. If it is greater than the distance
+        # to an edge of the CCD then the donut is rejected.
+        self.config.unblendedSeparation = 101
+        self.config.maxFieldDist = 1.8
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False]*4)
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['edge']]*4
+        )
 
         # Blended donut separation should exclude all donuts that have a blend
         # less than minBlendedSeparation from themselves even if blends are
@@ -312,6 +402,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], flagDict['blendTooClose'], 0]
+        )
 
         # Now test that it is allowed once the minBlendedSeparation is lowered.
         self.config.minBlendedSeparation = 45
@@ -319,6 +414,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, 0]
+        )
 
         # Test output if we have an empty catalog. Make sure that
         # all parts of the Struct are returned as expected.
@@ -332,11 +432,32 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [])
         self.assertEqual(testCatStruct.blendCentersX, None)
         self.assertEqual(testCatStruct.blendCentersY, None)
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(list(testRejectFlags), list())
+
+        # Test output if we have no donuts within the magnitude limits.
+        # Make sure that all parts of the Struct are returned as expected.
+        self.config.magMax = 0.1
+        self.config.isolatedMagDiff = 0.1
+        self.config.magMin = 0.0
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
+        testCatSelected = testCatStruct.selected
+        self.assertListEqual(list(testCatSelected), [False, False, False, False])
+        self.assertEqual(testCatStruct.blendCentersX, None)
+        self.assertEqual(testCatStruct.blendCentersY, None)
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            list(np.ones(len(minimalCat), dtype=int) * testCatStruct.rejectFlagsDict['magCut'])
+        )
 
         # Test that when there are multiple blends but not all are within
         # isolatedMagDiff that the donut centers for only the blended
         # donuts within isolatedMagDiff are kept since these are the only ones
         # that should count as blended.
+        self.config.magMax = 99.0
+        self.config.magMin = -99.0
         self.config.minBlendedSeparation = 55
         self.config.unblendedSeparation = 100
         self.config.isolatedMagDiff = 9.0
@@ -347,6 +468,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, 0]
+        )
 
         # Test same as above but with multiple donuts kept and one donut that
         # should not appear.
@@ -364,6 +490,11 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             self.assertListEqual(list(bX), trueBX)
         for bY, trueBY in zip(testCatStruct.blendCentersY, [[200.0, 200.0]]):
             self.assertListEqual(list(bY), trueBY)
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, flagDict['faintOverlap']]
+        )
 
     def testTaskRun(self) -> None:
         minimalCat, detector = self._createTestCat()
@@ -379,6 +510,12 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]] * 4)
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]] * 4)
+        print(testCatStruct)
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(
+            list(testRejectFlags),
+            np.zeros(4).tolist()
+        )
 
         # Will now take the brightest of the three donuts that overlap
         # for a total of 2 selected donuts
@@ -392,6 +529,12 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[], []])
+        testRejectFlags = testCatStruct.rejectFlags
+        flagDict = testCatStruct.rejectFlagsDict
+        self.assertEqual(
+            list(testRejectFlags),
+            [flagDict['faintOverlap'], flagDict['faintOverlap'], 0, 0]
+        )
 
         # Test output if we have an empty catalog. Make sure that
         # all parts of the Struct are returned as expected.
@@ -401,3 +544,5 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [])
         self.assertEqual(testCatStruct.blendCentersX, None)
         self.assertEqual(testCatStruct.blendCentersY, None)
+        testRejectFlags = testCatStruct.rejectFlags
+        self.assertEqual(list(testRejectFlags), list())

@@ -163,6 +163,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
             selected=result.selected,
             blendCentersX=result.blendCentersX,
             blendCentersY=result.blendCentersY,
+            rejectFlags=result.rejectFlags,
+            rejectFlagsDict=result.rejectFlagsDict,
         )
 
     @timeMethod
@@ -203,13 +205,19 @@ class DonutSourceSelectorTask(pipeBase.Task):
         bbox = detector.getBBox()
 
         selected = np.zeros(len(sourceCat), dtype=bool)
+        rejectFlags = list()
+        flagNames = ["edge", "fieldDist", "magCut",
+                      "faintOverlap", "blendTooClose", "blendTooMany",
+                      "sourceLimitReached"]
+        rejectFlagsDict = {flag: idx for idx, flag in enumerate(flagNames, start=1)}
         if len(selected) == 0:
             return pipeBase.Struct(
                 selected=selected,
                 blendCentersX=None,
                 blendCentersY=None,
+                rejectFlags=np.array(rejectFlags),
+                rejectFlagsDict=rejectFlagsDict,
             )
-        rejectLog = dict('edge'=[], 'fieldDist'=[])
 
         fluxField = f"{filterName}_flux"
         flux = _getFieldFromCatalog(sourceCat, fluxField)
@@ -232,11 +240,16 @@ class DonutSourceSelectorTask(pipeBase.Task):
         magSelected = np.ones(len(sourceCat), dtype=bool)
         magSelected &= mag < (magMax + minMagDiff)
         mag = mag[magSelected]
+        # Cut out any donuts that are too faint for the mag cut
+        # and too faint to register as a blend for the faintest
+        # allowed donut.
         if len(mag) == 0:
             return pipeBase.Struct(
                 selected=selected,
                 blendCentersX=None,
                 blendCentersY=None,
+                rejectFlags=np.ones(len(sourceCat), dtype=int) * rejectFlagsDict['magCut'],
+                rejectFlagsDict=rejectFlagsDict,
             )
         xCoord = _getFieldFromCatalog(sourceCat[magSelected], self.config.xCoordField)
         yCoord = _getFieldFromCatalog(sourceCat[magSelected], self.config.yCoordField)
@@ -290,28 +303,23 @@ class DonutSourceSelectorTask(pipeBase.Task):
             srcX = magSortedDf["x"].iloc[srcOn]
             srcY = magSortedDf["y"].iloc[srcOn]
             if trimmedBBox.contains(srcX, srcY) is False:
-                rejectLog['edge'].append(srcOn)
+                rejectFlags.append(rejectFlagsDict['edge'])
                 continue
 
             # If distance from field center is greater than
             # maxFieldDist discard the source and move on
             if magSortedDf["fieldDist"].iloc[srcOn] > self.config.maxFieldDist:
-                rejectLog['fieldDist'].append(srcOn)
+                rejectFlags.append(rejectFlagsDict['fieldDist'])
                 continue
 
             # If this source's magnitude is outside our bounds then discard
             srcMag = magSortedDf["mag"].iloc[srcOn]
             if (srcMag > magMax) | (srcMag < magMin):
-                rejectLog['magCut'].append(srcOn)
+                rejectFlags.append(rejectFlagsDict['magCut'])
                 continue
 
-            # If there is no overlapping source keep
-            # the source and move on to next
-            if len(idxList) == 1:
-                index.append(groupIndices[srcOn])
-                sourcesKept += 1
             # In this case there is at least one overlapping source
-            else:
+            if len(idxList) > 1:
                 # Measure magnitude differences with overlapping objects
                 magDiff = magSortedDf["mag"].iloc[idxList[1:]] - srcMag
                 magTooClose = magDiff.values < minMagDiff
@@ -322,24 +330,18 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
                 # If this is the fainter source of the overlaps move on
                 if np.min(magDiff) < 0.0:
-                    rejectLog['faintOverlap'].append(srcOn)
+                    rejectFlags.append(rejectFlagsDict['faintOverlap'])
                     continue
-                # If this source overlaps but is brighter than all its
-                # overlapping sources by minMagDiff then keep it
-                elif np.min(magDiff) >= minMagDiff:
-                    index.append(groupIndices[srcOn])
-                    sourcesKept += 1
                 # If the centers of any blended objects with a magnitude
                 # within minMagDiff of the source magnitude
                 # are closer than minBlendedSeparation move on
                 elif np.sum(blendTooClose & magTooClose) > 0:
-                    rejectLog['blendTooClose'].append(srcOn)
+                    rejectFlags.append(rejectFlagsDict['blendTooClose'])
                     continue
                 # If the number of overlapping sources with magnitudes close
                 # enough to count as blended is less than or equal to
                 # maxBlended then keep this source
                 elif len(magDiff) <= maxBlended:
-                    index.append(groupIndices[srcOn])
                     # Only include sources bright enough to count as
                     # blended based upon isolatedMagDiff. Otherwise
                     # masks for deblending will include footprints of
@@ -348,12 +350,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # magDiff is all sources in magSortedDf after index=0.
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
                     blendCentersX[groupIndices[srcOn]] = (
-                        magSortedDf["x"].iloc[idxList[blendMagIdx]].values
+                        magSortedDf["x"].iloc[idxList[blendMagIdx]].to_numpy().tolist()
                     )
                     blendCentersY[groupIndices[srcOn]] = (
-                        magSortedDf["y"].iloc[idxList[blendMagIdx]].values
+                        magSortedDf["y"].iloc[idxList[blendMagIdx]].to_numpy().tolist()
                     )
-                    sourcesKept += 1
                 # Keep the source if it is blended with up to maxBlended
                 # number of sources. To check this we look at the maxBlended+1
                 # source in the magDiff list and check that the object
@@ -361,24 +362,28 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # criterion means it is blended with maxBlended
                 # or fewer sources.
                 elif np.partition(magDiff, maxBlended)[maxBlended] > minMagDiff:
-                    index.append(groupIndices[srcOn])
                     # Same process as above to make sure we only get
                     # the blend centers we care about
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
                     blendCentersX[groupIndices[srcOn]] = (
-                        magSortedDf["x"].iloc[idxList[blendMagIdx]].values
+                        magSortedDf["x"].iloc[idxList[blendMagIdx]].to_numpy().tolist()
                     )
                     blendCentersY[groupIndices[srcOn]] = (
-                        magSortedDf["y"].iloc[idxList[blendMagIdx]].values
+                        magSortedDf["y"].iloc[idxList[blendMagIdx]].to_numpy().tolist()
                     )
-                    sourcesKept += 1
                 else:
-                    rejectLog['blendTooMany'].append(srcOn)
+                    rejectFlags.append(rejectFlagsDict['blendTooMany'])
                     continue
+
+            index.append(groupIndices[srcOn])
+            sourcesKept += 1
+            rejectFlags.append(0)  # No rejection for this source
 
             if (self.config.sourceLimit > 0) and (
                 sourcesKept == self.config.sourceLimit
             ):
+                for _ in range(srcOn+1, len(magSortedDf)):
+                    rejectFlags.append(rejectFlagsDict['sourceLimitReached'])
                 break
 
         # magSelected is a boolean array so we can
@@ -389,11 +394,17 @@ class DonutSourceSelectorTask(pipeBase.Task):
         sortedIndex = np.sort(index)
         selectedBlendCentersX = [blendCentersX[idx] for idx in sortedIndex]
         selectedBlendCentersY = [blendCentersY[idx] for idx in sortedIndex]
-
+        # Include any sources that were cut due to magnitude at the beginning
+        # in the final rejectFlags log and put them in magSorted order.
+        rejectFlagsFinal = np.ones(len(sourceCat), dtype=int) * rejectFlagsDict['magCut']
+        rejectFlagsFinal[groupIndices] = rejectFlags
+        # Add total selection numbers to the task log
         self.log.info("Selected %d/%d references", selected.sum(), len(sourceCat))
 
         return pipeBase.Struct(
             selected=selected,
             blendCentersX=selectedBlendCentersX,
             blendCentersY=selectedBlendCentersY,
+            rejectFlags=rejectFlagsFinal,
+            rejectFlagsDict=rejectFlagsDict,
         )

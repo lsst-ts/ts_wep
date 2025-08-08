@@ -89,9 +89,12 @@ def runSelection(
     else:
         donutSelection = donutSelectorTask.run(donutCatalog, detector, filterName)
         return (
-            donutCatalog[donutSelection.selected],
+            donutCatalog,
+            donutSelection.selected,
             donutSelection.blendCentersX,
             donutSelection.blendCentersY,
+            donutSelection.rejectFlags,
+            donutSelection.rejectFlagsDict,
         )
 
 
