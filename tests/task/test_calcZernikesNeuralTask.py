@@ -154,13 +154,13 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             "exposure": self.visitNum,
         }
 
-    def test_load_model(self):
+    def test_load_model(self) -> None:
         """
         Test we can load the models
         """
         print(self.task)
 
-    def test_load_intra_extra_exposures(self):
+    def test_load_intra_extra_exposures(self) -> None:
         """
         Test loading a pair of intra and extra focal exposures from the Butler repository.
         
@@ -196,7 +196,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         self.exposureExtra = exposureExtra
         self.exposureIntra = exposureIntra
 
-    def test_run_exposures(self):
+    def test_run_exposures(self) -> None:
         """
         Test running the neural task on the exposures
         """
