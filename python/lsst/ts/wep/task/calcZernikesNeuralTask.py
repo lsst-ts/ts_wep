@@ -25,7 +25,6 @@ __all__ = [
     "CalcZernikesNeuralTask",
 ]
 
-import abc
 from typing import Any, Optional
 import torch
 import lsst.pex.config as pexConfig
@@ -34,12 +33,13 @@ import numpy as np
 from astropy.table import QTable
 from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
-from NeuralAOS import NeuralActiveOpticsSys
+from TARTS import NeuralActiveOpticsSys
 
 class CalcZernikesNeuralTaskConnections(
     pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "detector", "instrument"),  # type: ignore
 ):
-    dimensions = ("visit", "detector", "instrument")
+
     donutStampsExtra = connectionTypes.Input(
         doc="Extra-focal Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
@@ -80,39 +80,55 @@ class CalcZernikesNeuralTaskConnections(
 
 class CalcZernikesNeuralTaskConfig(
     pipeBase.PipelineTaskConfig,
+    pipelineConnections=CalcZernikesNeuralTaskConnections,  # type: ignore
 ):
-    pipelineConnections = CalcZernikesNeuralTaskConnections
+    """Configuration for CalcZernikesNeuralTask.
 
-    wavenet_path = pexConfig.Field(
+    Attributes
+    ----------
+    wavenet_path : str
+        Model Weights Path for wavenet
+    alignet_path : str
+        Model Weights Path for alignet
+    aggregatornet_path : str
+        Model Weights Path for aggregatornet
+    dataset_param_path : str
+        datasetparam path
+    device : str
+        Device to use for calculations
+    """
+
+    wavenet_path = pexConfig.Field(  # type: ignore
         doc="Model Weights Path for wavenet",
         dtype=str
     )
-    alignet_path = pexConfig.Field(
+    alignet_path = pexConfig.Field(  # type: ignore
         doc="Model Weights Path for alignet",
         dtype=str
     )
-    aggregatornet_path = pexConfig.Field(
+    aggregatornet_path = pexConfig.Field(  # type: ignore
         doc="Model Weights Path for aggregatornet",
         dtype=str
     )
-    dataset_param_path = pexConfig.Field(
+    dataset_param_path = pexConfig.Field(  # type: ignore
         doc="datasetparam path",
         dtype=str
     )
-    device = pexConfig.Field(
+    device = pexConfig.Field(  # type: ignore
         doc="Device to use for calculations",
         dtype=str,
         default="cuda"
     )
 
 
-class CalcZernikesNeuralTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
-    """Base class for calculating Zernike coeffs from pairs of DonutStamps.
+class CalcZernikesNeuralTask(pipeBase.PipelineTask):
+    """Neural network-based Zernike estimation task using TARTS.
 
-    This class joins the EstimateZernikes and CombineZernikes subtasks to
-    be run on sets of DonutStamps.
+    This class uses the TARTS (Telescope Active Optics Real-Time System)
+    neural network models to estimate Zernike coefficients from pairs of
+    intra and extra-focal exposures.
     """
-    _DefaultName = "calcZernikesNeuralBaseTask"
+    _DefaultName = "calcZernikesNeuralTask"
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -120,48 +136,48 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
         self.nollIndices = np.arange(4, 24)
 
-        self.NAOS = NeuralActiveOpticsSys(
-            self.config.dataset_param_path,
-            self.config.wavenet_path,
-            self.config.alignet_path,
-            self.config.aggregatornet_path
+        self.tarts = NeuralActiveOpticsSys(
+            self.config.dataset_param_path,  # type: ignore
+            self.config.wavenet_path,  # type: ignore
+            self.config.alignet_path,  # type: ignore
+            self.config.aggregatornet_path  # type: ignore
         )
-        self.NAOS = self.NAOS.eval()
-        self.CROP_SIZE = self.NAOS.CROP_SIZE
-        self.device = self.config.device
+        self.tarts = self.tarts.eval()
+        self.CROP_SIZE = self.tarts.CROP_SIZE
+        self.device = self.config.device  # type: ignore
 
         if self.device == "cpu":
-            self.NAOS = self.NAOS.cpu()
+            self.tarts = self.tarts.cpu()
 
             # Update device attributes for all sub-models to CPU
-            self.NAOS.device_val = torch.device("cpu")
-            if hasattr(self.NAOS.alignnet_model, 'device_val'):
-                self.NAOS.alignnet_model.device_val = torch.device("cpu")
-            if hasattr(self.NAOS.wavenet_model, 'device_val'):
-                self.NAOS.wavenet_model.device_val = torch.device("cpu")
-            if hasattr(self.NAOS.aggregatornet_model, 'device_val'):
-                self.NAOS.aggregatornet_model.device_val = torch.device("cpu")
+            self.tarts.device_val = torch.device("cpu")
+            if hasattr(self.tarts.alignnet_model, 'device_val'):
+                self.tarts.alignnet_model.device_val = torch.device("cpu")
+            if hasattr(self.tarts.wavenet_model, 'device_val'):
+                self.tarts.wavenet_model.device_val = torch.device("cpu")
+            if hasattr(self.tarts.aggregatornet_model, 'device_val'):
+                self.tarts.aggregatornet_model.device_val = torch.device("cpu")
 
             # Update device attributes for the underlying models
-            if hasattr(self.NAOS.alignnet_model.alignnet, 'device_val'):
-                self.NAOS.alignnet_model.alignnet.device_val = torch.device("cpu")
-            if hasattr(self.NAOS.wavenet_model.wavenet, 'device_val'):
-                self.NAOS.wavenet_model.wavenet.device_val = torch.device("cpu")
+            if hasattr(self.tarts.alignnet_model.alignnet, 'device_val'):
+                self.tarts.alignnet_model.alignnet.device_val = torch.device("cpu")
+            if hasattr(self.tarts.wavenet_model.wavenet, 'device_val'):
+                self.tarts.wavenet_model.wavenet.device_val = torch.device("cpu")
 
             # Ensure all CNN models within the sub-models are also on CPU
-            if hasattr(self.NAOS.alignnet_model.alignnet, 'cnn'):
-                self.NAOS.alignnet_model.alignnet.cnn = self.NAOS.alignnet_model.alignnet.cnn.cpu()
-            if hasattr(self.NAOS.wavenet_model.wavenet, 'cnn'):
-                self.NAOS.wavenet_model.wavenet.cnn = self.NAOS.wavenet_model.wavenet.cnn.cpu()
+            if hasattr(self.tarts.alignnet_model.alignnet, 'cnn'):
+                self.tarts.alignnet_model.alignnet.cnn = self.tarts.alignnet_model.alignnet.cnn.cpu()
+            if hasattr(self.tarts.wavenet_model.wavenet, 'cnn'):
+                self.tarts.wavenet_model.wavenet.cnn = self.tarts.wavenet_model.wavenet.cnn.cpu()
         else:
-            self.NAOS.to("cuda")
+            self.tarts.to("cuda")
 
     def calc_exposure(self, exposure: Any) -> np.ndarray:
         """
         Calculate the Zernike coefficients for an exposure.
         """
         with torch.no_grad():
-            pred = self.NAOS.deploy_run(exposure)
+            pred = self.tarts.deploy_run(exposure)
         return pred
 
     def empty(self, qualityTable: Optional[QTable] = None) -> pipeBase.Struct:

@@ -21,6 +21,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import sys
+import os
+
+# Add the python directory to the path so we can import the actual module
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
+
 from lsst.ts.wep.bin.generatePairTable import main
 
 if __name__ == "__main__":

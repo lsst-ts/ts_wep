@@ -120,24 +120,26 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         This method configures the task with your specific estimation algorithm
         and loads test data for each test method.
         """
-        self.repoDir = '/home/peterma/research/Rubin_LSST/Rubin_AO_ML/training/butler'
+        self.repoDir = '/home/peterma/research/Rubin_AO_ML/training/butler'
         self.config = CalcZernikesTaskConfig()
         
         # TODO: Replace with your specific estimation task
         # self.config.estimateZernikes.retarget(YourEstimationTask)
         self.config = CalcZernikesNeuralTaskConfig()
-        self.config.wavenet_path = '/home/peterma/research/Rubin_LSST/Rubin_AO_ML/training/finetune_logs/lightning_logs/version_0/checkpoints/best_finetuned_wavennet.ckpt'
-        self.config.alignet_path = '/home/peterma/research/Rubin_LSST/Rubin_AO_ML/training/alignnet_logs/lightning_logs/version_0/checkpoints/best_alignnet_120.ckpt'
-        self.config.aggregatornet_path = '/home/peterma/research/Rubin_LSST/Rubin_AO_ML/training/aggregator_logs/lightning_logs/version_0/checkpoints/best_aggregator.ckpt'
-        self.config.dataset_param_path = '/home/peterma/research/Rubin_LSST/Rubin_AO_ML/training/dataset_params.yaml'
+        self.config.wavenet_path = '/home/peterma/research/Rubin_AO_ML/training/finetune_logs/lightning_logs/version_0/checkpoints/best_finetuned_wavennet.ckpt'
+        self.config.alignet_path = '/home/peterma/research/Rubin_AO_ML/training/alignnet_logs/lightning_logs/version_0/checkpoints/best_alignnet_120.ckpt'
+        self.config.aggregatornet_path = '/home/peterma/research/Rubin_AO_ML/training/aggregator_logs/lightning_logs/version_0/checkpoints/best_aggregator.ckpt'
+        self.config.dataset_param_path = '/home/peterma/research/Rubin_AO_ML/TARTS/TARTS/dataset_params.yaml'
         self.config.device = 'cpu'
 
         # Initialize the neural task
         self.task = CalcZernikesNeuralTask(config=self.config, name="Neural Task")
         
+        # Set the run name for data collection
+        self.runName = "pretest_run_cwfs"
+        
         # Initialize Butler and registry for data loading
-        # self.butler = Butler.from_config(self.repoDir)
-        self.butler = Butler(self.repoDir, collections=["LSSTCam/raw/all", "LSSTCam/calib"], writeable=True)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         # Define data IDs for extra and intra focal exposures

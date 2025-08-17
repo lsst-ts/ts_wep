@@ -19,8 +19,8 @@ version = { attr = "setuptools_scm.get_version" }
 where = [ "python" ]
 
 [project.scripts]
-generatePairTable = "lsst.ts.wep:generatePairTable"
-ingestPairTable = "lsst.ts.wep:ingestPairTable"
+generatePairTable = "lsst.ts.wep.bin.generatePairTable:main"
+ingestPairTable = "lsst.ts.wep.bin.ingestPairTable:main"
 
 [tool.setuptools_scm]
 write_to = "python/lsst/ts/wep/version.py"
