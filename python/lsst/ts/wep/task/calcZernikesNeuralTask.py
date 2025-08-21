@@ -15,9 +15,8 @@ from lsst.utils.timer import timeMethod
 from TARTS import NeuralActiveOpticsSys
 
 class CalcZernikesNeuralTaskConnections(
-    pipeBase.PipelineTaskConnections,
+    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
 ):
-    dimensions = ("visit", "detector", "instrument")
 
     donutStampsExtra = connectionTypes.Input(
         doc="Extra-focal Donut Postage Stamp Images",
@@ -58,6 +57,7 @@ class CalcZernikesNeuralTaskConnections(
 
 class CalcZernikesNeuralTaskConfig(
     pipeBase.PipelineTaskConfig,
+    pipelineConnections=CalcZernikesNeuralTaskConnections,  # type: ignore
 ):
     """Configuration for CalcZernikesNeuralTask.
 
@@ -78,7 +78,6 @@ class CalcZernikesNeuralTaskConfig(
         excluding piston (Z1), tip (Z2), and tilt (Z3) which are
         typically not measured in wavefront sensing.
     """
-    pipelineConnections = CalcZernikesNeuralTaskConnections
 
     wavenet_path = pexConfig.Field(
         doc="Model Weights Path for wavenet",
@@ -221,6 +220,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         """
         with torch.no_grad():
             pred = self.tarts.deploy_run(exposure)
+        # Convert PyTorch tensor to numpy array
+        if hasattr(pred, 'cpu'):
+            pred = pred.cpu().numpy()
         return pred
 
     def empty(self, qualityTable: Optional[QTable] = None) -> pipeBase.Struct:
@@ -392,21 +394,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         if hasIntra and hasExtra:
             # Both exposures available - process normally
-            predIntra = self.calcExposure(IntraExposure)  # gives microns
-            predExtra = self.calcExposure(ExtraExposure)  # gives microns
+            predIntra = self.calcExposure(IntraExposure)[0,:]  # gives microns
+            predExtra = self.calcExposure(ExtraExposure)[0,:]  # gives microns
 
             zernikesRaw = np.stack([predIntra, predExtra], axis=0)
             zernikesAvg = np.mean(zernikesRaw, axis=0)
 
         elif hasIntra:
             # Only intra-focal available - use it for both
-            predIntra = self.calcExposure(IntraExposure)  # gives microns
+            predIntra = self.calcExposure(IntraExposure)[0,:]  # gives microns
             zernikesRaw = np.stack([predIntra, predIntra], axis=0)
             zernikesAvg = predIntra  # Average of same value is the value itself
 
         else:  # hasExtra only
             # Only extra-focal available - use it for both
-            predExtra = self.calcExposure(ExtraExposure)  # gives microns
+            predExtra = self.calcExposure(ExtraExposure)[0,:]  # gives microns
             zernikesRaw = np.stack([predExtra, predExtra], axis=0)
             zernikesAvg = predExtra  # Average of same value is the value itself
 

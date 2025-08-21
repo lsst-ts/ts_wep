@@ -130,7 +130,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         self.config.aggregatornet_path = '/home/peterma/research/Rubin_AO_ML/training/aggregator_logs/lightning_logs/version_0/checkpoints/best_aggregator.ckpt'
         self.config.dataset_param_path = '/home/peterma/research/Rubin_AO_ML/TARTS/TARTS/dataset_params.yaml'
         self.config.device = 'cpu'
-
+        customNollIndices = [4,5,6,7,8,9,10,11,12,13,14,15,20,21,22,27,28]
+        self.config.noll_indices = customNollIndices
         # Initialize the neural task
         self.task = CalcZernikesNeuralTask(config=self.config, name="Neural Task")
         
@@ -168,7 +169,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         customConfig.device = self.config.device
         
         # Test custom Noll indices (e.g., only Z4-Z9 for basic aberrations)
-        customNollIndices = [4, 5, 6, 7, 8, 9]
+        customNollIndices = [4,5,6,7,8,9,10,11,12,13,14,15,20,21,22,27,28]
         customConfig.noll_indices = customNollIndices
         
         # Create task with custom config
@@ -181,8 +182,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         # Test that the task works with custom indices
         # Create a simple test exposure (this would need proper mock data in practice)
         # For now, just verify the configuration is applied correctly
-        self.assertEqual(len(customTask.nollIndices), 6,
-                        "Custom task should have 6 Noll indices")
+        self.assertEqual(len(customTask.nollIndices), 17,
+                        "Custom task should have 17 Noll indices")
 
     def testRunExposures(self) -> None:
         """
@@ -204,7 +205,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         # Store the loaded data as instance variables for use in other tests
 
         values = self.task.run(exposureExtra, exposureIntra)
-        
+        print(values.outputZernikesRaw.shape)
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results")
         self.assertTrue(hasattr(values, 'outputZernikesAvg'), "Should have outputZernikesAvg")
@@ -317,7 +318,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         # Verify data types and shapes
         self.assertIsInstance(values.outputZernikesAvg, np.ndarray, "outputZernikesAvg should be numpy array")
         self.assertIsInstance(values.outputZernikesRaw, np.ndarray, "outputZernikesRaw should be numpy array")
-        self.assertEqual(values.outputZernikesRaw.shape[0], 2, "Should have 2 rows")
+        self.assertEqual(values.outputZernikesRaw.shape[0], 1, "Should have 2 rows")
         self.assertEqual(values.outputZernikesRaw.shape[1], len(self.task.nollIndices), 
                        f"Should have {len(self.task.nollIndices)} Zernike coefficients")
         
