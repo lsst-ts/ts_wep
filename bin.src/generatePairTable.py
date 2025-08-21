@@ -15,17 +15,11 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-import sys
-import os
-
-# Add the python directory to the path so we can import the actual module
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
 
 from lsst.ts.wep.bin.generatePairTable import main
 
