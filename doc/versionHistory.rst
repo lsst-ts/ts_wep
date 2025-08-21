@@ -22,8 +22,6 @@ Version History
 * Add neural network-based Zernike estimation task (CalcZernikesNeuralTask).
 * Integrate TARTS system for wavefront estimation.
 * Add support for WaveNet, AlignNet, and AggregatorNet models.
-* Fix type annotations throughout the codebase for better MyPy compliance.
-* Clean up linting issues and improve code quality.
 
 .. _lsst.ts.wep-14.15.0:
 

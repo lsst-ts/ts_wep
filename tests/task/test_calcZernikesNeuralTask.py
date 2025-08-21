@@ -18,7 +18,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 # flake8: noqa
 import os
 
@@ -156,49 +155,36 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             "exposure": self.visitNum,
         }
 
-    def test_load_model(self) -> None:
+    def testConfigurableNollIndices(self) -> None:
         """
-        Test we can load the models
+        Test that Noll indices can be configured via the config.
         """
-        print(self.task)
+        # Create a new config with custom Noll indices
+        customConfig = CalcZernikesNeuralTaskConfig()
+        customConfig.wavenet_path = self.config.wavenet_path
+        customConfig.alignet_path = self.config.alignet_path
+        customConfig.aggregatornet_path = self.config.aggregatornet_path
+        customConfig.dataset_param_path = self.config.dataset_param_path
+        customConfig.device = self.config.device
+        
+        # Test custom Noll indices (e.g., only Z4-Z9 for basic aberrations)
+        customNollIndices = [4, 5, 6, 7, 8, 9]
+        customConfig.noll_indices = customNollIndices
+        
+        # Create task with custom config
+        customTask = CalcZernikesNeuralTask(config=customConfig, name="Custom Neural Task")
+        
+        # Verify custom Noll indices are used
+        self.assertEqual(customTask.nollIndices, customNollIndices,
+                        "Task should use custom Noll indices from config")
+        
+        # Test that the task works with custom indices
+        # Create a simple test exposure (this would need proper mock data in practice)
+        # For now, just verify the configuration is applied correctly
+        self.assertEqual(len(customTask.nollIndices), 6,
+                        "Custom task should have 6 Noll indices")
 
-    def test_load_intra_extra_exposures(self) -> None:
-        """
-        Test loading a pair of intra and extra focal exposures from the Butler repository.
-        
-        This test follows the pattern from test_cutOutDonutsCwfsTask.py to load
-        exposure data and donut catalogs for testing the neural network algorithm.
-        """
-        # Butler and registry are already initialized in setUp()
-        # Data IDs are also already defined in setUp()
-
-        # Load post-ISR exposures from Butler
-      
-        exposureExtra = self.butler.get(
-            "raw", dataId=self.dataIdExtra, collections=["LSSTCam/raw/all"]
-        )
-        exposureIntra = self.butler.get(
-            "raw", dataId=self.dataIdIntra, collections=["LSSTCam/raw/all"]
-        )
-        # exposureExtra = self.butler.get(
-        #     "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
-        # )
-        # exposureIntra = self.butler.get(
-        #     "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
-        # )
-        
-        # Load camera information
- 
-        
-        # Verify that we have valid data
-        self.assertIsNotNone(exposureExtra, "Extra focal exposure should not be None")
-        self.assertIsNotNone(exposureIntra, "Intra focal exposure should not be None")
-        
-        # Store the loaded data as instance variables for use in other tests
-        self.exposureExtra = exposureExtra
-        self.exposureIntra = exposureIntra
-
-    def test_run_exposures(self) -> None:
+    def testRunExposures(self) -> None:
         """
         Test running the neural task on the exposures
         """
@@ -208,20 +194,138 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         exposureIntra = self.butler.get(
             "raw", dataId=self.dataIdIntra, collections=["LSSTCam/raw/all"]
         )
-        # exposureExtra = self.butler.get(
-        #     "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
-        # )
-        # exposureIntra = self.butler.get(
-        #     "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
-        # )
-        
+
         # Load camera information
  
-        
         # Verify that we have valid data
         self.assertIsNotNone(exposureExtra, "Extra focal exposure should not be None")
         self.assertIsNotNone(exposureIntra, "Intra focal exposure should not be None")
         
         # Store the loaded data as instance variables for use in other tests
 
-        values =self.task.run(exposureExtra, exposureIntra)
+        values = self.task.run(exposureExtra, exposureIntra)
+        
+        # Verify the output structure
+        self.assertIsNotNone(values, "Task run should return results")
+        self.assertTrue(hasattr(values, 'outputZernikesAvg'), "Should have outputZernikesAvg")
+        self.assertTrue(hasattr(values, 'outputZernikesRaw'), "Should have outputZernikesRaw")
+        
+        # Verify data types and shapes
+        self.assertIsInstance(values.outputZernikesAvg, np.ndarray, "outputZernikesAvg should be numpy array")
+        self.assertIsInstance(values.outputZernikesRaw, np.ndarray, "outputZernikesRaw should be numpy array")
+        self.assertEqual(values.outputZernikesRaw.shape[0], 2, "Should have 2 rows (intra + extra)")
+        self.assertEqual(values.outputZernikesRaw.shape[1], len(self.task.nollIndices), 
+                       f"Should have {len(self.task.nollIndices)} Zernike coefficients")
+
+    def testRunWithOnlyIntraExposure(self) -> None:
+        """
+        Test running the neural task with only intra-focal exposure available.
+        This tests the robustness when extra-focal exposure is missing.
+        """
+        exposureIntra = self.butler.get(
+            "raw", dataId=self.dataIdIntra, collections=["LSSTCam/raw/all"]
+        )
+        
+        # Verify we have valid intra-focal data
+        self.assertIsNotNone(exposureIntra, "Intra focal exposure should not be None")
+        
+        # Run with only intra-focal exposure (extra-focal is None)
+        values = self.task.run(None, exposureIntra)
+        
+        # Verify the output structure
+        self.assertIsNotNone(values, "Task run should return results even with missing extra exposure")
+        self.assertTrue(hasattr(values, 'outputZernikesAvg'), "Should have outputZernikesAvg")
+        self.assertTrue(hasattr(values, 'outputZernikesRaw'), "Should have outputZernikesRaw")
+        
+        # Verify data types and shapes
+        self.assertIsInstance(values.outputZernikesAvg, np.ndarray, "outputZernikesAvg should be numpy array")
+        self.assertIsInstance(values.outputZernikesRaw, np.ndarray, "outputZernikesRaw should be numpy array")
+        self.assertEqual(values.outputZernikesRaw.shape[0], 2, "Should still have 2 rows")
+        self.assertEqual(values.outputZernikesRaw.shape[1], len(self.task.nollIndices), 
+                       f"Should have {len(self.task.nollIndices)} Zernike coefficients")
+        
+        # Verify that both rows contain the same data (intra-focal used for both)
+        np.testing.assert_array_equal(
+            values.outputZernikesRaw[0], 
+            values.outputZernikesRaw[1], 
+            "Both rows should contain identical data when only intra-focal available"
+        )
+        
+        # Verify that average equals the single exposure result
+        np.testing.assert_array_equal(
+            values.outputZernikesAvg, 
+            values.outputZernikesRaw[0], 
+            "Average should equal single exposure when only intra-focal available"
+        )
+
+    def testRunWithOnlyExtraExposure(self) -> None:
+        """
+        Test running the neural task with only extra-focal exposure available.
+        This tests the robustness when intra-focal exposure is missing.
+        """
+        exposureExtra = self.butler.get(
+            "raw", dataId=self.dataIdExtra, collections=["LSSTCam/raw/all"]
+        )
+        
+        # Verify we have valid extra-focal data
+        self.assertIsNotNone(exposureExtra, "Extra focal exposure should not be None")
+        
+        # Run with only extra-focal exposure (intra-focal is None)
+        values = self.task.run(exposureExtra, None)
+        
+        # Verify the output structure
+        self.assertIsNotNone(values, "Task run should return results even with missing intra exposure")
+        self.assertTrue(hasattr(values, 'outputZernikesAvg'), "Should have outputZernikesAvg")
+        self.assertTrue(hasattr(values, 'outputZernikesRaw'), "Should have outputZernikesRaw")
+        
+        # Verify data types and shapes
+        self.assertIsInstance(values.outputZernikesAvg, np.ndarray, "outputZernikesAvg should be numpy array")
+        self.assertIsInstance(values.outputZernikesRaw, np.ndarray, "outputZernikesRaw should be numpy array")
+        self.assertEqual(values.outputZernikesRaw.shape[0], 2, "Should still have 2 rows")
+        self.assertEqual(values.outputZernikesRaw.shape[1], len(self.task.nollIndices), 
+                       f"Should have {len(self.task.nollIndices)} Zernike coefficients")
+        
+        # Verify that both rows contain the same data (extra-focal used for both)
+        np.testing.assert_array_equal(
+            values.outputZernikesRaw[0], 
+            values.outputZernikesRaw[1], 
+            "Both rows should contain identical data when only extra-focal available"
+        )
+        
+        # Verify that average equals the single exposure result
+        np.testing.assert_array_equal(
+            values.outputZernikesAvg, 
+            values.outputZernikesRaw[0], 
+            "Average should equal single exposure when only extra-focal available"
+        )
+
+    def testRunWithNoExposures(self) -> None:
+        """
+        Test running the neural task with no exposures available.
+        This tests the error handling when both exposures are missing.
+        """
+        # Run with no exposures (both are None)
+        values = self.task.run(None, None)
+        
+        # Verify the output structure
+        self.assertIsNotNone(values, "Task run should return empty results when no exposures available")
+        self.assertTrue(hasattr(values, 'outputZernikesAvg'), "Should have outputZernikesAvg")
+        self.assertTrue(hasattr(values, 'outputZernikesRaw'), "Should have outputZernikesRaw")
+        self.assertTrue(hasattr(values, 'zernikes'), "Should have zernikes table")
+        self.assertTrue(hasattr(values, 'donutQualityTable'), "Should have donutQualityTable")
+        
+        # Verify data types and shapes
+        self.assertIsInstance(values.outputZernikesAvg, np.ndarray, "outputZernikesAvg should be numpy array")
+        self.assertIsInstance(values.outputZernikesRaw, np.ndarray, "outputZernikesRaw should be numpy array")
+        self.assertEqual(values.outputZernikesRaw.shape[0], 2, "Should have 2 rows")
+        self.assertEqual(values.outputZernikesRaw.shape[1], len(self.task.nollIndices), 
+                       f"Should have {len(self.task.nollIndices)} Zernike coefficients")
+        
+        # Verify that results contain NaN values (empty results)
+        self.assertTrue(np.all(np.isnan(values.outputZernikesAvg)), 
+                       "outputZernikesAvg should contain NaN values when no exposures available")
+        self.assertTrue(np.all(np.isnan(values.outputZernikesRaw)), 
+                       "outputZernikesRaw should contain NaN values when no exposures available")
+        
+        # Verify that zernikes table is empty
+        self.assertEqual(len(values.zernikes), 0, "Zernikes table should be empty when no exposures available")
