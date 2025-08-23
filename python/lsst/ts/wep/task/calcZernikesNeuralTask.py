@@ -19,6 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+__all__ = [
+    "CalcZernikesNeuralTaskConnections",
+    "CalcZernikesNeuralTaskConfig",
+    "CalcZernikesNeuralTask",
+]
+
 from typing import Any, Optional
 
 import numpy as np
@@ -453,10 +459,3 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw
         )
-
-
-__all__ = [
-    "CalcZernikesNeuralTaskConnections",
-    "CalcZernikesNeuralTaskConfig",
-    "CalcZernikesNeuralTask",
-]
