@@ -160,10 +160,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         Notes
         -----
         The initialization process:
-        1. Sets up Noll indices from configuration (default: Z4-Z23)
-        2. Loads TARTS neural network models with specified weights
-        3. Configures device (CPU/CUDA) and moves models accordingly
-        4. Sets the models to evaluation mode for inference
+        1. Calls parent class constructor with super().__init__(**kwargs)
+        2. Sets up Noll indices from configuration (default: Z4-Z23)
+        3. Loads TARTS neural network models with specified weights
+        4. Sets models to evaluation mode with .eval()
+        5. Extracts crop size from TARTS system
+        6. Configures device (CPU/CUDA) and moves models accordingly
 
         The TARTS system includes three main components:
         - Wavenet: Estimates Zernike coefficients from donut images
