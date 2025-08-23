@@ -96,7 +96,9 @@ class CalcZernikesNeuralTaskConfig(
     aggregatornetPath : str
         Model Weights Path for aggregatornet
     datasetParamPath : str
-        datasetparam path
+        Path to TARTS dataset parameters YAML file containing normalization
+        scaling factors, image processing parameters (CROP_SIZE, deg_per_pix,
+        mm_pix), model hyperparameters, and training data file paths
     device : str
         Device to use for calculations
     nollIndices : list[int]
@@ -118,7 +120,9 @@ class CalcZernikesNeuralTaskConfig(
         dtype=str
     )
     datasetParamPath: pexConfig.Field = pexConfig.Field(
-        doc="datasetparam path for TARTS includes normalization scaling and parameters path",
+        doc="Path to TARTS dataset parameters YAML file containing normalization "
+            "scaling factors, image processing parameters (CROP_SIZE, deg_per_pix, "
+            "mm_pix), model hyperparameters, and training data file paths",
         dtype=str
     )
     device: pexConfig.Field = pexConfig.Field(
