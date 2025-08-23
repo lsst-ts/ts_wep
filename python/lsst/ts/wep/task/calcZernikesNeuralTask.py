@@ -81,35 +81,35 @@ class CalcZernikesNeuralTaskConfig(
 
     Attributes
     ----------
-    wavenet_path : str
+    wavenetPath : str
         Model Weights Path for wavenet
-    alignet_path : str
+    alignetPath : str
         Model Weights Path for alignet
-    aggregatornet_path : str
+    aggregatornetPath : str
         Model Weights Path for aggregatornet
-    dataset_param_path : str
+    datasetParamPath : str
         datasetparam path
     device : str
         Device to use for calculations
-    noll_indices : list[int]
+    nollIndices : list[int]
         List of Noll indices to calculate. Default is Z4-Z23 (4-23),
         excluding piston (Z1), tip (Z2), and tilt (Z3) which are
         typically not measured in wavefront sensing.
     """
 
-    wavenet_path = pexConfig.Field(
+    wavenetPath = pexConfig.Field(
         doc="Model Weights Path for wavenet",
         dtype=str
     )
-    alignet_path = pexConfig.Field(
+    alignetPath = pexConfig.Field(
         doc="Model Weights Path for alignet",
         dtype=str
     )
-    aggregatornet_path = pexConfig.Field(
+    aggregatornetPath = pexConfig.Field(
         doc="Model Weights Path for aggregatornet",
         dtype=str
     )
-    dataset_param_path = pexConfig.Field(
+    datasetParamPath = pexConfig.Field(
         doc="datasetparam path for TARTS includes normalization scaling and parameters path",
         dtype=str
     )
@@ -118,7 +118,7 @@ class CalcZernikesNeuralTaskConfig(
         dtype=str,
         default="cuda"
     )
-    noll_indices = pexConfig.ListField(
+    nollIndices = pexConfig.ListField(
         doc="List of Noll indices to calculate. Default is Z4-Z23 (4-23), "
             "excluding piston (Z1), tip (Z2), and tilt (Z3) which are "
             "typically not measured in wavefront sensing.",
@@ -163,20 +163,20 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         - Alignnet: Handles image alignment and preprocessing
         - Aggregatornet: Combines results from multiple donuts
 
-        Noll indices are configurable via the config.noll_indices parameter.
+        Noll indices are configurable via the config.nollIndices parameter.
         The default excludes Z1-Z3 (piston, tip, tilt) as these are typically
         not measured in wavefront sensing.
         """
         super().__init__(**kwargs)
 
         # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
-        self.nollIndices = self.config.noll_indices
+        self.nollIndices = self.config.nollIndices
 
         self.tarts = NeuralActiveOpticsSys(
-            self.config.dataset_param_path,
-            self.config.wavenet_path,
-            self.config.alignet_path,
-            self.config.aggregatornet_path
+            self.config.datasetParamPath,
+            self.config.wavenetPath,
+            self.config.alignetPath,
+            self.config.aggregatornetPath
         )
         self.tarts = self.tarts.eval()
         self.cropSize = self.tarts.CROP_SIZE
@@ -331,7 +331,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         Notes
         -----
-        The Noll indices are configurable via config.noll_indices. The default
+        The Noll indices are configurable via config.nollIndices. The default
         starts from 4 (not 1) as Z1-Z3 represent piston and tip/tilt, which
         are typically not measured in wavefront sensing. Users can customize
         this list based on their specific requirements.
@@ -346,8 +346,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        ExtraExposure: afwImage.Exposure,
-        IntraExposure: afwImage.Exposure,
+        extraExposure: afwImage.Exposure,
+        intraExposure: afwImage.Exposure,
     ) -> pipeBase.Struct:
         """Run the neural network-based Zernike estimation task.
 
@@ -359,11 +359,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         Parameters
         ----------
-        ExtraExposure : lsst.afw.image.Exposure
+        extraExposure : lsst.afw.image.Exposure
             The extra-focal LSST exposure data. This should contain donut
             stamps or image data with proper WCS information for the TARTS
             neural network.
-        IntraExposure : lsst.afw.image.Exposure
+        intraExposure : lsst.afw.image.Exposure
             The intra-focal LSST exposure data. This should contain donut
             stamps or image data with proper WCS information for the TARTS
             neural network.
@@ -403,8 +403,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         calcExposure : Method that processes individual exposures
         """
         # Check if exposures are valid and handle missing cases
-        hasIntra = IntraExposure is not None
-        hasExtra = ExtraExposure is not None
+        hasIntra = intraExposure is not None
+        hasExtra = extraExposure is not None
 
         if not hasIntra and not hasExtra:
             # No exposures available - return empty results
@@ -412,21 +412,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         if hasIntra and hasExtra:
             # Both exposures available - process normally
-            predIntra = self.calcExposure(IntraExposure)[0,:]  # gives microns
-            predExtra = self.calcExposure(ExtraExposure)[0,:]  # gives microns
+            predIntra = self.calcExposure(intraExposure)[0,:]  # gives microns
+            predExtra = self.calcExposure(extraExposure)[0,:]  # gives microns
 
             zernikesRaw = np.stack([predIntra, predExtra], axis=0)
             zernikesAvg = np.mean(zernikesRaw, axis=0)
 
         elif hasIntra:
             # Only intra-focal available - use it for both
-            predIntra = self.calcExposure(IntraExposure)[0,:]  # gives microns
+            predIntra = self.calcExposure(intraExposure)[0,:]  # gives microns
             zernikesRaw = np.stack([predIntra, predIntra], axis=0)
             zernikesAvg = predIntra  # Average of same value is the value itself
 
         else:  # hasExtra only
             # Only extra-focal available - use it for both
-            predExtra = self.calcExposure(ExtraExposure)[0,:]  # gives microns
+            predExtra = self.calcExposure(extraExposure)[0,:]  # gives microns
             zernikesRaw = np.stack([predExtra, predExtra], axis=0)
             zernikesAvg = predExtra  # Average of same value is the value itself
 
