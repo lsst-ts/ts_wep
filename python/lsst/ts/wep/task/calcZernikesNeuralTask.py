@@ -136,7 +136,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
     This class uses the TARTS (Telescope Active Optics Real-Time System)
     neural network models to estimate Zernike coefficients from pairs of
-    intra and extra-focal exposures.
+    intra and extra-focal exposures. Each exposure contains donut stamps
+    from one focal position, and the task processes them separately to
+    estimate Zernike coefficients for each side of the focal plane.
     """
     ConfigClass = CalcZernikesNeuralTaskConfig
     _DefaultName = "calcZernikesNeuralTask"
@@ -217,31 +219,39 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             self.tarts.to("cuda")
 
     def calcZernikesFromExposure(self, exposure: afwImage.Exposure) -> np.ndarray:
-        """Calculate Zernike coefficients from a single exposure using TARTS.
+        """Calculate Zernike coefficients from a single focal position
+        exposure.
 
-        This method processes an exposure through the TARTS neural network
-        to estimate Zernike coefficients representing wavefront aberrations.
-        The exposure is expected to contain donut stamps or similar
-        wavefront sensing data that the neural network can analyze.
+        This method processes either an intra-focal OR extra-focal exposure
+        through the TARTS neural network to estimate Zernike coefficients
+        representing wavefront aberrations. The exposure contains donut
+        stamps from one side of the focal plane (not both).
 
         Parameters
         ----------
         exposure : lsst.afw.image.Exposure
-            The exposure containing a full frame image post ISR
-            (not donut stamps).
+            An exposure containing donut stamps from either the intra-focal
+            OR extra-focal position. This is NOT a full frame exposure
+            with both focal positions - it's specifically one side of
+            the focal pair. Must have valid image data and WCS information.
 
         Returns
         -------
         np.ndarray
             Array of Zernike coefficients in microns, representing the
-            estimated wavefront aberrations. The array length matches
-            the configured Noll indices (default: Z4-Z23).
+            estimated wavefront aberrations for this focal position.
+            The array length matches the configured Noll indices
+            (default: Z4-Z23).
 
         Notes
         -----
-        This method runs the neural network in inference mode for efficiency.
-        The exposure should contain donut stamps or similar wavefront
-        sensing targets that the TARTS models are trained to process.
+        This method processes one side of the focal pair (intra OR extra).
+        In production, a single "exposure" typically contains both intra
+        and extra-focal donuts in different corners, but this method
+        expects an exposure with donut stamps from only one focal position.
+
+        The exposure should contain donut stamps that the TARTS models
+        are trained to process, not full frame images.
         """
         with torch.no_grad():
             pred = self.tarts.deploy_run(exposure)
