@@ -38,17 +38,17 @@ class CalcZernikesNeuralTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
 ):
 
-    donutStampsExtra = connectionTypes.Input(
-        doc="Extra-focal Donut Postage Stamp Images",
+    extraExposure = connectionTypes.Input(
+        doc="Extra-focal exposure containing full frame images",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="StampsBase",
-        name="donutStampsExtra",
+        storageClass="Exposure",
+        name="extraExposure",
     )
-    donutStampsIntra = connectionTypes.Input(
-        doc="Intra-focal Donut Postage Stamp Images",
+    intraExposure = connectionTypes.Input(
+        doc="Intra-focal exposure containing full frame images",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="StampsBase",
-        name="donutStampsIntra",
+        storageClass="Exposure",
+        name="intraExposure",
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -377,12 +377,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         Parameters
         ----------
         extraExposure : lsst.afw.image.Exposure
-            The extra-focal LSST exposure data. This should contain donut
-            stamps or image data with proper WCS information for the TARTS
+            The extra-focal LSST exposure data. This should contain full
+            frame images with proper WCS information for the TARTS
             neural network.
         intraExposure : lsst.afw.image.Exposure
-            The intra-focal LSST exposure data. This should contain donut
-            stamps or image data with proper WCS information for the TARTS
+            The intra-focal LSST exposure data. This should contain full
+            frame images with proper WCS information for the TARTS
             neural network.
 
         Returns
