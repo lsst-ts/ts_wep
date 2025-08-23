@@ -99,28 +99,28 @@ class CalcZernikesNeuralTaskConfig(
         typically not measured in wavefront sensing.
     """
 
-    wavenetPath: str = pexConfig.Field(  # type: ignore[assignment]
+    wavenetPath: pexConfig.Field = pexConfig.Field(
         doc="Model Weights Path for wavenet",
         dtype=str
     )
-    alignetPath: str = pexConfig.Field(  # type: ignore[assignment]
+    alignetPath: pexConfig.Field = pexConfig.Field(
         doc="Model Weights Path for alignet",
         dtype=str
     )
-    aggregatornetPath: str = pexConfig.Field(  # type: ignore[assignment]
+    aggregatornetPath: pexConfig.Field = pexConfig.Field(
         doc="Model Weights Path for aggregatornet",
         dtype=str
     )
-    datasetParamPath: str = pexConfig.Field(  # type: ignore[assignment]
+    datasetParamPath: pexConfig.Field = pexConfig.Field(
         doc="datasetparam path for TARTS includes normalization scaling and parameters path",
         dtype=str
     )
-    device: str = pexConfig.Field(  # type: ignore[assignment]
+    device: pexConfig.Field = pexConfig.Field(
         doc="Device to use for calculations",
         dtype=str,
         default="cuda"
     )
-    nollIndices: list[int] = pexConfig.ListField(  # type: ignore[assignment]
+    nollIndices: pexConfig.ListField = pexConfig.ListField(
         doc="List of Noll indices to calculate. Default is Z4-Z23 (4-23), "
             "excluding piston (Z1), tip (Z2), and tilt (Z3) which are "
             "typically not measured in wavefront sensing.",
