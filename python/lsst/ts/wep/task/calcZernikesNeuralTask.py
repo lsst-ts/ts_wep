@@ -23,11 +23,11 @@ from typing import Any, Optional
 
 import numpy as np
 import torch
+from astropy.table import QTable
 
 import lsst.afw.image as afwImage
 import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
-from astropy.table import QTable
 from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
 from TARTS import NeuralActiveOpticsSys
