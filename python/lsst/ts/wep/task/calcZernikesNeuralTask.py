@@ -19,8 +19,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# ruff: noqa: N999
-
 from typing import Any, Optional
 
 import numpy as np
