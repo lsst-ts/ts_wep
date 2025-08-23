@@ -208,7 +208,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         else:
             self.tarts.to("cuda")
 
-    def calcExposure(self, exposure: afwImage.Exposure) -> np.ndarray:
+    def calcZernikesFromExposure(self, exposure: afwImage.Exposure) -> np.ndarray:
         """Calculate the Zernike coefficients for a single exposure.
 
         This method processes a single LSST exposure through the TARTS neural
@@ -400,7 +400,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         See Also
         --------
-        calcExposure : Method that processes individual exposures
+        calcZernikesFromExposure : Method that processes individual exposures
         """
         # Check if exposures are valid and handle missing cases
         hasIntra = intraExposure is not None
@@ -412,21 +412,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         if hasIntra and hasExtra:
             # Both exposures available - process normally
-            predIntra = self.calcExposure(intraExposure)[0,:]  # gives microns
-            predExtra = self.calcExposure(extraExposure)[0,:]  # gives microns
+            predIntra = self.calcZernikesFromExposure(intraExposure)[0,:]  # gives microns
+            predExtra = self.calcZernikesFromExposure(extraExposure)[0,:]  # gives microns
 
             zernikesRaw = np.stack([predIntra, predExtra], axis=0)
             zernikesAvg = np.mean(zernikesRaw, axis=0)
 
         elif hasIntra:
             # Only intra-focal available - use it for both
-            predIntra = self.calcExposure(intraExposure)[0,:]  # gives microns
+            predIntra = self.calcZernikesFromExposure(intraExposure)[0,:]  # gives microns
             zernikesRaw = np.stack([predIntra, predIntra], axis=0)
             zernikesAvg = predIntra  # Average of same value is the value itself
 
         else:  # hasExtra only
             # Only extra-focal available - use it for both
-            predExtra = self.calcExposure(extraExposure)[0,:]  # gives microns
+            predExtra = self.calcZernikesFromExposure(extraExposure)[0,:]  # gives microns
             zernikesRaw = np.stack([predExtra, predExtra], axis=0)
             zernikesAvg = predExtra  # Average of same value is the value itself
 
