@@ -32,10 +32,10 @@ Version History
 * Add DonutSizeCorrelator to measure donut diameters at the exposure level.
 * Updated handling of radius information to donut stamps metadata, and donut quality table.
 
-.. _lsst.ts.wep-14.16.0:
+.. _lsst.ts.wep-15.0.0:
 
 -------------
- 14.16.0
+ 15.0.0
 -------------
 
 * Add neural network-based Zernike estimation task (CalcZernikesNeuralTask).
