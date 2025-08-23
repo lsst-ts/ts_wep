@@ -30,10 +30,10 @@ from itertools import zip_longest
 from typing import Any, cast
 
 import astropy.units as u
+from astropy.table import QTable, vstack
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-from astropy.table import QTable, vstack
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
