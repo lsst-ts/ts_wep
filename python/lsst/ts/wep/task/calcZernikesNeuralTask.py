@@ -32,6 +32,8 @@ from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
 from TARTS import NeuralActiveOpticsSys
 
+
+
 class CalcZernikesNeuralTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
 ):
@@ -97,34 +99,36 @@ class CalcZernikesNeuralTaskConfig(
         typically not measured in wavefront sensing.
     """
 
-    wavenetPath = pexConfig.Field(
+    wavenetPath: str = pexConfig.Field(  # type: ignore[assignment]
         doc="Model Weights Path for wavenet",
         dtype=str
     )
-    alignetPath = pexConfig.Field(
+    alignetPath: str = pexConfig.Field(  # type: ignore[assignment]
         doc="Model Weights Path for alignet",
         dtype=str
     )
-    aggregatornetPath = pexConfig.Field(
+    aggregatornetPath: str = pexConfig.Field(  # type: ignore[assignment]
         doc="Model Weights Path for aggregatornet",
         dtype=str
     )
-    datasetParamPath = pexConfig.Field(
+    datasetParamPath: str = pexConfig.Field(  # type: ignore[assignment]
         doc="datasetparam path for TARTS includes normalization scaling and parameters path",
         dtype=str
     )
-    device = pexConfig.Field(
+    device: str = pexConfig.Field(  # type: ignore[assignment]
         doc="Device to use for calculations",
         dtype=str,
         default="cuda"
     )
-    nollIndices = pexConfig.ListField(
+    nollIndices: list[int] = pexConfig.ListField(  # type: ignore[assignment]
         doc="List of Noll indices to calculate. Default is Z4-Z23 (4-23), "
             "excluding piston (Z1), tip (Z2), and tilt (Z3) which are "
             "typically not measured in wavefront sensing.",
         dtype=int,
         default=[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
     )
+
+
 
 
 class CalcZernikesNeuralTask(pipeBase.PipelineTask):
@@ -134,6 +138,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
     neural network models to estimate Zernike coefficients from pairs of
     intra and extra-focal exposures.
     """
+    ConfigClass = CalcZernikesNeuralTaskConfig
     _DefaultName = "calcZernikesNeuralTask"
 
     def __init__(self, **kwargs: Any) -> None:
@@ -168,6 +173,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         not measured in wavefront sensing.
         """
         super().__init__(**kwargs)
+
+        # Type annotation for mypy to understand the config structure
+        self.config: CalcZernikesNeuralTaskConfig
 
         # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
         self.nollIndices = self.config.nollIndices
@@ -209,32 +217,31 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             self.tarts.to("cuda")
 
     def calcZernikesFromExposure(self, exposure: afwImage.Exposure) -> np.ndarray:
-        """Calculate the Zernike coefficients for a single exposure.
+        """Calculate Zernike coefficients from a single exposure using TARTS.
 
-        This method processes a single LSST exposure through the TARTS neural
-        network to estimate Zernike coefficients representing wavefront
-        aberrations.
+        This method processes an exposure through the TARTS neural network
+        to estimate Zernike coefficients representing wavefront aberrations.
+        The exposure is expected to contain donut stamps or similar
+        wavefront sensing data that the neural network can analyze.
 
         Parameters
         ----------
         exposure : lsst.afw.image.Exposure
-            The LSST exposure data to process. This should contain the image
-            data and metadata needed by the TARTS neural network for wavefront
-            estimation.
+            The exposure containing a full frame image post ISR
+            (not donut stamps).
 
         Returns
         -------
         np.ndarray
-            Array of Zernike coefficients in microns. The coefficients
-            represent the estimated wavefront aberrations for the given
-            exposure.
+            Array of Zernike coefficients in microns, representing the
+            estimated wavefront aberrations. The array length matches
+            the configured Noll indices (default: Z4-Z23).
 
         Notes
         -----
-        This method runs the neural network in inference mode (no gradients
-        computed) for efficiency during prediction. The exposure object
-        should contain valid image data and WCS information for proper
-        processing.
+        This method runs the neural network in inference mode for efficiency.
+        The exposure should contain donut stamps or similar wavefront
+        sensing targets that the TARTS models are trained to process.
         """
         with torch.no_grad():
             pred = self.tarts.deploy_run(exposure)
