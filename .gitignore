@@ -1,4 +1,3 @@
-tests/testData/gen3TestRepo/gen3.sqlite3
 .sconsign.dblite
 config.log
 .sconf_temp
@@ -38,4 +37,3 @@ pytest_session.txt
 
 # Existing Phosim Donut Templates
 policy/cwfs/donutTemplateData/phosimTemplates/
-.ruff.toml
