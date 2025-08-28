@@ -25,6 +25,7 @@ __all__ = [
     "CalcZernikesNeuralTask",
 ]
 
+from copy import deepcopy
 from typing import Any, Optional
 
 import numpy as np
@@ -32,13 +33,15 @@ import torch
 from astropy.table import QTable
 
 import lsst.afw.image as afwImage
+import lsst.geom
 import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
 from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
 from TARTS import NeuralActiveOpticsSys
-
-
+from lsst.ts.wep.task.donutStamp import DonutStamp
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.daf.base import PropertyList
 
 class CalcZernikesNeuralTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("exposure", "detector", "instrument")  # type: ignore
@@ -240,9 +243,87 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         else:
             self.tarts.to("cuda")
 
+    def createDonutStampFromTarts(
+        self, exposure: afwImage.Exposure, cropped_image: np.ndarray, defocalType: str
+    ) -> DonutStamps:
+        """Create DonutStamps from TARTS output - handles multiple donuts."""
+        # Extract information from exposure
+        detector = exposure.getDetector()
+        detectorName = detector.getName()
+        cameraName = "LSSTCam"
+        bandLabel = exposure.filter.bandLabel
 
+        # Get exposure dimensions for centroid calculation
+        bbox = exposure.getBBox()
+        center_x = bbox.getCenterX()
+        center_y = bbox.getCenterY()
 
-    def calcZernikesFromExposure(self, exposure: afwImage.Exposure) -> np.ndarray:
+        # Convert cropped image to proper format
+        if hasattr(cropped_image, 'cpu'):
+            # PyTorch tensor
+            image_array = cropped_image.cpu().numpy()
+        else:
+            # Already numpy array
+            image_array = cropped_image
+
+        # Handle different input shapes
+        if len(image_array.shape) == 2:
+            # Single donut: [160, 160] -> reshape to [1, 160, 160]
+            image_array = image_array.reshape(1, 160, 160)
+        elif len(image_array.shape) == 3:
+            # Multiple donuts: [num_stamps, 160, 160] - already correct shape
+            pass
+        else:
+            raise ValueError(f"Unexpected image array shape: {image_array.shape}")
+
+        num_stamps = image_array.shape[0]
+        # Create metadata for all donuts
+        metadata = PropertyList()
+        metadata["RA_DEG"] = [0.0] * num_stamps  # Will be calculated from WCS
+        metadata["DEC_DEG"] = [0.0] * num_stamps  # Will be calculated from WCS
+        metadata["CENT_X"] = [center_x] * num_stamps  # Center of exposure for each
+        metadata["CENT_Y"] = [center_y] * num_stamps  # Center of exposure for each
+        metadata["DET_NAME"] = [detectorName] * num_stamps  # Valid detector name
+        metadata["CAM_NAME"] = [cameraName] * num_stamps  # Valid camera name
+        metadata["DFC_TYPE"] = [defocalType] * num_stamps  # "extra" or "intra"
+        metadata["DFC_DIST"] = [1.5] * num_stamps  # Default defocal distance in mm
+        metadata["BANDPASS"] = [bandLabel] * num_stamps  # Filter band
+        metadata["BLEND_CX"] = ["nan"] * num_stamps  # No blended sources
+        metadata["BLEND_CY"] = ["nan"] * num_stamps  # No blended sources
+
+        # Create list of DonutStamp objects
+        donutStamps = []
+
+        for i in range(num_stamps):
+            # Create MaskedImageF for this donut
+            stamp_im = afwImage.MaskedImageF(160, 160)
+            stamp_im.image.array[:] = image_array[i]  # Use the i-th donut image
+            stamp_im.setXY0(0, 0)  # Set origin
+
+            # Create linear WCS for this donut stamp
+            centroid_position = lsst.geom.Point2D(center_x, center_y)
+            wcs = exposure.wcs
+            linearTransform = wcs.linearizePixelToSky(centroid_position, lsst.geom.degrees)
+            cdMatrix = linearTransform.getLinear().getMatrix()
+            linear_wcs = lsst.afw.geom.makeSkyWcs(
+                centroid_position,
+                wcs.pixelToSky(centroid_position),
+                cdMatrix
+            )
+
+            # Create DonutStamp using factory
+            donutStamp = DonutStamp.factory(
+                stamp_im=stamp_im,
+                metadata=metadata,
+                index=i,  # Index into the metadata lists
+                archive_element=linear_wcs
+            )
+            donutStamps.append(donutStamp)
+
+        # Return DonutStamps collection
+        return DonutStamps(donutStamps)
+
+    def calcZernikesFromExposure(self, exposure: afwImage.Exposure, defocalType: str) -> np.ndarray:
         """Calculate Zernike coefficients from a single focal position
         exposure.
 
@@ -282,7 +363,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Convert PyTorch tensor to numpy array
         if hasattr(pred, 'cpu'):
             pred = pred.cpu().numpy()
-        return pred
+        # Determine defocal type based on exposure
+        donutStamps = self.createDonutStampFromTarts(exposure, self.tarts.cropped_image, defocalType)
+        return pred, donutStamps, deepcopy(self.tarts.total_zernikes)
 
     def empty(self, qualityTable: Optional[QTable] = None) -> pipeBase.Struct:
         """Return empty results when no donuts are available for processing.
@@ -453,25 +536,33 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         if hasIntra and hasExtra:
             # Both exposures available - process normally
-            predIntra = self.calcZernikesFromExposure(intraExposure)[0,:]  # gives microns
-            predExtra = self.calcZernikesFromExposure(extraExposure)[0,:]  # gives microns
-
+            predIntra, donutStampsIntra, zkIntra = self.calcZernikesFromExposure(intraExposure, "intra")
+            predExtra, donutStampsExtra, zkExtra = self.calcZernikesFromExposure(extraExposure, "extra")
+            predIntra = predIntra[0,:]
+            predExtra = predExtra[0,:]
             zernikesRaw = np.stack([predIntra, predExtra], axis=0)
             zernikesAvg = np.mean(zernikesRaw, axis=0)
 
         elif hasIntra:
             # Only intra-focal available - use it for both
-            predIntra = self.calcZernikesFromExposure(intraExposure)[0,:]  # gives microns
+            predIntra, donutStampsIntra, zkIntra = self.calcZernikesFromExposure(intraExposure, "intra")
+            donutStampsExtra = None
+            zkExtra = None
+            predIntra = predIntra[0,:]
             zernikesRaw = np.stack([predIntra, predIntra], axis=0)
             zernikesAvg = predIntra  # Average of same value is the value itself
 
         else:  # hasExtra only
             # Only extra-focal available - use it for both
-            predExtra = self.calcZernikesFromExposure(extraExposure)[0,:]  # gives microns
+            predExtra, donutStampsExtra, zkExtra = self.calcZernikesFromExposure(extraExposure, "extra")
+            donutStampsIntra = None
+            predExtra = predExtra[0,:]
             zernikesRaw = np.stack([predExtra, predExtra], axis=0)
             zernikesAvg = predExtra  # Average of same value is the value itself
 
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
-            outputZernikesRaw=zernikesRaw
+            outputZernikesRaw=zernikesRaw,
+            donutStampsExtra=donutStampsExtra,
+            donutStampsIntra=donutStampsIntra,
         )
