@@ -89,12 +89,15 @@ class CalcZernikesNeuralTaskConfig(
 
     Attributes
     ----------
-    wavenetPath : str
-        Model Weights Path for wavenet
-    alignetPath : str
-        Model Weights Path for alignet
-    aggregatornetPath : str
-        Model Weights Path for aggregatornet
+    wavenetPath : str or None
+        Model Weights Path for wavenet. If None, TARTS will create a new
+        model with random weights (useful for testing).
+    alignetPath : str or None
+        Model Weights Path for alignet. If None, TARTS will create a new
+        model with random weights (useful for testing).
+    aggregatornetPath : str or None
+        Model Weights Path for aggregatornet. If None, TARTS will create a new
+        model with random weights (useful for testing).
     datasetParamPath : str
         Path to TARTS dataset parameters YAML file containing normalization
         scaling factors, image processing parameters (CROP_SIZE, deg_per_pix,
@@ -108,16 +111,19 @@ class CalcZernikesNeuralTaskConfig(
     """
 
     wavenetPath: pexConfig.Field = pexConfig.Field(
-        doc="Model Weights Path for wavenet",
-        dtype=str
+        doc="Model Weights Path for wavenet (None for random weights)",
+        dtype=str,
+        optional=True
     )
     alignetPath: pexConfig.Field = pexConfig.Field(
-        doc="Model Weights Path for alignet",
-        dtype=str
+        doc="Model Weights Path for alignet (None for random weights)",
+        dtype=str,
+        optional=True
     )
     aggregatornetPath: pexConfig.Field = pexConfig.Field(
-        doc="Model Weights Path for aggregatornet",
-        dtype=str
+        doc="Model Weights Path for aggregatornet (None for random weights)",
+        dtype=str,
+        optional=True
     )
     datasetParamPath: pexConfig.Field = pexConfig.Field(
         doc="Path to TARTS dataset parameters YAML file containing normalization "
@@ -194,6 +200,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
         self.nollIndices = self.config.nollIndices
 
+        # TARTS handles None values by creating new models with random weights
         self.tarts = NeuralActiveOpticsSys(
             self.config.datasetParamPath,
             self.config.wavenetPath,
@@ -229,6 +236,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 self.tarts.wavenet_model.wavenet.cnn = self.tarts.wavenet_model.wavenet.cnn.cpu()
         else:
             self.tarts.to("cuda")
+
+
 
     def calcZernikesFromExposure(self, exposure: afwImage.Exposure) -> np.ndarray:
         """Calculate Zernike coefficients from a single focal position

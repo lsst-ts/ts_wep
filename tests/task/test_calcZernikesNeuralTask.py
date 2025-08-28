@@ -107,6 +107,16 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
+    def tearDown(self) -> None:
+        """
+        Clean up temporary files after each test.
+        """
+        if hasattr(self, '_temp_dataset_params'):
+            try:
+                os.unlink(self._temp_dataset_params)
+            except OSError:
+                pass  # File might already be deleted
+
     def setUp(self) -> None:
         """
         Set up individual test environment.
@@ -116,24 +126,47 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         """
         self.repoDir = '/home/peterma/research/Rubin_AO_ML/training/butler'
         self.config = CalcZernikesNeuralTaskConfig()
-        self.config.wavenetPath = (
-            '/home/peterma/research/Rubin_AO_ML/training/finetune_logs/'
-            'lightning_logs/version_0/checkpoints/best_finetuned_wavennet.ckpt'
-        )
-        self.config.alignetPath = (
-            '/home/peterma/research/Rubin_AO_ML/training/alignnet_logs/'
-            'lightning_logs/version_0/checkpoints/best_alignnet_120.ckpt'
-        )
-        self.config.aggregatornetPath = (
-            '/home/peterma/research/Rubin_AO_ML/training/aggregator_logs/'
-            'lightning_logs/version_0/checkpoints/best_aggregator.ckpt'
-        )
-        self.config.datasetParamPath = (
-            '/home/peterma/research/Rubin_AO_ML/TARTS/TARTS/dataset_params.yaml'
-        )
+
+        # Use random weights for testing instead of actual trained models
+        # This makes tests portable and doesn't depend on specific file paths
+        self.config.wavenetPath = None  # TARTS will use random weights
+        self.config.alignetPath = None  # TARTS will use random weights
+        self.config.aggregatornetPath = None  # TARTS will use random weights
+
+        # Create a minimal dataset params file for testing
+        import tempfile
+        import yaml
+
+        # Create temporary dataset params with minimal required parameters
+        dataset_params = {
+            "version": 0,
+            "adjustment_WaveNet": 10,
+            "adjustment_AlignNet": 120,
+            "refinements": 1,
+            "CROP_SIZE": 160,
+            "deg_per_pix": 0.00005555555,
+            "mm_pix": 0.01,
+            "alpha": 1,
+            "max_seq_len": 200,
+            "noll_zk": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 27, 28],
+            "aggregator_model": {
+                "d_model": 20,
+                "nhead": 2,
+                "num_layers": 6,
+                "dim_feedforward": 128
+            }
+        }
+
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(dataset_params, f)
+            self.config.datasetParamPath = f.name
+            self._temp_dataset_params = f.name  # Store for cleanup
+
         self.config.device = 'cpu'
         customNollIndices = [4,5,6,7,8,9,10,11,12,13,14,15,20,21,22,27,28]
         self.config.nollIndices = customNollIndices
+
         # Initialize the neural task
         self.task = CalcZernikesNeuralTask(config=self.config, name="Neural Task")
 
@@ -164,9 +197,10 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         """
         # Create a new config with custom Noll indices
         customConfig = CalcZernikesNeuralTaskConfig()
-        customConfig.wavenetPath = self.config.wavenetPath
-        customConfig.alignetPath = self.config.alignetPath
-        customConfig.aggregatornetPath = self.config.aggregatornetPath
+        # Use the same random weights approach for consistency
+        customConfig.wavenetPath = None
+        customConfig.alignetPath = None
+        customConfig.aggregatornetPath = None
         customConfig.datasetParamPath = self.config.datasetParamPath
         customConfig.device = self.config.device
 
