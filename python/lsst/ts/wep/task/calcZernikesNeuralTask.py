@@ -41,20 +41,20 @@ from TARTS import NeuralActiveOpticsSys
 
 
 class CalcZernikesNeuralTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
+    pipeBase.PipelineTaskConnections, dimensions=("exposure", "detector", "instrument")  # type: ignore
 ):
 
     extraExposure = connectionTypes.Input(
         doc="Extra-focal exposure containing full frame images",
-        dimensions=("visit", "detector", "instrument"),
+        dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="extraExposure",
+        name="raw",
     )
     intraExposure = connectionTypes.Input(
         doc="Intra-focal exposure containing full frame images",
-        dimensions=("visit", "detector", "instrument"),
+        dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="intraExposure",
+        name="raw",
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -111,18 +111,21 @@ class CalcZernikesNeuralTaskConfig(
     """
 
     wavenetPath: pexConfig.Field = pexConfig.Field(
-        doc="Model Weights Path for wavenet (None for random weights)",
+        doc="Model Weights Path for wavenet",
         dtype=str,
+        default=None,
         optional=True
     )
     alignetPath: pexConfig.Field = pexConfig.Field(
-        doc="Model Weights Path for alignet (None for random weights)",
+        doc="Model Weights Path for alignet",
         dtype=str,
+        default=None,
         optional=True
     )
     aggregatornetPath: pexConfig.Field = pexConfig.Field(
-        doc="Model Weights Path for aggregatornet (None for random weights)",
+        doc="Model Weights Path for aggregatornet",
         dtype=str,
+        default=None,
         optional=True
     )
     datasetParamPath: pexConfig.Field = pexConfig.Field(
@@ -200,7 +203,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
         self.nollIndices = self.config.nollIndices
 
-        # TARTS handles None values by creating new models with random weights
+        # TARTS system handles None paths by creating new models with random weights
         self.tarts = NeuralActiveOpticsSys(
             self.config.datasetParamPath,
             self.config.wavenetPath,
