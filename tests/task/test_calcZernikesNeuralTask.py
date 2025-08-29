@@ -244,7 +244,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         # Store the loaded data as instance variables for use in other tests
 
         values = self.task.run(exposureExtra, exposureIntra)
-        print(values.outputZernikesRaw.shape)
+
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results")
         self.assertTrue(hasattr(values, 'outputZernikesAvg'),

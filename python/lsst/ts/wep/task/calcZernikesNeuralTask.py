@@ -42,6 +42,10 @@ from TARTS import NeuralActiveOpticsSys
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.daf.base import PropertyList
+import astropy.units as u
+
+# Define the position 2D float dtype for the zernikes table
+pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 
 class CalcZernikesNeuralTaskConnections(
     pipeBase.PipelineTaskConnections, dimensions=("exposure", "detector", "instrument")  # type: ignore
@@ -323,6 +327,189 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Return DonutStamps collection
         return DonutStamps(donutStamps)
 
+    def initZkTable(self) -> QTable:
+        """Initialize the table to store the Zernike coefficients
+
+        Returns
+        -------
+        table : `astropy.table.QTable`
+            Table to store the Zernike coefficients
+        """
+        # Create table with proper dtype structure
+        dtype = [
+            ("label", "<U12"),
+            ("used", np.bool_),
+            ("intra_field_x", "<f4"),
+            ("intra_field_y", "<f4"),
+            ("extra_field_x", "<f4"),
+            ("extra_field_y", "<f4"),
+            ("intra_centroid_x", "<f4"),
+            ("intra_centroid_y", "<f4"),
+            ("extra_centroid_x", "<f4"),
+            ("extra_centroid_y", "<f4"),
+            ("intra_mag", "<f4"),
+            ("extra_mag", "<f4"),
+            ("intra_sn", "<f4"),
+            ("extra_sn", "<f4"),
+            ("intra_entropy", "<f4"),
+            ("extra_entropy", "<f4"),
+            ("intra_frac_bad_pix", "<f4"),
+            ("extra_frac_bad_pix", "<f4"),
+            ("intra_max_power_grad", "<f4"),
+            ("extra_max_power_grad", "<f4"),
+        ]
+
+        # Add Zernike coefficient columns
+        for j in self.config.nollIndices:
+            dtype.append((f"Z{j}", "<f4"))
+
+        table = QTable(dtype=dtype)
+
+        # Assign units where appropriate
+        table["intra_field_x"].unit = u.deg
+        table["intra_field_y"].unit = u.deg
+        table["extra_field_x"].unit = u.deg
+        table["extra_field_y"].unit = u.deg
+        table["intra_centroid_x"].unit = u.pixel
+        table["intra_centroid_y"].unit = u.pixel
+        table["extra_centroid_x"].unit = u.pixel
+        table["extra_centroid_y"].unit = u.pixel
+        for j in self.config.nollIndices:
+            table[f"Z{j}"].unit = u.nm
+
+        return table
+
+    def createZkTable(
+        self,
+        extraStamps: DonutStamps,
+        intraStamps: DonutStamps,
+        zkCoeffRaw: np.ndarray,
+        zkCoeffAvg: np.ndarray,
+    ) -> QTable:
+        """Create the Zernike table to store Zernike Coefficients.
+
+        Parameters
+        ----------
+        extraStamps: DonutStamps
+            The extrafocal stamps
+        intraStamps: DonutStamps
+            The intrafocal stamps
+        zkCoeffRaw: np.ndarray
+            Raw zernike coefficients from TARTS
+        zkCoeffAvg: np.ndarray
+            Averaged zernike coefficients
+
+        Returns
+        -------
+        table : `astropy.table.QTable`
+            Table with the Zernike coefficients
+        """
+        zkTable = self.initZkTable()
+
+
+
+        # Add average row
+        row_data = {
+            "label": "average",
+            "used": True,
+            "intra_field_x": np.nan,
+            "intra_field_y": np.nan,
+            "extra_field_x": np.nan,
+            "extra_field_y": np.nan,
+            "intra_centroid_x": np.nan,
+            "intra_centroid_y": np.nan,
+            "extra_centroid_x": np.nan,
+            "extra_centroid_y": np.nan,
+            "intra_mag": np.nan,
+            "extra_mag": np.nan,
+            "intra_sn": np.nan,
+            "extra_sn": np.nan,
+            "intra_entropy": np.nan,
+            "extra_entropy": np.nan,
+            "intra_frac_bad_pix": np.nan,
+            "extra_frac_bad_pix": np.nan,
+            "intra_max_power_grad": np.nan,
+            "extra_max_power_grad": np.nan,
+        }
+
+        # Add Zernike coefficients
+        for i, j in enumerate(self.config.nollIndices):
+            if i < len(zkCoeffAvg):
+                row_data[f"Z{j}"] = zkCoeffAvg[i] * u.nm
+            else:
+                row_data[f"Z{j}"] = 0.0 * u.nm
+
+        zkTable.add_row(row_data)
+
+        # Add individual donut rows
+        # For TARTS, we typically have one prediction per focal position
+        # We'll create rows for each donut stamp
+        max_stamps = max(len(extraStamps), len(intraStamps))
+
+        for i in range(max_stamps):
+            # Get the zernike coefficients for this donut
+            # For TARTS, we typically have one set of coefficients per
+            # focal position
+            if zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] > i:
+                zk = zkCoeffRaw[i]
+            else:
+                # If we don't have individual coefficients, use the average
+                zk = zkCoeffAvg
+
+            row: dict = dict()
+            row["label"] = f"donut{i+1}"
+            row["used"] = True  # TARTS predictions are always used
+
+            # Add Zernike coefficients
+            for idx, j in enumerate(self.config.nollIndices):
+                if idx < len(zk):
+                    row[f"Z{j}"] = zk[idx] * u.nm
+                else:
+                    row[f"Z{j}"] = 0.0 * u.nm
+
+            # Get field positions and centroids from stamps
+            if i < len(intraStamps) and intraStamps[i] is not None:
+                intra = intraStamps[i]
+                field_xy = intra.calcFieldXY()
+                row["intra_field_x"] = field_xy[0] * u.deg
+                row["intra_field_y"] = field_xy[1] * u.deg
+                row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
+                row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
+            else:
+                row["intra_field_x"] = np.nan
+                row["intra_field_y"] = np.nan
+                row["intra_centroid_x"] = np.nan
+                row["intra_centroid_y"] = np.nan
+
+            if i < len(extraStamps) and extraStamps[i] is not None:
+                extra = extraStamps[i]
+                field_xy = extra.calcFieldXY()
+                row["extra_field_x"] = field_xy[0] * u.deg
+                row["extra_field_y"] = field_xy[1] * u.deg
+                row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
+                row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
+            else:
+                row["extra_field_x"] = np.nan
+                row["extra_field_y"] = np.nan
+                row["extra_centroid_x"] = np.nan
+                row["extra_centroid_y"] = np.nan
+
+            # Get quality metrics from metadata
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+                for stamps, foc in [
+                    (intraStamps, "intra"),
+                    (extraStamps, "extra"),
+                ]:
+                    if len(stamps) > 0 and key in stamps.metadata and i < len(stamps.metadata.getArray(key)):
+                        val = stamps.metadata.getArray(key)[i]
+                    else:
+                        val = np.nan
+                    row[f"{foc}_{key.lower()}"] = val
+
+            zkTable.add_row(row)
+
+        return zkTable
+
     def calcZernikesFromExposure(self, exposure: afwImage.Exposure, defocalType: str) -> np.ndarray:
         """Calculate Zernike coefficients from a single focal position
         exposure.
@@ -421,51 +608,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             donutQualityTable=donutQualityTable,
         )
 
-    def initZkTable(self) -> QTable:
-        """Initialize an empty Zernike coefficient table.
 
-        Creates a table structure for storing Zernike coefficients with columns
-        for each configured Noll index from the configuration.
-
-        Returns
-        -------
-        astropy.table.QTable
-            Empty table with columns for each configured Zernike coefficient.
-            The default configuration includes:
-            - Z4: Defocus
-            - Z5: Astigmatism (0°)
-            - Z6: Astigmatism (45°)
-            - Z7: Coma (0°)
-            - Z8: Coma (90°)
-            - Z9: Spherical aberration
-            - Z10: Trefoil (0°)
-            - Z11: Trefoil (30°)
-            - Z12: Secondary astigmatism (0°)
-            - Z13: Secondary astigmatism (45°)
-            - Z14: Secondary coma (0°)
-            - Z15: Secondary coma (90°)
-            - Z16: Secondary spherical aberration
-            - Z17: Quadrafoil (0°)
-            - Z18: Quadrafoil (22.5°)
-            - Z19: Secondary trefoil (0°)
-            - Z20: Secondary trefoil (30°)
-            - Z21: Secondary quadrafoil (0°)
-            - Z22: Secondary quadrafoil (22.5°)
-            - Z23: Tertiary spherical aberration
-
-        Notes
-        -----
-        The Noll indices are configurable via config.nollIndices. The default
-        starts from 4 (not 1) as Z1-Z3 represent piston and tip/tilt, which
-        are typically not measured in wavefront sensing. Users can customize
-        this list based on their specific requirements.
-        """
-        # Create columns for each Noll index
-        columns: dict[str, list] = {}
-        for noll_idx in self.nollIndices:
-            columns[f"Z{noll_idx}"] = []
-
-        return QTable(columns)
 
     @timeMethod
     def run(
@@ -502,6 +645,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             - outputZernikesRaw : np.ndarray
                 Raw Zernike coefficients for each exposure separately (in
                 microns)
+            - donutStampsExtra : DonutStamps
+                Extra-focal donut stamps created from TARTS output
+            - donutStampsIntra : DonutStamps
+                Intra-focal donut stamps created from TARTS output
+            - zernikes : astropy.table.QTable
+                Zernike coefficients table with individual donut and
+                average values
 
         Notes
         -----
@@ -560,9 +710,18 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             zernikesRaw = np.stack([predExtra, predExtra], axis=0)
             zernikesAvg = predExtra  # Average of same value is the value itself
 
+        # Create zernikes table
+        zernikesTable = self.createZkTable(
+            extraStamps=donutStampsExtra if donutStampsExtra is not None else DonutStamps([]),
+            intraStamps=donutStampsIntra if donutStampsIntra is not None else DonutStamps([]),
+            zkCoeffRaw=zernikesRaw,
+            zkCoeffAvg=zernikesAvg,
+        )
+
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw,
             donutStampsExtra=donutStampsExtra,
             donutStampsIntra=donutStampsIntra,
+            zernikes=zernikesTable,
         )
