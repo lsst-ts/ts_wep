@@ -724,4 +724,5 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             donutStampsExtra=donutStampsExtra,
             donutStampsIntra=donutStampsIntra,
             zernikes=zernikesTable,
+            donutQualityTable=QTable([]),
         )
