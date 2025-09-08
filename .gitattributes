@@ -114,3 +114,4 @@ tests/testData/gen3TestRepo/LSSTCam/raw/all/raw/20211231/MC_H_20211231_006002/ra
 tests/testData/gen3TestRepo/LSSTCam/raw/all/raw/20211231/MC_H_20211231_006002/raw_LSSTCam_g_MC_H_20211231_006002_R22_S11_LSSTCam_raw_all.fits.gz filter=lfs diff=lfs merge=lfs -text
 tests/testData/gen3TestRepo/LSSTCam/raw/all/raw/20211231/MC_H_20211231_006008/raw_LSSTCam_g_MC_H_20211231_006008_R22_S11_LSSTCam_raw_all.fits.gz filter=lfs diff=lfs merge=lfs -text
 tests/testData/gen3TestRepo/LSSTCam/raw/all/raw/20211231/MC_H_20211231_006009/raw_LSSTCam_g_MC_H_20211231_006009_R22_S11_LSSTCam_raw_all.fits.gz filter=lfs diff=lfs merge=lfs -text
+*.pt filter=lfs diff=lfs merge=lfs -text
