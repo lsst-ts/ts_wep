@@ -5,11 +5,22 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-14.17.0:
+
+-------------
+ 14.17.0
+-------------
+
+* Add AiDonutAlgorithm for wavefront estimation using a PyTorch model.
+* Add EstimateZernikesAiDonutTask to use AiDonutAlgorithm.
+
 .. _lsst.ts.wep-14.16.0:
 
 -------------
  14.16.0
 -------------
+
 * Add DonutSizeCorrelator to measure donut diameters at the exposure level.
 * Updated handling of radius information to donut stamps metadata, and donut quality table.
 

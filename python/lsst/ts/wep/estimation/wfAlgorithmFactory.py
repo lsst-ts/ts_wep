@@ -23,6 +23,7 @@ __all__ = ["WfAlgorithmFactory"]
 
 from typing import Union
 
+from lsst.ts.wep.estimation.aiDonut import AiDonutAlgorithm
 from lsst.ts.wep.estimation.danish import DanishAlgorithm
 from lsst.ts.wep.estimation.tie import TieAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
@@ -61,5 +62,7 @@ class WfAlgorithmFactory:
             return configClass(algoConfig, TieAlgorithm)
         elif algoName == WfAlgorithmName.Danish:
             return configClass(algoConfig, DanishAlgorithm)
+        elif algoName == WfAlgorithmName.AiDonut:
+            return configClass(algoConfig, AiDonutAlgorithm)
         else:
             raise ValueError(f"{algoName} not supported.")
