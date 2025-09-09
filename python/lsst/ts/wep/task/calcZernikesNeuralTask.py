@@ -81,6 +81,18 @@ class CalcZernikesNeuralTaskConnections(
         storageClass="AstropyQTable",
         name="zernikes",
     )
+    donutStampsExtra = connectionTypes.Output(
+        doc="Donut stamps",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutStampsExtra",
+    )
+    donutStampsIntra = connectionTypes.Output(
+        doc="Donut stamps",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutStampsIntra",
+    )
     donutQualityTable = connectionTypes.Output(
         doc="Quality information for donuts",
         dimensions=("visit", "detector", "instrument"),
