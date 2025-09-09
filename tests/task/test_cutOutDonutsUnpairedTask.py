@@ -69,7 +69,7 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         else:
             cls.baseRunName = "run1"
             if cls.baseRunName in collectionsList:
-                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.baseRunName)
                 runProgram(cleanUpCmd)
 
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
@@ -169,9 +169,14 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         ) = self._getDataFromButler()
 
         # Test normal behavior
-        taskOut = self.task.run(
-            [copy(exposureExtra), copy(exposureIntra)],
-            [donutCatalogExtra, donutCatalogIntra],
+        taskOutExtra = self.task.run(
+            copy(exposureExtra),
+            donutCatalogExtra,
+            camera,
+        )
+        taskOutIntra = self.task.run(
+            copy(exposureIntra),
+            donutCatalogIntra,
             camera,
         )
 
@@ -179,7 +184,7 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
         donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
 
-        for butlerStamp, taskStamp in zip(donutStampsExtra, taskOut.donutStamps[0]):
+        for butlerStamp, taskStamp in zip(donutStampsExtra, taskOutExtra.donutStamps):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
-        for butlerStamp, taskStamp in zip(donutStampsIntra, taskOut.donutStamps[1]):
+        for butlerStamp, taskStamp in zip(donutStampsIntra, taskOutIntra.donutStamps):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
