@@ -80,6 +80,16 @@ class GenerateDonutCatalogWcsTaskConnections(
         storageClass="AstropyQTable",
         name="donutTable",
     )
+    donutFullRefCat = connectionTypes.Output(
+        doc="Full catalog with all detected donuts before selection",
+        dimensions=(
+            "visit",
+            "detector",
+            "instrument",
+        ),
+        storageClass="AstropyQTable",
+        name="donutFullRefCat",
+    )
 
 
 class GenerateDonutCatalogWcsTaskConfig(
@@ -208,7 +218,11 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         fieldObjects = donutCatalogToAstropy(
             selectedCat, filterName, blendCentersX, blendCentersY
         )
-        donutRefs = donutCatalogToAstropy(refCatalog, filterName, [], [])
+        donutRefs = donutCatalogToAstropy(refCatalog, filterName, [[]]*len(refCatalog), [[]]*len(refCatalog))
+        donutRefs['selected'] = refSelection
+        for key, val in rejectFlagsDict.items():
+            donutRefs[key] = [False] * len(donutRefs)
+            donutRefs[key][rejectFlags == val] = True
         fieldObjects["detector"] = np.array(
             [detector.getName()] * len(fieldObjects), dtype=str
         )

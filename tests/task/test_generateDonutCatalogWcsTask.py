@@ -275,6 +275,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.task.config.donutSelector.useCustomMagLimit = True
         for exposure in expList:
             taskOutput = self.task.run(deferredList, exposure)
+            print(taskOutput)
             self.assertEqual(len(taskOutput.donutCatalog), 4)
             donutCatTableList.append(taskOutput.donutCatalog)
             # Get pixel locations with proper wcs
