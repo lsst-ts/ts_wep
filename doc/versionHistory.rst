@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.16.2:
+
+-------------
+ 14.16.2
+-------------
+
+* Fix CalcZernikesUnpairedTask to handle new `numCores` parameter in estimateZernikes.
+
 .. _lsst.ts.wep-14.16.1:
 
 -------------

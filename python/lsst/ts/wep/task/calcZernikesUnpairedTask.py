@@ -85,7 +85,11 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
     _DefaultName = "calcZernikesUnpairedTask"
 
     @timeMethod
-    def run(self, donutStamps: DonutStamps) -> pipeBase.Struct:
+    def run(
+        self,
+        donutStamps: DonutStamps,
+        numCores: int = 1,
+    ) -> pipeBase.Struct:
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if len(donutStamps) == 0:
@@ -123,7 +127,11 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
 
         # Estimate Zernikes
-        zkCoeffRaw = self.estimateZernikes.run(extraStamps, intraStamps)
+        zkCoeffRaw = self.estimateZernikes.run(
+            extraStamps,
+            intraStamps,
+            numCores=numCores
+        )
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
         zkTable = self.createZkTable(
