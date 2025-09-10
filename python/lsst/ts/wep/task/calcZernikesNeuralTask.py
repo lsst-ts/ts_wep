@@ -55,7 +55,7 @@ class CalcZernikesNeuralTaskConnections(
         doc="Exposure containing donut stamps",
         dimensions=("visit", "detector", "instrument"),
         storageClass="Exposure",
-        name="raw",
+        name="post_isr_image",
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
