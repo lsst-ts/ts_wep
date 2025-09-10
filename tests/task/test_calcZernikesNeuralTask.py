@@ -237,8 +237,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
                        "Should have outputZernikesAvg")
         self.assertTrue(hasattr(values, 'outputZernikesRaw'),
                        "Should have outputZernikesRaw")
-        self.assertTrue(hasattr(values, 'donutStamps'),
-                       "Should have donutStamps")
+        self.assertTrue(hasattr(values, 'donutStampsNeural'),
+                       "Should have donutStampsNeural")
         self.assertTrue(hasattr(values, 'zernikes'),
                        "Should have zernikes table")
         self.assertTrue(hasattr(values, 'donutQualityTable'),
@@ -276,8 +276,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
                        "Should have outputZernikesAvg")
         self.assertTrue(hasattr(values, 'outputZernikesRaw'),
                        "Should have outputZernikesRaw")
-        self.assertTrue(hasattr(values, 'donutStamps'),
-                       "Should have donutStamps")
+        self.assertTrue(hasattr(values, 'donutStampsNeural'),
+                       "Should have donutStampsNeural")
         self.assertTrue(hasattr(values, 'zernikes'),
                        "Should have zernikes table")
 
@@ -327,8 +327,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
                        "Should have outputZernikesAvg")
         self.assertTrue(hasattr(values, 'outputZernikesRaw'),
                        "Should have outputZernikesRaw")
-        self.assertTrue(hasattr(values, 'donutStamps'),
-                       "Should have donutStamps")
+        self.assertTrue(hasattr(values, 'donutStampsNeural'),
+                       "Should have donutStampsNeural")
         self.assertTrue(hasattr(values, 'zernikes'),
                        "Should have zernikes table")
 
@@ -361,7 +361,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         self.assertIsNotNone(values, "Task run should return empty results when no exposure available")
         self.assertTrue(hasattr(values, 'outputZernikesAvg'), "Should have outputZernikesAvg")
         self.assertTrue(hasattr(values, 'outputZernikesRaw'), "Should have outputZernikesRaw")
-        self.assertTrue(hasattr(values, 'donutStamps'), "Should have donutStamps")
+        self.assertTrue(hasattr(values, 'donutStampsNeural'), "Should have donutStampsNeural")
         self.assertTrue(hasattr(values, 'zernikes'), "Should have zernikes table")
         self.assertTrue(hasattr(values, 'donutQualityTable'), "Should have donutQualityTable")
 

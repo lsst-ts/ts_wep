@@ -75,11 +75,11 @@ class CalcZernikesNeuralTaskConnections(
         storageClass="AstropyQTable",
         name="zernikes",
     )
-    donutStamps = connectionTypes.Output(
-        doc="Donut stamps",
+    donutStampsNeural = connectionTypes.Output(
+        doc="Neural network-generated donut stamps",
         dimensions=("visit", "detector", "instrument"),
         storageClass="AstropyQTable",
-        name="donutStamps",
+        name="donutStampsNeural",
     )
     donutQualityTable = connectionTypes.Output(
         doc="Quality information for donuts",
@@ -577,8 +577,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 Array filled with NaN values for all Noll indices
             - outputZernikesAvg : np.ndarray
                 Array filled with NaN values for all Noll indices
-            - donutStamps : DonutStamps
-                Empty donut stamps collection
+            - donutStampsNeural : DonutStamps
+                Empty neural network-generated donut stamps collection
             - zernikes : astropy.table.QTable
                 Empty Zernike coefficient table
             - donutQualityTable : astropy.table.QTable
@@ -606,7 +606,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
-            donutStamps=DonutStamps([]),
+            donutStampsNeural=DonutStamps([]),
             zernikes=self.initZkTable(),
             donutQualityTable=donutQualityTable,
         )
@@ -639,8 +639,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 Zernike coefficients from the exposure (in microns)
             - outputZernikesRaw : np.ndarray
                 Raw Zernike coefficients from the exposure (in microns)
-            - donutStamps : DonutStamps
-                Donut stamps created from TARTS output
+            - donutStampsNeural : DonutStamps
+                Neural network-generated donut stamps from TARTS output
             - zernikes : astropy.table.QTable
                 Zernike coefficients table with individual donut and
                 average values
@@ -694,7 +694,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw,
-            donutStamps=donutStamps,
+            donutStampsNeural=donutStamps,
             zernikes=zernikesTable,
             donutQualityTable=QTable([]),
         )
