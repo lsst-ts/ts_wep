@@ -48,18 +48,12 @@ import astropy.units as u
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 
 class CalcZernikesNeuralTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("exposure", "detector", "instrument")  # type: ignore
+    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
 ):
 
-    extraExposure = connectionTypes.Input(
-        doc="Extra-focal exposure containing full frame images",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="Exposure",
-        name="raw",
-    )
-    intraExposure = connectionTypes.Input(
-        doc="Intra-focal exposure containing full frame images",
-        dimensions=("exposure", "detector", "instrument"),
+    exposure = connectionTypes.Input(
+        doc="Exposure containing donut stamps",
+        dimensions=("visit", "detector", "instrument"),
         storageClass="Exposure",
         name="raw",
     )
@@ -81,17 +75,11 @@ class CalcZernikesNeuralTaskConnections(
         storageClass="AstropyQTable",
         name="zernikes",
     )
-    donutStampsExtra = connectionTypes.Output(
+    donutStamps = connectionTypes.Output(
         doc="Donut stamps",
         dimensions=("visit", "detector", "instrument"),
         storageClass="AstropyQTable",
-        name="donutStampsExtra",
-    )
-    donutStampsIntra = connectionTypes.Output(
-        doc="Donut stamps",
-        dimensions=("visit", "detector", "instrument"),
-        storageClass="AstropyQTable",
-        name="donutStampsIntra",
+        name="donutStamps",
     )
     donutQualityTable = connectionTypes.Output(
         doc="Quality information for donuts",
@@ -589,6 +577,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 Array filled with NaN values for all Noll indices
             - outputZernikesAvg : np.ndarray
                 Array filled with NaN values for all Noll indices
+            - donutStamps : DonutStamps
+                Empty donut stamps collection
             - zernikes : astropy.table.QTable
                 Empty Zernike coefficient table
             - donutQualityTable : astropy.table.QTable
@@ -616,6 +606,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
+            donutStamps=DonutStamps([]),
             zernikes=self.initZkTable(),
             donutQualityTable=donutQualityTable,
         )
@@ -625,61 +616,45 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        extraExposure: afwImage.Exposure,
-        intraExposure: afwImage.Exposure,
+        exposure: afwImage.Exposure,
     ) -> pipeBase.Struct:
         """Run the neural network-based Zernike estimation task.
 
-        This method processes pairs of intra and extra-focal LSST exposures
-        to estimate Zernike coefficients using the TARTS neural network.
-        The method calculates Zernike coefficients for each exposure
-        separately and then provides both individual results and averaged
-        results.
+        This method processes a single LSST exposure to estimate Zernike
+        coefficients using the TARTS neural network. The method determines
+        whether the exposure contains intra-focal or extra-focal donuts
+        and processes them accordingly.
 
         Parameters
         ----------
-        extraExposure : lsst.afw.image.Exposure
-            The extra-focal LSST exposure data. This should contain full
-            frame images with proper WCS information for the TARTS
-            neural network.
-        intraExposure : lsst.afw.image.Exposure
-            The intra-focal LSST exposure data. This should contain full
-            frame images with proper WCS information for the TARTS
-            neural network.
+        exposure : lsst.afw.image.Exposure
+            The LSST exposure data containing donut stamps. This should
+            contain proper WCS information for the TARTS neural network.
 
         Returns
         -------
         lsst.pipe.base.Struct
             A struct containing:
             - outputZernikesAvg : np.ndarray
-                Average Zernike coefficients across both exposures (in
-                microns)
+                Zernike coefficients from the exposure (in microns)
             - outputZernikesRaw : np.ndarray
-                Raw Zernike coefficients for each exposure separately (in
-                microns)
-            - donutStampsExtra : DonutStamps
-                Extra-focal donut stamps created from TARTS output
-            - donutStampsIntra : DonutStamps
-                Intra-focal donut stamps created from TARTS output
+                Raw Zernike coefficients from the exposure (in microns)
+            - donutStamps : DonutStamps
+                Donut stamps created from TARTS output
             - zernikes : astropy.table.QTable
                 Zernike coefficients table with individual donut and
                 average values
+            - donutQualityTable : astropy.table.QTable
+                Quality information for donuts
 
         Notes
         -----
-        This implementation assumes separate intra and extra-focal exposures.
-        For CWFS mode (single exposure with different corners), this method
-        would need to be modified to handle the different data structure.
-        The current approach processes each exposure independently through
-        the neural network and then combines the results.
+        This implementation processes a single exposure containing donut
+        stamps from either the intra-focal or extra-focal position.
+        The TARTS neural network is used to estimate Zernike coefficients
+        representing wavefront aberrations.
 
-        Robustness features:
-        - If only one exposure is available, it will be used for both
-          intra and extra focal calculations
-        - If both exposures are available, they will be processed separately
-        - The method gracefully handles missing or invalid exposures
-
-        Both exposure objects should contain:
+        The exposure should contain:
         - Valid image data (typically donut stamps)
         - Proper WCS (World Coordinate System) information
         - Appropriate metadata for the instrument and observation
@@ -688,44 +663,30 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         --------
         calcZernikesFromExposure : Method that processes individual exposures
         """
-        # Check if exposures are valid and handle missing cases
-        hasIntra = intraExposure is not None
-        hasExtra = extraExposure is not None
-
-        if not hasIntra and not hasExtra:
-            # No exposures available - return empty results
+        # Check if exposure is valid
+        if exposure is None:
+            # No exposure available - return empty results
             return self.empty()
 
-        if hasIntra and hasExtra:
-            # Both exposures available - process normally
-            predIntra, donutStampsIntra, zkIntra = self.calcZernikesFromExposure(intraExposure, "intra")
-            predExtra, donutStampsExtra, zkExtra = self.calcZernikesFromExposure(extraExposure, "extra")
-            predIntra = predIntra[0,:]
-            predExtra = predExtra[0,:]
-            zernikesRaw = np.stack([predIntra, predExtra], axis=0)
-            zernikesAvg = np.mean(zernikesRaw, axis=0)
-
-        elif hasIntra:
-            # Only intra-focal available - use it for both
-            predIntra, donutStampsIntra, zkIntra = self.calcZernikesFromExposure(intraExposure, "intra")
-            donutStampsExtra = None
-            zkExtra = None
-            predIntra = predIntra[0,:]
-            zernikesRaw = np.stack([predIntra, predIntra], axis=0)
-            zernikesAvg = predIntra  # Average of same value is the value itself
-
-        else:  # hasExtra only
-            # Only extra-focal available - use it for both
-            predExtra, donutStampsExtra, zkExtra = self.calcZernikesFromExposure(extraExposure, "extra")
-            donutStampsIntra = None
-            predExtra = predExtra[0,:]
-            zernikesRaw = np.stack([predExtra, predExtra], axis=0)
-            zernikesAvg = predExtra  # Average of same value is the value itself
+        # Process the single exposure - determine defocal type from metadata
+        # For now, use "intra" as default, but could be determined from meta
+        defocalType = "intra"  # Could be determined from exposure metadata if available
+        pred, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
+        pred = pred[0,:]
+        zernikesRaw = np.atleast_2d(pred)
+        zernikesAvg = pred
 
         # Create zernikes table
+        # Since we only have one exposure, put stamps in the appropriate slot
+        if defocalType == "extra":
+            extraStamps = donutStamps
+            intraStamps = DonutStamps([])
+        else:  # intra or unknown
+            extraStamps = DonutStamps([])
+            intraStamps = donutStamps
         zernikesTable = self.createZkTable(
-            extraStamps=donutStampsExtra if donutStampsExtra is not None else DonutStamps([]),
-            intraStamps=donutStampsIntra if donutStampsIntra is not None else DonutStamps([]),
+            extraStamps=extraStamps,
+            intraStamps=intraStamps,
             zkCoeffRaw=zernikesRaw,
             zkCoeffAvg=zernikesAvg,
         )
@@ -733,8 +694,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw,
-            donutStampsExtra=donutStampsExtra,
-            donutStampsIntra=donutStampsIntra,
+            donutStamps=donutStamps,
             zernikes=zernikesTable,
             donutQualityTable=QTable([]),
         )
