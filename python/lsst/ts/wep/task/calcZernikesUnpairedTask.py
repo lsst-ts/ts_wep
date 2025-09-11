@@ -90,6 +90,13 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         donutStamps: DonutStamps,
         numCores: int = 1,
     ) -> pipeBase.Struct:
+        extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
+        if donutStamps.metadata["DET_NAME"] in extraDetectorNames:
+            self.stampsExtra = donutStamps
+            self.stampsIntra = None
+        else:
+            self.stampsExtra = None
+            self.stampsIntra = donutStamps
         # If no donuts are in the donutCatalog for a set of exposures
         # then return the Zernike coefficients as nan.
         if len(donutStamps) == 0:
