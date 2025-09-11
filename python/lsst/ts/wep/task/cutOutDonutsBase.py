@@ -738,6 +738,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                     donutRow["coord_dec"].value,
                     lsst.geom.radians,
                 ),
+                donut_id=donutRow["donut_id"],
                 centroid_position=centroid_position,
                 blend_centroid_positions=blendCentroidPositions,
                 detector_name=detectorName,
@@ -791,6 +792,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             )
         else:
             stampsMetadata["MAG"] = np.array([])
+
+        # Save donut id
+        stampsMetadata["DONUT_ID"] = np.array(donutCatalog["donut_id"].value)
         # Save the original centroid values
         stampsMetadata["CENT_X0"] = np.array(donutCatalog["centroid_x"].value)
         stampsMetadata["CENT_Y0"] = np.array(donutCatalog["centroid_y"].value)
