@@ -218,7 +218,10 @@ class DonutStampSelectorTask(pipeBase.Task):
         entropySelect = np.ones(len(donutStamps), dtype="bool")
 
         # Collect donut id values
-        donutId = donutStamps.metadata.getArray("DONUT_ID")
+        if "DONUT_ID" in list(donutStamps.metadata):
+            donutId = donutStamps.metadata.getArray("DONUT_ID")
+        else:
+            donutId = np.zeros(len(donutStamps), dtype='str')
 
         # Collect the entropy information if available
         entropyValue = np.full(len(donutStamps), np.nan)
