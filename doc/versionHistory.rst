@@ -5,6 +5,13 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-14.17.0:
+
+-------------
+ 14.17.0
+-------------
+* Add donut_id at donut detection stage.
+
 .. _lsst.ts.wep-14.16.0:
 
 -------------
