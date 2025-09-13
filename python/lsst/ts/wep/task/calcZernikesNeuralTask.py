@@ -48,14 +48,14 @@ import astropy.units as u
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 
 class CalcZernikesNeuralTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
+    pipeBase.PipelineTaskConnections, dimensions=("exposure", "detector", "instrument")  # type: ignore
 ):
 
     exposure = connectionTypes.Input(
         doc="Exposure containing donut stamps",
-        dimensions=("visit", "detector", "instrument"),
+        dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="post_isr_image",
+        name="raw",
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -327,6 +327,33 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Return DonutStamps collection
         return DonutStamps(donutStamps)
 
+    def donutStampsToQTable(self, donutStamps: DonutStamps) -> QTable:
+        """Convert DonutStamps to QTable for storage compatibility.
+        
+        Parameters
+        ----------
+        donutStamps : DonutStamps
+            The DonutStamps object to convert
+            
+        Returns
+        -------
+        QTable
+            A QTable containing the donut stamp metadata
+        """
+        if len(donutStamps) == 0:
+            return QTable()
+        
+        # Refresh metadata to ensure it's up to date
+        donutStamps._refresh_metadata()
+        
+        # Convert PropertyList to regular dictionary
+        metadata_dict = {}
+        for key in donutStamps.metadata.names():
+            metadata_dict[key] = donutStamps.metadata.getArray(key)
+        
+        # Convert metadata dictionary to QTable
+        return QTable(metadata_dict)
+
     def initZkTable(self) -> QTable:
         """Initialize the table to store the Zernike coefficients
 
@@ -577,7 +604,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 Array filled with NaN values for all Noll indices
             - outputZernikesAvg : np.ndarray
                 Array filled with NaN values for all Noll indices
-            - donutStampsNeural : DonutStamps
+            - donutStampsNeural : astropy.table.QTable
                 Empty neural network-generated donut stamps collection
             - zernikes : astropy.table.QTable
                 Empty Zernike coefficient table
@@ -606,7 +633,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
-            donutStampsNeural=DonutStamps([]),
+            donutStampsNeural=self.donutStampsToQTable(DonutStamps([])),
             zernikes=self.initZkTable(),
             donutQualityTable=donutQualityTable,
         )
@@ -639,8 +666,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 Zernike coefficients from the exposure (in microns)
             - outputZernikesRaw : np.ndarray
                 Raw Zernike coefficients from the exposure (in microns)
-            - donutStampsNeural : DonutStamps
-                Neural network-generated donut stamps from TARTS output
+            - donutStampsNeural : astropy.table.QTable
+                Neural network-generated donut stamps metadata from TARTS output
             - zernikes : astropy.table.QTable
                 Zernike coefficients table with individual donut and
                 average values
@@ -694,7 +721,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw,
-            donutStampsNeural=donutStamps,
+            donutStampsNeural=self.donutStampsToQTable(donutStamps),
             zernikes=zernikesTable,
             donutQualityTable=QTable([]),
         )
