@@ -339,7 +339,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 successfulFit = True
                 self.metadata["wcsFitSuccess"] = True
             else:
-                # this is set to None when the fit fails, so restore it
+                # WCS has been updated already but we are rolling back, so restore it
                 exposure.setWcs(originalWcs)
                 donutCatalog = fitDonutCatalog
                 self.log.warning(
