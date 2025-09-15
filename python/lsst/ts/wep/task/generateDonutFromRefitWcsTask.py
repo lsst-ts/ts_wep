@@ -338,6 +338,15 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             if scatter < self.config.maxFitScatter:
                 successfulFit = True
                 self.metadata["wcsFitSuccess"] = True
+            else:
+                # this is set to None when the fit fails, so restore it
+                exposure.setWcs(originalWcs)
+                donutCatalog = fitDonutCatalog
+                self.log.warning(
+                    "Returning original exposure and WCS and "
+                    "direct detect catalog as output."
+                )
+
         except (RuntimeError, TaskError, IndexError, ValueError, AttributeError) as e:
             # IndexError raised for low source counts:
             # index 0 is out of bounds for axis 0 with size 0
