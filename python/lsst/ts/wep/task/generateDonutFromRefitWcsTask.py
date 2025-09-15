@@ -320,7 +320,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             self.config.astromRefFilter
         )
         afwCat = self.formatDonutCatalog(fitDonutCatalog)
-        originalWcs = copy(exposure.wcs)
+        originalExposure = copy(exposure)
 
         successfulFit = False
         # Set a parameter in the metadata to
@@ -339,8 +339,8 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 successfulFit = True
                 self.metadata["wcsFitSuccess"] = True
             else:
-                # WCS has been updated already but we are rolling back, so restore it
-                exposure.setWcs(originalWcs)
+                # WCS has been fit but scatter is
+                # too high, so use original catalog
                 donutCatalog = fitDonutCatalog
                 self.log.warning(
                     "Returning original exposure and WCS and "
@@ -361,7 +361,6 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 raise TaskError("Failing task due to wcs fit failure.")
             else:
                 # this is set to None when the fit fails, so restore it
-                exposure.setWcs(originalWcs)
                 donutCatalog = fitDonutCatalog
                 self.log.warning(
                     "Returning original exposure and WCS and "
@@ -474,5 +473,9 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             [detectorName] * len(donutCatalog), dtype=str
         )
         donutCatalog = addVisitInfoToCatTable(exposure, donutCatalog)
+        # We want the original image array with the new WCS
+        # attached to it if the WCS fitting was successful.
+        if self.metadata["wcsFitSuccess"] is True:
+            originalExposure.setWcs(exposure.wcs)
 
-        return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
+        return pipeBase.Struct(outputExposure=originalExposure, donutCatalog=donutCatalog)

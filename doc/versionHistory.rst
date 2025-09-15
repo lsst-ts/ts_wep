@@ -13,6 +13,7 @@ Version History
 -------------
 
 * Fix missing logic in generateDonutFromRefitWcsTask that caused failures when scatter in WCS fit was too large.
+* Return original post_isr_image with new WCS if WCS fit successful.
 
 .. _lsst.ts.wep-14.16.0:
 
