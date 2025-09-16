@@ -27,6 +27,7 @@ __all__ = [
 
 from copy import deepcopy
 from typing import Any, Optional
+import logging
 
 import numpy as np
 import torch
@@ -207,8 +208,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Type annotation for mypy to understand the config structure
         self.config: CalcZernikesNeuralTaskConfig
 
+        # Initialize task logger consistent with other tasks
+        self.log = logging.getLogger(type(self).__name__)  # type: ignore
+
         # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
         self.nollIndices = self.config.nollIndices
+        self.log.debug("Configured Noll indices: %s", self.nollIndices)
 
         # TARTS system handles None paths by creating new models with random weights
         self.tarts = NeuralActiveOpticsSys(
@@ -220,6 +225,15 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.tarts = self.tarts.eval()
         self.cropSize = self.tarts.CROP_SIZE
         self.device = self.config.device
+
+        self.log.info("Initialized TARTS with dataset params: %s", self.config.datasetParamPath)
+        self.log.debug(
+            "Model paths - wavenet: %s, alignet: %s, aggregatornet: %s",
+            self.config.wavenetPath,
+            self.config.alignetPath,
+            self.config.aggregatornetPath,
+        )
+        self.log.info("Running on device: %s", self.device)
 
         if self.device == "cpu":
             self.tarts = self.tarts.cpu()
@@ -244,13 +258,22 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 self.tarts.alignnet_model.alignnet.cnn = self.tarts.alignnet_model.alignnet.cnn.cpu()
             if hasattr(self.tarts.wavenet_model.wavenet, 'cnn'):
                 self.tarts.wavenet_model.wavenet.cnn = self.tarts.wavenet_model.wavenet.cnn.cpu()
+            self.log.debug("Moved all sub-models and CNNs to CPU")
         else:
             self.tarts.to("cuda")
+            self.log.debug("Moved models to CUDA")
+
+        self.log.debug("TARTS crop size: %s", self.cropSize)
 
     def createDonutStampFromTarts(
         self, exposure: afwImage.Exposure, cropped_image: np.ndarray, defocalType: str
     ) -> DonutStamps:
         """Create DonutStamps from TARTS output - handles multiple donuts."""
+        self.log.debug(
+            "Creating DonutStamps; input image type/shape: %s, defocalType='%s'",
+            getattr(cropped_image, "shape", type(cropped_image)),
+            defocalType,
+        )
         # Extract information from exposure
         detector = exposure.getDetector()
         detectorName = detector.getName()
@@ -278,9 +301,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Multiple donuts: [num_stamps, 160, 160] - already correct shape
             pass
         else:
+            self.log.warning("Unexpected image array shape: %s", image_array.shape)
             raise ValueError(f"Unexpected image array shape: {image_array.shape}")
 
         num_stamps = image_array.shape[0]
+        self.log.debug("Normalized to %d stamp(s) of size 160x160", num_stamps)
         # Create metadata for all donuts
         metadata = PropertyList()
         metadata["RA_DEG"] = [0.0] * num_stamps  # Will be calculated from WCS
@@ -325,6 +350,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             donutStamps.append(donutStamp)
 
         # Return DonutStamps collection
+        self.log.info("Constructed %d DonutStamps with WCS", len(donutStamps))
         return DonutStamps(donutStamps)
 
     def donutStampsToQTable(self, donutStamps: DonutStamps) -> QTable:
@@ -404,6 +430,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         for j in self.config.nollIndices:
             table[f"Z{j}"].unit = u.nm
 
+        self.log.debug("Initialized Zernike table with %d coefficient columns", len(self.config.nollIndices))
         return table
 
     def createZkTable(
@@ -432,6 +459,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             Table with the Zernike coefficients
         """
         zkTable = self.initZkTable()
+        self.log.debug(
+            "Creating Zernike table: intra stamps=%d, extra stamps=%d",
+            len(intraStamps),
+            len(extraStamps),
+        )
 
 
 
@@ -467,6 +499,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 row_data[f"Z{j}"] = 0.0 * u.nm
 
         zkTable.add_row(row_data)
+        self.log.debug("Added average row with %d Zernike terms", len(self.config.nollIndices))
 
         # Add individual donut rows
         # For TARTS, we typically have one prediction per focal position
@@ -482,6 +515,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             else:
                 # If we don't have individual coefficients, use the average
                 zk = zkCoeffAvg
+                self.log.debug(
+                    "Raw coeff shape %s does not cover stamp index %d; using average",
+                    getattr(zkCoeffRaw, "shape", None),
+                    i,
+                )
 
             row: dict = dict()
             row["label"] = f"donut{i+1}"
@@ -535,6 +573,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             zkTable.add_row(row)
 
+        self.log.info("Created Zernike QTable with %d rows", len(zkTable))
         return zkTable
 
     def calcZernikesFromExposure(self, exposure: afwImage.Exposure, defocalType: str) -> np.ndarray:
@@ -572,13 +611,20 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         The exposure should contain donut stamps that the TARTS models
         are trained to process, not full frame images.
         """
+        self.log.debug("Calculating Zernikes from exposure; defocalType='%s'", defocalType)
         with torch.no_grad():
             pred = self.tarts.deploy_run(exposure)
         # Convert PyTorch tensor to numpy array
         if hasattr(pred, 'cpu'):
             pred = pred.cpu().numpy()
+        self.log.debug("TARTS prediction array shape: %s", np.shape(pred))
         # Determine defocal type based on exposure
         donutStamps = self.createDonutStampFromTarts(exposure, self.tarts.cropped_image, defocalType)
+        self.log.debug(
+            "Returning pred shape: %s and total_zernikes shape: %s",
+            np.shape(pred),
+            np.shape(self.tarts.total_zernikes),
+        )
         return pred, donutStamps, deepcopy(self.tarts.total_zernikes)
 
     def empty(self, qualityTable: Optional[QTable] = None) -> pipeBase.Struct:
@@ -626,17 +672,20 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
         ]
+        self.log.info("Producing empty results; quality table provided: %s", qualityTable is not None)
         if qualityTable is None:
             donutQualityTable = QTable({name: [] for name in qualityTableCols})
         else:
             donutQualityTable = qualityTable
-        return pipeBase.Struct(
+        struct = pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             donutStampsNeural=DonutStamps([]),
             zernikes=self.initZkTable(),
             donutQualityTable=donutQualityTable,
         )
+        self.log.debug("Empty outputs have %d NaN Zernike terms", len(self.nollIndices))
+        return struct
 
 
 
@@ -692,14 +741,23 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         calcZernikesFromExposure : Method that processes individual exposures
         """
         # Check if exposure is valid
+        self.log.info("Starting Zernike estimation for a single exposure")
         if exposure is None:
             # No exposure available - return empty results
+            self.log.warning("No exposure provided; returning empty results")
             return self.empty()
 
         # Process the single exposure - determine defocal type from metadata
         # For now, use "intra" as default, but could be determined from meta
         defocalType = "intra"  # Could be determined from exposure metadata if available
+        self.log.debug("Defocal type not in metadata; defaulting to '%s'", defocalType)
         pred, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
+        self.log.debug(
+            "Pred shape pre-squeeze: %s, donut stamps: %d, total zernikes shape: %s",
+            np.shape(pred),
+            len(donutStamps),
+            np.shape(zk),
+        )
         pred = pred[0,:]
         zernikesRaw = np.atleast_2d(pred)
         zernikesAvg = pred
@@ -712,6 +770,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         else:  # intra or unknown
             extraStamps = DonutStamps([])
             intraStamps = donutStamps
+        self.log.debug(
+            "Using defocalType='%s' -> intra stamps: %d, extra stamps: %d",
+            defocalType,
+            len(intraStamps),
+            len(extraStamps),
+        )
         zernikesTable = self.createZkTable(
             extraStamps=extraStamps,
             intraStamps=intraStamps,
@@ -719,6 +783,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             zkCoeffAvg=zernikesAvg,
         )
 
+        self.log.info("Estimated %d Zernike terms for exposure", len(zernikesAvg))
+        self.log.debug("ZernikesAvg (first 5): %s", np.array2string(zernikesAvg[:5], precision=3))
+        self.log.info("Finished Zernike estimation; table rows: %d", len(zernikesTable))
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw,
