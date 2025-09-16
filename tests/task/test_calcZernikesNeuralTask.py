@@ -82,9 +82,9 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
             instrument = "lsst.obs.lsst.LsstCam"
 
-            # Use the CWFS pipeline configuration to generate test data
+            # Use the neural pipeline configuration to generate test data
             pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
+                testPipelineConfigDir, "testCalcZernikesNeural.yaml"
             )
 
             pipeCmd = writePipetaskCmd(
