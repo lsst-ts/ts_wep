@@ -428,7 +428,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         table["extra_centroid_x"].unit = u.pixel
         table["extra_centroid_y"].unit = u.pixel
         for j in self.config.nollIndices:
-            table[f"Z{j}"].unit = u.nm
+            table[f"Z{j}"].unit = u.um
 
         self.log.debug("Initialized Zernike table with %d coefficient columns", len(self.config.nollIndices))
         return table
@@ -494,9 +494,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Add Zernike coefficients
         for i, j in enumerate(self.config.nollIndices):
             if i < len(zkCoeffAvg):
-                row_data[f"Z{j}"] = zkCoeffAvg[i] * u.nm
+                row_data[f"Z{j}"] = zkCoeffAvg[i] * u.um
             else:
-                row_data[f"Z{j}"] = 0.0 * u.nm
+                row_data[f"Z{j}"] = 0.0 * u.um
 
         zkTable.add_row(row_data)
         self.log.debug("Added average row with %d Zernike terms", len(self.config.nollIndices))
@@ -528,9 +528,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Add Zernike coefficients
             for idx, j in enumerate(self.config.nollIndices):
                 if idx < len(zk):
-                    row[f"Z{j}"] = zk[idx] * u.nm
+                    row[f"Z{j}"] = zk[idx] * u.um
                 else:
-                    row[f"Z{j}"] = 0.0 * u.nm
+                    row[f"Z{j}"] = 0.0 * u.um
 
             # Get field positions and centroids from stamps
             if i < len(intraStamps) and intraStamps[i] is not None:
