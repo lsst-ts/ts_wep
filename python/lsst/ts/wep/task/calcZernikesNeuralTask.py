@@ -542,23 +542,31 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.log.debug("Added average row with %d Zernike terms", len(self.config.nollIndices))
 
         # Add individual donut rows
-        # For TARTS, we typically have one prediction per focal position
+        # For TARTS, we have individual coefficients per donut in
+        # total_zernikes
         # We'll create rows for each donut stamp
         max_stamps = max(len(extraStamps), len(intraStamps))
+        self.log.debug(
+            "Creating Zernike table: %d extra stamps, %d intra stamps, "
+            "zkCoeffRaw shape: %s",
+            len(extraStamps), len(intraStamps), zkCoeffRaw.shape
+        )
 
         for i in range(max_stamps):
             # Get the zernike coefficients for this donut
-            # For TARTS, we typically have one set of coefficients per
-            # focal position
+            # For TARTS, we have individual coefficients per donut in
+            # total_zernikes
             if zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] > i:
                 zk = zkCoeffRaw[i]
+                self.log.debug("Using individual coefficients for donut %d", i+1)
             elif zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] == 1:
-                # Single set of coefficients for all donuts
+                # Single set of coefficients for all donuts (fallback)
                 zk = zkCoeffRaw[0]
-                self.log.debug(
-                    "Using single coefficient set for all %d donuts",
-                    max_stamps,
-                )
+                if i == 0:  # Only log once
+                    self.log.debug(
+                        "Using single coefficient set for all %d donuts (fallback)",
+                        max_stamps,
+                    )
             else:
                 # If we don't have individual coefficients, use the average
                 zk = zkCoeffAvg
@@ -902,8 +910,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             np.shape(zk),
         )
         pred = pred[0,:]
-        zernikesRaw = np.atleast_2d(pred)
-        zernikesAvg = pred
+        # For outputZernikesRaw, use the single prediction (per exposure)
+        zernikesRaw = np.atleast_2d(pred)  # Single prediction per exposure
+        zernikesAvg = pred  # Keep the single prediction as average
+        # Store individual donut coefficients separately for the table
+        individualZernikes = zk  # zk is self.tarts.total_zernikes
 
         # Create zernikes table
         # Since we only have one exposure, put stamps in the appropriate slot
@@ -922,7 +933,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         zernikesTable = self.createZkTable(
             extraStamps=extraStamps,
             intraStamps=intraStamps,
-            zkCoeffRaw=zernikesRaw,
+            zkCoeffRaw=individualZernikes,
             zkCoeffAvg=zernikesAvg,
         )
 
