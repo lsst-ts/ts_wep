@@ -320,6 +320,38 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         metadata["BLEND_CX"] = ["nan"] * num_stamps  # No blended sources
         metadata["BLEND_CY"] = ["nan"] * num_stamps  # No blended sources
 
+        # Add TARTS-specific metadata
+        if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+            # Convert PyTorch tensors to numpy arrays, then to Python lists
+            fx_list = (
+                self.tarts.fx.cpu().numpy().tolist()
+                if hasattr(self.tarts.fx, 'cpu')
+                else list(self.tarts.fx)
+            )
+            fy_list = (
+                self.tarts.fy.cpu().numpy().tolist()
+                if hasattr(self.tarts.fy, 'cpu')
+                else list(self.tarts.fy)
+            )
+
+            # Flatten nested lists if needed
+            if fx_list and isinstance(fx_list[0], list):
+                fx_list = [item for sublist in fx_list for item in sublist]
+            if fy_list and isinstance(fy_list[0], list):
+                fy_list = [item for sublist in fy_list for item in sublist]
+
+            # Use fx/fy lists directly if they match the number of stamps
+            if len(fx_list) == num_stamps and len(fy_list) == num_stamps:
+                metadata["FX"] = fx_list  # TARTS fx values (flat Python list)
+                metadata["FY"] = fy_list  # TARTS fy values (flat Python list)
+            else:
+                # If lengths don't match, pad with zeros or repeat last value
+                metadata["FX"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_stamps
+                metadata["FY"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_stamps
+        else:
+            metadata["FX"] = [0.0] * num_stamps  # Default fx values
+            metadata["FY"] = [0.0] * num_stamps  # Default fy values
+
         # Create list of DonutStamp objects
         donutStamps = []
 
@@ -410,6 +442,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             ("extra_frac_bad_pix", "<f4"),
             ("intra_max_power_grad", "<f4"),
             ("extra_max_power_grad", "<f4"),
+            ("intra_fx", "<f4"),
+            ("extra_fx", "<f4"),
+            ("intra_fy", "<f4"),
+            ("extra_fy", "<f4"),
         ]
 
         # Add Zernike coefficient columns
@@ -489,6 +525,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             "extra_frac_bad_pix": np.nan,
             "intra_max_power_grad": np.nan,
             "extra_max_power_grad": np.nan,
+            "intra_fx": np.nan,
+            "extra_fx": np.nan,
+            "intra_fy": np.nan,
+            "extra_fy": np.nan,
         }
 
         # Add Zernike coefficients
@@ -560,7 +600,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 row["extra_centroid_y"] = np.nan
 
             # Get quality metrics from metadata
-            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "FX", "FY"]:
                 for stamps, foc in [
                     (intraStamps, "intra"),
                     (extraStamps, "extra"),
