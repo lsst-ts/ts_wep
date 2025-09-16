@@ -78,8 +78,8 @@ class CalcZernikesNeuralTaskConnections(
     donutStampsNeural = connectionTypes.Output(
         doc="Neural network-generated donut stamps",
         dimensions=("visit", "detector", "instrument"),
-        storageClass="AstropyQTable",
-        name="donutStampsNeural",
+        storageClass="StampsBase",
+        name="donutStampsNeuralImages",
     )
     donutQualityTable = connectionTypes.Output(
         doc="Quality information for donuts",
@@ -633,7 +633,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
             outputZernikesAvg=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
-            donutStampsNeural=self.donutStampsToQTable(DonutStamps([])),
+            donutStampsNeural=DonutStamps([]),
             zernikes=self.initZkTable(),
             donutQualityTable=donutQualityTable,
         )
@@ -721,7 +721,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw,
-            donutStampsNeural=self.donutStampsToQTable(donutStamps),
+            donutStampsNeural=donutStamps,
             zernikes=zernikesTable,
             donutQualityTable=QTable([]),
         )
