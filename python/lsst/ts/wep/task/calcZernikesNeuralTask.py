@@ -329,12 +329,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
     def donutStampsToQTable(self, donutStamps: DonutStamps) -> QTable:
         """Convert DonutStamps to QTable for storage compatibility.
-        
+
         Parameters
         ----------
         donutStamps : DonutStamps
             The DonutStamps object to convert
-            
+
         Returns
         -------
         QTable
@@ -342,15 +342,15 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         """
         if len(donutStamps) == 0:
             return QTable()
-        
+
         # Refresh metadata to ensure it's up to date
         donutStamps._refresh_metadata()
-        
+
         # Convert PropertyList to regular dictionary
         metadata_dict = {}
         for key in donutStamps.metadata.names():
             metadata_dict[key] = donutStamps.metadata.getArray(key)
-        
+
         # Convert metadata dictionary to QTable
         return QTable(metadata_dict)
 
@@ -667,7 +667,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             - outputZernikesRaw : np.ndarray
                 Raw Zernike coefficients from the exposure (in microns)
             - donutStampsNeural : astropy.table.QTable
-                Neural network-generated donut stamps metadata from TARTS output
+                Neural network-generated donut stamps metadata from TARTS
+                output
             - zernikes : astropy.table.QTable
                 Zernike coefficients table with individual donut and
                 average values
