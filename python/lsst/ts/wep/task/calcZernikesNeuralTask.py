@@ -552,6 +552,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # focal position
             if zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] > i:
                 zk = zkCoeffRaw[i]
+            elif zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] == 1:
+                # Single set of coefficients for all donuts
+                zk = zkCoeffRaw[0]
+                self.log.debug(
+                    "Using single coefficient set for all %d donuts",
+                    max_stamps,
+                )
             else:
                 # If we don't have individual coefficients, use the average
                 zk = zkCoeffAvg
@@ -615,6 +622,102 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         self.log.info("Created Zernike QTable with %d rows", len(zkTable))
         return zkTable
+
+    def createDonutQualityTable(self, donutStamps: DonutStamps) -> QTable:
+        """Create a quality table from TARTS outputs.
+
+        Parameters
+        ----------
+        donutStamps : DonutStamps
+            The donut stamps (used to determine number of donuts)
+
+        Returns
+        -------
+        QTable
+            A table containing quality information for each donut
+        """
+        if len(donutStamps) == 0:
+            # Return empty table with expected columns
+            qualityTableCols = [
+                "SN",
+                "ENTROPY",
+                "ENTROPY_SELECT",
+                "SN_SELECT",
+                "FINAL_SELECT",
+                "DEFOCAL_TYPE",
+                "FX",
+                "FY",
+            ]
+            return QTable({name: [] for name in qualityTableCols})
+
+        num_donuts = len(donutStamps)
+
+        # Extract TARTS quality metrics
+        quality_data = {}
+
+        # Get FX and FY from TARTS
+        if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+            # Convert PyTorch tensors to numpy arrays, then to Python lists
+            fx_list = (
+                self.tarts.fx.cpu().numpy().tolist()
+                if hasattr(self.tarts.fx, 'cpu')
+                else list(self.tarts.fx)
+            )
+            fy_list = (
+                self.tarts.fy.cpu().numpy().tolist()
+                if hasattr(self.tarts.fy, 'cpu')
+                else list(self.tarts.fy)
+            )
+
+            # Flatten nested lists if needed
+            if fx_list and isinstance(fx_list[0], list):
+                fx_list = [item for sublist in fx_list for item in sublist]
+            if fy_list and isinstance(fy_list[0], list):
+                fy_list = [item for sublist in fy_list for item in sublist]
+
+            # Use fx/fy lists directly if they match the number of donuts
+            if len(fx_list) == num_donuts and len(fy_list) == num_donuts:
+                quality_data["FX"] = fx_list
+                quality_data["FY"] = fy_list
+            else:
+                # If lengths don't match, pad with zeros or repeat last value
+                quality_data["FX"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_donuts
+                quality_data["FY"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_donuts
+        else:
+            quality_data["FX"] = [0.0] * num_donuts
+            quality_data["FY"] = [0.0] * num_donuts
+
+        # Get SNR from TARTS
+        if hasattr(self.tarts, 'SNR'):
+            snr_list = (
+                self.tarts.SNR.cpu().numpy().tolist()
+                if hasattr(self.tarts.SNR, 'cpu')
+                else list(self.tarts.SNR)
+            )
+
+            # Flatten nested lists if needed
+            if snr_list and isinstance(snr_list[0], list):
+                snr_list = [item for sublist in snr_list for item in sublist]
+
+            if len(snr_list) == num_donuts:
+                quality_data["SN"] = snr_list
+            else:
+                quality_data["SN"] = [snr_list[0] if len(snr_list) > 0 else np.nan] * num_donuts
+        else:
+            quality_data["SN"] = [np.nan] * num_donuts
+
+        # Add NaN values for missing metrics
+        quality_data["ENTROPY"] = [np.nan] * num_donuts
+        quality_data["ENTROPY_SELECT"] = [np.nan] * num_donuts
+        quality_data["SN_SELECT"] = [np.nan] * num_donuts
+        quality_data["FINAL_SELECT"] = [np.nan] * num_donuts
+        quality_data["DEFOCAL_TYPE"] = [np.nan] * num_donuts
+
+        # Create the quality table
+        qualityTable = QTable(quality_data)
+
+        self.log.debug("Created donut quality table with %d rows using TARTS FX/FY/SNR", len(qualityTable))
+        return qualityTable
 
     def calcZernikesFromExposure(self, exposure: afwImage.Exposure, defocalType: str) -> np.ndarray:
         """Calculate Zernike coefficients from a single focal position
@@ -823,6 +926,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             zkCoeffAvg=zernikesAvg,
         )
 
+        # Create quality table from donut stamps
+        donutQualityTable = self.createDonutQualityTable(donutStamps)
+
         self.log.info("Estimated %d Zernike terms for exposure", len(zernikesAvg))
         self.log.debug("ZernikesAvg (first 5): %s", np.array2string(zernikesAvg[:5], precision=3))
         self.log.info("Finished Zernike estimation; table rows: %d", len(zernikesTable))
@@ -831,5 +937,5 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             outputZernikesRaw=zernikesRaw,
             donutStampsNeural=donutStamps,
             zernikes=zernikesTable,
-            donutQualityTable=QTable([]),
+            donutQualityTable=donutQualityTable,
         )
