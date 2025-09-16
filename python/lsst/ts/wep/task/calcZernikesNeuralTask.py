@@ -590,9 +590,17 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Get field positions and centroids from stamps
             if i < len(intraStamps) and intraStamps[i] is not None:
                 intra = intraStamps[i]
-                field_xy = intra.calcFieldXY()
-                row["intra_field_x"] = field_xy[0] * u.deg
-                row["intra_field_y"] = field_xy[1] * u.deg
+                # Use TARTS fx/fy values from metadata if available
+                if "FX" in intraStamps.metadata and i < len(intraStamps.metadata.getArray("FX")):
+                    fx_val = intraStamps.metadata.getArray("FX")[i]
+                    fy_val = intraStamps.metadata.getArray("FY")[i]
+                    row["intra_field_x"] = fx_val * u.deg
+                    row["intra_field_y"] = fy_val * u.deg
+                else:
+                    # Fallback to calcFieldXY if TARTS values not available
+                    field_xy = intra.calcFieldXY()
+                    row["intra_field_x"] = field_xy[0] * u.deg
+                    row["intra_field_y"] = field_xy[1] * u.deg
                 row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
                 row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
             else:
@@ -603,9 +611,17 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             if i < len(extraStamps) and extraStamps[i] is not None:
                 extra = extraStamps[i]
-                field_xy = extra.calcFieldXY()
-                row["extra_field_x"] = field_xy[0] * u.deg
-                row["extra_field_y"] = field_xy[1] * u.deg
+                # Use TARTS fx/fy values from metadata if available
+                if "FX" in extraStamps.metadata and i < len(extraStamps.metadata.getArray("FX")):
+                    fx_val = extraStamps.metadata.getArray("FX")[i]
+                    fy_val = extraStamps.metadata.getArray("FY")[i]
+                    row["extra_field_x"] = fx_val * u.deg
+                    row["extra_field_y"] = fy_val * u.deg
+                else:
+                    # Fallback to calcFieldXY if TARTS values not available
+                    field_xy = extra.calcFieldXY()
+                    row["extra_field_x"] = field_xy[0] * u.deg
+                    row["extra_field_y"] = field_xy[1] * u.deg
                 row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
                 row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
             else:
