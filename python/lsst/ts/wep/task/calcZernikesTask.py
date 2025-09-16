@@ -418,6 +418,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "RADIUS",
             "RADIUS_FAIL_FLAG",
             "DEFOCAL_TYPE",
+            "DONUT_ID"
         ]
         if qualityTable is None:
             donutQualityTable = QTable({name: [] for name in qualityTableCols})
