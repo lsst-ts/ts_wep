@@ -39,7 +39,7 @@ import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
 from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
-from TARTS import NeuralActiveOpticsSys
+from tarts import NeuralActiveOpticsSys
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.daf.base import PropertyList
