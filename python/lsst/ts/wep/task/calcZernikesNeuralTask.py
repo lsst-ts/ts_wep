@@ -591,12 +591,30 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Get field positions and centroids from stamps
             if i < len(intraStamps) and intraStamps[i] is not None:
                 intra = intraStamps[i]
-                # Use TARTS fx/fy values from metadata if available
-                if "FX" in intraStamps.metadata and i < len(intraStamps.metadata.getArray("FX")):
-                    fx_val = intraStamps.metadata.getArray("FX")[i]
-                    fy_val = intraStamps.metadata.getArray("FY")[i]
-                    row["intra_field_x"] = fx_val * u.deg
-                    row["intra_field_y"] = fy_val * u.deg
+                # Use TARTS fx/fy values directly (same as DonutQualityTable)
+                if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+                    fx_list = (
+                        self.tarts.fx.cpu().numpy().tolist()
+                        if hasattr(self.tarts.fx, 'cpu')
+                        else list(self.tarts.fx)
+                    )
+                    fy_list = (
+                        self.tarts.fy.cpu().numpy().tolist()
+                        if hasattr(self.tarts.fy, 'cpu')
+                        else list(self.tarts.fy)
+                    )
+                    # Flatten nested lists if needed
+                    if fx_list and isinstance(fx_list[0], list):
+                        fx_list = [item for sublist in fx_list for item in sublist]
+                    if fy_list and isinstance(fy_list[0], list):
+                        fy_list = [item for sublist in fy_list for item in sublist]
+
+                    if i < len(fx_list) and i < len(fy_list):
+                        row["intra_field_x"] = fx_list[i] * u.deg
+                        row["intra_field_y"] = fy_list[i] * u.deg
+                    else:
+                        row["intra_field_x"] = np.nan
+                        row["intra_field_y"] = np.nan
                 else:
                     # Fallback to calcFieldXY if TARTS values not available
                     field_xy = intra.calcFieldXY()
@@ -612,12 +630,30 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             if i < len(extraStamps) and extraStamps[i] is not None:
                 extra = extraStamps[i]
-                # Use TARTS fx/fy values from metadata if available
-                if "FX" in extraStamps.metadata and i < len(extraStamps.metadata.getArray("FX")):
-                    fx_val = extraStamps.metadata.getArray("FX")[i]
-                    fy_val = extraStamps.metadata.getArray("FY")[i]
-                    row["extra_field_x"] = fx_val * u.deg
-                    row["extra_field_y"] = fy_val * u.deg
+                # Use TARTS fx/fy values directly (same as DonutQualityTable)
+                if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+                    fx_list = (
+                        self.tarts.fx.cpu().numpy().tolist()
+                        if hasattr(self.tarts.fx, 'cpu')
+                        else list(self.tarts.fx)
+                    )
+                    fy_list = (
+                        self.tarts.fy.cpu().numpy().tolist()
+                        if hasattr(self.tarts.fy, 'cpu')
+                        else list(self.tarts.fy)
+                    )
+                    # Flatten nested lists if needed
+                    if fx_list and isinstance(fx_list[0], list):
+                        fx_list = [item for sublist in fx_list for item in sublist]
+                    if fy_list and isinstance(fy_list[0], list):
+                        fy_list = [item for sublist in fy_list for item in sublist]
+
+                    if i < len(fx_list) and i < len(fy_list):
+                        row["extra_field_x"] = fx_list[i] * u.deg
+                        row["extra_field_y"] = fy_list[i] * u.deg
+                    else:
+                        row["extra_field_x"] = np.nan
+                        row["extra_field_y"] = np.nan
                 else:
                     # Fallback to calcFieldXY if TARTS values not available
                     field_xy = extra.calcFieldXY()
