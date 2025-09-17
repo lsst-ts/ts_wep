@@ -215,7 +215,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.nollIndices = self.config.nollIndices
         self.log.debug("Configured Noll indices: %s", self.nollIndices)
 
-        # TARTS system handles None paths by creating new models with random weights
+        # TARTS system handles None paths by creating new models with random
+        # weights
         self.tarts = NeuralActiveOpticsSys(
             self.config.datasetParamPath,
             self.config.wavenetPath,
