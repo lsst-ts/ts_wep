@@ -30,6 +30,7 @@ from typing import Any, Optional
 import logging
 
 import numpy as np
+import os
 import torch
 from astropy.table import QTable
 
@@ -218,10 +219,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # TARTS system handles None paths by creating new models with random
         # weights
         self.tarts = NeuralActiveOpticsSys(
-            self.config.datasetParamPath,
-            self.config.wavenetPath,
-            self.config.alignetPath,
-            self.config.aggregatornetPath
+            os.path.expandvars(self.config.datasetParamPath),
+            os.path.expandvars(self.config.wavenetPath),
+            os.path.expandvars(self.config.alignetPath),
+            os.path.expandvars(self.config.aggregatornetPath),
         )
         self.tarts = self.tarts.eval()
         self.cropSize = self.tarts.CROP_SIZE
