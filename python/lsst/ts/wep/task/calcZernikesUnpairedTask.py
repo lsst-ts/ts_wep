@@ -84,26 +84,49 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
     ConfigClass = CalcZernikesUnpairedTaskConfig
     _DefaultName = "calcZernikesUnpairedTask"
 
+    def createUnpairedZkTable(
+        self,
+        zkCoeffRaw: pipeBase.Struct,
+        zkCoeffCombined: pipeBase.Struct,
+    ) -> QTable:
+        """Create the Zernike table to store Zernike Coefficients.
+
+        Parameters
+        ----------
+        zkCoeffRaw: pipeBase.Struct
+            All zernikes returned by self.estimateZernikes.run(...)
+        zkCoeffCombined
+            Combined zernikes returned by self.combineZernikes.run(...)
+
+        Returns
+        -------
+        table : `astropy.table.QTable`
+            Table with the Zernike coefficients
+        """
+
+        if self.stampsExtra is None:
+            extraStamps = DonutStamps([])
+            intraStamps = self.stampsIntra
+        elif self.stampsIntra is None:
+            extraStamps = self.stampsExtra
+            intraStamps = DonutStamps([])
+
+        return self.createZkTable(
+            extraStamps,
+            intraStamps,
+            zkCoeffRaw,
+            zkCoeffCombined
+        )
+
+
     @timeMethod
     def run(
         self,
         donutStamps: DonutStamps,
         numCores: int = 1,
     ) -> pipeBase.Struct:
-        extraDetectorNames = ["R00_SW0", "R04_SW0", "R40_SW0", "R44_SW0"]
-        if donutStamps.metadata["DET_NAME"] in extraDetectorNames:
-            self.stampsExtra = donutStamps
-            self.stampsIntra = None
-        else:
-            self.stampsExtra = None
-            self.stampsIntra = donutStamps
-        # If no donuts are in the donutCatalog for a set of exposures
-        # then return the Zernike coefficients as nan.
-        if len(donutStamps) == 0:
-            return self.empty()
-
         # Run donut selection
-        if self.doDonutStampSelector:
+        if self.doDonutStampSelector and len(donutStamps) > 0:
             self.log.info("Running Donut Stamp Selector")
             selection = self.donutStampSelector.run(donutStamps)
 
@@ -120,29 +143,33 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             donutQualityTable = QTable([])
 
         # Assign stamps to either intra or extra
-        if selectedDonuts[0].wep_im.defocalType == DefocalType.Extra:
+        if len(donutStamps) == 0:
+            self.stampsIntra = None
+            self.stampsExtra = None
+            return self.empty()
+
+        defocalType = donutStamps.metadata["DFC_TYPE"]
+        if defocalType == "extra":
             self.stampsExtra = selectedDonuts
-            extraStamps = selectedDonuts
-            intraStamps = DonutStamps([])
+            self.stampsIntra = None
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
         else:
             self.stampsIntra = selectedDonuts
-            extraStamps = DonutStamps([])
-            intraStamps = selectedDonuts
+            self.stampsExtra = None
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
 
         # Estimate Zernikes
         zkCoeffRaw = self.estimateZernikes.run(
-            extraStamps,
-            intraStamps,
+            self.stampsExtra,
+            self.stampsIntra,
             numCores=numCores
         )
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
-        zkTable = self.createZkTable(
-            extraStamps, intraStamps, zkCoeffRaw, zkCoeffCombined
+        zkTable = self.createUnpairedZkTable(
+            zkCoeffRaw, zkCoeffCombined
         )
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
