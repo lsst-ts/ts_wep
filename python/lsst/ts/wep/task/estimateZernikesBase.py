@@ -265,12 +265,6 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             containing metadata with extra output from the wavefront
             estimation algorithm.
         """
-        if donutStampsExtra is None:
-            donutStampsExtra = DonutStamps([])
-        elif donutStampsIntra is None:
-            donutStampsIntra = DonutStamps([])
-        elif donutStampsExtra is None and donutStampsIntra is None:
-            raise ValueError("At least one of donutStampsExtra or donutStampsIntra must be provided.")
         # Get the instrument
         if len(donutStampsExtra) > 0:
             refStamp = donutStampsExtra[0]

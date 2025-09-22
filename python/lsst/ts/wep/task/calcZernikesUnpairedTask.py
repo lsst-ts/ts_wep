@@ -31,7 +31,6 @@ from astropy.table import QTable
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
 
 
@@ -154,18 +153,22 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             self.stampsIntra = None
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
+            zkCoeffRaw = self.estimateZernikes.run(
+                self.stampsExtra,
+                DonutStamps([]),
+                numCores=numCores
+            )
         else:
             self.stampsIntra = selectedDonuts
             self.stampsExtra = None
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
-
-        # Estimate Zernikes
-        zkCoeffRaw = self.estimateZernikes.run(
-            self.stampsExtra,
-            self.stampsIntra,
-            numCores=numCores
-        )
+            zkCoeffRaw = self.estimateZernikes.run(
+                DonutStamps([]),
+                self.stampsIntra,
+                numCores=numCores
+            )
+        # Combine Zernikes
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
         zkTable = self.createUnpairedZkTable(
