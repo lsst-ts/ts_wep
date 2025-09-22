@@ -240,8 +240,8 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
     def run(
         self,
-        donutStampsExtra: DonutStamps | None,
-        donutStampsIntra: DonutStamps | None,
+        donutStampsExtra: DonutStamps,
+        donutStampsIntra: DonutStamps,
         numCores: int = 1,
     ) -> pipeBase.Struct:
         """Estimate Zernike coefficients (in microns) from the donut stamps.
