@@ -347,9 +347,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         meta["extra"] = {}
         cam_name = None
 
-        if self.stampsIntra is None and self.stampsExtra is None:
-            raise ValueError("No stamps available. Cannot create metadata.")
-
         for dict_, stamps in [
             (meta["intra"], self.stampsIntra),
             (meta["extra"], self.stampsExtra),
