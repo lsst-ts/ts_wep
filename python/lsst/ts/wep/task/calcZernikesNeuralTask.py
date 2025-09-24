@@ -1223,20 +1223,26 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 if len(centers_array) == num_donuts:
                     donut_data["centroid_x"] = centers_array[:, 0].tolist()
                     donut_data["centroid_y"] = centers_array[:, 1].tolist()
-                    self.log.debug("Using TARTS centers for %d donuts: first few = %s",
-                                 num_donuts, centers_array[:3].tolist())
+                    self.log.debug(
+                        "Using TARTS centers for %d donuts: first few = %s",
+                        num_donuts, centers_array[:3].tolist()
+                    )
                 elif len(centers_array) > num_donuts:
                     # Take first num_donuts centers
                     donut_data["centroid_x"] = centers_array[:num_donuts, 0].tolist()
                     donut_data["centroid_y"] = centers_array[:num_donuts, 1].tolist()
-                    self.log.debug("Using first %d TARTS centers out of %d available",
-                                 num_donuts, len(centers_array))
+                    self.log.debug(
+                        "Using first %d TARTS centers out of %d available",
+                        num_donuts, len(centers_array)
+                    )
                 else:
                     # Not enough centers, repeat the last one
                     donut_data["centroid_x"] = [centers_array[-1, 0]] * num_donuts
                     donut_data["centroid_y"] = [centers_array[-1, 1]] * num_donuts
-                    self.log.debug("Only %d TARTS centers available for %d donuts, repeating last center",
-                                 len(centers_array), num_donuts)
+                    self.log.debug(
+                        "Only %d TARTS centers available for %d donuts, repeating last center",
+                        len(centers_array), num_donuts
+                    )
             else:
                 # Fallback: use exposure center
                 bbox = exposure.getBBox()
@@ -1244,8 +1250,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 center_y = bbox.getCenterY()
                 donut_data["centroid_x"] = [center_x] * num_donuts
                 donut_data["centroid_y"] = [center_y] * num_donuts
-                self.log.debug("TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donuts",
-                             center_x, center_y, num_donuts)
+                self.log.debug(
+                    "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donuts",
+                    center_x, center_y, num_donuts
+                )
         elif hasattr(donutStamps, 'getCentroidPositions'):
             # Fallback to donut stamps method
             centroid_positions = donutStamps.getCentroidPositions()
