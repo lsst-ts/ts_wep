@@ -316,23 +316,23 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.log.debug("Normalized to %d stamp(s) of size 160x160", num_stamps)
         # Get TARTS centers for accurate centroid positions
         if hasattr(self.tarts, 'centers') and self.tarts.centers is not None:
-            self.log.debug("TARTS centers type: %s, shape: %s",
-                           type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape'))
+            self.log.info("TARTS centers type: %s, shape: %s",
+                          type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape'))
 
             # Handle different data types for TARTS centers
             if hasattr(self.tarts.centers, 'cpu'):
                 centers_array = self.tarts.centers.cpu().numpy()
-                self.log.debug("TARTS centers numpy array shape: %s", centers_array.shape)
+                self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
             else:
                 centers_array = np.array(self.tarts.centers)
-                self.log.debug("TARTS centers converted to numpy, shape: %s", centers_array.shape)
+                self.log.info("TARTS centers converted to numpy, shape: %s", centers_array.shape)
 
             # Handle different array shapes
             if centers_array.ndim == 1:
                 # Flattened array: [x1, y1, x2, y2, ...] -> reshape to [n, 2]
                 if len(centers_array) % 2 == 0:
                     centers_array = centers_array.reshape(-1, 2)
-                    self.log.debug("Reshaped flattened centers to shape: %s", centers_array.shape)
+                    self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
                 else:
                     self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
                     centers_array = None
@@ -350,7 +350,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 if len(centers_array) == num_stamps:
                     cent_x_list = centers_array[:, 0].tolist()
                     cent_y_list = centers_array[:, 1].tolist()
-                    self.log.debug(
+                    self.log.info(
                         "Using TARTS centers for %d donut stamps: first few = %s",
                         num_stamps, centers_array[:3].tolist()
                     )
@@ -358,7 +358,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     # Take first num_stamps centers
                     cent_x_list = centers_array[:num_stamps, 0].tolist()
                     cent_y_list = centers_array[:num_stamps, 1].tolist()
-                    self.log.debug(
+                    self.log.info(
                         "Using first %d TARTS centers out of %d available for stamps",
                         num_stamps, len(centers_array)
                     )
@@ -366,7 +366,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     # Not enough centers, repeat the last one
                     cent_x_list = [centers_array[-1, 0]] * num_stamps
                     cent_y_list = [centers_array[-1, 1]] * num_stamps
-                    self.log.debug(
+                    self.log.info(
                         "Only %d TARTS centers available for %d stamps, repeating last center",
                         len(centers_array), num_stamps
                     )
@@ -374,7 +374,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 # Fallback to exposure center
                 cent_x_list = [center_x] * num_stamps
                 cent_y_list = [center_y] * num_stamps
-                self.log.debug(
+                self.log.info(
                     "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donut stamps",
                     center_x, center_y, num_stamps
                 )
@@ -382,7 +382,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Fallback to exposure center
             cent_x_list = [center_x] * num_stamps
             cent_y_list = [center_y] * num_stamps
-            self.log.debug(
+            self.log.info(
                 "No TARTS centers available, using exposure center [%.1f, %.1f] for %d donut stamps",
                 center_x, center_y, num_stamps
             )
@@ -500,6 +500,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         donutStampsObj.metadata["BANDPASS"] = bandLabel
         donutStampsObj.metadata["DFC_TYPE"] = defocalType
         donutStampsObj.metadata["DFC_DIST"] = 1.5
+
+        self.log.info("Set DonutStamps metadata: DET_NAME='%s', CAM_NAME='%s', DFC_TYPE='%s'",
+                     detectorName, cameraName, defocalType)
 
         # Debug: Check what metadata keys are available after setting
         self.log.debug("Metadata keys after setting: %s", list(donutStampsObj.metadata.names()))
@@ -907,6 +910,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Set metadata on the Zernike table
         zkTable.meta = self.createZkTableMetadata()
 
+        # Debug: Log detector names in metadata
+        if "intra" in zkTable.meta and "det_name" in zkTable.meta["intra"]:
+            self.log.info("Zernike table intra det_name: '%s'", zkTable.meta["intra"]["det_name"])
+        if "extra" in zkTable.meta and "det_name" in zkTable.meta["extra"]:
+            self.log.info("Zernike table extra det_name: '%s'", zkTable.meta["extra"]["det_name"])
+
         self.log.info("Created Zernike QTable with %d rows", len(zkTable))
         return zkTable
 
@@ -964,9 +973,20 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 # Try to get DET_NAME first
                 if "DET_NAME" in stamps.metadata.names():
                     dict_["det_name"] = stamps.metadata["DET_NAME"]
+                    self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_["det_name"])
                 else:
-                    self.log.warning("DET_NAME not found in metadata, using 'Unknown'")
-                    dict_["det_name"] = "Unknown"
+                    # Fallback: use stored detector name
+                    if hasattr(self, '_detector_name') and self._detector_name is not None:
+                        dict_["det_name"] = self._detector_name
+                        self.log.info(
+                            "DET_NAME not found in metadata, using stored detector name: '%s'",
+                            dict_["det_name"]
+                        )
+                    else:
+                        self.log.warning(
+                            "DET_NAME not found in metadata and no stored detector name, using 'Unknown'"
+                        )
+                        dict_["det_name"] = "Unknown"
 
                 # Get other metadata with fallbacks
                 dict_["visit"] = stamps.metadata.get("VISIT", 0)
@@ -1127,7 +1147,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.log.debug("Created donut quality table with %d rows using TARTS FX/FY/SNR", len(qualityTable))
         return qualityTable
 
-    def createDonutTable(self, donutStamps: DonutStamps, exposure: afwImage.Exposure) -> QTable:
+    def createDonutTable(
+        self, donutStamps: DonutStamps, exposure: afwImage.Exposure, defocalType: str = "intra"
+    ) -> QTable:
         """Create a donut source catalog table matching
         GenerateDonutCatalogWcsTask structure.
 
@@ -1164,6 +1186,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         camera_name = "LSSTCam"
         band_label = exposure.filter.bandLabel
 
+        self.log.info("Extracted detector info: name='%s', camera='%s', band='%s'",
+                     detector_name, camera_name, band_label)
+
         # Initialize data arrays
         donut_data = {}
 
@@ -1194,18 +1219,18 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             if hasattr(self.tarts.centers, 'cpu'):
                 # PyTorch tensor
                 centers_array = self.tarts.centers.cpu().numpy()
-                self.log.debug("TARTS centers numpy array shape: %s", centers_array.shape)
+                self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
             else:
                 # Already numpy array or list
                 centers_array = np.array(self.tarts.centers)
-                self.log.debug("TARTS centers converted to numpy, shape: %s", centers_array.shape)
+                self.log.info("TARTS centers converted to numpy, shape: %s", centers_array.shape)
 
             # Handle different array shapes
             if centers_array.ndim == 1:
                 # Flattened array: [x1, y1, x2, y2, ...] -> reshape to [n, 2]
                 if len(centers_array) % 2 == 0:
                     centers_array = centers_array.reshape(-1, 2)
-                    self.log.debug("Reshaped flattened centers to shape: %s", centers_array.shape)
+                    self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
                 else:
                     self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
                     centers_array = None
@@ -1223,7 +1248,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 if len(centers_array) == num_donuts:
                     donut_data["centroid_x"] = centers_array[:, 0].tolist()
                     donut_data["centroid_y"] = centers_array[:, 1].tolist()
-                    self.log.debug(
+                    self.log.info(
                         "Using TARTS centers for %d donuts: first few = %s",
                         num_donuts, centers_array[:3].tolist()
                     )
@@ -1231,7 +1256,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     # Take first num_donuts centers
                     donut_data["centroid_x"] = centers_array[:num_donuts, 0].tolist()
                     donut_data["centroid_y"] = centers_array[:num_donuts, 1].tolist()
-                    self.log.debug(
+                    self.log.info(
                         "Using first %d TARTS centers out of %d available",
                         num_donuts, len(centers_array)
                     )
@@ -1239,7 +1264,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     # Not enough centers, repeat the last one
                     donut_data["centroid_x"] = [centers_array[-1, 0]] * num_donuts
                     donut_data["centroid_y"] = [centers_array[-1, 1]] * num_donuts
-                    self.log.debug(
+                    self.log.info(
                         "Only %d TARTS centers available for %d donuts, repeating last center",
                         len(centers_array), num_donuts
                     )
@@ -1250,7 +1275,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 center_y = bbox.getCenterY()
                 donut_data["centroid_x"] = [center_x] * num_donuts
                 donut_data["centroid_y"] = [center_y] * num_donuts
-                self.log.debug(
+                self.log.info(
                     "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donuts",
                     center_x, center_y, num_donuts
                 )
@@ -1259,7 +1284,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             centroid_positions = donutStamps.getCentroidPositions()
             donut_data["centroid_x"] = [pos.getX() for pos in centroid_positions]
             donut_data["centroid_y"] = [pos.getY() for pos in centroid_positions]
-            self.log.debug("Using donut stamps centroids for %d donuts", num_donuts)
+            self.log.info("Using donut stamps centroids for %d donuts", num_donuts)
         else:
             # Final fallback: use exposure center
             bbox = exposure.getBBox()
@@ -1267,7 +1292,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             center_y = bbox.getCenterY()
             donut_data["centroid_x"] = [center_x] * num_donuts
             donut_data["centroid_y"] = [center_y] * num_donuts
-            self.log.debug("Using exposure center final fallback for %d donuts", num_donuts)
+            self.log.info("Using exposure center final fallback for %d donuts", num_donuts)
 
         # Get TARTS-specific data for additional columns if available
         if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
@@ -1322,7 +1347,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Add detector information as a column (required by downstream
         # aggregation)
+        # Ensure detector name is consistent with expected format
         donut_data["detector"] = [detector_name] * num_donuts
+        self.log.info("Using detector name: '%s' for %d donuts (defocal type: '%s')",
+                     detector_name, num_donuts, defocalType)
 
         # Add missing telescope coordinate columns required by downstream
         # aggregation
@@ -1642,10 +1670,37 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             self.log.warning("No exposure provided; returning empty results")
             return self.empty()
 
-        # Process the single exposure - determine defocal type from metadata
-        # For now, use "intra" as default, but could be determined from meta
-        defocalType = "intra"  # Could be determined from exposure metadata if available
-        self.log.debug("Defocal type not in metadata; defaulting to '%s'", defocalType)
+        # Store exposure for metadata creation
+        self._current_exposure = exposure
+
+        # Determine defocal type from exposure metadata
+        # Try to get defocal type from exposure metadata first
+        try:
+            # Check if exposure has defocal type in metadata
+            if hasattr(exposure, 'getMetadata') and exposure.getMetadata() is not None:
+                defocalType = exposure.getMetadata().get("DFC_TYPE", "intra")
+                self.log.info("Found DFC_TYPE in exposure metadata: '%s'", defocalType)
+            else:
+                # Fallback: try to determine from focus Z value if available
+                try:
+                    focusZ = exposure.visitInfo.focusZ
+                    # For LSSTCam, positive focusZ is typically extra-focal
+                    # This is a heuristic - may need adjustment based on actual
+                    # data
+                    if focusZ > 0:
+                        defocalType = "extra"
+                    else:
+                        defocalType = "intra"
+                    self.log.info("Determined defocal type from focusZ=%.3f: '%s'", focusZ, defocalType)
+                except (AttributeError, NameError):
+                    defocalType = "intra"
+                    self.log.info(
+                        "Could not determine defocal type from metadata or focusZ; defaulting to '%s'",
+                        defocalType
+                    )
+        except Exception as e:
+            defocalType = "intra"
+            self.log.info("Error determining defocal type: %s; defaulting to '%s'", e, defocalType)
         pred, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
         self.log.debug(
             "Pred shape pre-squeeze: %s, donut stamps: %d, total zernikes shape: %s",
@@ -1684,6 +1739,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.stampsIntra = intraStamps
         self.stampsExtra = extraStamps
 
+        # Store detector name for metadata creation
+        detector = exposure.getDetector()
+        self._detector_name = detector.getName()
+
         self.log.debug(
             "Using defocalType='%s' -> intra stamps: %d, extra stamps: %d",
             defocalType,
@@ -1701,7 +1760,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         donutQualityTable = self.createDonutQualityTable(donutStamps)
 
         # Create donut table from donut stamps
-        donutTable = self.createDonutTable(donutStamps, exposure)
+        donutTable = self.createDonutTable(donutStamps, exposure, defocalType)
 
         self.log.info("Estimated %d Zernike terms for exposure", zernikesAvg.shape[1])
         self.log.debug("ZernikesAvg (first 5): %s", np.array2string(zernikesAvg[0, :5], precision=3))
