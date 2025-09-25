@@ -44,14 +44,21 @@ from lsst.utils.timer import timeMethod
 
 class CutOutDonutsUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
+<<<<<<< HEAD
     dimensions=("exposure", "instrument"),  # type: ignore
+=======
+    dimensions=("exposure", "instrument", "detector"),  # type: ignore
+>>>>>>> 6962d285 (All Peter's work)
 ):
-    exposures = connectionTypes.Input(
+    exposure = connectionTypes.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
         name="post_isr_image",
+<<<<<<< HEAD
         multiple=True,
+=======
+>>>>>>> 6962d285 (All Peter's work)
     )
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
@@ -62,7 +69,6 @@ class CutOutDonutsUnpairedTaskConnections(
         ),
         storageClass="AstropyQTable",
         name="donutTable",
-        multiple=True,
     )
     camera = connectionTypes.PrerequisiteInput(
         name="camera",
@@ -77,7 +83,6 @@ class CutOutDonutsUnpairedTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStamps",
-        multiple=True,
     )
 
 
@@ -101,27 +106,27 @@ class CutOutDonutsUnpairedTask(CutOutDonutsBaseTask):
     @timeMethod
     def run(
         self,
+<<<<<<< HEAD
         exposures: list[afwImage.Exposure],
         donutCatalog: list[QTable],
+=======
+        exposure: afwImage.Exposure,
+        donutCatalog: QTable,
+>>>>>>> 6962d285 (All Peter's work)
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
-        # Loop over exposures (and corresponding catalogs)
-        stampList = []
-        for exposure, catalog in zip(exposures, donutCatalog):
-            # Determine which side of focus
-            if exposure.visitInfo.focusZ > 0:
-                defocalType = DefocalType.Extra
-            else:
-                defocalType = DefocalType.Intra
 
-            # Cutout the stamps
-            stampList.append(
-                self.cutOutStamps(
-                    exposure,
-                    catalog,
-                    defocalType,
-                    camera.getName(),
-                )
-            )
+        if exposure.visitInfo.focusZ > 0:
+            defocalType = DefocalType.Extra
+        else:
+            defocalType = DefocalType.Intra
 
-        return pipeBase.Struct(donutStamps=stampList)
+        # Cutout the stamps
+        stampsOut = self.cutOutStamps(
+            exposure,
+            donutCatalog,
+            defocalType,
+            camera.getName(),
+        )
+
+        return pipeBase.Struct(donutStamps=stampsOut)

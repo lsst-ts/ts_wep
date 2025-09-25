@@ -6,6 +6,7 @@
 Version History
 ##################
 
+<<<<<<< HEAD
 .. _lsst.ts.wep-14.17.0:
 
 -------------
@@ -14,6 +15,15 @@ Version History
 
 * Add AiDonutAlgorithm for wavefront estimation using a PyTorch model.
 * Add EstimateZernikesAiDonutTask to use AiDonutAlgorithm.
+=======
+.. _lsst.ts.wep-14.16.2:
+
+-------------
+ 14.16.2
+-------------
+
+* Fix CalcZernikesUnpairedTask to handle new `numCores` parameter in estimateZernikes.
+>>>>>>> 6962d285 (All Peter's work)
 
 .. _lsst.ts.wep-14.16.1:
 
@@ -33,6 +43,19 @@ Version History
 * Add DonutSizeCorrelator to measure donut diameters at the exposure level.
 * Updated handling of radius information to donut stamps metadata, and donut quality table.
 
+<<<<<<< HEAD
+=======
+.. _lsst.ts.wep-15.0.0:
+
+-------------
+ 15.0.0
+-------------
+
+* Add neural network-based Zernike estimation task (CalcZernikesNeuralTask).
+* Integrate TARTS system for wavefront estimation.
+* Add support for WaveNet, AlignNet, and AggregatorNet models.
+
+>>>>>>> 6962d285 (All Peter's work)
 .. _lsst.ts.wep-14.15.0:
 
 -------------

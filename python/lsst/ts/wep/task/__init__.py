@@ -24,3 +24,4 @@ from .generateDonutFromRefitWcsTask import *
 from .pairTask import *
 from .reassignCwfsCutoutsTask import *
 from .refCatalogInterface import *
+from .calcZernikesNeuralTask import *

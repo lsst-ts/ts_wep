@@ -31,7 +31,6 @@ from astropy.table import QTable
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import DefocalType
 from lsst.utils.timer import timeMethod
 
 
@@ -84,15 +83,49 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
     ConfigClass = CalcZernikesUnpairedTaskConfig
     _DefaultName = "calcZernikesUnpairedTask"
 
-    @timeMethod
-    def run(self, donutStamps: DonutStamps) -> pipeBase.Struct:
-        # If no donuts are in the donutCatalog for a set of exposures
-        # then return the Zernike coefficients as nan.
-        if len(donutStamps) == 0:
-            return self.empty()
+    def createUnpairedZkTable(
+        self,
+        zkCoeffRaw: pipeBase.Struct,
+        zkCoeffCombined: pipeBase.Struct,
+    ) -> QTable:
+        """Create the Zernike table to store Zernike Coefficients.
 
+        Parameters
+        ----------
+        zkCoeffRaw: pipeBase.Struct
+            All zernikes returned by self.estimateZernikes.run(...)
+        zkCoeffCombined
+            Combined zernikes returned by self.combineZernikes.run(...)
+
+        Returns
+        -------
+        table : `astropy.table.QTable`
+            Table with the Zernike coefficients
+        """
+
+        if self.stampsExtra is None:
+            extraStamps = DonutStamps([])
+            intraStamps = self.stampsIntra
+        elif self.stampsIntra is None:
+            extraStamps = self.stampsExtra
+            intraStamps = DonutStamps([])
+
+        return self.createZkTable(
+            extraStamps,
+            intraStamps,
+            zkCoeffRaw,
+            zkCoeffCombined
+        )
+
+
+    @timeMethod
+    def run(
+        self,
+        donutStamps: DonutStamps,
+        numCores: int = 1,
+    ) -> pipeBase.Struct:
         # Run donut selection
-        if self.doDonutStampSelector:
+        if self.doDonutStampSelector and len(donutStamps) > 0:
             self.log.info("Running Donut Stamp Selector")
             selection = self.donutStampSelector.run(donutStamps)
 
@@ -109,26 +142,39 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             donutQualityTable = QTable([])
 
         # Assign stamps to either intra or extra
-        if selectedDonuts[0].wep_im.defocalType == DefocalType.Extra:
+        if len(donutStamps) == 0:
+            self.stampsIntra = None
+            self.stampsExtra = None
+            return self.empty()
+
+        defocalType = donutStamps.metadata["DFC_TYPE"]
+        if defocalType == "extra":
             self.stampsExtra = selectedDonuts
-            extraStamps = selectedDonuts
-            intraStamps = DonutStamps([])
+            self.stampsIntra = None
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
+            zkCoeffRaw = self.estimateZernikes.run(
+                self.stampsExtra,
+                DonutStamps([]),
+                numCores=numCores
+            )
         else:
             self.stampsIntra = selectedDonuts
-            extraStamps = DonutStamps([])
-            intraStamps = selectedDonuts
+            self.stampsExtra = None
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
-
-        # Estimate Zernikes
-        zkCoeffRaw = self.estimateZernikes.run(extraStamps, intraStamps)
+            zkCoeffRaw = self.estimateZernikes.run(
+                DonutStamps([]),
+                self.stampsIntra,
+                numCores=numCores
+            )
+        # Combine Zernikes
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
-        zkTable = self.createZkTable(
-            extraStamps, intraStamps, zkCoeffRaw, zkCoeffCombined
+        zkTable = self.createUnpairedZkTable(
+            zkCoeffRaw, zkCoeffCombined
         )
+        zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
         return pipeBase.Struct(
             outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),
