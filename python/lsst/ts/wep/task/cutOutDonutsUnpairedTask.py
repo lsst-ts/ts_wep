@@ -44,21 +44,14 @@ from lsst.utils.timer import timeMethod
 
 class CutOutDonutsUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
-<<<<<<< HEAD
     dimensions=("exposure", "instrument"),  # type: ignore
-=======
-    dimensions=("exposure", "instrument", "detector"),  # type: ignore
->>>>>>> 6962d285 (All Peter's work)
 ):
     exposure = connectionTypes.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
         name="post_isr_image",
-<<<<<<< HEAD
         multiple=True,
-=======
->>>>>>> 6962d285 (All Peter's work)
     )
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
@@ -106,27 +99,26 @@ class CutOutDonutsUnpairedTask(CutOutDonutsBaseTask):
     @timeMethod
     def run(
         self,
-<<<<<<< HEAD
         exposures: list[afwImage.Exposure],
         donutCatalog: list[QTable],
-=======
-        exposure: afwImage.Exposure,
-        donutCatalog: QTable,
->>>>>>> 6962d285 (All Peter's work)
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
 
-        if exposure.visitInfo.focusZ > 0:
-            defocalType = DefocalType.Extra
-        else:
-            defocalType = DefocalType.Intra
+        # Process each exposure
+        allStamps = []
+        for exposure, catalog in zip(exposures, donutCatalog):
+            if exposure.visitInfo.focusZ > 0:
+                defocalType = DefocalType.Extra
+            else:
+                defocalType = DefocalType.Intra
 
-        # Cutout the stamps
-        stampsOut = self.cutOutStamps(
-            exposure,
-            donutCatalog,
-            defocalType,
-            camera.getName(),
-        )
+            # Cutout the stamps
+            stampsOut = self.cutOutStamps(
+                exposure,
+                catalog,
+                defocalType,
+                camera.getName(),
+            )
+            allStamps.extend(stampsOut)
 
-        return pipeBase.Struct(donutStamps=stampsOut)
+        return pipeBase.Struct(donutStamps=allStamps)

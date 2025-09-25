@@ -24,11 +24,7 @@ __all__ = ["EstimateZernikesBaseConfig", "EstimateZernikesBaseTask"]
 import abc
 import itertools
 import multiprocessing as mp
-<<<<<<< HEAD
 from typing import Any, Callable, Iterable
-=======
-from typing import Any
->>>>>>> 6962d285 (All Peter's work)
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
