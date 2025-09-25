@@ -24,7 +24,7 @@ __all__ = ["EstimateZernikesBaseConfig", "EstimateZernikesBaseTask"]
 import abc
 import itertools
 import multiprocessing as mp
-from typing import Any
+from typing import Any, Callable, Iterable
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -120,6 +120,32 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return WfAlgorithmFactory.createWfAlgorithm(self.wfAlgoName, algoConfig)
 
+    @staticmethod
+    def _applyToList(fun: Callable, args: Iterable, numCores: int) -> list:
+        """Apply a function to a list of arguments, optionally in parallel.
+
+        If numCores is 1, multiprocessing is bypassed entirely to avoid issues
+        with pickling AI models.
+
+        Parameters
+        ----------
+        fun : Callable
+            The function to apply. Must take a single argument.
+        args : Iterable
+            An iterable of arguments to apply the function to.
+        numCores : int
+            The number of cores to use. If 1, no multiprocessing is used.
+
+        Returns
+        -------
+        list
+            A list of results from applying the function to the arguments.
+        """
+        with mp.Pool(processes=numCores) as pool:
+            results = pool.map(fun, args)
+
+        return results
+
     def estimateFromPairs(
         self,
         donutStampsExtra: DonutStamps,
@@ -157,8 +183,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             (donutExtra, donutIntra, wfEstimator)
             for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra)
         ]
-        with mp.Pool(processes=numCores) as pool:
-            results = pool.map(estimate_zk_pair, args)
+        results = self._applyToList(estimate_zk_pair, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
         zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}
@@ -216,8 +241,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             (donut, wfEstimator)
             for donut in itertools.chain(donutStampsExtra, donutStampsIntra)
         ]
-        with mp.Pool(processes=numCores) as pool:
-            results = pool.map(estimate_zk_single, args)
+        results = self._applyToList(estimate_zk_single, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
         zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}

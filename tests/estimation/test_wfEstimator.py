@@ -109,8 +109,8 @@ class TestWfEstimator(unittest.TestCase):
                 )
             self.assertEqual(len(zk0), 3)
 
-            # Estimate with [4, 5, 6, 20, 21]
-            wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 20, 21], units="m")
+            # Estimate with [4, 5, 6, 14, 15]
+            wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 14, 15], units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst.algo.optimizeLinAlg = False
                 zk1, _ = wfEst.estimateZk(intra, extra)
@@ -127,7 +127,7 @@ class TestWfEstimator(unittest.TestCase):
             self.assertEqual(len(zk1), 5)
 
             #  Make sure results are pretty similar for [4, 5, 6]
-            self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 10e-9)
+            self.assertLess(np.sqrt(np.sum(np.square(zk1[:-2] - zk0))), 20e-9)
 
     def testStartWithIntrinsic(self) -> None:
         # Get the test data

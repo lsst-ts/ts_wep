@@ -56,7 +56,7 @@ class WfEstimator:
     nollIndices : Sequence, optional
         List, tuple, or array of Noll indices for which you wish to
         estimate Zernike coefficients. Note these values must be unique,
-        ascending, and >= 4. (the default is indices 4-22)
+        ascending, and >= 4. (the default is indices 4-11)
     startWithIntrinsic : bool, optional
         Whether to start the Zernike estimation process from the intrinsic
         Zernikes rather than zero.
@@ -82,7 +82,7 @@ class WfEstimator:
         algoName: str = "tie",
         algoConfig: Union[dict, WfAlgorithm, None] = None,
         instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
-        nollIndices: Sequence = tuple(np.arange(4, 23)),
+        nollIndices: Sequence = tuple(np.arange(4, 12)),
         startWithIntrinsic: bool = True,
         returnWfDev: bool = False,
         units: str = "um",

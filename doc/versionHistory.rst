@@ -6,6 +6,15 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.17.0:
+
+-------------
+ 14.17.0
+-------------
+
+* Add AiDonutAlgorithm for wavefront estimation using a PyTorch model.
+* Add EstimateZernikesAiDonutTask to use AiDonutAlgorithm.
+
 .. _lsst.ts.wep-14.16.1:
 
 -------------
