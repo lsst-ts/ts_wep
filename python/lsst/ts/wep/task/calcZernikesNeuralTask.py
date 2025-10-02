@@ -292,6 +292,68 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         self.log.debug("TARTS crop size: %s", self.cropSize)
 
+    def _is_pytorch_tensor(self, obj: Any) -> bool:
+        """Check if object is a PyTorch tensor."""
+        try:
+            return hasattr(obj, 'cpu') and hasattr(obj, 'numpy')
+        except Exception:
+            return False
+
+    def _to_numpy(self, obj: Any) -> np.ndarray:
+        """Convert PyTorch tensor or other object to numpy array."""
+        if self._is_pytorch_tensor(obj):
+            return obj.cpu().numpy()
+        elif isinstance(obj, np.ndarray):
+            return obj
+        else:
+            return np.array(obj)
+
+    def _get_tarts_centers(self) -> Optional[np.ndarray]:
+        """Get TARTS centers as numpy array, handling PyTorch tensors."""
+        try:
+            if self.tarts.centers is not None:
+                return self._to_numpy(self.tarts.centers)
+        except AttributeError:
+            pass
+        return None
+
+    def _get_tarts_fx(self) -> Optional[np.ndarray]:
+        """Get TARTS fx values as numpy array."""
+        try:
+            if self.tarts.fx is not None:
+                return self._to_numpy(self.tarts.fx)
+        except AttributeError:
+            pass
+        return None
+
+    def _get_tarts_fy(self) -> Optional[np.ndarray]:
+        """Get TARTS fy values as numpy array."""
+        try:
+            if self.tarts.fy is not None:
+                return self._to_numpy(self.tarts.fy)
+        except AttributeError:
+            pass
+        return None
+
+    def _get_tarts_snr(self) -> Optional[np.ndarray]:
+        """Get TARTS SNR values as numpy array."""
+        try:
+            if self.tarts.SNR is not None:
+                return self._to_numpy(self.tarts.SNR)
+        except AttributeError:
+            pass
+        return None
+
+    def _get_visit_id(self, exp_id: Any) -> int:
+        """Get visit ID from exposure ID, handling different types."""
+        try:
+            if hasattr(exp_id, 'getVisitId'):
+                return exp_id.getVisitId()
+            else:
+                return exp_id
+        except Exception:
+            return 0
+
     def createDonutStampFromTarts(
         self, exposure: afwImage.Exposure, cropped_image: np.ndarray, defocalType: str
     ) -> DonutStamps:
@@ -334,35 +396,27 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.log.debug("Normalized to %d stamp(s) of size %dx%d", num_stamps, self.cropSize, self.cropSize)
         # Get TARTS centers for accurate centroid positions
         try:
-            if self.tarts.centers is not None:
-                self.log.info("TARTS centers type: %s, shape: %s",
-                              type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape'))
-
-            # Handle different data types for TARTS centers
-            if hasattr(self.tarts.centers, 'cpu'):
-                centers_array = self.tarts.centers.cpu().numpy()
+            centers_array = self._get_tarts_centers()
+            if centers_array is not None:
                 self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
-            else:
-                centers_array = np.array(self.tarts.centers)
-                self.log.info("TARTS centers converted to numpy, shape: %s", centers_array.shape)
 
-            # Handle different array shapes
-            if centers_array.ndim == 1:
-                # Flattened array: [x1, y1, x2, y2, ...] -> reshape to [n, 2]
-                if len(centers_array) % 2 == 0:
-                    centers_array = centers_array.reshape(-1, 2)
-                    self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
+                # Handle different array shapes
+                if centers_array.ndim == 1:
+                    # Flattened array -> reshape to [n,2]
+                    if len(centers_array) % 2 == 0:
+                        centers_array = centers_array.reshape(-1, 2)
+                        self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
+                    else:
+                        self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
+                        centers_array = None
+                elif centers_array.ndim == 2:
+                    # Already in [n, 2] format
+                    if centers_array.shape[1] != 2:
+                        self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
+                        centers_array = None
                 else:
-                    self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
+                    self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
                     centers_array = None
-            elif centers_array.ndim == 2:
-                # Already in [n, 2] format
-                if centers_array.shape[1] != 2:
-                    self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
-                    centers_array = None
-            else:
-                self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
-                centers_array = None
 
             # Extract coordinates if we have valid centers
             if centers_array is not None and len(centers_array) > 0:
@@ -423,16 +477,15 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Add TARTS-specific metadata
         try:
             # Convert PyTorch tensors to numpy arrays, then to Python lists
-            fx_list = (
-                self.tarts.fx.cpu().numpy().tolist()
-                if hasattr(self.tarts.fx, 'cpu')
-                else list(self.tarts.fx)
-            )
-            fy_list = (
-                self.tarts.fy.cpu().numpy().tolist()
-                if hasattr(self.tarts.fy, 'cpu')
-                else list(self.tarts.fy)
-            )
+            fx_array = self._get_tarts_fx()
+            fy_array = self._get_tarts_fy()
+
+            if fx_array is not None and fy_array is not None:
+                fx_list = fx_array.tolist()
+                fy_list = fy_array.tolist()
+            else:
+                fx_list = []
+                fy_list = []
 
             # Flatten nested lists if needed
             if fx_list and isinstance(fx_list[0], list):
@@ -467,16 +520,14 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             try:
                 if self.tarts.centers is not None:
                     # Handle TARTS centers data structure
-                    if hasattr(self.tarts.centers, 'cpu'):
-                        centers_array = self.tarts.centers.cpu().numpy()
-                    else:
-                        centers_array = np.array(self.tarts.centers)
+                    centers_array = self._get_tarts_centers()
 
                     # Handle different array shapes
-                    if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
-                        centers_array = centers_array.reshape(-1, 2)
-                    elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
-                        centers_array = None
+                    if centers_array is not None:
+                        if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
+                            centers_array = centers_array.reshape(-1, 2)
+                        elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
+                            centers_array = None
 
                     # Use individual center if available
                     if centers_array is not None and i < len(centers_array):
@@ -541,10 +592,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Add visit information
         try:
             exp_id = exposure.getInfo().getId()
-            if hasattr(exp_id, 'getVisitId'):
-                visit_id = exp_id.getVisitId()
-            else:
-                visit_id = exp_id
+            visit_id = self._get_visit_id(exp_id)
             donutStampsObj.metadata["VISIT"] = visit_id
         except (AttributeError, NameError):
             donutStampsObj.metadata["VISIT"] = 0
@@ -801,16 +849,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     # Use TARTS fx/fy values directly (same as
                     # DonutQualityTable)
                     try:
-                        fx_list = (
-                            self.tarts.fx.cpu().numpy().tolist()
-                            if hasattr(self.tarts.fx, 'cpu')
-                            else list(self.tarts.fx)
-                        )
-                        fy_list = (
-                            self.tarts.fy.cpu().numpy().tolist()
-                            if hasattr(self.tarts.fy, 'cpu')
-                            else list(self.tarts.fy)
-                        )
+                        fx_array = self._get_tarts_fx()
+                        fy_array = self._get_tarts_fy()
+
+                        fx_list = fx_array.tolist() if fx_array is not None else []
+                        fy_list = fy_array.tolist() if fy_array is not None else []
                         # Flatten nested lists if needed
                         if fx_list and isinstance(fx_list[0], list):
                             fx_list = [item for sublist in fx_list for item in sublist]
@@ -833,16 +876,15 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     try:
                         if self.tarts.centers is not None:
                             # Handle TARTS centers data structure
-                            if hasattr(self.tarts.centers, 'cpu'):
-                                centers_array = self.tarts.centers.cpu().numpy()
-                            else:
-                                centers_array = np.array(self.tarts.centers)
+                            centers_array = self._get_tarts_centers()
 
                             # Handle different array shapes
-                            if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
-                                centers_array = centers_array.reshape(-1, 2)
-                            elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
-                                centers_array = None
+                            if centers_array is not None:
+                                array = centers_array  # Type narrowing for mypy
+                                if array.ndim == 1 and len(array) % 2 == 0:
+                                    centers_array = array.reshape(-1, 2)
+                                elif array.ndim != 2 or array.shape[1] != 2:
+                                    centers_array = None
 
                             # Use individual center if available
                             if centers_array is not None and i < len(centers_array):
@@ -868,16 +910,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     # Use TARTS fx/fy values directly (same as
                     # DonutQualityTable)
                     try:
-                        fx_list = (
-                            self.tarts.fx.cpu().numpy().tolist()
-                            if hasattr(self.tarts.fx, 'cpu')
-                            else list(self.tarts.fx)
-                        )
-                        fy_list = (
-                            self.tarts.fy.cpu().numpy().tolist()
-                            if hasattr(self.tarts.fy, 'cpu')
-                            else list(self.tarts.fy)
-                        )
+                        fx_array = self._get_tarts_fx()
+                        fy_array = self._get_tarts_fy()
+
+                        fx_list = fx_array.tolist() if fx_array is not None else []
+                        fy_list = fy_array.tolist() if fy_array is not None else []
                         # Flatten nested lists if needed
                         if fx_list and isinstance(fx_list[0], list):
                             fx_list = [item for sublist in fx_list for item in sublist]
@@ -900,16 +937,15 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     try:
                         if self.tarts.centers is not None:
                             # Handle TARTS centers data structure
-                            if hasattr(self.tarts.centers, 'cpu'):
-                                centers_array = self.tarts.centers.cpu().numpy()
-                            else:
-                                centers_array = np.array(self.tarts.centers)
+                            centers_array = self._get_tarts_centers()
 
                             # Handle different array shapes
-                            if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
-                                centers_array = centers_array.reshape(-1, 2)
-                            elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
-                                centers_array = None
+                            if centers_array is not None:
+                                array = centers_array  # Type narrowing for mypy
+                                if array.ndim == 1 and len(array) % 2 == 0:
+                                    centers_array = array.reshape(-1, 2)
+                                elif array.ndim != 2 or array.shape[1] != 2:
+                                    centers_array = None
 
                             # Use individual center if available
                             if centers_array is not None and i < len(centers_array):
@@ -1124,16 +1160,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Get FX and FY from TARTS
         try:
             # Convert PyTorch tensors to numpy arrays, then to Python lists
-            fx_list = (
-                self.tarts.fx.cpu().numpy().tolist()
-                if hasattr(self.tarts.fx, 'cpu')
-                else list(self.tarts.fx)
-            )
-            fy_list = (
-                self.tarts.fy.cpu().numpy().tolist()
-                if hasattr(self.tarts.fy, 'cpu')
-                else list(self.tarts.fy)
-            )
+            fx_array = self._get_tarts_fx()
+            fy_array = self._get_tarts_fy()
+
+            fx_list = fx_array.tolist() if fx_array is not None else []
+            fy_list = fy_array.tolist() if fy_array is not None else []
 
             # Flatten nested lists if needed
             if fx_list and isinstance(fx_list[0], list):
@@ -1156,11 +1187,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Get SNR from TARTS
         try:
-            snr_list = (
-                self.tarts.SNR.cpu().numpy().tolist()
-                if hasattr(self.tarts.SNR, 'cpu')
-                else list(self.tarts.SNR)
-            )
+            snr_array = self._get_tarts_snr()
+            snr_list = snr_array.tolist() if snr_array is not None else []
 
             # Flatten nested lists if needed
             if snr_list and isinstance(snr_list[0], list):
@@ -1233,7 +1261,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         donut_data = {}
 
         # Get positions from donut stamps - use standard column names and units
-        if hasattr(donutStamps, 'getSkyPositions'):
+        try:
             sky_positions = donutStamps.getSkyPositions()
             donut_data["coord_ra"] = [
                 pos.getRa().asRadians() for pos in sky_positions
@@ -1241,7 +1269,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             donut_data["coord_dec"] = [
                 pos.getDec().asRadians() for pos in sky_positions
             ]  # Use radians like standard
-        else:
+        except AttributeError:
             # Fallback: use exposure center
             bbox = exposure.getBBox()
             center_pos = exposure.wcs.pixelToSky(bbox.getCenterX(), bbox.getCenterY())
@@ -1257,32 +1285,27 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 )
 
             # Handle different data types for TARTS centers
-            if hasattr(self.tarts.centers, 'cpu'):
-                # PyTorch tensor
-                centers_array = self.tarts.centers.cpu().numpy()
+            centers_array = self._get_tarts_centers()
+            if centers_array is not None:
                 self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
-            else:
-                # Already numpy array or list
-                centers_array = np.array(self.tarts.centers)
-                self.log.info("TARTS centers converted to numpy, shape: %s", centers_array.shape)
 
-            # Handle different array shapes
-            if centers_array.ndim == 1:
-                # Flattened array: [x1, y1, x2, y2, ...] -> reshape to [n, 2]
-                if len(centers_array) % 2 == 0:
-                    centers_array = centers_array.reshape(-1, 2)
-                    self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
+                # Handle different array shapes
+                if centers_array.ndim == 1:
+                    # Flattened array -> reshape to [n,2]
+                    if len(centers_array) % 2 == 0:
+                        centers_array = centers_array.reshape(-1, 2)
+                        self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
+                    else:
+                        self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
+                        centers_array = None
+                elif centers_array.ndim == 2:
+                    # Already in [n, 2] format
+                    if centers_array.shape[1] != 2:
+                        self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
+                        centers_array = None
                 else:
-                    self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
+                    self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
                     centers_array = None
-            elif centers_array.ndim == 2:
-                # Already in [n, 2] format
-                if centers_array.shape[1] != 2:
-                    self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
-                    centers_array = None
-            else:
-                self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
-                centers_array = None
 
             # Extract coordinates if we have valid centers
             if centers_array is not None and len(centers_array) > 0:
@@ -1331,13 +1354,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 "TARTS centers not available, using exposure center [%.1f, %.1f] for %d donuts",
                 center_x, center_y, num_donuts
             )
-        if hasattr(donutStamps, 'getCentroidPositions'):
-            # Fallback to donut stamps method
+        try:
             centroid_positions = donutStamps.getCentroidPositions()
             donut_data["centroid_x"] = [pos.getX() for pos in centroid_positions]
             donut_data["centroid_y"] = [pos.getY() for pos in centroid_positions]
             self.log.info("Using donut stamps centroids for %d donuts", num_donuts)
-        else:
+        except AttributeError:
             # Final fallback: use exposure center
             bbox = exposure.getBBox()
             center_x = bbox.getCenterX()
@@ -1349,16 +1371,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Get TARTS-specific data for additional columns if available
         try:
             # Convert PyTorch tensors to numpy arrays, then to Python lists
-            fx_list = (
-                self.tarts.fx.cpu().numpy().tolist()
-                if hasattr(self.tarts.fx, 'cpu')
-                else list(self.tarts.fx)
-            )
-            fy_list = (
-                self.tarts.fy.cpu().numpy().tolist()
-                if hasattr(self.tarts.fy, 'cpu')
-                else list(self.tarts.fy)
-            )
+            fx_array = self._get_tarts_fx()
+            fy_array = self._get_tarts_fy()
+
+            fx_list = fx_array.tolist() if fx_array is not None else []
+            fy_list = fy_array.tolist() if fy_array is not None else []
 
             # Flatten nested lists if needed
             if fx_list and isinstance(fx_list[0], list):
@@ -1381,11 +1398,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Get SNR from TARTS
         try:
-            snr_list = (
-                self.tarts.SNR.cpu().numpy().tolist()
-                if hasattr(self.tarts.SNR, 'cpu')
-                else list(self.tarts.SNR)
-            )
+            snr_array = self._get_tarts_snr()
+            snr_list = snr_array.tolist() if snr_array is not None else []
 
             # Flatten nested lists if needed
             if snr_list and isinstance(snr_list[0], list):
@@ -1434,10 +1448,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Get visit ID
             try:
                 exp_id = exposure.getInfo().getId()
-                if hasattr(exp_id, 'getVisitId'):
-                    visit_id = exp_id.getVisitId()
-                else:
-                    visit_id = exp_id
+                visit_id = self._get_visit_id(exp_id)
             except (AttributeError, NameError):
                 visit_id = visitInfo.id
 
@@ -1555,18 +1566,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         with torch.no_grad():
             pred = self.tarts.deploy_run(exposure)
         # Convert PyTorch tensor to numpy array
-        if hasattr(pred, 'cpu') and hasattr(pred, 'numpy'):
-            pred = pred.cpu().numpy()
-        elif not isinstance(pred, np.ndarray):
-            pred = np.array(pred)
+        pred = self._to_numpy(pred)
         self.log.debug("TARTS prediction array shape: %s", np.shape(pred))
 
         # Ensure cropped_image is a numpy array before passing to function
         cropped_image_np = self.tarts.cropped_image
-        if hasattr(cropped_image_np, 'cpu') and hasattr(cropped_image_np, 'numpy'):
-            cropped_image_np = cropped_image_np.cpu().numpy()
-        elif not isinstance(cropped_image_np, np.ndarray):
-            cropped_image_np = np.array(cropped_image_np)
+        cropped_image_np = self._to_numpy(cropped_image_np)
 
         # Determine defocal type based on exposure
         donutStamps = self.createDonutStampFromTarts(exposure, cropped_image_np, defocalType)
