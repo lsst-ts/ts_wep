@@ -30,9 +30,12 @@ Modify this script to fit the interger step for need.
 __all__ = ["feval", "nelderMeadModify"]
 
 import copy
+from typing import Callable
+
+import numpy as np
 
 
-def feval(func, vars=()):
+def feval(func: Callable, vars: tuple = ()) -> float:
     """Evaluate the function.
 
     Parameters
@@ -52,18 +55,18 @@ def feval(func, vars=()):
 
 
 def nelderMeadModify(
-    func,
-    x_start,
-    args=(),
-    step=0.1,
-    no_improve_thr=10e-6,
-    no_improv_break=10,
-    max_iter=0,
-    alpha=1.0,
-    gamma=2.0,
-    rho=-0.5,
-    sigma=0.5,
-):
+    func: Callable,
+    x_start: np.ndarray,
+    args: tuple = (),
+    step: float = 0.1,
+    no_improve_thr: float = 10e-6,
+    no_improv_break: int = 10,
+    max_iter: int = 0,
+    alpha: float = 1.0,
+    gamma: float = 2.0,
+    rho: float = -0.5,
+    sigma: float = 0.5,
+) -> list:
     """Optimization of the Nelder-Mead algorithm.
 
     Parameters

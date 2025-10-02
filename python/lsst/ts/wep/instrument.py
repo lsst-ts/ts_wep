@@ -25,7 +25,7 @@ __all__ = ["Instrument"]
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Sequence, Tuple, Union
+from typing import Sequence
 
 import batoid
 import numpy as np
@@ -37,7 +37,7 @@ from .utils.zernikeUtils import createZernikeBasis, createZernikeGradBasis
 
 
 @lru_cache(10)
-def _getBatoidModelFromFileName(filename):
+def _getBatoidModelFromFileName(filename: str) -> batoid.Optic:
     return batoid.Optic.fromYaml(filename)
 
 
@@ -133,20 +133,20 @@ class Instrument:
 
     def __init__(
         self,
-        configFile: Union[Path, str, None] = "policy:instruments/LsstCam.yaml",
+        configFile: Path | str | None = "policy:instruments/LsstCam.yaml",
         *,
-        name: Optional[str] = None,
-        diameter: Optional[float] = None,
-        obscuration: Optional[float] = None,
-        focalLength: Optional[float] = None,
-        defocalOffset: Optional[float] = None,
-        pixelSize: Optional[float] = None,
-        refBand: Union[BandLabel, str, None] = None,
-        wavelength: Union[float, dict, None] = None,
-        batoidModelName: Optional[str] = None,
-        batoidOffsetOptic: Optional[str] = None,
-        batoidOffsetValue: Optional[float] = None,
-        maskParams: Optional[dict] = None,
+        name: str | None = None,
+        diameter: float | None = None,
+        obscuration: float | None = None,
+        focalLength: float | None = None,
+        defocalOffset: float | None = None,
+        pixelSize: float | None = None,
+        refBand: BandLabel | str | None = None,
+        wavelength: float | dict | None = None,
+        batoidModelName: str | None = None,
+        batoidOffsetOptic: str | None = None,
+        batoidOffsetValue: float | None = None,
+        maskParams: dict | None = None,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
         params = mergeConfigWithFile(
@@ -238,7 +238,7 @@ class Instrument:
             )
 
     @diameter.setter
-    def diameter(self, value: Union[float, None]) -> None:
+    def diameter(self, value: float | None) -> None:
         """Set the mirror diameter.
 
         Parameters
@@ -283,7 +283,7 @@ class Instrument:
             )
 
     @obscuration.setter
-    def obscuration(self, value: Union[float, None]) -> None:
+    def obscuration(self, value: float | None) -> None:
         """Set the fractional obscuration.
 
         Parameters
@@ -310,13 +310,14 @@ class Instrument:
         if self._focalLengthBatoid is not None:
             return self._focalLengthBatoid
         elif self.batoidModelName is not None:
-            self._focalLengthBatoid = batoid.analysis.focalLength(
+            focalLengthBatoid = batoid.analysis.focalLength(
                 self.getBatoidModel(),
                 0,
                 0,
                 self.wavelength[self.refBand],
             )
-            return self._focalLengthBatoid
+            self._focalLengthBatoid = focalLengthBatoid
+            return focalLengthBatoid
         else:
             raise ValueError(
                 "There is currently no focalLength set. "
@@ -324,7 +325,7 @@ class Instrument:
             )
 
     @focalLength.setter
-    def focalLength(self, value: Union[float, None]) -> None:
+    def focalLength(self, value: float | None) -> None:
         """Set the focal length.
 
         Parameters
@@ -378,7 +379,9 @@ class Instrument:
 
             # Calculate the equivalent detector offset
             result = minimize_scalar(
-                lambda offset: np.abs((self.offsetToZ4Defocus(offset) - dZ4optic) / dZ4optic),
+                lambda offset: np.abs(
+                    (self.offsetToZ4Defocus(offset) - dZ4optic) / dZ4optic
+                ),
                 bounds=(-0.1, 0.1),
             )
             if not result.success or result.fun > 1e-3:
@@ -387,9 +390,9 @@ class Instrument:
                 )
 
             # Save the calculated offset
-            self._defocalOffsetBatoid = np.abs(result.x)
-
-            return self._defocalOffsetBatoid
+            defocalOffsetBatoid = np.abs(result.x)
+            self._defocalOffsetBatoid = defocalOffsetBatoid
+            return defocalOffsetBatoid
         else:
             raise ValueError(
                 "There is currently no defocalOffset set. "
@@ -398,7 +401,7 @@ class Instrument:
             )
 
     @defocalOffset.setter
-    def defocalOffset(self, value: Union[float, None]) -> None:
+    def defocalOffset(self, value: float | None) -> None:
         """Set the defocal offset.
 
         Parameters
@@ -495,7 +498,7 @@ class Instrument:
         return self._refBand
 
     @refBand.setter
-    def refBand(self, value: Union[BandLabel, str, None]) -> None:
+    def refBand(self, value: BandLabel | str | None) -> None:
         """Set reference band for loading Batoid model and getting wavelength.
 
         Parameters
@@ -525,7 +528,7 @@ class Instrument:
             return self._wavelength
 
     @wavelength.setter
-    def wavelength(self, value: Union[float, dict, None]) -> None:
+    def wavelength(self, value: float | dict | None) -> None:
         """Set the effective wavelength(s).
 
         Parameters
@@ -553,14 +556,15 @@ class Instrument:
 
         # Save wavelength info in a BandLabel EnumDict
         if isinstance(value, dict) or isinstance(value, EnumDict):
-            value = EnumDict(BandLabel, value)
+            enumDictValue = EnumDict(BandLabel, value)
             try:
-                value[BandLabel.REF] = value[self.refBand]
+                enumDictValue[BandLabel.REF] = enumDictValue[self.refBand]
             except KeyError:
                 raise ValueError(
                     "The wavelength dictionary must contain a wavelength "
                     "for the reference band."
                 )
+            value = enumDictValue
         elif value is not None:
             value = EnumDict(BandLabel, {BandLabel.REF: value, self.refBand: value})
 
@@ -574,12 +578,12 @@ class Instrument:
         self._defocalOffsetBatoid = None
 
     @property
-    def batoidModelName(self) -> Union[str, None]:
+    def batoidModelName(self) -> str | None:
         """The Batoid model name."""
         return self._batoidModelName
 
     @batoidModelName.setter
-    def batoidModelName(self, value: Optional[str]) -> None:
+    def batoidModelName(self, value: str | None) -> None:
         """Set the Batoid model name.
 
         The Batoid model name is used to load the Batoid model via
@@ -632,12 +636,12 @@ class Instrument:
         self._defocalOffsetBatoid = None
 
     @property
-    def batoidOffsetOptic(self) -> Union[str, None]:
+    def batoidOffsetOptic(self) -> str | None:
         """The optic that is offset in the Batoid model."""
         return self._batoidOffsetOptic
 
     @batoidOffsetOptic.setter
-    def batoidOffsetOptic(self, value: Union[str, None]) -> None:
+    def batoidOffsetOptic(self, value: str | None) -> None:
         """Set the optic that is offset in the Batoid model.
 
         This optic is offset in order to calculate the equivalent
@@ -672,12 +676,12 @@ class Instrument:
         self._defocalOffsetBatoid = None
 
     @property
-    def batoidOffsetValue(self) -> Union[float, None]:
+    def batoidOffsetValue(self) -> float | None:
         """Amount in meters the optic is offset in the Batoid model."""
         return self._batoidOffsetValue
 
     @batoidOffsetValue.setter
-    def batoidOffsetValue(self, value: Union[float, None]) -> None:
+    def batoidOffsetValue(self, value: float | None) -> None:
         """Set amount in meters the optic is offset in the batoid model.
 
         This is the amount that batoidOffsetOptic is offset in the Batoid
@@ -704,9 +708,7 @@ class Instrument:
         self._getIntrinsicZernikesTACached.cache_clear()
         self._defocalOffsetBatoid = None
 
-    def getBatoidModel(
-        self, band: Union[BandLabel, str] = BandLabel.REF
-    ) -> batoid.Optic:
+    def getBatoidModel(self, band: BandLabel | str = BandLabel.REF) -> batoid.Optic:
         """Return the Batoid model for the instrument and the requested band.
 
         Parameters
@@ -737,7 +739,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        band: Union[BandLabel, str],
+        band: BandLabel | str,
         jmax: int,
     ) -> np.ndarray:
         """Cached interior function for the getIntrinsicZernikes method.
@@ -797,8 +799,8 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        band: Union[BandLabel, str] = BandLabel.REF,
-        nollIndices: Sequence = tuple(np.arange(4, 79)),
+        band: BandLabel | str = BandLabel.REF,
+        nollIndices: Sequence[int] = tuple(np.arange(4, 79)),
     ) -> np.ndarray:
         """Return the intrinsic Zernikes associated with the optical design.
 
@@ -825,7 +827,7 @@ class Instrument:
         nollIndices = np.array(nollIndices)
 
         # Retrieve cached Zernikes
-        zk = self._getIntrinsicZernikesCached(xAngle, yAngle, band, nollIndices.max())
+        zk = self._getIntrinsicZernikesCached(xAngle, yAngle, band, max(nollIndices))
 
         return zk[nollIndices]
 
@@ -835,7 +837,7 @@ class Instrument:
         xAngle: float,
         yAngle: float,
         defocalType: DefocalType,
-        band: Union[BandLabel, str],
+        band: BandLabel | str,
         jmax: int,
     ) -> np.ndarray:
         """Cached function for batoid.zernikeTA.
@@ -913,7 +915,7 @@ class Instrument:
         xAngle: float,
         yAngle: float,
         defocalType: DefocalType,
-        band: Union[BandLabel, str] = BandLabel.REF,
+        band: BandLabel | str = BandLabel.REF,
         nollIndicesModel: Sequence = tuple(np.arange(4, 79)),
         nollIndicesIntr: Sequence = tuple(np.arange(4, 79)),
     ) -> np.ndarray:
@@ -959,7 +961,7 @@ class Instrument:
             yAngle,
             defocalType,
             band,
-            nollIndicesModel.max(),
+            max(nollIndicesModel),
         )
 
         # Get regular intrinsic zernikes
@@ -967,7 +969,7 @@ class Instrument:
             xAngle,
             yAngle,
             band,
-            nollIndicesIntr.max(),
+            max(nollIndicesIntr),
         )
 
         # Subtract intrinsics from zernikeTA
@@ -1007,7 +1009,7 @@ class Instrument:
         return params
 
     @maskParams.setter
-    def maskParams(self, value: Optional[dict]) -> None:
+    def maskParams(self, value: dict | None) -> None:
         """Set the mask parameters.
 
         Parameters
@@ -1047,7 +1049,7 @@ class Instrument:
         """
         return np.ceil(self.donutDiameter).astype(int)
 
-    def createPupilGrid(self) -> Tuple[np.ndarray, np.ndarray]:
+    def createPupilGrid(self) -> tuple[np.ndarray, np.ndarray]:
         """Create a grid for the pupil.
 
         The coordinates of the grid are in normalized pupil coordinates.
@@ -1072,20 +1074,20 @@ class Instrument:
         return uPupil, vPupil
 
     @lru_cache(100)
-    def createZernikeBasis(self, jmax):
+    def createZernikeBasis(self, jmax: int) -> np.ndarray:
         uPupil, vPupil = self.createPupilGrid()
         return createZernikeBasis(
             uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
         )
 
     @lru_cache(100)
-    def createZernikeGradBasis(self, jmax):
+    def createZernikeGradBasis(self, jmax: int) -> np.ndarray:
         uPupil, vPupil = self.createPupilGrid()
         return createZernikeGradBasis(
             uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
         )
 
-    def createImageGrid(self, nPixels: int) -> Tuple[np.ndarray, np.ndarray]:
+    def createImageGrid(self, nPixels: int) -> tuple[np.ndarray, np.ndarray]:
         """Create an (nPixel x nPixel) grid for the image.
 
         The coordinates of the grid are in normalized image coordinates.

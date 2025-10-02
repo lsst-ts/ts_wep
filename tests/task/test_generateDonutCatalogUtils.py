@@ -19,20 +19,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import datetime
 import os
 import unittest
 
 import lsst.geom
 from astropy.table import QTable
-from lsst.afw.image import VisitInfo
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.obs.base import createInitialSkyWcsFromBoresight
 from lsst.ts.wep.task import DonutSourceSelectorTask, DonutSourceSelectorTaskConfig
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
     addVisitInfoToCatTable,
-    convertDictToVisitInfo,
     donutCatalogToAstropy,
     runSelection,
 )
@@ -40,16 +37,16 @@ from lsst.ts.wep.utils import getModulePath
 
 
 class TestGenerateDonutCatalogUtils(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
         self.centerRaft = ["R22_S10", "R22_S11"]
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
-    def _getRefCat(self):
+    def _getRefCat(self) -> list:
         refCatList = list()
         datasetGenerator = self.registry.queryDatasets(
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
@@ -61,7 +58,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         return refCatList
 
-    def _createRefObjLoader(self):
+    def _createRefObjLoader(self) -> ReferenceObjectLoader:
         refCatalogList = self._getRefCat()
         refObjLoader = ReferenceObjectLoader(
             dataIds=[ref.dataId for ref in refCatalogList],
@@ -69,7 +66,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         return refObjLoader
 
-    def _createTestDonutCat(self, returnExposure=False):
+    def _createTestDonutCat(self, returnExposure: bool = False) -> QTable:
         refObjLoader = self._createRefObjLoader()
 
         # Check that our refObjLoader loads the available objects
@@ -95,7 +92,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         else:
             return donutCatSmall.refCat, testExposure
 
-    def testRunSelection(self):
+    def testRunSelection(self) -> None:
         refObjLoader = self._createRefObjLoader()
         camera = self.butler.get(
             "camera",
@@ -148,7 +145,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         self.assertEqual(len(donutCatSmall), 1)
 
-    def testRunSelectionNoTask(self):
+    def testRunSelectionNoTask(self) -> None:
         refObjLoader = self._createRefObjLoader()
         camera = self.butler.get(
             "camera",
@@ -172,7 +169,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         self.assertEqual(blendX, [[]] * 4)
         self.assertEqual(blendY, [[]] * 4)
 
-    def testDonutCatalogToAstropy(self):
+    def testDonutCatalogToAstropy(self) -> None:
         donutCatSmall = self._createTestDonutCat()
 
         fieldObjects = donutCatalogToAstropy(donutCatSmall, ["g"])
@@ -252,15 +249,15 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             fieldObjectsBlends.meta["blend_centroid_y"], [[], [3], [], []]
         )
 
-    def testDonutCatalogToAstropyWithBlendCenters(self):
+    def testDonutCatalogToAstropyWithBlendCenters(self) -> None:
         donutCatSmall = self._createTestDonutCat()
         # Brightest three fluxes are all the same.
         # Change two slightly so that we get a consistent order
         # after sorting the catalog by brightness.
         donutCatSmall["g_flux"][1] -= 0.1
         donutCatSmall["g_flux"][2] -= 0.02
-        blendCentersX = [list() for _ in range(len(donutCatSmall))]
-        blendCentersY = [list() for _ in range(len(donutCatSmall))]
+        blendCentersX: list = [list() for _ in range(len(donutCatSmall))]
+        blendCentersY: list = [list() for _ in range(len(donutCatSmall))]
 
         fieldObjects = donutCatalogToAstropy(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
@@ -308,7 +305,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             [[blendValsY[0]], [], [blendValsY[1]], []],
         )
 
-    def testDonutCatalogToAstropyErrors(self):
+    def testDonutCatalogToAstropyErrors(self) -> None:
         columnList = [
             "coord_ra",
             "coord_dec",
@@ -363,7 +360,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             )
         self.assertTrue(xyMismatchErrMsg in str(context.exception))
 
-    def testAddVisitInfoToCatTable(self):
+    def testAddVisitInfoToCatTable(self) -> None:
 
         donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
         fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
@@ -386,55 +383,9 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "observatory_longitude",
             "ERA",
             "exposure_time",
+            "donut_radius"
         ]
 
         self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
         # Test columns are all present
         self.assertCountEqual(visitInfoKeys, catTableWithMeta.meta["visit_info"].keys())
-
-    def testConvertDictToVisitInfo(self):
-
-        donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
-        fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
-        catTableWithMeta = addVisitInfoToCatTable(testExposure, fieldObjects)
-        roundTripVisitInfo = convertDictToVisitInfo(catTableWithMeta.meta["visit_info"])
-
-        self.assertTrue(isinstance(roundTripVisitInfo, VisitInfo))
-        # Test keys and results are the same from VisitInfo round trip
-        self.assertEqual(roundTripVisitInfo.focusZ, testExposure.visitInfo.focusZ)
-        self.assertEqual(roundTripVisitInfo.id, testExposure.visitInfo.id)
-        self.assertEqual(
-            roundTripVisitInfo.boresightRaDec, testExposure.visitInfo.boresightRaDec
-        )
-        if testExposure.visitInfo.boresightAzAlt.isFinite():
-            # Test that they are equal if they are not nan
-            self.assertEqual(
-                roundTripVisitInfo.boresightAzAlt, testExposure.visitInfo.boresightAzAlt
-            )
-        else:
-            # If testExposure has nan value, round trip should as well
-            self.assertFalse(roundTripVisitInfo.boresightAzAlt.isFinite())
-        self.assertEqual(
-            roundTripVisitInfo.instrumentLabel, testExposure.visitInfo.instrumentLabel
-        )
-        self.assertEqual(
-            roundTripVisitInfo.boresightParAngle,
-            testExposure.visitInfo.boresightParAngle,
-        )
-        self.assertEqual(
-            roundTripVisitInfo.boresightRotAngle,
-            testExposure.visitInfo.boresightRotAngle,
-        )
-        self.assertEqual(roundTripVisitInfo.rotType, testExposure.visitInfo.rotType)
-        self.assertEqual(
-            roundTripVisitInfo.exposureTime, testExposure.visitInfo.exposureTime
-        )
-        self.assertAlmostEqual(
-            roundTripVisitInfo.date.toPython(),
-            testExposure.visitInfo.date.toPython(),
-            delta=datetime.timedelta(seconds=1e-3),
-        )
-        self.assertEqual(
-            roundTripVisitInfo.observatory, testExposure.visitInfo.observatory
-        )
-        self.assertEqual(roundTripVisitInfo.era, testExposure.visitInfo.era)

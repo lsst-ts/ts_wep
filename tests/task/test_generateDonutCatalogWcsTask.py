@@ -24,7 +24,7 @@ import os
 import lsst.geom
 import numpy as np
 from astropy.table import vstack
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
@@ -39,7 +39,7 @@ from lsst.utils.tests import TestCase
 
 
 class TestGenerateDonutCatalogWcsTask(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = GenerateDonutCatalogWcsTaskConfig()
         self.config.donutSelector.unblendedSeparation = 1
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
@@ -49,10 +49,10 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
         self.centerRaft = ["R22_S10", "R22_S11"]
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
-    def _getRefCat(self):
+    def _getRefCat(self) -> list:
         refCatList = []
         datasetGenerator = self.registry.queryDatasets(
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
@@ -64,7 +64,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         return refCatList
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.config.doDonutSelection = False
         self.config.anyFilterMapsToThis = "phot_g_mean"
         self.config.edgeMargin = 100
@@ -74,7 +74,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertEqual(self.task.config.anyFilterMapsToThis, "phot_g_mean")
         self.assertEqual(self.task.config.edgeMargin, 100)
 
-    def testAnyFilterMapsToThis(self):
+    def testAnyFilterMapsToThis(self) -> None:
         self.config.anyFilterMapsToThis = "r"
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
@@ -83,7 +83,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         self.assertEqual(refObjLoader.config.anyFilterMapsToThis, "r")
 
-    def testGetRefObjLoader(self):
+    def testGetRefObjLoader(self) -> None:
         refCatList = self._getRefCat()
         refObjLoader = self.task.getRefObjLoader(refCatList)
 
@@ -103,7 +103,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         )
         self.assertEqual(len(donutCatFull.refCat), 24)
 
-    def testPipeline(self):
+    def testPipeline(self) -> None:
         """
         Test that the task runs in a pipeline. Also functions as a test of
         runQuantum function.
@@ -134,9 +134,9 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         runProgram(pipetaskCmd)
 
         # Test instrument matches
-        pipelineButler = dafButler.Butler(self.repoDir)
+        pipelineButler = Butler.from_config(self.repoDir)
         s11_wcs = pipelineButler.get(
-            "postISRCCD.wcs",
+            "post_isr_image.wcs",
             dataId={
                 "instrument": "LSSTCam",
                 "detector": 94,
@@ -146,7 +146,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             collections=[f"{runName}"],
         )
         s10_wcs = pipelineButler.get(
-            "postISRCCD.wcs",
+            "post_isr_image.wcs",
             dataId={
                 "instrument": "LSSTCam",
                 "detector": 93,
@@ -212,22 +212,22 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             -0.005492987,
             -0.005396017,
         ]
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             np.sort(true_ra), np.sort(outputTable["coord_ra"].value), atol=1e-8
         )
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             np.sort(true_dec), np.sort(outputTable["coord_dec"].value), atol=1e-8
         )
         s11_x, s11_y = s11_wcs.skyToPixelArray(true_ra[:4], true_dec[:4])
         s10_x, s10_y = s10_wcs.skyToPixelArray(true_ra[4:], true_dec[4:])
         true_x = np.sort(np.array([s11_x, s10_x]).flatten())
         true_y = np.sort(np.array([s11_y, s10_y]).flatten())
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             true_x,
             np.sort(outputTable["centroid_x"].value),
             atol=1e-2,  # Small fractions of pixel okay since we abbreviated ra, dec positions above
         )
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             true_y, np.sort(outputTable["centroid_y"].value), atol=1e-2
         )
         fluxTruth = np.ones(8)
@@ -239,7 +239,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
         runProgram(cleanUpCmd)
 
-    def testDonutCatalogGeneration(self):
+    def testDonutCatalogGeneration(self) -> None:
         """
         Test that task creates a QTable with detector information.
         """
@@ -304,13 +304,13 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertCountEqual(
             np.radians(inputCat["dec"]), outputTable["coord_dec"].value
         )
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             np.sort(np.array(donutCatXPixelList).flatten()),
             np.sort(outputTable["centroid_x"]),
             atol=1e-14,
             rtol=1e-14,
         )
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             np.sort(np.array(donutCatYPixelList).flatten()),
             np.sort(outputTable["centroid_y"]),
             atol=1e-14,

@@ -27,6 +27,8 @@ __all__ = [
 
 import abc
 from itertools import zip_longest
+from typing import Any, cast
+
 import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -49,7 +51,7 @@ pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 
 class CalcZernikesTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "detector", "instrument"),
+    dimensions=("visit", "detector", "instrument"),  # type: ignore
 ):
     donutStampsExtra = connectionTypes.Input(
         doc="Extra-focal Donut Postage Stamp Images",
@@ -91,16 +93,16 @@ class CalcZernikesTaskConnections(
 
 class CalcZernikesTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=CalcZernikesTaskConnections,
+    pipelineConnections=CalcZernikesTaskConnections,  # type: ignore
 ):
-    estimateZernikes = pexConfig.ConfigurableField(
+    estimateZernikes: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=EstimateZernikesTieTask,
         doc=str(
             "Choice of task to estimate Zernikes from pairs of donuts. "
             + "(the default is EstimateZernikesTieTask)"
         ),
     )
-    combineZernikes = pexConfig.ConfigurableField(
+    combineZernikes: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=CombineZernikesSigmaClipTask,
         doc=str(
             "Choice of task to combine the Zernikes from pairs of "
@@ -108,11 +110,11 @@ class CalcZernikesTaskConfig(
             + "is CombineZernikesSigmaClipTask.)"
         ),
     )
-    donutStampSelector = pexConfig.ConfigurableField(
+    donutStampSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutStampSelectorTask,
         doc="How to select donut stamps.",
     )
-    doDonutStampSelector = pexConfig.Field(
+    doDonutStampSelector: pexConfig.Field = pexConfig.Field(
         doc="Whether or not to run donut stamp selector."
         + "If this is False, then we do not get donutQualityTable."
         + "(The default is True). It is also possible to run"
@@ -135,21 +137,23 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
     ConfigClass = CalcZernikesTaskConfig
     _DefaultName = "calcZernikesBaseTask"
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         # Create subtasks
-        self.estimateZernikes = self.config.estimateZernikes
+        config = cast(CalcZernikesTaskConfig, self.config)
+
+        self.estimateZernikes = config.estimateZernikes
         self.makeSubtask("estimateZernikes")
         self.nollIndices = self.estimateZernikes.config.nollIndices
 
-        self.combineZernikes = self.config.combineZernikes
+        self.combineZernikes = config.combineZernikes
         self.makeSubtask("combineZernikes")
 
-        self.donutStampSelector = self.config.donutStampSelector
+        self.donutStampSelector = config.donutStampSelector
         self.makeSubtask("donutStampSelector")
 
-        self.doDonutStampSelector = self.config.doDonutStampSelector
+        self.doDonutStampSelector = config.doDonutStampSelector
 
         # Initialize the donut stamps to None
         self.stampsExtra = None
@@ -264,7 +268,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             if zk is None:
                 break
 
-            row = dict()
+            row: dict = dict()
             row["label"] = f"pair{i+1}"
             row["used"] = not flag
             row.update(
@@ -314,13 +318,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     * u.pixel
                 )
             )
-            for key in [
-                "MAG",
-                "SN",
-                "ENTROPY",
-                "FRAC_BAD_PIX",
-                "MAX_POWER_GRAD"
-            ]:
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
                 for stamps, foc in [
                     (intraStamps, "intra"),
                     (extraStamps, "extra"),
@@ -336,7 +334,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         return zkTable
 
-    def createZkTableMetadata(self):
+    def createZkTableMetadata(self) -> dict:
         """Create the metadata for the Zernike table.
 
         Returns
@@ -344,15 +342,13 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         metadata : dict
             Metadata for the Zernike table
         """
-        meta = {}
+        meta: dict = {}
         meta["intra"] = {}
         meta["extra"] = {}
         cam_name = None
 
         if self.stampsIntra is None and self.stampsExtra is None:
-            raise ValueError(
-                "No stamps available. Cannot create metadata."
-            )
+            raise ValueError("No stamps available. Cannot create metadata.")
 
         for dict_, stamps in [
             (meta["intra"], self.stampsIntra),
@@ -362,26 +358,18 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 continue
             dict_["det_name"] = stamps.metadata["DET_NAME"]
             dict_["visit"] = stamps.metadata["VISIT"]
-            dict_["dfc_dist"] =stamps.metadata["DFC_DIST"]
+            dict_["dfc_dist"] = stamps.metadata["DFC_DIST"]
             dict_["band"] = stamps.metadata["BANDPASS"]
-            dict_["boresight_rot_angle_rad"] = (
-                stamps.metadata["BORESIGHT_ROT_ANGLE_RAD"]
-            )
-            dict_["boresight_par_angle_rad"] = (
-                stamps.metadata["BORESIGHT_PAR_ANGLE_RAD"]
-            )
-            dict_["boresight_alt_rad"] = (
-               stamps.metadata["BORESIGHT_ALT_RAD"]
-            )
-            dict_["boresight_az_rad"] = (
-                 stamps.metadata["BORESIGHT_AZ_RAD"]
-            )
-            dict_["boresight_ra_rad"] = (
-                stamps.metadata["BORESIGHT_RA_RAD"]
-            )
-            dict_["boresight_dec_rad"] = (
-                stamps.metadata["BORESIGHT_DEC_RAD"]
-            )
+            dict_["boresight_rot_angle_rad"] = stamps.metadata[
+                "BORESIGHT_ROT_ANGLE_RAD"
+            ]
+            dict_["boresight_par_angle_rad"] = stamps.metadata[
+                "BORESIGHT_PAR_ANGLE_RAD"
+            ]
+            dict_["boresight_alt_rad"] = stamps.metadata["BORESIGHT_ALT_RAD"]
+            dict_["boresight_az_rad"] = stamps.metadata["BORESIGHT_AZ_RAD"]
+            dict_["boresight_ra_rad"] = stamps.metadata["BORESIGHT_RA_RAD"]
+            dict_["boresight_dec_rad"] = stamps.metadata["BORESIGHT_DEC_RAD"]
             dict_["mjd"] = stamps.metadata["MJD"]
             if cam_name is None:
                 cam_name = stamps.metadata["CAM_NAME"]
@@ -389,11 +377,16 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         meta["cam_name"] = cam_name
 
         if self.stampsIntra is not None and self.stampsExtra is not None:
-            assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]
+            assert (
+                self.stampsIntra.metadata["CAM_NAME"]
+                == self.stampsExtra.metadata["CAM_NAME"]
+            )
 
         return meta
 
-    def empty(self, qualityTable=None, zernikeTable=None) -> pipeBase.Struct:
+    def empty(
+        self, qualityTable: QTable | None = None, zernikeTable: QTable | None = None
+    ) -> pipeBase.Struct:
         """Return empty results if no donuts are available. If
         it is a result of no quality donuts we still include the
         quality table results instead of an empty quality table.
@@ -419,8 +412,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "SN_SELECT",
             "FINAL_SELECT",
             "RADIUS",
-            "X_PIX_LEFT_EDGE",
-            "X_PIX_RIGHT_EDGE",
+            "RADIUS_FAIL_FLAG",
             "DEFOCAL_TYPE",
         ]
         if qualityTable is None:
@@ -446,7 +438,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         butlerQC: QuantumContext,
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
-    ):
+    ) -> None:
         inputs = butlerQC.get(inputRefs)
         outputs = self.run(**inputs, numCores=butlerQC.resources.num_cores)
         butlerQC.put(outputs, outputRefs)
@@ -463,7 +455,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # by fitting the donut radius. If that fails, return empty struct.
         self.stampsExtra = donutStampsExtra
         self.stampsIntra = donutStampsIntra
-        if len(self.stampsExtra) == 0 or len(self.stampsIntra) == 0:
+        if not self.stampsExtra or not self.stampsIntra:
             return self.empty()
 
         # Run donut stamp selection. By default, doSelection is turned on,
@@ -484,10 +476,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             # If no donuts get selected, also attempt to
             # to compute the Z4 from donut radius fit.
             # If unsuccessful, return empty struct.
-            if (
-                len(selectedExtraStamps) == 0
-                or len(selectedIntraStamps) == 0
-            ):
+            if len(selectedExtraStamps) == 0 or len(selectedIntraStamps) == 0:
                 self.log.info("No donut stamps were selected.")
                 return self.empty(qualityTable=donutQualityTable)
         else:

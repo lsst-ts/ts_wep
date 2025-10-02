@@ -26,14 +26,14 @@ import astropy.units as u
 import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
+    DonutStamps,
     DonutStampSelectorTask,
-    DonutStamps
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -44,8 +44,12 @@ from lsst.ts.wep.utils import (
 
 
 class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Generate donutCatalog needed for task.
         """
@@ -56,7 +60,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if "pretest_run_science" in collectionsList:
@@ -74,7 +78,11 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             )
 
             pipeCmd = writePipetaskCmd(
-                cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
             )
             # Make sure we are using the right exposure+detector combinations
             pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
@@ -82,16 +90,16 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -107,7 +115,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "visit": 4021123106002,
         }
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
@@ -117,7 +125,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.donutStampSelector), DonutStampSelectorTask)
         self.assertEqual(self.task.doDonutStampSelector, True)
 
-    def testEstimateZernikes(self):
+    def testEstimateZernikes(self) -> None:
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
@@ -134,7 +142,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 25))
 
-    def testCalcZernikes(self):
+    def testCalcZernikes(self) -> None:
         donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
@@ -149,7 +157,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         zkAvg1 = structNormal.outputZernikesAvg[0]
         zkAvgRow = structNormal.zernikes[structNormal.zernikes["label"] == "average"][0]
         zkAvg2 = np.array([zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
-        self.assertFloatsAlmostEqual(zkAvg1, zkAvg2, rtol=1e-6, atol=0)
+        np.testing.assert_allclose(zkAvg1, zkAvg2, rtol=1e-6, atol=0)
 
         zkRaw1 = structNormal.outputZernikesRaw
         zkRaw2 = np.full_like(zkRaw1, np.nan)
@@ -161,7 +169,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
                 [row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
             )
             i += 1
-        self.assertFloatsAlmostEqual(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
+        np.testing.assert_allclose(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
 
         # verify remaining desired columns exist in zernikes table
         desired_colnames = [
@@ -219,16 +227,14 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "MAX_POWER_GRAD_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
-            "RADIUS",
-            "X_PIX_LEFT_EDGE",
-            "X_PIX_RIGHT_EDGE"
+            "RADIUS"
         ]
         np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
         # test null run
         structNull = self.task.run(
             DonutStamps([], metadata=copy(donutStampsExtra.metadata)),
-            DonutStamps([], metadata=copy(donutStampsExtra.metadata))
+            DonutStamps([], metadata=copy(donutStampsExtra.metadata)),
         )
 
         for struct in [structNormal, structNull]:
@@ -248,7 +254,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         structAllDonutsFail = self.task.run(donutStampsIntra, donutStampsExtra)
         self.assertEqual(len(structAllDonutsFail.donutQualityTable), 6)
 
-    def testGetCombinedZernikes(self):
+    def testGetCombinedZernikes(self) -> None:
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)

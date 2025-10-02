@@ -26,7 +26,7 @@ import os
 import threadpoolctl
 
 
-def enforce_single_threading():
+def enforce_single_threading() -> None:
     """
     Set OpenBLAS, MKL, and OMP to use only one thread.
     We implemented this to avoid issues with test hanging

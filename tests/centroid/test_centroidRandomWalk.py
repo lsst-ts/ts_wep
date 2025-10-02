@@ -30,10 +30,10 @@ from lsst.ts.wep.utils import getModulePath
 class TestCentroidRandomWalk(unittest.TestCase):
     """Test the CentroidRandomWalk class."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.centroid = CentroidRandomWalk()
 
-    def testGetCenterAndR(self):
+    def testGetCenterAndR(self) -> None:
         imgDonut = self._prepareDonutImg(1000)
 
         realcx, realcy, realR = self.centroid.getCenterAndR(imgDonut)
@@ -41,7 +41,7 @@ class TestCentroidRandomWalk(unittest.TestCase):
         self.assertAlmostEqual(realcy, 59.3421, places=3)
         self.assertAlmostEqual(realR, 47.3616, places=3)
 
-    def _prepareDonutImg(self, seed):
+    def _prepareDonutImg(self, seed: int) -> np.ndarray:
         # Read the image file
         imgFile = os.path.join(
             getModulePath(),

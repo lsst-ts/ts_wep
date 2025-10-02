@@ -28,8 +28,11 @@ import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
 import lsst.geom
 import numpy as np
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
+from lsst.afw.geom import SkyWcs
+from lsst.daf.base import PropertyList
 from lsst.meas.algorithms.stamps import AbstractStamp
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.utils import getCameraFromButlerName
@@ -93,7 +96,7 @@ class DonutStamp(AbstractStamp):
     archive_element: Optional[afwTable.io.Persistable] = None
     wep_im: Image = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         This method sets up the WEP Image after initialization
         because we need to use the parameters set in the original `__init__`.
@@ -101,7 +104,13 @@ class DonutStamp(AbstractStamp):
         self._setWepImage()
 
     @classmethod
-    def factory(cls, stamp_im, metadata, index, archive_element=None):
+    def factory(
+        cls,
+        stamp_im: afwImage.MaskedImageF,
+        metadata: PropertyList,
+        index: int,
+        archive_element: afwTable.io.Persistable | None = None,
+    ) -> "DonutStamp":
         """This method is needed to service the FITS reader.
         We need a standard interface to construct objects like this.
         Parameters needed to construct this object are passed in via
@@ -176,7 +185,7 @@ class DonutStamp(AbstractStamp):
             ),
         )
 
-    def getCamera(self):
+    def getCamera(self) -> Camera:
         """
         Get the proper camera object for the donuts.
 
@@ -193,7 +202,7 @@ class DonutStamp(AbstractStamp):
 
         return getCameraFromButlerName(self.cam_name)
 
-    def calcFieldXY(self):
+    def calcFieldXY(self) -> tuple[float, float]:
         """
         Calculate the X, Y field position of the centroid in degrees.
 
@@ -212,7 +221,7 @@ class DonutStamp(AbstractStamp):
 
         return np.degrees(field_x), np.degrees(field_y)
 
-    def _setWepImage(self):
+    def _setWepImage(self) -> None:
         """Return a ts.wep.image.Image object for the stamp.
 
         Note that the information from the butler is in the data visualization
@@ -294,11 +303,11 @@ class DonutStamp(AbstractStamp):
 
     def makeMask(
         self,
-        instrument,
-        opticalModel="offAxis",
-        dilate=0,
-        dilateBlends=0,
-    ):
+        instrument: Instrument,
+        opticalModel: str = "offAxis",
+        dilate: int = 0,
+        dilateBlends: int = 0,
+    ) -> None:
         """Create the mask for the image.
 
         Note that technically the image masks depend on the optical
@@ -373,7 +382,7 @@ class DonutStamp(AbstractStamp):
         # Save mask
         self.stamp_im.setMask(afwImage.Mask(stampMask.copy()))
 
-    def getLinearWCS(self):
+    def getLinearWCS(self) -> SkyWcs:
         """
         Get the linear WCS for the stamp.
 

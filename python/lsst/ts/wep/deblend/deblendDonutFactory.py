@@ -30,7 +30,7 @@ class DeblendDonutFactory(object):
     donut from neighboring stars."""
 
     @staticmethod
-    def createDeblendDonut(deblendDonutType):
+    def createDeblendDonut(deblendDonutType: DeblendDonutType) -> DeblendAdapt:
         """Create the concrete deblend donut object.
 
         Parameters

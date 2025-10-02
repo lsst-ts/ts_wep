@@ -1,6 +1,8 @@
 import os
 
-from lsst.daf import butler as dafButler
+from _pytest.config import Config
+from _pytest.config.argparsing import Parser
+from lsst.daf.butler import Butler
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -9,7 +11,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser: Parser) -> None:
     parser.addoption(
         "--run-pretest",
         action="store_true",
@@ -18,7 +20,7 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_configure(config):
+def pytest_configure(config: Config) -> None:
     if config.getoption("--run-pretest"):
         print("Running pre-test command...")
 
@@ -32,7 +34,7 @@ def pytest_configure(config):
         config.testInfo["runNameScience"] = "pretest_run_science"
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(config.testInfo["repoDir"])
+        butler = Butler.from_config(config.testInfo["repoDir"])
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         for runName in [
@@ -77,7 +79,8 @@ def pytest_configure(config):
         pipeCmdScience += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
         runProgram(pipeCmdScience)
 
-def pytest_unconfigure(config):
+
+def pytest_unconfigure(config: Config) -> None:
     if config.getoption("--run-pretest"):
         print("Running cleanup...")
         for runName in [

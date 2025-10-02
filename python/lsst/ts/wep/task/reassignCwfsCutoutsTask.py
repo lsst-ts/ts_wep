@@ -25,6 +25,8 @@ __all__ = [
     "ReassignCwfsCutoutsTask",
 ]
 
+from typing import Any
+
 import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate
 from lsst.pipe.base import connectionTypes
@@ -34,7 +36,7 @@ extra_focal_ids = set([191, 195, 199, 203])
 
 
 class ReassignCwfsCutoutsTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")
+    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
 ):
     donutStampsIn = connectionTypes.Input(
         doc="Donut Postage Stamp Images with either Intra-focal or Extra-focal detector id.",
@@ -58,7 +60,7 @@ class ReassignCwfsCutoutsTaskConnections(
         multiple=False,
     )
 
-    def adjust_all_quanta(self, adjuster):
+    def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
         """This will drop intra quanta and assign
         them to the extra detector quanta
         """
@@ -70,10 +72,12 @@ class ReassignCwfsCutoutsTaskConnections(
                 seen.add(data_id)
             elif data_id["detector"] in intra_focal_ids:
                 extra_focal_data_id = DataCoordinate.standardize(
-                    data_id, detector=data_id["detector"] - 1
+                    data_id, detector=int(data_id["detector"]) - 1
                 )
 
-                assert extra_focal_data_id in seen or extra_focal_data_id in to_do
+                assert (
+                    extra_focal_data_id in seen or extra_focal_data_id in to_do
+                ), f"DataId {extra_focal_data_id} not found in seen or to_do sets."
 
                 inputs = adjuster.get_inputs(data_id)
                 adjuster.add_input(
@@ -86,7 +90,7 @@ class ReassignCwfsCutoutsTaskConnections(
 
 
 class ReassignCwfsCutoutsTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=ReassignCwfsCutoutsTaskConnections
+    pipeBase.PipelineTaskConfig, pipelineConnections=ReassignCwfsCutoutsTaskConnections  # type: ignore
 ):
     pass
 
@@ -98,8 +102,9 @@ class ReassignCwfsCutoutsTask(pipeBase.PipelineTask):
 
     ConfigClass = ReassignCwfsCutoutsTaskConfig
     _DefaultName = "ReassignCwfsCutoutsTask"
+    config: ReassignCwfsCutoutsTaskConfig
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
     def runQuantum(
@@ -107,7 +112,7 @@ class ReassignCwfsCutoutsTask(pipeBase.PipelineTask):
         butlerQC: pipeBase.QuantumContext,
         inputRefs: pipeBase.InputQuantizedConnection,
         outputRefs: pipeBase.OutputQuantizedConnection,
-    ):
+    ) -> None:
         """
         We need to be able to take pairs of detectors from the full
         set of detector exposures and run the task. Then we need to put

@@ -21,6 +21,7 @@
 
 __all__ = ["DonutStamps"]
 
+
 import numpy as np
 from lsst.meas.algorithms.stamps import StampsBase, readFitsWithOptions
 from lsst.ts.wep.task.donutStamp import DonutStamp
@@ -34,7 +35,7 @@ class DonutStamps(StampsBase):
     and is storable and readable within a Gen 3 repository.
     """
 
-    def _refresh_metadata(self):
+    def _refresh_metadata(self) -> None:
         sky_positions = self.getSkyPositions()
         self.metadata["RA_DEG"] = [p.getRa().asDegrees() for p in sky_positions]
         self.metadata["DEC_DEG"] = [p.getDec().asDegrees() for p in sky_positions]
@@ -58,7 +59,7 @@ class DonutStamps(StampsBase):
         bandpasses = self.getBandpasses()
         self.metadata["BANDPASS"] = [bandpass for bandpass in bandpasses]
 
-    def getSkyPositions(self):
+    def getSkyPositions(self) -> list:
         """
         Get the ra, dec coordinates in degrees of the DonutStamps.
 
@@ -69,7 +70,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.sky_position for stamp in self]
 
-    def getXY0Positions(self):
+    def getXY0Positions(self) -> list:
         """
         Get the corner position of the DonutStamp BBox locations.
 
@@ -80,7 +81,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.stamp_im.getXY0() for stamp in self]
 
-    def getCentroidPositions(self):
+    def getCentroidPositions(self) -> list:
         """
         Get the centroid positions of the DonutStamps in the original image.
 
@@ -91,7 +92,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.centroid_position for stamp in self]
 
-    def getBlendCentroids(self):
+    def getBlendCentroids(self) -> list:
         """
         Get the X,Y centroid positions of the blended sources in pixels.
 
@@ -124,7 +125,7 @@ class DonutStamps(StampsBase):
 
         return [finalBlendXList, finalBlendYList]
 
-    def getDetectorNames(self):
+    def getDetectorNames(self) -> list:
         """
         Get the detector name for each stamp.
 
@@ -135,7 +136,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.detector_name for stamp in self]
 
-    def getCameraNames(self):
+    def getCameraNames(self) -> list:
         """
         Get the instrument name for each stamp.
 
@@ -146,7 +147,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.cam_name for stamp in self]
 
-    def getDefocalTypes(self):
+    def getDefocalTypes(self) -> list:
         """
         Get the defocal type for each stamp.
 
@@ -157,7 +158,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.defocal_type for stamp in self]
 
-    def getDefocalDistances(self):
+    def getDefocalDistances(self) -> list:
         """
         Get the defocal distance for each stamp.
 
@@ -168,7 +169,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.defocal_distance for stamp in self]
 
-    def getBandpasses(self):
+    def getBandpasses(self) -> list:
         """
         Get the bandpass for each stamp.
 
@@ -179,7 +180,7 @@ class DonutStamps(StampsBase):
         """
         return [stamp.bandpass for stamp in self]
 
-    def append(self, newStamp):
+    def append(self, newStamp: DonutStamp) -> None:
         """Add an additional stamp.
 
         Parameters
@@ -197,7 +198,7 @@ class DonutStamps(StampsBase):
         # Follow same procedure as Stamps subclass
         self._stamps.append(newStamp)
 
-    def extend(self, newStampList):
+    def extend(self, newStampList: list) -> None:
         """Extend DonutStamps instance by appending elements
         from another instance.
 
@@ -218,7 +219,7 @@ class DonutStamps(StampsBase):
         self._stamps += newStampList
 
     @classmethod
-    def readFits(cls, filename):
+    def readFits(cls, filename: str) -> "DonutStamps":
         """Build an instance of this class from a file.
 
         Parameters
@@ -234,7 +235,7 @@ class DonutStamps(StampsBase):
         return cls.readFitsWithOptions(filename, None)
 
     @classmethod
-    def readFitsWithOptions(cls, filename, options):
+    def readFitsWithOptions(cls, filename: str, options: dict | None) -> "DonutStamps":
         """Build an instance of this class with options.
 
         Parameters

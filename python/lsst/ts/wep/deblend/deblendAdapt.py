@@ -41,7 +41,7 @@ class DeblendAdapt(DeblendDefault):
     """DeblendDefault child class to do the deblending by the adaptive
     threshold method."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(DeblendAdapt, self).__init__()
 
         # Method to find the centroid of donut
@@ -52,7 +52,9 @@ class DeblendAdapt(DeblendDefault):
         # Initial guess of block size used in the adaptive threshold mothod
         self.blockSizeInit = 33
 
-    def deblendDonut(self, imgToDeblend, iniGuessXY):
+    def deblendDonut(
+        self, imgToDeblend: np.ndarray, iniGuessXY: list[tuple]
+    ) -> tuple[np.ndarray, float, float]:
         """Deblend the donut image.
 
         Parameters
@@ -172,7 +174,7 @@ class DeblendAdapt(DeblendDefault):
 
         return imgDeblend, realcx, realcy
 
-    def _getImgBinaryAdapt(self, imgInit):
+    def _getImgBinaryAdapt(self, imgInit: np.ndarray) -> np.ndarray:
         """Get the binary image by the adaptive threshold method.
 
         Parameters
@@ -213,7 +215,9 @@ class DeblendAdapt(DeblendDefault):
 
         return imgBinary
 
-    def _funcResidue(self, posShift, imgBinary, resImgBinary):
+    def _funcResidue(
+        self, posShift: tuple | list, imgBinary: np.ndarray, resImgBinary: np.ndarray
+    ) -> float:
         """Use the least square method to decide the position of neighboring
         star.
 
@@ -245,8 +249,14 @@ class DeblendAdapt(DeblendDefault):
         return delta
 
     def _funcMag(
-        self, magRatio, imgMainDonut, imgOverlapBinary, imgFit, imgRef, xyShiftNeighbor
-    ):
+        self,
+        magRatio: float,
+        imgMainDonut: np.ndarray,
+        imgOverlapBinary: np.ndarray,
+        imgFit: np.ndarray,
+        imgRef: np.ndarray,
+        xyShiftNeighbor: tuple | list,
+    ) -> float:
         """Use the least square method to decide the magnitude ratio of
         neighboring star.
 
@@ -284,7 +294,12 @@ class DeblendAdapt(DeblendDefault):
 
         return delta
 
-    def _repairBoundary(self, imgOverlapBinary, imgBinary, imgDeblend):
+    def _repairBoundary(
+        self,
+        imgOverlapBinary: np.ndarray,
+        imgBinary: np.ndarray,
+        imgDeblend: np.ndarray,
+    ) -> np.ndarray:
         """Compensate the values on boundary of overlap region between the
         bright star and neighboring star.
 

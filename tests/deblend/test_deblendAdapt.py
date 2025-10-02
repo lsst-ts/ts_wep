@@ -30,14 +30,14 @@ from lsst.ts.wep.utils import getModulePath
 class TestDeblendAdapt(unittest.TestCase):
     """Test the DeblendAdapt class."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.deblend = DeblendAdapt()
 
-    def testDeblendDonutMoreThanOneStarNgr(self):
+    def testDeblendDonutMoreThanOneStarNgr(self) -> None:
         iniGuessXY = [(1, 2), (3, 4)]
         self.assertRaises(ValueError, self.deblend.deblendDonut, [], iniGuessXY)
 
-    def testDeblendDonut(self):
+    def testDeblendDonut(self) -> None:
         template, imgToDeblend, iniGuessXY = self._genBlendedImg()
         imgDeblend, realcx, realcy = self.deblend.deblendDonut(imgToDeblend, iniGuessXY)
 
@@ -47,7 +47,9 @@ class TestDeblendAdapt(unittest.TestCase):
         self.assertEqual(np.rint(realcx), 96)
         self.assertEqual(np.rint(realcy), 93)
 
-    def _genBlendedImg(self):
+    def _genBlendedImg(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, list[tuple[float, float]]]:
         imageFilePath = os.path.join(
             getModulePath(),
             "tests",

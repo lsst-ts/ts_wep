@@ -28,18 +28,24 @@ __all__ = [
     "createTemplateForDetector",
     "convertHistoryToMetadata",
     "convertMetadataToHistory",
+    "convertDictToVisitInfo",
 ]
 
 import os
 import shlex
 import subprocess
 from contextlib import ExitStack
-from typing import Optional, Union
+from typing import TextIO
 
+import astropy.units as u
 import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
 import numpy as np
-from lsst.afw.cameraGeom import FIELD_ANGLE, Detector, DetectorType
+from lsst.afw.cameraGeom import FIELD_ANGLE, Camera, Detector, DetectorType
+from lsst.afw.coord import Observatory
+from lsst.afw.image import RotType, VisitInfo
+from lsst.daf.base import DateTime
+from lsst.geom import SpherePoint, degrees, radians
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
@@ -47,7 +53,13 @@ from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType
 
 
-def runProgram(command, binDir=None, argstring=None, stdout=None, stderr=None):
+def runProgram(
+    command: str,
+    binDir: str | None = None,
+    argstring: str | None = None,
+    stdout: TextIO | str | None = None,
+    stderr: TextIO | str | None = None,
+) -> None:
     """Run the program w/o arguments.
 
     Parameters
@@ -98,8 +110,13 @@ def runProgram(command, binDir=None, argstring=None, stdout=None, stderr=None):
 
 
 def writePipetaskCmd(
-    repoDir, runName, instrument, collections, taskName=None, pipelineYaml=None
-):
+    repoDir: str,
+    runName: str,
+    instrument: str,
+    collections: str,
+    taskName: str | None = None,
+    pipelineYaml: str | None = None,
+) -> str:
     """
     Format a command line call to run a Gen 3 pipeline task.
     Can also be a set of tasks if specified in a pipeline yaml file.
@@ -147,7 +164,7 @@ def writePipetaskCmd(
     return pipetaskCmd
 
 
-def writeCleanUpRepoCmd(repoDir, runName):
+def writeCleanUpRepoCmd(repoDir: str, runName: str) -> str:
     """
     Format a command line call to clean up the data created by a pipeline.
 
@@ -170,7 +187,7 @@ def writeCleanUpRepoCmd(repoDir, runName):
     return cleanUpCmd
 
 
-def getCameraFromButlerName(camName):
+def getCameraFromButlerName(camName: str) -> Camera:
     """
     Get the proper camera object for the donuts.
 
@@ -206,7 +223,7 @@ def getCameraFromButlerName(camName):
 def getTaskInstrument(
     camName: str,
     detectorName: str,
-    instConfigFile: Union[str, None] = None,
+    instConfigFile: str | None = None,
 ) -> Instrument:
     """Get the instrument to use for the task.
 
@@ -256,13 +273,13 @@ def getTaskInstrument(
 def createTemplateForDetector(
     detector: Detector,
     defocalType: DefocalType,
-    bandLabel: Union[BandLabel, str] = BandLabel.REF,
-    instrument: Optional[Instrument] = None,
+    bandLabel: BandLabel | str = BandLabel.REF,
+    instrument: Instrument | None = None,
     opticalModel: str = "offAxis",
     padding: int = 5,
     isBinary: bool = True,
     ccs: bool = False,
-    nPixels: int = None,
+    nPixels: int | None = None,
 ) -> np.ndarray:
     """Create a donut template for the given detector.
 
@@ -381,7 +398,7 @@ def convertHistoryToMetadata(history: dict) -> pipeBase.TaskMetadata:
     return history
 
 
-def convertMetadataToHistory(metadata: pipeBase.TaskMetadata) -> dict:
+def convertMetadataToHistory(metadata: pipeBase.TaskMetadata | dict | str) -> dict:
     """Convert the history from the metadata back to original format.
 
     Parameters
@@ -404,13 +421,13 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata) -> dict:
     elif isinstance(metadata, dict):
         # If these are the keys, convert to an array
         if set(metadata.keys()) == {"shape", "dtype", "values"}:
-            metadata = np.array(
+            _metadata = np.array(
                 metadata["values"],
                 dtype=metadata["dtype"],
             ).reshape([int(val) for val in metadata["shape"]])
         # Otherwise, recurse on keys and values
         else:
-            metadata = {
+            _metadata = {
                 convertMetadataToHistory(key): convertMetadataToHistory(val)
                 for key, val in metadata.items()
             }
@@ -418,16 +435,59 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata) -> dict:
     # Convert "None" strings back to None and numeric strings to floats/ints
     elif isinstance(metadata, str):
         if metadata == "None":
-            metadata = None
+            _metadata = None
         elif "." in metadata:
             try:
-                metadata = float(metadata)
+                _metadata = float(metadata)
             except:  # noqa: E722
                 pass
         else:
             try:
-                metadata = int(metadata)
+                _metadata = int(metadata)
             except:  # noqa: E722
                 pass
 
-    return metadata
+    return _metadata
+
+
+def convertDictToVisitInfo(
+    info: dict,
+) -> VisitInfo:
+    """
+    Convert a dictionary (as from astropy metadata added by
+    addVisitInfoToCatTable) back into a VisitInfo object.
+
+    Parameters
+    ----------
+    info : dict
+        Dictionary of visit info.
+
+    Returns
+    -------
+    `lsst.afw.image.VisitInfo`
+        VisitInfo object with the same information as the input dictionary.
+    """
+    kwargs = {
+        "id": info["visit_id"],
+        "date": DateTime(info["mjd"], system=DateTime.MJD, scale=DateTime.TAI),
+        "boresightRaDec": SpherePoint(
+            info["boresight_ra"].to_value(u.rad) * radians,
+            info["boresight_dec"].to_value(u.rad) * radians,
+        ),
+        "boresightAzAlt": SpherePoint(
+            info["boresight_az"].to_value(u.rad) * radians,
+            info["boresight_alt"].to_value(u.rad) * radians,
+        ),
+        "boresightRotAngle": info["boresight_rot_angle"].to_value(u.rad) * radians,
+        "rotType": RotType(info["rot_type_value"]),
+        "focusZ": info["focus_z"].to_value(u.mm),
+        "instrumentLabel": info["instrument_label"],
+        "observatory": Observatory(
+            info["observatory_longitude"].to_value(u.deg) * degrees,
+            info["observatory_latitude"].to_value(u.deg) * degrees,
+            info["observatory_elevation"].to_value(u.m),
+        ),
+        "era": info["ERA"].to_value(u.rad) * radians,
+        "exposureTime": info["exposure_time"].to_value(u.s),
+    }
+    return VisitInfo(**kwargs)

@@ -42,13 +42,18 @@ class RefCatalogInterface(object):
         Boresight rotation angle in degreees.
     """
 
-    def __init__(self, boresightRa, boresightDec, boresightRotAng):
+    def __init__(
+        self,
+        boresightRa: float,
+        boresightDec: float,
+        boresightRotAng: float,
+    ) -> None:
         # Set the pointing information
         self.boresightRa = boresightRa
         self.boresightDec = boresightDec
         self.boresightRotAng = boresightRotAng
 
-    def getHtmIds(self, radius=1.8):
+    def getHtmIds(self, radius: float = 1.8) -> list:
         """
         Get the htmIds for the pieces of the reference catalog
         that overlap the circular area within `radius` (in degrees)
@@ -81,7 +86,13 @@ class RefCatalogInterface(object):
 
         return htmIds[0]
 
-    def getDataRefs(self, htmIds, butler, catalogName, collections):
+    def getDataRefs(
+        self,
+        htmIds: list,
+        butler: lsst.daf.butler.Butler,
+        catalogName: str,
+        collections: str | list[str],
+    ) -> tuple[list, list]:
         """
         Get the butler references and dataIds
         for the reference catalog shards specified.
@@ -124,7 +135,9 @@ class RefCatalogInterface(object):
             dataIds.append(dataRef[0].dataId)
         return deferredList, dataIds
 
-    def getDetectorWcs(self, detector):
+    def getDetectorWcs(
+        self, detector: lsst.afw.cameraGeom.Detector
+    ) -> lsst.afw.geom.SkyWcs:
         """
         Create a WCS for the detector with the initialized
         pointing information.

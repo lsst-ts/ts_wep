@@ -25,7 +25,7 @@ import unittest
 import lsst.geom
 import numpy as np
 from astropy import units
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task.generateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTask,
     GenerateDonutCatalogOnlineTaskConfig,
@@ -35,7 +35,7 @@ from lsst.ts.wep.utils import getModulePath
 
 
 class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         boresightRa = 0.0
         boresightDec = 0.0
         boresightRotAng = 0.0
@@ -46,7 +46,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         shardIds = self.refCatInterface.getHtmIds()
@@ -64,7 +64,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
             "camera", instrument="LSSTCam", collections=["LSSTCam/calib/unbounded"]
         )
 
-    def _getRefCat(self):
+    def _getRefCat(self) -> list:
         refCatList = list()
         datasetGenerator = self.registry.queryDatasets(
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
@@ -76,7 +76,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
 
         return refCatList
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.config.filterName = "r"
         self.config.doDonutSelection = False
         self.config.edgeMargin = 100
@@ -86,7 +86,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         self.assertEqual(task.config.doDonutSelection, False)
         self.assertEqual(task.config.edgeMargin, 100)
 
-    def testGetRefObjLoader(self):
+    def testGetRefObjLoader(self) -> None:
         refCatList = self._getRefCat()
         refObjLoader = self.task.getRefObjLoader(refCatList)
 
@@ -106,7 +106,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
         self.assertEqual(len(donutCatFull.refCat), 24)
 
-    def testTaskRun(self):
+    def testTaskRun(self) -> None:
         self.config.doDonutSelection = False
         task = GenerateDonutCatalogOnlineTask(config=self.config)
 

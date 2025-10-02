@@ -5,6 +5,82 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-14.17.0:
+
+-------------
+ 14.17.0
+-------------
+
+* Add AiDonutAlgorithm for wavefront estimation using a PyTorch model.
+* Add EstimateZernikesAiDonutTask to use AiDonutAlgorithm.
+
+.. _lsst.ts.wep-14.16.1:
+
+-------------
+ 14.16.1
+-------------
+
+* Fix missing logic in generateDonutFromRefitWcsTask that caused failures when scatter in WCS fit was too large.
+* Return original post_isr_image with new WCS if WCS fit successful.
+
+.. _lsst.ts.wep-14.16.0:
+
+-------------
+ 14.16.0
+-------------
+
+* Add DonutSizeCorrelator to measure donut diameters at the exposure level.
+* Updated handling of radius information to donut stamps metadata, and donut quality table.
+
+.. _lsst.ts.wep-14.15.0:
+
+-------------
+ 14.15.0
+-------------
+
+* Add background subtraction to generateDonutDirectDetectTask.
+
+.. _lsst.ts.wep-14.14.1:
+
+-------------
+ 14.14.1
+-------------
+
+* Add mypy as a dependency to ts_wep.
+
+.. _lsst.ts.wep-14.14.0:
+
+-------------
+ 14.14.0
+-------------
+
+* Mypy the entire ts_wep repository.
+
+.. _lsst.ts.wep-14.13.1:
+
+-------------
+ 14.13.1
+-------------
+
+* Minor changes to help danish run more robustly.
+
+.. _lsst.ts.wep-14.13.0:
+
+-------------
+ 14.13.0
+-------------
+
+* Fix fitDonutRadiusTask to use median of cuts at different angles.
+
+.. _lsst.ts.wep-14.12.0:
+
+-------------
+ 14.12.0
+-------------
+
+* Update default exposure connection to post_isr_image from postISRCCD in pipelines and tasks.
+
 .. _lsst.ts.wep-14.11.0:
 
 -------------
@@ -23,6 +99,14 @@ Version History
 * Fix adding new metadata in generateDonutFromRefitWcsTask
 * Update cutOutDonutsBase test value due to ISR changes
 
+.. _lsst.ts.wep-14.10.1:
+
+-------------
+ 14.10.0
+-------------
+
+* Add donut radius fail flag to donut quality tables.
+
 .. _lsst.ts.wep-14.10.0:
 
 -------------
@@ -31,7 +115,7 @@ Version History
 
 * Add donut radius, left edge and right edge to metadata of donutStamps.
 * Refactor fitDonutRadiusTask to be a regular task and take donutStamps as input.
-  
+
 .. _lsst.ts.wep-14.9.0:
 
 -------------

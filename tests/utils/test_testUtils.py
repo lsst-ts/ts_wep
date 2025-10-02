@@ -27,7 +27,7 @@ from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
 
 class TestSingleThreading(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         # Store original environment variables to restore after test
         self.original_openblas = os.environ.get("OPENBLAS_NUM_THREADS")
         self.original_mkl = os.environ.get("MKL_NUM_THREADS")
@@ -45,7 +45,7 @@ class TestSingleThreading(unittest.TestCase):
         except (AttributeError, ImportError):
             pass
 
-    def test_enforce_single_threading(self):
+    def test_enforce_single_threading(self) -> None:
         # Call the function to enforce single-threading
         enforce_single_threading()
 
@@ -77,7 +77,7 @@ class TestSingleThreading(unittest.TestCase):
             os.environ["BLIS_NUM_THREADS"], "1", "BLIS_NUM_THREADS should be set to 1"
         )
 
-    def test_threadpool_limits(self):
+    def test_threadpool_limits(self) -> None:
         # Call the function to enforce single-threading
         enforce_single_threading()
 
@@ -101,7 +101,7 @@ class TestSingleThreading(unittest.TestCase):
                     f"OpenMP library {library['prefix']} should be limited to 1 thread",
                 )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         # Restore original environment variables
         if self.original_openblas is not None:
             os.environ["OPENBLAS_NUM_THREADS"] = self.original_openblas

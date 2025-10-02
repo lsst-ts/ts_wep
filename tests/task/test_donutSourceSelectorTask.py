@@ -25,7 +25,7 @@ import unittest
 import astropy.units as u
 import numpy as np
 import pandas as pd
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.pex.config import FieldValidationError
 from lsst.ts.wep.task.donutSourceSelectorTask import (
     DonutSourceSelectorTask,
@@ -35,7 +35,7 @@ from lsst.ts.wep.utils import getModulePath, readConfigYaml
 
 
 class TestDonutSourceSelectorTask(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = DonutSourceSelectorTaskConfig()
         self.task = DonutSourceSelectorTask()
 
@@ -43,14 +43,14 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
         self.filterName = "g"
 
         self.magMax = 99.0
         self.magMin = -99.0
 
-    def _createTestCat(self):
+    def _createTestCat(self) -> tuple[pd.DataFrame, dict]:
         minimalCat = pd.DataFrame()
 
         # Set magnitudes to test with policy file values
@@ -78,7 +78,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         detector = camera["R22_S11"]
         return minimalCat, detector
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         # Check default configuration
         self.OrigTask = DonutSourceSelectorTask(config=self.config, name="Orig Task")
         self.assertEqual(self.OrigTask.config.xCoordField, "centroid_x")
@@ -97,7 +97,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             # sourceLimit defined to be integer. Float should raise error.
             self.config.sourceLimit = 2.1
 
-    def testSelectSourcesMagLimits(self):
+    def testSelectSourcesMagLimits(self) -> None:
         minimalCat, detector = self._createTestCat()
 
         # All donuts should pass since default mag limit is (-99.0, 99.0)
@@ -131,7 +131,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         testCatSelected = testCatStruct.selected
         self.assertListEqual(list(testCatSelected), [True, False, False, True])
 
-    def testSelectSources(self):
+    def testSelectSources(self) -> None:
         minimalCat, detector = self._createTestCat()
 
         # All donuts chosen since none overlap in this instance
@@ -365,7 +365,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         for bY, trueBY in zip(testCatStruct.blendCentersY, [[200.0, 200.0]]):
             self.assertListEqual(list(bY), trueBY)
 
-    def testTaskRun(self):
+    def testTaskRun(self) -> None:
         minimalCat, detector = self._createTestCat()
 
         # All donuts should pass since default mag limit is (-99.0, 99.0)

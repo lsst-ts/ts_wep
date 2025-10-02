@@ -25,7 +25,7 @@ import tempfile
 
 import lsst.utils.tests
 import pytest
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
@@ -48,8 +48,12 @@ from lsst.ts.wep.utils import (
     reason="requires access to butler db",
 )
 class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
+    runName: str
+    repoDir: str
+    cameraName: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Run the pipeline only once since it takes a
         couple minutes with the ISR.
@@ -65,12 +69,12 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         # to ensure write access is granted
         user = getpass.getuser()
         tempDir = os.path.join(cls.repoDir, "u", user)
-        cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
-        testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
+        testDir = tempfile.TemporaryDirectory(dir=tempDir)
+        testDirName = os.path.split(testDir.name)[1]  # temp dir name
         cls.runName = os.path.join("u", user, testDirName)
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if cls.runName in collectionsList:
@@ -92,14 +96,14 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         pipeCmd += " -d 'exposure IN (2021090800487, 2021090800488) AND visit_system=0'"
         runProgram(pipeCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CutOutDonutsScienceSensorTaskConfig()
         self.config.donutStampSize = 200
         self.config.opticalModel = "onAxis"
         self.config.initialCutoutPadding = 40
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdExtra = {
@@ -115,7 +119,7 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
             "visit": 2021090800488,
         }
 
-    def testAssignExtraIntraIdx(self):
+    def testAssignExtraIntraIdx(self) -> None:
         focusZextra = -1.5
         focusZintra = -1.2
 
@@ -140,14 +144,14 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
             str(context.exception),
         )
 
-    def testTaskRun(self):
+    def testTaskRun(self) -> None:
         # Grab two exposures from the same detector at two different visits to
         # get extra and intra
         exposureExtra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdExtra, collections=[self.runName]
+            "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
         )
         exposureIntra = self.butler.get(
-            "postISRCCD", dataId=self.dataIdIntra, collections=[self.runName]
+            "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
         donutTableExtra = self.butler.get(
@@ -197,15 +201,15 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         )
 
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
-            self.assertMaskedImagesAlmostEqual(
+            self.assertMaskedImagesAlmostEqual(  # type: ignore
                 donutStamp.stamp_im, cutOutStamp.stamp_im, atol=1e-4
             )
         for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
-            self.assertMaskedImagesAlmostEqual(
+            self.assertMaskedImagesAlmostEqual(  # type: ignore
                 donutStamp.stamp_im, cutOutStamp.stamp_im, atol=1e-4
             )
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)

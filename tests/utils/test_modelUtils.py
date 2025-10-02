@@ -28,10 +28,10 @@ from lsst.ts.wep.utils.modelUtils import forwardModelPair
 class TestModelUtils(unittest.TestCase):
     """Test the model utility functions."""
 
-    def testDefaultsRun(self):
+    def testDefaultsRun(self) -> None:
         forwardModelPair()
 
-    def testSuppliedZernikes(self):
+    def testSuppliedZernikes(self) -> None:
         # Simulate then reuse Zernikes
         zk1, intra1, extra1 = forwardModelPair()
         zk2, intra2, extra2 = forwardModelPair(zkCoeff=zk1)
@@ -41,7 +41,7 @@ class TestModelUtils(unittest.TestCase):
         self.assertTrue(np.allclose(intra1.image, intra2.image))
         self.assertTrue(np.allclose(extra1.image, extra2.image))
 
-    def testRandomSeed(self):
+    def testRandomSeed(self) -> None:
         # 3 models with 2 different seeds
         zk1, intra1, extra1 = forwardModelPair(seed=42)
         zk2, intra2, extra2 = forwardModelPair(seed=42)
@@ -63,7 +63,7 @@ class TestModelUtils(unittest.TestCase):
         self.assertFalse(np.allclose(intra1.fieldAngle, intra3.fieldAngle))
         self.assertFalse(np.allclose(extra1.fieldAngle, extra3.fieldAngle))
 
-    def testAngles(self):
+    def testAngles(self) -> None:
         # Specify single angles
         _, intra1, extra1 = forwardModelPair(fieldAngleIntra=(0.12, 0.34))
         _, intra2, extra2 = forwardModelPair(fieldAngleExtra=(0.12, 0.34))
@@ -74,7 +74,7 @@ class TestModelUtils(unittest.TestCase):
         self.assertTrue(np.allclose(intra1.fieldAngle, extra2.fieldAngle))
         self.assertTrue(np.allclose(extra1.fieldAngle, intra2.fieldAngle))
 
-    def testZernikes(self):
+    def testZernikes(self) -> None:
         # Zero Zernikes
         zk1, _, _ = forwardModelPair(zkNorm=0)
         zk2, _, _ = forwardModelPair(zkMax=0)
@@ -86,7 +86,7 @@ class TestModelUtils(unittest.TestCase):
         self.assertFalse(np.isfinite(intra.image).any())
         self.assertFalse(np.isfinite(extra.image).any())
 
-    def testBlends(self):
+    def testBlends(self) -> None:
         # Just going to test that blends get added by looking at flux
         _, intra1, extra1 = forwardModelPair()
         _, intra2, extra2 = forwardModelPair(
@@ -113,14 +113,14 @@ class TestModelUtils(unittest.TestCase):
         _, intra2, extra2 = forwardModelPair(blendOffsetsIntra=((40, 30),))
         self.assertTrue(np.allclose(intra1.image, intra2.image))
 
-    def testSeeing(self):
+    def testSeeing(self) -> None:
         # No atmosphere should cover fewer pixels
         _, intra1, extra1 = forwardModelPair(seeing=0, skyLevel=0)
         _, intra2, extra2 = forwardModelPair(seeing=1, skyLevel=0)
         self.assertTrue(np.sum(intra1.image > 0) < np.sum(intra2.image > 0))
         self.assertTrue(np.sum(extra1.image > 0) < np.sum(extra2.image > 0))
 
-    def testMiscenter(self):
+    def testMiscenter(self) -> None:
         # Move extrafocal donut all the way out of frame
         _, intra, extra = forwardModelPair(skyLevel=0, miscenterExtra=(500, 0))
         self.assertTrue(intra.image.sum() > 0)

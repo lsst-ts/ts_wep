@@ -39,7 +39,12 @@ from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-def plotZernike(zkIdx, zk, unit, saveFilePath=None):
+def plotZernike(
+    zkIdx: list[int] | np.ndarray,
+    zk: np.ndarray,
+    unit: str,
+    saveFilePath: str | None = None,
+) -> None:
     """Plot the Zernike polynomials (zk).
 
     Parameters
@@ -285,7 +290,7 @@ def plotRoundTrip(
     opticalModel: str = "offAxis",
     zk: np.ndarray = np.zeros(19),
     nPixels: int = 180,
-):
+) -> tuple[plt.Figure, list[plt.Axes]]:
     """Plot a roundtrip of the ImageMapper
 
     Parameters

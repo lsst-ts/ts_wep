@@ -10,7 +10,7 @@ tasks:
     # include bias or flats we only want to use doApplyGains and
     # doOverscan in our isr task.
     config:
-      connections.outputExposure: "postISRCCD"
+      connections.outputExposure: "post_isr_image"
       doBias: False
       doVariance: False
       doLinearize: False

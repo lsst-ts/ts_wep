@@ -21,6 +21,7 @@
 
 import typing
 from copy import copy
+from typing import Any
 
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
@@ -53,7 +54,7 @@ __all__ = [
 
 
 class GenerateDonutFromRefitWcsTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("instrument", "visit", "detector")
+    pipeBase.PipelineTaskConnections, dimensions=("instrument", "visit", "detector")  # type: ignore
 ):
     """
     Specify the pipeline inputs and outputs needed
@@ -96,7 +97,7 @@ class GenerateDonutFromRefitWcsTaskConnections(
         doc="Output exposure with new WCS",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="postISRCCD",
+        name="post_isr_image",
     )
     donutCatalog = connectionTypes.Output(
         doc="Donut Locations",
@@ -112,7 +113,7 @@ class GenerateDonutFromRefitWcsTaskConnections(
 
 class GenerateDonutFromRefitWcsTaskConfig(
     GenerateDonutCatalogWcsTaskConfig,
-    pipelineConnections=GenerateDonutFromRefitWcsTaskConnections,
+    pipelineConnections=GenerateDonutFromRefitWcsTaskConnections,  # type: ignore
 ):
     """
     Configuration settings for GenerateDonutCatalogWcsTask.
@@ -120,27 +121,27 @@ class GenerateDonutFromRefitWcsTaskConfig(
     that run to do the source selection.
     """
 
-    astromTask = pexConfig.ConfigurableField(
+    astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=AstrometryTask, doc="Task for WCS fitting."
     )
-    maxFitScatter = pexConfig.Field(
+    maxFitScatter: pexConfig.Field = pexConfig.Field(
         doc="Maximum allowed scatter for a successful fit (in arcseconds.)",
         dtype=float,
         default=1.0,
     )
-    astromRefFilter = pexConfig.Field(
+    astromRefFilter: pexConfig.Field = pexConfig.Field(
         doc="Set filter to use in Astrometry task.",
         dtype=str,
         default="phot_g_mean",
     )
-    photoRefFilter = pexConfig.Field(
+    photoRefFilter: pexConfig.Field = pexConfig.Field(
         doc="Set filter to use in Photometry catalog. "
         + "Cannot set both this and photoRefFilter. "
         + "If neither is set then will just try to use the name of the exposure filter.",
         dtype=str,
         optional=True,
     )
-    photoRefFilterPrefix = pexConfig.Field(
+    photoRefFilterPrefix: pexConfig.Field = pexConfig.Field(
         doc="Set filter prefix to use. "
         + "Will then try to use exposure band label with given catalog prefix. "
         + "Cannot set both this and photoRefFilter. "
@@ -148,24 +149,24 @@ class GenerateDonutFromRefitWcsTaskConfig(
         dtype=str,
         optional=True,
     )
-    catalogFilterList = pexConfig.ListField(
+    catalogFilterList: pexConfig.ListField = pexConfig.ListField(
         dtype=str,
         doc="Filters from reference catalog to include in donut catalog.",
         default=["lsst_u", "lsst_g", "lsst_r", "lsst_i", "lsst_z", "lsst_y"],
     )
-    failTask = pexConfig.Field(
+    failTask: pexConfig.Field = pexConfig.Field(
         doc="Fail if error raised.",
         dtype=bool,
         default=False,
     )
-    edgeMargin = pexConfig.Field(
+    edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Size of detector edge margin in pixels", dtype=int, default=80
     )
 
     # Took these defaults from atmospec/centroiding which I used
     # as a template for implementing WCS fitting in a task.
     # https://github.com/lsst/atmospec/blob/main/python/lsst/atmospec/centroiding.py
-    def setDefaults(self):
+    def setDefaults(self) -> None:
         super().setDefaults()
         self.astromTask.wcsFitter.retarget(FitAffineWcsTask)
         self.astromTask.doMagnitudeOutlierRejection = False
@@ -189,14 +190,16 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
     ConfigClass = GenerateDonutFromRefitWcsTaskConfig
     _DefaultName = "generateDonutFromRefitWcsTask"
+    config: GenerateDonutFromRefitWcsTaskConfig
+    astromTask: AstrometryTask
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         # Set up the astrometry subtask for WCS fitting.
         self.makeSubtask("astromTask", refObjLoader=None)
 
-    def formatDonutCatalog(self, catalog):
+    def formatDonutCatalog(self, catalog: QTable) -> afwTable.SimpleCatalog:
         """
         Create a minimal donut catalog in afwTable
         format from the input direct detect catalog.
@@ -317,7 +320,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             self.config.astromRefFilter
         )
         afwCat = self.formatDonutCatalog(fitDonutCatalog)
-        originalWcs = copy(exposure.wcs)
+        originalExposure = copy(exposure)
 
         successfulFit = False
         # Set a parameter in the metadata to
@@ -335,6 +338,15 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             if scatter < self.config.maxFitScatter:
                 successfulFit = True
                 self.metadata["wcsFitSuccess"] = True
+            else:
+                # WCS has been fit but scatter is
+                # too high, so use original catalog
+                donutCatalog = fitDonutCatalog
+                self.log.warning(
+                    "Returning original exposure and WCS and "
+                    "direct detect catalog as output."
+                )
+
         except (RuntimeError, TaskError, IndexError, ValueError, AttributeError) as e:
             # IndexError raised for low source counts:
             # index 0 is out of bounds for axis 0 with size 0
@@ -349,7 +361,6 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 raise TaskError("Failing task due to wcs fit failure.")
             else:
                 # this is set to None when the fit fails, so restore it
-                exposure.setWcs(originalWcs)
                 donutCatalog = fitDonutCatalog
                 self.log.warning(
                     "Returning original exposure and WCS and "
@@ -462,5 +473,9 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             [detectorName] * len(donutCatalog), dtype=str
         )
         donutCatalog = addVisitInfoToCatTable(exposure, donutCatalog)
+        # We want the original image array with the new WCS
+        # attached to it if the WCS fitting was successful.
+        if self.metadata["wcsFitSuccess"] is True:
+            originalExposure.setWcs(exposure.wcs)
 
-        return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
+        return pipeBase.Struct(outputExposure=originalExposure, donutCatalog=donutCatalog)

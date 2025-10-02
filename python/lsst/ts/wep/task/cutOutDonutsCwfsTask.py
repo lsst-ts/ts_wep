@@ -22,6 +22,8 @@
 __all__ = ["CutOutDonutsCwfsTaskConfig", "CutOutDonutsCwfsTask"]
 
 
+from typing import Any
+
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
 import lsst.pipe.base as pipeBase
@@ -38,13 +40,13 @@ from lsst.utils.timer import timeMethod
 
 
 class CutOutDonutsCwfsTaskConnections(
-    CutOutDonutsBaseTaskConnections, dimensions=("exposure", "detector", "instrument")
+    CutOutDonutsBaseTaskConnections, dimensions=("exposure", "detector", "instrument")  # type: ignore
 ):
     exposure = connectionTypes.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="postISRCCD",
+        name="post_isr_image",
     )
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
@@ -68,7 +70,7 @@ class CutOutDonutsCwfsTaskConnections(
 
 class CutOutDonutsCwfsTaskConfig(
     CutOutDonutsBaseTaskConfig,
-    pipelineConnections=CutOutDonutsCwfsTaskConnections,
+    pipelineConnections=CutOutDonutsCwfsTaskConnections,  # type: ignore
 ):
     pass
 
@@ -80,8 +82,9 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
 
     ConfigClass = CutOutDonutsCwfsTaskConfig
     _DefaultName = "CutOutDonutsCwfsTask"
+    config: CutOutDonutsCwfsTaskConfig
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         # Set final size (in pixels) of postage stamp images returned as

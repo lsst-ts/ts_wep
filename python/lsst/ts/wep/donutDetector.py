@@ -39,13 +39,13 @@ class DonutDetector(object):
 
     def detectDonuts(
         self,
-        expArray,
-        template,
-        blendRadius,
-        peakThreshold=0.95,
-        dbscanEps=5,
-        binaryChoice="centroid",
-    ):
+        expArray: np.ndarray,
+        template: np.ndarray,
+        blendRadius: float,
+        peakThreshold: float = 0.95,
+        dbscanEps: int = 5,
+        binaryChoice: str = "centroid",
+    ) -> pd.DataFrame:
         """
         Detect and categorize donut sources as blended/unblended
 
@@ -119,7 +119,9 @@ class DonutDetector(object):
 
         return donutDf
 
-    def identifyBlendedDonuts(self, donutDf, blendRadius):
+    def identifyBlendedDonuts(
+        self, donutDf: pd.DataFrame, blendRadius: float
+    ) -> pd.DataFrame:
         """
         Label donuts as blended/unblended if the centroids are within
         the blendRadius number of pixels.

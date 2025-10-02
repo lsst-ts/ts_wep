@@ -32,19 +32,19 @@ from lsst.ts.wep.utils import WfAlgorithmName
 class EstimateZernikesDanishConfig(EstimateZernikesBaseConfig):
     """Danish-specific configuration parameters for Zernike estimation."""
 
-    lstsqKwargs = pexConfig.DictField(
+    lstsqKwargs: pexConfig.DictField = pexConfig.DictField(
         keytype=str,
         default=dict(),
         doc="A dictionary containing any of the keyword arguments for "
         + "scipy.optimize.least_squares, except `fun`, `x0`, `jac`, or `args`.",
     )
-    binning = pexConfig.Field(
+    binning: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=1,
         doc="Binning factor to apply to the donut stamps before estimating "
         + "Zernike coefficients. A value of 1 means no binning.",
     )
-    jointFitPair = pexConfig.Field(
+    jointFitPair: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
         doc="Whether to jointly fit intra/extra pairs, when a pair is provided. "

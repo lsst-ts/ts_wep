@@ -21,6 +21,8 @@
 
 __all__ = ["CentroidDefault"]
 
+from typing import Any
+
 import numpy as np
 from scipy.ndimage import center_of_mass
 
@@ -28,7 +30,9 @@ from scipy.ndimage import center_of_mass
 class CentroidDefault(object):
     """Default Centroid class."""
 
-    def getCenterAndR(self, imgDonut, **kwargs):
+    def getCenterAndR(
+        self, imgDonut: np.ndarray, **kwargs: Any
+    ) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius.
 
         Parameters
@@ -52,7 +56,9 @@ class CentroidDefault(object):
 
         return self.getCenterAndRfromImgBinary(imgBinary)
 
-    def getCenterAndRfromImgBinary(self, imgBinary, **kwargs):
+    def getCenterAndRfromImgBinary(
+        self, imgBinary: np.ndarray, **kwargs: Any
+    ) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius from the binary
         image.
 
@@ -78,7 +84,7 @@ class CentroidDefault(object):
 
         return x, y, radius
 
-    def getImgBinary(self, imgDonut):
+    def getImgBinary(self, imgDonut: np.ndarray) -> np.ndarray:
         """Get the binary image.
 
         Parameters

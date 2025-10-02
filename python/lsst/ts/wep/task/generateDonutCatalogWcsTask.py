@@ -26,8 +26,8 @@ __all__ = [
 ]
 
 import os
-import typing
 import warnings
+from typing import Any
 
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
@@ -46,7 +46,8 @@ from lsst.utils.timer import timeMethod
 
 
 class GenerateDonutCatalogWcsTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("instrument", "visit", "detector")
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "detector", "instrument"),  # type: ignore
 ):
     """
     Specify the pipeline connections needed for
@@ -67,7 +68,7 @@ class GenerateDonutCatalogWcsTaskConnections(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="postISRCCD",
+        name="post_isr_image",
     )
     donutCatalog = connectionTypes.Output(
         doc="Donut Locations",
@@ -83,7 +84,7 @@ class GenerateDonutCatalogWcsTaskConnections(
 
 class GenerateDonutCatalogWcsTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=GenerateDonutCatalogWcsTaskConnections,
+    pipelineConnections=GenerateDonutCatalogWcsTaskConnections,  # type: ignore
 ):
     """
     Configuration settings for GenerateDonutCatalogWcsTask.
@@ -91,13 +92,13 @@ class GenerateDonutCatalogWcsTaskConfig(
     that run to do the source selection.
     """
 
-    donutSelector = pexConfig.ConfigurableField(
+    donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutSourceSelectorTask, doc="How to select donut targets."
     )
-    doDonutSelection = pexConfig.Field(
+    doDonutSelection: pexConfig.Field = pexConfig.Field(
         doc="Whether or not to run donut selector.", dtype=bool, default=True
     )
-    edgeMargin = pexConfig.Field(
+    edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Size of detector edge margin in pixels", dtype=int, default=80
     )
     # When matching photometric filters are not available in
@@ -115,7 +116,10 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
     ConfigClass = GenerateDonutCatalogWcsTaskConfig
     _DefaultName = "generateDonutCatalogWcsTask"
 
-    def __init__(self, **kwargs):
+    config: GenerateDonutCatalogWcsTaskConfig
+    donutSelector: DonutSourceSelectorTask
+
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         if self.config.doDonutSelection:
@@ -125,7 +129,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         # can remove this
         os.environ["NUMEXPR_MAX_THREADS"] = "1"
 
-    def getRefObjLoader(self, refCatalogList):
+    def getRefObjLoader(self, refCatalogList: list) -> ReferenceObjectLoader:
         """
         Create a `ReferenceObjectLoader` from available reference catalogs
         in the repository.
@@ -158,7 +162,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
     @timeMethod
     def run(
         self,
-        refCatalogs: typing.List[afwTable.SimpleCatalog],
+        refCatalogs: list[afwTable.SimpleCatalog],
         exposure: afwImage.Exposure,
     ) -> pipeBase.Struct:
         refObjLoader = self.getRefObjLoader(refCatalogs)

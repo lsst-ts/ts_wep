@@ -26,7 +26,7 @@ import tempfile
 import lsst.utils.tests
 import numpy as np
 import pytest
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
@@ -50,8 +50,13 @@ from lsst.ts.wep.utils import (
     reason="requires access to butler db",
 )
 class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
+    runName: str
+    testDataDir: str
+    repoDir: str
+    cameraName: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Generate donutCatalog needed for task.
         """
@@ -66,12 +71,12 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
         # to ensure write access is granted
         user = getpass.getuser()
         tempDir = os.path.join(cls.repoDir, "u", user)
-        cls.testDir = tempfile.TemporaryDirectory(dir=tempDir)
-        testDirName = os.path.split(cls.testDir.name)[1]  # temp dir name
+        testDir = tempfile.TemporaryDirectory(dir=tempDir)
+        testDirName = os.path.split(testDir.name)[1]  # temp dir name
         cls.runName = os.path.join("u", user, testDirName)
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         if cls.runName in collectionsList:
@@ -94,11 +99,11 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
         runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
         runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
         self.config.doDonutStampSelector = False
         self.config.estimateZernikes.nollIndices = [
@@ -124,7 +129,7 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
         ]
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         self.dataIdIntra = {
@@ -140,7 +145,7 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
             "visit": 2021090800487,
         }
 
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
 
         self.config.combineZernikes.retarget(CombineZernikesMeanTask)
@@ -148,7 +153,7 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
-    def testEstimateZernikesRegression(self):
+    def testEstimateZernikesRegression(self) -> None:
         """THIS DOES NOT TEST ZERNIKE ACCURACY!!!
 
         This only tests to see if software changes result in different
@@ -195,11 +200,11 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
                 0.0147995,
             ]
         )
-        self.assertFloatsAlmostEqual(
+        np.testing.assert_allclose(
             zk, zernCoeff.outputZernikesRaw[0], rtol=0, atol=1e-3
         )
 
-    def testGetCombinedZernikes(self):
+    def testGetCombinedZernikes(self) -> None:
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)

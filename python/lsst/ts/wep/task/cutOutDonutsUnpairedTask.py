@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 
-import typing
+from typing import Any
 
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
@@ -44,13 +44,13 @@ from lsst.utils.timer import timeMethod
 
 class CutOutDonutsUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("exposure", "instrument"),
+    dimensions=("exposure", "instrument"),  # type: ignore
 ):
     exposures = connectionTypes.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
-        name="postISRCCD",
+        name="post_isr_image",
         multiple=True,
     )
     donutCatalog = connectionTypes.Input(
@@ -83,7 +83,7 @@ class CutOutDonutsUnpairedTaskConnections(
 
 class CutOutDonutsUnpairedTaskConfig(
     CutOutDonutsBaseTaskConfig,
-    pipelineConnections=CutOutDonutsUnpairedTaskConnections,
+    pipelineConnections=CutOutDonutsUnpairedTaskConnections,  # type: ignore
 ):
     pass
 
@@ -93,15 +93,16 @@ class CutOutDonutsUnpairedTask(CutOutDonutsBaseTask):
 
     ConfigClass = CutOutDonutsUnpairedTaskConfig
     _DefaultName = "CutOutDonutsUnpairedTask"
+    config: CutOutDonutsUnpairedTaskConfig
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
     @timeMethod
     def run(
         self,
-        exposures: typing.List[afwImage.Exposure],
-        donutCatalog: typing.List[QTable],
+        exposures: list[afwImage.Exposure],
+        donutCatalog: list[QTable],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
         # Loop over exposures (and corresponding catalogs)

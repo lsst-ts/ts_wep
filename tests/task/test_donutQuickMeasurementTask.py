@@ -24,7 +24,7 @@ import unittest
 
 import numpy as np
 import pandas as pd
-from lsst.daf import butler as dafButler
+from lsst.daf.butler import Butler
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task.donutQuickMeasurementTask import (
     DonutQuickMeasurementTask,
@@ -41,8 +41,12 @@ from lsst.ts.wep.utils import (
 
 
 class TestDonutQuickMeasurementTask(unittest.TestCase):
+    expNum: int
+    detNum: int
+    runName: str
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """
         Produce ISR image for task.
         """
@@ -53,7 +57,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         cls.repoDir = os.path.join(cls.testDataDir, "gen3TestRepo")
 
         # Check that run doesn't already exist due to previous improper cleanup
-        butler = dafButler.Butler(cls.repoDir)
+        butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
         cls.expNum = 4021123106001
@@ -71,18 +75,24 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
             pipelineYaml = os.path.join(testPipelineConfigDir, "testIsrPipeline.yaml")
 
             pipeCmd = writePipetaskCmd(
-                cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
             )
-            pipeCmd += f" -d 'detector in ({cls.detNum}) and exposure in ({cls.expNum})'"
+            pipeCmd += (
+                f" -d 'detector in ({cls.detNum}) and exposure in ({cls.expNum})'"
+            )
             runProgram(pipeCmd)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         if cls.runName == "run1":
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.config = DonutQuickMeasurementTaskConfig()
         self.task = DonutQuickMeasurementTask(config=self.config)
 
@@ -90,7 +100,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
 
-        self.butler = dafButler.Butler(self.repoDir)
+        self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
         # Get image from butler
@@ -101,22 +111,19 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
             "visit": self.expNum,
         }
         self.postIsrExp = self.butler.get(
-            "postISRCCD", dataId=testDataId, collections=self.runName
+            "post_isr_image", dataId=testDataId, collections=self.runName
         )
 
-    def _getTemplate(self):
+    def _getTemplate(self) -> np.ndarray:
         # Get the detector
         cam = LsstCam().getCamera()
         detector = cam.get("R22_S11")
 
-        # Create the template
-        template = createTemplateForDetector(
+        return createTemplateForDetector(
             detector=detector, defocalType=DefocalType.Extra
         )
 
-        return template
-
-    def testValidateConfigs(self):
+    def testValidateConfigs(self) -> None:
         # Check default configuration
         self.origTask = DonutQuickMeasurementTask(config=self.config, name="Orig Task")
         self.assertEqual(self.origTask.config.initialCutoutPadding, 5)
@@ -135,7 +142,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         self.assertFalse(self.modifiedTask.config.doPreConvolution)
         self.assertEqual(self.modifiedTask.config.nSigmaDetection, 5)
 
-    def testTaskTemplateError(self):
+    def testTaskTemplateError(self) -> None:
         with self.assertRaises(ValueError) as context:
             self.task.run(self.postIsrExp)
         self.assertEqual(
@@ -146,7 +153,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
             str(context.exception),
         )
 
-    def testTaskRunWithPreConvolve(self):
+    def testTaskRunWithPreConvolve(self) -> None:
         template = self._getTemplate()
 
         output = self.task.run(self.postIsrExp, template)
@@ -166,7 +173,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         relFluxDiff = outputDf["apFlux70"] / np.max(outputDf["apFlux70"])
         np.testing.assert_allclose(relFluxDiff, 1.0, atol=0.1)
 
-    def testTaskRunWithoutPreConvolve(self):
+    def testTaskRunWithoutPreConvolve(self) -> None:
         self.task.config.doPreConvolution = False
         output = self.task.run(self.postIsrExp)
 

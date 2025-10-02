@@ -31,5 +31,7 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
     measurement with an unweighted mean.
     """
 
-    def combineZernikes(self, zernikeArray):
+    def combineZernikes(
+        self, zernikeArray: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         return np.mean(zernikeArray, axis=0), np.zeros(len(zernikeArray), dtype=int)

@@ -43,7 +43,7 @@ from lsst.utils.tests import TestCase
 class TestZernikeUtils(TestCase):
     """Test the Zernike utility functions."""
 
-    def testOrthonormality(self):
+    def testOrthonormality(self) -> None:
         # Create the Zernike basis
         grid = np.linspace(-1, 1, 1000)
         uGrid, vGrid = np.meshgrid(grid, grid)
@@ -68,7 +68,7 @@ class TestZernikeUtils(TestCase):
         close = np.allclose(innerProd, np.identity(innerProd.shape[0]), atol=1e-2)
         self.assertTrue(close)
 
-    def testZernikeEval(self):
+    def testZernikeEval(self) -> None:
         # Create a Zernike basis
         grid = np.linspace(-1, 1, 200)
         uGrid, vGrid = np.meshgrid(grid, grid)
@@ -80,7 +80,7 @@ class TestZernikeUtils(TestCase):
             coeff[-1] = 1
             np.allclose(zernikeEval(uGrid, vGrid, coeff), zkBasis[i])
 
-    def testZernikeGradEval(self):
+    def testZernikeGradEval(self) -> None:
         # Create a Zernike gradient basis
         grid = np.linspace(-1, 1, 200)
         uGrid, vGrid = np.meshgrid(grid, grid)
@@ -93,7 +93,7 @@ class TestZernikeUtils(TestCase):
             np.allclose(zernikeGradEval(uGrid, vGrid, 1, 0, coeff), dzkdu[i])
             np.allclose(zernikeGradEval(uGrid, vGrid, 0, 1, coeff), dzkdv[i])
 
-    def testConvertZernikesToPsf(self):
+    def testConvertZernikesToPsf(self) -> None:
         # Directory where expected values are stored
         testDataDir = os.path.join(
             getModulePath(),
@@ -126,7 +126,7 @@ class TestZernikeUtils(TestCase):
         coeffs = convertZernikesToPsfWidth(np.ones(19))
         self.assertTrue(np.allclose(coeffs, getPsfGradPerZernike()))
 
-    def testGetZernikeParity(self):
+    def testGetZernikeParity(self) -> None:
         xParity = getZernikeParity()
         xTruth = [1, -1, 1, 1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, 1]
         self.assertTrue(all(xParity == xTruth))
@@ -135,7 +135,7 @@ class TestZernikeUtils(TestCase):
         yTruth = [1, -1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1]
         self.assertTrue(all(yParity == yTruth))
 
-    def testJmin(self):
+    def testJmin(self) -> None:
         # Create a pupil grid
         grid = np.linspace(-1, 1, 200)
         u, v = np.meshgrid(grid, grid)
@@ -189,7 +189,7 @@ class TestZernikeUtils(TestCase):
         yParity4 = getZernikeParity(jmin=4, axis="y")
         self.assertTrue(np.allclose(yParity0[4:], yParity4))
 
-    def testSparseDense(self):
+    def testSparseDense(self) -> None:
         vals = np.arange(4, 23)
         indices = np.array([4, 5, 6, 17])
 
@@ -226,7 +226,7 @@ class TestZernikeUtils(TestCase):
             with self.assertRaises(ValueError):
                 func([1, 2, 3], [4, 6, 6])
 
-    def testCheckNollIndices(self):
+    def testCheckNollIndices(self) -> None:
         # These values should all pass
         checkNollIndices(np.array([4]))
         checkNollIndices(np.array([4, 5, 6]))
