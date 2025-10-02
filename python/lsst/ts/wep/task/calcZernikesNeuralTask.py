@@ -594,6 +594,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             A QTable containing the donut stamp metadata
         """
         if len(donutStamps) == 0:
+            self.log.warning("No donut stamps available to convert to QTable")
             return QTable()
 
         # Refresh metadata to ensure it's up to date
