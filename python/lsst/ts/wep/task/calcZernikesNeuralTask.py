@@ -296,11 +296,16 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self, exposure: afwImage.Exposure, cropped_image: np.ndarray, defocalType: str
     ) -> DonutStamps:
         """Create DonutStamps from TARTS output - handles multiple donuts."""
-        self.log.debug(
-            "Creating DonutStamps; input image type/shape: %s, defocalType='%s'",
-            getattr(cropped_image, "shape", type(cropped_image)),
-            defocalType,
-        )
+        # Log image type and shape for debugging
+        try:
+            image_shape = cropped_image.shape
+            self.log.debug(
+                f"Creating DonutStamps; input image shape: {image_shape}, defocalType='{defocalType}'"
+            )
+        except AttributeError:
+            self.log.debug(
+                f"Creating DonutStamps; input image type: {type(cropped_image)}, defocalType='{defocalType}'"
+            )
         # Extract information from exposure
         detector = exposure.getDetector()
         detectorName = detector.getName()
