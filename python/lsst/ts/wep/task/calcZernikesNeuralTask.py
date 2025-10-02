@@ -46,7 +46,7 @@ from lsst.daf.base import PropertyList, DateTime
 import astropy.units as u
 
 # Define the position 2D float dtype for the zernikes table
-pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
+POS2F_DTYPE = np.dtype([("x", "<f4"), ("y", "<f4")])
 
 
 class CalcZernikesNeuralTaskConnections(
