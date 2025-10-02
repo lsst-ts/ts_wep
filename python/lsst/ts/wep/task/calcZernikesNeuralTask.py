@@ -317,13 +317,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         center_x = bbox.getCenterX()
         center_y = bbox.getCenterY()
 
-        # Convert cropped image to proper format
-        if hasattr(cropped_image, 'cpu'):
-            # PyTorch tensor
-            image_array = cropped_image.cpu().numpy()
-        else:
-            # Already numpy array
-            image_array = cropped_image
+        # Use the cropped image directly as it's guaranteed to be a numpy array
+        image_array = cropped_image
 
         # Handle different input shapes
         if len(image_array.shape) == 2:
@@ -1525,11 +1520,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         with torch.no_grad():
             pred = self.tarts.deploy_run(exposure)
         # Convert PyTorch tensor to numpy array
-        if hasattr(pred, 'cpu'):
+        if hasattr(pred, 'cpu') and hasattr(pred, 'numpy'):
             pred = pred.cpu().numpy()
+        elif not isinstance(pred, np.ndarray):
+            pred = np.array(pred)
         self.log.debug("TARTS prediction array shape: %s", np.shape(pred))
+
+        # Ensure cropped_image is a numpy array before passing to function
+        cropped_image_np = self.tarts.cropped_image
+        if hasattr(cropped_image_np, 'cpu') and hasattr(cropped_image_np, 'numpy'):
+            cropped_image_np = cropped_image_np.cpu().numpy()
+        elif not isinstance(cropped_image_np, np.ndarray):
+            cropped_image_np = np.array(cropped_image_np)
+
         # Determine defocal type based on exposure
-        donutStamps = self.createDonutStampFromTarts(exposure, self.tarts.cropped_image, defocalType)
+        donutStamps = self.createDonutStampFromTarts(exposure, cropped_image_np, defocalType)
         self.log.debug(
             "Returning pred shape: %s and total_zernikes shape: %s",
             np.shape(pred),
@@ -1733,8 +1738,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             np.shape(zk),
         )
         # Convert PyTorch tensors to NumPy arrays
-        pred_np = pred.cpu().numpy() if hasattr(pred, 'cpu') else np.array(pred)
-        zk_np = zk.cpu().numpy() if hasattr(zk, 'cpu') else np.array(zk)
+        # pred and zk should already be numpy arrays
+        pred_np = pred if isinstance(pred, np.ndarray) else np.array(pred)
+        zk_np = zk if isinstance(zk, np.ndarray) else np.array(zk)
 
         # Ensure pred is 1D array of Zernike coefficients
         if pred_np.ndim > 1:
