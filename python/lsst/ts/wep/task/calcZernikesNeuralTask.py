@@ -40,7 +40,6 @@ import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
 from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
-from tarts import NeuralActiveOpticsSys
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.daf.base import PropertyList, DateTime
@@ -230,6 +229,16 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
         self.nollIndices = self.config.nollIndices
         self.log.debug("Configured Noll indices: %s", self.nollIndices)
+
+        # Deferred import of TARTS to handle cases where it's not in the build
+        try:
+            from tarts import NeuralActiveOpticsSys
+        except ImportError as e:
+            raise ImportError(
+                "TARTS neural network system not available. "
+                "Please ensure TARTS is installed and available in the Python path. "
+                f"Original error: {e}"
+            ) from e
 
         # TARTS system handles None paths by creating new models with random
         # weights
