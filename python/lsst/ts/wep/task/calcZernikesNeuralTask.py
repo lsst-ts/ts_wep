@@ -333,9 +333,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         num_stamps = image_array.shape[0]
         self.log.debug("Normalized to %d stamp(s) of size %dx%d", num_stamps, self.cropSize, self.cropSize)
         # Get TARTS centers for accurate centroid positions
-        if hasattr(self.tarts, 'centers') and self.tarts.centers is not None:
-            self.log.info("TARTS centers type: %s, shape: %s",
-                          type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape'))
+        try:
+            if self.tarts.centers is not None:
+                self.log.info("TARTS centers type: %s, shape: %s",
+                              type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape'))
 
             # Handle different data types for TARTS centers
             if hasattr(self.tarts.centers, 'cpu'):
@@ -396,12 +397,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donut stamps",
                     center_x, center_y, num_stamps
                 )
-        else:
-            # Fallback to exposure center
+        except AttributeError:
+            # TARTS centers not available, use exposure center
             cent_x_list = [center_x] * num_stamps
             cent_y_list = [center_y] * num_stamps
             self.log.info(
-                "No TARTS centers available, using exposure center [%.1f, %.1f] for %d donut stamps",
+                "TARTS centers not available, using exposure center [%.1f, %.1f] for %d donut stamps",
                 center_x, center_y, num_stamps
             )
 
@@ -420,7 +421,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         metadata["BLEND_CY"] = ["nan"] * num_stamps  # No blended sources
 
         # Add TARTS-specific metadata
-        if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+        try:
             # Convert PyTorch tensors to numpy arrays, then to Python lists
             fx_list = (
                 self.tarts.fx.cpu().numpy().tolist()
@@ -447,7 +448,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 # If lengths don't match, pad with zeros or repeat last value
                 metadata["FX"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_stamps
                 metadata["FY"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_stamps
-        else:
+        except AttributeError:
+            self.log.warning("TARTS fx/fy attributes not available, using default values")
             metadata["FX"] = [0.0] * num_stamps  # Default fx values
             metadata["FY"] = [0.0] * num_stamps  # Default fy values
 
@@ -462,32 +464,42 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             # Create linear WCS for this donut stamp using TARTS center if
             # available
-            if hasattr(self.tarts, 'centers') and self.tarts.centers is not None:
-                # Handle TARTS centers data structure
-                if hasattr(self.tarts.centers, 'cpu'):
-                    centers_array = self.tarts.centers.cpu().numpy()
-                else:
-                    centers_array = np.array(self.tarts.centers)
+            try:
+                if self.tarts.centers is not None:
+                    # Handle TARTS centers data structure
+                    if hasattr(self.tarts.centers, 'cpu'):
+                        centers_array = self.tarts.centers.cpu().numpy()
+                    else:
+                        centers_array = np.array(self.tarts.centers)
 
-                # Handle different array shapes
-                if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
-                    centers_array = centers_array.reshape(-1, 2)
-                elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
-                    centers_array = None
+                    # Handle different array shapes
+                    if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
+                        centers_array = centers_array.reshape(-1, 2)
+                    elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
+                        centers_array = None
 
-                # Use individual center if available
-                if centers_array is not None and i < len(centers_array):
-                    centroid_position = lsst.geom.Point2D(centers_array[i, 0], centers_array[i, 1])
-                    self.log.debug(
-                        "Using TARTS center [%.2f, %.2f] for donut %d",
-                        centers_array[i, 0], centers_array[i, 1], i+1
-                    )
+                    # Use individual center if available
+                    if centers_array is not None and i < len(centers_array):
+                        centroid_position = lsst.geom.Point2D(centers_array[i, 0], centers_array[i, 1])
+                        self.log.debug(
+                            "Using TARTS center [%.2f, %.2f] for donut %d",
+                            centers_array[i, 0], centers_array[i, 1], i+1
+                        )
+                    else:
+                        centroid_position = lsst.geom.Point2D(center_x, center_y)
+                        self.log.debug(
+                            "Using exposure center [%.2f, %.2f] for donut %d", center_x, center_y, i+1
+                        )
                 else:
                     centroid_position = lsst.geom.Point2D(center_x, center_y)
-                    self.log.debug("Using exposure center [%.2f, %.2f] for donut %d", center_x, center_y, i+1)
-            else:
+                    self.log.debug(
+                        "Using exposure center [%.2f, %.2f] for donut %d", center_x, center_y, i+1
+                    )
+            except AttributeError:
                 centroid_position = lsst.geom.Point2D(center_x, center_y)
-                self.log.debug("Using exposure center [%.2f, %.2f] for donut %d", center_x, center_y, i+1)
+                self.log.debug(
+                    "Using exposure center [%.2f, %.2f] for donut %d", center_x, center_y, i+1
+                )
 
             wcs = exposure.wcs
             linearTransform = wcs.linearizePixelToSky(centroid_position, lsst.geom.degrees)
@@ -788,7 +800,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     intra = intraStamps[i]
                     # Use TARTS fx/fy values directly (same as
                     # DonutQualityTable)
-                    if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+                    try:
                         fx_list = (
                             self.tarts.fx.cpu().numpy().tolist()
                             if hasattr(self.tarts.fx, 'cpu')
@@ -811,34 +823,38 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                         else:
                             row["intra_field_x"] = np.nan
                             row["intra_field_y"] = np.nan
-                    else:
+                    except AttributeError:
                         # Fallback to calcFieldXY if TARTS values not available
                         field_xy = intra.calcFieldXY()
                         row["intra_field_x"] = field_xy[0] * u.deg
                         row["intra_field_y"] = field_xy[1] * u.deg
                     # Use TARTS centers if available for more accurate
                     # positions
-                    if hasattr(self.tarts, 'centers') and self.tarts.centers is not None:
-                        # Handle TARTS centers data structure
-                        if hasattr(self.tarts.centers, 'cpu'):
-                            centers_array = self.tarts.centers.cpu().numpy()
-                        else:
-                            centers_array = np.array(self.tarts.centers)
+                    try:
+                        if self.tarts.centers is not None:
+                            # Handle TARTS centers data structure
+                            if hasattr(self.tarts.centers, 'cpu'):
+                                centers_array = self.tarts.centers.cpu().numpy()
+                            else:
+                                centers_array = np.array(self.tarts.centers)
 
-                        # Handle different array shapes
-                        if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
-                            centers_array = centers_array.reshape(-1, 2)
-                        elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
-                            centers_array = None
+                            # Handle different array shapes
+                            if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
+                                centers_array = centers_array.reshape(-1, 2)
+                            elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
+                                centers_array = None
 
-                        # Use individual center if available
-                        if centers_array is not None and i < len(centers_array):
-                            row["intra_centroid_x"] = centers_array[i, 0] * u.pixel
-                            row["intra_centroid_y"] = centers_array[i, 1] * u.pixel
+                            # Use individual center if available
+                            if centers_array is not None and i < len(centers_array):
+                                row["intra_centroid_x"] = centers_array[i, 0] * u.pixel
+                                row["intra_centroid_y"] = centers_array[i, 1] * u.pixel
+                            else:
+                                row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
+                                row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
                         else:
                             row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
                             row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
-                    else:
+                    except AttributeError:
                         row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
                         row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
                 else:
@@ -851,7 +867,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     extra = extraStamps[i]
                     # Use TARTS fx/fy values directly (same as
                     # DonutQualityTable)
-                    if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+                    try:
                         fx_list = (
                             self.tarts.fx.cpu().numpy().tolist()
                             if hasattr(self.tarts.fx, 'cpu')
@@ -874,35 +890,38 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                         else:
                             row["extra_field_x"] = np.nan
                             row["extra_field_y"] = np.nan
-                    else:
+                    except AttributeError:
                         # Fallback to calcFieldXY if TARTS values not available
                         field_xy = extra.calcFieldXY()
                         row["extra_field_x"] = field_xy[0] * u.deg
                         row["extra_field_y"] = field_xy[1] * u.deg
                     # Use TARTS centers if available for more accurate
                     # positions
-                    if hasattr(self.tarts, 'centers') and self.tarts.centers is not None:
-                        # Handle TARTS centers data structure
-                        print("CHECK THE TARTS CENTERS", self.tarts.centers)
-                        if hasattr(self.tarts.centers, 'cpu'):
-                            centers_array = self.tarts.centers.cpu().numpy()
-                        else:
-                            centers_array = np.array(self.tarts.centers)
+                    try:
+                        if self.tarts.centers is not None:
+                            # Handle TARTS centers data structure
+                            if hasattr(self.tarts.centers, 'cpu'):
+                                centers_array = self.tarts.centers.cpu().numpy()
+                            else:
+                                centers_array = np.array(self.tarts.centers)
 
-                        # Handle different array shapes
-                        if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
-                            centers_array = centers_array.reshape(-1, 2)
-                        elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
-                            centers_array = None
+                            # Handle different array shapes
+                            if centers_array.ndim == 1 and len(centers_array) % 2 == 0:
+                                centers_array = centers_array.reshape(-1, 2)
+                            elif centers_array.ndim != 2 or centers_array.shape[1] != 2:
+                                centers_array = None
 
-                        # Use individual center if available
-                        if centers_array is not None and i < len(centers_array):
-                            row["extra_centroid_x"] = centers_array[i, 0] * u.pixel
-                            row["extra_centroid_y"] = centers_array[i, 1] * u.pixel
+                            # Use individual center if available
+                            if centers_array is not None and i < len(centers_array):
+                                row["extra_centroid_x"] = centers_array[i, 0] * u.pixel
+                                row["extra_centroid_y"] = centers_array[i, 1] * u.pixel
+                            else:
+                                row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
+                                row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
                         else:
                             row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
                             row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
-                    else:
+                    except AttributeError:
                         row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
                         row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
                 else:
@@ -1103,7 +1122,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         quality_data = {}
 
         # Get FX and FY from TARTS
-        if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+        try:
             # Convert PyTorch tensors to numpy arrays, then to Python lists
             fx_list = (
                 self.tarts.fx.cpu().numpy().tolist()
@@ -1130,12 +1149,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 # If lengths don't match, pad with zeros or repeat last value
                 quality_data["FX"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_donuts
                 quality_data["FY"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_donuts
-        else:
+        except AttributeError:
+            self.log.warning("TARTS fx/fy attributes not available for quality data, using default values")
             quality_data["FX"] = [0.0] * num_donuts
             quality_data["FY"] = [0.0] * num_donuts
 
         # Get SNR from TARTS
-        if hasattr(self.tarts, 'SNR'):
+        try:
             snr_list = (
                 self.tarts.SNR.cpu().numpy().tolist()
                 if hasattr(self.tarts.SNR, 'cpu')
@@ -1150,7 +1170,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 quality_data["SN"] = snr_list
             else:
                 quality_data["SN"] = [snr_list[0] if len(snr_list) > 0 else np.nan] * num_donuts
-        else:
+        except AttributeError:
+            self.log.warning("TARTS SNR attribute not available for quality data, using default values")
             quality_data["SN"] = [np.nan] * num_donuts
 
         # Add NaN values for missing metrics
@@ -1228,11 +1249,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             donut_data["coord_dec"] = [center_pos.getDec().asRadians()] * num_donuts
 
         # Get centroid positions from TARTS centers (most accurate)
-        if hasattr(self.tarts, 'centers') and self.tarts.centers is not None:
-            self.log.debug(
-                "TARTS centers type: %s, shape: %s",
-                type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape')
-            )
+        try:
+            if self.tarts.centers is not None:
+                self.log.debug(
+                    "TARTS centers type: %s, shape: %s",
+                    type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape')
+                )
 
             # Handle different data types for TARTS centers
             if hasattr(self.tarts.centers, 'cpu'):
@@ -1298,7 +1320,18 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donuts",
                     center_x, center_y, num_donuts
                 )
-        elif hasattr(donutStamps, 'getCentroidPositions'):
+        except AttributeError:
+            # TARTS centers not available, use exposure center
+            bbox = exposure.getBBox()
+            center_x = bbox.getCenterX()
+            center_y = bbox.getCenterY()
+            donut_data["centroid_x"] = [center_x] * num_donuts
+            donut_data["centroid_y"] = [center_y] * num_donuts
+            self.log.info(
+                "TARTS centers not available, using exposure center [%.1f, %.1f] for %d donuts",
+                center_x, center_y, num_donuts
+            )
+        if hasattr(donutStamps, 'getCentroidPositions'):
             # Fallback to donut stamps method
             centroid_positions = donutStamps.getCentroidPositions()
             donut_data["centroid_x"] = [pos.getX() for pos in centroid_positions]
@@ -1314,7 +1347,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             self.log.info("Using exposure center final fallback for %d donuts", num_donuts)
 
         # Get TARTS-specific data for additional columns if available
-        if hasattr(self.tarts, 'fx') and hasattr(self.tarts, 'fy'):
+        try:
             # Convert PyTorch tensors to numpy arrays, then to Python lists
             fx_list = (
                 self.tarts.fx.cpu().numpy().tolist()
@@ -1341,12 +1374,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 # If lengths don't match, pad with zeros
                 donut_data["fx"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_donuts
                 donut_data["fy"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_donuts
-        else:
+        except AttributeError:
+            self.log.warning("TARTS fx/fy attributes not available for donut data, using default values")
             donut_data["fx"] = [0.0] * num_donuts
             donut_data["fy"] = [0.0] * num_donuts
 
         # Get SNR from TARTS
-        if hasattr(self.tarts, 'SNR'):
+        try:
             snr_list = (
                 self.tarts.SNR.cpu().numpy().tolist()
                 if hasattr(self.tarts.SNR, 'cpu')
@@ -1361,7 +1395,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 donut_data["snr"] = snr_list
             else:
                 donut_data["snr"] = [snr_list[0] if len(snr_list) > 0 else np.nan] * num_donuts
-        else:
+        except AttributeError:
+            self.log.warning("TARTS SNR attribute not available for donut data, using default values")
             donut_data["snr"] = [np.nan] * num_donuts
 
         # Add detector information as a column (required by downstream
@@ -1729,7 +1764,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     )
         except Exception as e:
             defocalType = "intra"
-            self.log.info("Error determining defocal type: %s; defaulting to '%s'", e, defocalType)
+            self.log.warning("Error determining defocal type: %s; defaulting to '%s'", e, defocalType)
         pred, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
         self.log.debug(
             "Pred shape pre-squeeze: %s, donut stamps: %d, total zernikes shape: %s",
