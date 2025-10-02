@@ -125,6 +125,9 @@ class CalcZernikesNeuralTaskConfig(
         List of Noll indices to calculate. Default is Z4-Z23 (4-23),
         excluding piston (Z1), tip (Z2), and tilt (Z3) which are
         typically not measured in wavefront sensing.
+    cropSize : int
+        Size of donut crop in pixels (width and height). Default is 160 pixels,
+        which matches the TARTS neural network training data format.
     """
 
     wavenetPath: pexConfig.Field = pexConfig.Field(
@@ -162,6 +165,12 @@ class CalcZernikesNeuralTaskConfig(
             "typically not measured in wavefront sensing.",
         dtype=int,
         default=[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    )
+    cropSize: pexConfig.Field = pexConfig.Field(
+        doc="Size of donut crop in pixels (width and height). Default is 160 pixels, "
+            "which matches the TARTS neural network training data format.",
+        dtype=int,
+        default=160
     )
 
 
@@ -231,7 +240,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             os.path.expandvars(self.config.aggregatornetPath),
         )
         self.tarts = self.tarts.eval()
-        self.cropSize = self.tarts.CROP_SIZE
+        # Use configurable crop size instead of hard-coded TARTS value
+        self.cropSize = self.config.cropSize
         self.device = self.config.device
 
         self.log.info("Initialized TARTS with dataset params: %s", self.config.datasetParamPath)
@@ -303,17 +313,17 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Handle different input shapes
         if len(image_array.shape) == 2:
-            # Single donut: [160, 160] -> reshape to [1, 160, 160]
-            image_array = image_array.reshape(1, 160, 160)
+            # Single donut: [cropSize, cropSize] -> [1, cropSize, cropSize]
+            image_array = image_array.reshape(1, self.cropSize, self.cropSize)
         elif len(image_array.shape) == 3:
-            # Multiple donuts: [num_stamps, 160, 160] - already correct shape
+            # Multiple donuts: [num_stamps, cropSize, cropSize] - correct shape
             pass
         else:
             self.log.warning("Unexpected image array shape: %s", image_array.shape)
             raise ValueError(f"Unexpected image array shape: {image_array.shape}")
 
         num_stamps = image_array.shape[0]
-        self.log.debug("Normalized to %d stamp(s) of size 160x160", num_stamps)
+        self.log.debug("Normalized to %d stamp(s) of size %dx%d", num_stamps, self.cropSize, self.cropSize)
         # Get TARTS centers for accurate centroid positions
         if hasattr(self.tarts, 'centers') and self.tarts.centers is not None:
             self.log.info("TARTS centers type: %s, shape: %s",
@@ -438,7 +448,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         for i in range(num_stamps):
             # Create MaskedImageF for this donut
-            stamp_im = afwImage.MaskedImageF(160, 160)
+            stamp_im = afwImage.MaskedImageF(self.cropSize, self.cropSize)
             stamp_im.image.array[:] = image_array[i]  # Use the i-th donut image
             stamp_im.setXY0(0, 0)  # Set origin
 
