@@ -1705,7 +1705,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Try to get defocal type from exposure metadata first
         try:
             # Check if exposure has defocal type in metadata
-            if hasattr(exposure, 'getMetadata') and exposure.getMetadata() is not None:
+            if exposure.getMetadata() is not None:
                 defocalType = exposure.getMetadata().get("DFC_TYPE", "intra")
                 self.log.info("Found DFC_TYPE in exposure metadata: '%s'", defocalType)
             else:
