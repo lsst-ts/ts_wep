@@ -328,7 +328,6 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Multiple donuts: [num_stamps, cropSize, cropSize] - correct shape
             pass
         else:
-            self.log.warning("Unexpected image array shape: %s", image_array.shape)
             raise ValueError(f"Unexpected image array shape: {image_array.shape}")
 
         num_stamps = image_array.shape[0]
