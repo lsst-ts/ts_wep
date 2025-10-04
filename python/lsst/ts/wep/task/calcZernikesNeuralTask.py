@@ -322,17 +322,17 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             pass
         return None
 
-    def _validate_and_normalize_centers(self, centers_array: np.ndarray) -> Optional[np.ndarray]:
+    def _validate_and_normalize_centers(self, centers_array: np.ndarray) -> np.ndarray:
         """Validate and normalize TARTS centers array to [n, 2] format.
 
         Args:
             centers_array: Input centers array
 
         Returns:
-            Normalized centers array in [n, 2] format, or None if invalid
+            Normalized centers array in [n, 2] format
 
         Raises:
-            Warning: Logged when centers array has invalid shape or dimensions
+            ValueError: If centers array has invalid shape or dimensions
         """
         if centers_array.ndim == 1:
             # Flattened array: [x1, y1, x2, y2, ...] -> reshape to [n, 2]
@@ -341,17 +341,23 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
                 return centers_array
             else:
-                self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
-                return None
+                raise ValueError(
+                    f"TARTS centers length {len(centers_array)} is not divisible by 2. "
+                    "Expected even number of elements for (x, y) coordinate pairs."
+                )
         elif centers_array.ndim == 2:
             # Already in [n, 2] format
             if centers_array.shape[1] != 2:
-                self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
-                return None
+                raise ValueError(
+                    f"TARTS centers shape {centers_array.shape} doesn't have 2 columns. "
+                    "Expected shape (n, 2) for (x, y) coordinate pairs."
+                )
             return centers_array
         else:
-            self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
-            return None
+            raise ValueError(
+                f"Unexpected TARTS centers dimensionality: {centers_array.ndim}. "
+                "Expected 1D (flattened) or 2D (n, 2) array."
+            )
 
     def _extract_centers_for_stamps(
         self, centers_array: np.ndarray, num_stamps: int
@@ -566,15 +572,30 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Get TARTS centers for accurate centroid positions
         centers_array = self._get_tarts_centers()
         if centers_array is not None:
-            self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
+            self.log.warning("TARTS centers numpy array shape: %s", centers_array.shape)
 
             # Validate and normalize centers array
-            normalized_centers = self._validate_and_normalize_centers(centers_array)
-            if normalized_centers is not None and len(normalized_centers) > 0:
-                # Extract coordinates for stamps
-                cent_x_list, cent_y_list = self._extract_centers_for_stamps(normalized_centers, num_stamps)
-            else:
+            try:
+                normalized_centers = self._validate_and_normalize_centers(centers_array)
+                if len(normalized_centers) > 0:
+                    # Extract coordinates for stamps
+                    cent_x_list, cent_y_list = self._extract_centers_for_stamps(
+                        normalized_centers, num_stamps
+                    )
+                else:
+                    # TARTS centers empty, use exposure center
+                    self.log.warning("TARTS centers array is empty, using exposure center")
+                    bbox = exposure.getBBox()
+                    center_x = bbox.getCenterX()
+                    center_y = bbox.getCenterY()
+                    cent_x_list = [center_x] * num_stamps
+                    cent_y_list = [center_y] * num_stamps
+            except ValueError as e:
                 # TARTS centers invalid, use exposure center
+                self.log.warning("TARTS centers validation failed: %s. Using exposure center as fallback.", e)
+                bbox = exposure.getBBox()
+                center_x = bbox.getCenterX()
+                center_y = bbox.getCenterY()
                 cent_x_list = [center_x] * num_stamps
                 cent_y_list = [center_y] * num_stamps
                 self.log.warning(
@@ -583,6 +604,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 )
         else:
             # TARTS centers not available, use exposure center
+            bbox = exposure.getBBox()
+            center_x = bbox.getCenterX()
+            center_y = bbox.getCenterY()
             cent_x_list = [center_x] * num_stamps
             cent_y_list = [center_y] * num_stamps
             self.log.warning(
@@ -1474,6 +1498,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     )
             else:
                 # Fallback: use exposure center
+                self.log.warning("TARTS centers invalid, using exposure center")
                 bbox = exposure.getBBox()
                 center_x = bbox.getCenterX()
                 center_y = bbox.getCenterY()
@@ -1501,6 +1526,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             self.log.info("Using donut stamps centroids for %d donuts", num_donuts)
         except AttributeError:
             # Final fallback: use exposure center
+            self.log.warning("TARTS centers invalid, using exposure center")
             bbox = exposure.getBBox()
             center_x = bbox.getCenterX()
             center_y = bbox.getCenterY()
