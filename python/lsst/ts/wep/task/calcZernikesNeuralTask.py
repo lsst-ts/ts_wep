@@ -969,10 +969,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                         row["intra_field_x"] = fx_list[i] * u.deg
                         row["intra_field_y"] = fy_list[i] * u.deg
                     else:
+                        self.log.warning(
+                            "TARTS fx/fy data insufficient for donut %d: "
+                            "fx_list length=%d, fy_list length=%d. "
+                            "This may indicate a data mismatch between TARTS output and donut stamps.",
+                            i + 1, len(fx_list), len(fy_list)
+                        )
                         row["intra_field_x"] = np.nan
                         row["intra_field_y"] = np.nan
                 except AttributeError:
-                    # Fallback to calcFieldXY if TARTS values not available
+                    # Fallback to calcFieldXY if TARTS fx/fy not available
+                    # Expected when TARTS doesn't provide field positions
+                    self.log.debug(
+                        "TARTS fx/fy not available for donut %d, using calcFieldXY fallback",
+                        i + 1
+                    )
                     field_xy = intra.calcFieldXY()
                     row["intra_field_x"] = field_xy[0] * u.deg
                     row["intra_field_y"] = field_xy[1] * u.deg
@@ -1004,7 +1015,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 except AttributeError:
                     row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
                     row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
-            else:
+                # intraStamp is None (padded by zip_longest when arrays have
+                # different lengths)
+                self.log.debug("No intra stamp available for donut %d", i + 1)
                 row["intra_field_x"] = np.nan
                 row["intra_field_y"] = np.nan
                 row["intra_centroid_x"] = np.nan
@@ -1030,10 +1043,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                         row["extra_field_x"] = fx_list[i] * u.deg
                         row["extra_field_y"] = fy_list[i] * u.deg
                     else:
+                        self.log.warning(
+                            "TARTS fx/fy data insufficient for donut %d: "
+                            "fx_list length=%d, fy_list length=%d. "
+                            "This may indicate a data mismatch between TARTS output and donut stamps.",
+                            i + 1, len(fx_list), len(fy_list)
+                        )
                         row["extra_field_x"] = np.nan
                         row["extra_field_y"] = np.nan
                 except AttributeError:
-                    # Fallback to calcFieldXY if TARTS values not available
+                    # Fallback to calcFieldXY if TARTS fx/fy not available
+                    # Expected when TARTS doesn't provide field positions
+                    self.log.debug(
+                        "TARTS fx/fy not available for donut %d, using calcFieldXY fallback",
+                        i + 1
+                    )
                     field_xy = extra.calcFieldXY()
                     row["extra_field_x"] = field_xy[0] * u.deg
                     row["extra_field_y"] = field_xy[1] * u.deg
@@ -1066,6 +1090,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
                     row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
             else:
+                # extraStamp=None (padded when arrays have different lengths)
+                self.log.debug("No extra stamp available for donut %d", i + 1)
                 row["extra_field_x"] = np.nan
                 row["extra_field_y"] = np.nan
                 row["extra_centroid_x"] = np.nan
