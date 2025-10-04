@@ -1630,8 +1630,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 img = correlator.prepButlerExposure(exposure)
                 diameter, *_ = correlator.getDonutDiameter(img)
                 catVisitInfo["donut_radius"] = 0.5 * diameter
-            except Exception as e:
-                self.log.warning("Could not estimate donut diameter: %s", e)
+            except Exception:
+                self.log.exception("Could not estimate donut diameter")
                 catVisitInfo["donut_radius"] = 1.0  # Default value
 
             donut_table.meta["visit_info"] = catVisitInfo
