@@ -443,6 +443,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         Returns:
             String indicating defocal type: "intra" or "extra"
+
+        Raises:
+            ValueError: If defocal type cannot be determined
         """
         # First, try to get DFC_TYPE from exposure metadata
         try:
@@ -466,13 +469,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             self.log.info("Determined defocal type from focusZ=%.3f: '%s'", focus_z, defocal_type)
             return defocal_type
         except (AttributeError, NameError):
-            # Final fallback: default to intra
-            defocal_type = "intra"
-            self.log.info(
-                "Could not determine defocal type from metadata or focusZ; defaulting to '%s'",
-                defocal_type
+            # Cannot determine defocal type - this is a critical error
+            raise ValueError(
+                "Cannot determine defocal type from exposure metadata. "
+                "Neither DFC_TYPE metadata nor focusZ value is available. "
+                "This is required for proper wavefront analysis. "
+                "Please ensure exposure has valid metadata."
             )
-            return defocal_type
 
     def _get_exposure_metadata(self, exposure: afwImage.Exposure) -> dict[str, float | int]:
         """Extract metadata from exposure as a dictionary
@@ -1947,7 +1950,14 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self._current_exposure = exposure
 
         # Determine defocal type using helper function
-        defocalType = self._determine_defocal_type(exposure)
+        try:
+            defocalType = self._determine_defocal_type(exposure)
+        except ValueError as e:
+            self.log.error("Failed to determine defocal type: %s", e)
+            # Raise exception to prevent incorrect processing
+            # In the future, this could be made configurable or handled
+            # differently
+            raise
         pred, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
         self.log.debug(
             "Pred shape pre-squeeze: %s, donut stamps: %d, total zernikes shape: %s",
