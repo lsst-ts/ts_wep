@@ -760,6 +760,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         num_stamps = image_array.shape[0]
         self.log.info("Processing %d donut stamp(s) of size %dx%d pixels",
                      num_stamps, self.cropSize, self.cropSize)
+        self.log.debug("DONUT PROCESSING DEBUG: Starting donut stamp creation")
         self.log.debug("Normalized to %d stamp(s) of size %dx%d", num_stamps, self.cropSize, self.cropSize)
         # Get centroid positions using helper method
         cent_x_list, cent_y_list = self._calculate_centroid_positions(exposure, num_stamps)
@@ -1256,7 +1257,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             # Debug: Check what metadata keys are available
             self.log.debug("Available metadata keys: %s", list(stamps.metadata.names()))
-            self.log.debug("DET_NAME value: %s", stamps.metadata.get("DET_NAME", "NOT_FOUND"))
+            det_name_raw = stamps.metadata.get("DET_NAME", "NOT_FOUND")
+            self.log.debug("DET_NAME value: %s (type: %s)", det_name_raw, type(det_name_raw))
+            if isinstance(det_name_raw, list):
+                self.log.debug("DET_NAME array length: %d, contents: %s", len(det_name_raw), det_name_raw)
 
             # Extract metadata from stamps (handle scalar and array formats)
             try:
@@ -1820,6 +1824,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         """
         # Check if exposure is valid
         self.log.info("Starting Zernike estimation for a single exposure")
+        self.log.debug("RUN METHOD DEBUG: CalcZernikesNeuralTask.run() called")
         if exposure is None:
             # No exposure available - return empty results
             self.log.warning("No exposure provided; returning empty results")
