@@ -1230,29 +1230,29 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # downstream compatibility)
         if "det_name" not in meta["intra"]:
             meta["intra"]["det_name"] = "Unknown"
-            meta["intra"]["visit"] = 0
-            meta["intra"]["dfc_dist"] = 1.5
+            meta["intra"]["visit"] = -1
+            meta["intra"]["dfc_dist"] = float('nan')
             meta["intra"]["band"] = "Unknown"
-            meta["intra"]["boresight_rot_angle_rad"] = 0.0
-            meta["intra"]["boresight_par_angle_rad"] = 0.0
-            meta["intra"]["boresight_alt_rad"] = 0.0
-            meta["intra"]["boresight_az_rad"] = 0.0
-            meta["intra"]["boresight_ra_rad"] = 0.0
-            meta["intra"]["boresight_dec_rad"] = 0.0
-            meta["intra"]["mjd"] = 0.0
+            meta["intra"]["boresight_rot_angle_rad"] = float('nan')
+            meta["intra"]["boresight_par_angle_rad"] = float('nan')
+            meta["intra"]["boresight_alt_rad"] = float('nan')
+            meta["intra"]["boresight_az_rad"] = float('nan')
+            meta["intra"]["boresight_ra_rad"] = float('nan')
+            meta["intra"]["boresight_dec_rad"] = float('nan')
+            meta["intra"]["mjd"] = float('nan')
 
         if "det_name" not in meta["extra"]:
             meta["extra"]["det_name"] = "Unknown"
-            meta["extra"]["visit"] = 0
-            meta["extra"]["dfc_dist"] = 1.5
+            meta["extra"]["visit"] = -1
+            meta["extra"]["dfc_dist"] = float('nan')
             meta["extra"]["band"] = "Unknown"
-            meta["extra"]["boresight_rot_angle_rad"] = 0.0
-            meta["extra"]["boresight_par_angle_rad"] = 0.0
-            meta["extra"]["boresight_alt_rad"] = 0.0
-            meta["extra"]["boresight_az_rad"] = 0.0
-            meta["extra"]["boresight_ra_rad"] = 0.0
-            meta["extra"]["boresight_dec_rad"] = 0.0
-            meta["extra"]["mjd"] = 0.0
+            meta["extra"]["boresight_rot_angle_rad"] = float('nan')
+            meta["extra"]["boresight_par_angle_rad"] = float('nan')
+            meta["extra"]["boresight_alt_rad"] = float('nan')
+            meta["extra"]["boresight_az_rad"] = float('nan')
+            meta["extra"]["boresight_ra_rad"] = float('nan')
+            meta["extra"]["boresight_dec_rad"] = float('nan')
+            meta["extra"]["mjd"] = float('nan')
 
         return meta
 
