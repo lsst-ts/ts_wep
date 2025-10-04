@@ -1271,6 +1271,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         """
         if len(donutStamps) == 0:
             # Return empty table with expected columns
+            self.log.warning(
+                "No donut stamps available for quality table creation. "
+                "This may indicate a problem with donut detection or processing."
+            )
             qualityTableCols = [
                 "SN",
                 "ENTROPY",
