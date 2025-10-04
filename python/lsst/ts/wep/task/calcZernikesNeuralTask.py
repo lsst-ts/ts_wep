@@ -43,6 +43,7 @@ from lsst.pipe.base import connectionTypes
 from lsst.utils.timer import timeMethod
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.donutSizeCorrelator import DonutSizeCorrelator
 from lsst.daf.base import PropertyList, DateTime
 import astropy.units as u
 
@@ -1625,7 +1626,6 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             # Estimate donut diameter using DonutSizeCorrelator
             try:
-                from lsst.ts.wep.donutSizeCorrelator import DonutSizeCorrelator
                 correlator = DonutSizeCorrelator()
                 img = correlator.prepButlerExposure(exposure)
                 diameter, *_ = correlator.getDonutDiameter(img)
