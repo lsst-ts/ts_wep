@@ -435,6 +435,45 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         except Exception:
             return -1
 
+    def _determine_defocal_type(self, exposure: afwImage.Exposure) -> str:
+        """Determine defocal type (intra/extra) from exposure metadata.
+
+        Args:
+            exposure: The exposure to analyze
+
+        Returns:
+            String indicating defocal type: "intra" or "extra"
+        """
+        # First, try to get DFC_TYPE from exposure metadata
+        try:
+            metadata = exposure.getMetadata()
+            if metadata is not None and "DFC_TYPE" in metadata.names():
+                defocal_type = metadata.get("DFC_TYPE")
+                self.log.info("Found DFC_TYPE in exposure metadata: '%s'", defocal_type)
+                return defocal_type
+        except Exception:
+            pass
+
+        # Fallback: try to determine from focus Z value if available
+        try:
+            focus_z = exposure.visitInfo.focusZ
+            # For LSSTCam, positive focusZ is typically extra-focal
+            # This is a heuristic - may need adjustment based on actual data
+            if focus_z > 0:
+                defocal_type = "extra"
+            else:
+                defocal_type = "intra"
+            self.log.info("Determined defocal type from focusZ=%.3f: '%s'", focus_z, defocal_type)
+            return defocal_type
+        except (AttributeError, NameError):
+            # Final fallback: default to intra
+            defocal_type = "intra"
+            self.log.info(
+                "Could not determine defocal type from metadata or focusZ; defaulting to '%s'",
+                defocal_type
+            )
+            return defocal_type
+
     def _get_exposure_metadata(self, exposure: afwImage.Exposure) -> dict[str, float | int]:
         """Extract metadata from exposure as a dictionary
            with safe fallback values.
@@ -1907,34 +1946,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Store exposure for metadata creation
         self._current_exposure = exposure
 
-        # Determine defocal type from exposure metadata
-        # Try to get defocal type from exposure metadata first
-        try:
-            # Check if exposure has defocal type in metadata
-            if exposure.getMetadata() is not None:
-                defocalType = exposure.getMetadata().get("DFC_TYPE", "intra")
-                self.log.info("Found DFC_TYPE in exposure metadata: '%s'", defocalType)
-            else:
-                # Fallback: try to determine from focus Z value if available
-                try:
-                    focusZ = exposure.visitInfo.focusZ
-                    # For LSSTCam, positive focusZ is typically extra-focal
-                    # This is a heuristic - may need adjustment based on actual
-                    # data
-                    if focusZ > 0:
-                        defocalType = "extra"
-                    else:
-                        defocalType = "intra"
-                    self.log.info("Determined defocal type from focusZ=%.3f: '%s'", focusZ, defocalType)
-                except (AttributeError, NameError):
-                    defocalType = "intra"
-                    self.log.info(
-                        "Could not determine defocal type from metadata or focusZ; defaulting to '%s'",
-                        defocalType
-                    )
-        except Exception as e:
-            defocalType = "intra"
-            self.log.warning("Error determining defocal type: %s; defaulting to '%s'", e, defocalType)
+        # Determine defocal type using helper function
+        defocalType = self._determine_defocal_type(exposure)
         pred, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
         self.log.debug(
             "Pred shape pre-squeeze: %s, donut stamps: %d, total zernikes shape: %s",
