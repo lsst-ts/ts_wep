@@ -855,7 +855,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         donutStampsObj = DonutStamps(donutStamps)
 
         # Set scalar visit-level metadata directly (don't call
-        # _refresh_metadata as it overrides with arrays)
+        # _refresh_metadata as it overrides with arrays and would
+        # convert scalar values to arrays, potentially losing data
+        # when there are no stamps)
         # Use direct assignment to ensure scalar values are stored
         donutStampsObj.metadata["DET_NAME"] = detectorName
         donutStampsObj.metadata["CAM_NAME"] = cameraName
@@ -1253,17 +1255,39 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             self.log.debug("Available metadata keys: %s", list(stamps.metadata.names()))
             self.log.debug("DET_NAME value: %s", stamps.metadata.get("DET_NAME", "NOT_FOUND"))
 
-            # Extract metadata from stamps (now stored as scalar values)
+            # Extract metadata from stamps (handle scalar and array formats)
             try:
-                # Get DET_NAME from stamps metadata (should always be present)
-                dict_["det_name"] = stamps.metadata.get("DET_NAME", "Unknown")
-                if dict_["det_name"] == "Unknown":
-                    self.log.warning(
-                        "DET_NAME not found in stamps metadata, using 'Unknown'. "
-                        "This may indicate a problem with stamp creation."
-                    )
+                # Get DET_NAME from stamps metadata (handle scalar/array)
+                det_name_value = stamps.metadata.get("DET_NAME", "Unknown")
+
+                # Handle case where DET_NAME might be an empty array
+                # (from _refresh_metadata)
+                if isinstance(det_name_value, list):
+                    if len(det_name_value) > 0:
+                        # Use first detector name from array
+                        dict_["det_name"] = det_name_value[0]
+                        self.log.debug("Using first DET_NAME from array: '%s'", dict_["det_name"])
+                    else:
+                        # Empty array - fall back to stored detector name
+                        # or Unknown
+                        dict_["det_name"] = getattr(self, '_detector_name', "Unknown")
+                        if dict_["det_name"] == "Unknown":
+                            self.log.warning(
+                                "DET_NAME array is empty and no stored detector name available. "
+                                "This may indicate a problem with stamp creation."
+                            )
+                        else:
+                            self.log.info("Using stored detector name: '%s'", dict_["det_name"])
                 else:
-                    self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_["det_name"])
+                    # Scalar value
+                    dict_["det_name"] = det_name_value
+                    if dict_["det_name"] == "Unknown":
+                        self.log.warning(
+                            "DET_NAME not found in stamps metadata, using 'Unknown'. "
+                            "This may indicate a problem with stamp creation."
+                        )
+                    else:
+                        self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_["det_name"])
 
                 # Get other metadata with proper sentinel values
                 dict_["visit"] = stamps.metadata.get("VISIT", -1)
