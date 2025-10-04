@@ -1420,9 +1420,28 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         if len(donutStamps) == 0:
             # Return empty table with expected columns matching standard format
             empty_cols = [
-                "coord_ra", "coord_dec", "centroid_x", "centroid_y"
+                "coord_ra", "coord_dec", "centroid_x", "centroid_y", "detector",
+                "thx_CCS", "thy_CCS", "thx_OCS", "thy_OCS", "th_N", "th_W",
+                "fx", "fy", "snr"
             ]
-            return QTable({name: [] for name in empty_cols})
+            empty_table = QTable({name: [] for name in empty_cols})
+            # Add required metadata for empty table
+            empty_table.meta["detector"] = "Unknown"
+            empty_table.meta["camera"] = "LSSTCam"
+            empty_table.meta["band"] = "Unknown"
+            empty_table.meta["visit_info"] = {
+                "visit_id": -1,
+                "focus_z": float('nan') * u.mm,
+                "boresight_ra": float('nan') * u.deg,
+                "boresight_dec": float('nan') * u.deg,
+                "boresight_rot_angle": float('nan') * u.deg,
+                "boresight_par_angle": float('nan') * u.deg,
+                "boresight_alt": float('nan') * u.deg,
+                "boresight_az": float('nan') * u.deg,
+                "mjd": float('nan'),
+                "donut_radius": float('nan'),
+            }
+            return empty_table
 
         num_donuts = len(donutStamps)
 
@@ -1738,7 +1757,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             "coord_ra": [], "coord_dec": [], "centroid_x": [], "centroid_y": [],
             "detector": [],
             "thx_CCS": [], "thy_CCS": [], "thx_OCS": [], "thy_OCS": [], "th_N": [],
-            "th_W": []
+            "th_W": [], "fx": [], "fy": [], "snr": []
         })
 
         # Add default visit_info metadata for empty table
