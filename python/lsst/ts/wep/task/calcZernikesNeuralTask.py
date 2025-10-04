@@ -423,6 +423,192 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             pass
         return None
 
+    def _extract_and_normalize_tarts_data(self, field_name: str, num_items: int) -> list[float]:
+        """Extract TARTS data field and normalize to list with proper length.
+
+        Args:
+            field_name: Name of TARTS field ('fx', 'fy', 'SNR')
+            num_items: Expected number of items in the result list
+
+        Returns:
+            List of float values, padded or truncated to match num_items
+        """
+        # Get the appropriate TARTS field
+        if field_name == 'fx':
+            array = self._get_tarts_fx()
+        elif field_name == 'fy':
+            array = self._get_tarts_fy()
+        elif field_name == 'SNR':
+            array = self._get_tarts_snr()
+        else:
+            self.log.warning("Unknown TARTS field name: %s", field_name)
+            return [np.nan] * num_items
+
+        # Convert to list
+        if array is not None:
+            data_list = array.tolist()
+            # Flatten nested lists if needed
+            if data_list and isinstance(data_list[0], list):
+                data_list = [item for sublist in data_list for item in sublist]
+        else:
+            data_list = []
+
+        # Normalize to expected length
+        if len(data_list) == num_items:
+            return data_list
+        elif len(data_list) > num_items:
+            self.log.info("Truncating %s data from %d to %d items", field_name, len(data_list), num_items)
+            return data_list[:num_items]
+        else:
+            # Pad with default value
+            default_value = 0.0 if field_name in ['fx', 'fy'] else np.nan
+            if len(data_list) > 0:
+                # Repeat last value if we have some data
+                padded = data_list + [data_list[-1]] * (num_items - len(data_list))
+                self.log.warning(
+                    "Padding %s data from %d to %d items using last value (%.3f)",
+                    field_name, len(data_list), num_items, data_list[-1]
+                )
+                return padded
+            else:
+                # Use default value if no data
+                self.log.warning(
+                    "No %s data available, using default value (%.3f) for %d items",
+                    field_name, default_value, num_items
+                )
+                return [default_value] * num_items
+
+    def _calculate_centroid_positions(
+        self, exposure: afwImage.Exposure, num_stamps: int
+    ) -> tuple[list[float], list[float]]:
+        """Calculate centroid positions for donut stamps using TARTS centers
+        or fallback.
+
+        Args:
+            exposure: The exposure containing the donuts
+            num_stamps: Number of stamps needing centroid positions
+
+        Returns:
+            Tuple of (cent_x_list, cent_y_list) with positions for each stamp
+        """
+        # Try to get TARTS centers first
+        centers_array = self._get_tarts_centers()
+        if centers_array is not None:
+            self.log.debug("TARTS centers available, shape: %s", centers_array.shape)
+
+            try:
+                # Validate and normalize centers array
+                normalized_centers = self._validate_and_normalize_centers(centers_array)
+                if len(normalized_centers) > 0:
+                    # Extract coordinates for stamps
+                    return self._extract_centers_for_stamps(normalized_centers, num_stamps)
+                else:
+                    self.log.warning("TARTS centers array is empty, using exposure center")
+            except ValueError as e:
+                self.log.warning("TARTS centers validation failed: %s. Using exposure center as fallback.", e)
+        else:
+            self.log.debug("TARTS centers not available, using exposure center")
+
+        # Fallback to exposure center
+        bbox = exposure.getBBox()
+        center_x = bbox.getCenterX()
+        center_y = bbox.getCenterY()
+        cent_x_list = [center_x] * num_stamps
+        cent_y_list = [center_y] * num_stamps
+
+        self.log.info(
+            "Using exposure center [%.1f, %.1f] for %d donut stamps",
+            center_x, center_y, num_stamps
+        )
+        return cent_x_list, cent_y_list
+
+    def _extract_metadata_field(
+        self, obj: Any, method_name: str, conversion_method: Optional[str] = None,
+        default_value: float = float('nan')
+    ) -> float:
+        """Extract a metadata field from an object using getattr pattern.
+
+        Args:
+            obj: Object to extract metadata from
+            method_name: Name of the method to call on the object
+            conversion_method: Optional method to call on the result
+                (e.g., 'asRadians')
+            default_value: Default value to return if extraction fails
+
+        Returns:
+            Extracted value or default_value if extraction fails
+        """
+        try:
+            method = getattr(obj, method_name, None)
+            if method is None:
+                return default_value
+
+            result = method()
+            if result is None:
+                return default_value
+
+            # Apply conversion if specified
+            if conversion_method:
+                conversion = getattr(result, conversion_method, None)
+                if conversion is None:
+                    return default_value
+                return conversion()
+
+            return result
+        except Exception:
+            return default_value
+
+    def _get_centroid_for_stamp(self, stamp: DonutStamp, stamp_index: int) -> tuple[float, float]:
+        """Get centroid position for a specific stamp, using TARTS centers if
+        available.
+
+        Args:
+            stamp: The donut stamp object
+            stamp_index: Index of the stamp (0-based)
+
+        Returns:
+            Tuple of (centroid_x, centroid_y) in pixels
+        """
+        # Try to use TARTS centers first for more accurate positions
+        try:
+            if self.tarts.centers is not None:
+                centers_array = self._get_tarts_centers()
+
+                # Handle different array shapes
+                if centers_array is not None:
+                    array = centers_array  # Type narrowing for mypy
+                    if array.ndim == 1 and len(array) % 2 == 0:
+                        centers_array = array.reshape(-1, 2)
+                    elif array.ndim != 2 or array.shape[1] != 2:
+                        centers_array = None
+
+                # Use individual center if available
+                if centers_array is not None and stamp_index < len(centers_array):
+                    return centers_array[stamp_index, 0], centers_array[stamp_index, 1]
+        except AttributeError:
+            pass
+
+        # Fallback to stamp's centroid position
+        return stamp.centroid_position.x, stamp.centroid_position.y
+
+    def _set_sentinel_metadata(self, metadata_dict: dict) -> None:
+        """Set sentinel values for missing metadata fields.
+
+        Args:
+            metadata_dict: Dictionary to populate with sentinel values
+        """
+        metadata_dict["det_name"] = "Unknown"
+        metadata_dict["visit"] = -1
+        metadata_dict["dfc_dist"] = float('nan')
+        metadata_dict["band"] = "Unknown"
+        metadata_dict["boresight_rot_angle_rad"] = float('nan')
+        metadata_dict["boresight_par_angle_rad"] = float('nan')
+        metadata_dict["boresight_alt_rad"] = float('nan')
+        metadata_dict["boresight_az_rad"] = float('nan')
+        metadata_dict["boresight_ra_rad"] = float('nan')
+        metadata_dict["boresight_dec_rad"] = float('nan')
+        metadata_dict["mjd"] = float('nan')
+
     def _get_visit_id(self, exp_id: Any) -> int:
         """Get visit ID from exposure ID, handling different types."""
         try:
@@ -501,63 +687,25 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         else:
             metadata['visit_id'] = -1
 
-        # Boresight rotation angle
-        boresight_rot_angle = getattr(
-            exp_info, 'getBoresightRotAngle', lambda: None
-        )()
-        if boresight_rot_angle is not None:
-            metadata['boresight_rot_angle_rad'] = getattr(
-                boresight_rot_angle, 'asRadians', lambda: float('nan')
-            )()
-        else:
-            metadata['boresight_rot_angle_rad'] = float('nan')
-
-        # Boresight par angle
-        boresight_par_angle = getattr(
-            exp_info, 'getBoresightParAngle', lambda: None
-        )()
-        if boresight_par_angle is not None:
-            metadata['boresight_par_angle_rad'] = getattr(
-                boresight_par_angle, 'asRadians', lambda: float('nan')
-            )()
-        else:
-            metadata['boresight_par_angle_rad'] = float('nan')
-
-        # Boresight altitude
-        boresight_alt = getattr(exp_info, 'getBoresightAlt', lambda: None)()
-        if boresight_alt is not None:
-            metadata['boresight_alt_rad'] = getattr(
-                boresight_alt, 'asRadians', lambda: float('nan')
-            )()
-        else:
-            metadata['boresight_alt_rad'] = float('nan')
-
-        # Boresight azimuth
-        boresight_az = getattr(exp_info, 'getBoresightAz', lambda: None)()
-        if boresight_az is not None:
-            metadata['boresight_az_rad'] = getattr(
-                boresight_az, 'asRadians', lambda: float('nan')
-            )()
-        else:
-            metadata['boresight_az_rad'] = float('nan')
-
-        # Boresight RA
-        boresight_ra = getattr(exp_info, 'getBoresightRa', lambda: None)()
-        if boresight_ra is not None:
-            metadata['boresight_ra_rad'] = getattr(
-                boresight_ra, 'asRadians', lambda: float('nan')
-            )()
-        else:
-            metadata['boresight_ra_rad'] = float('nan')
-
-        # Boresight DEC
-        boresight_dec = getattr(exp_info, 'getBoresightDec', lambda: None)()
-        if boresight_dec is not None:
-            metadata['boresight_dec_rad'] = getattr(
-                boresight_dec, 'asRadians', lambda: float('nan')
-            )()
-        else:
-            metadata['boresight_dec_rad'] = float('nan')
+        # Extract boresight angles using helper method
+        metadata['boresight_rot_angle_rad'] = self._extract_metadata_field(
+            exp_info, 'getBoresightRotAngle', 'asRadians'
+        )
+        metadata['boresight_par_angle_rad'] = self._extract_metadata_field(
+            exp_info, 'getBoresightParAngle', 'asRadians'
+        )
+        metadata['boresight_alt_rad'] = self._extract_metadata_field(
+            exp_info, 'getBoresightAlt', 'asRadians'
+        )
+        metadata['boresight_az_rad'] = self._extract_metadata_field(
+            exp_info, 'getBoresightAz', 'asRadians'
+        )
+        metadata['boresight_ra_rad'] = self._extract_metadata_field(
+            exp_info, 'getBoresightRa', 'asRadians'
+        )
+        metadata['boresight_dec_rad'] = self._extract_metadata_field(
+            exp_info, 'getBoresightDec', 'asRadians'
+        )
 
         # MJD date
         exp_date = getattr(exp_info, 'getDate', lambda: None)()
@@ -611,50 +759,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         num_stamps = image_array.shape[0]
         self.log.debug("Normalized to %d stamp(s) of size %dx%d", num_stamps, self.cropSize, self.cropSize)
-        # Get TARTS centers for accurate centroid positions
-        centers_array = self._get_tarts_centers()
-        if centers_array is not None:
-            self.log.warning("TARTS centers numpy array shape: %s", centers_array.shape)
-
-            # Validate and normalize centers array
-            try:
-                normalized_centers = self._validate_and_normalize_centers(centers_array)
-                if len(normalized_centers) > 0:
-                    # Extract coordinates for stamps
-                    cent_x_list, cent_y_list = self._extract_centers_for_stamps(
-                        normalized_centers, num_stamps
-                    )
-                else:
-                    # TARTS centers empty, use exposure center
-                    self.log.warning("TARTS centers array is empty, using exposure center")
-                    bbox = exposure.getBBox()
-                    center_x = bbox.getCenterX()
-                    center_y = bbox.getCenterY()
-                    cent_x_list = [center_x] * num_stamps
-                    cent_y_list = [center_y] * num_stamps
-            except ValueError as e:
-                # TARTS centers invalid, use exposure center
-                self.log.warning("TARTS centers validation failed: %s. Using exposure center as fallback.", e)
-                bbox = exposure.getBBox()
-                center_x = bbox.getCenterX()
-                center_y = bbox.getCenterY()
-                cent_x_list = [center_x] * num_stamps
-                cent_y_list = [center_y] * num_stamps
-                self.log.warning(
-                    "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donut stamps",
-                    center_x, center_y, num_stamps
-                )
-        else:
-            # TARTS centers not available, use exposure center
-            bbox = exposure.getBBox()
-            center_x = bbox.getCenterX()
-            center_y = bbox.getCenterY()
-            cent_x_list = [center_x] * num_stamps
-            cent_y_list = [center_y] * num_stamps
-            self.log.warning(
-                "TARTS centers not available, using exposure center [%.1f, %.1f] for %d donut stamps",
-                center_x, center_y, num_stamps
-            )
+        # Get centroid positions using helper method
+        cent_x_list, cent_y_list = self._calculate_centroid_positions(exposure, num_stamps)
 
         # Create metadata for all donuts
         metadata = PropertyList()
@@ -670,33 +776,12 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         metadata["BLEND_CX"] = ["nan"] * num_stamps  # No blended sources
         metadata["BLEND_CY"] = ["nan"] * num_stamps  # No blended sources
 
-        # Add TARTS-specific metadata
+        # Add TARTS-specific metadata using helper method
         try:
-            # Convert PyTorch tensors to numpy arrays, then to Python lists
-            fx_array = self._get_tarts_fx()
-            fy_array = self._get_tarts_fy()
-
-            if fx_array is not None and fy_array is not None:
-                fx_list = fx_array.tolist()
-                fy_list = fy_array.tolist()
-            else:
-                fx_list = []
-                fy_list = []
-
-            # Flatten nested lists if needed
-            if fx_list and isinstance(fx_list[0], list):
-                fx_list = [item for sublist in fx_list for item in sublist]
-            if fy_list and isinstance(fy_list[0], list):
-                fy_list = [item for sublist in fy_list for item in sublist]
-
-            # Use fx/fy lists directly if they match the number of stamps
-            if len(fx_list) == num_stamps and len(fy_list) == num_stamps:
-                metadata["FX"] = fx_list  # TARTS fx values (flat Python list)
-                metadata["FY"] = fy_list  # TARTS fy values (flat Python list)
-            else:
-                # If lengths don't match, pad with zeros or repeat last value
-                metadata["FX"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_stamps
-                metadata["FY"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_stamps
+            fx_list = self._extract_and_normalize_tarts_data('fx', num_stamps)
+            fy_list = self._extract_and_normalize_tarts_data('fy', num_stamps)
+            metadata["FX"] = fx_list
+            metadata["FY"] = fy_list
         except AttributeError:
             self.log.warning("TARTS fx/fy attributes not available, using default values")
             metadata["FX"] = [0.0] * num_stamps  # Default fx values
@@ -1018,19 +1103,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # Get field positions and centroids from stamps
             if intraStamp is not None:
                 intra = intraStamp
-                # Use TARTS fx/fy values directly (same as
-                # DonutQualityTable)
+                # Use TARTS fx/fy values directly using helper method
                 try:
-                    fx_array = self._get_tarts_fx()
-                    fy_array = self._get_tarts_fy()
-
-                    fx_list = fx_array.tolist() if fx_array is not None else []
-                    fy_list = fy_array.tolist() if fy_array is not None else []
-                    # Flatten nested lists if needed
-                    if fx_list and isinstance(fx_list[0], list):
-                        fx_list = [item for sublist in fx_list for item in sublist]
-                    if fy_list and isinstance(fy_list[0], list):
-                        fy_list = [item for sublist in fy_list for item in sublist]
+                    fx_list = self._extract_and_normalize_tarts_data('fx', max_stamps)
+                    fy_list = self._extract_and_normalize_tarts_data('fy', max_stamps)
 
                     if i < len(fx_list) and i < len(fy_list):
                         row["intra_field_x"] = fx_list[i] * u.deg
@@ -1054,34 +1130,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     field_xy = intra.calcFieldXY()
                     row["intra_field_x"] = field_xy[0] * u.deg
                     row["intra_field_y"] = field_xy[1] * u.deg
-                # Use TARTS centers if available for more accurate
-                # positions
-                try:
-                    if self.tarts.centers is not None:
-                        # Handle TARTS centers data structure
-                        centers_array = self._get_tarts_centers()
-
-                        # Handle different array shapes
-                        if centers_array is not None:
-                            array = centers_array  # Type narrowing for mypy
-                            if array.ndim == 1 and len(array) % 2 == 0:
-                                centers_array = array.reshape(-1, 2)
-                            elif array.ndim != 2 or array.shape[1] != 2:
-                                centers_array = None
-
-                        # Use individual center if available
-                        if centers_array is not None and i < len(centers_array):
-                            row["intra_centroid_x"] = centers_array[i, 0] * u.pixel
-                            row["intra_centroid_y"] = centers_array[i, 1] * u.pixel
-                        else:
-                            row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
-                            row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
-                    else:
-                        row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
-                        row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
-                except AttributeError:
-                    row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
-                    row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
+                # Use helper method for centroid calculation
+                centroid_x, centroid_y = self._get_centroid_for_stamp(intra, i)
+                row["intra_centroid_x"] = centroid_x * u.pixel
+                row["intra_centroid_y"] = centroid_y * u.pixel
                 # intraStamp is None (padded by zip_longest when arrays have
                 # different lengths)
                 self.log.debug("No intra stamp available for donut %d", i + 1)
@@ -1092,19 +1144,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             if extraStamp is not None:
                 extra = extraStamp
-                # Use TARTS fx/fy values directly (same as
-                # DonutQualityTable)
+                # Use TARTS fx/fy values directly using helper method
                 try:
-                    fx_array = self._get_tarts_fx()
-                    fy_array = self._get_tarts_fy()
-
-                    fx_list = fx_array.tolist() if fx_array is not None else []
-                    fy_list = fy_array.tolist() if fy_array is not None else []
-                    # Flatten nested lists if needed
-                    if fx_list and isinstance(fx_list[0], list):
-                        fx_list = [item for sublist in fx_list for item in sublist]
-                    if fy_list and isinstance(fy_list[0], list):
-                        fy_list = [item for sublist in fy_list for item in sublist]
+                    fx_list = self._extract_and_normalize_tarts_data('fx', max_stamps)
+                    fy_list = self._extract_and_normalize_tarts_data('fy', max_stamps)
 
                     if i < len(fx_list) and i < len(fy_list):
                         row["extra_field_x"] = fx_list[i] * u.deg
@@ -1128,34 +1171,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     field_xy = extra.calcFieldXY()
                     row["extra_field_x"] = field_xy[0] * u.deg
                     row["extra_field_y"] = field_xy[1] * u.deg
-                # Use TARTS centers if available for more accurate
-                # positions
-                try:
-                    if self.tarts.centers is not None:
-                        # Handle TARTS centers data structure
-                        centers_array = self._get_tarts_centers()
-
-                        # Handle different array shapes
-                        if centers_array is not None:
-                            array = centers_array  # Type narrowing for mypy
-                            if array.ndim == 1 and len(array) % 2 == 0:
-                                centers_array = array.reshape(-1, 2)
-                            elif array.ndim != 2 or array.shape[1] != 2:
-                                centers_array = None
-
-                        # Use individual center if available
-                        if centers_array is not None and i < len(centers_array):
-                            row["extra_centroid_x"] = centers_array[i, 0] * u.pixel
-                            row["extra_centroid_y"] = centers_array[i, 1] * u.pixel
-                        else:
-                            row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
-                            row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
-                    else:
-                        row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
-                        row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
-                except AttributeError:
-                    row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
-                    row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
+                # Use helper method for centroid calculation
+                centroid_x, centroid_y = self._get_centroid_for_stamp(extra, i)
+                row["extra_centroid_x"] = centroid_x * u.pixel
+                row["extra_centroid_y"] = centroid_y * u.pixel
             else:
                 # extraStamp=None (padded when arrays have different lengths)
                 self.log.debug("No extra stamp available for donut %d", i + 1)
@@ -1227,17 +1246,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         ]:
             if stamps is None:
                 # Populate with sentinel values if stamps are None
-                dict_["det_name"] = "Unknown"
-                dict_["visit"] = -1
-                dict_["dfc_dist"] = float('nan')
-                dict_["band"] = "Unknown"
-                dict_["boresight_rot_angle_rad"] = float('nan')
-                dict_["boresight_par_angle_rad"] = float('nan')
-                dict_["boresight_alt_rad"] = float('nan')
-                dict_["boresight_az_rad"] = float('nan')
-                dict_["boresight_ra_rad"] = float('nan')
-                dict_["boresight_dec_rad"] = float('nan')
-                dict_["mjd"] = float('nan')
+                self._set_sentinel_metadata(dict_)
                 continue
 
             # Debug: Check what metadata keys are available
@@ -1277,17 +1286,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             except Exception as e:
                 self.log.error("Error accessing metadata: %s", e)
                 # Use sentinel values if metadata is missing
-                dict_["det_name"] = "Unknown"
-                dict_["visit"] = -1
-                dict_["dfc_dist"] = float('nan')
-                dict_["band"] = "Unknown"
-                dict_["boresight_rot_angle_rad"] = float('nan')
-                dict_["boresight_par_angle_rad"] = float('nan')
-                dict_["boresight_alt_rad"] = float('nan')
-                dict_["boresight_az_rad"] = float('nan')
-                dict_["boresight_ra_rad"] = float('nan')
-                dict_["boresight_dec_rad"] = float('nan')
-                dict_["mjd"] = float('nan')
+                self._set_sentinel_metadata(dict_)
                 if cam_name is None:
                     cam_name = "LSSTCam"
 
@@ -1296,30 +1295,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Ensure both intra and extra have at least basic structure (for
         # downstream compatibility)
         if "det_name" not in meta["intra"]:
-            meta["intra"]["det_name"] = "Unknown"
-            meta["intra"]["visit"] = -1
-            meta["intra"]["dfc_dist"] = float('nan')
-            meta["intra"]["band"] = "Unknown"
-            meta["intra"]["boresight_rot_angle_rad"] = float('nan')
-            meta["intra"]["boresight_par_angle_rad"] = float('nan')
-            meta["intra"]["boresight_alt_rad"] = float('nan')
-            meta["intra"]["boresight_az_rad"] = float('nan')
-            meta["intra"]["boresight_ra_rad"] = float('nan')
-            meta["intra"]["boresight_dec_rad"] = float('nan')
-            meta["intra"]["mjd"] = float('nan')
+            self._set_sentinel_metadata(meta["intra"])
 
         if "det_name" not in meta["extra"]:
-            meta["extra"]["det_name"] = "Unknown"
-            meta["extra"]["visit"] = -1
-            meta["extra"]["dfc_dist"] = float('nan')
-            meta["extra"]["band"] = "Unknown"
-            meta["extra"]["boresight_rot_angle_rad"] = float('nan')
-            meta["extra"]["boresight_par_angle_rad"] = float('nan')
-            meta["extra"]["boresight_alt_rad"] = float('nan')
-            meta["extra"]["boresight_az_rad"] = float('nan')
-            meta["extra"]["boresight_ra_rad"] = float('nan')
-            meta["extra"]["boresight_dec_rad"] = float('nan')
-            meta["extra"]["mjd"] = float('nan')
+            self._set_sentinel_metadata(meta["extra"])
 
         return meta
 
@@ -1359,49 +1338,15 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Extract TARTS quality metrics
         quality_data = {}
 
-        # Get FX and FY from TARTS
+        # Get FX, FY, and SNR from TARTS using helper methods
         try:
-            # Convert PyTorch tensors to numpy arrays, then to Python lists
-            fx_array = self._get_tarts_fx()
-            fy_array = self._get_tarts_fy()
-
-            fx_list = fx_array.tolist() if fx_array is not None else []
-            fy_list = fy_array.tolist() if fy_array is not None else []
-
-            # Flatten nested lists if needed
-            if fx_list and isinstance(fx_list[0], list):
-                fx_list = [item for sublist in fx_list for item in sublist]
-            if fy_list and isinstance(fy_list[0], list):
-                fy_list = [item for sublist in fy_list for item in sublist]
-
-            # Use fx/fy lists directly if they match the number of donuts
-            if len(fx_list) == num_donuts and len(fy_list) == num_donuts:
-                quality_data["FX"] = fx_list
-                quality_data["FY"] = fy_list
-            else:
-                # If lengths don't match, pad with zeros or repeat last value
-                quality_data["FX"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_donuts
-                quality_data["FY"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_donuts
+            quality_data["FX"] = self._extract_and_normalize_tarts_data('fx', num_donuts)
+            quality_data["FY"] = self._extract_and_normalize_tarts_data('fy', num_donuts)
+            quality_data["SN"] = self._extract_and_normalize_tarts_data('SNR', num_donuts)
         except AttributeError:
-            self.log.warning("TARTS fx/fy attributes not available for quality data, using default values")
+            self.log.warning("TARTS attributes not available for quality data, using default values")
             quality_data["FX"] = [0.0] * num_donuts
             quality_data["FY"] = [0.0] * num_donuts
-
-        # Get SNR from TARTS
-        try:
-            snr_array = self._get_tarts_snr()
-            snr_list = snr_array.tolist() if snr_array is not None else []
-
-            # Flatten nested lists if needed
-            if snr_list and isinstance(snr_list[0], list):
-                snr_list = [item for sublist in snr_list for item in sublist]
-
-            if len(snr_list) == num_donuts:
-                quality_data["SN"] = snr_list
-            else:
-                quality_data["SN"] = [snr_list[0] if len(snr_list) > 0 else np.nan] * num_donuts
-        except AttributeError:
-            self.log.warning("TARTS SNR attribute not available for quality data, using default values")
             quality_data["SN"] = [np.nan] * num_donuts
 
         # Add NaN values for missing metrics
@@ -1482,74 +1427,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             donut_data["coord_ra"] = [center_pos.getRa().asRadians()] * num_donuts
             donut_data["coord_dec"] = [center_pos.getDec().asRadians()] * num_donuts
 
-        # Get centroid positions from TARTS centers (most accurate)
+        # Get centroid positions using helper method
         try:
-            if self.tarts.centers is not None:
-                self.log.debug(
-                    "TARTS centers type: %s, shape: %s",
-                    type(self.tarts.centers), getattr(self.tarts.centers, 'shape', 'no shape')
-                )
-
-            # Handle different data types for TARTS centers
-            centers_array = self._get_tarts_centers()
-            if centers_array is not None:
-                self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
-
-                # Handle different array shapes
-                if centers_array.ndim == 1:
-                    # Flattened array -> reshape to [n,2]
-                    if len(centers_array) % 2 == 0:
-                        centers_array = centers_array.reshape(-1, 2)
-                        self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
-                    else:
-                        self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
-                        centers_array = None
-                elif centers_array.ndim == 2:
-                    # Already in [n, 2] format
-                    if centers_array.shape[1] != 2:
-                        self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
-                        centers_array = None
-                else:
-                    self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
-                    centers_array = None
-
-            # Extract coordinates if we have valid centers
-            if centers_array is not None and len(centers_array) > 0:
-                if len(centers_array) == num_donuts:
-                    donut_data["centroid_x"] = centers_array[:, 0].tolist()
-                    donut_data["centroid_y"] = centers_array[:, 1].tolist()
-                    self.log.info(
-                        "Using TARTS centers for %d donuts: first few = %s",
-                        num_donuts, centers_array[:3].tolist()
-                    )
-                elif len(centers_array) > num_donuts:
-                    # Take first num_donuts centers
-                    donut_data["centroid_x"] = centers_array[:num_donuts, 0].tolist()
-                    donut_data["centroid_y"] = centers_array[:num_donuts, 1].tolist()
-                    self.log.info(
-                        "Using first %d TARTS centers out of %d available",
-                        num_donuts, len(centers_array)
-                    )
-                else:
-                    # Not enough centers, repeat the last one
-                    donut_data["centroid_x"] = [centers_array[-1, 0]] * num_donuts
-                    donut_data["centroid_y"] = [centers_array[-1, 1]] * num_donuts
-                    self.log.info(
-                        "Only %d TARTS centers available for %d donuts, repeating last center",
-                        len(centers_array), num_donuts
-                    )
-            else:
-                # Fallback: use exposure center
-                self.log.warning("TARTS centers invalid, using exposure center")
-                bbox = exposure.getBBox()
-                center_x = bbox.getCenterX()
-                center_y = bbox.getCenterY()
-                donut_data["centroid_x"] = [center_x] * num_donuts
-                donut_data["centroid_y"] = [center_y] * num_donuts
-                self.log.info(
-                    "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donuts",
-                    center_x, center_y, num_donuts
-                )
+            centroid_x_list, centroid_y_list = self._calculate_centroid_positions(exposure, num_donuts)
+            donut_data["centroid_x"] = centroid_x_list
+            donut_data["centroid_y"] = centroid_y_list
         except AttributeError:
             # TARTS centers not available, use exposure center
             bbox = exposure.getBBox()
@@ -1576,49 +1458,15 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             donut_data["centroid_y"] = [center_y] * num_donuts
             self.log.info("Using exposure center final fallback for %d donuts", num_donuts)
 
-        # Get TARTS-specific data for additional columns if available
+        # Get TARTS-specific data for additional columns using helper methods
         try:
-            # Convert PyTorch tensors to numpy arrays, then to Python lists
-            fx_array = self._get_tarts_fx()
-            fy_array = self._get_tarts_fy()
-
-            fx_list = fx_array.tolist() if fx_array is not None else []
-            fy_list = fy_array.tolist() if fy_array is not None else []
-
-            # Flatten nested lists if needed
-            if fx_list and isinstance(fx_list[0], list):
-                fx_list = [item for sublist in fx_list for item in sublist]
-            if fy_list and isinstance(fy_list[0], list):
-                fy_list = [item for sublist in fy_list for item in sublist]
-
-            # Use fx/fy lists if they match the number of donuts
-            if len(fx_list) == num_donuts and len(fy_list) == num_donuts:
-                donut_data["fx"] = fx_list
-                donut_data["fy"] = fy_list
-            else:
-                # If lengths don't match, pad with zeros
-                donut_data["fx"] = [fx_list[0] if len(fx_list) > 0 else 0.0] * num_donuts
-                donut_data["fy"] = [fy_list[0] if len(fy_list) > 0 else 0.0] * num_donuts
+            donut_data["fx"] = self._extract_and_normalize_tarts_data('fx', num_donuts)
+            donut_data["fy"] = self._extract_and_normalize_tarts_data('fy', num_donuts)
+            donut_data["snr"] = self._extract_and_normalize_tarts_data('SNR', num_donuts)
         except AttributeError:
-            self.log.warning("TARTS fx/fy attributes not available for donut data, using default values")
+            self.log.warning("TARTS attributes not available for donut data, using default values")
             donut_data["fx"] = [0.0] * num_donuts
             donut_data["fy"] = [0.0] * num_donuts
-
-        # Get SNR from TARTS
-        try:
-            snr_array = self._get_tarts_snr()
-            snr_list = snr_array.tolist() if snr_array is not None else []
-
-            # Flatten nested lists if needed
-            if snr_list and isinstance(snr_list[0], list):
-                snr_list = [item for sublist in snr_list for item in sublist]
-
-            if len(snr_list) == num_donuts:
-                donut_data["snr"] = snr_list
-            else:
-                donut_data["snr"] = [snr_list[0] if len(snr_list) > 0 else np.nan] * num_donuts
-        except AttributeError:
-            self.log.warning("TARTS SNR attribute not available for donut data, using default values")
             donut_data["snr"] = [np.nan] * num_donuts
 
         # Add detector information as a column (required by downstream
