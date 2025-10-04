@@ -1642,19 +1642,19 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             try:
                 visit_id = exposure.visitInfo.id
             except Exception:
-                visit_id = 0
+                visit_id = -1
 
             donut_table.meta["visit_info"] = {
                 "visit_id": visit_id,
-                "focus_z": 0.0 * u.mm,
-                "boresight_ra": 0.0 * u.deg,
-                "boresight_dec": 0.0 * u.deg,
-                "boresight_rot_angle": 0.0 * u.deg,
-                "boresight_par_angle": 0.0 * u.deg,
-                "boresight_alt": 0.0 * u.deg,
-                "boresight_az": 0.0 * u.deg,
-                "mjd": 0.0,
-                "donut_radius": 1.0,
+                "focus_z": float('nan') * u.mm,
+                "boresight_ra": float('nan') * u.deg,
+                "boresight_dec": float('nan') * u.deg,
+                "boresight_rot_angle": float('nan') * u.deg,
+                "boresight_par_angle": float('nan') * u.deg,
+                "boresight_alt": float('nan') * u.deg,
+                "boresight_az": float('nan') * u.deg,
+                "mjd": float('nan'),
+                "donut_radius": float('nan'),
             }
 
         # Add detector metadata
