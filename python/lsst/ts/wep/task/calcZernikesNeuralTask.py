@@ -758,6 +758,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             raise ValueError(f"Unexpected image array shape: {image_array.shape}")
 
         num_stamps = image_array.shape[0]
+        self.log.info("Processing %d donut stamp(s) of size %dx%d pixels",
+                     num_stamps, self.cropSize, self.cropSize)
         self.log.debug("Normalized to %d stamp(s) of size %dx%d", num_stamps, self.cropSize, self.cropSize)
         # Get centroid positions using helper method
         cent_x_list, cent_y_list = self._calculate_centroid_positions(exposure, num_stamps)
@@ -853,6 +855,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Create DonutStamps collection
         donutStampsObj = DonutStamps(donutStamps)
+        self.log.debug("Created DonutStamps collection with %d individual stamp(s)", len(donutStamps))
 
         # Set scalar visit-level metadata directly (don't call
         # _refresh_metadata as it overrides with arrays and would
@@ -1654,6 +1657,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Determine defocal type based on exposure
         donutStamps = self.createDonutStampFromTarts(exposure, cropped_image_np, defocalType)
+
+        # Log number of donuts detected and processed
+        num_donuts = len(donutStamps) if donutStamps else 0
+        self.log.info("Detected and processed %d donut(s) for defocalType='%s'", num_donuts, defocalType)
         self.log.debug(
             "Returning pred shape: %s and total_zernikes shape: %s",
             np.shape(pred),
@@ -1831,6 +1838,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             # differently
             raise
         pred, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
+
+        # Log final donut count and processing summary
+        num_donuts_final = len(donutStamps) if donutStamps else 0
+        self.log.info("Final processing summary: %d donut(s) processed, defocalType='%s'",
+                     num_donuts_final, defocalType)
         self.log.debug(
             "Pred shape pre-squeeze: %s, donut stamps: %d, total zernikes shape: %s",
             np.shape(pred),
