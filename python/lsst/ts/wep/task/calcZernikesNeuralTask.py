@@ -1144,6 +1144,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Handle case where both stamp collections are None
         if self.stampsIntra is None and self.stampsExtra is None:
+            self.log.warning(
+                "Both intra and extra stamp collections are None. "
+                "This indicates no donut data is available for Zernike estimation."
+            )
             meta["cam_name"] = "LSSTCam"
             meta["intra"]["det_name"] = "Unknown"
             meta["extra"]["det_name"] = "Unknown"
