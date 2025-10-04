@@ -1406,6 +1406,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             ]  # Use radians like standard
         except AttributeError:
             # Fallback: use exposure center
+            self.log.warning(
+                "Could not get sky positions from donut stamps, using exposure center as fallback. "
+                "This may indicate missing WCS information or stamp metadata."
+            )
             bbox = exposure.getBBox()
             center_pos = exposure.wcs.pixelToSky(bbox.getCenterX(), bbox.getCenterY())
             donut_data["coord_ra"] = [center_pos.getRa().asRadians()] * num_donuts
