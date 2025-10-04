@@ -46,7 +46,7 @@ class CutOutDonutsUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("exposure", "instrument"),  # type: ignore
 ):
-    exposures = connectionTypes.Input(
+    exposure = connectionTypes.Input(
         doc="Input exposure to make measurements on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
@@ -62,7 +62,6 @@ class CutOutDonutsUnpairedTaskConnections(
         ),
         storageClass="AstropyQTable",
         name="donutTable",
-        multiple=True,
     )
     camera = connectionTypes.PrerequisiteInput(
         name="camera",
@@ -77,7 +76,6 @@ class CutOutDonutsUnpairedTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStamps",
-        multiple=True,
     )
 
 
@@ -105,23 +103,22 @@ class CutOutDonutsUnpairedTask(CutOutDonutsBaseTask):
         donutCatalog: list[QTable],
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
-        # Loop over exposures (and corresponding catalogs)
-        stampList = []
+
+        # Process each exposure
+        allStamps = []
         for exposure, catalog in zip(exposures, donutCatalog):
-            # Determine which side of focus
             if exposure.visitInfo.focusZ > 0:
                 defocalType = DefocalType.Extra
             else:
                 defocalType = DefocalType.Intra
 
             # Cutout the stamps
-            stampList.append(
-                self.cutOutStamps(
-                    exposure,
-                    catalog,
-                    defocalType,
-                    camera.getName(),
-                )
+            stampsOut = self.cutOutStamps(
+                exposure,
+                catalog,
+                defocalType,
+                camera.getName(),
             )
+            allStamps.extend(stampsOut)
 
-        return pipeBase.Struct(donutStamps=stampList)
+        return pipeBase.Struct(donutStamps=allStamps)

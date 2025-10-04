@@ -31,6 +31,7 @@ from lsst.ts.wep.task.cutOutDonutsUnpairedTask import (
     CutOutDonutsUnpairedTask,
     CutOutDonutsUnpairedTaskConfig,
 )
+from lsst.ts.wep.utils import DefocalType
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -69,7 +70,7 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         else:
             cls.baseRunName = "run1"
             if cls.baseRunName in collectionsList:
-                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.baseRunName)
                 runProgram(cleanUpCmd)
 
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
@@ -185,7 +186,15 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
             "donutStamps", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
-        for butlerStamp, taskStamp in zip(donutStampsExtra, taskOut.donutStamps[0]):
+        # Compare results - taskOut.donutStamps should contain all stamps
+        # from both exposures
+        extraStamps = [
+            stamp for stamp in taskOut.donutStamps if stamp.defocalType == DefocalType.Extra
+        ]
+        intraStamps = [
+            stamp for stamp in taskOut.donutStamps if stamp.defocalType == DefocalType.Intra
+        ]
+        for butlerStamp, taskStamp in zip(donutStampsExtra, extraStamps):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
-        for butlerStamp, taskStamp in zip(donutStampsIntra, taskOut.donutStamps[1]):
+        for butlerStamp, taskStamp in zip(donutStampsIntra, intraStamps):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
