@@ -874,7 +874,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         # Debug: Check what metadata keys are available after setting
         self.log.debug("Metadata keys after setting: %s", list(donutStampsObj.metadata.names()))
-        self.log.debug("DET_NAME value: %s", donutStampsObj.metadata.get("DET_NAME", "NOT_FOUND"))
+        self.log.debug("DET_NAME value: %s (type: %s)", donutStampsObj.metadata.get("DET_NAME", "NOT_FOUND"),
+                      type(donutStampsObj.metadata.get("DET_NAME", "NOT_FOUND")))
+        # Store the detector name for potential recovery later
+        self._detector_name = detectorName
+        self.log.debug("Stored detector name for recovery: '%s'", self._detector_name)
+
+        # Override _refresh_metadata to preserve our scalar DET_NAME
+        original_refresh = donutStampsObj._refresh_metadata
+        def preserve_det_name_refresh() -> None:
+            original_refresh()
+            # Restore our scalar DET_NAME if it was overwritten
+            if isinstance(donutStampsObj.metadata.get("DET_NAME", None), list):
+                self.log.debug("Restoring scalar DET_NAME after _refresh_metadata()")
+                donutStampsObj.metadata["DET_NAME"] = self._detector_name
+        donutStampsObj._refresh_metadata = preserve_det_name_refresh
 
         # Add exposure metadata using safe extraction
         exp_metadata = self._get_exposure_metadata(exposure)
