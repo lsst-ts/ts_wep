@@ -425,7 +425,101 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             else:
                 return exp_id
         except Exception:
-            return 0
+            return -1
+
+    def _get_exposure_metadata(self, exposure: afwImage.Exposure) -> dict[str, float | int]:
+        """Extract metadata from exposure as a dictionary
+           with safe fallback values.
+
+        Args:
+            exposure: The exposure object to extract metadata from
+
+        Returns:
+            Dictionary containing metadata with safe fallback values
+        """
+        metadata: dict[str, float | int] = {}
+
+        # Get exposure info safely
+        exp_info = getattr(exposure, 'getInfo', lambda: None)()
+        if exp_info is None:
+            return metadata
+
+        # Visit ID
+        exp_id = getattr(exp_info, 'getId', lambda: None)()
+        if exp_id is not None:
+            metadata['visit_id'] = self._get_visit_id(exp_id)
+        else:
+            metadata['visit_id'] = -1
+
+        # Boresight rotation angle
+        boresight_rot_angle = getattr(
+            exp_info, 'getBoresightRotAngle', lambda: None
+        )()
+        if boresight_rot_angle is not None:
+            metadata['boresight_rot_angle_rad'] = getattr(
+                boresight_rot_angle, 'asRadians', lambda: float('nan')
+            )()
+        else:
+            metadata['boresight_rot_angle_rad'] = float('nan')
+
+        # Boresight par angle
+        boresight_par_angle = getattr(
+            exp_info, 'getBoresightParAngle', lambda: None
+        )()
+        if boresight_par_angle is not None:
+            metadata['boresight_par_angle_rad'] = getattr(
+                boresight_par_angle, 'asRadians', lambda: float('nan')
+            )()
+        else:
+            metadata['boresight_par_angle_rad'] = float('nan')
+
+        # Boresight altitude
+        boresight_alt = getattr(exp_info, 'getBoresightAlt', lambda: None)()
+        if boresight_alt is not None:
+            metadata['boresight_alt_rad'] = getattr(
+                boresight_alt, 'asRadians', lambda: float('nan')
+            )()
+        else:
+            metadata['boresight_alt_rad'] = float('nan')
+
+        # Boresight azimuth
+        boresight_az = getattr(exp_info, 'getBoresightAz', lambda: None)()
+        if boresight_az is not None:
+            metadata['boresight_az_rad'] = getattr(
+                boresight_az, 'asRadians', lambda: float('nan')
+            )()
+        else:
+            metadata['boresight_az_rad'] = float('nan')
+
+        # Boresight RA
+        boresight_ra = getattr(exp_info, 'getBoresightRa', lambda: None)()
+        if boresight_ra is not None:
+            metadata['boresight_ra_rad'] = getattr(
+                boresight_ra, 'asRadians', lambda: float('nan')
+            )()
+        else:
+            metadata['boresight_ra_rad'] = float('nan')
+
+        # Boresight DEC
+        boresight_dec = getattr(exp_info, 'getBoresightDec', lambda: None)()
+        if boresight_dec is not None:
+            metadata['boresight_dec_rad'] = getattr(
+                boresight_dec, 'asRadians', lambda: float('nan')
+            )()
+        else:
+            metadata['boresight_dec_rad'] = float('nan')
+
+        # MJD date
+        exp_date = getattr(exp_info, 'getDate', lambda: None)()
+        if exp_date is not None:
+            mjd = getattr(
+                exp_date, 'get', lambda system: float('nan')
+            )(system=DateTime.MJD)
+            metadata['mjd'] = mjd
+        else:
+            metadata['mjd'] = float('nan')
+
+        return metadata
 
     def createDonutStampFromTarts(
         self, exposure: afwImage.Exposure, cropped_image: np.ndarray, defocalType: str
@@ -623,53 +717,30 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         self.log.debug("Metadata keys after setting: %s", list(donutStampsObj.metadata.names()))
         self.log.debug("DET_NAME value: %s", donutStampsObj.metadata.get("DET_NAME", "NOT_FOUND"))
 
-        # Add visit information
-        try:
-            exp_id = exposure.getInfo().getId()
-            visit_id = self._get_visit_id(exp_id)
-            donutStampsObj.metadata["VISIT"] = visit_id
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["VISIT"] = 0
+        # Add exposure metadata using safe extraction
+        exp_metadata = self._get_exposure_metadata(exposure)
 
-        # Add boresight angles with fallback
-        try:
-            donutStampsObj.metadata["BORESIGHT_ROT_ANGLE_RAD"] = (
-                exposure.getInfo().getBoresightRotAngle().asRadians()
-            )
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["BORESIGHT_ROT_ANGLE_RAD"] = 0.0
-
-        try:
-            donutStampsObj.metadata["BORESIGHT_PAR_ANGLE_RAD"] = (
-                exposure.getInfo().getBoresightParAngle().asRadians()
-            )
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["BORESIGHT_PAR_ANGLE_RAD"] = 0.0
-
-        try:
-            donutStampsObj.metadata["BORESIGHT_ALT_RAD"] = exposure.getInfo().getBoresightAlt().asRadians()
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["BORESIGHT_ALT_RAD"] = 0.0
-
-        try:
-            donutStampsObj.metadata["BORESIGHT_AZ_RAD"] = exposure.getInfo().getBoresightAz().asRadians()
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["BORESIGHT_AZ_RAD"] = 0.0
-
-        try:
-            donutStampsObj.metadata["BORESIGHT_RA_RAD"] = exposure.getInfo().getBoresightRa().asRadians()
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["BORESIGHT_RA_RAD"] = 0.0
-
-        try:
-            donutStampsObj.metadata["BORESIGHT_DEC_RAD"] = exposure.getInfo().getBoresightDec().asRadians()
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["BORESIGHT_DEC_RAD"] = 0.0
-
-        try:
-            donutStampsObj.metadata["MJD"] = exposure.getInfo().getDate().get(system=DateTime.MJD)
-        except (AttributeError, NameError):
-            donutStampsObj.metadata["MJD"] = 0.0
+        # Set metadata with safe fallback values
+        donutStampsObj.metadata["VISIT"] = exp_metadata.get('visit_id', -1)
+        donutStampsObj.metadata["BORESIGHT_ROT_ANGLE_RAD"] = exp_metadata.get(
+            'boresight_rot_angle_rad', float('nan')
+        )
+        donutStampsObj.metadata["BORESIGHT_PAR_ANGLE_RAD"] = exp_metadata.get(
+            'boresight_par_angle_rad', float('nan')
+        )
+        donutStampsObj.metadata["BORESIGHT_ALT_RAD"] = exp_metadata.get(
+            'boresight_alt_rad', float('nan')
+        )
+        donutStampsObj.metadata["BORESIGHT_AZ_RAD"] = exp_metadata.get(
+            'boresight_az_rad', float('nan')
+        )
+        donutStampsObj.metadata["BORESIGHT_RA_RAD"] = exp_metadata.get(
+            'boresight_ra_rad', float('nan')
+        )
+        donutStampsObj.metadata["BORESIGHT_DEC_RAD"] = exp_metadata.get(
+            'boresight_dec_rad', float('nan')
+        )
+        donutStampsObj.metadata["MJD"] = exp_metadata.get('mjd', float('nan'))
 
         self.log.info("Constructed %d DonutStamps with WCS and metadata", len(donutStamps))
         return donutStampsObj
@@ -840,180 +911,179 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             len(extraStamps), len(intraStamps), zkCoeffRaw.shape
         )
 
-        # Only add individual donut rows if we have stamps
-        if max_stamps > 0:
-            for i in range(max_stamps):
-                # Get the zernike coefficients for this donut
-                # For TARTS, we have individual coefficients per donut in
-                # total_zernikes
-                if zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] > i:
-                    zk = zkCoeffRaw[i]
-                    self.log.debug("Using individual coefficients for donut %d", i+1)
-                elif zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] == 1:
-                    # Single set of coefficients for all donuts (fallback)
-                    zk = zkCoeffRaw[0]
-                    if i == 0:  # Only log once
-                        self.log.debug(
-                            "Using single coefficient set for all %d donuts (fallback)",
-                            max_stamps,
-                        )
-                else:
-                    # If we don't have individual coefficients, use the average
-                    zk = zkCoeffAvg
+        # Add individual donut rows
+        for i in range(max_stamps):
+            # Get the zernike coefficients for this donut
+            # For TARTS, we have individual coefficients per donut in
+            # total_zernikes
+            if zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] > i:
+                zk = zkCoeffRaw[i]
+                self.log.debug("Using individual coefficients for donut %d", i+1)
+            elif zkCoeffRaw.ndim == 2 and zkCoeffRaw.shape[0] == 1:
+                # Single set of coefficients for all donuts (fallback)
+                zk = zkCoeffRaw[0]
+                if i == 0:  # Only log once
                     self.log.debug(
-                        "Raw coeff shape %s does not cover stamp index %d; using average",
-                        getattr(zkCoeffRaw, "shape", None),
-                        i,
+                        "Using single coefficient set for all %d donuts (fallback)",
+                        max_stamps,
                     )
+            else:
+                # If we don't have individual coefficients, use the average
+                zk = zkCoeffAvg
+                self.log.debug(
+                    "Raw coeff shape %s does not cover stamp index %d; using average",
+                    getattr(zkCoeffRaw, "shape", None),
+                    i,
+                )
 
-                row: dict = dict()
-                row["label"] = f"donut{i+1}"
-                row["used"] = True  # TARTS predictions are always used
+            row: dict = dict()
+            row["label"] = f"donut{i+1}"
+            row["used"] = True  # TARTS predictions are always used
 
-                # Add Zernike coefficients
-                for idx, j in enumerate(self.config.nollIndices):
-                    if idx < len(zk):
-                        row[f"Z{j}"] = zk[idx] * u.um
+            # Add Zernike coefficients
+            for idx, j in enumerate(self.config.nollIndices):
+                if idx < len(zk):
+                    row[f"Z{j}"] = zk[idx] * u.um
+                else:
+                    row[f"Z{j}"] = 0.0 * u.um
+
+            # Get field positions and centroids from stamps
+            if i < len(intraStamps) and intraStamps[i] is not None:
+                intra = intraStamps[i]
+                # Use TARTS fx/fy values directly (same as
+                # DonutQualityTable)
+                try:
+                    fx_array = self._get_tarts_fx()
+                    fy_array = self._get_tarts_fy()
+
+                    fx_list = fx_array.tolist() if fx_array is not None else []
+                    fy_list = fy_array.tolist() if fy_array is not None else []
+                    # Flatten nested lists if needed
+                    if fx_list and isinstance(fx_list[0], list):
+                        fx_list = [item for sublist in fx_list for item in sublist]
+                    if fy_list and isinstance(fy_list[0], list):
+                        fy_list = [item for sublist in fy_list for item in sublist]
+
+                    if i < len(fx_list) and i < len(fy_list):
+                        row["intra_field_x"] = fx_list[i] * u.deg
+                        row["intra_field_y"] = fy_list[i] * u.deg
                     else:
-                        row[f"Z{j}"] = 0.0 * u.um
+                        row["intra_field_x"] = np.nan
+                        row["intra_field_y"] = np.nan
+                except AttributeError:
+                    # Fallback to calcFieldXY if TARTS values not available
+                    field_xy = intra.calcFieldXY()
+                    row["intra_field_x"] = field_xy[0] * u.deg
+                    row["intra_field_y"] = field_xy[1] * u.deg
+                # Use TARTS centers if available for more accurate
+                # positions
+                try:
+                    if self.tarts.centers is not None:
+                        # Handle TARTS centers data structure
+                        centers_array = self._get_tarts_centers()
 
-                # Get field positions and centroids from stamps
-                if i < len(intraStamps) and intraStamps[i] is not None:
-                    intra = intraStamps[i]
-                    # Use TARTS fx/fy values directly (same as
-                    # DonutQualityTable)
-                    try:
-                        fx_array = self._get_tarts_fx()
-                        fy_array = self._get_tarts_fy()
+                        # Handle different array shapes
+                        if centers_array is not None:
+                            array = centers_array  # Type narrowing for mypy
+                            if array.ndim == 1 and len(array) % 2 == 0:
+                                centers_array = array.reshape(-1, 2)
+                            elif array.ndim != 2 or array.shape[1] != 2:
+                                centers_array = None
 
-                        fx_list = fx_array.tolist() if fx_array is not None else []
-                        fy_list = fy_array.tolist() if fy_array is not None else []
-                        # Flatten nested lists if needed
-                        if fx_list and isinstance(fx_list[0], list):
-                            fx_list = [item for sublist in fx_list for item in sublist]
-                        if fy_list and isinstance(fy_list[0], list):
-                            fy_list = [item for sublist in fy_list for item in sublist]
-
-                        if i < len(fx_list) and i < len(fy_list):
-                            row["intra_field_x"] = fx_list[i] * u.deg
-                            row["intra_field_y"] = fy_list[i] * u.deg
-                        else:
-                            row["intra_field_x"] = np.nan
-                            row["intra_field_y"] = np.nan
-                    except AttributeError:
-                        # Fallback to calcFieldXY if TARTS values not available
-                        field_xy = intra.calcFieldXY()
-                        row["intra_field_x"] = field_xy[0] * u.deg
-                        row["intra_field_y"] = field_xy[1] * u.deg
-                    # Use TARTS centers if available for more accurate
-                    # positions
-                    try:
-                        if self.tarts.centers is not None:
-                            # Handle TARTS centers data structure
-                            centers_array = self._get_tarts_centers()
-
-                            # Handle different array shapes
-                            if centers_array is not None:
-                                array = centers_array  # Type narrowing for mypy
-                                if array.ndim == 1 and len(array) % 2 == 0:
-                                    centers_array = array.reshape(-1, 2)
-                                elif array.ndim != 2 or array.shape[1] != 2:
-                                    centers_array = None
-
-                            # Use individual center if available
-                            if centers_array is not None and i < len(centers_array):
-                                row["intra_centroid_x"] = centers_array[i, 0] * u.pixel
-                                row["intra_centroid_y"] = centers_array[i, 1] * u.pixel
-                            else:
-                                row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
-                                row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
+                        # Use individual center if available
+                        if centers_array is not None and i < len(centers_array):
+                            row["intra_centroid_x"] = centers_array[i, 0] * u.pixel
+                            row["intra_centroid_y"] = centers_array[i, 1] * u.pixel
                         else:
                             row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
                             row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
-                    except AttributeError:
+                    else:
                         row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
                         row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
-                else:
-                    row["intra_field_x"] = np.nan
-                    row["intra_field_y"] = np.nan
-                    row["intra_centroid_x"] = np.nan
-                    row["intra_centroid_y"] = np.nan
+                except AttributeError:
+                    row["intra_centroid_x"] = intra.centroid_position.x * u.pixel
+                    row["intra_centroid_y"] = intra.centroid_position.y * u.pixel
+            else:
+                row["intra_field_x"] = np.nan
+                row["intra_field_y"] = np.nan
+                row["intra_centroid_x"] = np.nan
+                row["intra_centroid_y"] = np.nan
 
-                if i < len(extraStamps) and extraStamps[i] is not None:
-                    extra = extraStamps[i]
-                    # Use TARTS fx/fy values directly (same as
-                    # DonutQualityTable)
-                    try:
-                        fx_array = self._get_tarts_fx()
-                        fy_array = self._get_tarts_fy()
+            if i < len(extraStamps) and extraStamps[i] is not None:
+                extra = extraStamps[i]
+                # Use TARTS fx/fy values directly (same as
+                # DonutQualityTable)
+                try:
+                    fx_array = self._get_tarts_fx()
+                    fy_array = self._get_tarts_fy()
 
-                        fx_list = fx_array.tolist() if fx_array is not None else []
-                        fy_list = fy_array.tolist() if fy_array is not None else []
-                        # Flatten nested lists if needed
-                        if fx_list and isinstance(fx_list[0], list):
-                            fx_list = [item for sublist in fx_list for item in sublist]
-                        if fy_list and isinstance(fy_list[0], list):
-                            fy_list = [item for sublist in fy_list for item in sublist]
+                    fx_list = fx_array.tolist() if fx_array is not None else []
+                    fy_list = fy_array.tolist() if fy_array is not None else []
+                    # Flatten nested lists if needed
+                    if fx_list and isinstance(fx_list[0], list):
+                        fx_list = [item for sublist in fx_list for item in sublist]
+                    if fy_list and isinstance(fy_list[0], list):
+                        fy_list = [item for sublist in fy_list for item in sublist]
 
-                        if i < len(fx_list) and i < len(fy_list):
-                            row["extra_field_x"] = fx_list[i] * u.deg
-                            row["extra_field_y"] = fy_list[i] * u.deg
-                        else:
-                            row["extra_field_x"] = np.nan
-                            row["extra_field_y"] = np.nan
-                    except AttributeError:
-                        # Fallback to calcFieldXY if TARTS values not available
-                        field_xy = extra.calcFieldXY()
-                        row["extra_field_x"] = field_xy[0] * u.deg
-                        row["extra_field_y"] = field_xy[1] * u.deg
-                    # Use TARTS centers if available for more accurate
-                    # positions
-                    try:
-                        if self.tarts.centers is not None:
-                            # Handle TARTS centers data structure
-                            centers_array = self._get_tarts_centers()
+                    if i < len(fx_list) and i < len(fy_list):
+                        row["extra_field_x"] = fx_list[i] * u.deg
+                        row["extra_field_y"] = fy_list[i] * u.deg
+                    else:
+                        row["extra_field_x"] = np.nan
+                        row["extra_field_y"] = np.nan
+                except AttributeError:
+                    # Fallback to calcFieldXY if TARTS values not available
+                    field_xy = extra.calcFieldXY()
+                    row["extra_field_x"] = field_xy[0] * u.deg
+                    row["extra_field_y"] = field_xy[1] * u.deg
+                # Use TARTS centers if available for more accurate
+                # positions
+                try:
+                    if self.tarts.centers is not None:
+                        # Handle TARTS centers data structure
+                        centers_array = self._get_tarts_centers()
 
-                            # Handle different array shapes
-                            if centers_array is not None:
-                                array = centers_array  # Type narrowing for mypy
-                                if array.ndim == 1 and len(array) % 2 == 0:
-                                    centers_array = array.reshape(-1, 2)
-                                elif array.ndim != 2 or array.shape[1] != 2:
-                                    centers_array = None
+                        # Handle different array shapes
+                        if centers_array is not None:
+                            array = centers_array  # Type narrowing for mypy
+                            if array.ndim == 1 and len(array) % 2 == 0:
+                                centers_array = array.reshape(-1, 2)
+                            elif array.ndim != 2 or array.shape[1] != 2:
+                                centers_array = None
 
-                            # Use individual center if available
-                            if centers_array is not None and i < len(centers_array):
-                                row["extra_centroid_x"] = centers_array[i, 0] * u.pixel
-                                row["extra_centroid_y"] = centers_array[i, 1] * u.pixel
-                            else:
-                                row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
-                                row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
+                        # Use individual center if available
+                        if centers_array is not None and i < len(centers_array):
+                            row["extra_centroid_x"] = centers_array[i, 0] * u.pixel
+                            row["extra_centroid_y"] = centers_array[i, 1] * u.pixel
                         else:
                             row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
                             row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
-                    except AttributeError:
+                    else:
                         row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
                         row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
-                else:
-                    row["extra_field_x"] = np.nan
-                    row["extra_field_y"] = np.nan
-                    row["extra_centroid_x"] = np.nan
-                    row["extra_centroid_y"] = np.nan
+                except AttributeError:
+                    row["extra_centroid_x"] = extra.centroid_position.x * u.pixel
+                    row["extra_centroid_y"] = extra.centroid_position.y * u.pixel
+            else:
+                row["extra_field_x"] = np.nan
+                row["extra_field_y"] = np.nan
+                row["extra_centroid_x"] = np.nan
+                row["extra_centroid_y"] = np.nan
 
-                # Get quality metrics from metadata
-                for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "FX", "FY"]:
-                    for stamps, foc in [
-                        (intraStamps, "intra"),
-                        (extraStamps, "extra"),
-                    ]:
-                        if (len(stamps) > 0 and key in stamps.metadata and
-                                i < len(stamps.metadata.getArray(key))):
-                            val = stamps.metadata.getArray(key)[i]
-                        else:
-                            val = np.nan
-                        row[f"{foc}_{key.lower()}"] = val
+            # Get quality metrics from metadata
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "FX", "FY"]:
+                for stamps, foc in [
+                    (intraStamps, "intra"),
+                    (extraStamps, "extra"),
+                ]:
+                    if (len(stamps) > 0 and key in stamps.metadata and
+                            i < len(stamps.metadata.getArray(key))):
+                        val = stamps.metadata.getArray(key)[i]
+                    else:
+                        val = np.nan
+                    row[f"{foc}_{key.lower()}"] = val
 
-                zkTable.add_row(row)
+            zkTable.add_row(row)
 
         # Set metadata on the Zernike table
         zkTable.meta = self.createZkTableMetadata()
@@ -1479,11 +1549,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         try:
             visitInfo = exposure.visitInfo
 
-            # Get visit ID
-            try:
-                exp_id = exposure.getInfo().getId()
-                visit_id = self._get_visit_id(exp_id)
-            except (AttributeError, NameError):
+            # Get visit ID using safe extraction
+            exp_metadata = self._get_exposure_metadata(exposure)
+            visit_id = exp_metadata.get('visit_id', -1)
+            if visit_id == -1:
                 visit_id = visitInfo.id
 
             # Create visit_info matching the standard structure from
