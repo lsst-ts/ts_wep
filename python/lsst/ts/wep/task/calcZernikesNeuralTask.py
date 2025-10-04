@@ -295,7 +295,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
     def _is_pytorch_tensor(self, obj: Any) -> bool:
         """Check if object is a PyTorch tensor."""
         try:
-            return hasattr(obj, 'cpu') and hasattr(obj, 'numpy')
+            # Use getattr to avoid hasattr checks
+            cpu_method = getattr(obj, 'cpu', None)
+            numpy_method = getattr(obj, 'numpy', None)
+            return cpu_method is not None and numpy_method is not None
         except Exception:
             return False
 
@@ -316,6 +319,74 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         except AttributeError:
             pass
         return None
+
+    def _validate_and_normalize_centers(self, centers_array: np.ndarray) -> Optional[np.ndarray]:
+        """Validate and normalize TARTS centers array to [n, 2] format.
+
+        Args:
+            centers_array: Input centers array
+
+        Returns:
+            Normalized centers array in [n, 2] format, or None if invalid
+
+        Raises:
+            Warning: Logged when centers array has invalid shape or dimensions
+        """
+        if centers_array.ndim == 1:
+            # Flattened array: [x1, y1, x2, y2, ...] -> reshape to [n, 2]
+            if len(centers_array) % 2 == 0:
+                centers_array = centers_array.reshape(-1, 2)
+                self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
+                return centers_array
+            else:
+                self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
+                return None
+        elif centers_array.ndim == 2:
+            # Already in [n, 2] format
+            if centers_array.shape[1] != 2:
+                self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
+                return None
+            return centers_array
+        else:
+            self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
+            return None
+
+    def _extract_centers_for_stamps(
+        self, centers_array: np.ndarray, num_stamps: int
+    ) -> tuple[list[float], list[float]]:
+        """Extract center coordinates for the specified number of stamps.
+
+        Args:
+            centers_array: Validated centers array in [n, 2] format
+            num_stamps: Number of stamps needed
+
+        Returns:
+            Tuple of (cent_x_list, cent_y_list) for the stamps
+        """
+        if len(centers_array) == num_stamps:
+            cent_x_list = centers_array[:, 0].tolist()
+            cent_y_list = centers_array[:, 1].tolist()
+            self.log.info(
+                "Using TARTS centers for %d donut stamps: first few = %s",
+                num_stamps, centers_array[:3].tolist()
+            )
+        elif len(centers_array) > num_stamps:
+            # Take first num_stamps centers
+            cent_x_list = centers_array[:num_stamps, 0].tolist()
+            cent_y_list = centers_array[:num_stamps, 1].tolist()
+            self.log.info(
+                "Using first %d TARTS centers out of %d available for stamps",
+                num_stamps, len(centers_array)
+            )
+        else:
+            # Not enough centers, repeat the last one
+            cent_x_list = [centers_array[-1, 0]] * num_stamps
+            cent_y_list = [centers_array[-1, 1]] * num_stamps
+            self.log.warning(
+                "Only %d TARTS centers available for %d stamps, repeating last center",
+                len(centers_array), num_stamps
+            )
+        return cent_x_list, cent_y_list
 
     def _get_tarts_fx(self) -> Optional[np.ndarray]:
         """Get TARTS fx values as numpy array."""
@@ -347,8 +418,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
     def _get_visit_id(self, exp_id: Any) -> int:
         """Get visit ID from exposure ID, handling different types."""
         try:
-            if hasattr(exp_id, 'getVisitId'):
-                return exp_id.getVisitId()
+            # Use getattr with default to avoid hasattr check
+            get_visit_id_method = getattr(exp_id, 'getVisitId', None)
+            if get_visit_id_method is not None:
+                return get_visit_id_method()
             else:
                 return exp_id
         except Exception:
@@ -395,67 +468,28 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         num_stamps = image_array.shape[0]
         self.log.debug("Normalized to %d stamp(s) of size %dx%d", num_stamps, self.cropSize, self.cropSize)
         # Get TARTS centers for accurate centroid positions
-        try:
-            centers_array = self._get_tarts_centers()
-            if centers_array is not None:
-                self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
+        centers_array = self._get_tarts_centers()
+        if centers_array is not None:
+            self.log.info("TARTS centers numpy array shape: %s", centers_array.shape)
 
-                # Handle different array shapes
-                if centers_array.ndim == 1:
-                    # Flattened array -> reshape to [n,2]
-                    if len(centers_array) % 2 == 0:
-                        centers_array = centers_array.reshape(-1, 2)
-                        self.log.info("Reshaped flattened centers to shape: %s", centers_array.shape)
-                    else:
-                        self.log.warning("TARTS centers length %d is not divisible by 2", len(centers_array))
-                        centers_array = None
-                elif centers_array.ndim == 2:
-                    # Already in [n, 2] format
-                    if centers_array.shape[1] != 2:
-                        self.log.warning("TARTS centers shape %s doesn't have 2 columns", centers_array.shape)
-                        centers_array = None
-                else:
-                    self.log.warning("Unexpected TARTS centers dimensionality: %d", centers_array.ndim)
-                    centers_array = None
-
-            # Extract coordinates if we have valid centers
-            if centers_array is not None and len(centers_array) > 0:
-                if len(centers_array) == num_stamps:
-                    cent_x_list = centers_array[:, 0].tolist()
-                    cent_y_list = centers_array[:, 1].tolist()
-                    self.log.info(
-                        "Using TARTS centers for %d donut stamps: first few = %s",
-                        num_stamps, centers_array[:3].tolist()
-                    )
-                elif len(centers_array) > num_stamps:
-                    # Take first num_stamps centers
-                    cent_x_list = centers_array[:num_stamps, 0].tolist()
-                    cent_y_list = centers_array[:num_stamps, 1].tolist()
-                    self.log.info(
-                        "Using first %d TARTS centers out of %d available for stamps",
-                        num_stamps, len(centers_array)
-                    )
-                else:
-                    # Not enough centers, repeat the last one
-                    cent_x_list = [centers_array[-1, 0]] * num_stamps
-                    cent_y_list = [centers_array[-1, 1]] * num_stamps
-                    self.log.info(
-                        "Only %d TARTS centers available for %d stamps, repeating last center",
-                        len(centers_array), num_stamps
-                    )
+            # Validate and normalize centers array
+            normalized_centers = self._validate_and_normalize_centers(centers_array)
+            if normalized_centers is not None and len(normalized_centers) > 0:
+                # Extract coordinates for stamps
+                cent_x_list, cent_y_list = self._extract_centers_for_stamps(normalized_centers, num_stamps)
             else:
-                # Fallback to exposure center
+                # TARTS centers invalid, use exposure center
                 cent_x_list = [center_x] * num_stamps
                 cent_y_list = [center_y] * num_stamps
-                self.log.info(
+                self.log.warning(
                     "TARTS centers invalid, using exposure center [%.1f, %.1f] for %d donut stamps",
                     center_x, center_y, num_stamps
                 )
-        except AttributeError:
+        else:
             # TARTS centers not available, use exposure center
             cent_x_list = [center_x] * num_stamps
             cent_y_list = [center_y] * num_stamps
-            self.log.info(
+            self.log.warning(
                 "TARTS centers not available, using exposure center [%.1f, %.1f] for %d donut stamps",
                 center_x, center_y, num_stamps
             )
