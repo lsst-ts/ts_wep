@@ -1636,12 +1636,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             donut_table.meta["visit_info"] = catVisitInfo
 
-        except Exception as e:
-            self.log.warning("Could not extract comprehensive visit_info metadata: %s", e)
+        except Exception:
+            self.log.exception("Could not extract comprehensive visit_info metadata")
             # Provide minimal visit_info structure
             try:
                 visit_id = exposure.visitInfo.id
             except Exception:
+                self.log.warning("Could not extract visit ID from exposure.visitInfo, using fallback -1")
                 visit_id = -1
 
             donut_table.meta["visit_info"] = {
