@@ -1179,35 +1179,31 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             # Extract metadata from stamps (now stored as scalar values)
             try:
-                # Try to get DET_NAME first
-                if "DET_NAME" in stamps.metadata.names():
-                    dict_["det_name"] = stamps.metadata["DET_NAME"]
-                    self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_["det_name"])
+                # Get DET_NAME from stamps metadata (should always be present)
+                dict_["det_name"] = stamps.metadata.get("DET_NAME", "Unknown")
+                if dict_["det_name"] == "Unknown":
+                    self.log.warning(
+                        "DET_NAME not found in stamps metadata, using 'Unknown'. "
+                        "This may indicate a problem with stamp creation."
+                    )
                 else:
-                    # Fallback: use stored detector name
-                    if hasattr(self, '_detector_name') and self._detector_name is not None:
-                        dict_["det_name"] = self._detector_name
-                        self.log.info(
-                            "DET_NAME not found in metadata, using stored detector name: '%s'",
-                            dict_["det_name"]
-                        )
-                    else:
-                        self.log.warning(
-                            "DET_NAME not found in metadata and no stored detector name, using 'Unknown'"
-                        )
-                        dict_["det_name"] = "Unknown"
+                    self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_["det_name"])
 
-                # Get other metadata with fallbacks
-                dict_["visit"] = stamps.metadata.get("VISIT", 0)
-                dict_["dfc_dist"] = stamps.metadata.get("DFC_DIST", 1.5)
+                # Get other metadata with proper sentinel values
+                dict_["visit"] = stamps.metadata.get("VISIT", -1)
+                dict_["dfc_dist"] = stamps.metadata.get("DFC_DIST", float('nan'))
                 dict_["band"] = stamps.metadata.get("BANDPASS", "Unknown")
-                dict_["boresight_rot_angle_rad"] = stamps.metadata.get("BORESIGHT_ROT_ANGLE_RAD", 0.0)
-                dict_["boresight_par_angle_rad"] = stamps.metadata.get("BORESIGHT_PAR_ANGLE_RAD", 0.0)
-                dict_["boresight_alt_rad"] = stamps.metadata.get("BORESIGHT_ALT_RAD", 0.0)
-                dict_["boresight_az_rad"] = stamps.metadata.get("BORESIGHT_AZ_RAD", 0.0)
-                dict_["boresight_ra_rad"] = stamps.metadata.get("BORESIGHT_RA_RAD", 0.0)
-                dict_["boresight_dec_rad"] = stamps.metadata.get("BORESIGHT_DEC_RAD", 0.0)
-                dict_["mjd"] = stamps.metadata.get("MJD", 0.0)
+                dict_["boresight_rot_angle_rad"] = stamps.metadata.get(
+                    "BORESIGHT_ROT_ANGLE_RAD", float('nan')
+                )
+                dict_["boresight_par_angle_rad"] = stamps.metadata.get(
+                    "BORESIGHT_PAR_ANGLE_RAD", float('nan')
+                )
+                dict_["boresight_alt_rad"] = stamps.metadata.get("BORESIGHT_ALT_RAD", float('nan'))
+                dict_["boresight_az_rad"] = stamps.metadata.get("BORESIGHT_AZ_RAD", float('nan'))
+                dict_["boresight_ra_rad"] = stamps.metadata.get("BORESIGHT_RA_RAD", float('nan'))
+                dict_["boresight_dec_rad"] = stamps.metadata.get("BORESIGHT_DEC_RAD", float('nan'))
+                dict_["mjd"] = stamps.metadata.get("MJD", float('nan'))
 
                 if cam_name is None:
                     cam_name = stamps.metadata.get("CAM_NAME", "LSSTCam")
