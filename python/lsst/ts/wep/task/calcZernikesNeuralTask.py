@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 from copy import deepcopy
+from itertools import zip_longest
 from typing import Any, Optional
 import logging
 
@@ -912,7 +913,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         )
 
         # Add individual donut rows
-        for i in range(max_stamps):
+        for i, (intraStamp, extraStamp) in enumerate(zip_longest(intraStamps, extraStamps)):
             # Get the zernike coefficients for this donut
             # For TARTS, we have individual coefficients per donut in
             # total_zernikes
@@ -948,8 +949,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     row[f"Z{j}"] = 0.0 * u.um
 
             # Get field positions and centroids from stamps
-            if i < len(intraStamps) and intraStamps[i] is not None:
-                intra = intraStamps[i]
+            if intraStamp is not None:
+                intra = intraStamp
                 # Use TARTS fx/fy values directly (same as
                 # DonutQualityTable)
                 try:
@@ -1009,8 +1010,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 row["intra_centroid_x"] = np.nan
                 row["intra_centroid_y"] = np.nan
 
-            if i < len(extraStamps) and extraStamps[i] is not None:
-                extra = extraStamps[i]
+            if extraStamp is not None:
+                extra = extraStamp
                 # Use TARTS fx/fy values directly (same as
                 # DonutQualityTable)
                 try:
