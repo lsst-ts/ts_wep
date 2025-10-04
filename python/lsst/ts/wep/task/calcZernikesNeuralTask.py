@@ -1159,18 +1159,18 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             (meta["extra"], self.stampsExtra),
         ]:
             if stamps is None:
-                # Populate with default values if stamps are None
+                # Populate with sentinel values if stamps are None
                 dict_["det_name"] = "Unknown"
-                dict_["visit"] = 0
-                dict_["dfc_dist"] = 1.5
+                dict_["visit"] = -1
+                dict_["dfc_dist"] = float('nan')
                 dict_["band"] = "Unknown"
-                dict_["boresight_rot_angle_rad"] = 0.0
-                dict_["boresight_par_angle_rad"] = 0.0
-                dict_["boresight_alt_rad"] = 0.0
-                dict_["boresight_az_rad"] = 0.0
-                dict_["boresight_ra_rad"] = 0.0
-                dict_["boresight_dec_rad"] = 0.0
-                dict_["mjd"] = 0.0
+                dict_["boresight_rot_angle_rad"] = float('nan')
+                dict_["boresight_par_angle_rad"] = float('nan')
+                dict_["boresight_alt_rad"] = float('nan')
+                dict_["boresight_az_rad"] = float('nan')
+                dict_["boresight_ra_rad"] = float('nan')
+                dict_["boresight_dec_rad"] = float('nan')
+                dict_["mjd"] = float('nan')
                 continue
 
             # Debug: Check what metadata keys are available
@@ -1213,18 +1213,18 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     cam_name = stamps.metadata.get("CAM_NAME", "LSSTCam")
             except Exception as e:
                 self.log.error("Error accessing metadata: %s", e)
-                # Use default values if metadata is missing
+                # Use sentinel values if metadata is missing
                 dict_["det_name"] = "Unknown"
-                dict_["visit"] = 0
-                dict_["dfc_dist"] = 1.5
+                dict_["visit"] = -1
+                dict_["dfc_dist"] = float('nan')
                 dict_["band"] = "Unknown"
-                dict_["boresight_rot_angle_rad"] = 0.0
-                dict_["boresight_par_angle_rad"] = 0.0
-                dict_["boresight_alt_rad"] = 0.0
-                dict_["boresight_az_rad"] = 0.0
-                dict_["boresight_ra_rad"] = 0.0
-                dict_["boresight_dec_rad"] = 0.0
-                dict_["mjd"] = 0.0
+                dict_["boresight_rot_angle_rad"] = float('nan')
+                dict_["boresight_par_angle_rad"] = float('nan')
+                dict_["boresight_alt_rad"] = float('nan')
+                dict_["boresight_az_rad"] = float('nan')
+                dict_["boresight_ra_rad"] = float('nan')
+                dict_["boresight_dec_rad"] = float('nan')
+                dict_["mjd"] = float('nan')
                 if cam_name is None:
                     cam_name = "LSSTCam"
 
