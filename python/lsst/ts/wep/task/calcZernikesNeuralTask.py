@@ -1084,6 +1084,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             len(extraStamps), len(intraStamps), zkCoeffRaw.shape
         )
 
+        # Determine which side has stamps for field position propagation
+        intra_has_stamps = len(intraStamps) > 0
+        extra_has_stamps = len(extraStamps) > 0
+
         # Add individual donut rows
         for i, (intraStamp, extraStamp) in enumerate(zip_longest(intraStamps, extraStamps)):
             # Get the zernike coefficients for this donut
@@ -1154,6 +1158,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 centroid_x, centroid_y = self._get_centroid_for_stamp(intra, i)
                 row["intra_centroid_x"] = centroid_x * u.pixel
                 row["intra_centroid_y"] = centroid_y * u.pixel
+            else:
                 # intraStamp is None (padded by zip_longest when arrays have
                 # different lengths)
                 self.log.debug("No intra stamp available for donut %d", i + 1)
@@ -1202,6 +1207,23 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                 row["extra_field_y"] = np.nan
                 row["extra_centroid_x"] = np.nan
                 row["extra_centroid_y"] = np.nan
+
+            # Propagate field positions to the side that doesn't have stamps
+            # Since we only process one side, copy field positions to the other
+            if intra_has_stamps and not extra_has_stamps:
+                # We have intra stamps but no extra stamps - copy intra field
+                # positions to extra
+                if not np.isnan(row["intra_field_x"]) and not np.isnan(row["intra_field_y"]):
+                    row["extra_field_x"] = row["intra_field_x"]
+                    row["extra_field_y"] = row["intra_field_y"]
+                    self.log.debug("Propagated intra field positions to extra side for donut %d", i + 1)
+            elif extra_has_stamps and not intra_has_stamps:
+                # We have extra stamps but no intra stamps - copy extra field
+                # positions to intra
+                if not np.isnan(row["extra_field_x"]) and not np.isnan(row["extra_field_y"]):
+                    row["intra_field_x"] = row["extra_field_x"]
+                    row["intra_field_y"] = row["extra_field_y"]
+                    self.log.debug("Propagated extra field positions to intra side for donut %d", i + 1)
 
             # Get quality metrics from metadata
             for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "FX", "FY"]:
