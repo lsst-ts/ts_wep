@@ -439,10 +439,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         data_list = array.flatten().tolist() if array is not None else []
 
         # Normalize to expected length
-        if len(data_list) == num_items:
-            return data_list
-        elif len(data_list) > num_items:
-            self.log.info("Truncating %s data from %d to %d items", field_name, len(data_list), num_items)
+        if len(data_list) >= num_items:
+            # Return first num_items (exact match or truncation needed)
+            if len(data_list) > num_items:
+                self.log.info("Truncating %s data from %d to %d items", field_name, len(data_list), num_items)
             return data_list[:num_items]
         else:
             # Pad with default value
