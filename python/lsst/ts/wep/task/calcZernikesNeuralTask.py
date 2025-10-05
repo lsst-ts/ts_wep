@@ -601,8 +601,8 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         metadata_dict["visit"] = -1
         metadata_dict["dfc_dist"] = float('nan')
         metadata_dict["band"] = "Unknown"
-        metadata_dict["boresight_rot_angle_rad"] = float('nan')
-        metadata_dict["boresight_par_angle_rad"] = float('nan')
+        metadata_dict["boresight_rot_angle_rad"] = 0.0
+        metadata_dict["boresight_par_angle_rad"] = 0.0
         metadata_dict["boresight_alt_rad"] = float('nan')
         metadata_dict["boresight_az_rad"] = float('nan')
         metadata_dict["boresight_ra_rad"] = float('nan')
@@ -896,10 +896,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Set metadata with safe fallback values
         donutStampsObj.metadata["VISIT"] = exp_metadata.get('visit_id', -1)
         donutStampsObj.metadata["BORESIGHT_ROT_ANGLE_RAD"] = exp_metadata.get(
-            'boresight_rot_angle_rad', float('nan')
+            'boresight_rot_angle_rad', 0.0
         )
         donutStampsObj.metadata["BORESIGHT_PAR_ANGLE_RAD"] = exp_metadata.get(
-            'boresight_par_angle_rad', float('nan')
+            'boresight_par_angle_rad', 0.0
         )
         donutStampsObj.metadata["BORESIGHT_ALT_RAD"] = exp_metadata.get(
             'boresight_alt_rad', float('nan')
@@ -1328,10 +1328,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             dict_with_data["dfc_dist"] = stamps_with_data.metadata.get("DFC_DIST", float('nan'))
             dict_with_data["band"] = stamps_with_data.metadata.get("BANDPASS", "Unknown")
             dict_with_data["boresight_rot_angle_rad"] = stamps_with_data.metadata.get(
-                "BORESIGHT_ROT_ANGLE_RAD", float('nan')
+                "BORESIGHT_ROT_ANGLE_RAD", 0.0
             )
             dict_with_data["boresight_par_angle_rad"] = stamps_with_data.metadata.get(
-                "BORESIGHT_PAR_ANGLE_RAD", float('nan')
+                "BORESIGHT_PAR_ANGLE_RAD", 0.0
             )
             dict_with_data["boresight_alt_rad"] = stamps_with_data.metadata.get(
                 "BORESIGHT_ALT_RAD", float('nan')
