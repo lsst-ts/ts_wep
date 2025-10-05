@@ -269,12 +269,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
             # Update device attributes for all sub-models to CPU
             self.tarts.device_val = torch.device("cpu")
-            if hasattr(self.tarts.alignnet_model, 'device_val'):
-                self.tarts.alignnet_model.device_val = torch.device("cpu")
-            if hasattr(self.tarts.wavenet_model, 'device_val'):
-                self.tarts.wavenet_model.device_val = torch.device("cpu")
-            if hasattr(self.tarts.aggregatornet_model, 'device_val'):
-                self.tarts.aggregatornet_model.device_val = torch.device("cpu")
+            for model in [
+                self.tarts.alignnet_model,
+                self.tarts.wavenet_model,
+                self.tarts.aggregatornet_model,
+            ]:
+                if model is not None and hasattr(model, "device_val"):
+                    model.device_val = torch.device("cpu")
 
             # Update device attributes for the underlying models
             if hasattr(self.tarts.alignnet_model.alignnet, 'device_val'):
