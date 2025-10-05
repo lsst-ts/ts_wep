@@ -395,29 +395,23 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
     def _get_tarts_fx(self) -> Optional[np.ndarray]:
         """Get TARTS fx values as numpy array."""
-        try:
-            if self.tarts.fx is not None:
-                return self._to_numpy(self.tarts.fx)
-        except AttributeError:
-            pass
+        fx = getattr(self.tarts, "fx", None)
+        if fx is not None:
+            return self._to_numpy(fx)
         return None
 
     def _get_tarts_fy(self) -> Optional[np.ndarray]:
         """Get TARTS fy values as numpy array."""
-        try:
-            if self.tarts.fy is not None:
-                return self._to_numpy(self.tarts.fy)
-        except AttributeError:
-            pass
+        fy = getattr(self.tarts, "fy", None)
+        if fy is not None:
+            return self._to_numpy(fy)
         return None
 
     def _get_tarts_snr(self) -> Optional[np.ndarray]:
         """Get TARTS SNR values as numpy array."""
-        try:
-            if self.tarts.SNR is not None:
-                return self._to_numpy(self.tarts.SNR)
-        except AttributeError:
-            pass
+        snr = getattr(self.tarts, "SNR", None)
+        if snr is not None:
+            return self._to_numpy(snr)
         return None
 
     def _extract_and_normalize_tarts_data(self, field_name: str, num_items: int) -> list[float]:
