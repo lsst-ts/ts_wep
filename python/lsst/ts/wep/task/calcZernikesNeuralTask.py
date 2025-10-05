@@ -672,13 +672,14 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Extract boresight angles from visitInfo (the correct approach)
         try:
             boresight_rot_angle = getattr(visit_info, 'boresightRotAngle', None)
+            metadata['boresight_rot_angle_rad'] = (
+                boresight_rot_angle.asRadians() if boresight_rot_angle is not None else 0.0
+            )
             if boresight_rot_angle is not None:
-                metadata['boresight_rot_angle_rad'] = boresight_rot_angle.asRadians()
                 self.log.debug("Extracted boresightRotAngle: %.6f rad (%.3f deg)",
                              metadata["boresight_rot_angle_rad"],
                              metadata["boresight_rot_angle_rad"] * 180.0 / np.pi)
             else:
-                metadata['boresight_rot_angle_rad'] = 0.0
                 self.log.debug("boresightRotAngle not available, using fallback: 0.0")
         except Exception as e:
             self.log.debug("Could not extract boresightRotAngle: %s", e)
@@ -686,13 +687,14 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
         try:
             boresight_par_angle = getattr(visit_info, 'boresightParAngle', None)
+            metadata['boresight_par_angle_rad'] = (
+                boresight_par_angle.asRadians() if boresight_par_angle is not None else 0.0
+            )
             if boresight_par_angle is not None:
-                metadata['boresight_par_angle_rad'] = boresight_par_angle.asRadians()
                 self.log.debug("Extracted boresightParAngle: %.6f rad (%.3f deg)",
                              metadata["boresight_par_angle_rad"],
                              metadata["boresight_par_angle_rad"] * 180.0 / np.pi)
             else:
-                metadata['boresight_par_angle_rad'] = 0.0
                 self.log.debug("boresightParAngle not available, using fallback: 0.0")
         except Exception as e:
             self.log.debug("Could not extract boresightParAngle: %s", e)
