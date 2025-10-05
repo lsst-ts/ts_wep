@@ -383,39 +383,21 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             )
         return cent_x_list, cent_y_list
 
-    def _get_tarts_fx(self) -> Optional[np.ndarray]:
-        """Get TARTS fx values as numpy array."""
-        fx = getattr(self.tarts, "fx", None)
-        if fx is not None:
-            return self._to_numpy(fx)
-        return None
-
-    def _get_tarts_fy(self) -> Optional[np.ndarray]:
-        """Get TARTS fy values as numpy array."""
-        fy = getattr(self.tarts, "fy", None)
-        if fy is not None:
-            return self._to_numpy(fy)
-        return None
-
-    def _get_tarts_snr(self) -> Optional[np.ndarray]:
-        """Get TARTS SNR values as numpy array."""
-        snr = getattr(self.tarts, "SNR", None)
-        if snr is not None:
-            return self._to_numpy(snr)
-        return None
-
     def _extract_and_normalize_tarts_data(self, field_name: str, num_items: int) -> list[float]:
         """Extract TARTS data field and normalize to proper length."""
         # Get the appropriate TARTS field
         if field_name == 'fx':
-            array = self._get_tarts_fx()
+            field_value = getattr(self.tarts, "fx", None)
         elif field_name == 'fy':
-            array = self._get_tarts_fy()
+            field_value = getattr(self.tarts, "fy", None)
         elif field_name == 'SNR':
-            array = self._get_tarts_snr()
+            field_value = getattr(self.tarts, "SNR", None)
         else:
             self.log.warning("Unknown TARTS field name: %s", field_name)
             return [np.nan] * num_items
+
+        # Convert to numpy array if available
+        array = self._to_numpy(field_value) if field_value is not None else None
 
         # Convert to list
         data_list = array.flatten().tolist() if array is not None else []
@@ -645,12 +627,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             metadata['boresight_rot_angle_rad'] = (
                 boresight_rot_angle.asRadians() if boresight_rot_angle is not None else 0.0
             )
-            if boresight_rot_angle is not None:
-                self.log.debug("Extracted boresightRotAngle: %.6f rad (%.3f deg)",
-                             metadata["boresight_rot_angle_rad"],
-                             metadata["boresight_rot_angle_rad"] * 180.0 / np.pi)
-            else:
-                self.log.debug("boresightRotAngle not available, using fallback: 0.0")
+            self.log.debug("boresightRotAngle: %.6f rad (%.3f deg)%s",
+                         metadata["boresight_rot_angle_rad"],
+                         metadata["boresight_rot_angle_rad"] * 180.0 / np.pi,
+                         " (fallback)" if boresight_rot_angle is None else "")
         except Exception as e:
             self.log.debug("Could not extract boresightRotAngle: %s", e)
             metadata['boresight_rot_angle_rad'] = 0.0
@@ -660,12 +640,10 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             metadata['boresight_par_angle_rad'] = (
                 boresight_par_angle.asRadians() if boresight_par_angle is not None else 0.0
             )
-            if boresight_par_angle is not None:
-                self.log.debug("Extracted boresightParAngle: %.6f rad (%.3f deg)",
-                             metadata["boresight_par_angle_rad"],
-                             metadata["boresight_par_angle_rad"] * 180.0 / np.pi)
-            else:
-                self.log.debug("boresightParAngle not available, using fallback: 0.0")
+            self.log.debug("boresightParAngle: %.6f rad (%.3f deg)%s",
+                         metadata["boresight_par_angle_rad"],
+                         metadata["boresight_par_angle_rad"] * 180.0 / np.pi,
+                         " (fallback)" if boresight_par_angle is None else "")
         except Exception as e:
             self.log.debug("Could not extract boresightParAngle: %s", e)
             metadata['boresight_par_angle_rad'] = 0.0
