@@ -1259,91 +1259,111 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             meta["extra"]["det_name"] = "Unknown"
             return meta
 
-        # Process intra and extra stamps
-        for dict_, stamps in [
-            (meta["intra"], self.stampsIntra),
-            (meta["extra"], self.stampsExtra),
-        ]:
-            if stamps is None:
-                # Populate with sentinel values if stamps are None
-                self._set_sentinel_metadata(dict_)
-                continue
+        # Determine which side has stamps (only one side ever has stamps)
+        intra_has_stamps = self.stampsIntra is not None
+        extra_has_stamps = self.stampsExtra is not None
 
-            # Debug: Check what metadata keys are available
-            self.log.debug("Available metadata keys: %s", list(stamps.metadata.names()))
-            det_name_raw = stamps.metadata.get("DET_NAME", "NOT_FOUND")
-            self.log.debug("DET_NAME value: %s (type: %s)", det_name_raw, type(det_name_raw))
-            if isinstance(det_name_raw, list):
-                self.log.debug("DET_NAME array length: %d, contents: %s", len(det_name_raw), det_name_raw)
+        self.log.debug("Stamp availability: intra=%s, extra=%s", intra_has_stamps, extra_has_stamps)
 
-            # Extract metadata from stamps (handle scalar and array formats)
-            try:
-                # Get DET_NAME from stamps metadata (handle scalar/array)
-                det_name_value = stamps.metadata.get("DET_NAME", "Unknown")
+        # Extract metadata from the side that has stamps
+        stamps_with_data = None
+        dict_with_data = None
 
-                # Handle case where DET_NAME might be an empty array
-                # (from _refresh_metadata)
-                if isinstance(det_name_value, list):
-                    if len(det_name_value) > 0:
-                        # Use first detector name from array
-                        dict_["det_name"] = det_name_value[0]
-                        self.log.debug("Using first DET_NAME from array: '%s'", dict_["det_name"])
-                    else:
-                        # Empty array - fall back to stored detector name
-                        # or Unknown
-                        dict_["det_name"] = getattr(self, '_detector_name', "Unknown")
-                        if dict_["det_name"] == "Unknown":
-                            self.log.warning(
-                                "DET_NAME array is empty and no stored detector name available. "
-                                "This may indicate a problem with stamp creation."
-                            )
-                        else:
-                            self.log.info("Using stored detector name: '%s'", dict_["det_name"])
+        if intra_has_stamps:
+            stamps_with_data = self.stampsIntra
+            dict_with_data = meta["intra"]
+            self.log.debug("Processing intra stamps (extra will get propagated metadata)")
+        elif extra_has_stamps:
+            stamps_with_data = self.stampsExtra
+            dict_with_data = meta["extra"]
+            self.log.debug("Processing extra stamps (intra will get propagated metadata)")
+        else:
+            # This should not happen given the check at the top
+            self.log.warning("No stamps available for either side")
+            return meta
+
+        # Extract metadata from the stamps that exist
+        self.log.debug("Available metadata keys: %s", list(stamps_with_data.metadata.names()))
+        det_name_raw = stamps_with_data.metadata.get("DET_NAME", "NOT_FOUND")
+        self.log.debug("DET_NAME value: %s (type: %s)", det_name_raw, type(det_name_raw))
+        if isinstance(det_name_raw, list):
+            self.log.debug("DET_NAME array length: %d, contents: %s", len(det_name_raw), det_name_raw)
+
+        try:
+            # Get DET_NAME from stamps metadata (handle scalar/array)
+            det_name_value = stamps_with_data.metadata.get("DET_NAME", "Unknown")
+
+            # Handle case where DET_NAME might be an empty array
+            # (from _refresh_metadata)
+            if isinstance(det_name_value, list):
+                if len(det_name_value) > 0:
+                    # Use first detector name from array
+                    dict_with_data["det_name"] = det_name_value[0]
+                    self.log.debug("Using first DET_NAME from array: '%s'", dict_with_data["det_name"])
                 else:
-                    # Scalar value
-                    dict_["det_name"] = det_name_value
-                    if dict_["det_name"] == "Unknown":
+                    # Empty array - fall back to stored detector name
+                    dict_with_data["det_name"] = getattr(self, '_detector_name', "Unknown")
+                    if dict_with_data["det_name"] == "Unknown":
                         self.log.warning(
-                            "DET_NAME not found in stamps metadata, using 'Unknown'. "
+                            "DET_NAME array is empty and no stored detector name available. "
                             "This may indicate a problem with stamp creation."
                         )
                     else:
-                        self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_["det_name"])
+                        self.log.info("Using stored detector name: '%s'", dict_with_data["det_name"])
+            else:
+                # Scalar value
+                dict_with_data["det_name"] = det_name_value
+                if dict_with_data["det_name"] == "Unknown":
+                    self.log.warning(
+                        "DET_NAME not found in stamps metadata, using 'Unknown'. "
+                        "This may indicate a problem with stamp creation."
+                    )
+                else:
+                    self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_with_data["det_name"])
 
-                # Get other metadata with proper sentinel values
-                dict_["visit"] = stamps.metadata.get("VISIT", -1)
-                dict_["dfc_dist"] = stamps.metadata.get("DFC_DIST", float('nan'))
-                dict_["band"] = stamps.metadata.get("BANDPASS", "Unknown")
-                dict_["boresight_rot_angle_rad"] = stamps.metadata.get(
-                    "BORESIGHT_ROT_ANGLE_RAD", float('nan')
-                )
-                dict_["boresight_par_angle_rad"] = stamps.metadata.get(
-                    "BORESIGHT_PAR_ANGLE_RAD", float('nan')
-                )
-                dict_["boresight_alt_rad"] = stamps.metadata.get("BORESIGHT_ALT_RAD", float('nan'))
-                dict_["boresight_az_rad"] = stamps.metadata.get("BORESIGHT_AZ_RAD", float('nan'))
-                dict_["boresight_ra_rad"] = stamps.metadata.get("BORESIGHT_RA_RAD", float('nan'))
-                dict_["boresight_dec_rad"] = stamps.metadata.get("BORESIGHT_DEC_RAD", float('nan'))
-                dict_["mjd"] = stamps.metadata.get("MJD", float('nan'))
+            # Get other metadata with proper sentinel values
+            dict_with_data["visit"] = stamps_with_data.metadata.get("VISIT", -1)
+            dict_with_data["dfc_dist"] = stamps_with_data.metadata.get("DFC_DIST", float('nan'))
+            dict_with_data["band"] = stamps_with_data.metadata.get("BANDPASS", "Unknown")
+            dict_with_data["boresight_rot_angle_rad"] = stamps_with_data.metadata.get(
+                "BORESIGHT_ROT_ANGLE_RAD", float('nan')
+            )
+            dict_with_data["boresight_par_angle_rad"] = stamps_with_data.metadata.get(
+                "BORESIGHT_PAR_ANGLE_RAD", float('nan')
+            )
+            dict_with_data["boresight_alt_rad"] = stamps_with_data.metadata.get(
+                "BORESIGHT_ALT_RAD", float('nan')
+            )
+            dict_with_data["boresight_az_rad"] = stamps_with_data.metadata.get(
+                "BORESIGHT_AZ_RAD", float('nan')
+            )
+            dict_with_data["boresight_ra_rad"] = stamps_with_data.metadata.get(
+                "BORESIGHT_RA_RAD", float('nan')
+            )
+            dict_with_data["boresight_dec_rad"] = stamps_with_data.metadata.get(
+                "BORESIGHT_DEC_RAD", float('nan')
+            )
+            dict_with_data["mjd"] = stamps_with_data.metadata.get("MJD", float('nan'))
 
-                if cam_name is None:
-                    cam_name = stamps.metadata.get("CAM_NAME", "LSSTCam")
-            except Exception as e:
-                self.log.error("Error accessing metadata: %s", e)
-                # Use sentinel values if metadata is missing
-                self._set_sentinel_metadata(dict_)
-                if cam_name is None:
-                    cam_name = "LSSTCam"
+            cam_name = stamps_with_data.metadata.get("CAM_NAME", "LSSTCam")
+
+        except Exception as e:
+            self.log.error("Error accessing metadata: %s", e)
+            # Use sentinel values if metadata is missing
+            self._set_sentinel_metadata(dict_with_data)
+            cam_name = "LSSTCam"
+
+        # Copy metadata to the side that doesn't have stamps
+        if intra_has_stamps:
+            # Copy from intra to extra
+            meta["extra"] = dict_with_data.copy()
+            self.log.info("Copied detector name '%s' from intra to extra side", dict_with_data["det_name"])
+        else:
+            # Copy from extra to intra
+            meta["intra"] = dict_with_data.copy()
+            self.log.info("Copied detector name '%s' from extra to intra side", dict_with_data["det_name"])
 
         meta["cam_name"] = cam_name if cam_name else "LSSTCam"
-
-        # Ensure both intra and extra have at least basic structure (for
-        # downstream compatibility)
-        if "det_name" not in meta["intra"]:
-            self._set_sentinel_metadata(meta["intra"])
-
-        if "det_name" not in meta["extra"]:
-            self._set_sentinel_metadata(meta["extra"])
 
         return meta
 
