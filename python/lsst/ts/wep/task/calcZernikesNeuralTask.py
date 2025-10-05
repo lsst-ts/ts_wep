@@ -570,41 +570,41 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         Raises:
             ValueError: If defocal type cannot be determined
         """
-        # First, try to get DFC_TYPE from exposure metadata
-        try:
-            metadata = exposure.getMetadata()
-            if metadata is not None and "DFC_TYPE" in metadata.names():
-                defocal_type = metadata.get("DFC_TYPE")
-                self.log.info("Found DFC_TYPE in exposure metadata: '%s'", defocal_type)
-                return defocal_type
-        except Exception:
-            pass
+        # Get DFC_TYPE from exposure metadata - this should always be present
+        metadata = exposure.getMetadata()
+        if metadata is None or "DFC_TYPE" not in metadata.names():
+            raise ValueError(
+                "DFC_TYPE metadata is missing from exposure. "
+                "This is required for proper wavefront analysis. "
+                "Please ensure exposure has valid DFC_TYPE metadata."
+            )
 
-        # Cannot determine defocal type - this is a critical error
-        raise ValueError(
-            "Cannot determine defocal type from exposure metadata. "
-            "DFC_TYPE metadata is not available in exposure.getMetadata(). "
-            "This is required for proper wavefront analysis. "
-            "Please ensure exposure has valid DFC_TYPE metadata."
-        )
+        defocal_type = metadata.get("DFC_TYPE")
+        self.log.info("Found DFC_TYPE in exposure metadata: '%s'", defocal_type)
+        return defocal_type
 
     def _get_exposure_metadata(self, exposure: afwImage.Exposure) -> dict[str, float | int]:
-        """Extract metadata from exposure as a dictionary
-           with safe fallback values.
+        """Extract metadata from exposure as a dictionary.
 
         Args:
             exposure: The exposure object to extract metadata from
 
         Returns:
-            Dictionary containing metadata with safe fallback values
+            Dictionary containing metadata from exposure
+
+        Raises:
+            ValueError: If visitInfo is missing from exposure
         """
         metadata: dict[str, float | int] = {}
 
-        # Get visitInfo safely - this is the correct way to access angles
-        visit_info = getattr(exposure, 'visitInfo', None)
-        if visit_info is None:
-            self.log.warning("No visitInfo available in exposure, using fallback values")
-            return metadata
+        # Get visitInfo - this should always be present in valid LSST exposures
+        if not hasattr(exposure, 'visitInfo') or exposure.visitInfo is None:
+            raise ValueError(
+                "visitInfo is missing from exposure. "
+                "This is required for proper wavefront analysis. "
+                "Please ensure exposure has valid visitInfo."
+            )
+        visit_info = exposure.visitInfo
 
         # Visit ID
         metadata['visit_id'] = getattr(visit_info, 'id', -1)
