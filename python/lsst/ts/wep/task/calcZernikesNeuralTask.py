@@ -316,11 +316,9 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
     def _get_tarts_centers(self) -> Optional[np.ndarray]:
         """Get TARTS centers as numpy array, handling PyTorch tensors."""
-        try:
-            if self.tarts.centers is not None:
-                return self._to_numpy(self.tarts.centers)
-        except AttributeError:
-            pass
+        centers = getattr(self.tarts, "centers", None)
+        if centers is not None:
+            return self._to_numpy(centers)
         return None
 
     def _validate_and_normalize_centers(self, centers_array: np.ndarray) -> np.ndarray:
