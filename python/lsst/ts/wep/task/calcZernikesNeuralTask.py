@@ -322,16 +322,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return None
 
     def _validate_and_normalize_centers(self, centers_array: np.ndarray) -> np.ndarray:
-        """Validate and normalize TARTS centers array to [n, 2] format.
-        Args:
-            centers_array: Input centers array
-
-        Returns:
-            Normalized centers array in [n, 2] format
-
-        Raises:
-            ValueError: If centers array has invalid shape or dimensions
-        """
+        """Validate and normalize TARTS centers array to [n, 2] format."""
         if centers_array.ndim == 1:
             # Flattened array: [x1, y1, x2, y2, ...] -> reshape to [n, 2]
             if len(centers_array) % 2 == 0:
@@ -384,12 +375,11 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
                     num_stamps, len(centers_array)
                 )
         else:
-            # Not enough centers, repeat the last one
-            cent_x_list = [centers_array[-1, 0]] * num_stamps
-            cent_y_list = [centers_array[-1, 1]] * num_stamps
-            self.log.warning(
-                "Only %d TARTS centers available for %d stamps, repeating last center",
-                len(centers_array), num_stamps
+            # Not enough centers - this is an error condition
+            raise ValueError(
+                f"Insufficient TARTS centers: need {num_stamps} centers for {num_stamps} donut stamps, "
+                f"but only {len(centers_array)} centers available. This indicates a mismatch between "
+                "TARTS output and donut stamp creation."
             )
         return cent_x_list, cent_y_list
 
@@ -415,15 +405,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         return None
 
     def _extract_and_normalize_tarts_data(self, field_name: str, num_items: int) -> list[float]:
-        """Extract TARTS data field and normalize to list with proper length.
-
-        Args:
-            field_name: Name of TARTS field ('fx', 'fy', 'SNR')
-            num_items: Expected number of items in the result list
-
-        Returns:
-            List of float values, padded or truncated to match num_items
-        """
+        """Extract TARTS data field and normalize to proper length."""
         # Get the appropriate TARTS field
         if field_name == 'fx':
             array = self._get_tarts_fx()
