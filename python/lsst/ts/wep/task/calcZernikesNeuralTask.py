@@ -559,7 +559,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         metadata_dict["mjd"] = float('nan')
 
     def _determine_defocal_type(self, exposure: afwImage.Exposure) -> str:
-        """Determine defocal type (intra/extra) from exposure metadata.
+        """Determine defocal type (intra/extra) from detector name.
 
         Args:
             exposure: The exposure to analyze
@@ -568,19 +568,43 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             String indicating defocal type: "intra" or "extra"
 
         Raises:
-            ValueError: If defocal type cannot be determined
+            ValueError: If defocal type cannot be determined from detector name
         """
-        # Get DFC_TYPE from exposure metadata - this should always be present
-        metadata = exposure.getMetadata()
-        if metadata is None or "DFC_TYPE" not in metadata.names():
+        # Get detector name
+        detector_name = exposure.getDetector().getName()
+        self.log.debug("Detector name: '%s'", detector_name)
+
+        # Determine defocal type based on detector name pattern
+        # SW0 detectors are extra-focal, SW1 detectors are intra-focal
+        # This matches the pattern used in CutOutDonutsCwfsTask
+        if detector_name.endswith("_SW0"):
+            defocal_type = "extra"
+            self.log.info("Detector '%s' is extra-focal (SW0)", detector_name)
+        elif detector_name.endswith("_SW1"):
+            defocal_type = "intra"
+            self.log.info("Detector '%s' is intra-focal (SW1)", detector_name)
+        else:
+            # Fallback: try to get DFC_TYPE from exposure metadata
+            try:
+                metadata = exposure.getMetadata()
+                if metadata is not None and "DFC_TYPE" in metadata.names():
+                    defocal_type = metadata.get("DFC_TYPE")
+                    self.log.info(
+                        "Using DFC_TYPE from metadata: '%s' for detector '%s'",
+                        defocal_type, detector_name
+                    )
+                    return defocal_type
+            except Exception:
+                pass
+
+            # Cannot determine defocal type - this is a critical error
             raise ValueError(
-                "DFC_TYPE metadata is missing from exposure. "
-                "This is required for proper wavefront analysis. "
-                "Please ensure exposure has valid DFC_TYPE metadata."
+                f"Cannot determine defocal type for detector '{detector_name}'. "
+                "Expected detector names ending with '_SW0' (extra-focal) or '_SW1' (intra-focal), "
+                "or valid DFC_TYPE metadata. "
+                "This is required for proper wavefront analysis."
             )
 
-        defocal_type = metadata.get("DFC_TYPE")
-        self.log.info("Found DFC_TYPE in exposure metadata: '%s'", defocal_type)
         return defocal_type
 
     def _get_exposure_metadata(self, exposure: afwImage.Exposure) -> dict[str, float | int]:
