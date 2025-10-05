@@ -228,7 +228,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         # Initialize task logger consistent with other tasks
         self.log = logging.getLogger(type(self).__name__)  # type: ignore
 
-        # Define default Noll indices (zk terms 4-23, excl piston, tip, tilt)
+        # Define default Noll indices to be used for wavefront estimation
         self.nollIndices = self.config.nollIndices
         self.log.debug("Configured Noll indices: %s", self.nollIndices)
 
