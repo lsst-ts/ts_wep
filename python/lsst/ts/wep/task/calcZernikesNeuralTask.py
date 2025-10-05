@@ -369,21 +369,20 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         Returns:
             Tuple of (cent_x_list, cent_y_list) for the stamps
         """
-        if len(centers_array) == num_stamps:
-            cent_x_list = centers_array[:, 0].tolist()
-            cent_y_list = centers_array[:, 1].tolist()
-            self.log.info(
-                "Using TARTS centers for %d donut stamps: first few = %s",
-                num_stamps, centers_array[:3].tolist()
-            )
-        elif len(centers_array) > num_stamps:
-            # Take first num_stamps centers
+        if len(centers_array) >= num_stamps:
+            # Use first num_stamps centers (exact match or more available)
             cent_x_list = centers_array[:num_stamps, 0].tolist()
             cent_y_list = centers_array[:num_stamps, 1].tolist()
-            self.log.info(
-                "Using first %d TARTS centers out of %d available for stamps",
-                num_stamps, len(centers_array)
-            )
+            if len(centers_array) == num_stamps:
+                self.log.info(
+                    "Using TARTS centers for %d donut stamps: first few = %s",
+                    num_stamps, centers_array[:3].tolist()
+                )
+            else:
+                self.log.info(
+                    "Using first %d TARTS centers out of %d available for stamps",
+                    num_stamps, len(centers_array)
+                )
         else:
             # Not enough centers, repeat the last one
             cent_x_list = [centers_array[-1, 0]] * num_stamps
