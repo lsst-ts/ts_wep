@@ -594,18 +594,6 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         metadata_dict["boresight_dec_rad"] = float('nan')
         metadata_dict["mjd"] = float('nan')
 
-    def _get_visit_id(self, exp_id: Any) -> int:
-        """Get visit ID from exposure ID, handling different types."""
-        try:
-            # Use getattr with default to avoid hasattr check
-            get_visit_id_method = getattr(exp_id, 'getVisitId', None)
-            if get_visit_id_method is not None:
-                return get_visit_id_method()
-            else:
-                return exp_id
-        except Exception:
-            return -1
-
     def _determine_defocal_type(self, exposure: afwImage.Exposure) -> str:
         """Determine defocal type (intra/extra) from exposure metadata.
 
