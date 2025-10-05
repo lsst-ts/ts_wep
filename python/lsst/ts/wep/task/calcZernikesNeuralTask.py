@@ -323,7 +323,6 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
 
     def _validate_and_normalize_centers(self, centers_array: np.ndarray) -> np.ndarray:
         """Validate and normalize TARTS centers array to [n, 2] format.
-
         Args:
             centers_array: Input centers array
 
