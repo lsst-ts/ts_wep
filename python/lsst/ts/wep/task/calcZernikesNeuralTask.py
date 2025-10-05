@@ -436,13 +436,7 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             return [np.nan] * num_items
 
         # Convert to list
-        if array is not None:
-            data_list = array.tolist()
-            # Flatten nested lists if needed
-            if data_list and isinstance(data_list[0], list):
-                data_list = [item for sublist in data_list for item in sublist]
-        else:
-            data_list = []
+        data_list = array.flatten().tolist() if array is not None else []
 
         # Normalize to expected length
         if len(data_list) == num_items:
