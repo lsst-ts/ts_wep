@@ -44,7 +44,7 @@ from lsst.utils.timer import timeMethod
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.donutSizeCorrelator import DonutSizeCorrelator
-from lsst.daf.base import PropertyList, DateTime
+from lsst.daf.base import PropertyList
 import astropy.units as u
 
 # Define the position 2D float dtype for the zernikes table
@@ -675,46 +675,81 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         """
         metadata: dict[str, float | int] = {}
 
-        # Get exposure info safely
-        exp_info = getattr(exposure, 'getInfo', lambda: None)()
-        if exp_info is None:
+        # Get visitInfo safely - this is the correct way to access angles
+        visit_info = getattr(exposure, 'visitInfo', None)
+        if visit_info is None:
+            self.log.warning("No visitInfo available in exposure, using fallback values")
             return metadata
 
         # Visit ID
-        exp_id = getattr(exp_info, 'getId', lambda: None)()
-        if exp_id is not None:
-            metadata['visit_id'] = self._get_visit_id(exp_id)
-        else:
-            metadata['visit_id'] = -1
+        metadata['visit_id'] = getattr(visit_info, 'id', -1)
 
-        # Extract boresight angles using helper method
-        metadata['boresight_rot_angle_rad'] = self._extract_metadata_field(
-            exp_info, 'getBoresightRotAngle', 'asRadians'
-        )
-        metadata['boresight_par_angle_rad'] = self._extract_metadata_field(
-            exp_info, 'getBoresightParAngle', 'asRadians'
-        )
-        metadata['boresight_alt_rad'] = self._extract_metadata_field(
-            exp_info, 'getBoresightAlt', 'asRadians'
-        )
-        metadata['boresight_az_rad'] = self._extract_metadata_field(
-            exp_info, 'getBoresightAz', 'asRadians'
-        )
-        metadata['boresight_ra_rad'] = self._extract_metadata_field(
-            exp_info, 'getBoresightRa', 'asRadians'
-        )
-        metadata['boresight_dec_rad'] = self._extract_metadata_field(
-            exp_info, 'getBoresightDec', 'asRadians'
-        )
+        # Extract boresight angles from visitInfo (the correct approach)
+        try:
+            boresight_rot_angle = getattr(visit_info, 'boresightRotAngle', None)
+            if boresight_rot_angle is not None:
+                metadata['boresight_rot_angle_rad'] = boresight_rot_angle.asRadians()
+                self.log.debug("Extracted boresightRotAngle: %.6f rad (%.3f deg)",
+                             metadata["boresight_rot_angle_rad"],
+                             metadata["boresight_rot_angle_rad"] * 180.0 / np.pi)
+            else:
+                metadata['boresight_rot_angle_rad'] = 0.0
+                self.log.debug("boresightRotAngle not available, using fallback: 0.0")
+        except Exception as e:
+            self.log.debug("Could not extract boresightRotAngle: %s", e)
+            metadata['boresight_rot_angle_rad'] = 0.0
+
+        try:
+            boresight_par_angle = getattr(visit_info, 'boresightParAngle', None)
+            if boresight_par_angle is not None:
+                metadata['boresight_par_angle_rad'] = boresight_par_angle.asRadians()
+                self.log.debug("Extracted boresightParAngle: %.6f rad (%.3f deg)",
+                             metadata["boresight_par_angle_rad"],
+                             metadata["boresight_par_angle_rad"] * 180.0 / np.pi)
+            else:
+                metadata['boresight_par_angle_rad'] = 0.0
+                self.log.debug("boresightParAngle not available, using fallback: 0.0")
+        except Exception as e:
+            self.log.debug("Could not extract boresightParAngle: %s", e)
+            metadata['boresight_par_angle_rad'] = 0.0
+
+        try:
+            boresight_az_alt = getattr(visit_info, 'boresightAzAlt', None)
+            if boresight_az_alt is not None and boresight_az_alt.isFinite():
+                metadata['boresight_alt_rad'] = boresight_az_alt.getLatitude().asRadians()
+                metadata['boresight_az_rad'] = boresight_az_alt.getLongitude().asRadians()
+            else:
+                metadata['boresight_alt_rad'] = float('nan')
+                metadata['boresight_az_rad'] = float('nan')
+        except Exception as e:
+            self.log.debug("Could not extract boresightAzAlt: %s", e)
+            metadata['boresight_alt_rad'] = float('nan')
+            metadata['boresight_az_rad'] = float('nan')
+
+        try:
+            boresight_ra_dec = getattr(visit_info, 'boresightRaDec', None)
+            if boresight_ra_dec is not None:
+                metadata['boresight_ra_rad'] = boresight_ra_dec.getRa().asRadians()
+                metadata['boresight_dec_rad'] = boresight_ra_dec.getDec().asRadians()
+            else:
+                metadata['boresight_ra_rad'] = float('nan')
+                metadata['boresight_dec_rad'] = float('nan')
+        except Exception as e:
+            self.log.debug("Could not extract boresightRaDec: %s", e)
+            metadata['boresight_ra_rad'] = float('nan')
+            metadata['boresight_dec_rad'] = float('nan')
 
         # MJD date
-        exp_date = getattr(exp_info, 'getDate', lambda: None)()
-        if exp_date is not None:
-            mjd = getattr(
-                exp_date, 'get', lambda system: float('nan')
-            )(system=DateTime.MJD)
-            metadata['mjd'] = mjd
-        else:
+        try:
+            exp_date = getattr(visit_info, 'date', None)
+            if exp_date is not None:
+                # Convert to astropy and get MJD
+                mjd = exp_date.toAstropy().tai.mjd
+                metadata['mjd'] = mjd
+            else:
+                metadata['mjd'] = float('nan')
+        except Exception as e:
+            self.log.debug("Could not extract date: %s", e)
             metadata['mjd'] = float('nan')
 
         return metadata
