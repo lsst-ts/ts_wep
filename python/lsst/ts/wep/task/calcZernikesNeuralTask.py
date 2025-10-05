@@ -580,25 +580,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         except Exception:
             pass
 
-        # Fallback: try to determine from focus Z value if available
-        try:
-            focus_z = exposure.visitInfo.focusZ
-            # For LSSTCam, positive focusZ is typically extra-focal
-            # This is a heuristic - may need adjustment based on actual data
-            if focus_z > 0:
-                defocal_type = "extra"
-            else:
-                defocal_type = "intra"
-            self.log.info("Determined defocal type from focusZ=%.3f: '%s'", focus_z, defocal_type)
-            return defocal_type
-        except (AttributeError, NameError):
-            # Cannot determine defocal type - this is a critical error
-            raise ValueError(
-                "Cannot determine defocal type from exposure metadata. "
-                "Neither DFC_TYPE metadata nor focusZ value is available. "
-                "This is required for proper wavefront analysis. "
-                "Please ensure exposure has valid metadata."
-            )
+        # Cannot determine defocal type - this is a critical error
+        raise ValueError(
+            "Cannot determine defocal type from exposure metadata. "
+            "DFC_TYPE metadata is not available in exposure.getMetadata(). "
+            "This is required for proper wavefront analysis. "
+            "Please ensure exposure has valid DFC_TYPE metadata."
+        )
 
     def _get_exposure_metadata(self, exposure: afwImage.Exposure) -> dict[str, float | int]:
         """Extract metadata from exposure as a dictionary
