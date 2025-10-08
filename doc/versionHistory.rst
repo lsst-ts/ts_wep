@@ -14,6 +14,9 @@ Version History
 
 * Add AiDonutAlgorithm for wavefront estimation using a PyTorch model.
 * Add EstimateZernikesAiDonutTask to use AiDonutAlgorithm.
+* Add neural network-based Zernike estimation task (CalcZernikesNeuralTask).
+* Integrate TARTS system for wavefront estimation.
+* Add support for WaveNet, AlignNet, and AggregatorNet models.
 
 .. _lsst.ts.wep-14.16.1:
 

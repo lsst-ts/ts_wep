@@ -312,6 +312,7 @@ class DanishAlgorithm(WfAlgorithm):
             result = None
             zkFit = np.full_like(zkStart, np.nan)
             zkSum = np.full_like(zkStart, np.nan)
+            fwhm = np.nan
             if saveHistory:
                 modelImage = np.full_like(img, np.nan)
 
