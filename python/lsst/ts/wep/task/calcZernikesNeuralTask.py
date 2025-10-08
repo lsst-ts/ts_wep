@@ -858,9 +858,13 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
         original_refresh = donutStampsObj._refresh_metadata
         def preserve_det_name_refresh() -> None:
             original_refresh()
-            # Restore our scalar DET_NAME if it was overwritten
-            if isinstance(donutStampsObj.metadata.get("DET_NAME", None), list):
-                self.log.debug("Restoring scalar DET_NAME after _refresh_metadata()")
+            # Restore our scalar DET_NAME if it was overwritten by an array
+            det_name_value = donutStampsObj.metadata.get("DET_NAME", None)
+            if isinstance(det_name_value, list):
+                self.log.debug("Restoring scalar DET_NAME after _refresh_metadata() (was array)")
+                donutStampsObj.metadata["DET_NAME"] = self._detector_name
+            elif det_name_value is None or det_name_value == "Unknown":
+                self.log.debug("Restoring scalar DET_NAME after _refresh_metadata() (was missing/unknown)")
                 donutStampsObj.metadata["DET_NAME"] = self._detector_name
         donutStampsObj._refresh_metadata = preserve_det_name_refresh
 
@@ -1289,11 +1293,20 @@ class CalcZernikesNeuralTask(pipeBase.PipelineTask):
             else:
                 # Scalar value
                 dict_with_data["det_name"] = det_name_value
-                if dict_with_data["det_name"] == "Unknown":
-                    self.log.warning(
-                        "DET_NAME not found in stamps metadata, using 'Unknown'. "
-                        "This may indicate a problem with stamp creation."
-                    )
+                # Check if we got a valid detector name
+                if dict_with_data["det_name"] == "Unknown" or dict_with_data["det_name"] is None:
+                    # Try to use stored detector name as fallback
+                    if hasattr(self, '_detector_name') and self._detector_name:
+                        dict_with_data["det_name"] = self._detector_name
+                        self.log.info(
+                            "Using stored detector name as fallback: '%s'",
+                            dict_with_data["det_name"]
+                        )
+                    else:
+                        self.log.warning(
+                            "DET_NAME not found in stamps metadata and no stored detector name available. "
+                            "This may indicate a problem with stamp creation."
+                        )
                 else:
                     self.log.info("Using DET_NAME from stamps metadata: '%s'", dict_with_data["det_name"])
 
