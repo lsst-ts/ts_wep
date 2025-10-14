@@ -260,7 +260,8 @@ class Image:
             value = np.zeros((0, 2))
 
         # Convert to float array
-        value = np.atleast_2d(value).astype(float)
+        value = np.atleast_2d(np.array(value, dtype=float))
+        assert isinstance(value, np.ndarray)  # for mypy
 
         # Check shape
         if value.shape[1] != 2 or value.ndim != 2:
