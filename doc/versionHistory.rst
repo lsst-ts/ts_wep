@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.17.1:
+
+-------------
+ 14.17.1
+-------------
+
+* Fix mypy issues in image.py and plotUtils.py
+
 .. _lsst.ts.wep-14.17.0:
 
 -------------
