@@ -102,7 +102,6 @@ class CutOutDonutsUnpairedTask(CutOutDonutsBaseTask):
         donutCatalog: QTable,
         camera: lsst.afw.cameraGeom.Camera,
     ) -> pipeBase.Struct:
-
         if exposure.visitInfo.focusZ > 0:
             defocalType = DefocalType.Extra
         else:

@@ -31,6 +31,7 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CalcZernikesUnpairedTask,
     CalcZernikesUnpairedTaskConfig,
+    DonutStamps,
     EstimateZernikesDanishTask,
     EstimateZernikesTieTask,
 )
@@ -225,7 +226,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
                 # test null run
-                structNull = task.run([])
+                emptyStamps = DonutStamps([], metadata=stamps.metadata)
+                structNull = task.run(emptyStamps)
 
                 for struct in [structNormal, structNull]:
                     # test that in accordance with declared connections,
@@ -236,3 +238,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
                     self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
                     self.assertIsInstance(struct.zernikes, QTable)
+
+    def testRaiseErrorNoneStamps(self) -> None:
+        with self.assertRaises(ValueError) as cm:
+            task = CalcZernikesUnpairedTask()
+            task.createZkTableMetadata()
+        self.assertEqual(str(cm.exception), "No stamps available. Cannot create metadata.")

@@ -188,3 +188,42 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
         for butlerStamp, taskStamp in zip(donutStampsIntra, taskOutIntra.donutStamps):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
+
+    def testEmptyCatalog(self) -> None:
+        (
+            exposureExtra,
+            exposureIntra,
+            donutCatalogExtra,
+            donutCatalogIntra,
+            camera,
+        ) = self._getDataFromButler()
+
+        # Test empty catalog behavior
+        emptyCatalog = donutCatalogExtra.copy()
+        emptyCatalog = emptyCatalog[:0]
+
+        taskOutExtra = self.task.run(
+            copy(exposureExtra),
+            emptyCatalog,
+            camera,
+        )
+        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
+
+        self.assertEqual(len(taskOutExtra.donutStamps), 0)
+        metadataKeys = [
+            "BANDPASS",
+            "DFC_DIST",
+            "DFC_TYPE",
+            "DET_NAME",
+            "CAM_NAME",
+            "VISIT",
+            "MJD",
+            "BORESIGHT_ROT_ANGLE_RAD",
+            "BORESIGHT_PAR_ANGLE_RAD",
+            "BORESIGHT_RA_RAD",
+            "BORESIGHT_DEC_RAD",
+        ]
+        for metadataKey in metadataKeys:
+            self.assertAlmostEqual(
+                donutStampsExtra.metadata[metadataKey], taskOutExtra.donutStamps.metadata[metadataKey]
+            )
