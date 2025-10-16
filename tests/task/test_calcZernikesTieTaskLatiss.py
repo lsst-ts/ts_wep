@@ -88,9 +88,7 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
         collections = "LATISS/raw/all,LATISS/calib"
         instrument = "lsst.obs.lsst.Latiss"
         cls.cameraName = "LATISS"
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesLatissPipeline.yaml"
-        )
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testCalcZernikesLatissPipeline.yaml")
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
@@ -172,9 +170,7 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
 
         zernCoeff = self.task.run(donutStampsExtra, donutStampsIntra)
 
-        self.assertEqual(
-            np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19)
-        )
+        self.assertEqual(np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19))
 
         # Previous Zernikes for regression test
         zk = np.array(
@@ -200,17 +196,11 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
                 0.0147995,
             ]
         )
-        np.testing.assert_allclose(
-            zk, zernCoeff.outputZernikesRaw[0], rtol=0, atol=1e-3
-        )
+        np.testing.assert_allclose(zk, zernCoeff.outputZernikesRaw[0], rtol=0, atol=1e-3)
 
     def testGetCombinedZernikes(self) -> None:
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.combinedZernikes, np.ones(19)
-        )
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.flags, np.zeros(len(testArr))
-        )
+        np.testing.assert_array_equal(combinedZernikesStruct.combinedZernikes, np.ones(19))
+        np.testing.assert_array_equal(combinedZernikesStruct.flags, np.zeros(len(testArr)))

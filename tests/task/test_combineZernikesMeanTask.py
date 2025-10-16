@@ -47,8 +47,6 @@ class TestCombineZernikesMeanTask(unittest.TestCase):
         zernikeArray = self.prepareTestArray()
         combinedZernikesStruct = self.task.run(zernikeArray)
         self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)
-        np.testing.assert_array_equal(
-            np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes
-        )
+        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes)
         np.testing.assert_array_equal(np.zeros(2), combinedZernikesStruct.flags)
         self.assertTrue(isinstance(combinedZernikesStruct.flags[0], numbers.Integral))

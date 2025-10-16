@@ -71,9 +71,7 @@ def createGalsimZernike(
     if jmin < 0:
         raise ValueError("jmin cannot be negative.")
 
-    return galsim.zernike.Zernike(
-        np.concatenate([np.zeros(jmin), zkCoeff]), R_inner=obscuration
-    )
+    return galsim.zernike.Zernike(np.concatenate([np.zeros(jmin), zkCoeff]), R_inner=obscuration)
 
 
 def createZernikeBasis(
@@ -691,6 +689,4 @@ def checkNollIndices(nollIndices: np.ndarray) -> None:
     # Check all pairs are complete
     for j in nollIndices:
         if j in pairs and pairs[j] not in nollIndices:
-            raise ValueError(
-                f"Noll index {j} is missing azimuthal pair, Noll index {pairs[j]}."
-            )
+            raise ValueError(f"Noll index {j} is missing azimuthal pair, Noll index {pairs[j]}.")

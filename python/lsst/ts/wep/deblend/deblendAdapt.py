@@ -45,9 +45,7 @@ class DeblendAdapt(DeblendDefault):
         super(DeblendAdapt, self).__init__()
 
         # Method to find the centroid of donut
-        self._centroidFind = CentroidFindFactory.createCentroidFind(
-            CentroidFindType.RandomWalk
-        )
+        self._centroidFind = CentroidFindFactory.createCentroidFind(CentroidFindType.RandomWalk)
 
         # Initial guess of block size used in the adaptive threshold mothod
         self.blockSizeInit = 33
@@ -133,9 +131,7 @@ class DeblendAdapt(DeblendDefault):
         )
 
         # Shift the main donut image to fitted position of neighboring star
-        fitImgBinary = shift(
-            imgBinary, [int(xoptNeighbor[0][1]), int(xoptNeighbor[0][0])]
-        )
+        fitImgBinary = shift(imgBinary, [int(xoptNeighbor[0][1]), int(xoptNeighbor[0][0])])
 
         # Handle the numerical error of shift. Regenerate a binary image.
         fitImgBinary[fitImgBinary > 0.5] = 1
@@ -215,9 +211,7 @@ class DeblendAdapt(DeblendDefault):
 
         return imgBinary
 
-    def _funcResidue(
-        self, posShift: tuple | list, imgBinary: np.ndarray, resImgBinary: np.ndarray
-    ) -> float:
+    def _funcResidue(self, posShift: tuple | list, imgBinary: np.ndarray, resImgBinary: np.ndarray) -> float:
         """Use the least square method to decide the position of neighboring
         star.
 
@@ -285,9 +279,7 @@ class DeblendAdapt(DeblendDefault):
 
         # Synthesize the image
         imgNew = imgMainDonut - magRatio * imgFit * imgOverlapBinary
-        imgNew = imgNew + magRatio * shift(
-            imgNew, [int(xyShiftNeighbor[1]), int(xyShiftNeighbor[0])]
-        )
+        imgNew = imgNew + magRatio * shift(imgNew, [int(xyShiftNeighbor[1]), int(xyShiftNeighbor[0])])
 
         # Take the least square difference
         delta = np.sum((imgNew - imgRef) ** 2)
@@ -339,9 +331,7 @@ class DeblendAdapt(DeblendDefault):
                 for kk in range(9):
                     testValue = repairImgDeblend[m[ii], n[ii] - 4 + kk]
                     if testValue != 0:
-                        if (testValue >= meanTemp + 2 * stdTemp) or (
-                            testValue <= meanTemp - 2 * stdTemp
-                        ):
+                        if (testValue >= meanTemp + 2 * stdTemp) or (testValue <= meanTemp - 2 * stdTemp):
                             repairImgDeblend[m[ii], n[ii] - 4 + kk] = (
                                 repairImgDeblend[m[ii], n[ii] - 5 + kk]
                                 + repairImgDeblend[m[ii], n[ii] - 3 + kk]
@@ -356,9 +346,7 @@ class DeblendAdapt(DeblendDefault):
                 for kk in range(9):
                     testValue = repairImgDeblend[m[ii] - 4 + kk, n[ii]]
                     if testValue != 0:
-                        if (testValue >= meanTemp + 2 * stdTemp) or (
-                            testValue <= meanTemp - 2 * stdTemp
-                        ):
+                        if (testValue >= meanTemp + 2 * stdTemp) or (testValue <= meanTemp - 2 * stdTemp):
                             repairImgDeblend[m[ii] - 4 + kk, n[ii]] = (
                                 repairImgDeblend[m[ii] - 5 + kk, n[ii]]
                                 + repairImgDeblend[m[ii] - 3 + kk, n[ii]]

@@ -45,42 +45,24 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         for x in range(imageSize):
             for y in range(imageSize):
                 # For single donut put the donut at the center of the image
-                if (
-                    np.sqrt((imageSize / 2 - x) ** 2 + (imageSize / 2 - y) ** 2)
-                    <= radiusOuter
-                ):
+                if np.sqrt((imageSize / 2 - x) ** 2 + (imageSize / 2 - y) ** 2) <= radiusOuter:
                     singleDonut[x, y] += 1
-                if (
-                    np.sqrt((imageSize / 2 - x) ** 2 + (imageSize / 2 - y) ** 2)
-                    <= radiusInner
-                ):
+                if np.sqrt((imageSize / 2 - x) ** 2 + (imageSize / 2 - y) ** 2) <= radiusInner:
                     singleDonut[x, y] -= 1
                 # For double donut put the two donuts along same line
                 # halfway down the image and provide 10 pixels between
                 # image edge and outer edge of donut on either side of image
-                if (
-                    np.sqrt(((radiusOuter + 10) - x) ** 2 + (imageSize / 2 - y) ** 2)
-                    <= radiusOuter
-                ):
+                if np.sqrt(((radiusOuter + 10) - x) ** 2 + (imageSize / 2 - y) ** 2) <= radiusOuter:
                     doubleDonut[x, y] += 1
-                if (
-                    np.sqrt(((radiusOuter + 10) - x) ** 2 + (imageSize / 2 - y) ** 2)
-                    <= radiusInner
-                ):
+                if np.sqrt(((radiusOuter + 10) - x) ** 2 + (imageSize / 2 - y) ** 2) <= radiusInner:
                     doubleDonut[x, y] -= 1
                 if (
-                    np.sqrt(
-                        (imageSize - (radiusOuter + 10) - x) ** 2
-                        + (imageSize / 2 - y) ** 2
-                    )
+                    np.sqrt((imageSize - (radiusOuter + 10) - x) ** 2 + (imageSize / 2 - y) ** 2)
                     <= radiusOuter
                 ):
                     doubleDonut[x, y] += 1
                 if (
-                    np.sqrt(
-                        (imageSize - (radiusOuter + 10) - x) ** 2
-                        + (imageSize / 2 - y) ** 2
-                    )
+                    np.sqrt((imageSize - (radiusOuter + 10) - x) ** 2 + (imageSize / 2 - y) ** 2)
                     <= radiusInner
                 ):
                     doubleDonut[x, y] -= 1
@@ -98,22 +80,16 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         return singleDonut, doubleDonut, eff_radius
 
     def testGetImgBinary(self) -> None:
-        singleDonut, doubleDonut, eff_radius = self._createData(
-            20, 40, 160, addNoise=False
-        )
+        singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160, addNoise=False)
 
-        noisySingle, noisyDouble, eff_radius = self._createData(
-            20, 40, 160, addNoise=True
-        )
+        noisySingle, noisyDouble, eff_radius = self._createData(20, 40, 160, addNoise=True)
 
         binarySingle = self.centroidConv.getImgBinary(noisySingle)
 
         np.testing.assert_array_equal(singleDonut, binarySingle)
 
     def testGetCenterAndRWithoutTemplate(self) -> None:
-        singleDonut, doubleDonut, eff_radius = self._createData(
-            20, 40, 160, addNoise=True
-        )
+        singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160, addNoise=True)
 
         # Test recovery with defaults
         centX, centY, rad = self.centroidConv.getCenterAndR(singleDonut)
@@ -123,14 +99,10 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         self.assertAlmostEqual(rad, eff_radius, delta=0.1)
 
     def testGetCenterAndRWithTemplate(self) -> None:
-        singleDonut, doubleDonut, eff_radius = self._createData(
-            20, 40, 160, addNoise=True
-        )
+        singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160, addNoise=True)
 
         # Test recovery with defaults
-        centX, centY, rad = self.centroidConv.getCenterAndR(
-            singleDonut, templateDonut=singleDonut
-        )
+        centX, centY, rad = self.centroidConv.getCenterAndR(singleDonut, templateDonut=singleDonut)
 
         self.assertEqual(centX, 80.0)
         self.assertEqual(centY, 80.0)
@@ -151,27 +123,19 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
 
         nDonutsAssertMsg = "nDonuts must be an integer >= 1 or -1"
         with self.assertRaises(AssertionError, msg=nDonutsAssertMsg):
-            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(
-                singleDonut, nDonuts=0
-            )
+            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut, nDonuts=0)
 
         with self.assertRaises(AssertionError, msg=nDonutsAssertMsg):
-            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(
-                singleDonut, nDonuts=-2
-            )
+            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut, nDonuts=-2)
 
         with self.assertRaises(AssertionError, msg=nDonutsAssertMsg):
-            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(
-                singleDonut, nDonuts=1.5
-            )
+            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut, nDonuts=1.5)
 
     def testGetCenterAndRFromTemplateConvKMeans(self) -> None:
         singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160)
 
         # Test recovery of single donut
-        singleCX, singleCY, rad = self.centroidConv.getCenterAndRfromTemplateConv(
-            singleDonut
-        )
+        singleCX, singleCY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut)
         self.assertEqual(singleCX, [80.0])
         self.assertEqual(singleCY, [80.0])
         self.assertAlmostEqual(rad, eff_radius, delta=0.1)
@@ -188,9 +152,7 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
         singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160)
 
         # Test recovery of single donut
-        singleCX, singleCY, rad = self.centroidConv.getCenterAndRfromTemplateConv(
-            singleDonut, nDonuts=-1
-        )
+        singleCX, singleCY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut, nDonuts=-1)
         self.assertEqual(singleCX, [80.0])
         self.assertEqual(singleCY, [80.0])
         self.assertAlmostEqual(rad, eff_radius, delta=0.1)

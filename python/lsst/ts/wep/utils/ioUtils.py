@@ -242,9 +242,7 @@ def configClass(config: Union[str, dict, None, Any], classObj: Any) -> Any:
         return classObj()
     # If it's none of these, raise an error
     else:
-        raise TypeError(
-            "config must be a string, dictionary, None, or an instance of classObj."
-        )
+        raise TypeError("config must be a string, dictionary, None, or an instance of classObj.")
 
 
 def getObsLsstCmdTaskConfigDir() -> str:

@@ -70,9 +70,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
 
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testDonutDirectDetectPipeline.yaml"
-        )
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testDonutDirectDetectPipeline.yaml")
 
         if "pretest_run_science" in collectionsList:
             pipelineYaml += "#generateDonutDirectDetectTask"
@@ -135,9 +133,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.config.donutSelector.useCustomMagLimit, True)
 
     def testBackgroundSubtractionApplied(self) -> None:
-        testExposure = self.butler.get(
-            "raw", dataId=self.testDataIdS10, collections=["LSSTCam/raw/all"]
-        )
+        testExposure = self.butler.get("raw", dataId=self.testDataIdS10, collections=["LSSTCam/raw/all"])
         with self.assertRaises(KeyError):
             testExposure.getMetadata()["BGMEAN"]
         self.task.run(testExposure, self.camera)
@@ -147,10 +143,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertIsInstance(testExposure.getMetadata()["BGMEAN"], float)
 
     def testUpdateDonutCatalog(self) -> None:
-
-        testExposure = self.butler.get(
-            "raw", dataId=self.testDataIdS10, collections=["LSSTCam/raw/all"]
-        )
+        testExposure = self.butler.get("raw", dataId=self.testDataIdS10, collections=["LSSTCam/raw/all"])
 
         # setup a test donut catalog DataFrame
         x_center = np.arange(15)
@@ -195,7 +188,6 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertCountEqual(newColumns, donutCatUpd.columns)
 
     def testEmptyTable(self) -> None:
-
         testTable = self.task.emptyTable()
 
         # Test that there are no rows, but all columns are present
@@ -224,9 +216,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             dataId=self.testDataIdS11,
             collections=[self.baseRunName],
         )
-        bkgnd = 100 * (
-            np.random.random_sample(size=np.shape(exposure_S11.image.array)) - 0.5
-        )
+        bkgnd = 100 * (np.random.random_sample(size=np.shape(exposure_S11.image.array)) - 0.5)
         image = afwImage.ImageF(exposure_S11.getBBox())
         image.array[:] = bkgnd
         maskedImage = afwImage.MaskedImageF(image)
@@ -308,9 +298,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         )
 
         # Test that there are no rows, but all columns are present
-        self.assertCountEqual(
-            taskOut_S10_noSources.donutCatalog.columns, expected_columns
-        )
+        self.assertCountEqual(taskOut_S10_noSources.donutCatalog.columns, expected_columns)
 
         # Test that all expected metadata keys are present
         self.assertCountEqual(
@@ -325,9 +313,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             self.camera,
         )
         # Check that the expected columns are present
-        self.assertCountEqual(
-            taskOut_S11_noSelection.donutCatalog.columns, expected_columns
-        )
+        self.assertCountEqual(taskOut_S11_noSelection.donutCatalog.columns, expected_columns)
         # Check that the length of catalogs is as expected
         outputTableNoSel = taskOut_S11_noSelection.donutCatalog
         self.assertEqual(len(outputTableNoSel), 3)
@@ -366,12 +352,8 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertEqual(len(donutCatTable_S10), 3)
 
         # Test that brighter sources are at the top of the list
-        np.testing.assert_array_equal(
-            np.arange(3), np.argsort(donutCatTable_S10["source_flux"].value)[::-1]
-        )
-        np.testing.assert_array_equal(
-            np.arange(3), np.argsort(donutCatTable_S11["source_flux"].value)[::-1]
-        )
+        np.testing.assert_array_equal(np.arange(3), np.argsort(donutCatTable_S10["source_flux"].value)[::-1])
+        np.testing.assert_array_equal(np.arange(3), np.argsort(donutCatTable_S11["source_flux"].value)[::-1])
 
         # Check correct detector names
         self.assertEqual(np.unique(donutCatTable_S11["detector"]), "R22_S11")

@@ -46,7 +46,8 @@ from lsst.utils.timer import timeMethod
 
 
 class GenerateDonutDirectDetectTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("instrument", "visit", "detector")  # type: ignore
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "visit", "detector"),  # type: ignore
 ):
     """
     Specify the pipeline connections needed for
@@ -162,9 +163,7 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         # to create correct template
         self.intraFocalNames = ["R00_SW1", "R04_SW1", "R40_SW1", "R44_SW1"]
 
-    def updateDonutCatalog(
-        self, donutCat: QTable, exposure: afwImage.Exposure
-    ) -> QTable:
+    def updateDonutCatalog(self, donutCat: QTable, exposure: afwImage.Exposure) -> QTable:
         """
         Reorganize the content of donut catalog
         adding detector column, doing the transpose,
@@ -333,9 +332,7 @@ That means that the provided exposure is very close to focus"
             # Run the donut selector task.
             if self.config.doDonutSelection:
                 self.log.info("Running Donut Selector")
-                donutSelection = self.donutSelector.run(
-                    donutTable, exposure.detector, bandLabel
-                )
+                donutSelection = self.donutSelector.run(donutTable, exposure.detector, bandLabel)
                 donutCatSelected = donutTable[donutSelection.selected]
                 donutCatSelected.meta["blend_centroid_x"] = donutSelection.blendCentersX
                 donutCatSelected.meta["blend_centroid_y"] = donutSelection.blendCentersY
@@ -348,21 +345,14 @@ That means that the provided exposure is very close to focus"
             # and content
             if len(donutCatSelected) > 0:
                 donutCatUpd = self.updateDonutCatalog(donutCatSelected, exposure)
-                donutCatUpd["detector"] = np.array(
-                    [detectorName] * len(donutCatUpd), dtype=str
-                )
+                donutCatUpd["detector"] = np.array([detectorName] * len(donutCatUpd), dtype=str)
             # If no donuts got selected, issue a warning and return an empty
             # donut table
             else:
-                self.log.warning(
-                    "No sources selected in the exposure. Returning an empty donut catalog."
-                )
+                self.log.warning("No sources selected in the exposure. Returning an empty donut catalog.")
                 donutCatUpd = self.emptyTable()
         else:
-
-            self.log.warning(
-                "No sources found in the exposure. Returning an empty donut catalog."
-            )
+            self.log.warning("No sources found in the exposure. Returning an empty donut catalog.")
             donutCatUpd = self.emptyTable()
 
         donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)

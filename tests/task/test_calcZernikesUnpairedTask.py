@@ -71,9 +71,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCutoutsUnpairedPipeline.yaml"
-        )
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsUnpairedPipeline.yaml")
         if "pretest_run_science" in collectionsList:
             pipelineYaml += "#cutOutDonutsUnpairedTask"
             collections += ",pretest_run_science"
@@ -110,12 +108,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
     def testWithAndWithoutPairs(self) -> None:
         # Load data from butler
-        donutStampsExtra = self.butler.get(
-            "donutStamps", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsIntra = self.butler.get(
-            "donutStamps", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
+        donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
@@ -142,12 +136,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
     def testTable(self) -> None:
         # Load data from butler
-        donutStampsExtra = self.butler.get(
-            "donutStamps", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsIntra = self.butler.get(
-            "donutStamps", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
+        donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
@@ -162,12 +152,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 self.assertEqual(len(structNormal), 4)
 
                 zkAvg1 = structNormal.outputZernikesAvg[0]
-                zkAvgRow = structNormal.zernikes[
-                    structNormal.zernikes["label"] == "average"
-                ][0]
-                zkAvg2 = np.array(
-                    [zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
-                )
+                zkAvgRow = structNormal.zernikes[structNormal.zernikes["label"] == "average"][0]
+                zkAvg2 = np.array([zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
                 np.testing.assert_allclose(zkAvg1, zkAvg2, rtol=1e-6, atol=0)
 
                 zkRaw1 = structNormal.outputZernikesRaw
@@ -176,9 +162,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 for row in structNormal.zernikes:
                     if row["label"] == "average":
                         continue
-                    zkRaw2[i] = np.array(
-                        [row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
-                    )
+                    zkRaw2[i] = np.array([row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
                     i += 1
                 np.testing.assert_allclose(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
 
@@ -200,9 +184,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "intra_max_power_grad",
                     "extra_max_power_grad",
                 ]
-                self.assertLessEqual(
-                    set(desired_colnames), set(structNormal.zernikes.colnames)
-                )
+                self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
 
                 # Check metadata keys exist
                 self.assertIn("cam_name", structNormal.zernikes.meta)
@@ -238,11 +220,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "MAX_POWER_GRAD_SELECT",
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
-                    "RADIUS"
+                    "RADIUS",
                 ]
-                np.testing.assert_array_equal(
-                    np.sort(colnames), np.sort(desired_colnames)
-                )
+                np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
                 # test null run
                 structNull = task.run([])

@@ -125,13 +125,9 @@ class TestDanishAlgorithm(unittest.TestCase):
 
                     # Test that we binned the images.
                     if "intra" in danBin.history:
-                        self.assertEqual(
-                            danBin.history["intra"]["image"].shape, binned_shape
-                        )
+                        self.assertEqual(danBin.history["intra"]["image"].shape, binned_shape)
                     if "extra" in danBin.history:
-                        self.assertEqual(
-                            danBin.history["extra"]["image"].shape, binned_shape
-                        )
+                        self.assertEqual(danBin.history["extra"]["image"].shape, binned_shape)
 
     def testMetadata(self) -> None:
         zkTrue, intra, extra = forwardModelPair(seed=42)

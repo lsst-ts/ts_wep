@@ -269,11 +269,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 break
 
             row: dict = dict()
-            row["label"] = f"pair{i+1}"
+            row["label"] = f"pair{i + 1}"
             row["used"] = not flag
-            row.update(
-                {f"Z{j}": zk[i] * u.micron for i, j in enumerate(self.nollIndices)}
-            )
+            row.update({f"Z{j}": zk[i] * u.micron for i, j in enumerate(self.nollIndices)})
             row["intra_field"] = (
                 (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
                 if intra is None
@@ -360,12 +358,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             dict_["visit"] = stamps.metadata["VISIT"]
             dict_["dfc_dist"] = stamps.metadata["DFC_DIST"]
             dict_["band"] = stamps.metadata["BANDPASS"]
-            dict_["boresight_rot_angle_rad"] = stamps.metadata[
-                "BORESIGHT_ROT_ANGLE_RAD"
-            ]
-            dict_["boresight_par_angle_rad"] = stamps.metadata[
-                "BORESIGHT_PAR_ANGLE_RAD"
-            ]
+            dict_["boresight_rot_angle_rad"] = stamps.metadata["BORESIGHT_ROT_ANGLE_RAD"]
+            dict_["boresight_par_angle_rad"] = stamps.metadata["BORESIGHT_PAR_ANGLE_RAD"]
             dict_["boresight_alt_rad"] = stamps.metadata["BORESIGHT_ALT_RAD"]
             dict_["boresight_az_rad"] = stamps.metadata["BORESIGHT_AZ_RAD"]
             dict_["boresight_ra_rad"] = stamps.metadata["BORESIGHT_RA_RAD"]
@@ -377,10 +371,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         meta["cam_name"] = cam_name
 
         if self.stampsIntra is not None and self.stampsExtra is not None:
-            assert (
-                self.stampsIntra.metadata["CAM_NAME"]
-                == self.stampsExtra.metadata["CAM_NAME"]
-            )
+            assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]
 
         return meta
 
@@ -490,9 +481,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsIntra = selectedIntraStamps
 
         # Estimate Zernikes from the collection of selected stamps
-        zkCoeffRaw = self.estimateZernikes.run(
-            self.stampsExtra, self.stampsIntra, numCores=numCores
-        )
+        zkCoeffRaw = self.estimateZernikes.run(self.stampsExtra, self.stampsIntra, numCores=numCores)
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
         zkTable = self.createZkTable(

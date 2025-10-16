@@ -113,9 +113,7 @@ class CentroidRandomWalk(CentroidDefault):
                     # table to give a random walk/ step with a random thermal
                     # fluctuation.
                     ind = np.round(stepsize * (2 * np.random.rand() - 1)).astype(int)
-                    thermal = 1 + 0.5 * np.random.rand() * np.exp(
-                        1.0 * ii / (nwalk * 0.3)
-                    )
+                    thermal = 1 + 0.5 * np.random.rand() * np.exp(1.0 * ii / (nwalk * 0.3))
 
                     # Check the index of bin is whithin the range of histogram
                     if (minind + ind < 1) or (minind + ind > (self.numOfBins)):
@@ -143,9 +141,7 @@ class CentroidRandomWalk(CentroidDefault):
 
         # Try to close the second peak
         while (minind >= slide) and (foundvalley is True):
-            if np.abs(hist[int(minind - 5)] - hist[int(minind)]) < 4 * np.median(
-                hist[len(hist) - 20 :]
-            ):
+            if np.abs(hist[int(minind - 5)] - hist[int(minind)]) < 4 * np.median(hist[len(hist) - 20 :]):
                 minind = minind - 1
             else:
                 break

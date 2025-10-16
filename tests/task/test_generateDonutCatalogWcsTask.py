@@ -58,9 +58,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            refCatList.append(
-                self.butler.getDeferred(ref, collections=["refcats/gen2"])
-            )
+            refCatList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
 
         return refCatList
 
@@ -115,9 +113,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         exposureId = 4021123106001  # Exposure ID for test extra-focal image
         testPipelineConfigDir = os.path.join(self.testDataDir, "pipelineConfigs")
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testDonutCatWcsPipeline.yaml"
-        )
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testDonutCatWcsPipeline.yaml")
         pipetaskCmd = writePipetaskCmd(
             self.repoDir, runName, instrument, collections, pipelineYaml=pipelineYaml
         )
@@ -212,12 +208,8 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             -0.005492987,
             -0.005396017,
         ]
-        np.testing.assert_allclose(
-            np.sort(true_ra), np.sort(outputTable["coord_ra"].value), atol=1e-8
-        )
-        np.testing.assert_allclose(
-            np.sort(true_dec), np.sort(outputTable["coord_dec"].value), atol=1e-8
-        )
+        np.testing.assert_allclose(np.sort(true_ra), np.sort(outputTable["coord_ra"].value), atol=1e-8)
+        np.testing.assert_allclose(np.sort(true_dec), np.sort(outputTable["coord_dec"].value), atol=1e-8)
         s11_x, s11_y = s11_wcs.skyToPixelArray(true_ra[:4], true_dec[:4])
         s10_x, s10_y = s10_wcs.skyToPixelArray(true_ra[4:], true_dec[4:])
         true_x = np.sort(np.array([s11_x, s10_x]).flatten())
@@ -227,9 +219,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             np.sort(outputTable["centroid_x"].value),
             atol=1e-2,  # Small fractions of pixel okay since we abbreviated ra, dec positions above
         )
-        np.testing.assert_allclose(
-            true_y, np.sort(outputTable["centroid_y"].value), atol=1e-2
-        )
+        np.testing.assert_allclose(true_y, np.sort(outputTable["centroid_y"].value), atol=1e-2)
         fluxTruth = np.ones(8)
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
@@ -250,9 +240,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            deferredList.append(
-                self.butler.getDeferred(ref, collections=["refcats/gen2"])
-            )
+            deferredList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
         expGenerator = self.registry.queryDatasets(
             datasetType="raw",
             collections=["LSSTCam/raw/all"],
@@ -261,11 +249,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         ).expanded()
         expList = []
         for expRef in expGenerator:
-            expList.append(
-                self.butler.get(
-                    "raw", dataId=expRef.dataId, collections=["LSSTCam/raw/all"]
-                )
-            )
+            expList.append(self.butler.get("raw", dataId=expRef.dataId, collections=["LSSTCam/raw/all"]))
 
         # run task on all exposures
         donutCatTableList = []
@@ -293,17 +277,13 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         # Compare ra, dec info to original input catalog
         inputCat = np.genfromtxt(
-            os.path.join(
-                self.testDataDir, "phosimOutput", "realComCam", "skyComCamInfo.txt"
-            ),
+            os.path.join(self.testDataDir, "phosimOutput", "realComCam", "skyComCamInfo.txt"),
             names=["id", "ra", "dec", "mag"],
         )
 
         self.assertEqual(len(outputTable), 8)
         self.assertCountEqual(np.radians(inputCat["ra"]), outputTable["coord_ra"].value)
-        self.assertCountEqual(
-            np.radians(inputCat["dec"]), outputTable["coord_dec"].value
-        )
+        self.assertCountEqual(np.radians(inputCat["dec"]), outputTable["coord_dec"].value)
         np.testing.assert_allclose(
             np.sort(np.array(donutCatXPixelList).flatten()),
             np.sort(outputTable["centroid_x"]),

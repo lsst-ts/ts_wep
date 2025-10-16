@@ -83,9 +83,7 @@ def main() -> None:
     )
     butler.registry.registerDatasetType(donutVisitPairTableDatasetType)
     logger.info("Registering donutVisitPairTable collection")
-    butler.registry.registerCollection(
-        name=args.output_collection, type=CollectionType.RUN
-    )
+    butler.registry.registerCollection(name=args.output_collection, type=CollectionType.RUN)
 
     logger.info("Ingesting pair table")
     butler.put(

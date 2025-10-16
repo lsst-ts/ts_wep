@@ -136,9 +136,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        zernCoeff = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
+        zernCoeff = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 25))
 
@@ -165,9 +163,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         for row in structNormal.zernikes:
             if row["label"] == "average":
                 continue
-            zkRaw2[i] = np.array(
-                [row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
-            )
+            zkRaw2[i] = np.array([row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
             i += 1
         np.testing.assert_allclose(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
 
@@ -209,9 +205,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             len(donutStampsExtra) + len(donutStampsIntra),
         )
         # Check DEFOCAL_TYPE assigned properly
-        extra_count = len(
-            np.where(structSelect.donutQualityTable["DEFOCAL_TYPE"] == "extra")[0]
-        )
+        extra_count = len(np.where(structSelect.donutQualityTable["DEFOCAL_TYPE"] == "extra")[0])
         self.assertEqual(extra_count, len(donutStampsExtra))
 
         # check that all desired quantities are included
@@ -227,7 +221,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "MAX_POWER_GRAD_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
-            "RADIUS"
+            "RADIUS",
         ]
         np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
@@ -258,9 +252,5 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         testArr = np.zeros((2, 19))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.combinedZernikes, np.ones(19)
-        )
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.flags, np.zeros(len(testArr))
-        )
+        np.testing.assert_array_equal(combinedZernikesStruct.combinedZernikes, np.ones(19))
+        np.testing.assert_array_equal(combinedZernikesStruct.flags, np.zeros(len(testArr)))

@@ -30,9 +30,7 @@ from scipy.ndimage import center_of_mass
 class CentroidDefault(object):
     """Default Centroid class."""
 
-    def getCenterAndR(
-        self, imgDonut: np.ndarray, **kwargs: Any
-    ) -> tuple[float, float, float]:
+    def getCenterAndR(self, imgDonut: np.ndarray, **kwargs: Any) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius.
 
         Parameters
@@ -56,9 +54,7 @@ class CentroidDefault(object):
 
         return self.getCenterAndRfromImgBinary(imgBinary)
 
-    def getCenterAndRfromImgBinary(
-        self, imgBinary: np.ndarray, **kwargs: Any
-    ) -> tuple[float, float, float]:
+    def getCenterAndRfromImgBinary(self, imgBinary: np.ndarray, **kwargs: Any) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius from the binary
         image.
 

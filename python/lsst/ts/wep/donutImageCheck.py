@@ -26,9 +26,7 @@ from scipy.stats import entropy
 
 
 class DonutImageCheck(object):
-    def __init__(
-        self, numOfBins: int = 256, entroThres: float = 3.5, returnEntro: bool = False
-    ) -> None:
+    def __init__(self, numOfBins: int = 256, entroThres: float = 3.5, returnEntro: bool = False) -> None:
         """Donut image check class to judge the donut image is effective or
         not.
 

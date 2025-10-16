@@ -386,8 +386,7 @@ class TieAlgorithm(WfAlgorithm):
         keys = set(value.keys())
         if not keys.issubset(allowedKeys):
             raise ValueError(
-                f"maskKwargs key(s) {keys - allowedKeys} are not allowed. "
-                f"The allowed keys are {allowedKeys}."
+                f"maskKwargs key(s) {keys - allowedKeys} are not allowed. The allowed keys are {allowedKeys}."
             )
 
         self._maskKwargs = value
@@ -411,9 +410,7 @@ class TieAlgorithm(WfAlgorithm):
         """
         value = float(value)
         if value < 0:
-            raise ValueError(
-                "modelPupilKernelSize must be greater than or equal to zero."
-            )
+            raise ValueError("modelPupilKernelSize must be greater than or equal to zero.")
 
         self._modelPupilKernelSize = value
 
@@ -657,7 +654,7 @@ class TieAlgorithm(WfAlgorithm):
         b = np.einsum("ab,jab->j", dIdz, zk, optimize=self.optimizeLinAlg)
         M = np.einsum("ab,jab,kab->jk", I0, dzkdu, dzkdu, optimize=self.optimizeLinAlg)
         M += np.einsum("ab,jab,kab->jk", I0, dzkdv, dzkdv, optimize=self.optimizeLinAlg)
-        M /= -instrument.radius**2
+        M /= -(instrument.radius**2)
 
         # Invert to get Zernike coefficients in meters
         zkCoeff, *_ = np.linalg.lstsq(M, b, rcond=None)
@@ -888,9 +885,7 @@ class TieAlgorithm(WfAlgorithm):
                 #     must be below self.convergeTol
                 # (2) We must be compensating all the Zernikes
                 newBest = zkComp + zkResid
-                converged = (jmaxComp >= jmax) & (
-                    np.max(np.abs(newBest - zkBest)) < self.convergeTol
-                )
+                converged = (jmaxComp >= jmax) & (np.max(np.abs(newBest - zkBest)) < self.convergeTol)
 
                 # Set the new best cumulative estimate of the residuals
                 zkBest = newBest

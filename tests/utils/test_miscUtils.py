@@ -29,7 +29,7 @@ from lsst.ts.wep.utils import (
     padArray,
     polygonContains,
     rotMatrix,
-    binArray
+    binArray,
 )
 from scipy.ndimage import shift
 
@@ -61,9 +61,7 @@ class TestMiscUtils(unittest.TestCase):
 
         self.assertEqual(imgPadded.shape[0], imgDim + padPixelSize)
 
-    def _padRandomImg(
-        self, imgDim: int, padPixelSize: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _padRandomImg(self, imgDim: int, padPixelSize: int) -> tuple[np.ndarray, np.ndarray]:
         img = np.random.rand(imgDim, imgDim)
         imgPadded = padArray(img, imgDim + padPixelSize)
 
@@ -147,9 +145,7 @@ class TestMiscUtils(unittest.TestCase):
         # and should not be clipped.
         # - The second column has high variability
         # and should be clipped.
-        sampleArray = np.array(
-            [[1.0, 100.0], [2.0, 200.0], [6.0, 600.0], [2.0, 200.0], [1.0, 100.0]]
-        )
+        sampleArray = np.array([[1.0, 100.0], [2.0, 200.0], [6.0, 600.0], [2.0, 200.0], [1.0, 100.0]])
         # Set sigma for sigma clipping
         # Set a std_min that will ensure the second column
         # is clipped but not the first
@@ -157,9 +153,7 @@ class TestMiscUtils(unittest.TestCase):
         stdMin = 50
 
         # Call the function with the sample array
-        processedArray = conditionalSigmaClip(
-            sampleArray, sigmaClipKwargs=sigmaClipKwargs, stdMin=stdMin
-        )
+        processedArray = conditionalSigmaClip(sampleArray, sigmaClipKwargs=sigmaClipKwargs, stdMin=stdMin)
 
         # Assert the first column remains unchanged
         np.testing.assert_array_equal(processedArray[:, 0], sampleArray[:, 0])
@@ -168,25 +162,15 @@ class TestMiscUtils(unittest.TestCase):
         # This assumes the sigma clipping with std would indeed
         # clip values in the second column.
         # Checking for NaNs as a result of clipping
-        assert np.isnan(
-            processedArray[:, 1]
-        ).any(), "Expected NaNs in the second column after clipping"
+        assert np.isnan(processedArray[:, 1]).any(), "Expected NaNs in the second column after clipping"
 
     def testBinArray(self) -> None:
         # Create a 4x4 test array
-        testArray = np.array([
-            [1, 2, 3, 4],
-            [5, 6, 7, 8],
-            [9, 10, 11, 12],
-            [13, 14, 15, 16]
-        ])
+        testArray = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]])
         binning = 2
 
         # Test 'mean' method
-        expectedMean = np.array([
-            [3.5, 5.5],
-            [11.5, 13.5]
-        ])
+        expectedMean = np.array([[3.5, 5.5], [11.5, 13.5]])
         resultMean = binArray(testArray, binning, method="mean")
         np.testing.assert_array_almost_equal(resultMean, expectedMean)
 
@@ -194,13 +178,8 @@ class TestMiscUtils(unittest.TestCase):
         resultMedian = binArray(testArray, binning, method="median")
         np.testing.assert_array_almost_equal(resultMedian, expectedMean)
 
-         # Simple 4x4 test array with hot pixel at (2,2)
-        baseArray = np.array([
-            [1, 1, 1, 1],
-            [1, 1, 1, 1],
-            [1, 1, 1000, 1],
-            [1, 1, 1, 1]
-        ])
+        # Simple 4x4 test array with hot pixel at (2,2)
+        baseArray = np.array([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1000, 1], [1, 1, 1, 1]])
         binning = 2
 
         # Test 'mean' result
@@ -227,6 +206,7 @@ class TestMiscUtils(unittest.TestCase):
         testArrayOdd = np.arange(25).reshape(5, 5)
         resultOdd = binArray(testArrayOdd, binning, method="mean")
         self.assertEqual(resultOdd.shape, (2, 2))
+
 
 if __name__ == "__main__":
     # Do the unit test

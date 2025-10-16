@@ -78,8 +78,6 @@ class EstimateZernikesAiDonutTask(EstimateZernikesBaseTask):
             A list of results from applying the function to the arguments.
         """
         if numCores != 1:
-            self.log.warn(
-                "AiDonut does not support multiprocessing. Running on a single core."
-            )
+            self.log.warn("AiDonut does not support multiprocessing. Running on a single core.")
 
         return [fun(arg) for arg in args]

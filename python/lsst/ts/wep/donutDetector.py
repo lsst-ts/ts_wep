@@ -88,9 +88,7 @@ class DonutDetector(object):
             binaryChoice is not supported.
         """
 
-        centroidFinder = CentroidFindFactory.createCentroidFind(
-            CentroidFindType.ConvolveTemplate
-        )
+        centroidFinder = CentroidFindFactory.createCentroidFind(CentroidFindType.ConvolveTemplate)
         if binaryChoice == "centroid":
             binaryExp = centroidFinder.getImgBinary(copy(expArray))
 
@@ -112,16 +110,12 @@ class DonutDetector(object):
             dbscanEps=dbscanEps,
         )
 
-        donutDf = pd.DataFrame(
-            np.array([centroidX, centroidY]).T, columns=["x_center", "y_center"]
-        )
+        donutDf = pd.DataFrame(np.array([centroidX, centroidY]).T, columns=["x_center", "y_center"])
         donutDf = self.identifyBlendedDonuts(donutDf, blendRadius)
 
         return donutDf
 
-    def identifyBlendedDonuts(
-        self, donutDf: pd.DataFrame, blendRadius: float
-    ) -> pd.DataFrame:
+    def identifyBlendedDonuts(self, donutDf: pd.DataFrame, blendRadius: float) -> pd.DataFrame:
         """
         Label donuts as blended/unblended if the centroids are within
         the blendRadius number of pixels.
@@ -155,9 +149,7 @@ class DonutDetector(object):
         distMatrixUpper = np.triu(distMatrix)
 
         # Identify blended pairs of objects by distance
-        blendedPairs = np.array(
-            np.where((distMatrixUpper > 0.0) & (distMatrixUpper < blendRadius))
-        ).T
+        blendedPairs = np.array(np.where((distMatrixUpper > 0.0) & (distMatrixUpper < blendRadius))).T
         blendedCenters = np.unique(blendedPairs.flatten())
 
         # Add blended information into dataframe
@@ -170,19 +162,11 @@ class DonutDetector(object):
             if donutDf.loc[donutTwo, "blended_with"] is None:
                 donutDf.at[donutTwo, "blended_with"] = []
             donutDf.loc[donutOne, "blended_with"].append(donutTwo)
-            donutDf.loc[donutOne, "x_blend_center"].append(
-                donutDf.loc[donutTwo, "x_center"]
-            )
-            donutDf.loc[donutOne, "y_blend_center"].append(
-                donutDf.loc[donutTwo, "y_center"]
-            )
+            donutDf.loc[donutOne, "x_blend_center"].append(donutDf.loc[donutTwo, "x_center"])
+            donutDf.loc[donutOne, "y_blend_center"].append(donutDf.loc[donutTwo, "y_center"])
             donutDf.loc[donutTwo, "blended_with"].append(donutOne)
-            donutDf.loc[donutTwo, "x_blend_center"].append(
-                donutDf.loc[donutOne, "x_center"]
-            )
-            donutDf.loc[donutTwo, "y_blend_center"].append(
-                donutDf.loc[donutOne, "y_center"]
-            )
+            donutDf.loc[donutTwo, "x_blend_center"].append(donutDf.loc[donutOne, "x_center"])
+            donutDf.loc[donutTwo, "y_blend_center"].append(donutDf.loc[donutOne, "y_center"])
 
         # Count the number of other donuts overlapping
         # each donut
@@ -191,8 +175,6 @@ class DonutDetector(object):
             if donutDf["blended_with"].iloc[donutIdx] is None:
                 continue
 
-            donutDf.at[donutIdx, "num_blended_neighbors"] = len(
-                donutDf["blended_with"].loc[donutIdx]
-            )
+            donutDf.at[donutIdx, "num_blended_neighbors"] = len(donutDf["blended_with"].loc[donutIdx])
 
         return donutDf

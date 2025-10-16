@@ -118,9 +118,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def _generateTestExposures(
         self,
-    ) -> tuple[
-        afwImage.ExposureF, np.ndarray, np.ndarray, afwImage.ExposureF, np.ndarray
-    ]:
+    ) -> tuple[afwImage.ExposureF, np.ndarray, np.ndarray, afwImage.ExposureF, np.ndarray]:
         # Generate donut template
         camera = LsstCam.getCamera()
         template = createTemplateForDetector(camera.get("R22_S11"), "extra")
@@ -218,19 +216,13 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             initCornerX,
             initCornerY,
             peakHeight,
-        ) = self.task.calculateFinalCentroids(
-            centeredExp, template, centerCoordX, centerCoordY
-        )
+        ) = self.task.calculateFinalCentroids(centeredExp, template, centerCoordX, centerCoordY)
         # For centered donut final center and final corner should be
         # half stamp width apart
         np.testing.assert_array_equal(centerX, centerCoordX)
         np.testing.assert_array_equal(centerY, centerCoordY)
-        np.testing.assert_array_equal(
-            cornerX, centerCoordX - self.task.donutStampSize / 2
-        )
-        np.testing.assert_array_equal(
-            cornerY, centerCoordY - self.task.donutStampSize / 2
-        )
+        np.testing.assert_array_equal(cornerX, centerCoordX - self.task.donutStampSize / 2)
+        np.testing.assert_array_equal(cornerY, centerCoordY - self.task.donutStampSize / 2)
         np.testing.assert_array_equal(initCornerX, cornerX)
         np.testing.assert_array_equal(initCornerY, cornerY)
 
@@ -255,9 +247,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             initCornerX,
             initCornerY,
             peakHeight,
-        ) = self.task.calculateFinalCentroids(
-            edgeExp, template, centerCoordX, centerCoordY
-        )
+        ) = self.task.calculateFinalCentroids(edgeExp, template, centerCoordX, centerCoordY)
         # For donut stamp that would go off the top corner of the exposure
         # then the stamp should start at (0, 0) instead
         np.testing.assert_array_equal(centerX, edgeCoord[0])
@@ -282,9 +272,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         catalog["centroid_y"] = centroid_y_arr
 
         # Get original shifts
-        donutStampsOrig = self.task.cutOutStamps(
-            exp, catalog, DefocalType.Extra, self.cameraName
-        )
+        donutStampsOrig = self.task.cutOutStamps(exp, catalog, DefocalType.Extra, self.cameraName)
         xShifts = []
         yShifts = []
         for stamp_cent, catalog_x, catalog_y in zip(
@@ -298,15 +286,11 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.task.maxRecenterDistance = maxRecenter
         # Test that warnings logged due to recentering failures
         with self.assertLogs(logger=self.task.log.logger, level="WARNING") as cm:
-            donutStamps = self.task.cutOutStamps(
-                exp, catalog, DefocalType.Extra, self.cameraName
-            )
+            donutStamps = self.task.cutOutStamps(exp, catalog, DefocalType.Extra, self.cameraName)
 
         # All donuts except the first one should have unchanged values
         # Pick only the recentering warnings
-        recenteringWarnings = [
-            warn for warn in cm.output if "Donut Recentering " in warn
-        ]
+        recenteringWarnings = [warn for warn in cm.output if "Donut Recentering " in warn]
         # Test that there are recentering warnings for two objects
         # since first object should pass
         self.assertEqual(len(recenteringWarnings), 2)
@@ -323,8 +307,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             errMsg = (
                 "WARNING:lsst.Base Task:Donut Recentering Failed. "
                 + "Flagging and not shifting center of stamp for extra-focal source"
-                + f' at ({catRow["centroid_x"]}, {catRow["centroid_y"]}). '
-                + f"Catalog row: {catRow.index+1}. "
+                + f" at ({catRow['centroid_x']}, {catRow['centroid_y']}). "
+                + f"Catalog row: {catRow.index + 1}. "
                 + f"Proposed Shift: ({int(xShift)}, {int(yShift)})."
             )
             self.assertEqual(logMsg, errMsg)
@@ -334,9 +318,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.task.cutOutStamps(exp, catalog, DefocalType.Intra, self.cameraName)
         self.assertEqual(self.task.metadata.arrays["recenterFlagsIntra"], [0, 1, 1])
 
-    def _getExpAndCatalog(
-        self, defocalType: DefocalType
-    ) -> tuple[afwImage.ExposureF, QTable]:
+    def _getExpAndCatalog(self, defocalType: DefocalType) -> tuple[afwImage.ExposureF, QTable]:
         """
         Helper function to get exposure and donutCatalog for
         testing cutOutStamps.
@@ -359,12 +341,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         else:
             dataId = self.dataIdIntra
 
-        exposure = self.butler.get(
-            "post_isr_image", dataId=dataId, collections=[self.runName]
-        )
-        donutCatalog = self.butler.get(
-            "donutTable", dataId=dataId, collections=[self.runName]
-        )
+        exposure = self.butler.get("post_isr_image", dataId=dataId, collections=[self.runName])
+        donutCatalog = self.butler.get("donutTable", dataId=dataId, collections=[self.runName])
 
         return exposure, donutCatalog
 
@@ -372,9 +350,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
         with self.assertRaises(KeyError):
             exposure.getMetadata()["BGMEAN"]
-        self.task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
+        self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra, self.cameraName)
         # cutOutStamps runs background subtraction which is automatically
         # applied to the exposure. Thus, BGMEAN should now exist in the
         # exposure metadata.
@@ -382,9 +358,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
 
     def testCutOutStampsTaskRunNormal(self) -> None:
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
-        donutStamps = self.task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
+        donutStamps = self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra, self.cameraName)
         self.assertTrue(len(donutStamps), 4)
         self.assertTrue(self.task.metadata.arrays["recenterFlagsExtra"], [0, 0, 0, 0])
 
@@ -394,9 +368,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             lsst.geom.Extent2I(160),
         )
         expCutOut = exposure[stampBBox].image.array
-        np.testing.assert_array_almost_equal(
-            donutStamps[0].stamp_im.image.array, expCutOut
-        )
+        np.testing.assert_array_almost_equal(donutStamps[0].stamp_im.image.array, expCutOut)
 
         # Check that local linear WCS in archive element is consistent with the
         # original exposure WCS.
@@ -465,9 +437,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.assertCountEqual(metadata, expectedMetadata)
 
         # test that the visit is properly stored
-        self.assertEqual(
-            self.dataIdExtra["visit"], donutStamps.metadata.getArray("VISIT")[0]
-        )
+        self.assertEqual(self.dataIdExtra["visit"], donutStamps.metadata.getArray("VISIT")[0])
 
         # test that each metric has been calculated
         # for all donuts
@@ -481,9 +451,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
         ]:
-            self.assertEqual(
-                len(donutStamps), len(donutStamps.metadata.getArray(measure))
-            )
+            self.assertEqual(len(donutStamps), len(donutStamps.metadata.getArray(measure)))
 
         # test that the effectiveness contains only binary values
         unique_values = set(np.unique(donutStamps.metadata.getArray("EFFECTIVE")))
@@ -493,9 +461,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # test the calculation of SN
         sn_values = [2149.093503846915, 2160.668317852145, 2041.9917562475855]
         sn_calculated = donutStamps.metadata.getArray("SN")
-        np.testing.assert_allclose(
-            np.sort(np.array(sn_values)), np.sort(np.array(sn_calculated)), rtol=1e-3
-        )
+        np.testing.assert_allclose(np.sort(np.array(sn_values)), np.sort(np.array(sn_calculated)), rtol=1e-3)
 
     def testFilterBadRecentering(self) -> None:
         maxRecenter = 25
@@ -524,9 +490,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         result in nan values for SN."""
 
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
-        stamps = self.task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
+        stamps = self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra, self.cameraName)
         stamp = stamps[0]
         orig_sn_dict = self.task.calculateSN(stamp)
 
@@ -545,12 +509,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         self.task.bkgDilationIter = 100
         exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
         with self.assertLogs(logger=self.task.log.logger, level="WARNING") as cm:
-            self.task.cutOutStamps(
-                exposure, donutCatalog, DefocalType.Extra, self.cameraName
-            )
-        infoMsg = (
-            "WARNING:lsst.Base Task:Binary dilation of donut mask reached the edge "
-        )
+            self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra, self.cameraName)
+        infoMsg = "WARNING:lsst.Base Task:Binary dilation of donut mask reached the edge "
         infoMsg += "of the image; reducing the amount of donut mask dilation to 99"
         self.assertEqual(infoMsg, cm.output[0])
 
@@ -561,9 +521,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Flag donut pixels as bad
         self.config.badPixelMaskDefinitions = ["DONUT"]
         task = CutOutDonutsBaseTask(config=self.config, name="Flag donut pix as bad")
-        donutStamps = task.cutOutStamps(
-            exposure, donutCatalog, DefocalType.Extra, self.cameraName
-        )
+        donutStamps = task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra, self.cameraName)
 
         # Check that all the stamps have "bad" pixels
         # (because we flagged donut pixels as bad)
@@ -576,9 +534,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         donutStamps = DonutStamps([])
         self.assertEqual(donutStamps.metadata, None)
 
-        donutStamps = self.task.addVisitLevelMetadata(
-            exposure, donutStamps, donutCatalog, DefocalType.Extra
-        )
+        donutStamps = self.task.addVisitLevelMetadata(exposure, donutStamps, donutCatalog, DefocalType.Extra)
         # Check that metadata is a PropertySet
         self.assertIsInstance(donutStamps.metadata, PropertySet)
 
@@ -597,12 +553,10 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "BORESIGHT_AZ_RAD",
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
-            "RADIUS"
+            "RADIUS",
         ]
         self.assertCountEqual(key_list, list(donutStamps.metadata.keys()))
 
         # Test a few values
-        self.assertEqual(
-            donutStamps.metadata.get("BANDPASS"), exposure.filter.bandLabel
-        )
+        self.assertEqual(donutStamps.metadata.get("BANDPASS"), exposure.filter.bandLabel)
         self.assertEqual(donutStamps.metadata.get("VISIT"), self.dataIdExtra["visit"])

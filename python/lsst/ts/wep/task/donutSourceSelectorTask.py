@@ -152,9 +152,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         if hasattr(sourceCat, "isContiguous"):
             # Check for continuity on afwTable catalogs
             if not sourceCat.isContiguous():
-                raise RuntimeError(
-                    "Input catalogs for source selection must be contiguous."
-                )
+                raise RuntimeError("Input catalogs for source selection must be contiguous.")
 
         result = self.selectSources(sourceCat, detector, filterName)
 
@@ -250,10 +248,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
             PIXELS,
             FIELD_ANGLE,
         )
-        fieldDist = [
-            np.degrees(np.sqrt(fieldLoc[0] ** 2 + fieldLoc[1] ** 2))
-            for fieldLoc in fieldXY
-        ]
+        fieldDist = [np.degrees(np.sqrt(fieldLoc[0] ** 2 + fieldLoc[1] ** 2)) for fieldLoc in fieldXY]
         df["fieldDist"] = fieldDist
 
         # Remove area too close to edge with new bounding box that allows
@@ -264,14 +259,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
         magSortedDf = df.sort_values("mag")
         groupIndices = magSortedDf.index.values
         xyNeigh.fit(magSortedDf[["x", "y"]])
-        radDist, radIdx = xyNeigh.radius_neighbors(
-            magSortedDf[["x", "y"]], sort_results=True
-        )
+        radDist, radIdx = xyNeigh.radius_neighbors(magSortedDf[["x", "y"]], sort_results=True)
 
-        errMsg = str(
-            "config.sourceLimit must be a positive integer "
-            + "or turned off by setting it to '-1'"
-        )
+        errMsg = str("config.sourceLimit must be a positive integer " + "or turned off by setting it to '-1'")
         if not ((self.config.sourceLimit == -1) or (self.config.sourceLimit > 0)):
             raise ValueError(errMsg)
 
@@ -341,12 +331,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # when deblending. Add one to index because
                     # magDiff is all sources in magSortedDf after index=0.
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
-                    blendCentersX[groupIndices[srcOn]] = (
-                        magSortedDf["x"].iloc[idxList[blendMagIdx]].values
-                    )
-                    blendCentersY[groupIndices[srcOn]] = (
-                        magSortedDf["y"].iloc[idxList[blendMagIdx]].values
-                    )
+                    blendCentersX[groupIndices[srcOn]] = magSortedDf["x"].iloc[idxList[blendMagIdx]].values
+                    blendCentersY[groupIndices[srcOn]] = magSortedDf["y"].iloc[idxList[blendMagIdx]].values
                     sourcesKept += 1
                 # Keep the source if it is blended with up to maxBlended
                 # number of sources. To check this we look at the maxBlended+1
@@ -359,19 +345,13 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # Same process as above to make sure we only get
                     # the blend centers we care about
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
-                    blendCentersX[groupIndices[srcOn]] = (
-                        magSortedDf["x"].iloc[idxList[blendMagIdx]].values
-                    )
-                    blendCentersY[groupIndices[srcOn]] = (
-                        magSortedDf["y"].iloc[idxList[blendMagIdx]].values
-                    )
+                    blendCentersX[groupIndices[srcOn]] = magSortedDf["x"].iloc[idxList[blendMagIdx]].values
+                    blendCentersY[groupIndices[srcOn]] = magSortedDf["y"].iloc[idxList[blendMagIdx]].values
                     sourcesKept += 1
                 else:
                     continue
 
-            if (self.config.sourceLimit > 0) and (
-                sourcesKept == self.config.sourceLimit
-            ):
+            if (self.config.sourceLimit > 0) and (sourcesKept == self.config.sourceLimit):
                 break
 
         # magSelected is a boolean array so we can

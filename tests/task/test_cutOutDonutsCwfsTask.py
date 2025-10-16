@@ -72,9 +72,7 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
 
             collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
             instrument = "lsst.obs.lsst.LsstCam"
-            pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
-            )
+            pipelineYaml = os.path.join(testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml")
 
             pipeCmd = writePipetaskCmd(
                 cls.repoDir,
@@ -136,19 +134,11 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         Camera,
     ]:
         # Grab two exposures from the same visits of adjacent detectors
-        exposureExtra = self.butler.get(
-            "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        exposureIntra = self.butler.get(
-            "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        exposureExtra = self.butler.get("post_isr_image", dataId=self.dataIdExtra, collections=[self.runName])
+        exposureIntra = self.butler.get("post_isr_image", dataId=self.dataIdIntra, collections=[self.runName])
         # Get the donut catalogs for each detector
-        donutCatalogExtra = self.butler.get(
-            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutCatalogIntra = self.butler.get(
-            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        donutCatalogExtra = self.butler.get("donutTable", dataId=self.dataIdExtra, collections=[self.runName])
+        donutCatalogIntra = self.butler.get("donutTable", dataId=self.dataIdIntra, collections=[self.runName])
         # Get the camera from the butler
         camera = self.butler.get(
             "camera",
@@ -201,13 +191,9 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
         )
 
-        for donutStamp, cutOutStamp in zip(
-            taskOutExtra.donutStampsOut, testExtraStamps
-        ):
+        for donutStamp, cutOutStamp in zip(taskOutExtra.donutStampsOut, testExtraStamps):
             self.assertMaskedImagesAlmostEqual(donutStamp.stamp_im, cutOutStamp.stamp_im)  # type: ignore
-        for donutStamp, cutOutStamp in zip(
-            taskOutIntra.donutStampsOut, testIntraStamps
-        ):
+        for donutStamp, cutOutStamp in zip(taskOutIntra.donutStampsOut, testIntraStamps):
             self.assertMaskedImagesAlmostEqual(donutStamp.stamp_im, cutOutStamp.stamp_im)  # type: ignore
 
         # Test that only one set of donut stamps are returned for each
@@ -215,7 +201,6 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
         self.assertEqual(len(taskOutIntra), 1)
 
     def testEmptyCatalog(self) -> None:
-
         (
             exposureExtra,
             exposureIntra,
@@ -275,12 +260,8 @@ class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):
             "donutStampsCwfs", dataId=self.dataIdIntra, collections=[self.runName]
         )
 
-        for butlerStamp, taskStamp in zip(
-            donutStampsExtra_extraId, taskOutExtra.donutStampsOut
-        ):
+        for butlerStamp, taskStamp in zip(donutStampsExtra_extraId, taskOutExtra.donutStampsOut):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore
 
-        for butlerStamp, taskStamp in zip(
-            donutStampsIntra_intraId, taskOutIntra.donutStampsOut
-        ):
+        for butlerStamp, taskStamp in zip(donutStampsIntra_intraId, taskOutIntra.donutStampsOut):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore

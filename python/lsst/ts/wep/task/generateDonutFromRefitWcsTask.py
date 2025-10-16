@@ -54,7 +54,8 @@ __all__ = [
 
 
 class GenerateDonutFromRefitWcsTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("instrument", "visit", "detector")  # type: ignore
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "visit", "detector"),  # type: ignore
 ):
     """
     Specify the pipeline inputs and outputs needed
@@ -225,9 +226,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             name = f"coord_{c}Err"
             if name not in sourceSchema.getNames():
                 sourceSchema.addField(
-                    afwTable.Field["F"](
-                        name=name, doc=f"position err in {c}", units="rad"
-                    ),
+                    afwTable.Field["F"](name=name, doc=f"position err in {c}", units="rad"),
                 )
 
         # create a catalog with that schema
@@ -273,9 +272,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 raErr = abs(ra) * 0.01
             else:
                 # use the existing coord_raErr column
-                raErr = lsst.geom.Angle(
-                    catalog["coord_raErr"][i].value, lsst.geom.radians
-                )
+                raErr = lsst.geom.Angle(catalog["coord_raErr"][i].value, lsst.geom.radians)
             src.set(sourceRaErrKey, raErr)
 
             if make_new_decErr:
@@ -283,9 +280,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 decErr = abs(dec) * 0.01
             else:
                 # use the existing coord_decErr column
-                decErr = lsst.geom.Angle(
-                    catalog["coord_decErr"][i].value, lsst.geom.radians
-                )
+                decErr = lsst.geom.Angle(catalog["coord_decErr"][i].value, lsst.geom.radians)
             src.set(sourceDecErrKey, decErr)
 
             # set the x,y centroid
@@ -316,9 +311,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             refCats=astromRefCat,
         )
         self.astromTask.setRefObjLoader(astromRefObjLoader)
-        self.astromTask.refObjLoader.config.anyFilterMapsToThis = (
-            self.config.astromRefFilter
-        )
+        self.astromTask.refObjLoader.config.anyFilterMapsToThis = self.config.astromRefFilter
         afwCat = self.formatDonutCatalog(fitDonutCatalog)
         originalExposure = copy(exposure)
 
@@ -342,10 +335,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 # WCS has been fit but scatter is
                 # too high, so use original catalog
                 donutCatalog = fitDonutCatalog
-                self.log.warning(
-                    "Returning original exposure and WCS and "
-                    "direct detect catalog as output."
-                )
+                self.log.warning("Returning original exposure and WCS and direct detect catalog as output.")
 
         except (RuntimeError, TaskError, IndexError, ValueError, AttributeError) as e:
             # IndexError raised for low source counts:
@@ -362,10 +352,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             else:
                 # this is set to None when the fit fails, so restore it
                 donutCatalog = fitDonutCatalog
-                self.log.warning(
-                    "Returning original exposure and WCS and "
-                    "direct detect catalog as output."
-                )
+                self.log.warning("Returning original exposure and WCS and direct detect catalog as output.")
 
         if successfulFit:
             photoRefObjLoader = ReferenceObjectLoader(
@@ -374,53 +361,35 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             )
             detector = exposure.getDetector()
             filterName = exposure.filter.bandLabel
-            catCreateErrorMsg = (
-                "Returning new WCS but original direct detect catalog as donutCatalog."
-            )
+            catCreateErrorMsg = "Returning new WCS but original direct detect catalog as donutCatalog."
 
             # Check that there are catalogs
             if len(photoRefCat) == 0:
                 self.log.warning("No catalogs cover this detector.")
                 donutCatalog = fitDonutCatalog
                 self.log.warning(catCreateErrorMsg)
-                return pipeBase.Struct(
-                    outputExposure=exposure, donutCatalog=donutCatalog
-                )
+                return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
 
             # Check that specified filter exists in catalogs
-            if (
-                self.config.photoRefFilter is not None
-                and self.config.photoRefFilterPrefix is not None
-            ):
-                raise ValueError(
-                    "photoRefFilter and photoRefFilterConfig cannot both be set."
-                )
+            if self.config.photoRefFilter is not None and self.config.photoRefFilterPrefix is not None:
+                raise ValueError("photoRefFilter and photoRefFilterConfig cannot both be set.")
             if self.config.photoRefFilter is not None:
                 filterName = self.config.photoRefFilter
             elif self.config.photoRefFilterPrefix is not None:
-                filterName = (
-                    f"{self.config.photoRefFilterPrefix}_{exposure.filter.bandLabel}"
-                )
+                filterName = f"{self.config.photoRefFilterPrefix}_{exposure.filter.bandLabel}"
 
             # Test that given filter name exists in catalog.
             if f"{filterName}_flux" not in photoRefCat[0].get().schema:
-                filterFailMsg = (
-                    "Photometric Reference Catalog does not contain "
-                    f"photoRefFilter: {filterName}"
-                )
+                filterFailMsg = f"Photometric Reference Catalog does not contain photoRefFilter: {filterName}"
                 self.log.warning(filterFailMsg)
                 donutCatalog = fitDonutCatalog
                 self.log.warning(catCreateErrorMsg)
-                return pipeBase.Struct(
-                    outputExposure=exposure, donutCatalog=donutCatalog
-                )
+                return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
 
             try:
                 # Match detector layout to reference catalog
                 self.log.info("Running Donut Selector")
-                donutSelectorTask = (
-                    self.donutSelector if self.config.doDonutSelection is True else None
-                )
+                donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
                 edgeMargin = self.config.edgeMargin
                 refSelection, blendCentersX, blendCentersY = runSelection(
                     photoRefObjLoader,
@@ -433,9 +402,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 # Create list of filters to include in final catalog
                 filterList = self.config.catalogFilterList
                 availableRefFilters = [
-                    col[:-5]
-                    for col in refSelection.schema.getNames()
-                    if col.endswith("_flux")
+                    col[:-5] for col in refSelection.schema.getNames() if col.endswith("_flux")
                 ]
 
                 # Validate all requested filters exist
@@ -469,9 +436,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 self.log.warning(catCreateErrorMsg)
 
         detectorName = exposure.getDetector().getName()
-        donutCatalog["detector"] = np.array(
-            [detectorName] * len(donutCatalog), dtype=str
-        )
+        donutCatalog["detector"] = np.array([detectorName] * len(donutCatalog), dtype=str)
         donutCatalog = addVisitInfoToCatTable(exposure, donutCatalog)
         # We want the original image array with the new WCS
         # attached to it if the WCS fitting was successful.

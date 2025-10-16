@@ -74,9 +74,7 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.maxZernClip = self.config.maxZernClip
         self.stdMin = self.config.stdMin
 
-    def combineZernikes(
-        self, zernikeArray: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def combineZernikes(self, zernikeArray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         sigArray = conditionalSigmaClip(
             zernikeArray, sigmaClipKwargs=self.sigmaClipKwargs, stdMin=self.stdMin
         )
@@ -91,16 +89,12 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
 
         while numRejected == len(sigArray):
             effMaxZernClip -= 1
-            binaryFlagArray = np.any(
-                np.isnan(sigArray[:, :effMaxZernClip]), axis=1
-            ).astype(int)
+            binaryFlagArray = np.any(np.isnan(sigArray[:, :effMaxZernClip]), axis=1).astype(int)
             numRejected = np.sum(binaryFlagArray)
         # Identify which rows to use when calculating final mean
         keepIdx = ~np.array(binaryFlagArray, dtype=bool)
 
-        self.log.info(
-            f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}."
-        )
+        self.log.info(f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}.")
         if effMaxZernClip < self.maxZernClip:
             self.log.warning(
                 f"EffMaxZernClip ({effMaxZernClip}) was less than MaxZernClip config ({self.maxZernClip})."

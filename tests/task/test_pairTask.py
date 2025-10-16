@@ -48,9 +48,7 @@ class TestPairTask(unittest.TestCase):
         intra_id: int = 0,
         extra_id: int = 1,
     ) -> typing.Dict[int, VisitInfo]:
-        intra_boresight = lsst.geom.SpherePoint(
-            ra_deg_start, dec_deg_start, lsst.geom.degrees
-        )
+        intra_boresight = lsst.geom.SpherePoint(ra_deg_start, dec_deg_start, lsst.geom.degrees)
         intra_mjd = DateTime(time_mjd_start)
         intra_focus_z = -1.5
         intra_rtp = lsst.geom.Angle(rot_deg_start, lsst.geom.degrees)

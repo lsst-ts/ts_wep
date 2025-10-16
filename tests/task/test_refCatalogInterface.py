@@ -32,9 +32,7 @@ class TestRefCatalogInterface(unittest.TestCase):
         self.boresightRa = 0.03
         self.boresightDec = -0.02
         self.boresightRotAng = 90.0
-        self.refCatInterface = RefCatalogInterface(
-            self.boresightRa, self.boresightDec, self.boresightRotAng
-        )
+        self.refCatInterface = RefCatalogInterface(self.boresightRa, self.boresightDec, self.boresightRotAng)
 
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
@@ -57,9 +55,7 @@ class TestRefCatalogInterface(unittest.TestCase):
         htmIds = self.refCatInterface.getHtmIds()
         catalogName = "cal_ref_cat"
         collectionName = "refcats/gen2"
-        dataRefs, dataIds = self.refCatInterface.getDataRefs(
-            htmIds, self.butler, catalogName, collectionName
-        )
+        dataRefs, dataIds = self.refCatInterface.getDataRefs(htmIds, self.butler, catalogName, collectionName)
 
         self.assertEqual(len(dataRefs), 7)
         self.assertEqual(len(dataIds), 7)
@@ -67,9 +63,7 @@ class TestRefCatalogInterface(unittest.TestCase):
     def testGetDetectorWcs(self) -> None:
         """Test setting up a WCS for the pointing."""
 
-        camera = self.butler.get(
-            "camera", instrument="LSSTCam", collections=["LSSTCam/calib/unbounded"]
-        )
+        camera = self.butler.get("camera", instrument="LSSTCam", collections=["LSSTCam/calib/unbounded"])
 
         detector = camera["R22_S11"]
         detWcs = self.refCatInterface.getDetectorWcs(detector)

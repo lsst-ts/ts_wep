@@ -117,8 +117,6 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         zernikeArray, trueFlags = self.prepareTestData()
         combinedZernikesStruct = self.task.run(zernikeArray)
         self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)
-        np.testing.assert_array_equal(
-            np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes
-        )
+        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes)
         np.testing.assert_array_equal(trueFlags, combinedZernikesStruct.flags)
         self.assertTrue(isinstance(combinedZernikesStruct.flags[0], numbers.Integral))

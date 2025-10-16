@@ -33,9 +33,7 @@ class TestCentroidDefault(unittest.TestCase):
         self.centroid = CentroidDefault()
 
     def testGetImgBinary(self) -> None:
-        self.assertRaises(
-            NotImplementedError, self.centroid.getImgBinary, np.zeros((2, 2))
-        )
+        self.assertRaises(NotImplementedError, self.centroid.getImgBinary, np.zeros((2, 2)))
 
     def testGetCenterAndRfromImgBinary(self) -> None:
         structOri = generate_binary_structure(2, 1).astype(int)

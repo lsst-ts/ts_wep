@@ -69,9 +69,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
             collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
             instrument = "lsst.obs.lsst.LsstCam"
-            pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
-            )
+            pipelineYaml = os.path.join(testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml")
 
             pipeCmd = writePipetaskCmd(
                 cls.repoDir,
@@ -127,9 +125,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         self.assertEqual(self.task.estimateZernikes.wfAlgoConfig.binning, 2)
 
     def testEstimateZernikes(self) -> None:
-        zernCoeff = self.task.estimateZernikes.run(
-            self.donutStampsExtra, self.donutStampsIntra
-        ).zernikes
+        zernCoeff = self.task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 25))
 
@@ -142,18 +138,10 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
 
         # Test R04
-        donutStampsExtra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
-        )
-        donutStampsIntra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
-        )
-        zernCoeffAllR04 = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
-        zernCoeffAvgR04 = self.task.combineZernikes.run(
-            zernCoeffAllR04
-        ).combinedZernikes
+        donutStampsExtra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW0_donutStamps.fits"))
+        donutStampsIntra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW1_donutStamps.fits"))
+        zernCoeffAllR04 = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
+        zernCoeffAvgR04 = self.task.combineZernikes.run(zernCoeffAllR04).combinedZernikes
         trueZernCoeffR04 = np.array(
             [
                 -3.98568849e-01,
@@ -185,23 +173,13 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         )
         # Make sure the total rms error is less than 0.35 microns off
         # from the OPD truth as a sanity check
-        self.assertLess(
-            np.sqrt(np.sum(np.square(zernCoeffAvgR04 - trueZernCoeffR04))), 0.35
-        )
+        self.assertLess(np.sqrt(np.sum(np.square(zernCoeffAvgR04 - trueZernCoeffR04))), 0.35)
 
         # Test R40
-        donutStampsExtra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R40_SW0_donutStamps.fits")
-        )
-        donutStampsIntra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R40_SW1_donutStamps.fits")
-        )
-        zernCoeffAllR40 = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
-        zernCoeffAvgR40 = self.task.combineZernikes.run(
-            zernCoeffAllR40
-        ).combinedZernikes
+        donutStampsExtra = DonutStamps.readFits(os.path.join(donutStampDir, "R40_SW0_donutStamps.fits"))
+        donutStampsIntra = DonutStamps.readFits(os.path.join(donutStampDir, "R40_SW1_donutStamps.fits"))
+        zernCoeffAllR40 = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
+        zernCoeffAvgR40 = self.task.combineZernikes.run(zernCoeffAllR40).combinedZernikes
         trueZernCoeffR40 = np.array(
             [
                 -4.51261752e-01,
@@ -233,30 +211,20 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         )
         # Make sure the total rms error is less than 0.35 microns off
         # from the OPD truth as a sanity check
-        self.assertLess(
-            np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.35
-        )
+        self.assertLess(np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.35)
 
     def testGetCombinedZernikes(self) -> None:
         testArr = np.zeros((2, 25))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.combinedZernikes, np.ones(25)
-        )
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.flags, np.zeros(len(testArr))
-        )
+        np.testing.assert_array_equal(combinedZernikesStruct.combinedZernikes, np.ones(25))
+        np.testing.assert_array_equal(combinedZernikesStruct.flags, np.zeros(len(testArr)))
 
     def testWithAndWithoutPairs(self) -> None:
         # Load the test data
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
-        donutStampsExtra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
-        )
-        donutStampsIntra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
-        )
+        donutStampsExtra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW0_donutStamps.fits"))
+        donutStampsIntra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW1_donutStamps.fits"))
 
         # First estimate without pairs
         zkAllExtra = self.task.estimateZernikes.run(donutStampsExtra, []).zernikes
@@ -265,9 +233,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         zkAvgIntra = self.task.combineZernikes.run(zkAllIntra).combinedZernikes
 
         # Now estimate with pairs
-        zkAllPairs = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
+        zkAllPairs = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
         zkAvgPairs = self.task.combineZernikes.run(zkAllPairs).combinedZernikes
 
         # Check that all have same number of Zernike coeffs
@@ -304,12 +270,8 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # Estimate zernikes
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
-        donutStampsExtra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
-        )
-        donutStampsIntra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
-        )
+        donutStampsExtra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW0_donutStamps.fits"))
+        donutStampsIntra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW1_donutStamps.fits"))
         output = task.estimateZernikes.run(donutStampsExtra, donutStampsIntra)
         zernikes = output.zernikes
 
@@ -319,24 +281,16 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
     def testNollIndices(self) -> None:
         # Load the stamps
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")
-        donutStampsExtra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW0_donutStamps.fits")
-        )
-        donutStampsIntra = DonutStamps.readFits(
-            os.path.join(donutStampDir, "R04_SW1_donutStamps.fits")
-        )
+        donutStampsExtra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW0_donutStamps.fits"))
+        donutStampsIntra = DonutStamps.readFits(os.path.join(donutStampDir, "R04_SW1_donutStamps.fits"))
 
         # Estimate Zernikes 4, 5, 6
         self.task.config.estimateZernikes.nollIndices = [4, 5, 6]
-        zk0 = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes[0]
+        zk0 = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes[0]
 
         # Estimate Zernikes 4, 5, 6, 20, 21
         self.task.config.estimateZernikes.nollIndices = [4, 5, 6, 20, 21]
-        zk1 = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes[0]
+        zk1 = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes[0]
 
         # Check lengths
         self.assertEqual(len(zk0), 3)
@@ -373,20 +327,14 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
             self.assertEqual(dict_["mjd"], self.donutStampsIntra.metadata["MJD"])
 
         # Now estimate with pairs
-        zkCalcPairs = self.task.run(
-            self.donutStampsExtra, self.donutStampsIntra
-        ).zernikes
+        zkCalcPairs = self.task.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
 
         # Check metadata keys exist for pairs case
         self.assertIn("cam_name", zkCalcPairs.meta)
         self.assertIn("estimatorInfo", zkCalcPairs.meta)
-        self.assertCountEqual(
-            ["caustic", "converged"], list(zkCalcPairs.meta["estimatorInfo"].keys())
-        )
+        self.assertCountEqual(["caustic", "converged"], list(zkCalcPairs.meta["estimatorInfo"].keys()))
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["caustic"]))
-        for stamps, k in zip(
-            [self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]
-        ):
+        for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:
                 self.assertIn("det_name", dict_)

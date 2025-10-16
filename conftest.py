@@ -49,9 +49,7 @@ def pytest_configure(config: Config) -> None:
         instrument = "lsst.obs.lsst.LsstCam"
 
         # Run CWFS Pipeline
-        pipelineYamlCwfs = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
-        )
+        pipelineYamlCwfs = os.path.join(testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml")
         pipelineYamlScience = os.path.join(
             testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
         )

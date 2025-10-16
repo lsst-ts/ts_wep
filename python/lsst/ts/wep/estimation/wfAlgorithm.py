@@ -319,11 +319,7 @@ class WfAlgorithm(ABC):
 
         # Calculate the wavefront deviation?
         if returnWfDev:
-            zkIntrinsic = (
-                zkIntrinsicI1
-                if I2 is None
-                else np.mean([zkIntrinsicI1, zkIntrinsicI2], axis=0)
-            )
+            zkIntrinsic = zkIntrinsicI1 if I2 is None else np.mean([zkIntrinsicI1, zkIntrinsicI2], axis=0)
             zk -= zkIntrinsic
 
         # Convert to desired units

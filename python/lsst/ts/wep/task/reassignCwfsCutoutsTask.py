@@ -36,7 +36,8 @@ extra_focal_ids = set([191, 195, 199, 203])
 
 
 class ReassignCwfsCutoutsTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("visit", "detector", "instrument")  # type: ignore
+    pipeBase.PipelineTaskConnections,
+    dimensions=("visit", "detector", "instrument"),  # type: ignore
 ):
     donutStampsIn = connectionTypes.Input(
         doc="Donut Postage Stamp Images with either Intra-focal or Extra-focal detector id.",
@@ -75,14 +76,12 @@ class ReassignCwfsCutoutsTaskConnections(
                     data_id, detector=int(data_id["detector"]) - 1
                 )
 
-                assert (
-                    extra_focal_data_id in seen or extra_focal_data_id in to_do
-                ), f"DataId {extra_focal_data_id} not found in seen or to_do sets."
+                assert extra_focal_data_id in seen or extra_focal_data_id in to_do, (
+                    f"DataId {extra_focal_data_id} not found in seen or to_do sets."
+                )
 
                 inputs = adjuster.get_inputs(data_id)
-                adjuster.add_input(
-                    extra_focal_data_id, "donutStampsIn", inputs["donutStampsIn"][0]
-                )
+                adjuster.add_input(extra_focal_data_id, "donutStampsIn", inputs["donutStampsIn"][0])
                 adjuster.remove_quantum(data_id)
 
             else:
@@ -90,7 +89,8 @@ class ReassignCwfsCutoutsTaskConnections(
 
 
 class ReassignCwfsCutoutsTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=ReassignCwfsCutoutsTaskConnections  # type: ignore
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=ReassignCwfsCutoutsTaskConnections,  # type: ignore
 ):
     pass
 
