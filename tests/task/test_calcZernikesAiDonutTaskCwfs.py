@@ -44,9 +44,8 @@ from lsst.ts.wep.utils import (
     writePipetaskCmd,
 )
 
-TEST_MODEL_PATH = (
-    getModulePath() + "/tests/testData/testAiModels/test_aidonut_model_file.pt"
-)
+TEST_MODEL_PATH = getModulePath() + "/tests/testData/testAiModels/test_aidonut_model_file.pt"
+
 
 class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
     runName: str
@@ -78,9 +77,7 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
 
             collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
             instrument = "lsst.obs.lsst.LsstCam"
-            pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
-            )
+            pipelineYaml = os.path.join(testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml")
 
             pipeCmd = writePipetaskCmd(
                 cls.repoDir,
@@ -137,9 +134,7 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
 
     def testEstimateZernikes(self) -> None:
-        zernCoeff = self.task.estimateZernikes.run(
-            self.donutStampsExtra, self.donutStampsIntra
-        ).zernikes
+        zernCoeff = self.task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 8))
 
@@ -147,12 +142,8 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         testArr = np.zeros((2, 25))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.combinedZernikes, np.ones(25)
-        )
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.flags, np.zeros(len(testArr))
-        )
+        np.testing.assert_array_equal(combinedZernikesStruct.combinedZernikes, np.ones(25))
+        np.testing.assert_array_equal(combinedZernikesStruct.flags, np.zeros(len(testArr)))
 
     def testTableMetadata(self) -> None:
         # First estimate without pairs
@@ -181,16 +172,12 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
             self.assertEqual(dict_["mjd"], self.donutStampsIntra.metadata["MJD"])
 
         # Now estimate with pairs
-        zkCalcPairs = self.task.run(
-            self.donutStampsExtra, self.donutStampsIntra
-        ).zernikes
+        zkCalcPairs = self.task.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
 
         # Check metadata keys exist for pairs case
         self.assertIn("cam_name", zkCalcPairs.meta)
         self.assertIn("estimatorInfo", zkCalcPairs.meta)
-        for stamps, k in zip(
-            [self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]
-        ):
+        for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:
                 self.assertIn("det_name", dict_)

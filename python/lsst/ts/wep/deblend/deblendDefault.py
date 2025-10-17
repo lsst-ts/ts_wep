@@ -118,9 +118,9 @@ class DeblendDefault(object):
         ] += template
 
         # Get the shifted neighboring donut image
-        imageNeighbor[
-            int(newY - m / 2) : int(newY + m / 2), int(newX - n / 2) : int(newX + n / 2)
-        ] += (magRatio * template)
+        imageNeighbor[int(newY - m / 2) : int(newY + m / 2), int(newX - n / 2) : int(newX + n / 2)] += (
+            magRatio * template
+        )
 
         # Get the synthesized multi-donut image
         image = imageMain + imageNeighbor

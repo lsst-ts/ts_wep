@@ -36,9 +36,7 @@ class TestCombineZernikesBaseTask(unittest.TestCase):
 
     def testSubclassWorks(self) -> None:
         class TestCombineClass(CombineZernikesBaseTask):
-            def combineZernikes(
-                self, zernikeArray: np.ndarray
-            ) -> tuple[np.ndarray, np.ndarray]:
+            def combineZernikes(self, zernikeArray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
                 return zernikeArray, np.ones(len(zernikeArray))
 
         task = TestCombineClass()
@@ -52,6 +50,4 @@ class TestCombineZernikesBaseTask(unittest.TestCase):
         self.assertEqual(task.metadata["numDonutsTotal"], 10)
         self.assertEqual(task.metadata["numDonutsUsed"], 0)
         self.assertEqual(task.metadata["numDonutsRejected"], 10)
-        self.assertListEqual(
-            task.metadata.arrays["combineZernikesFlags"], list(np.ones(10))
-        )
+        self.assertListEqual(task.metadata.arrays["combineZernikesFlags"], list(np.ones(10)))

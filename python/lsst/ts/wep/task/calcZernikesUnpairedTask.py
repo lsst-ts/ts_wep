@@ -126,9 +126,7 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         zkCoeffRaw = self.estimateZernikes.run(extraStamps, intraStamps)
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
-        zkTable = self.createZkTable(
-            extraStamps, intraStamps, zkCoeffRaw, zkCoeffCombined
-        )
+        zkTable = self.createZkTable(extraStamps, intraStamps, zkCoeffRaw, zkCoeffCombined)
 
         return pipeBase.Struct(
             outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),

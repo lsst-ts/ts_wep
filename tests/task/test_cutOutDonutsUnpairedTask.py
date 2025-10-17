@@ -74,9 +74,7 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
 
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCutoutsUnpairedPipeline.yaml"
-        )
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsUnpairedPipeline.yaml")
 
         if cls.baseRunName == "pretest_run_cwfs":
             collections += ",pretest_run_cwfs"
@@ -178,12 +176,8 @@ class TestCutOutDonutsUnpairedTask(lsst.utils.tests.TestCase):
         )
 
         # Compare the interactive run to pipetask run results
-        donutStampsExtra = self.butler.get(
-            "donutStamps", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutStampsIntra = self.butler.get(
-            "donutStamps", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
+        donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
 
         for butlerStamp, taskStamp in zip(donutStampsExtra, taskOut.donutStamps[0]):
             self.assertMaskedImagesAlmostEqual(butlerStamp.stamp_im, taskStamp.stamp_im)  # type: ignore

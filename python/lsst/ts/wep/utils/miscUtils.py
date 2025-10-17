@@ -385,9 +385,7 @@ def polygonContains(
 
 
 # Function to apply conditional sigma clipping
-def conditionalSigmaClip(
-    array: np.ndarray, sigmaClipKwargs: dict, stdMin: float = 0.005
-) -> np.ndarray:
+def conditionalSigmaClip(array: np.ndarray, sigmaClipKwargs: dict, stdMin: float = 0.005) -> np.ndarray:
     """Apply conditional sigma clipping to an array.
     Note this function applies sigma clipping to each
     column of the input array, and replaces the column
@@ -460,18 +458,14 @@ def binArray(array: np.ndarray, binning: int, method: str = "mean") -> np.ndarra
         If method is not "mean" or "median"
     """
     # Ensure the array is divisible by the binning factor
-    array = array[
-        : array.shape[0] // binning * binning, : array.shape[1] // binning * binning
-    ]
+    array = array[: array.shape[0] // binning * binning, : array.shape[1] // binning * binning]
     # Bin the array
     if method == "mean":
-        binned = array.reshape(
-            array.shape[0] // binning, binning, array.shape[1] // binning, binning
-        ).mean(axis=(1, 3))
-    elif method == "median":
-        reshaped = array.reshape(
-            array.shape[0] // binning, binning, array.shape[1] // binning, binning
+        binned = array.reshape(array.shape[0] // binning, binning, array.shape[1] // binning, binning).mean(
+            axis=(1, 3)
         )
+    elif method == "median":
+        reshaped = array.reshape(array.shape[0] // binning, binning, array.shape[1] // binning, binning)
         binned = np.median(reshaped, axis=(1, 3))
     else:
         raise ValueError(f"{method} is not an accepted averaging method.")

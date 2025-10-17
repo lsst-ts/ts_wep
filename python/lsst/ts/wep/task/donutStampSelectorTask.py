@@ -149,17 +149,10 @@ class DonutStampSelectorTask(pipeBase.Task):
         """
         result = self.selectStamps(donutStamps)
 
-        selectedStamps = DonutStamps(
-            [donutStamps[i] for i in range(len(donutStamps)) if result.selected[i]]
-        )
+        selectedStamps = DonutStamps([donutStamps[i] for i in range(len(donutStamps)) if result.selected[i]])
         selectedStamps._refresh_metadata()
         # Need to copy a few other fields by hand
-        for k in [
-            "SN",
-            "ENTROPY",
-            "FRAC_BAD_PIX",
-            "MAX_POWER_GRAD"
-        ]:
+        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
                     [
@@ -225,13 +218,10 @@ class DonutStampSelectorTask(pipeBase.Task):
             if self.config.selectWithEntropy:
                 entropySelect = entropyValue < self.config.maxEntropy
                 self.log.info(
-                    f"{sum(entropySelect)} of {len(entropySelect)} donuts "
-                    "passed entropy selection."
+                    f"{sum(entropySelect)} of {len(entropySelect)} donuts passed entropy selection."
                 )
         elif self.config.selectWithEntropy:
-            self.log.warning(
-                "selectWithEntropy==True but ENTROPY not in stamp metadata."
-            )
+            self.log.warning("selectWithEntropy==True but ENTROPY not in stamp metadata.")
 
         # Collect the donut radius metric from stamps metadata
         if "RADIUS" in list(donutStamps.metadata):
@@ -261,15 +251,10 @@ class DonutStampSelectorTask(pipeBase.Task):
 
                 # Select using the given threshold
                 snSelect = snThreshold < snValue
-                self.log.info(
-                    f"{sum(snSelect)} of {len(snSelect)} donuts "
-                    "passed SNR selection."
-                )
+                self.log.info(f"{sum(snSelect)} of {len(snSelect)} donuts passed SNR selection.")
 
         elif self.config.selectWithSignalToNoise:
-            self.log.warning(
-                "selectWithSignalToNoise==True but SN not in stamp metadata."
-            )
+            self.log.warning("selectWithSignalToNoise==True but SN not in stamp metadata.")
 
         # By default select all donuts,  only overwritten
         # if selectWithFracBadPixels is True
@@ -283,14 +268,10 @@ class DonutStampSelectorTask(pipeBase.Task):
             if self.config.selectWithFracBadPixels:
                 fracBadPixSelect = fracBadPix <= self.config.maxFracBadPixels
                 self.log.info(
-                    f"{sum(fracBadPixSelect)} of {len(fracBadPixSelect)} donuts "
-                    "passed bad pixel selection."
+                    f"{sum(fracBadPixSelect)} of {len(fracBadPixSelect)} donuts passed bad pixel selection."
                 )
         elif self.config.selectWithFracBadPixels:
-            self.log.warning(
-                "selectWithFracBadPixels==True but "
-                "FRAC_BAD_PIX not in stamp metadata."
-            )
+            self.log.warning("selectWithFracBadPixels==True but FRAC_BAD_PIX not in stamp metadata.")
 
         # By default select all donuts,  only overwritten
         # if selectWithMaxPowerGrad is True
@@ -308,18 +289,12 @@ class DonutStampSelectorTask(pipeBase.Task):
                     "donuts passed power spectrum selection."
                 )
         elif self.config.selectWithMaxPowerGrad:
-            self.log.warning(
-                "selectWithMaxPowerGrad==True but "
-                "MAX_POWER_GRAD not in stamp metadata."
-            )
+            self.log.warning("selectWithMaxPowerGrad==True but MAX_POWER_GRAD not in stamp metadata.")
 
         # choose only donuts that satisfy all selected conditions
         if self.config.doSelection:
             selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect
-            self.log.info(
-                f"{sum(selected)} of {len(selected)} donuts "
-                "passed combined selection criteria."
-            )
+            self.log.info(f"{sum(selected)} of {len(selected)} donuts passed combined selection criteria.")
             # make sure we don't select more than maxSelect
             if self.config.maxSelect != -1:
                 selected[np.cumsum(selected) > self.config.maxSelect] = False

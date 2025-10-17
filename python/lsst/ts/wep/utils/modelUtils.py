@@ -167,17 +167,11 @@ def forwardModelPair(
 
     # Sample random field angles?
     _maxAngle = np.max(
-        [
-            params["thetaMax"]
-            for edge in mapper.instrument.maskParams.values()
-            for params in edge.values()
-        ]
+        [params["thetaMax"] for edge in mapper.instrument.maskParams.values() for params in edge.values()]
     )
     _fieldAngleRadius = rng.uniform(0, _maxAngle)
     _fieldAngleAzimuth = rng.uniform(0, 2 * np.pi)
-    _fieldAngle = _fieldAngleRadius * np.array(
-        [np.cos(_fieldAngleAzimuth), np.sin(_fieldAngleAzimuth)]
-    )
+    _fieldAngle = _fieldAngleRadius * np.array([np.cos(_fieldAngleAzimuth), np.sin(_fieldAngleAzimuth)])
     if fieldAngleIntra is None and fieldAngleExtra is None:
         fieldAngleIntra = tuple(_fieldAngle)
         fieldAngleExtra = tuple(_fieldAngle)
@@ -214,9 +208,7 @@ def forwardModelPair(
         blendRatiosIntra = [0]
     else:
         offsets = np.atleast_2d(blendOffsetsIntra)
-        blendRatiosIntra = (
-            np.ones(offsets.shape[0]) if blendRatiosIntra is None else blendRatiosIntra
-        )
+        blendRatiosIntra = np.ones(offsets.shape[0]) if blendRatiosIntra is None else blendRatiosIntra
         centralDonut = intraStamp.image.copy()
         for blendShift, ratio in zip(offsets, blendRatiosIntra):
             intraStamp.image += ratio * shift(centralDonut, blendShift[::-1])
@@ -236,9 +228,7 @@ def forwardModelPair(
     # Pseudo-Poissonian noise
     intraStamp.image += background
     intraStamp.image = np.clip(intraStamp.image, 0, None)
-    intraStamp.image += rng.normal(size=intraStamp.image.shape) * np.sqrt(
-        intraStamp.image
-    )
+    intraStamp.image += rng.normal(size=intraStamp.image.shape) * np.sqrt(intraStamp.image)
     intraStamp.image -= background
 
     # Now the extrafocal image
@@ -257,9 +247,7 @@ def forwardModelPair(
         blendRatiosExtra = [0]
     else:
         offsets = np.atleast_2d(blendOffsetsExtra)
-        blendRatiosExtra = (
-            np.ones(offsets.shape[0]) if blendRatiosExtra is None else blendRatiosExtra
-        )
+        blendRatiosExtra = np.ones(offsets.shape[0]) if blendRatiosExtra is None else blendRatiosExtra
         centralDonut = extraStamp.image.copy()
         for blendShift, ratio in zip(offsets, blendRatiosExtra):
             extraStamp.image += ratio * shift(centralDonut, blendShift[::-1])
@@ -279,9 +267,7 @@ def forwardModelPair(
     # Pseudo-Poissonian noise
     extraStamp.image += background
     extraStamp.image = np.clip(extraStamp.image, 0, None)
-    extraStamp.image += rng.normal(size=extraStamp.image.shape) * np.sqrt(
-        extraStamp.image
-    )
+    extraStamp.image += rng.normal(size=extraStamp.image.shape) * np.sqrt(extraStamp.image)
     extraStamp.image -= background
 
     return zkCoeff, intraStamp, extraStamp

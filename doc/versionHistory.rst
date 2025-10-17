@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-14.17.2:
+
+-------------
+ 14.17.2
+-------------
+
+* Run ruff format after upgrade in lsst-ts/ts_pre_commit_conf.
+
 .. _lsst.ts.wep-14.17.1:
 
 -------------

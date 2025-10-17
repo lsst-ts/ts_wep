@@ -66,9 +66,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testDonutStampSelectorPipeline.yaml"
-        )
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testDonutStampSelectorPipeline.yaml")
         if "pretest_run_science" in collectionsList:
             cls.baseRunName = "pretest_run_science"
             collections += ",pretest_run_science"
@@ -103,7 +101,6 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         }
 
     def testValidateConfigs(self) -> None:
-
         # Test the default config values
         self.OrigTask = DonutStampSelectorTask(config=self.config, name="Orig Task")
         self.assertEqual(self.OrigTask.config.selectWithEntropy, False)
@@ -251,7 +248,5 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
     def testPipelineRun(self) -> None:
         # Config specifies maxSelect=1, so the Zernike table should only have
         # 2 rows (average, and pair 1)
-        zernikes = self.butler.get(
-            "zernikes", dataId=self.dataIdExtra, collections=[self.runName]
-        )
+        zernikes = self.butler.get("zernikes", dataId=self.dataIdExtra, collections=[self.runName])
         self.assertEqual(len(zernikes), 2)

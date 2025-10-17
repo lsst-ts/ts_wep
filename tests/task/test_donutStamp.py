@@ -38,16 +38,12 @@ class TestDonutStamp(unittest.TestCase):
     def setUp(self) -> None:
         self.nStamps = 3
         self.stampSize = 32
-        self.testStamps, self.testMetadata = self._makeStamps(
-            self.nStamps, self.stampSize
-        )
+        self.testStamps, self.testMetadata = self._makeStamps(self.nStamps, self.stampSize)
         self.testDefaultStamps, self.testDefaultMetadata = self._makeStamps(
             self.nStamps, self.stampSize, testDefaults=True
         )
 
-    def _makeStamps(
-        self, nStamps: int, stampSize: int, testDefaults: bool = False
-    ) -> tuple[list, dict]:
+    def _makeStamps(self, nStamps: int, stampSize: int, testDefaults: bool = False) -> tuple[list, dict]:
         randState = np.random.RandomState(42)
         stampList = []
 
@@ -112,9 +108,7 @@ class TestDonutStamp(unittest.TestCase):
             self.assertEqual(centroidPos.getX(), i + 20)
             self.assertEqual(centroidPos.getY(), i + 25)
             blendCentroidPos = donutStamp.blend_centroid_positions
-            np.testing.assert_array_equal(
-                blendCentroidPos, np.array([[i + 30, i + 35]])
-            )
+            np.testing.assert_array_equal(blendCentroidPos, np.array([[i + 30, i + 35]]))
             camName = donutStamp.cam_name
             self.assertEqual("LSSTCam", camName)
             defocalType = donutStamp.defocal_type
@@ -138,9 +132,7 @@ class TestDonutStamp(unittest.TestCase):
         """
 
         for i in range(self.nStamps):
-            donutStamp = DonutStamp.factory(
-                self.testDefaultStamps[i], self.testDefaultMetadata, i
-            )
+            donutStamp = DonutStamp.factory(self.testDefaultStamps[i], self.testDefaultMetadata, i)
             defocalDist = donutStamp.defocal_distance
             # Test default metadata distance of 1.5 mm
             self.assertEqual(defocalDist, 1.5)
@@ -209,9 +201,7 @@ class TestDonutStamp(unittest.TestCase):
                 refPt = detOrientation.getReferencePoint()
                 trueFieldPos = detOrientation.getFpPosition()
                 # Convert to field angle
-                trueFieldAngleX, trueFieldAngleY = detector.transform(
-                    trueFieldPos, FOCAL_PLANE, FIELD_ANGLE
-                )
+                trueFieldAngleX, trueFieldAngleY = detector.transform(trueFieldPos, FOCAL_PLANE, FIELD_ANGLE)
                 donutStamp = DonutStamp(
                     self.testStamps[0],
                     lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),

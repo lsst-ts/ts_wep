@@ -231,8 +231,7 @@ class WfEstimator:
         allowed_units = ["m", "um", "nm", "arcsec"]
         if value not in allowed_units:
             raise ValueError(
-                f"Unit '{value}' not supported. "
-                f"Please choose one of {str(allowed_units)[1:-1]}."
+                f"Unit '{value}' not supported. Please choose one of {str(allowed_units)[1:-1]}."
             )
         self._units = value
 

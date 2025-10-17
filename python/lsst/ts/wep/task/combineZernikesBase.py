@@ -82,8 +82,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         # Make sure that flags contains only integers
         flags = np.array(flags, dtype=int)
         self.log.info(
-            f"Using {len(flags)-np.sum(flags)} pairs out of {len(zernikeArray)} "
-            "in final Zernike estimate."
+            f"Using {len(flags) - np.sum(flags)} pairs out of {len(zernikeArray)} in final Zernike estimate."
         )
 
         # Save flags and summary values in task metadata
@@ -94,9 +93,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         return pipeBase.Struct(combinedZernikes=combinedZernikes, flags=flags)
 
     @abc.abstractmethod
-    def combineZernikes(
-        self, zernikeArray: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def combineZernikes(self, zernikeArray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
         Class specific algorithm to combine the Zernike
         coefficients from each individual donut pair into

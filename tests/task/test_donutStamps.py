@@ -85,9 +85,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         metadata["DFC_DIST"] = dfcDists
         metadata["BANDPASS"] = bandpass
 
-        donutStampList = [
-            DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)
-        ]
+        donutStampList = [DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)]
 
         return DonutStamps(donutStampList, metadata=metadata)
 
@@ -109,12 +107,8 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
                     stamp1.sky_position.getDec().asDegrees(),
                     stamp2.sky_position.getDec().asDegrees(),
                 )
-                self.assertAlmostEqual(
-                    stamp1.centroid_position.getX(), stamp2.centroid_position.getX()
-                )
-                self.assertAlmostEqual(
-                    stamp1.centroid_position.getY(), stamp2.centroid_position.getY()
-                )
+                self.assertAlmostEqual(stamp1.centroid_position.getX(), stamp2.centroid_position.getX())
+                self.assertAlmostEqual(stamp1.centroid_position.getY(), stamp2.centroid_position.getY())
                 self.assertEqual(stamp1.detector_name, stamp2.detector_name)
                 self.assertEqual(stamp1.cam_name, stamp2.cam_name)
                 self.assertEqual(stamp1.defocal_type, stamp2.defocal_type)
@@ -186,9 +180,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         # check if appending something other than a DonutStamp raises
         with self.assertRaises(ValueError) as context:
             self.donutStamps.append("hello world")
-        self.assertEqual(
-            "Objects added must be a DonutStamp object.", str(context.exception)
-        )
+        self.assertEqual("Objects added must be a DonutStamp object.", str(context.exception))
 
     def testExtend(self) -> None:
         donutStamps2 = copy(self.donutStamps)
@@ -201,9 +193,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         # object raises
         with self.assertRaises(ValueError) as context:
             self.donutStamps.extend(["hello", "world"])
-        self.assertEqual(
-            "Can only extend with DonutStamp objects.", str(context.exception)
-        )
+        self.assertEqual("Can only extend with DonutStamp objects.", str(context.exception))
 
     def testIOsub(self) -> None:
         """

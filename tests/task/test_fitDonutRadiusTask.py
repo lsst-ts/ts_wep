@@ -108,9 +108,7 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
             "X_PIX_RIGHT_EDGE",
             "FAIL_FLAG",
         ]
-        self.assertLessEqual(
-            set(expected_columns), set(taskOut.donutRadiiTable.colnames)
-        )
+        self.assertLessEqual(set(expected_columns), set(taskOut.donutRadiiTable.colnames))
         # test that correct detector names are present
         self.assertEqual(
             set(np.unique(taskOut.donutRadiiTable["DET_NAME"].value)),
@@ -148,9 +146,7 @@ class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):
             "X_PIX_RIGHT_EDGE",
             "FAIL_FLAG",
         ]
-        self.assertLessEqual(
-            set(expected_columns), set(taskOut.donutRadiiTable.colnames)
-        )
+        self.assertLessEqual(set(expected_columns), set(taskOut.donutRadiiTable.colnames))
         # test that correct detector names are present
         self.assertEqual(
             set(np.unique(taskOut.donutRadiiTable["DET_NAME"].value)),

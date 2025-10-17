@@ -275,15 +275,11 @@ def _fitEdges(thx: float, optic: batoid.CompoundOptic, wavelength: float) -> dic
         rInner = getattr(obsc, "inner", np.nan)
 
         # Fit the outer radius
-        center, radius = _fitCircle(
-            xPupil, yPupil, xItem, yItem, rPupilOut, rPupilIn, rOuter
-        )
+        center, radius = _fitCircle(xPupil, yPupil, xItem, yItem, rPupilOut, rPupilIn, rOuter)
         fits[name] = dict()
         fits[name]["outer"] = dict(clear=outerClear, center=center, radius=radius)
         if np.isfinite(rInner):
-            center, radius = _fitCircle(
-                xPupil, yPupil, xItem, yItem, rPupilOut, rPupilIn, rInner
-            )
+            center, radius = _fitCircle(xPupil, yPupil, xItem, yItem, rPupilOut, rPupilIn, rInner)
             fits[name]["inner"] = dict(clear=innerClear, center=center, radius=radius)
 
     return fits
@@ -373,12 +369,8 @@ def fitMaskModel(
             if np.sum(mask) > 0:
                 fitDict[key][edge]["thetaMin"] = fit["theta"].min()
                 fitDict[key][edge]["thetaMax"] = thetaMax
-                fitDict[key][edge]["center"] = np.polyfit(
-                    fit["theta"], fit["center"], deg
-                )
-                fitDict[key][edge]["radius"] = np.polyfit(
-                    fit["theta"], fit["radius"], deg
-                )
+                fitDict[key][edge]["center"] = np.polyfit(fit["theta"], fit["center"], deg)
+                fitDict[key][edge]["radius"] = np.polyfit(fit["theta"], fit["radius"], deg)
             else:
                 fitDict[key][edge]["thetaMin"] = np.nan
                 fitDict[key][edge]["thetaMax"] = np.nan

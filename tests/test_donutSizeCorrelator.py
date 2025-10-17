@@ -11,8 +11,9 @@ from lsst.ts.wep.utils import (
     writePipetaskCmd,
     DefocalType,
     createTemplateForDetector,
-    getTaskInstrument
+    getTaskInstrument,
 )
+
 
 class TestDonutSizeCorrelator(lsst.utils.tests.TestCase):
     runName: str
@@ -110,15 +111,11 @@ class TestDonutSizeCorrelator(lsst.utils.tests.TestCase):
         # Create image with a bright ring at a known radius
         size = 512
         Y, X = np.indices((size, size))
-        r = np.sqrt((X - size//2)**2 + (Y - size//2)**2)
-        image = np.exp(-((r - 60.0)**2) / (2 * 3**2))  # Approximate donut
+        r = np.sqrt((X - size // 2) ** 2 + (Y - size // 2) ** 2)
+        image = np.exp(-((r - 60.0) ** 2) / (2 * 3**2))  # Approximate donut
 
         diameters, correlations = self.correlator.correlateImage(
-            image=image,
-            resolution=4,
-            dMin=40,
-            dMax=100,
-            length=256
+            image=image, resolution=4, dMin=40, dMax=100, length=256
         )
 
         self.assertIsInstance(diameters, np.ndarray)
@@ -130,31 +127,30 @@ class TestDonutSizeCorrelator(lsst.utils.tests.TestCase):
     def testGetDonutDiameter(self) -> None:
         # Create a donut template and compare to the expected radius
         camera = LsstCam.getCamera()
-        detectorName = 'R44_SW1'
+        detectorName = "R44_SW1"
         instrument = getTaskInstrument(
-                    'LSSTCam',
-                detectorName,
-            )
+            "LSSTCam",
+            detectorName,
+        )
 
         # change offset from 0.0015 to create large donut
         instrument.defocalOffset = 0.0025
 
         template = createTemplateForDetector(
-        detector=camera.get(detectorName),
-        defocalType=DefocalType.Intra,
-        bandLabel='r',
-        instrument=instrument,
-        opticalModel='offAxis',
-        padding=5,
-        isBinary=True,
+            detector=camera.get(detectorName),
+            defocalType=DefocalType.Intra,
+            bandLabel="r",
+            instrument=instrument,
+            opticalModel="offAxis",
+            padding=5,
+            isBinary=True,
         )
         diameter, diameters, correlations = self.correlator.getDonutDiameter(template)
 
         self.assertTrue(np.isfinite(diameter))
         self.assertIsInstance(diameter, (int, float, np.integer))
         self.assertGreater(diameter, 200)
-        self.assertTrue(abs(diameter- instrument.donutDiameter)< 25)  # Loose tolerance
-
+        self.assertTrue(abs(diameter - instrument.donutDiameter) < 25)  # Loose tolerance
 
     @classmethod
     def tearDownClass(cls) -> None:

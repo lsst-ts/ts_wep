@@ -148,9 +148,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         refObjLoader = ReferenceObjectLoader(
             dataIds=[ref.dataId for ref in refCatalogList],
             refCats=refCatalogList,
-            config=LoadReferenceObjectsConfig(
-                anyFilterMapsToThis=self.config.anyFilterMapsToThis
-            ),
+            config=LoadReferenceObjectsConfig(anyFilterMapsToThis=self.config.anyFilterMapsToThis),
         )
         # This removes the padding around the border of detector BBox when
         # matching to reference catalog.
@@ -171,18 +169,12 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         detectorWcs = exposure.getWcs()
         anyFilterMapsToThis = self.config.anyFilterMapsToThis
         edgeMargin = self.config.edgeMargin
-        filterName = (
-            exposure.filter.bandLabel
-            if anyFilterMapsToThis is None
-            else anyFilterMapsToThis
-        )
+        filterName = exposure.filter.bandLabel if anyFilterMapsToThis is None else anyFilterMapsToThis
 
         try:
             # Match detector layout to reference catalog
             self.log.info("Running Donut Selector")
-            donutSelectorTask = (
-                self.donutSelector if self.config.doDonutSelection is True else None
-            )
+            donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
             refSelection, blendCentersX, blendCentersY = runSelection(
                 refObjLoader,
                 detector,
@@ -203,12 +195,8 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             blendCentersX = None
             blendCentersY = None
 
-        fieldObjects = donutCatalogToAstropy(
-            refSelection, filterName, blendCentersX, blendCentersY
-        )
-        fieldObjects["detector"] = np.array(
-            [detector.getName()] * len(fieldObjects), dtype=str
-        )
+        fieldObjects = donutCatalogToAstropy(refSelection, filterName, blendCentersX, blendCentersY)
+        fieldObjects["detector"] = np.array([detector.getName()] * len(fieldObjects), dtype=str)
 
         fieldObjects = addVisitInfoToCatTable(exposure, fieldObjects)
 

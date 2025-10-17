@@ -47,10 +47,7 @@ class DonutQuickMeasurementTaskConfig(QuickFrameMeasurementTaskConfig):
         default=5,
     )
     doPreConvolution: pexConfig.Field = pexConfig.Field(
-        doc=str(
-            "Perform a preconvolution of the image with a donut model? "
-            + "(The default is True.)"
-        ),
+        doc=str("Perform a preconvolution of the image with a donut model? " + "(The default is True.)"),
         dtype=bool,
         default=True,
     )
@@ -126,8 +123,7 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
         if self.config.doPreConvolution:
             if template is None:
                 errMsg = str(
-                    "Template required if doPreConvolution "
-                    + "configuration parameter is set to True."
+                    "Template required if doPreConvolution " + "configuration parameter is set to True."
                 )
                 raise ValueError(errMsg)
             exp.image.array = np.array(

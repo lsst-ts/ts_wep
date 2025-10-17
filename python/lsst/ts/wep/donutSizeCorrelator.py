@@ -159,7 +159,7 @@ class DonutSizeCorrelator:
         nOffsets = 10
         offsets = np.arange(nOffsets + 1) / nOffsets - 0.5
         dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
-        dy = dy.reshape(-1, 1, 1) # Reshape for broadcasting
+        dy = dy.reshape(-1, 1, 1)  # Reshape for broadcasting
         dx = dx.reshape(-1, 1, 1)
 
         # Distance to each subpixel
@@ -220,7 +220,7 @@ class DonutSizeCorrelator:
             # Create new template
             template = self.createDonutTemplate(diameter / resolution)
 
-             # Normalize the template
+            # Normalize the template
             template /= template.sum()
 
             # Calculate max correlation in image
@@ -326,7 +326,7 @@ class DonutSizeCorrelator:
             # We will calculate peaks/prominence with respect to zero
             secondDeriv = np.clip(np.append(secondDeriv, 0), 0, None)
 
-             # Now find peaks and prominences
+            # Now find peaks and prominences
             peaks, _ = find_peaks(secondDeriv)
             prominences, *_ = peak_prominences(secondDeriv, peaks)
             if len(peaks) > 0:

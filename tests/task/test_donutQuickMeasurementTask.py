@@ -81,9 +81,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
                 collections,
                 pipelineYaml=pipelineYaml,
             )
-            pipeCmd += (
-                f" -d 'detector in ({cls.detNum}) and exposure in ({cls.expNum})'"
-            )
+            pipeCmd += f" -d 'detector in ({cls.detNum}) and exposure in ({cls.expNum})'"
             runProgram(pipeCmd)
 
     @classmethod
@@ -110,18 +108,14 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
             "exposure": self.expNum,
             "visit": self.expNum,
         }
-        self.postIsrExp = self.butler.get(
-            "post_isr_image", dataId=testDataId, collections=self.runName
-        )
+        self.postIsrExp = self.butler.get("post_isr_image", dataId=testDataId, collections=self.runName)
 
     def _getTemplate(self) -> np.ndarray:
         # Get the detector
         cam = LsstCam().getCamera()
         detector = cam.get("R22_S11")
 
-        return createTemplateForDetector(
-            detector=detector, defocalType=DefocalType.Extra
-        )
+        return createTemplateForDetector(detector=detector, defocalType=DefocalType.Extra)
 
     def testValidateConfigs(self) -> None:
         # Check default configuration
@@ -135,9 +129,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         self.config.initialCutoutPadding = 10
         self.config.doPreConvolution = False
         self.config.nSigmaDetection = 5
-        self.modifiedTask = DonutQuickMeasurementTask(
-            config=self.config, name="Mod Task"
-        )
+        self.modifiedTask = DonutQuickMeasurementTask(config=self.config, name="Mod Task")
         self.assertEqual(self.modifiedTask.config.initialCutoutPadding, 10)
         self.assertFalse(self.modifiedTask.config.doPreConvolution)
         self.assertEqual(self.modifiedTask.config.nSigmaDetection, 5)
@@ -146,10 +138,7 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             self.task.run(self.postIsrExp)
         self.assertEqual(
-            str(
-                "Template required if doPreConvolution "
-                + "configuration parameter is set to True."
-            ),
+            str("Template required if doPreConvolution " + "configuration parameter is set to True."),
             str(context.exception),
         )
 
@@ -162,12 +151,8 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
 
         self.assertEqual(len(outputDf), 3)
         # Check centroids within 10 pixels of expected
-        np.testing.assert_allclose(
-            np.sort(outputDf["centroid_x"]), [617.0, 2814.0, 3815.0], atol=10
-        )
-        np.testing.assert_allclose(
-            np.sort(outputDf["centroid_y"]), [398.0, 2198.0, 3196.0], atol=10
-        )
+        np.testing.assert_allclose(np.sort(outputDf["centroid_x"]), [617.0, 2814.0, 3815.0], atol=10)
+        np.testing.assert_allclose(np.sort(outputDf["centroid_y"]), [398.0, 2198.0, 3196.0], atol=10)
         # All detected donuts should be same magnitude.
         # Check aperture fluxes are all within 10% of one another.
         relFluxDiff = outputDf["apFlux70"] / np.max(outputDf["apFlux70"])
@@ -181,12 +166,8 @@ class TestDonutQuickMeasurementTask(unittest.TestCase):
 
         self.assertEqual(len(outputDf), 3)
         # Check centroids within 10 pixels of expected
-        np.testing.assert_allclose(
-            np.sort(outputDf["centroid_x"]), [617.0, 2814.0, 3815.0], atol=10
-        )
-        np.testing.assert_allclose(
-            np.sort(outputDf["centroid_y"]), [398.0, 2198.0, 3196.0], atol=10
-        )
+        np.testing.assert_allclose(np.sort(outputDf["centroid_x"]), [617.0, 2814.0, 3815.0], atol=10)
+        np.testing.assert_allclose(np.sort(outputDf["centroid_y"]), [398.0, 2198.0, 3196.0], atol=10)
         # All detected donuts should be same magnitude.
         # Check aperture fluxes are all within 10% of one another.
         relFluxDiff = outputDf["apFlux70"] / np.max(outputDf["apFlux70"])

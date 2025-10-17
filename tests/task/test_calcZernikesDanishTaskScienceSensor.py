@@ -137,9 +137,7 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        zernCoeff = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
+        zernCoeff = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 25))
 
@@ -147,9 +145,5 @@ class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
         testArr = np.zeros((2, 25))
         testArr[1] += 2.0
         combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.combinedZernikes, np.ones(25)
-        )
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.flags, np.zeros(len(testArr))
-        )
+        np.testing.assert_array_equal(combinedZernikesStruct.combinedZernikes, np.ones(25))
+        np.testing.assert_array_equal(combinedZernikesStruct.flags, np.zeros(len(testArr)))

@@ -90,9 +90,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         if runName == "run1":
             instrument = "lsst.obs.lsst.LsstCam"
             cls.cameraName = "LSSTCam"
-            pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testCutoutsFamPipeline.yaml"
-            )
+            pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsFamPipeline.yaml")
 
             pipeCmd = writePipetaskCmd(
                 cls.repoDir,
@@ -119,9 +117,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             cls.run2Name,
             instrument,
             collections,
-            pipelineYaml=os.path.join(
-                testPipelineConfigDir, "testCutoutsFamPipelineTablePairer.yaml"
-            ),
+            pipelineYaml=os.path.join(testPipelineConfigDir, "testCutoutsFamPipelineTablePairer.yaml"),
         )
         pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
         runProgram(pipeCmd)
@@ -132,9 +128,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "run3",
             instrument,
             collections,
-            pipelineYaml=os.path.join(
-                testPipelineConfigDir, "testCutoutsFamPipelineGroupPairer.yaml"
-            ),
+            pipelineYaml=os.path.join(testPipelineConfigDir, "testCutoutsFamPipelineGroupPairer.yaml"),
         )
         pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
         runProgram(pipeCmd)
@@ -171,15 +165,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         focusZNegative = -1
         focusZPositive = 1
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZNegative, focusZPositive, "LSSTCam"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZNegative, focusZPositive, "LSSTCam")
         self.assertEqual(extraIdx, 1)
         self.assertEqual(intraIdx, 0)
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZPositive, focusZNegative, "LSSTCam"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZPositive, focusZNegative, "LSSTCam")
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
@@ -187,15 +177,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         focusZNegative = -1
         focusZPositive = 1
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZNegative, focusZPositive, "LSSTComCam"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZNegative, focusZPositive, "LSSTComCam")
         self.assertEqual(extraIdx, 1)
         self.assertEqual(intraIdx, 0)
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZPositive, focusZNegative, "LSSTComCam"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZPositive, focusZNegative, "LSSTComCam")
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
@@ -203,15 +189,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         focusZNegative = -1
         focusZPositive = 1
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZNegative, focusZPositive, "LSSTComCamSim"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZNegative, focusZPositive, "LSSTComCamSim")
         self.assertEqual(extraIdx, 1)
         self.assertEqual(intraIdx, 0)
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZPositive, focusZNegative, "LSSTComCamSim"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZPositive, focusZNegative, "LSSTComCamSim")
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
 
@@ -228,19 +210,11 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
     def testTaskRun(self) -> None:
         # Grab two exposures from the same detector at two different visits to
         # get extra and intra
-        exposureExtra = self.butler.get(
-            "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        exposureIntra = self.butler.get(
-            "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        exposureExtra = self.butler.get("post_isr_image", dataId=self.dataIdExtra, collections=[self.runName])
+        exposureIntra = self.butler.get("post_isr_image", dataId=self.dataIdIntra, collections=[self.runName])
 
-        donutCatalogExtra = self.butler.get(
-            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutCatalogIntra = self.butler.get(
-            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        donutCatalogExtra = self.butler.get("donutTable", dataId=self.dataIdExtra, collections=[self.runName])
+        donutCatalogIntra = self.butler.get("donutTable", dataId=self.dataIdIntra, collections=[self.runName])
         camera = self.butler.get(
             "camera",
             dataId={"instrument": "LSSTCam"},
@@ -258,9 +232,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         ]
         noSrcDonutCatalog = QTable({column: [] for column in columns})
         noSrcDonutCatalog = addVisitInfoToCatTable(exposureExtra, noSrcDonutCatalog)
-        testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera
-        )
+        testOutNoSrc = self.task.run([exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera)
 
         self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
         self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
@@ -285,9 +257,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             self.assertMaskedImagesAlmostEqual(donutStamp.stamp_im, cutOutStamp.stamp_im)  # type: ignore
 
         # Check that the new metadata is stored in butler
-        donutStamps = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
-        )
+        donutStamps = self.butler.get("donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName])
         metadata = list(donutStamps.metadata)
         expectedMetadata = [
             "RA_DEG",
@@ -331,9 +301,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "BANDPASS",
         ]
         # Test that all expected metadata is included in the butler
-        self.assertEqual(
-            np.sum(np.in1d(expectedMetadata, metadata)), len(expectedMetadata)
-        )
+        self.assertEqual(np.sum(np.in1d(expectedMetadata, metadata)), len(expectedMetadata))
         for measure in [
             "SIGNAL_SUM",
             "SIGNAL_MEAN",
@@ -343,9 +311,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "ENTROPY",
             "PEAK_HEIGHT",
         ]:
-            self.assertEqual(
-                len(donutStamps), len(donutStamps.metadata.getArray(measure))
-            )
+            self.assertEqual(len(donutStamps), len(donutStamps.metadata.getArray(measure)))
 
     @staticmethod
     def compareMetadata(metadata1: dict, metadata2: dict) -> bool:
