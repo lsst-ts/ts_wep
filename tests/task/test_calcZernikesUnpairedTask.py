@@ -64,26 +64,31 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
-        cls.runName = "run1"
-        if cls.runName in collectionsList:
-            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-            runProgram(cleanUpCmd)
-
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
-        instrument = "lsst.obs.lsst.LsstCam"
-        cls.cameraName = "LSSTCam"
-        pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsUnpairedPipeline.yaml")
         if "pretest_run_science" in collectionsList:
-            pipelineYaml += "#cutOutDonutsUnpairedTask"
-            collections += ",pretest_run_science"
+            cls.runName = "pretest_run_science"
+        else:
+            cls.runName = "run1"
+            if cls.runName in collectionsList:
+                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+                runProgram(cleanUpCmd)
 
-        pipeCmd = writePipetaskCmd(
-            cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
-        )
-        # Make sure we are using the right exposure+detector combinations
-        pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
-        pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
-        runProgram(pipeCmd)
+            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+            instrument = "lsst.obs.lsst.LsstCam"
+            pipelineYaml = os.path.join(
+                testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
+            )
+
+            pipeCmd = writePipetaskCmd(
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
+            )
+            # Make sure we are using the right exposure+detector combinations
+            pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
+            pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
+            runProgram(pipeCmd)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -109,8 +114,12 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
     def testWithAndWithoutPairs(self) -> None:
         # Load data from butler
-        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
-        donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
+        donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
@@ -137,8 +146,12 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
     def testTable(self) -> None:
         # Load data from butler
-        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
-        donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
+        donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:

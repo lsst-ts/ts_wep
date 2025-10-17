@@ -14,6 +14,7 @@ Version History
 
 * Fix CalcZernikesUnpairedTask to handle new `numCores` parameter in estimateZernikes.
 * Redefine Unpaired tasks to run on each detector independently.
+* Remove cutOutDonutsUnpairedTask since it replicates code in cutOutDonutsCwfsTask.
 
 .. _lsst.ts.wep-14.17.2:
 
