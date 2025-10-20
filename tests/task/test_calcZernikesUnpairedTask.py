@@ -92,8 +92,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-        runProgram(cleanUpCmd)
+        if cls.runName == "run1":
+            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+            runProgram(cleanUpCmd)
 
     def setUp(self) -> None:
         self.butler = Butler.from_config(self.repoDir)
