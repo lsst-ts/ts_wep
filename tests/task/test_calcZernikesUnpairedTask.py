@@ -257,4 +257,6 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         with self.assertRaises(ValueError) as cm:
             task = CalcZernikesUnpairedTask()
             task.createZkTableMetadata()
-        self.assertEqual(str(cm.exception), "No stamps available. Cannot create metadata.")
+        self.assertEqual(
+            str(cm.exception), "No metadata in either DonutStamps object. Cannot create Zk table metadata."
+        )
