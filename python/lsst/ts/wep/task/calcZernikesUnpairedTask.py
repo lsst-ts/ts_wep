@@ -89,13 +89,6 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         donutStamps: DonutStamps,
         numCores: int = 1,
     ) -> pipeBase.Struct:
-        # Assign stamps to either intra or extra
-        defocalType = donutStamps.metadata["DFC_TYPE"]
-        if defocalType == "extra":
-            self.stampsExtra = donutStamps
-        else:
-            self.stampsIntra = donutStamps
-
         if len(donutStamps) == 0:
             self.log.info("No donut stamps available.")
             return self.empty()
@@ -117,6 +110,8 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             selectedDonuts = donutStamps
             donutQualityTable = QTable([])
 
+        # Assign stamps to either intra or extra
+        defocalType = donutStamps.metadata["DFC_TYPE"]
         if defocalType == "extra":
             self.stampsExtra = selectedDonuts
             if len(donutQualityTable) > 0:
