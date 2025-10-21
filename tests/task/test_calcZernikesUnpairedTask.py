@@ -31,6 +31,7 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CalcZernikesUnpairedTask,
     CalcZernikesUnpairedTaskConfig,
+    DonutStamps,
     EstimateZernikesDanishTask,
     EstimateZernikesTieTask,
 )
@@ -63,31 +64,37 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
-        cls.runName = "run1"
-        if cls.runName in collectionsList:
-            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-            runProgram(cleanUpCmd)
-
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
-        instrument = "lsst.obs.lsst.LsstCam"
-        cls.cameraName = "LSSTCam"
-        pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsUnpairedPipeline.yaml")
         if "pretest_run_science" in collectionsList:
-            pipelineYaml += "#cutOutDonutsUnpairedTask"
-            collections += ",pretest_run_science"
+            cls.runName = "pretest_run_science"
+        else:
+            cls.runName = "run1"
+            if cls.runName in collectionsList:
+                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+                runProgram(cleanUpCmd)
 
-        pipeCmd = writePipetaskCmd(
-            cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
-        )
-        # Make sure we are using the right exposure+detector combinations
-        pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
-        pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
-        runProgram(pipeCmd)
+            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+            instrument = "lsst.obs.lsst.LsstCam"
+            pipelineYaml = os.path.join(
+                testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
+            )
+
+            pipeCmd = writePipetaskCmd(
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
+            )
+            # Make sure we are using the right exposure+detector combinations
+            pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
+            pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
+            runProgram(pipeCmd)
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-        runProgram(cleanUpCmd)
+        if cls.runName == "run1":
+            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+            runProgram(cleanUpCmd)
 
     def setUp(self) -> None:
         self.butler = Butler.from_config(self.repoDir)
@@ -108,8 +115,12 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
     def testWithAndWithoutPairs(self) -> None:
         # Load data from butler
-        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
-        donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
+        donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
@@ -136,8 +147,12 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
     def testTable(self) -> None:
         # Load data from butler
-        donutStampsExtra = self.butler.get("donutStamps", dataId=self.dataIdExtra, collections=[self.runName])
-        donutStampsIntra = self.butler.get("donutStamps", dataId=self.dataIdIntra, collections=[self.runName])
+        donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
@@ -225,7 +240,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
                 # test null run
-                structNull = task.run([])
+                emptyStamps = DonutStamps([], metadata=stamps.metadata)
+                structNull = task.run(emptyStamps)
 
                 for struct in [structNormal, structNull]:
                     # test that in accordance with declared connections,
@@ -236,3 +252,11 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
                     self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
                     self.assertIsInstance(struct.zernikes, QTable)
+
+    def testRaiseErrorNoneStamps(self) -> None:
+        with self.assertRaises(ValueError) as cm:
+            task = CalcZernikesUnpairedTask()
+            task.createZkTableMetadata()
+        self.assertEqual(
+            str(cm.exception), "No metadata in either DonutStamps object. Cannot create Zk table metadata."
+        )

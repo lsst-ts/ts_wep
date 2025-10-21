@@ -155,9 +155,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         self.doDonutStampSelector = config.doDonutStampSelector
 
-        # Initialize the donut stamps to None
-        self.stampsExtra = None
-        self.stampsIntra = None
+        # Initialize the donut stamps to empty placeholders
+        self.stampsExtra = DonutStamps([])
+        self.stampsIntra = DonutStamps([])
 
     def initZkTable(self) -> QTable:
         """Initialize the table to store the Zernike coefficients
@@ -202,8 +202,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
     def createZkTable(
         self,
-        extraStamps: DonutStamps,
-        intraStamps: DonutStamps,
         zkCoeffRaw: pipeBase.Struct,
         zkCoeffCombined: pipeBase.Struct,
     ) -> QTable:
@@ -215,10 +213,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         Parameters
         ----------
-        extraStamps: DonutStamps
-            The extrafocal stamps
-        intraStamps: DonutStamps
-            The intrafocal stamps
         zkCoeffRaw: pipeBase.Struct
             All zernikes returned by self.estimateZernikes.run(...)
         zkCoeffCombined
@@ -256,8 +250,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         )
         for i, (intra, extra, zk, flag) in enumerate(
             zip_longest(
-                intraStamps,
-                extraStamps,
+                self.stampsIntra,
+                self.stampsExtra,
                 zkCoeffRaw.zernikes,
                 zkCoeffCombined.flags,
             )
@@ -318,8 +312,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             )
             for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
                 for stamps, foc in [
-                    (intraStamps, "intra"),
-                    (extraStamps, "extra"),
+                    (self.stampsIntra, "intra"),
+                    (self.stampsExtra, "extra"),
                 ]:
                     if len(stamps) > 0 and key in stamps.metadata:
                         val = stamps.metadata.getArray(key)[i]
@@ -345,14 +339,14 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         meta["extra"] = {}
         cam_name = None
 
-        if self.stampsIntra is None and self.stampsExtra is None:
-            raise ValueError("No stamps available. Cannot create metadata.")
+        if not self.stampsIntra.metadata and not self.stampsExtra.metadata:
+            raise ValueError("No metadata in either DonutStamps object. Cannot create Zk table metadata.")
 
         for dict_, stamps in [
             (meta["intra"], self.stampsIntra),
             (meta["extra"], self.stampsExtra),
         ]:
-            if stamps is None:
+            if not stamps.metadata:
                 continue
             dict_["det_name"] = stamps.metadata["DET_NAME"]
             dict_["visit"] = stamps.metadata["VISIT"]
@@ -370,7 +364,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         meta["cam_name"] = cam_name
 
-        if self.stampsIntra is not None and self.stampsExtra is not None:
+        if self.stampsIntra.metadata and self.stampsExtra.metadata:
             assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]
 
         return meta
@@ -446,7 +440,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # by fitting the donut radius. If that fails, return empty struct.
         self.stampsExtra = donutStampsExtra
         self.stampsIntra = donutStampsIntra
-        if not self.stampsExtra or not self.stampsIntra:
+        if len(self.stampsExtra) == 0 or len(self.stampsIntra) == 0:
             return self.empty()
 
         # Run donut stamp selection. By default, doSelection is turned on,
@@ -485,8 +479,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
         zkTable = self.createZkTable(
-            selectedExtraStamps,
-            selectedIntraStamps,
             zkCoeffRaw,
             zkCoeffCombined,
         )
