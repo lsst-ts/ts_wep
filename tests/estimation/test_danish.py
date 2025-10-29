@@ -140,5 +140,16 @@ class TestDanishAlgorithm(unittest.TestCase):
 
         # Check metadata
         for metaDict in pairMeta, intraMeta, extraMeta:
-            self.assertEqual(["fwhm"], list(metaDict.keys()))
+            self.assertEqual(["fwhm", "model_dx", "model_dy", "model_sky_level"], list(metaDict.keys()))
             self.assertAlmostEqual(metaDict["fwhm"], 1.034, delta=0.01)
+        np.testing.assert_allclose(
+            pairMeta["model_dx"], [intraMeta["model_dx"], extraMeta["model_dx"]], atol=0.01
+        )
+        np.testing.assert_allclose(
+            pairMeta["model_dy"], [intraMeta["model_dy"], extraMeta["model_dy"]], atol=0.01
+        )
+        np.testing.assert_allclose(
+            pairMeta["model_sky_level"],
+            [intraMeta["model_sky_level"], extraMeta["model_sky_level"]],
+            atol=0.01,
+        )
