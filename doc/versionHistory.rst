@@ -5,6 +5,13 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-15.0.1:
+
+-------------
+15.0.1
+-------------
+
+* Fix donut mask selection in calculateSN of cutOutDonutsBase.
 
 .. _lsst.ts.wep-15.0.0:
 
