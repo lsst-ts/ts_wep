@@ -341,21 +341,46 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         mask = stamp.stamp_im.mask
         varianceArray = stamp.stamp_im.variance.array
 
-        # The following are example donut mask values:
-        # maskPlaneDict={'BAD': 0, 'BLEND': 10, 'CR': 3, 'DETECTED': 5,
-        # 'DETECTED_NEGATIVE': 6, 'DONUT': 9, 'EDGE': 4, 'INTRP': 2,
-        # 'NO_DATA': 8, 'SAT': 1, 'SUSPECT': 7}
+        # The mask plane value dictionary can be obtained via
+        # mask.getMaskPlaneDict(). They can be changed, hence
+        # avoid presuming any hard-coded values.
+        # We find which bit corresponds to DONUT presence with
+        # getPlaneBitMask method. We use bitwise_and to test
+        # for whether that bit is set. For example
+        # Pixel value: 73728 in binary: 10010000000000000
+        #                               ││└─ bit 0 (BAD)
+        #                               │└── bit 13 (DONUT) ✓ SET
+        #                               └─── bit 16 (PARTLY_VIGNETTED) ✓ SET
+        ## The Bitwise AND Operation (`&`)
+        # If `donutPlaneBit` is `2^13 = 8192`, which in binary is:
+        #    ```
+        #    8192 in binary: 10000000000000
+        #                    └─ only bit 13 is set
+        # Example with value 73728 (has DONUT bit set)
+        #      10010000000000000  (73728 - original mask value)
+        #    & 00010000000000000  (8192 - DONUT bit mask)
+        #    -------------------
+        #      00010000000000000  (8192 - result is non-zero!)
+        #
+        # Example with value 65536 (NO DONUT bit)
+        #      10000000000000000  (65536 - only PARTLY_VIGNETTED)
+        #    & 00010000000000000  (8192 - DONUT bit mask)
+        #    -------------------
+        #      00000000000000000  (0 - result is zero)
 
-        # The total mask value per pixel reflects that,
-        # So that each mask pixel has a value of
-        # eg.0, 512, 1024 for LSSTCam,
-        # or 0, 2048 for auxTel
-        # Thus to find out the number of pixels
-        # taken by the donut mask we sum all
-        # the nonzero mask pixels.
-        donutMaskPlane = mask.getMaskPlane("DONUT")
-        donutMask = mask.array == np.power(2, donutMaskPlane)
+        donutPlaneBit = mask.getPlaneBitMask("DONUT")
+        blendBit = mask.getPlaneBitMask("BLEND")
+        satBit = mask.getPlaneBitMask("SAT")
+        crBit = mask.getPlaneBitMask("CR")
+        # Select pixels with DONUT set AND BLEND, SAT, CR not set
+        # In extreme cases where all donut is SAT, the SN value
+        # will equal NaN as the donut is not usable
+        hasDonut = (mask.array & donutPlaneBit) > 0
+        notBlend = (mask.array & blendBit) == 0
+        notSat = (mask.array & satBit) == 0
+        notCr = (mask.array & crBit) == 0
 
+        donutMask = hasDonut & notBlend & notSat & notCr
         # Number of pixels taken by the donut in the original donut mask
         nPxMask = np.sum(donutMask)
 
@@ -385,8 +410,13 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             )
             bkgndMask = ~binary_dilation(donutMask, iterations=self.bkgDilationIter)
             xsection = bkgndMask[:, width // 2]
-        # Remove any other masked pixels including blends
-        bkgndMask[mask.array > 0] = 0
+        # Below, we exclude only problematic mask planes, not all masks
+        # Define which mask planes are bad for background estimation
+        bad_planes = ["BAD", "SAT", "CR", "INTRP", "NO_DATA", "SUSPECT", "EDGE", "BLEND"]
+        bad_mask_bit = mask.getPlaneBitMask(bad_planes)
+
+        # Remove pixels with any of these bad flags
+        bkgndMask[mask.array & bad_mask_bit > 0] = 0
 
         backgroundImageStdev = imageArray[bkgndMask].std()  # per pixel
         sqrtMeanVariance = np.sqrt(np.mean(varianceArray[bkgndMask]))
