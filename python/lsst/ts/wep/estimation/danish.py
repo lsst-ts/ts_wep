@@ -338,6 +338,10 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Save final fwhm value in metadata
         zkMeta = {"fwhm": fwhm}
+        # Add model information
+        zkMeta["model_dx"] = dx
+        zkMeta["model_dy"] = dy
+        zkMeta["model_sky_level"] = backgroundStd**2
 
         return zkSum, hist, zkMeta
 
@@ -509,6 +513,10 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Save final fwhm value in metadata
         zkMeta = {"fwhm": fwhm}
+        # Add model information
+        zkMeta["model_dx"] = dxs
+        zkMeta["model_dy"] = dys
+        zkMeta["model_sky_level"] = skyLevels
 
         return zkSum, hist, zkMeta
 

@@ -5,6 +5,14 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-15.0.2:
+
+-------------
+15.0.2
+-------------
+
+* Add model parameters to metadata in Danish estimator outputs.
+
 .. _lsst.ts.wep-15.0.1:
 
 -------------
