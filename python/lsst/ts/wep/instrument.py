@@ -744,9 +744,9 @@ class Instrument:
             value = Table.read(path)
 
         # Extract grid values from table
-        x = np.unique(value["x"].to("m").value)
-        y = np.unique(value["y"].to("m").value)
-        z = value["z"].to("m").value.reshape(x.size, y.size)
+        x = np.unique(value["x"].to("m").value)  # type: ignore
+        y = np.unique(value["y"].to("m").value)  # type: ignore
+        z = value["z"].to("m").value.reshape(x.size, y.size)  # type: ignore
 
         # Create the surface
         # Notice the minus sign: +focal plane height moves the sensor
