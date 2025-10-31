@@ -5,6 +5,20 @@
 ##################
 Version History
 ##################
+.. _lsst.ts.wep-15.1.0:
+
+-------------
+15.1.0
+-------------
+
+* Add CalcZernikesNeuralTask for neural network-based Zernike estimation using TARTS
+  (Triple-stage Alignment and Reconstruction using Transformer Systems for Active Optics).
+* Add new config option `oodModelPath` to pass an Out of Distribution (OOD) model directory to TARTS
+  (forwarded as `ood_model_path` to NeuralActiveOpticsSys).
+* Add per-donut `ood_score` column to the `zernikes` table when available from
+  TARTS; falls back to NaN when the OOD model is not loaded or the score is
+  missing.
+
 .. _lsst.ts.wep-15.0.2:
 
 -------------

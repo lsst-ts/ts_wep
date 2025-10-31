@@ -231,7 +231,6 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable) -> QTable:
     `astropy.table.QTable`
         Catalog with relevant exposure metadata added to catalog metadata.
     """
-
     visitInfo = exposure.visitInfo
 
     catVisitInfo = dict()
