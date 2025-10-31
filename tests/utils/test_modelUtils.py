@@ -139,8 +139,8 @@ class TestModelUtils(unittest.TestCase):
             zkCoeff=[0],
         )
 
-        # Check that intrafocal isn't too much bigger than extrafocal
-        self.assertTrue(np.sum(intra.image > 0) - np.sum(extra.image > 0) < 1000)
+        # Check that extrafocal isn't too much bigger than intrafocal
+        self.assertTrue(np.sum(extra.image > 0) - np.sum(intra.image > 0) < 1000)
 
         # Now simulate a pair with a constant height offset of +0.5mm
         x = np.linspace(-320, +320, 1000)
@@ -159,5 +159,5 @@ class TestModelUtils(unittest.TestCase):
             zkCoeff=[0],
         )
 
-        # Check that intrafocal is much larger than extrafocal
-        self.assertTrue(np.sum(intra.image > 0) - np.sum(extra.image > 0) > 1000)
+        # Check that extrafocal is much larger than intrafocal
+        self.assertTrue(np.sum(extra.image > 0) - np.sum(intra.image > 0) > 1000)
