@@ -108,8 +108,10 @@ class Instrument:
     heightMap : str or astropy.table.Table or None, optional
         Astropy table that holds the focal plane height map, or the path to
         where it is saved. The table columns should have names "x", "y", and
-        "z" with units of length. If None, no height map is used.
-        (the default is None)
+        "z" with astropy units of length. The x and y coordinates must be
+        aligned with the x,y coordinates of the Detector in the Batoid model.
+        The +z direction is in the extrafocal direction. If None, no height
+        map is used. (the default is None)
     maskParams : dict, optional
         Dictionary of mask parameters. Each key in this dictionary corresponds
         to a different mask element. The corresponding values are dictionaries
@@ -728,7 +730,10 @@ class Instrument:
         value : str or None
             Astropy table that holds the focal plane height map, or the path to
             where it is saved. The table columns should have names "x", "y",
-            and "z" with units of length. If None, no height map is used.
+            and "z" with astropy units of length. The x and y coordinates must
+            be aligned with the x,y coordinates of the Detector in the Batoid
+            model. The +z direction is in the extrafocal direction. If None,
+            no height map is used.
         """
         if value is None:
             self._heightMap = None
@@ -749,9 +754,7 @@ class Instrument:
         z = value["z"].to("m").value.reshape(x.size, y.size)  # type: ignore
 
         # Create the surface
-        # Notice the minus sign: +focal plane height moves the sensor
-        # in the direction from which the photons arrive.
-        self._heightMap = batoid.Bicubic(x, y, -z)
+        self._heightMap = batoid.Bicubic(x, y, z)
 
         # Clear relevant caches
         self._getIntrinsicZernikesTACached.cache_clear()
