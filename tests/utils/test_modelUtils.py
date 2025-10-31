@@ -22,6 +22,8 @@
 import unittest
 
 import numpy as np
+from astropy.table import Table
+from lsst.ts.wep import Instrument
 from lsst.ts.wep.utils.modelUtils import forwardModelPair
 
 
@@ -125,3 +127,37 @@ class TestModelUtils(unittest.TestCase):
         _, intra, extra = forwardModelPair(skyLevel=0, miscenterExtra=(500, 0))
         self.assertTrue(intra.image.sum() > 0)
         self.assertTrue(np.isclose(extra.image.sum(), 0))
+
+    def testHeightMap(self) -> None:
+        # Simulate a pair of stamps at the center with no height offsets
+        inst = Instrument()
+        inst.heightMap = None
+        _, intra, extra = forwardModelPair(
+            instConfig=inst,
+            skyLevel=0,
+            seeing=0,
+            zkCoeff=[0],
+        )
+
+        # Check that intrafocal isn't too much bigger than extrafocal
+        self.assertTrue(np.sum(intra.image > 0) - np.sum(extra.image > 0) < 1000)
+
+        # Now simulate a pair with a constant height offset of +0.5mm
+        x = np.linspace(-320, +320, 1000)
+        X, Y = np.meshgrid(x, x)
+        Z = np.full_like(X, 0.5)
+        heightTable = Table(
+            rows=np.column_stack((X.ravel(), Y.ravel(), Z.ravel())),
+            names=["x", "y", "z"],
+            units=["mm", "mm", "mm"],
+        )
+        inst.heightMap = heightTable
+        _, intra, extra = forwardModelPair(
+            instConfig=inst,
+            skyLevel=0,
+            seeing=0,
+            zkCoeff=[0],
+        )
+
+        # Check that intrafocal is much larger than extrafocal
+        self.assertTrue(np.sum(intra.image > 0) - np.sum(extra.image > 0) > 1000)

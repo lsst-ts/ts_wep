@@ -29,8 +29,9 @@ from typing import Sequence
 
 import batoid
 import numpy as np
+from astropy.table import Table
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, EnumDict
-from lsst.ts.wep.utils.ioUtils import mergeConfigWithFile
+from lsst.ts.wep.utils.ioUtils import mergeConfigWithFile, resolveRelativeConfigPath
 from scipy.optimize import minimize_scalar
 
 from .utils.zernikeUtils import createZernikeBasis, createZernikeGradBasis
@@ -104,6 +105,11 @@ class Instrument:
         detector offset is then used for everything else. Note that
         depending on the model, the sign of this value might matter.
         (the default is None)
+    heightMap : str or astropy.table.Table or None, optional
+        Astropy table that holds the focal plane height map, or the path to
+        where it is saved. The table columns should have names "x", "y", and
+        "z" with units of length. If None, no height map is used.
+        (the default is None)
     maskParams : dict, optional
         Dictionary of mask parameters. Each key in this dictionary corresponds
         to a different mask element. The corresponding values are dictionaries
@@ -146,6 +152,7 @@ class Instrument:
         batoidModelName: str | None = None,
         batoidOffsetOptic: str | None = None,
         batoidOffsetValue: float | None = None,
+        heightMap: str | Table | None = None,
         maskParams: dict | None = None,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
@@ -162,6 +169,7 @@ class Instrument:
             batoidModelName=batoidModelName,
             batoidOffsetOptic=batoidOffsetOptic,
             batoidOffsetValue=batoidOffsetValue,
+            heightMap=heightMap,
             maskParams=maskParams,
         )
 
@@ -378,11 +386,15 @@ class Instrument:
 
             # Calculate the equivalent detector offset
             result = minimize_scalar(
-                lambda offset: np.abs((self.offsetToZ4Defocus(offset) - dZ4optic) / dZ4optic),
+                lambda offset: np.abs(
+                    (self.offsetToZ4Defocus(offset) - dZ4optic) / dZ4optic
+                ),
                 bounds=(-0.1, 0.1),
             )
             if not result.success or result.fun > 1e-3:
-                raise RuntimeError("Calculating defocalOffset from batoidOffsetValue failed.")
+                raise RuntimeError(
+                    "Calculating defocalOffset from batoidOffsetValue failed."
+                )
 
             # Save the calculated offset
             defocalOffsetBatoid = np.abs(result.x)
@@ -702,7 +714,53 @@ class Instrument:
         self._getIntrinsicZernikesTACached.cache_clear()
         self._defocalOffsetBatoid = None
 
-    def getBatoidModel(self, band: BandLabel | str = BandLabel.REF) -> batoid.Optic:
+    @property
+    def heightMap(self) -> batoid.surface.Bicubic | None:
+        """Focal plane height map."""
+        return self._heightMap
+
+    @heightMap.setter
+    def heightMap(self, value: str | Table | None) -> None:
+        """Set the focal plane height map.
+
+        Parameters
+        ----------
+        value : str or None
+            Astropy table that holds the focal plane height map, or the path to
+            where it is saved. The table columns should have names "x", "y",
+            and "z" with units of length. If None, no height map is used.
+        """
+        if value is None:
+            self._heightMap = None
+            return
+
+        if isinstance(value, str) or isinstance(value, Path):
+            # Check the file exists
+            path = Path(resolveRelativeConfigPath(value))
+            if not path.exists():
+                raise FileNotFoundError(f"Height map file {value} does not exist.")
+
+            # Load the height map table
+            value = Table.read(path)
+
+        # Extract grid values from table
+        x = np.unique(value["x"].to("m").value)
+        y = np.unique(value["y"].to("m").value)
+        z = value["z"].to("m").value.reshape(x.size, y.size)
+
+        # Create the surface
+        # Notice the minus sign: +focal plane height moves the sensor
+        # in the direction from which the photons arrive.
+        self._heightMap = batoid.Bicubic(x, y, -z)
+
+        # Clear relevant caches
+        self._getIntrinsicZernikesTACached.cache_clear()
+
+    def getBatoidModel(
+        self,
+        band: BandLabel | str = BandLabel.REF,
+        includeHeights: bool = True,
+    ) -> batoid.Optic:
         """Return the Batoid model for the instrument and the requested band.
 
         Parameters
@@ -711,6 +769,10 @@ class Instrument:
             The BandLabel Enum or corresponding string, specifying which Batoid
             model to load. Only relevant if self.batoidModelName contains
             "{band}". (the default is BandLabel.REF)
+        includeHeights : bool, optional
+            If True, and a height map is provided, perturb the focal plane
+            surface using the height map. If False, do not apply the height
+            map. (the default is True)
         """
         # If batoidModelName is None, we can't load a model, so return None
         if self.batoidModelName is None:
@@ -726,7 +788,13 @@ class Instrument:
         batoidModelName = self.batoidModelName.format(band=band.value)
 
         # Load the Batoid model
-        return _getBatoidModelFromFileName(batoidModelName + ".yaml")
+        model = _getBatoidModelFromFileName(batoidModelName + ".yaml")
+
+        # If a height map is provided, perturb the focal plane
+        if includeHeights and getattr(self, "_heightMap", None) is not None:
+            model = model.withPerturbedSurface("Detector", self.heightMap)
+
+        return model
 
     @lru_cache(100)
     def _getIntrinsicZernikesCached(
@@ -762,7 +830,7 @@ class Instrument:
         band = BandLabel(band)
 
         # Get the batoid model
-        batoidModel = self.getBatoidModel(band)
+        batoidModel = self.getBatoidModel(band, includeHeights=False)
 
         # If there is no batoid model, just return zeros
         if batoidModel is None:
@@ -1070,12 +1138,16 @@ class Instrument:
     @lru_cache(100)
     def createZernikeBasis(self, jmax: int) -> np.ndarray:
         uPupil, vPupil = self.createPupilGrid()
-        return createZernikeBasis(uPupil, vPupil, jmax=jmax, obscuration=self.obscuration)
+        return createZernikeBasis(
+            uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
+        )
 
     @lru_cache(100)
     def createZernikeGradBasis(self, jmax: int) -> np.ndarray:
         uPupil, vPupil = self.createPupilGrid()
-        return createZernikeGradBasis(uPupil, vPupil, jmax=jmax, obscuration=self.obscuration)
+        return createZernikeGradBasis(
+            uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
+        )
 
     def createImageGrid(self, nPixels: int) -> tuple[np.ndarray, np.ndarray]:
         """Create an (nPixel x nPixel) grid for the image.

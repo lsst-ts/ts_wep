@@ -66,21 +66,25 @@ def getConfigDir() -> str:
 
 
 def resolveRelativeConfigPath(path: str) -> str:
-    """Resolve a relative config path into an absolute path.
+    """Resolves policy paths.
 
     This does not check whether the absolute path actually points to a file.
+    If the path does not start with "policy:", it is returned unchanged.
 
     Parameters
     ----------
     path : str
-        Path relative to the policy directory. Can start with "policy:" or not.
+        Path to resolve. Can start with "policy:" or not.
 
     Returns
     -------
     str
-        Absolute path of config file in the policy directory
+        Resolved path.
     """
-    # Remove policy: prefix if present
+    if not path.startswith("policy:"):
+        return path
+
+    # Remove policy: prefix
     path = path.removeprefix("policy:")
 
     # Return the absolute policy path
@@ -115,10 +119,7 @@ def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
         If recurseImports is True and 'imports' doesn't map to a string
         or 1D list of strings
     """
-    # Is the path relative to the policy directory?
-    if path.startswith("policy:"):
-        # Get absolute path including the policy directory path
-        path = resolveRelativeConfigPath(path)
+    path = resolveRelativeConfigPath(path)
 
     # Read the parameter file into a dictionary
     with open(path, "r") as file:

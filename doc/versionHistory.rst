@@ -5,6 +5,15 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-15.1.0:
+
+-------------
+15.1.0
+-------------
+
+* Added focal plane height map functionality to the Instrument class
+
 .. _lsst.ts.wep-15.0.2:
 
 -------------

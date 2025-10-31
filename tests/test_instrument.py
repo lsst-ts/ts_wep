@@ -242,6 +242,10 @@ class TestInstrument(unittest.TestCase):
         for key in keys:
             self.assertEqual(getattr(lsst, key), getattr(comcam, key))
 
+    def testBadHeightMap(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            Instrument(heightMap="bad")
+
 
 if __name__ == "__main__":
     # Do the unit test

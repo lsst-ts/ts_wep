@@ -20,6 +20,7 @@ wavelength:
   z: 866.8e-9
   y: 973.9e-9
 batoidModelName: LSST_{band} # name used to load the Batoid model
+heightMap: policy:heightMaps/LsstCam_focal_plane_heights_interpolated.fits
 
 maskParams: # center and radius are in meters, theta in degrees
   M1:
