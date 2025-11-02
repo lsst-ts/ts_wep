@@ -879,9 +879,7 @@ class Instrument:
         defocalType = DefocalType(defocalType)
         defocalSign = +1 if defocalType == DefocalType.Extra else -1
         offset = [0, 0, defocalSign * self.defocalOffset]
-        batoidModel = batoidModel.withLocallyShiftedOptic(
-            self.batoidOffsetOptic, offset
-        )
+        batoidModel = batoidModel.withLocallyShiftedOptic(self.batoidOffsetOptic, offset)
 
         # Get the wavelength
         if len(self.wavelength) > 1:
