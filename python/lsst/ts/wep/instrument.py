@@ -632,7 +632,11 @@ class Instrument:
     @property
     def batoidOffsetOptic(self) -> str | None:
         """The optic that is offset in the Batoid model."""
-        return self._batoidOffsetOptic
+        # Default to the detector if value not explicitly set
+        if self._batoidOffsetOptic is None and self.batoidModelName is not None:
+            return "Detector"
+        else:
+            return self._batoidOffsetOptic
 
     @batoidOffsetOptic.setter
     def batoidOffsetOptic(self, value: str | None) -> None:
