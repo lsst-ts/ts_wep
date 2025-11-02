@@ -668,7 +668,7 @@ class TestImageMapper(unittest.TestCase):
                 uImage, vImage, *_ = mapper._constructForwardMap(
                     uPupil,
                     vPupil,
-                    inst.getIntrinsicZernikes(*angle, band),
+                    inst.getIntrinsicZernikes(*angle, band=band),
                     None,
                     Image(np.zeros((1, 1)), angle, dfType, band),
                 )
