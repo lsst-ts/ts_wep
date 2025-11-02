@@ -242,6 +242,12 @@ class TestInstrument(unittest.TestCase):
         for key in keys:
             self.assertEqual(getattr(lsst, key), getattr(comcam, key))
 
+    def test_intrinsicZernikesDefocused(self) -> None:
+        inst = Instrument()
+        z4_intra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="intra", nollIndices=[4])
+        z4_extra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="extra", nollIndices=[4])
+        self.assertTrue(np.isclose(-z4_extra, z4_intra, rtol=1e-2))
+
 
 if __name__ == "__main__":
     # Do the unit test
