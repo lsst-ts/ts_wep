@@ -27,7 +27,7 @@ __all__ = [
 
 import lsst.pipe.base as pipeBase
 import numpy as np
-from astropy.table import QTable
+from astropy.table import QTable, Table
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -36,13 +36,19 @@ from lsst.utils.timer import timeMethod
 
 class CalcZernikesUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "detector", "instrument"),  # type: ignore
+    dimensions=("visit", "detector", "instrument", "physical_filter"),  # type: ignore
 ):
     donutStamps = connectionTypes.Input(
         doc="Defocused Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStamps",
+    )
+    intrinsicTable = connectionTypes.Input(
+        doc="Intrinsic Zernike Map for the instrument",
+        dimensions=("detector", "instrument", "physical_filter"),
+        storageClass="ArrowAstropy",
+        name="intrinsic_aberrations_temp"
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -87,6 +93,7 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
     def run(
         self,
         donutStamps: DonutStamps,
+        intrinsicTable: Table,
         numCores: int = 1,
     ) -> pipeBase.Struct:
         if len(donutStamps) == 0:

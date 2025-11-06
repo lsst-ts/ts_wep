@@ -33,7 +33,7 @@ import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-from astropy.table import QTable, vstack
+from astropy.table import QTable, Table, vstack
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -51,7 +51,7 @@ pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 
 class CalcZernikesTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "detector", "instrument"),  # type: ignore
+    dimensions=("visit", "detector", "instrument", "physical_filter"),  # type: ignore
 ):
     donutStampsExtra = connectionTypes.Input(
         doc="Extra-focal Donut Postage Stamp Images",
@@ -64,6 +64,12 @@ class CalcZernikesTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
+    )
+    intrinsicTable = connectionTypes.Input(
+        doc="Intrinsic Zernike Map for the instrument",
+        dimensions=("detector", "instrument", "physical_filter"),
+        storageClass="ArrowAstropy",
+        name="intrinsic_aberrations_temp"
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -433,6 +439,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self,
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
+        intrinsicTable: Table,
         numCores: int = 1,
     ) -> pipeBase.Struct:
         # If no donuts are in the donutCatalog for a set of exposures
