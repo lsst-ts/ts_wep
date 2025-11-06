@@ -120,8 +120,6 @@ class CalcZernikesTaskConnections(
                 adjuster.add_input(data_id, "intrinsicTables", intra_inputs["intrinsicTables"][0])
             elif data_id["detector"] in intra_focal_ids:
                 seen.add(data_id)
-            else:
-                adjuster.remove_quantum(data_id)
 
 
 class CalcZernikesTaskConfig(
