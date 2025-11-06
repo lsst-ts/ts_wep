@@ -34,6 +34,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import QTable, Table, vstack
+from lsst.daf.butler import DataCoordinate
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -47,6 +48,8 @@ from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
 from lsst.utils.timer import timeMethod
 
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
+intra_focal_ids = set([192, 196, 200, 204])
+extra_focal_ids = set([191, 195, 199, 203])
 
 
 class CalcZernikesTaskConnections(
@@ -65,11 +68,12 @@ class CalcZernikesTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
     )
-    intrinsicTable = connectionTypes.Input(
+    intrinsicTables = connectionTypes.Input(
         doc="Intrinsic Zernike Map for the instrument",
         dimensions=("detector", "instrument", "physical_filter"),
         storageClass="ArrowAstropy",
-        name="intrinsic_aberrations_temp"
+        name="intrinsic_aberrations_temp",
+        multiple=True,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -95,6 +99,29 @@ class CalcZernikesTaskConnections(
         storageClass="AstropyQTable",
         name="donutQualityTable",
     )
+
+    def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
+        """Add intrinsicTables inputs from intra-focal donuts to the
+        tasks running on extra-focal data ids."""
+        to_do = set(adjuster.iter_data_ids())
+        seen = set()
+        while to_do:
+            data_id = to_do.pop()
+            if data_id["detector"] in extra_focal_ids:
+                intra_focal_data_id = DataCoordinate.standardize(
+                    data_id, detector=int(data_id["detector"]) + 1
+                )
+
+                assert data_id in seen or intra_focal_data_id in to_do, (
+                    f"DataId {intra_focal_data_id} not found in seen or to_do sets."
+                )
+
+                intra_inputs = adjuster.get_inputs(intra_focal_data_id)
+                adjuster.add_input(data_id, "intrinsicTables", intra_inputs["intrinsicTables"][0])
+            elif data_id["detector"] in intra_focal_ids:
+                seen.add(data_id)
+            else:
+                adjuster.remove_quantum(data_id)
 
 
 class CalcZernikesTaskConfig(
@@ -439,7 +466,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self,
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
-        intrinsicTable: Table,
+        intrinsicTables: list[Table, Table],
         numCores: int = 1,
     ) -> pipeBase.Struct:
         # If no donuts are in the donutCatalog for a set of exposures
