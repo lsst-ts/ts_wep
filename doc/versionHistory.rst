@@ -5,6 +5,15 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-15.2.0:
+
+-------------
+15.2.0
+-------------
+
+* Correctly handling FAM by shifting entire camera in batoid model.
+
 .. _lsst.ts.wep-15.1.0:
 
 -------------
