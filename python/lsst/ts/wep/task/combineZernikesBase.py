@@ -28,6 +28,7 @@ from typing import Any
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from astropy.table import Table
 
 
 class CombineZernikesBaseConfig(pexConfig.Config):
@@ -48,16 +49,16 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         pipeBase.Task.__init__(self, **kwargs)
         self.log = logging.getLogger(type(self).__name__)  # type: ignore
 
-    def run(self, zernikeArray: np.ndarray) -> pipeBase.Struct:
+    def run(self, zkTable: Table) -> pipeBase.Struct:
         """
         Combine the zernikes from the input array of Zernike
         coefficients from each individual donut pair.
 
         Parameters
         ----------
-        zernikeArray : numpy.ndarray
+        zkTable : `astropy.table.Table`
             The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the array should
+            of donuts on the CCD. Each row of the table should
             be the set of Zernike coefficients for a single
             donut pair.
 
@@ -65,35 +66,22 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         -------
         struct : `lsst.pipe.base.Struct`
             The struct contains the following data:
-
-            - combinedZernikes : numpy.ndarray
-                The final combined Zernike coefficients from the CCD.
-            - combineFlags : numpy.ndarray
-                Flag indicating a particular set of Zernike
-                coefficients was not used in the final estimate.
-                If the values in a row in the `zernikeArray`
-                were used then its index is 0.
-                A value of 1 means the coefficients from that row
-                in the input `zernikeArray` were not used.
+            - combinedTable : `astropy.table.Table`
+                The input table with the averaged Zernike coefficients and
+                combination flags added.
         """
-
-        combinedZernikes, flags = self.combineZernikes(zernikeArray)
-
-        # Make sure that flags contains only integers
-        flags = np.array(flags, dtype=int)
-        self.log.info(
-            f"Using {len(flags) - np.sum(flags)} pairs out of {len(zernikeArray)} in final Zernike estimate."
-        )
+        combinedTable = self.combineZernikes(zkTable)
 
         # Save flags and summary values in task metadata
+        flags = ~combinedTable["used"].data[1:]
         self.metadata["numDonutsTotal"] = len(flags)
         self.metadata["numDonutsUsed"] = len(flags) - np.sum(flags)
         self.metadata["numDonutsRejected"] = np.sum(flags)
         self.metadata["combineZernikesFlags"] = list(flags)
-        return pipeBase.Struct(combinedZernikes=combinedZernikes, flags=flags)
+        return pipeBase.Struct(combinedTable=combinedTable, flags=flags)
 
     @abc.abstractmethod
-    def combineZernikes(self, zernikeArray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def combineZernikes(self, zkTable: Table) -> Table:
         """
         Class specific algorithm to combine the Zernike
         coefficients from each individual donut pair into
@@ -101,20 +89,16 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         Parameters
         ----------
-        zernikeArray : numpy.ndarray
+        zkTable : `astropy.table.Table`
             The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the array should
+            of donuts on the CCD. Each row of the table should
             be the set of Zernike coefficients for a single
             donut pair.
 
         Returns
         -------
-        numpy.ndarray
-            The final combined Zernike coefficients from the CCD.
-        numpy.ndarray
-            A binary array where a value of 0 in any index indicates
-            that the row in the `zernikeArray` was used
-            in the final combination and a value of 1 indicates it
-            was not included in the final combination.
+        `astropy.table.Table`
+            The input table with the averaged Zernike coefficients and
+            combination flags added.
         """
         raise NotImplementedError("CombineZernikesBaseTask is abstract.")

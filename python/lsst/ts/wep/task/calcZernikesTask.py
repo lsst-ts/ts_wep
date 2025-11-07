@@ -228,14 +228,45 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         table["extra_centroid"].unit = u.pixel
         for j in self.nollIndices:
             table[f"Z{j}"].unit = u.nm
+        for j in self.nollIndices:
+            table[f"Z{j}_intrinsics"].unit = u.nm
+        for j in self.nollIndices:
+            table[f"Z{j}_deviation"].unit = u.nm
 
         return table
 
-    def createZkTable(
-        self,
-        zkCoeffRaw: pipeBase.Struct,
-        zkCoeffCombined: pipeBase.Struct,
-    ) -> QTable:
+    def _unpackStampData(self, stamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
+        """Unpack data from the stamp object, handling None stamps.
+
+        Parameters
+        ----------
+        stamp : DonutStamp or None
+            The DonutStamp object to unpack data from.
+
+        Returns
+        -------
+        fieldAngle : `astropy.units.Quantity`
+            The field angle of the stamp in degrees.
+        centroid : `astropy.units.Quantity`
+            The centroid position of the stamp in pixels.
+        intrinsics : `astropy.units.Quantity`
+            The intrinsic Zernike coefficients for the stamp in microns.
+        """
+        if stamp is None:
+            fieldAngle = np.array(np.nan, dtype=pos2f_dtype) * u.deg
+            centroid = np.array((np.nan, np.nan), dtype=pos2f_dtype) * u.pixel
+            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
+        else:
+            fieldAngle = np.array(stamp.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+            centroid = (
+                np.array((stamp.centroid_position.x, stamp.centroid_position.y), dtype=pos2f_dtype) * u.pixel
+            )
+            rotAngle = stamp.metadata["BORESIGHT_ROT_ANGLE_RAD"]  # TODO: FIX THIS!
+            intrinsics = self.intrinsicMap.get(*fieldAngle, rotAngle) * u.micron
+
+        return fieldAngle, centroid, intrinsics
+
+    def createZkTable(self, zkCoeffRaw: pipeBase.Struct) -> QTable:
         """Create the Zernike table to store Zernike Coefficients.
 
         Note this is written with the assumption that either extraStamps or
@@ -246,8 +277,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         ----------
         zkCoeffRaw: pipeBase.Struct
             All zernikes returned by self.estimateZernikes.run(...)
-        zkCoeffCombined
-            Combined zernikes returned by self.combineZernikes.run(...)
 
         Returns
         -------
@@ -259,10 +288,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             {
                 "label": "average",
                 "used": True,
-                **{
-                    f"Z{j}": zkCoeffCombined.combinedZernikes[i] * u.micron
-                    for i, j in enumerate(self.nollIndices)
-                },
+                **{f"Z{j}": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
                 "intra_field": np.nan,
                 "extra_field": np.nan,
                 "intra_centroid": np.nan,
@@ -279,12 +305,11 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_max_power_grad": np.nan,
             }
         )
-        for i, (intra, extra, zk, flag) in enumerate(
+        for i, (intra, extra, zk) in enumerate(
             zip_longest(
                 self.stampsIntra,
                 self.stampsExtra,
                 zkCoeffRaw.zernikes,
-                zkCoeffCombined.flags,
             )
         ):
             # If zk is None, we need to stop. This can happen when running
@@ -293,54 +318,29 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             if zk is None:
                 break
 
+            # Assign units
+            zk = zk * u.micron
+
+            # Unpack data from stamps, handling cases with None stamps
+            intraAngle, intraCentroid, intraIntrinsics = self._unpackStampData(intra)
+            extraAngle, extraCentroid, extraIntrinsics = self._unpackStampData(extra)
+
+            # Average the intrinsics
+            intrinsics = np.nanmean((intraIntrinsics, extraIntrinsics), axis=0) * u.micron
+
+            # Calculate the wavefront deviation
+            deviation = zk - intrinsics
+
             row: dict = dict()
             row["label"] = f"pair{i + 1}"
-            row["used"] = not flag
-            row.update({f"Z{j}": zk[i] * u.micron for i, j in enumerate(self.nollIndices)})
-            row["intra_field"] = (
-                (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
-                if intra is None
-                else (np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg)
-            )
-            row["extra_field"] = (
-                (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
-                if extra is None
-                else (np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg)
-            )
-            row["intra_centroid"] = (
-                (
-                    np.array(
-                        (np.nan, np.nan),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-                if intra is None
-                else (
-                    np.array(
-                        (intra.centroid_position.x, intra.centroid_position.y),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-            )
-            row["extra_centroid"] = (
-                (
-                    np.array(
-                        (np.nan, np.nan),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-                if extra is None
-                else (
-                    np.array(
-                        (extra.centroid_position.x, extra.centroid_position.y),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-            )
+            row["used"] = False  # Placeholder for now
+            row.update({f"Z{j}": zk[i] for i, j in enumerate(self.nollIndices)})
+            row.update({f"Z{j}_intrinsics": intrinsics[i] for i, j in enumerate(self.nollIndices)})
+            row.update({f"Z{j}_deviation": deviation[i] for i, j in enumerate(self.nollIndices)})
+            row["intra_field"] = intraAngle
+            row["extra_field"] = extraAngle
+            row["intra_centroid"] = intraCentroid
+            row["extra_centroid"] = extraCentroid
             for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
                 for stamps, foc in [
                     (self.stampsIntra, "intra"),
@@ -506,18 +506,28 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = selectedExtraStamps
         self.stampsIntra = selectedIntraStamps
 
+        # Set the intrinsic map interpolator
+        # TODO: FIX THIS!
+        self.intrinsicMap = self.estimateZernikes.intrinsicMapClass(
+            intrinsicTables,
+            nollIndices=self.nollIndices,
+        )
+
         # Estimate Zernikes from the collection of selected stamps
         zkCoeffRaw = self.estimateZernikes.run(self.stampsExtra, self.stampsIntra, numCores=numCores)
-        zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
-        zkTable = self.createZkTable(
-            zkCoeffRaw,
-            zkCoeffCombined,
-        )
+        # Save the outputs in the table
+        zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
+        # Combine Zernikes
+        zkTable = self.combineZernikes.run(zkTable).combinedTable
+
+        combinedCols = [col for col in zkTable.colnames if col.startswith("Z") and "_" not in col]
+        outputZernikesAvg = zkTable[combinedCols][0].as_array()
+
         return pipeBase.Struct(
-            outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),
+            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
             outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
             zernikes=zkTable,
             donutQualityTable=donutQualityTable,

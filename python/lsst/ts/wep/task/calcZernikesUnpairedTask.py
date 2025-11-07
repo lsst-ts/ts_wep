@@ -48,7 +48,7 @@ class CalcZernikesUnpairedTaskConnections(
         doc="Intrinsic Zernike Map for the instrument",
         dimensions=("detector", "instrument", "physical_filter"),
         storageClass="ArrowAstropy",
-        name="intrinsic_aberrations_temp"
+        name="intrinsic_aberrations_temp",
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -119,23 +119,38 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
 
         # Assign stamps to either intra or extra
         defocalType = donutStamps.metadata["DFC_TYPE"]
+        intrinsicTables = [None, None]
         if defocalType == "extra":
             self.stampsExtra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
+            intrinsicTables[0] = intrinsicTable
         else:
             self.stampsIntra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
-        zkCoeffRaw = self.estimateZernikes.run(self.stampsExtra, self.stampsIntra, numCores=numCores)
-        # Combine Zernikes
-        zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
+            intrinsicTables[1] = intrinsicTable
 
-        zkTable = self.createZkTable(zkCoeffRaw, zkCoeffCombined)
+        # Estimate Zernikes
+        zkCoeffRaw = self.estimateZernikes.run(
+            self.stampsExtra,
+            self.stampsIntra,
+            intrinsicTables=intrinsicTables,
+            numCores=numCores,
+        )
+
+        # Save the outputs in the table
+        zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
+        # Combine Zernikes
+        zkTable = self.combineZernikes.run(zkTable).combinedTable
+
+        combinedCols = [col for col in zkTable.colnames if col.startswith("Z") and "_" not in col]
+        outputZernikesAvg = zkTable[combinedCols][0].as_array()
+
         return pipeBase.Struct(
-            outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),
+            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
             outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
             zernikes=zkTable,
             donutQualityTable=donutQualityTable,

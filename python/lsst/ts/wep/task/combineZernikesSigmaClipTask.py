@@ -30,6 +30,7 @@ from lsst.ts.wep.task.combineZernikesBase import (
     CombineZernikesBaseTask,
 )
 from lsst.ts.wep.utils import conditionalSigmaClip
+from astropy.table import Table
 
 
 class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
@@ -53,6 +54,12 @@ class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
         This is to prevent clipping based upon the highest Zernikes which
         have smaller values and more variation from noise.""",
     )
+    zkClipType: pexConfig.Field = pexConfig.Field(
+        dtype=str,
+        default="deviation",
+        doc="""Which type of Zernikes to perform clipping on. Options are:
+        'total', 'intrinsics', 'deviation'.""",
+    )
 
 
 class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
@@ -73,8 +80,21 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             self.sigmaClipKwargs[key] = val
         self.maxZernClip = self.config.maxZernClip
         self.stdMin = self.config.stdMin
+        self.zkClipType = self.config.zkClipType
 
-    def combineZernikes(self, zernikeArray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def combineZernikes(self, zkTable: Table) -> Table:
+        # Extract the array of Zernikes to perform clipping on
+        if self.zkClipType == "total":
+            columns = [col for col in zkTable.colnames if col.startswith("Z") and "_" not in col]
+        elif self.zkClipType == "intrinsics":
+            columns = [col for col in zkTable.colnames if col.startswith("Z") and "_intrinsics" in col]
+        elif self.zkClipType == "deviation":
+            columns = [col for col in zkTable.colnames if col.startswith("Z") and "_deviation" in col]
+        else:
+            raise ValueError(f"Unknown zkClipType: {self.zkClipType}")
+        zernikeArray = np.array([zkTable[col] for col in columns]).T[1:]
+
+        # Perform conditional sigma clipping
         sigArray = conditionalSigmaClip(
             zernikeArray, sigmaClipKwargs=self.sigmaClipKwargs, stdMin=self.stdMin
         )
@@ -93,6 +113,7 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             numRejected = np.sum(binaryFlagArray)
         # Identify which rows to use when calculating final mean
         keepIdx = ~np.array(binaryFlagArray, dtype=bool)
+        zkTable["used"][keepIdx + 1] = True
 
         self.log.info(f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}.")
         if effMaxZernClip < self.maxZernClip:
@@ -102,4 +123,9 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.metadata["maxZernClip"] = self.maxZernClip
         self.metadata["effMaxZernClip"] = effMaxZernClip
 
-        return np.mean(zernikeArray[keepIdx], axis=0), binaryFlagArray
+        # Calculate means
+        for colName in zkTable.colnames:
+            if colName.startswith("Z"):
+                zkTable[colName][0] = np.mean(zkTable[colName][1:][keepIdx])
+
+        return zkTable
