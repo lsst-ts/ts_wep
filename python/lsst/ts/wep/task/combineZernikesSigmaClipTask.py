@@ -124,8 +124,9 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.metadata["effMaxZernClip"] = effMaxZernClip
 
         # Calculate means
-        for colName in zkTable.colnames:
-            if colName.startswith("Z"):
-                zkTable[colName][0] = np.mean(zkTable[colName][1:][keepIdx])
+        for j in zkTable.meta["noll_indices"]:
+            zkTable[f"Z{j}"][0] = np.mean(zkTable[f"Z{j}"][1:][keepIdx])
+            zkTable[f"Z{j}_intrinsic"][0] = np.mean(zkTable[f"Z{j}_intrinsic"][1:][keepIdx])
+            zkTable[f"Z{j}_deviation"][0] = np.mean(zkTable[f"Z{j}_deviation"][1:][keepIdx])
 
         return zkTable

@@ -394,6 +394,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 cam_name = stamps.metadata["CAM_NAME"]
 
         meta["cam_name"] = cam_name
+        meta["noll_indices"] = self.nollIndices
 
         if self.stampsIntra.metadata and self.stampsExtra.metadata:
             assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]
