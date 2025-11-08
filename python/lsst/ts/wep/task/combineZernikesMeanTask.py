@@ -32,7 +32,7 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
     measurement with an unweighted mean.
     """
 
-    def combineZernikes(self, zkTable: Table.ndarray) -> Table:
+    def combineZernikes(self, zkTable: Table) -> Table:
         # Set all donuts to used (no rejection in this simple mean)
         zkTable["used"] = True
 
