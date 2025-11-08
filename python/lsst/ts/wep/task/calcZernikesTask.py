@@ -191,50 +191,35 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = DonutStamps([])
         self.stampsIntra = DonutStamps([])
 
-    def initZkTable(self) -> QTable:
-        """Initialize the table to store the Zernike coefficients
+    @staticmethod
+    def _createIntrinsicMap(intrinsicTable: Table | None) -> RegularGridInterpolator | None:
+        """Create a RegularGridInterpolator for the intrinsic Zernike map.
+
+        Parameters
+        ----------
+        intrinsicTable : astropy.table.Table or None
+            Table containing the intrinsic Zernike coefficients.
 
         Returns
         -------
-        table : `astropy.table.QTable`
-            Table to store the Zernike coefficients
+        interpolator : scipy.interpolate.RegularGridInterpolator or None
+            Interpolator for the intrinsic Zernike map,
+            or None if no table is provided.
         """
-        dtype = [
-            ("label", "<U12"),
-            ("used", np.bool_),
-            ("intra_field", pos2f_dtype),
-            ("extra_field", pos2f_dtype),
-            ("intra_centroid", pos2f_dtype),
-            ("extra_centroid", pos2f_dtype),
-            ("intra_mag", "<f4"),
-            ("extra_mag", "<f4"),
-            ("intra_sn", "<f4"),
-            ("extra_sn", "<f4"),
-            ("intra_entropy", "<f4"),
-            ("extra_entropy", "<f4"),
-            ("intra_frac_bad_pix", "<f4"),
-            ("extra_frac_bad_pix", "<f4"),
-            ("intra_max_power_grad", "<f4"),
-            ("extra_max_power_grad", "<f4"),
-        ]
-        for j in self.nollIndices:
-            dtype.append((f"Z{j}", "<f4"))
+        if intrinsicTable is None:
+            return None
 
-        table = QTable(dtype=dtype)
+        # Extract arrays of field angle (deg) and intrinsics (microns)
+        x = np.rad2deg(np.unique(intrinsicTable["x"].value))
+        y = np.rad2deg(np.unique(intrinsicTable["y"].value))
+        zks = intrinsicTable[[col for col in intrinsicTable.colnames if col.startswith("Z")]]
+        zks = zks.to_pandas().values * 1e6  # Convert to microns
 
-        # Assign units where appropriate
-        table["intra_field"].unit = u.deg
-        table["extra_field"].unit = u.deg
-        table["intra_centroid"].unit = u.pixel
-        table["extra_centroid"].unit = u.pixel
-        for j in self.nollIndices:
-            table[f"Z{j}"].unit = u.nm
-        for j in self.nollIndices:
-            table[f"Z{j}_intrinsic"].unit = u.nm
-        for j in self.nollIndices:
-            table[f"Z{j}_deviation"].unit = u.nm
+        # Create the interpolator
+        values = zks.reshape(y.size, x.size, -1)
+        interpolator = RegularGridInterpolator((y, x), values) #, bounds_error=False, fill_value=np.nan)
 
-        return table
+        return interpolator
 
     def _unpackStampData(self, stamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
         """Unpack data from the stamp object, handling None stamps.
@@ -266,9 +251,64 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 intrinsicMap = self.intrinsicMapExtra
             else:
                 intrinsicMap = self.intrinsicMapIntra
-            intrinsics = intrinsicMap(fieldAngle[::-1])[0] * u.micron
+
+            # Note that if you compare to the _createIntrinsicMap method you
+            # might think we would need to reverse the fieldAngle here (i.e.
+            # swap x and y), however stamp.calcFieldXY() returns coordinates
+            # in the DVCS instead of CCS, which is equivalent to already
+            # swapping x and y. Therefore we will not reverse the order here.
+            intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron
 
         return fieldAngle, centroid, intrinsics
+
+    def initZkTable(self) -> QTable:
+        """Initialize the table to store the Zernike coefficients
+
+        Returns
+        -------
+        table : `astropy.table.QTable`
+            Table to store the Zernike coefficients
+        """
+        dtype = [
+            ("label", "<U12"),
+            ("used", np.bool_),
+            ("intra_field", pos2f_dtype),
+            ("extra_field", pos2f_dtype),
+            ("intra_centroid", pos2f_dtype),
+            ("extra_centroid", pos2f_dtype),
+            ("intra_mag", "<f4"),
+            ("extra_mag", "<f4"),
+            ("intra_sn", "<f4"),
+            ("extra_sn", "<f4"),
+            ("intra_entropy", "<f4"),
+            ("extra_entropy", "<f4"),
+            ("intra_frac_bad_pix", "<f4"),
+            ("extra_frac_bad_pix", "<f4"),
+            ("intra_max_power_grad", "<f4"),
+            ("extra_max_power_grad", "<f4"),
+        ]
+        for j in self.nollIndices:
+            dtype.append((f"Z{j}", "<f4"))
+        for j in self.nollIndices:
+            dtype.append((f"Z{j}_intrinsic", "<f4"))
+        for j in self.nollIndices:
+            dtype.append((f"Z{j}_deviation", "<f4"))
+
+        table = QTable(dtype=dtype)
+
+        # Assign units where appropriate
+        table["intra_field"].unit = u.deg
+        table["extra_field"].unit = u.deg
+        table["intra_centroid"].unit = u.pixel
+        table["extra_centroid"].unit = u.pixel
+        for j in self.nollIndices:
+            table[f"Z{j}"].unit = u.nm
+        for j in self.nollIndices:
+            table[f"Z{j}_intrinsic"].unit = u.nm
+        for j in self.nollIndices:
+            table[f"Z{j}_deviation"].unit = u.nm
+
+        return table
 
     def createZkTable(self, zkCoeffRaw: pipeBase.Struct) -> QTable:
         """Create the Zernike table to store Zernike Coefficients.
@@ -400,7 +440,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 cam_name = stamps.metadata["CAM_NAME"]
 
         meta["cam_name"] = cam_name
-        meta["noll_indices"] = self.nollIndices
+        meta["noll_indices"] = self.nollIndices.list()
         meta["opd_columns"] = [f"Z{j}" for j in self.nollIndices]
         meta["intrinsic_columns"] = [f"Z{j}_intrinsic" for j in self.nollIndices]
         meta["deviation_columns"] = [f"Z{j}_deviation" for j in self.nollIndices]
@@ -458,36 +498,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             zernikes=zkTable,
             donutQualityTable=donutQualityTable,
         )
-
-    @staticmethod
-    def _createIntrinsicMap(intrinsicTable: Table | None) -> RegularGridInterpolator | None:
-        """Create a RegularGridInterpolator for the intrinsic Zernike map.
-
-        Parameters
-        ----------
-        intrinsicTable : astropy.table.Table or None
-            Table containing the intrinsic Zernike coefficients.
-
-        Returns
-        -------
-        interpolator : scipy.interpolate.RegularGridInterpolator or None
-            Interpolator for the intrinsic Zernike map,
-            or None if no table is provided.
-        """
-        if intrinsicTable is None:
-            return None
-
-        # Extract arrays of field angle (deg) and intrinsics (microns)
-        x = np.rad2deg(np.unique(intrinsicTable["x"].value))
-        y = np.rad2deg(np.unique(intrinsicTable["y"].value))
-        zks = intrinsicTable[[col for col in intrinsicTable.colnames if col.startswith("Z")]]
-        zks = zks.to_pandas().values * 1e6  # Convert to microns
-
-        # Create the interpolator
-        values = zks.reshape(y.size, x.size, -1)
-        interpolator = RegularGridInterpolator((y, x), values)
-
-        return interpolator
 
     def runQuantum(
         self,
@@ -560,8 +570,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
 
-        combinedCols = [f"Z{j}" for j in self.nollIndices]
-        outputZernikesAvg = zkTable[combinedCols][0].as_array()
+        avg = zkTable[zkTable["label"] == "average"]
+        outputZernikesAvg = np.array([avg[col] for col in avg.meta["opd_columns"]])
 
         return pipeBase.Struct(
             outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),

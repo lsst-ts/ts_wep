@@ -200,6 +200,8 @@ class DonutStamp(AbstractStamp):
         """
         Calculate the X, Y field position of the centroid in degrees.
 
+        Note the coordinate system is DVCS!
+
         Returns
         -------
         `float`
