@@ -32,13 +32,13 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
     measurement with an unweighted mean.
     """
 
-    def combineZernikes(self, zkTable: Table) -> Table:
+    def _combineZernikes(self, zkTable: Table) -> Table:
         # Set all donuts to used (no rejection in this simple mean)
         zkTable["used"] = True
 
         # Calculate mean of every Zernike column
         for colName in zkTable.colnames:
             if colName.startswith("Z"):
-                zkTable[colName][0] = np.mean(zkTable[colName][1:])
+                self._setAvg(zkTable, colName, np.nanmean)
 
         return zkTable

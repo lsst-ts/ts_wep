@@ -401,6 +401,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         meta["cam_name"] = cam_name
         meta["noll_indices"] = self.nollIndices
+        meta["opd_columns"] = [f"Z{j}" for j in self.nollIndices]
+        meta["intrinsic_columns"] = [f"Z{j}_intrinsic" for j in self.nollIndices]
+        meta["deviation_columns"] = [f"Z{j}_deviation" for j in self.nollIndices]
 
         if self.stampsIntra.metadata and self.stampsExtra.metadata:
             assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]

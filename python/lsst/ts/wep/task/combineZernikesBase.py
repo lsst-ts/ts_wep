@@ -49,6 +49,35 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         pipeBase.Task.__init__(self, **kwargs)
         self.log = logging.getLogger(type(self).__name__)  # type: ignore
 
+    @staticmethod
+    def _setAvg(zkTable: Table, colName: str, function: callable, useIdx: list | None = None) -> None:
+        """Set average value for a Zernike column.
+
+        This is an abstract method meant to be used in subclasses.
+        It sets the "average" for the given column using the function,
+        only considering the rows indicated by useIdx.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.Table`
+            The full zernike table, to be altered in place.
+        colName : `str`
+            The name of the column to set the average value for.
+        function : `callable`
+            The function to use to calculate the average value.
+            It should take a single argument which is an array
+            of values to average.
+        useIdx : `list` of `int` or `None`, optional
+            The indices of the rows to use when calculating
+            the average value. If None, all rows are used.
+            (default is None)
+        """
+        if useIdx is None:
+            useIdx = list(range(len(zkTable[zkTable["label"] != "average"])))
+
+        avg = function(zkTable[zkTable["label"] != "average"][colName][useIdx])
+        zkTable[colName][zkTable["label"] == "average"] = avg
+
     def run(self, zkTable: Table) -> pipeBase.Struct:
         """
         Combine the zernikes from the input array of Zernike
@@ -57,10 +86,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         Parameters
         ----------
         zkTable : `astropy.table.Table`
-            The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the table should
-            be the set of Zernike coefficients for a single
-            donut pair.
+            Table containing zernike coefficients for each donut (pair).
 
         Returns
         -------
@@ -72,28 +98,43 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         """
         combinedTable = self.combineZernikes(zkTable)
 
+        # Make sure that flags contains only integers
+        flags = np.array(~combinedTable[combinedTable["label"] != "average"]["used"], dtype=int)
+        self.log.info(
+            f"Using {len(flags) - np.sum(flags)} pairs out of {len(flags)} in final Zernike estimate."
+        )
+
         # Save flags and summary values in task metadata
-        flags = ~combinedTable["used"].data[1:]
         self.metadata["numDonutsTotal"] = len(flags)
         self.metadata["numDonutsUsed"] = len(flags) - np.sum(flags)
         self.metadata["numDonutsRejected"] = np.sum(flags)
-        self.metadata["combineZernikesFlags"] = list(flags)
+        self.metadata["combineZernikesFlags"] = flags.tolist()
         return pipeBase.Struct(combinedTable=combinedTable, flags=flags)
 
     @abc.abstractmethod
-    def combineZernikes(self, zkTable: Table) -> Table:
+    def _combineZernikes(self, zkTable: Table) -> None:
         """
-        Class specific algorithm to combine the Zernike
-        coefficients from each individual donut pair into
-        a single set of coefficients for the detector.
+        Abstract method to be implemented by subclasses.
+        This method should implement the specific algorithm to
+        combine the Zernike coefficients from each individual donut
+        pair into a single set of coefficients for the detector.
+
+        This function should modify the provided table in-place.
 
         Parameters
         ----------
         zkTable : `astropy.table.Table`
-            The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the table should
-            be the set of Zernike coefficients for a single
-            donut pair.
+            Table containing zernike coefficients for each donut (pair).
+        """
+        raise NotImplementedError("Subclasses must implement _combineZernikes method.")
+
+    def combineZernikes(self, zkTable: Table) -> Table:
+        """Combine Zernikes from each donut (pair) into single set for detector.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.Table`
+            Table containing zernike coefficients for each donut (pair).
 
         Returns
         -------
@@ -101,4 +142,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             The input table with the averaged Zernike coefficients and
             combination flags added.
         """
-        raise NotImplementedError("CombineZernikesBaseTask is abstract.")
+        # This is to protect the input table from modification
+        combinedTable = zkTable.copy()
+        self._combineZernikes(combinedTable)
+        return combinedTable
