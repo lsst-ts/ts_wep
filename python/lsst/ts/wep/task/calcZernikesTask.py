@@ -468,7 +468,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         Returns
         -------
         interpolator : scipy.interpolate.RegularGridInterpolator or None
-            Interpolator for the intrinsic Zernike map, or None if no table is provided.
+            Interpolator for the intrinsic Zernike map,
+            or None if no table is provided.
         """
         if intrinsicTable is None:
             return None
