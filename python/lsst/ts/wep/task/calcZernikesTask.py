@@ -46,6 +46,7 @@ from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
 from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
 from lsst.utils.timer import timeMethod
+from scipy.interpolate import RegularGridInterpolator
 
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 intra_focal_ids = set([192, 196, 200, 204])
@@ -261,8 +262,11 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             centroid = (
                 np.array((stamp.centroid_position.x, stamp.centroid_position.y), dtype=pos2f_dtype) * u.pixel
             )
-            rotAngle = stamp.metadata["BORESIGHT_ROT_ANGLE_RAD"]  # TODO: FIX THIS!
-            intrinsics = self.intrinsicMap.get(*fieldAngle, rotAngle) * u.micron
+            if stamp.defocal_type == "extra":
+                intrinsicMap = self.intrinsicMapExtra
+            else:
+                intrinsicMap = self.intrinsicMapIntra
+            intrinsics = intrinsicMap(fieldAngle[::-1])[0] * u.micron
 
         return fieldAngle, centroid, intrinsics
 
@@ -450,6 +454,35 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             donutQualityTable=donutQualityTable,
         )
 
+    @staticmethod
+    def _createIntrinsicMap(intrinsicTable: Table | None) -> RegularGridInterpolator | None:
+        """Create a RegularGridInterpolator for the intrinsic Zernike map.
+
+        Parameters
+        ----------
+        intrinsicTable : astropy.table.Table or None
+            Table containing the intrinsic Zernike coefficients.
+
+        Returns
+        -------
+        interpolator : scipy.interpolate.RegularGridInterpolator or None
+            Interpolator for the intrinsic Zernike map, or None if no table is provided.
+        """
+        if intrinsicTable is None:
+            return None
+
+        # Extract arrays of field angle (deg) and intrinsics (microns)
+        x = np.rad2deg(np.unique(intrinsicTable["x"].value))
+        y = np.rad2deg(np.unique(intrinsicTable["y"].value))
+        zks = intrinsicTable[[col for col in intrinsicTable.colnames if col.startswith("Z")]]
+        zks = zks.to_pandas().values * 1e6  # Convert to microns
+
+        # Create the interpolator
+        values = zks.reshape(y.size, x.size, -1)
+        interpolator = RegularGridInterpolator((y, x), values)
+
+        return interpolator
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
@@ -507,12 +540,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = selectedExtraStamps
         self.stampsIntra = selectedIntraStamps
 
-        # Set the intrinsic map interpolator
-        # TODO: FIX THIS!
-        self.intrinsicMap = self.estimateZernikes.intrinsicMapClass(
-            intrinsicTables,
-            nollIndices=self.nollIndices,
-        )
+        # Set the intrinsic map interpolators
+        self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTables[0])
+        self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTables[1])
 
         # Estimate Zernikes from the collection of selected stamps
         zkCoeffRaw = self.estimateZernikes.run(self.stampsExtra, self.stampsIntra, numCores=numCores)
@@ -524,7 +554,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
 
-        combinedCols = [col for col in zkTable.colnames if col.startswith("Z") and "_" not in col]
+        combinedCols = [f"Z{j}" for j in self.nollIndices]
         outputZernikesAvg = zkTable[combinedCols][0].as_array()
 
         return pipeBase.Struct(
