@@ -230,7 +230,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         for j in self.nollIndices:
             table[f"Z{j}"].unit = u.nm
         for j in self.nollIndices:
-            table[f"Z{j}_intrinsics"].unit = u.nm
+            table[f"Z{j}_intrinsic"].unit = u.nm
         for j in self.nollIndices:
             table[f"Z{j}_deviation"].unit = u.nm
 
@@ -293,6 +293,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "label": "average",
                 "used": True,
                 **{f"Z{j}": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
+                **{f"Z{j}_intrinsic": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
+                **{f"Z{j}_deviation": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
                 "intra_field": np.nan,
                 "extra_field": np.nan,
                 "intra_centroid": np.nan,
@@ -339,7 +341,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             row["label"] = f"pair{i + 1}"
             row["used"] = False  # Placeholder for now
             row.update({f"Z{j}": zk[i] for i, j in enumerate(self.nollIndices)})
-            row.update({f"Z{j}_intrinsics": intrinsics[i] for i, j in enumerate(self.nollIndices)})
+            row.update({f"Z{j}_intrinsic": intrinsics[i] for i, j in enumerate(self.nollIndices)})
             row.update({f"Z{j}_deviation": deviation[i] for i, j in enumerate(self.nollIndices)})
             row["intra_field"] = intraAngle
             row["extra_field"] = extraAngle
