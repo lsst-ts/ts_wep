@@ -102,8 +102,8 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         )
         # Create a binary flag array that indicates donuts have outlier values.
         # This array is 1 if it has any outlier values. If all available donuts
-        # have a clipped value in the first maxZernClip coefficients then reduce
-        # maxZernClip by 1 until we get one that passes.
+        # have a clipped value in the first maxZernClip coefficients then
+        # reduce maxZernClip by 1 until we get one that passes.
         numRejected = len(sigArray)
         effMaxZernClip = self.maxZernClip + 1
 

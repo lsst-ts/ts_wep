@@ -129,7 +129,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         raise NotImplementedError("Subclasses must implement _combineZernikes method.")
 
     def combineZernikes(self, zkTable: Table) -> Table:
-        """Combine Zernikes from each donut (pair) into single set for detector.
+        """Combine Zernikes from each donut (pair) into one set for detector.
 
         Parameters
         ----------
