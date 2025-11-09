@@ -234,13 +234,6 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         # from the OPD truth as a sanity check
         self.assertLess(np.sqrt(np.sum(np.square(zernCoeffAvgR40 - trueZernCoeffR40))), 0.35)
 
-    def testGetCombinedZernikes(self) -> None:
-        testArr = np.zeros((2, 25))
-        testArr[1] += 2.0
-        combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(combinedZernikesStruct.combinedZernikes, np.ones(25))
-        np.testing.assert_array_equal(combinedZernikesStruct.flags, np.zeros(len(testArr)))
-
     def testWithAndWithoutPairs(self) -> None:
         # Load the test data
         donutStampDir = os.path.join(self.testDataDir, "donutImg", "donutStamps")

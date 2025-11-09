@@ -42,7 +42,7 @@ from lsst.pipe.base import (
     connectionTypes,
 )
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
-from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.task.donutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
 from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
 from lsst.utils.timer import timeMethod
@@ -222,7 +222,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         return interpolator
 
-    def _unpackStampData(self, stamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
+    def _unpackStampData(self, stamp: DonutStamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
         """Unpack data from the stamp object, handling None stamps.
 
         Parameters
@@ -258,7 +258,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             # swap x and y), however stamp.calcFieldXY() returns coordinates
             # in the DVCS instead of CCS, which is equivalent to already
             # swapping x and y. Therefore we will not reverse the order here.
-            intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron
+            intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron  # type: ignore
 
         return fieldAngle, centroid, intrinsics
 
@@ -515,7 +515,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self,
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
-        intrinsicTables: list[Table, Table],
+        intrinsicTables: list[Table],
         numCores: int = 1,
     ) -> pipeBase.Struct:
         # If no donuts are in the donutCatalog for a set of exposures

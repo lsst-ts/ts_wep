@@ -23,7 +23,7 @@ __all__ = ["CombineZernikesBaseConfig", "CombineZernikesBaseTask"]
 
 import abc
 import logging
-from typing import Any
+from typing import Any, Callable
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -50,7 +50,7 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         self.log = logging.getLogger(type(self).__name__)  # type: ignore
 
     @staticmethod
-    def _setAvg(zkTable: Table, colName: str, function: callable, useIdx: list | None = None) -> None:
+    def _setAvg(zkTable: Table, colName: str, function: Callable, useIdx: list | None = None) -> None:
         """Set average value for a Zernike column.
 
         This is an abstract method meant to be used in subclasses.
