@@ -124,7 +124,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
                 "intrinsic_aberrations_temp",
                 dataId=self.dataIdIntra | {"detector": 192},
                 collections=["LSSTCam/aos/intrinsic"],
-            )
+            ),
         ]
 
     def testValidateConfigs(self) -> None:
@@ -332,7 +332,9 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
             self.assertEqual(dict_["mjd"], self.donutStampsIntra.metadata["MJD"])
 
         # Now estimate with pairs
-        zkCalcPairs = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
+        zkCalcPairs = self.task.run(
+            self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables
+        ).zernikes
 
         # Check metadata keys exist for pairs case
         self.assertIn("cam_name", zkCalcPairs.meta)

@@ -132,7 +132,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
                 "intrinsic_aberrations_temp",
                 dataId=self.dataIdIntra,
                 collections=["LSSTCam/aos/intrinsic"],
-            )
+            ),
         ]
 
     def testValidateConfigs(self) -> None:

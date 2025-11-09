@@ -214,9 +214,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         # Extract intrinsic Zernike coefficients (microns)
         zkTable = intrinsicTable[[f"Z{i}" for i in self.nollIndices]]
-        zks = np.column_stack(
-            [zkTable[col].to("um").value for col in zkTable.colnames]
-        )
+        zks = np.column_stack([zkTable[col].to("um").value for col in zkTable.colnames])
 
         # Create the interpolator
         values = zks.reshape(y.size, x.size, -1)
