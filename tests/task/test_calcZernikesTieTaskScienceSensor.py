@@ -172,7 +172,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         # check that 4 elements are created
         self.assertEqual(len(structNormal), 4)
 
-        zkAvg1 = structNormal.outputZernikesAvg.squeeze()
+        zkAvg1 = structNormal.outputZernikesAvg[0]
         zkAvgRow = structNormal.zernikes[structNormal.zernikes["label"] == "average"][0]
         zkAvg2 = np.array([zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
         np.testing.assert_allclose(zkAvg1, zkAvg2, rtol=1e-6, atol=0)

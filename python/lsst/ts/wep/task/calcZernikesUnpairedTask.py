@@ -117,25 +117,27 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             selectedDonuts = donutStamps
             donutQualityTable = QTable([])
 
-        # Assign stamps to either intra or extra
+        # Assign stamps to either intra or extra, and build intrinsic map
         defocalType = donutStamps.metadata["DFC_TYPE"]
-        intrinsicTables = [None, None]
         if defocalType == "extra":
+            self.stampsIntra = DonutStamps([])
             self.stampsExtra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
-            intrinsicTables[0] = intrinsicTable
+            self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTable)
+            self.intrinsicMapIntra = None
         else:
             self.stampsIntra = selectedDonuts
+            self.stampsExtra = DonutStamps([])
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
-            intrinsicTables[1] = intrinsicTable
+            self.intrinsicMapExtra = None
+            self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTable)
 
         # Estimate Zernikes
         zkCoeffRaw = self.estimateZernikes.run(
             self.stampsExtra,
             self.stampsIntra,
-            intrinsicTables=intrinsicTables,
             numCores=numCores,
         )
 
@@ -146,8 +148,8 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
 
-        combinedCols = [col for col in zkTable.colnames if col.startswith("Z") and "_" not in col]
-        outputZernikesAvg = zkTable[combinedCols][0].as_array()
+        avg = zkTable[zkTable["label"] == "average"]
+        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
 
         return pipeBase.Struct(
             outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),

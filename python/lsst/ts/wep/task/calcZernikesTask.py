@@ -574,7 +574,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zkTable = self.combineZernikes.run(zkTable).combinedTable
 
         avg = zkTable[zkTable["label"] == "average"]
-        outputZernikesAvg = np.array([avg[col] for col in avg.meta["opd_columns"]])
+        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
 
         return pipeBase.Struct(
             outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
