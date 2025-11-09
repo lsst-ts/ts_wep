@@ -1,3 +1,25 @@
+# This file is part of ts_wep.
+#
+# Developed for the LSST Telescope and Site Systems.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+# flake8: noqa
 import os
 
 from lsst.ts.wep.utils.testUtils import enforce_single_threading
@@ -84,16 +106,14 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             "detector": 191,
             "exposure": 4021123106000,
             "visit": 4021123106000,
-            "physical_filter": "r_57",
-            "band": "r",
+            "physical_filter": "g",
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 191,
             "exposure": 4021123106000,
             "visit": 4021123106000,
-            "physical_filter": "r_57",
-            "band": "r",
+            "physical_filter": "g",
         }
         self.donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
@@ -101,15 +121,16 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
-
-        # NEED TO REPLACE THIS WITH TEST REPO DATA!
-        butler = Butler("LSSTCam", collections="u/gmegias/intrinsic_aberrations_collection_temp")
         self.intrinsicTables = [
-            butler.get(
-                "intrinsic_aberrations_temp", dataId=self.dataIdExtra
+            self.butler.get(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdExtra,
+                collections=["LSSTCam/aos/intrinsic"],
             ),
-            butler.get(
-                "intrinsic_aberrations_temp", dataId=self.dataIdExtra
+            self.butler.get(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdIntra | {"detector": 192},
+                collections=["LSSTCam/aos/intrinsic"],
             )
         ]
 
@@ -270,7 +291,6 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("opd_columns", zkCalcExtra.meta)
         self.assertIn("intrinsic_columns", zkCalcExtra.meta)
         self.assertIn("deviation_columns", zkCalcExtra.meta)
-
 
         # Check metadata keys exist for intra case
         self.assertIn("cam_name", zkCalcIntra.meta)

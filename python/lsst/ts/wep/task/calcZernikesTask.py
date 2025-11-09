@@ -191,8 +191,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = DonutStamps([])
         self.stampsIntra = DonutStamps([])
 
-    @staticmethod
-    def _createIntrinsicMap(intrinsicTable: Table | None) -> RegularGridInterpolator | None:
+    def _createIntrinsicMap(self, intrinsicTable: Table | None) -> RegularGridInterpolator | None:
         """Create a RegularGridInterpolator for the intrinsic Zernike map.
 
         Parameters
@@ -209,15 +208,19 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if intrinsicTable is None:
             return None
 
-        # Extract arrays of field angle (deg) and intrinsics (microns)
-        x = np.rad2deg(np.unique(intrinsicTable["x"].value))
-        y = np.rad2deg(np.unique(intrinsicTable["y"].value))
-        zks = intrinsicTable[[col for col in intrinsicTable.colnames if col.startswith("Z")]]
-        zks = zks.to_pandas().values * 1e6  # Convert to microns
+        # Extract arrays of field angle (deg)
+        x = np.unique(intrinsicTable["x"].to("deg").value)
+        y = np.unique(intrinsicTable["y"].to("deg").value)
+
+        # Extract intrinsic Zernike coefficients (microns)
+        zkTable = intrinsicTable[[f"Z{i}" for i in self.nollIndices]]
+        zks = np.column_stack(
+            [zkTable[col].to("um").value for col in zkTable.colnames]
+        )
 
         # Create the interpolator
         values = zks.reshape(y.size, x.size, -1)
-        interpolator = RegularGridInterpolator((y, x), values) #, bounds_error=False, fill_value=np.nan)
+        interpolator = RegularGridInterpolator((y, x), values)
 
         return interpolator
 

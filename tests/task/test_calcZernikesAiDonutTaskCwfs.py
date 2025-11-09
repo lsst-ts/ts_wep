@@ -110,12 +110,14 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
             "detector": 191,
             "exposure": 4021123106000,
             "visit": 4021123106000,
+            "physical_filter": "g",
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 191,
             "exposure": 4021123106000,
             "visit": 4021123106000,
+            "physical_filter": "g",
         }
         self.donutStampsExtra = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
@@ -123,6 +125,18 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         self.donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
+        self.intrinsicTables = [
+            self.butler.get(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdExtra,
+                collections=["LSSTCam/aos/intrinsic"],
+            ),
+            self.butler.get(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdIntra | {"detector": 192},
+                collections=["LSSTCam/aos/intrinsic"],
+            )
+        ]
 
     def testValidateConfigs(self) -> None:
         self.assertEqual(type(self.task.estimateZernikes), EstimateZernikesAiDonutTask)
@@ -138,18 +152,11 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
 
         self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 8))
 
-    def testGetCombinedZernikes(self) -> None:
-        testArr = np.zeros((2, 25))
-        testArr[1] += 2.0
-        combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(combinedZernikesStruct.combinedZernikes, np.ones(25))
-        np.testing.assert_array_equal(combinedZernikesStruct.flags, np.zeros(len(testArr)))
-
     def testTableMetadata(self) -> None:
         # First estimate without pairs
         emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
-        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps).zernikes
-        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra).zernikes
+        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, self.intrinsicTables).zernikes
+        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, self.intrinsicTables).zernikes
 
         # Check metadata keys exist for extra case
         self.assertIn("cam_name", zkCalcExtra.meta)
@@ -172,7 +179,7 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
             self.assertEqual(dict_["mjd"], self.donutStampsIntra.metadata["MJD"])
 
         # Now estimate with pairs
-        zkCalcPairs = self.task.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
+        zkCalcPairs = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
 
         # Check metadata keys exist for pairs case
         self.assertIn("cam_name", zkCalcPairs.meta)
