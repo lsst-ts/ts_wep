@@ -44,7 +44,7 @@ class TestCombineZernikesBaseTask(unittest.TestCase):
 
     def testSubclassWorks(self) -> None:
         class TestCombineClass(CombineZernikesBaseTask):
-            def combineZernikes(self, zkTable: Table) -> Table:
+            def _combineZernikes(self, zkTable: Table) -> Table:
                 return zkTable
 
         table = self.prepareTestTable()
