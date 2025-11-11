@@ -71,7 +71,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
             runProgram(cleanUpCmd)
 
-        collections = "refcats/largeCatSingleCCD,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/largeCatSingleCCD,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
         instrument = "lsst.obs.lsst.LsstCam"
         cls.cameraName = "LSSTCam"
         pipelineYaml = os.path.join(testPipelineConfigDir, "testDonutFromRefitWcsPipeline.yaml")
