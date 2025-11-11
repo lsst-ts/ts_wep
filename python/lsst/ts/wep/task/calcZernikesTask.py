@@ -246,7 +246,11 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         else:
             fieldAngle = np.array(stamp.calcFieldXY(), dtype=pos2f_dtype) * u.deg
             centroid = (
-                np.array((stamp.centroid_position.x, stamp.centroid_position.y), dtype=pos2f_dtype) * u.pixel
+                np.array(
+                    (stamp.centroid_position.x, stamp.centroid_position.y),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
             )
             if stamp.defocal_type == "extra":
                 intrinsicMap = self.intrinsicMapExtra

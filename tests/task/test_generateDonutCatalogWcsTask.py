@@ -110,7 +110,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         # Run pipeline command
         runName = "run1"
         instrument = "lsst.obs.lsst.LsstCam"
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
         exposureId = 4021123106001  # Exposure ID for test extra-focal image
         testPipelineConfigDir = os.path.join(self.testDataDir, "pipelineConfigs")
         pipelineYaml = os.path.join(testPipelineConfigDir, "testDonutCatWcsPipeline.yaml")
