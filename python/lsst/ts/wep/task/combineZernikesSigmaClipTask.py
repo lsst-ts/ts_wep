@@ -31,7 +31,6 @@ from lsst.ts.wep.task.combineZernikesBase import (
 )
 from lsst.ts.wep.utils import conditionalSigmaClip
 from astropy.table import Table
-import re
 
 
 class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
