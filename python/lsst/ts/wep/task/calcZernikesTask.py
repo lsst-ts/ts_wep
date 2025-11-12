@@ -113,7 +113,7 @@ class CalcZernikesTaskConnections(
                     data_id, detector=int(data_id["detector"]) + 1
                 )
 
-                assert data_id in seen or intra_focal_data_id in to_do, (
+                assert intra_focal_data_id in seen or intra_focal_data_id in to_do, (
                     f"DataId {intra_focal_data_id} not found in seen or to_do sets."
                 )
 
