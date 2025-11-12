@@ -37,8 +37,12 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
         zkTable["used"] = True
 
         # Calculate mean of every Zernike column
-        for colName in zkTable.colnames:
-            if colName.startswith("Z"):
-                self._setAvg(zkTable, colName, np.nanmean)
+        zk_columns = (
+            zkTable.meta["opd_columns"]
+            + zkTable.meta["intrinsic_columns"]
+            + zkTable.meta["deviation_columns"]
+        )
+        for col in zk_columns:
+            self._setAvg(zkTable, col, np.nanmean)
 
         return zkTable

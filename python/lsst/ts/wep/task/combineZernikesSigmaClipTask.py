@@ -86,11 +86,11 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
     def _combineZernikes(self, zkTable: Table) -> Table:
         # Extract the array of Zernikes to perform clipping on
         if self.zkClipType == "opd":
-            columns = [col for col in zkTable.colnames if re.match("^Z\\d+$", col)]
+            columns = zkTable.meta["opd_columns"]
         elif self.zkClipType == "intrinsic":
-            columns = [col for col in zkTable.colnames if re.match("^Z\\d+_intrinsic$", col)]
+            columns = zkTable.meta["intrinsic_columns"]
         elif self.zkClipType == "deviation":
-            columns = [col for col in zkTable.colnames if re.match("^Z\\d+_deviation$", col)]
+            columns = zkTable.meta["deviation_columns"]
         else:
             raise ValueError(f"Unknown zkClipType: {self.zkClipType}")
         subTable = zkTable[zkTable["label"] != "average"][columns]

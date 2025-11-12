@@ -50,7 +50,12 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         self.log = logging.getLogger(type(self).__name__)  # type: ignore
 
     @staticmethod
-    def _setAvg(zkTable: Table, colName: str, function: Callable, useIdx: list | None = None) -> None:
+    def _setAvg(
+        zkTable: Table,
+        colName: str,
+        function: Callable = np.nanmean,
+        useIdx: list | None = None,
+    ) -> None:
         """Set average value for a Zernike column.
 
         This is an abstract method meant to be used in subclasses.
@@ -63,10 +68,10 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             The full zernike table, to be altered in place.
         colName : `str`
             The name of the column to set the average value for.
-        function : `callable`
+        function : `callable`, optional
             The function to use to calculate the average value.
             It should take a single argument which is an array
-            of values to average.
+            of values to average. (default is `np.nanmean`)
         useIdx : `list` of `int` or `None`, optional
             The indices of the rows to use when calculating
             the average value. If None, all rows are used.
@@ -77,39 +82,6 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         avg = function(zkTable[zkTable["label"] != "average"][colName][useIdx])
         zkTable[colName][zkTable["label"] == "average"] = avg
-
-    def run(self, zkTable: Table) -> pipeBase.Struct:
-        """
-        Combine the zernikes from the input array of Zernike
-        coefficients from each individual donut pair.
-
-        Parameters
-        ----------
-        zkTable : `astropy.table.Table`
-            Table containing zernike coefficients for each donut (pair).
-
-        Returns
-        -------
-        struct : `lsst.pipe.base.Struct`
-            The struct contains the following data:
-            - combinedTable : `astropy.table.Table`
-                The input table with the averaged Zernike coefficients and
-                combination flags added.
-        """
-        combinedTable = self.combineZernikes(zkTable)
-
-        # Make sure that flags contains only integers
-        flags = np.array(~combinedTable[combinedTable["label"] != "average"]["used"], dtype=int)
-        self.log.info(
-            f"Using {len(flags) - np.sum(flags)} pairs out of {len(flags)} in final Zernike estimate."
-        )
-
-        # Save flags and summary values in task metadata
-        self.metadata["numDonutsTotal"] = len(flags)
-        self.metadata["numDonutsUsed"] = len(flags) - np.sum(flags)
-        self.metadata["numDonutsRejected"] = np.sum(flags)
-        self.metadata["combineZernikesFlags"] = flags.tolist()
-        return pipeBase.Struct(combinedTable=combinedTable, flags=flags)
 
     @abc.abstractmethod
     def _combineZernikes(self, zkTable: Table) -> None:
@@ -146,3 +118,36 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         combinedTable = zkTable.copy()
         self._combineZernikes(combinedTable)
         return combinedTable
+
+    def run(self, zkTable: Table) -> pipeBase.Struct:
+        """
+        Combine the zernikes from the input array of Zernike
+        coefficients from each individual donut pair.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.Table`
+            Table containing zernike coefficients for each donut (pair).
+
+        Returns
+        -------
+        struct : `lsst.pipe.base.Struct`
+            The struct contains the following data:
+            - combinedTable : `astropy.table.Table`
+                The input table with the averaged Zernike coefficients and
+                combination flags added.
+        """
+        combinedTable = self.combineZernikes(zkTable)
+
+        # Make sure that flags contains only integers
+        flags = np.array(~combinedTable[combinedTable["label"] != "average"]["used"], dtype=int)
+        self.log.info(
+            f"Using {len(flags) - np.sum(flags)} pairs out of {len(flags)} in final Zernike estimate."
+        )
+
+        # Save flags and summary values in task metadata
+        self.metadata["numDonutsTotal"] = len(flags)
+        self.metadata["numDonutsUsed"] = len(flags) - np.sum(flags)
+        self.metadata["numDonutsRejected"] = np.sum(flags)
+        self.metadata["combineZernikesFlags"] = flags.tolist()
+        return pipeBase.Struct(combinedTable=combinedTable, flags=flags)
