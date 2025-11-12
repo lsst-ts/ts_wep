@@ -36,6 +36,9 @@ class TestCombineZernikesMeanTask(unittest.TestCase):
         used = [True] + 10 * [False]
         z4 = [-1.0] + list(np.arange(10))
         table = Table([label, used, z4], names=["label", "used", "Z4"])
+        table.meta["opd_columns"] = ["Z4"]
+        table.meta["intrinsic_columns"] = []
+        table.meta["deviation_columns"] = []
         return table
 
     def testCombineZernikes(self) -> None:

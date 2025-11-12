@@ -61,11 +61,10 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         )
         self.assertEqual(3, self.task.maxZernClip)
 
-        config = self.config.copy()
-        config.sigmaClipKwargs["sigma"] = 2.0
-        config.stdMin = 0.005
-        config.maxZernClip = 5
-        task = CombineZernikesSigmaClipTask(config=config)
+        self.config.sigmaClipKwargs["sigma"] = 2.0
+        self.config.stdMin = 0.005
+        self.config.maxZernClip = 5
+        task = CombineZernikesSigmaClipTask(config=self.config)
         self.assertEqual(2.0, task.sigmaClipKwargs["sigma"])
         self.assertEqual(0.005, task.stdMin)
         self.assertEqual(5, task.maxZernClip)
@@ -93,9 +92,8 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertTrue(outTable["used"].tolist() == 99 * [True] + 3 * [False])
 
         # Test that raising maxZernClip does trigger flagging
-        config = self.config.copy()
-        config.maxZernClip = 5
-        task = CombineZernikesSigmaClipTask(config=config)
+        self.config.maxZernClip = 5
+        task = CombineZernikesSigmaClipTask(config=self.config)
         outTable = task.combineZernikes(inTable)
         self.assertFalse(outTable[1]["used"])
 
@@ -123,9 +121,8 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         inTable = self.prepareTestTable()
 
         # Test cutting on OPD
-        config = self.config.copy()
-        config.zkClipType = "opd"
-        task = CombineZernikesSigmaClipTask(config=config)
+        self.config.zkClipType = "opd"
+        task = CombineZernikesSigmaClipTask(config=self.config)
         outTable = task.combineZernikes(inTable)
 
         avg = outTable[outTable["label"] == "average"]
@@ -135,9 +132,8 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertTrue(outTable["used"].tolist() == [True] + [False] + 100 * [True])
 
         # Test cutting on intrinsics
-        config = self.config.copy()
-        config.zkClipType = "intrinsic"
-        task = CombineZernikesSigmaClipTask(config=config)
+        self.config.zkClipType = "intrinsic"
+        task = CombineZernikesSigmaClipTask(config=self.config)
         outTable = task.combineZernikes(inTable)
 
         avg = outTable[outTable["label"] == "average"]
