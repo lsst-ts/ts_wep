@@ -200,7 +200,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "centroid_y",
             "detector",
             "source_flux",
-            "donut_id"
+            "donut_id",
         ]
         self.assertCountEqual(testTable.columns, expected_columns)
 
@@ -239,7 +239,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "centroid_y",
             "detector",
             "source_flux",
-            "donut_id"
+            "donut_id",
         ]
         self.assertCountEqual(taskOutNoSrc.donutCatalog.columns, expected_columns)
 
@@ -366,15 +366,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertEqual(len(outputTable), 6)
         self.assertCountEqual(
             outputTable.columns,
-            [
-                "coord_ra",
-                "coord_dec",
-                "centroid_x",
-                "centroid_y",
-                "detector",
-                "source_flux",
-                "donut_id"
-            ],
+            ["coord_ra", "coord_dec", "centroid_x", "centroid_y", "detector", "source_flux", "donut_id"],
         )
 
         tolerance = 15  # pixels
