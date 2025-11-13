@@ -180,20 +180,12 @@ class DonutStamp(AbstractStamp):
             # "BANDPASS" stands for the exposure bandpass
             # If this is an old version of the stamps without bandpass
             # information then an empty string ("") will be set as default.
-            bandpass=(
-                metadata.getArray("BANDPASS")[index]
-                if metadata.get("BANDPASS") is not None
-                else ""
-            ),
+            bandpass=(metadata.getArray("BANDPASS")[index] if metadata.get("BANDPASS") is not None else ""),
             # "DONUT_ID" is the donut identification number
             # created at detection stage. If this is an old
             # version of stamps without donut id,
             # an empty string will be set as default
-            donut_id=(
-                metadata.getArray("DONUT_ID")[index]
-                if metadata.get("DONUT_ID") is not None
-                else ""
-            )
+            donut_id=(metadata.getArray("DONUT_ID")[index] if metadata.get("DONUT_ID") is not None else ""),
         )
 
     def getCamera(self) -> Camera:
