@@ -186,10 +186,8 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         self._roundtrip(self.donutStamps)
         # check if appending something other than a DonutStamp raises
         with self.assertRaises(ValueError) as context:
-            self.donutStamps.append("hello world") # type: ignore[arg-type]
-        self.assertEqual(
-            "Objects added must be a DonutStamp object.", str(context.exception)
-        )
+            self.donutStamps.append("hello world")  # type: ignore[arg-type]
+        self.assertEqual("Objects added must be a DonutStamp object.", str(context.exception))
 
     def testExtend(self) -> None:
         donutStamps2 = copy(self.donutStamps)
