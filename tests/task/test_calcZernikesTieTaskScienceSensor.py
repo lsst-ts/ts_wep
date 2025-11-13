@@ -244,7 +244,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
             "DONUT_ID",
-            "RADIUS"
+            "RADIUS",
         ]
         np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
