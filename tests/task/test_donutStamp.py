@@ -196,7 +196,7 @@ class TestDonutStamp(unittest.TestCase):
             "R22_S11",
             "LSSTCam",
             "r",
-            ""
+            "",
         )
         np.testing.assert_array_almost_equal(donutStamp.calcFieldXY(), (0, 0))
 
@@ -221,7 +221,7 @@ class TestDonutStamp(unittest.TestCase):
                     detName,
                     "LSSTCam",
                     "r",
-                    ""
+                    "",
                 )
                 fieldAngle = donutStamp.calcFieldXY()
                 self.assertEqual(fieldAngle[0], np.degrees(trueFieldAngleX))
@@ -238,7 +238,7 @@ class TestDonutStamp(unittest.TestCase):
             "R22_S11",
             "LSSTCam",
             "r",
-            ""
+            "",
         )
 
         # Check that mask is empty at start
@@ -294,7 +294,7 @@ class TestDonutStamp(unittest.TestCase):
                 detName,
                 "LSSTCam",
                 "r",
-                ""
+                "",
             )
 
             # Make the mask
