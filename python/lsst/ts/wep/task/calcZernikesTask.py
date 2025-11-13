@@ -292,7 +292,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("intra_max_power_grad", "<f4"),
             ("extra_max_power_grad", "<f4"),
             ("intra_donut_id", "<U12"),
-            ("extra_donut_id", "<U12")
+            ("extra_donut_id", "<U12"),
         ]
         for j in self.nollIndices:
             dtype.append((f"Z{j}", "<f4"))
@@ -356,8 +356,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_frac_bad_pix": np.nan,
                 "intra_max_power_grad": np.nan,
                 "extra_max_power_grad": np.nan,
-                "intra_donut_id":"",
-                "extra_donut_id":""
+                "intra_donut_id": "",
+                "extra_donut_id": "",
             }
         )
         for i, (intra, extra, zk) in enumerate(
@@ -489,7 +489,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "RADIUS",
             "RADIUS_FAIL_FLAG",
             "DEFOCAL_TYPE",
-            "DONUT_ID"
+            "DONUT_ID",
         ]
         if qualityTable is None:
             donutQualityTable = QTable({name: [] for name in qualityTableCols})
