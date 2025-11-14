@@ -23,6 +23,7 @@ __all__ = ["CombineZernikesMeanTask"]
 
 import numpy as np
 from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
+from astropy.table import Table
 
 
 class CombineZernikesMeanTask(CombineZernikesBaseTask):
@@ -31,5 +32,17 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
     measurement with an unweighted mean.
     """
 
-    def combineZernikes(self, zernikeArray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        return np.mean(zernikeArray, axis=0), np.zeros(len(zernikeArray), dtype=int)
+    def _combineZernikes(self, zkTable: Table) -> Table:
+        # Set all donuts to used (no rejection in this simple mean)
+        zkTable["used"] = True
+
+        # Calculate mean of every Zernike column
+        zk_columns = (
+            zkTable.meta["opd_columns"]
+            + zkTable.meta["intrinsic_columns"]
+            + zkTable.meta["deviation_columns"]
+        )
+        for col in zk_columns:
+            self._setAvg(zkTable, col, np.nanmean)
+
+        return zkTable

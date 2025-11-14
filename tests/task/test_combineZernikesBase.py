@@ -25,9 +25,20 @@ import unittest
 import lsst.pipe.base as pipeBase
 import numpy as np
 from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
+from astropy.table import Table
 
 
 class TestCombineZernikesBaseTask(unittest.TestCase):
+    def prepareTestTable(self) -> Table:
+        label = ["average"] + [f"pair{i}" for i in range(10)]
+        used = [True] + 10 * [False]
+        z4 = [-1] + list(np.arange(10))
+        table = Table([label, used, z4], names=["label", "used", "Z4"])
+        table.meta["opd_columns"] = ["Z4"]
+        table.meta["intrinsic_columns"] = []
+        table.meta["deviation_columns"] = []
+        return table
+
     def testAbstractClassTypeError(self) -> None:
         # Without a combineZernikes method the class
         # should not be built
@@ -36,14 +47,15 @@ class TestCombineZernikesBaseTask(unittest.TestCase):
 
     def testSubclassWorks(self) -> None:
         class TestCombineClass(CombineZernikesBaseTask):
-            def combineZernikes(self, zernikeArray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-                return zernikeArray, np.ones(len(zernikeArray))
+            def _combineZernikes(self, zkTable: Table) -> Table:
+                return zkTable
+
+        table = self.prepareTestTable()
 
         task = TestCombineClass()
-        taskOutput = task.run(np.arange(10))
+        taskOutput = task.run(table)
         self.assertEqual(type(taskOutput), pipeBase.Struct)
-        np.testing.assert_array_equal(taskOutput.combinedZernikes, np.arange(10))
-        np.testing.assert_array_equal(taskOutput.flags, np.ones(10))
+        self.assertTrue(all(taskOutput.combinedTable == table))
         self.assertTrue(isinstance(taskOutput.flags[0], numbers.Integral))
 
         # Test Metadata stored

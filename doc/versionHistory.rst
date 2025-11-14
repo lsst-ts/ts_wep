@@ -5,6 +5,16 @@
 ##################
 Version History
 ##################
+
+.. _lsst.ts.wep-16.0.0:
+
+-------------
+16.0.0
+-------------
+
+* Added intrinsic tables to CalcZernikesTask. Intrinsics and wavefront deviations are now saved in the Zernikes table.
+* CombineZernikesTask now operates on the Zernikes table, rather than on the old arrays.
+
 .. _lsst.ts.wep-15.1.0:
 
 -------------

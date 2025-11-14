@@ -33,7 +33,8 @@ import astropy.units as u
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
-from astropy.table import QTable, vstack
+from astropy.table import QTable, Table, vstack
+from lsst.daf.butler import DataCoordinate
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -41,17 +42,20 @@ from lsst.pipe.base import (
     connectionTypes,
 )
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
-from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.task.donutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
 from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
 from lsst.utils.timer import timeMethod
+from scipy.interpolate import RegularGridInterpolator
 
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
+intra_focal_ids = set([192, 196, 200, 204])
+extra_focal_ids = set([191, 195, 199, 203])
 
 
 class CalcZernikesTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "detector", "instrument"),  # type: ignore
+    dimensions=("visit", "detector", "instrument", "physical_filter"),  # type: ignore
 ):
     donutStampsExtra = connectionTypes.Input(
         doc="Extra-focal Donut Postage Stamp Images",
@@ -64,6 +68,13 @@ class CalcZernikesTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
+    )
+    intrinsicTables = connectionTypes.Input(
+        doc="Intrinsic Zernike Map for the instrument",
+        dimensions=("detector", "instrument", "physical_filter"),
+        storageClass="ArrowAstropy",
+        name="intrinsic_aberrations_temp",
+        multiple=True,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -89,6 +100,27 @@ class CalcZernikesTaskConnections(
         storageClass="AstropyQTable",
         name="donutQualityTable",
     )
+
+    def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
+        """Add intrinsicTables inputs from intra-focal donuts to the
+        tasks running on extra-focal data ids."""
+        to_do = set(adjuster.iter_data_ids())
+        seen = set()
+        while to_do:
+            data_id = to_do.pop()
+            if data_id["detector"] in extra_focal_ids:
+                intra_focal_data_id = DataCoordinate.standardize(
+                    data_id, detector=int(data_id["detector"]) + 1
+                )
+
+                assert intra_focal_data_id in seen or intra_focal_data_id in to_do, (
+                    f"DataId {intra_focal_data_id} not found in seen or to_do sets."
+                )
+
+                intra_inputs = adjuster.get_inputs(intra_focal_data_id)
+                adjuster.add_input(data_id, "intrinsicTables", intra_inputs["intrinsicTables"][0])
+            elif data_id["detector"] in intra_focal_ids:
+                seen.add(data_id)
 
 
 class CalcZernikesTaskConfig(
@@ -159,6 +191,81 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = DonutStamps([])
         self.stampsIntra = DonutStamps([])
 
+    def _createIntrinsicMap(self, intrinsicTable: Table | None) -> RegularGridInterpolator | None:
+        """Create a RegularGridInterpolator for the intrinsic Zernike map.
+
+        Parameters
+        ----------
+        intrinsicTable : astropy.table.Table or None
+            Table containing the intrinsic Zernike coefficients.
+
+        Returns
+        -------
+        interpolator : scipy.interpolate.RegularGridInterpolator or None
+            Interpolator for the intrinsic Zernike map,
+            or None if no table is provided.
+        """
+        if intrinsicTable is None:
+            return None
+
+        # Extract arrays of field angle (deg)
+        x = np.unique(intrinsicTable["x"].to("deg").value)
+        y = np.unique(intrinsicTable["y"].to("deg").value)
+
+        # Extract intrinsic Zernike coefficients (microns)
+        zkTable = intrinsicTable[[f"Z{i}" for i in self.nollIndices]]
+        zks = np.column_stack([zkTable[col].to("um").value for col in zkTable.colnames])
+
+        # Create the interpolator
+        values = zks.reshape(y.size, x.size, -1)
+        interpolator = RegularGridInterpolator((y, x), values)
+
+        return interpolator
+
+    def _unpackStampData(self, stamp: DonutStamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
+        """Unpack data from the stamp object, handling None stamps.
+
+        Parameters
+        ----------
+        stamp : DonutStamp or None
+            The DonutStamp object to unpack data from.
+
+        Returns
+        -------
+        fieldAngle : `astropy.units.Quantity`
+            The field angle of the stamp in degrees.
+        centroid : `astropy.units.Quantity`
+            The centroid position of the stamp in pixels.
+        intrinsics : `astropy.units.Quantity`
+            The intrinsic Zernike coefficients for the stamp in microns.
+        """
+        if stamp is None:
+            fieldAngle = np.array(np.nan, dtype=pos2f_dtype) * u.deg
+            centroid = np.array((np.nan, np.nan), dtype=pos2f_dtype) * u.pixel
+            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
+        else:
+            fieldAngle = np.array(stamp.calcFieldXY(), dtype=pos2f_dtype) * u.deg
+            centroid = (
+                np.array(
+                    (stamp.centroid_position.x, stamp.centroid_position.y),
+                    dtype=pos2f_dtype,
+                )
+                * u.pixel
+            )
+            if stamp.defocal_type == "extra":
+                intrinsicMap = self.intrinsicMapExtra
+            else:
+                intrinsicMap = self.intrinsicMapIntra
+
+            # Note that if you compare to the _createIntrinsicMap method you
+            # might think we would need to reverse the fieldAngle here (i.e.
+            # swap x and y), however stamp.calcFieldXY() returns coordinates
+            # in the DVCS instead of CCS, which is equivalent to already
+            # swapping x and y. Therefore we will not reverse the order here.
+            intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron  # type: ignore
+
+        return fieldAngle, centroid, intrinsics
+
     def initZkTable(self) -> QTable:
         """Initialize the table to store the Zernike coefficients
 
@@ -187,6 +294,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         ]
         for j in self.nollIndices:
             dtype.append((f"Z{j}", "<f4"))
+        for j in self.nollIndices:
+            dtype.append((f"Z{j}_intrinsic", "<f4"))
+        for j in self.nollIndices:
+            dtype.append((f"Z{j}_deviation", "<f4"))
 
         table = QTable(dtype=dtype)
 
@@ -197,14 +308,14 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         table["extra_centroid"].unit = u.pixel
         for j in self.nollIndices:
             table[f"Z{j}"].unit = u.nm
+        for j in self.nollIndices:
+            table[f"Z{j}_intrinsic"].unit = u.nm
+        for j in self.nollIndices:
+            table[f"Z{j}_deviation"].unit = u.nm
 
         return table
 
-    def createZkTable(
-        self,
-        zkCoeffRaw: pipeBase.Struct,
-        zkCoeffCombined: pipeBase.Struct,
-    ) -> QTable:
+    def createZkTable(self, zkCoeffRaw: pipeBase.Struct) -> QTable:
         """Create the Zernike table to store Zernike Coefficients.
 
         Note this is written with the assumption that either extraStamps or
@@ -215,8 +326,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         ----------
         zkCoeffRaw: pipeBase.Struct
             All zernikes returned by self.estimateZernikes.run(...)
-        zkCoeffCombined
-            Combined zernikes returned by self.combineZernikes.run(...)
 
         Returns
         -------
@@ -228,10 +337,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             {
                 "label": "average",
                 "used": True,
-                **{
-                    f"Z{j}": zkCoeffCombined.combinedZernikes[i] * u.micron
-                    for i, j in enumerate(self.nollIndices)
-                },
+                **{f"Z{j}": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
+                **{f"Z{j}_intrinsic": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
+                **{f"Z{j}_deviation": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
                 "intra_field": np.nan,
                 "extra_field": np.nan,
                 "intra_centroid": np.nan,
@@ -248,12 +356,11 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_max_power_grad": np.nan,
             }
         )
-        for i, (intra, extra, zk, flag) in enumerate(
+        for i, (intra, extra, zk) in enumerate(
             zip_longest(
                 self.stampsIntra,
                 self.stampsExtra,
                 zkCoeffRaw.zernikes,
-                zkCoeffCombined.flags,
             )
         ):
             # If zk is None, we need to stop. This can happen when running
@@ -262,54 +369,29 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             if zk is None:
                 break
 
+            # Assign units
+            zk = zk * u.micron
+
+            # Unpack data from stamps, handling cases with None stamps
+            intraAngle, intraCentroid, intraIntrinsics = self._unpackStampData(intra)
+            extraAngle, extraCentroid, extraIntrinsics = self._unpackStampData(extra)
+
+            # Average the intrinsics
+            intrinsics = np.nanmean((intraIntrinsics, extraIntrinsics), axis=0) * u.micron
+
+            # Calculate the wavefront deviation
+            deviation = zk - intrinsics
+
             row: dict = dict()
             row["label"] = f"pair{i + 1}"
-            row["used"] = not flag
-            row.update({f"Z{j}": zk[i] * u.micron for i, j in enumerate(self.nollIndices)})
-            row["intra_field"] = (
-                (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
-                if intra is None
-                else (np.array(intra.calcFieldXY(), dtype=pos2f_dtype) * u.deg)
-            )
-            row["extra_field"] = (
-                (np.array(np.nan, dtype=pos2f_dtype) * u.deg)
-                if extra is None
-                else (np.array(extra.calcFieldXY(), dtype=pos2f_dtype) * u.deg)
-            )
-            row["intra_centroid"] = (
-                (
-                    np.array(
-                        (np.nan, np.nan),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-                if intra is None
-                else (
-                    np.array(
-                        (intra.centroid_position.x, intra.centroid_position.y),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-            )
-            row["extra_centroid"] = (
-                (
-                    np.array(
-                        (np.nan, np.nan),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-                if extra is None
-                else (
-                    np.array(
-                        (extra.centroid_position.x, extra.centroid_position.y),
-                        dtype=pos2f_dtype,
-                    )
-                    * u.pixel
-                )
-            )
+            row["used"] = False  # Placeholder for now
+            row.update({f"Z{j}": zk[i] for i, j in enumerate(self.nollIndices)})
+            row.update({f"Z{j}_intrinsic": intrinsics[i] for i, j in enumerate(self.nollIndices)})
+            row.update({f"Z{j}_deviation": deviation[i] for i, j in enumerate(self.nollIndices)})
+            row["intra_field"] = intraAngle
+            row["extra_field"] = extraAngle
+            row["intra_centroid"] = intraCentroid
+            row["extra_centroid"] = extraCentroid
             for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
                 for stamps, foc in [
                     (self.stampsIntra, "intra"),
@@ -363,6 +445,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 cam_name = stamps.metadata["CAM_NAME"]
 
         meta["cam_name"] = cam_name
+        meta["noll_indices"] = self.nollIndices.list()
+        meta["opd_columns"] = [f"Z{j}" for j in self.nollIndices]
+        meta["intrinsic_columns"] = [f"Z{j}_intrinsic" for j in self.nollIndices]
+        meta["deviation_columns"] = [f"Z{j}_deviation" for j in self.nollIndices]
 
         if self.stampsIntra.metadata and self.stampsExtra.metadata:
             assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]
@@ -433,6 +519,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self,
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
+        intrinsicTables: list[Table],
         numCores: int = 1,
     ) -> pipeBase.Struct:
         # If no donuts are in the donutCatalog for a set of exposures
@@ -474,18 +561,31 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = selectedExtraStamps
         self.stampsIntra = selectedIntraStamps
 
+        # Set the intrinsic map interpolators
+        if self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
+            # If both intra and extra focal donuts are from the same detector,
+            # then we only have one intrinsic table to use for both.
+            self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTables[0])
+            self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTables[0])
+        else:
+            self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTables[0])
+            self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTables[1])
+
         # Estimate Zernikes from the collection of selected stamps
         zkCoeffRaw = self.estimateZernikes.run(self.stampsExtra, self.stampsIntra, numCores=numCores)
-        zkCoeffCombined = self.combineZernikes.run(zkCoeffRaw.zernikes)
 
-        zkTable = self.createZkTable(
-            zkCoeffRaw,
-            zkCoeffCombined,
-        )
+        # Save the outputs in the table
+        zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
+        # Combine Zernikes
+        zkTable = self.combineZernikes.run(zkTable).combinedTable
+
+        avg = zkTable[zkTable["label"] == "average"]
+        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
+
         return pipeBase.Struct(
-            outputZernikesAvg=np.atleast_2d(np.array(zkCoeffCombined.combinedZernikes)),
+            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
             outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
             zernikes=zkTable,
             donutQualityTable=donutQualityTable,

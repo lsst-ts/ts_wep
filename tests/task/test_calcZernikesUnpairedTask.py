@@ -72,7 +72,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
                 runProgram(cleanUpCmd)
 
-            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
             instrument = "lsst.obs.lsst.LsstCam"
             pipelineYaml = os.path.join(
                 testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
@@ -105,12 +105,14 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             "detector": 94,
             "exposure": 4021123106001,
             "visit": 4021123106001,
+            "physical_filter": "g",
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106002,
             "visit": 4021123106002,
+            "physical_filter": "g",
         }
 
     def testWithAndWithoutPairs(self) -> None:
@@ -121,6 +123,11 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
+        intrinsicTable = self.butler.get(
+            "intrinsic_aberrations_temp",
+            dataId=self.dataIdExtra,
+            collections=["LSSTCam/aos/intrinsic"],
+        )
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
@@ -129,7 +136,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             config.estimateZernikes.retarget(subtask)
             pairedTask = CalcZernikesTask(config=config)
 
-            pairedZk = pairedTask.run(donutStampsExtra, donutStampsIntra)
+            pairedZk = pairedTask.run(donutStampsExtra, donutStampsIntra, 2 * [intrinsicTable])
             pairedZk = pairedZk.outputZernikesAvg
 
             # Calculate Zernikes with stamps unpaired
@@ -137,8 +144,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             config.estimateZernikes.retarget(subtask)
             unpairedTask = CalcZernikesUnpairedTask(config=config)
 
-            extraZk = unpairedTask.run(donutStampsExtra).outputZernikesAvg
-            intraZk = unpairedTask.run(donutStampsIntra).outputZernikesAvg
+            extraZk = unpairedTask.run(donutStampsExtra, intrinsicTable).outputZernikesAvg
+            intraZk = unpairedTask.run(donutStampsIntra, intrinsicTable).outputZernikesAvg
             meanZk = np.mean([extraZk, intraZk], axis=0)
 
             # Check that results are similar
@@ -153,6 +160,11 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
+        intrinsicTable = self.butler.get(
+            "intrinsic_aberrations_temp",
+            dataId=self.dataIdExtra,
+            collections=["LSSTCam/aos/intrinsic"],
+        )
 
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
@@ -161,7 +173,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 config = CalcZernikesUnpairedTaskConfig()
                 config.estimateZernikes.retarget(subtask)
                 task = CalcZernikesUnpairedTask(config=config)
-                structNormal = task.run(stamps)
+                structNormal = task.run(stamps, intrinsicTable)
 
                 # check that 4 elements are created
                 self.assertEqual(len(structNormal), 4)
@@ -215,7 +227,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
                 # Turn on the donut stamp selector
                 task.doDonutStampSelector = True
-                structSelect = task.run(stamps)
+                structSelect = task.run(stamps, intrinsicTable)
                 # check that donut quality is reported for all donuts
                 self.assertEqual(
                     len(structSelect.donutQualityTable),
@@ -241,7 +253,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
                 # test null run
                 emptyStamps = DonutStamps([], metadata=stamps.metadata)
-                structNull = task.run(emptyStamps)
+                structNull = task.run(emptyStamps, intrinsicTable)
 
                 for struct in [structNormal, structNull]:
                     # test that in accordance with declared connections,

@@ -19,34 +19,42 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import numbers
 import unittest
 
 import lsst.pipe.base as pipeBase
 import numpy as np
 from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
+from astropy.table import Table
 
 
 class TestCombineZernikesMeanTask(unittest.TestCase):
     def setUp(self) -> None:
         self.task = CombineZernikesMeanTask()
 
-    def prepareTestArray(self) -> np.ndarray:
-        inputArray = np.ones((2, 10))
-        inputArray[1] += 2.0
-        return inputArray
+    def prepareTestTable(self) -> Table:
+        label = ["average"] + [f"pair{i}" for i in range(10)]
+        used = [True] + 10 * [False]
+        z4 = [-1.0] + list(np.arange(10))
+        table = Table([label, used, z4], names=["label", "used", "Z4"])
+        table.meta["opd_columns"] = ["Z4"]
+        table.meta["intrinsic_columns"] = []
+        table.meta["deviation_columns"] = []
+        return table
 
     def testCombineZernikes(self) -> None:
-        zernikeArray = self.prepareTestArray()
-        combinedZernikes, flags = self.task.combineZernikes(zernikeArray)
-        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
-        np.testing.assert_array_equal(np.zeros(2), flags)
-        self.assertTrue(isinstance(flags[0], numbers.Integral))
+        inTable = self.prepareTestTable()
+        outTable = self.task.combineZernikes(inTable)
+        self.assertTrue(all(outTable["used"]))
+        self.assertEqual(outTable[outTable["label"] == "average"]["Z4"], np.arange(10).mean())
 
     def testTaskRun(self) -> None:
-        zernikeArray = self.prepareTestArray()
-        combinedZernikesStruct = self.task.run(zernikeArray)
-        self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)
-        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes)
-        np.testing.assert_array_equal(np.zeros(2), combinedZernikesStruct.flags)
-        self.assertTrue(isinstance(combinedZernikesStruct.flags[0], numbers.Integral))
+        inTable = self.prepareTestTable()
+        output = self.task.run(inTable.copy())
+        self.assertEqual(type(output), pipeBase.Struct)
+
+        outTable = output.combinedTable
+        self.assertTrue(all(outTable["used"]))
+        self.assertEqual(outTable[outTable["label"] == "average"]["Z4"], np.arange(10).mean())
+
+        flags = output.flags
+        self.assertTrue(all(flags == 0))
