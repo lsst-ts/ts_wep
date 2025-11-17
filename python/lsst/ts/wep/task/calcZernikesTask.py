@@ -404,7 +404,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     if len(stamps) > 0 and key in stamps.metadata:
                         val = stamps.metadata.getArray(key)[i]
                     else:
-                        val = np.nan
+                        val = "" if key == "DONUT_ID" else np.nan
                     row[f"{foc}_{key.lower()}"] = val
             zkTable.add_row(row)
 
