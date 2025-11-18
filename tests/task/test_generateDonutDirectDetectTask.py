@@ -200,7 +200,6 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             "centroid_y",
             "detector",
             "source_flux",
-            "donut_id",
         ]
         self.assertCountEqual(testTable.columns, expected_columns)
 
