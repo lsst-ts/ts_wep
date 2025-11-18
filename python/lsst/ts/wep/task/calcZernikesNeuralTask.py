@@ -1192,15 +1192,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         zkCoeffRaw = pipeBase.Struct(
             zernikes=zernikesRaw,  # 2D array of shape (numDonuts, nZernikes)
         )
-        zkCoeffCombined = pipeBase.Struct(
-            combinedZernikes=zernikesAvg[0],  # 1D array of aggregated Zernikes
-            flags=np.zeros(len(zernikesRaw), dtype=bool),  # All donuts are used (not flagged)
-        )
-
-        zernikesTable = self.createZkTable(
-            zkCoeffRaw=zkCoeffRaw,
-            zkCoeffCombined=zkCoeffCombined,
-        )
+        zernikesTable = self.createZkTable(zkCoeffRaw=zkCoeffRaw)
+        self._updateAverageRowWithAggregatedZernikes(zernikesTable, aggregatedZernikes)
         # Add OOD scores to zernikes table as a per-donut column
         # OOD scores are extracted in the same order as donuts from TARTS
         # internal data, and both come from the same TARTS run, so they
@@ -1251,3 +1244,35 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutTable=donutTable,
             donutQualityTable=donutQualityTable,
         )
+
+    def _updateAverageRowWithAggregatedZernikes(
+        self, zkTable: QTable, aggregatedZernikes: np.ndarray
+    ) -> None:
+        """Populate the average row of `zkTable` with neural aggregated data.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.QTable`
+            Table returned by ``createZkTable`` containing placeholder values.
+            The first row corresponds to the aggregate (average) entry.
+        aggregatedZernikes : `numpy.ndarray`
+            One-dimensional array of aggregated Zernike coefficients produced
+            by TARTS (in microns).
+        """
+        if len(zkTable) == 0:
+            return
+
+        agg = np.asarray(aggregatedZernikes, dtype=float).ravel()
+        if len(agg) != len(self.nollIndices):
+            raise ValueError(
+                "Neural aggregated Zernike vector length "
+                f"{len(agg)} does not match configured nollIndices length {len(self.nollIndices)}."
+            )
+
+        agg_quant = (agg * u.micron).to(u.nm)
+        avg_row = zkTable[0]
+
+        for idx, j in enumerate(self.nollIndices):
+            avg_row[f"Z{j}"] = agg_quant[idx]
+            avg_row[f"Z{j}_deviation"] = agg_quant[idx]
+            avg_row[f"Z{j}_intrinsic"] = np.nan * u.nm
