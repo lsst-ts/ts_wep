@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-16.0.1:
+
+-------------
+16.0.1
+-------------
+
+* Update astromTask defaults inside refitWcsTask to turn off new default centroid error limit added in DM stack w_2025_46.
+
 .. _lsst.ts.wep-16.0.0:
 
 -------------
