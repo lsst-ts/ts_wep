@@ -1245,6 +1245,45 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutQualityTable=donutQualityTable,
         )
 
+    def _unpackStampData(self, stamp: DonutStamp | None) -> tuple:
+        """Override parent method to handle missing intrinsic maps.
+
+        The neural task does not use intrinsic Zernike tables, so this method
+        returns NaN for intrinsic values instead of trying to access
+        intrinsicMapIntra or intrinsicMapExtra attributes.
+
+        Parameters
+        ----------
+        stamp : DonutStamp or None
+            The DonutStamp object to unpack data from.
+
+        Returns
+        -------
+        fieldAngle : `astropy.units.Quantity`
+            The field angle of the stamp in degrees.
+        centroid : `astropy.units.Quantity`
+            The centroid position of the stamp in pixels.
+        intrinsics : `astropy.units.Quantity`
+            The intrinsic Zernike coefficients (always NaN for neural task).
+        """
+        if stamp is None:
+            fieldAngle = np.array(np.nan, dtype=POS2F_DTYPE) * u.deg
+            centroid = np.array((np.nan, np.nan), dtype=POS2F_DTYPE) * u.pixel
+            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
+        else:
+            fieldAngle = np.array(stamp.calcFieldXY(), dtype=POS2F_DTYPE) * u.deg
+            centroid = (
+                np.array(
+                    (stamp.centroid_position.x, stamp.centroid_position.y),
+                    dtype=POS2F_DTYPE,
+                )
+                * u.pixel
+            )
+            # Neural task doesn't use intrinsic maps, so return NaN intrinsics
+            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
+
+        return fieldAngle, centroid, intrinsics
+
     def _updateAverageRowWithAggregatedZernikes(
         self, zkTable: QTable, aggregatedZernikes: np.ndarray
     ) -> None:
