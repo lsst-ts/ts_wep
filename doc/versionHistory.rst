@@ -38,6 +38,11 @@ Version History
 -------------
 
 * Update astromTask defaults inside refitWcsTask to turn off new default centroid error limit added in DM stack w_2025_46.
+* Fix CalcZernikesNeuralTask to handle missing intrinsic maps by overriding
+  `_unpackStampData()` method to return NaN for intrinsic values (neural task
+  does not use intrinsic Zernike tables).
+* Fix CalcZernikesNeuralTask `createZkTable()` call to remove unsupported
+  `zkCoeffCombined` argument that was causing TypeError in production pipelines.
 
 .. _lsst.ts.wep-16.0.0:
 
