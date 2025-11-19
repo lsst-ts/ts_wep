@@ -324,3 +324,11 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("opd_columns", zkCalcPairs.meta)
         self.assertIn("intrinsic_columns", zkCalcPairs.meta)
         self.assertIn("deviation_columns", zkCalcPairs.meta)
+
+    def testCreateIntrinsicMap(self) -> None:
+        for intrinsicTable in self.intrinsicTables:
+            intrinsicMap = self.task._createIntrinsicMap(intrinsicTable)
+            self.assertEqual(
+                intrinsicMap(intrinsicTable["y"].to("deg")[0], intrinsicTable["x"].to("deg")[0])[0],
+                intrinsicTable["Z4"].to("um").value[0],
+            )
