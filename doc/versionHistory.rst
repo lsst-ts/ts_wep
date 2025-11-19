@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-16.0.2:
+
+-------------
+16.0.2
+-------------
+
+* Change intrinsic map interpolation to LinearNDInterpolator to handle irregular grid of intrinsic Zernike measurements that appear due to vignetting in the model that creates the maps.
+
 .. _lsst.ts.wep-16.0.1:
 
 -------------
