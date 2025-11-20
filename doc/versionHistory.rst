@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-16.1.0:
+
+-------------
+16.1.0
+-------------
+
+* Change default estimateZernikesTask in CalcZernikesTask to Danish.
+
 .. _lsst.ts.wep-16.0.2:
 
 -------------
