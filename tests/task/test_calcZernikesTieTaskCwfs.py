@@ -29,6 +29,7 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
+    EstimateZernikesTieTask,
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -89,6 +90,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
     def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
+        self.config.estimateZernikes.retarget(EstimateZernikesTieTask)
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = Butler.from_config(self.repoDir)
@@ -266,6 +268,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
     def testRequireConverge(self) -> None:
         config = CalcZernikesTaskConfig()
+        config.estimateZernikes.retarget(EstimateZernikesTieTask)
         config.estimateZernikes.requireConverge = True  # Require to converge
         config.estimateZernikes.convergeTol = 0  # But don't allow convergence
         task = CalcZernikesTask(config=config, name="Test requireConverge")

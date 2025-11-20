@@ -32,6 +32,7 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CombineZernikesMeanTask,
     CombineZernikesSigmaClipTask,
+    EstimateZernikesTieTask,
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -103,6 +104,7 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
 
     def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
+        self.config.estimateZernikes.retarget(EstimateZernikesTieTask)
         self.config.doDonutStampSelector = False
         self.config.estimateZernikes.nollIndices = [
             4,

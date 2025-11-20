@@ -44,7 +44,7 @@ from lsst.pipe.base import (
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
-from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
+from lsst.ts.wep.task.estimateZernikesDanishTask import EstimateZernikesDanishTask
 from lsst.utils.timer import timeMethod
 from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
@@ -128,7 +128,7 @@ class CalcZernikesTaskConfig(
     pipelineConnections=CalcZernikesTaskConnections,  # type: ignore
 ):
     estimateZernikes: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=EstimateZernikesTieTask,
+        target=EstimateZernikesDanishTask,
         doc=str(
             "Choice of task to estimate Zernikes from pairs of donuts. "
             + "(the default is EstimateZernikesTieTask)"

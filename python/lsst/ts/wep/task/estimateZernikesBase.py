@@ -303,6 +303,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         )
 
         self.log.info("Using %d cores", numCores)
+        self.log.info("Noll indices: %s", self.config.nollIndices)
         if len(donutStampsExtra) > 0 and len(donutStampsIntra) > 0:
             zernikes, zkMeta = self.estimateFromPairs(
                 donutStampsExtra, donutStampsIntra, wfEst, numCores=numCores

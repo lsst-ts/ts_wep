@@ -34,6 +34,7 @@ from lsst.ts.wep.task import (
     CombineZernikesSigmaClipTask,
     DonutStamps,
     DonutStampSelectorTask,
+    EstimateZernikesTieTask,
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -97,6 +98,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
     def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
+        self.config.estimateZernikes.retarget(EstimateZernikesTieTask)
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = Butler.from_config(self.repoDir)
