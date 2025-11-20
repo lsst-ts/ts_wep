@@ -43,6 +43,7 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+from scipy.interpolate import RegularGridInterpolator, LinearNDInterpolator
 
 
 class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
@@ -327,8 +328,23 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
     def testCreateIntrinsicMap(self) -> None:
         for intrinsicTable in self.intrinsicTables:
+            # Create intrinsic maps with complete grid
             intrinsicMap = self.task._createIntrinsicMap(intrinsicTable)
             self.assertEqual(
-                intrinsicMap(intrinsicTable["y"].to("deg")[0], intrinsicTable["x"].to("deg")[0])[0],
+                intrinsicMap(
+                    [intrinsicTable["y"].to("deg").value[0], intrinsicTable["x"].to("deg").value[0]]
+                )[0][0],
                 intrinsicTable["Z4"].to("um").value[0],
             )
+            self.assertIsInstance(intrinsicMap, RegularGridInterpolator)
+            # Create intrinsic maps with "vignetted" grid (remove some points)
+            intrinsicTableVignetted = intrinsicTable[10:]
+            intrinsicMapVignetted = self.task._createIntrinsicMap(intrinsicTableVignetted)
+            self.assertEqual(
+                intrinsicMapVignetted(
+                    intrinsicTableVignetted["y"].to("deg").value[0],
+                    intrinsicTableVignetted["x"].to("deg").value[0],
+                )[0],
+                intrinsicTableVignetted["Z4"].to("um").value[0],
+            )
+            self.assertIsInstance(intrinsicMapVignetted, LinearNDInterpolator)

@@ -46,7 +46,7 @@ from lsst.ts.wep.task.donutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
 from lsst.ts.wep.task.estimateZernikesTieTask import EstimateZernikesTieTask
 from lsst.utils.timer import timeMethod
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 intra_focal_ids = set([192, 196, 200, 204])
@@ -208,14 +208,24 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if intrinsicTable is None:
             return None
 
+        # Extract arrays of field angle (deg)
+        x = intrinsicTable["x"].to("deg").value
+        y = intrinsicTable["y"].to("deg").value
+        x_grid = np.unique(x)
+        y_grid = np.unique(y)
+
         # Extract intrinsic Zernike coefficients (microns)
         zkTable = intrinsicTable[[f"Z{i}" for i in self.nollIndices]]
         zks = np.column_stack([zkTable[col].to("um").value for col in zkTable.colnames])
 
         # Create the interpolator
-        interpolator = LinearNDInterpolator(
-            np.column_stack([intrinsicTable["y"].to("deg"), intrinsicTable["x"].to("deg")]), zks
-        )
+        if (len(x_grid) * len(y_grid)) == len(intrinsicTable):
+            # If the grid is regular and complete, use RegularGridInterpolator
+            values = zks.reshape(y_grid.size, x_grid.size, -1)
+            interpolator = RegularGridInterpolator((y_grid, x_grid), values)
+        else:
+            # Otherwise, use LinearNDInterpolator
+            interpolator = LinearNDInterpolator(np.column_stack([y, x]), zks)
 
         return interpolator
 
