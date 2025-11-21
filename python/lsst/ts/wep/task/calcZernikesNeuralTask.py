@@ -1301,17 +1301,22 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         if len(zkTable) == 0:
             return
 
-        agg = np.asarray(aggregatedZernikes, dtype=float).ravel()
-        if len(agg) != len(self.nollIndices):
+        opd_columns = zkTable.meta["opd_columns"]
+        intrinsic_columns = zkTable.meta["intrinsic_columns"]
+        deviation_columns = zkTable.meta["deviation_columns"]
+        if len(aggregatedZernikes) != len(opd_columns):
             raise ValueError(
                 "Neural aggregated Zernike vector length "
-                f"{len(agg)} does not match configured nollIndices length {len(self.nollIndices)}."
+                f"{len(aggregatedZernikes)} does not match expected "
+                f"{len(opd_columns)} OPD columns."
             )
 
-        agg_quant = (agg * u.micron).to(u.nm)
+        agg_quant = (aggregatedZernikes * u.micron).to(u.nm)
         avg_row = zkTable[0]
 
-        for idx, j in enumerate(self.nollIndices):
-            avg_row[f"Z{j}"] = agg_quant[idx]
-            avg_row[f"Z{j}_deviation"] = agg_quant[idx]
-            avg_row[f"Z{j}_intrinsic"] = np.nan * u.nm
+        for value, column in zip(agg_quant, opd_columns):
+            avg_row[column] = value
+        for column in intrinsic_columns:
+            avg_row[column] = np.nan * u.nm
+        for value, column in zip(agg_quant, deviation_columns):
+            avg_row[column] = value
