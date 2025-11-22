@@ -1319,5 +1319,5 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             avg_row[column] = value
         for column in intrinsic_columns:
             avg_row[column] = np.nan * u.nm
-        for value, column in zip(agg_quant, deviation_columns):
-            avg_row[column] = value
+        for column in deviation_columns:
+            avg_row[column] = np.nan * u.nm
