@@ -180,7 +180,6 @@ class GenerateDonutFromRefitWcsTaskConfig(
         self.astromTask.sourceSelector["science"].doRequirePrimary = False
         self.astromTask.sourceSelector["science"].doIsolated = False
         self.astromTask.sourceSelector["science"].doSignalToNoise = False
-        self.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
 
 
 class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
