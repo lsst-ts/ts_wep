@@ -91,6 +91,7 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
 
     def setUp(self) -> None:
         self.config = GenerateDonutFromRefitWcsTaskConfig()
+        self.config.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
         self.task = GenerateDonutFromRefitWcsTask(config=self.config)
         self.logger = logging.getLogger("lsst.generateDonutFromRefitWcsTask")
 

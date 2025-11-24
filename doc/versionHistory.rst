@@ -6,6 +6,14 @@
 Version History
 ##################
 
+.. _lsst.ts.wep-16.1.1:
+
+-------------
+16.1.1
+-------------
+
+* To ensure bakcwards compatibility with DM stack < w_2025_43 remove the change in 16.0.1 update for centroid error limit and only add it in test pipeline as an additional config.
+
 .. _lsst.ts.wep-16.1.0:
 
 -------------
