@@ -6,6 +6,29 @@
 Version History
 ##################
 
+.. WARNING: DO NOT MANUALLY EDIT THIS FILE.
+
+   Release notes are now managed using towncrier.
+   The following comment marks the start of the automatically managed content.
+   For help in how to create the "news fragments" see the README page in the
+   doc directory.
+
+   Do not remove the following comment line.
+
+.. towncrier release notes start
+
+.. _lsst.ts.wep-16.2.0:
+
+-------------
+16.2.0
+-------------
+
+* Fix CalcZernikesNeuralTask to handle missing intrinsic maps by overriding
+  `_unpackStampData()` method to return NaN for intrinsic values (neural task
+  does not use intrinsic Zernike tables).
+* Fix CalcZernikesNeuralTask `createZkTable()` call to remove unsupported
+  `zkCoeffCombined` argument that was causing TypeError in production pipelines.
+
 .. _lsst.ts.wep-16.1.1:
 
 -------------
@@ -13,11 +36,6 @@ Version History
 -------------
 
 * To ensure bakcwards compatibility with DM stack < w_2025_43 remove the change in 16.0.1 update for centroid error limit and only add it in test pipeline as an additional config.
-* Fix CalcZernikesNeuralTask to handle missing intrinsic maps by overriding
-  `_unpackStampData()` method to return NaN for intrinsic values (neural task
-  does not use intrinsic Zernike tables).
-* Fix CalcZernikesNeuralTask `createZkTable()` call to remove unsupported
-  `zkCoeffCombined` argument that was causing TypeError in production pipelines.
 
 .. _lsst.ts.wep-16.1.0:
 
