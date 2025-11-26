@@ -298,6 +298,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("extra_frac_bad_pix", "<f4"),
             ("intra_max_power_grad", "<f4"),
             ("extra_max_power_grad", "<f4"),
+            ("intra_donut_id", "<U12"),
+            ("extra_donut_id", "<U12"),
         ]
         for j in self.nollIndices:
             dtype.append((f"Z{j}", "<f4"))
@@ -361,6 +363,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_frac_bad_pix": np.nan,
                 "intra_max_power_grad": np.nan,
                 "extra_max_power_grad": np.nan,
+                "intra_donut_id": "",
+                "extra_donut_id": "",
             }
         )
         for i, (intra, extra, zk) in enumerate(
@@ -399,7 +403,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             row["extra_field"] = extraAngle
             row["intra_centroid"] = intraCentroid
             row["extra_centroid"] = extraCentroid
-            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "DONUT_ID"]:
                 for stamps, foc in [
                     (self.stampsIntra, "intra"),
                     (self.stampsExtra, "extra"),
@@ -407,7 +411,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     if len(stamps) > 0 and key in stamps.metadata:
                         val = stamps.metadata.getArray(key)[i]
                     else:
-                        val = np.nan
+                        val = "" if key == "DONUT_ID" else np.nan
                     row[f"{foc}_{key.lower()}"] = val
             zkTable.add_row(row)
 
@@ -492,6 +496,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "RADIUS",
             "RADIUS_FAIL_FLAG",
             "DEFOCAL_TYPE",
+            "DONUT_ID",
         ]
         if qualityTable is None:
             donutQualityTable = QTable({name: [] for name in qualityTableCols})

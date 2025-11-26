@@ -175,14 +175,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertEqual(len(outputTable), 8)
         self.assertCountEqual(
             outputTable.columns,
-            [
-                "coord_ra",
-                "coord_dec",
-                "centroid_x",
-                "centroid_y",
-                "g_flux",
-                "detector",
-            ],
+            ["coord_ra", "coord_dec", "centroid_x", "centroid_y", "g_flux", "detector", "donut_id"],
         )
         self.assertCountEqual(
             outputTable.meta.keys(),

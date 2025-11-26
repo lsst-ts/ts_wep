@@ -20,7 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-
+import lsst.geom
 import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable
@@ -433,6 +433,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
             "BANDPASS",
+            "DONUT_ID",
         ]
         self.assertCountEqual(metadata, expectedMetadata)
 

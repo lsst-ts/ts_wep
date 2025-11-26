@@ -67,6 +67,7 @@ class TestDonutStamp(unittest.TestCase):
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
         dfcDists = np.ones(nStamps) * 1.25
         bandpass = ["r"] * nStamps
+        donutId = np.arange(nStamps)
 
         metadata = PropertyList()
         metadata["RA_DEG"] = ras
@@ -76,6 +77,7 @@ class TestDonutStamp(unittest.TestCase):
         metadata["DET_NAME"] = detectorNames
         metadata["CAM_NAME"] = camNames
         metadata["DFC_TYPE"] = dfcTypes
+        metadata["DONUT_ID"] = donutId
         if testDefaults is False:
             metadata["DFC_DIST"] = dfcDists
             metadata["BLEND_CX"] = blendCentX
@@ -121,6 +123,9 @@ class TestDonutStamp(unittest.TestCase):
             bandpass = donutStamp.bandpass
             self.assertEqual(bandpass, "r")
 
+            donutId = donutStamp.donut_id
+            self.assertEqual(i, donutId)
+
             self.assertIsInstance(donutStamp.wep_im, Image)
 
     def testFactoryMetadataDefaults(self) -> None:
@@ -144,6 +149,9 @@ class TestDonutStamp(unittest.TestCase):
             # Test default bandpass value is empty string
             bandpass = donutStamp.bandpass
             self.assertEqual(bandpass, "")
+            # Test default donutId value is empty string
+            donutId = donutStamp.donut_id
+            self.assertEqual(donutId, i)
 
     def testGetCamera(self) -> None:
         donutStamp = DonutStamp.factory(self.testStamps[0], self.testMetadata, 0)
@@ -188,6 +196,7 @@ class TestDonutStamp(unittest.TestCase):
             "R22_S11",
             "LSSTCam",
             "r",
+            "",
         )
         np.testing.assert_array_almost_equal(donutStamp.calcFieldXY(), (0, 0))
 
@@ -212,6 +221,7 @@ class TestDonutStamp(unittest.TestCase):
                     detName,
                     "LSSTCam",
                     "r",
+                    "",
                 )
                 fieldAngle = donutStamp.calcFieldXY()
                 self.assertEqual(fieldAngle[0], np.degrees(trueFieldAngleX))
@@ -228,6 +238,7 @@ class TestDonutStamp(unittest.TestCase):
             "R22_S11",
             "LSSTCam",
             "r",
+            "",
         )
 
         # Check that mask is empty at start
@@ -283,6 +294,7 @@ class TestDonutStamp(unittest.TestCase):
                 detName,
                 "LSSTCam",
                 "r",
+                "",
             )
 
             # Make the mask

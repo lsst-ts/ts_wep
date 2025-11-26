@@ -268,4 +268,9 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable) -> QTable:
 
     donutCat.meta["visit_info"] = catVisitInfo
 
+    # add donutId once sources are sorted by brightness
+    detId = exposure.detector.getId()
+    donutId = [str(detId).zfill(3) + str(idx).zfill(3) for idx in np.arange(len(donutCat))]
+    donutCat["donut_id"] = donutId
+
     return donutCat
