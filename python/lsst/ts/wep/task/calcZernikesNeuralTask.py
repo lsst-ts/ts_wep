@@ -1313,7 +1313,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             )
 
         agg_quant = (agg * u.micron).to(u.nm)
-        avg_row = zkTable[0]
+        avg_row = zkTable[zkTable["label"] == "average"]
 
         for value, column in zip(agg_quant, opd_columns):
             avg_row[column] = value
