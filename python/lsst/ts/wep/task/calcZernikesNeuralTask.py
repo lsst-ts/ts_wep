@@ -1192,15 +1192,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         zkCoeffRaw = pipeBase.Struct(
             zernikes=zernikesRaw,  # 2D array of shape (numDonuts, nZernikes)
         )
-        zkCoeffCombined = pipeBase.Struct(
-            combinedZernikes=zernikesAvg[0],  # 1D array of aggregated Zernikes
-            flags=np.zeros(len(zernikesRaw), dtype=bool),  # All donuts are used (not flagged)
-        )
-
-        zernikesTable = self.createZkTable(
-            zkCoeffRaw=zkCoeffRaw,
-            zkCoeffCombined=zkCoeffCombined,
-        )
+        zernikesTable = self.createZkTable(zkCoeffRaw=zkCoeffRaw)
+        self._updateAverageRowWithAggregatedZernikes(zernikesTable, aggregatedZernikes)
         # Add OOD scores to zernikes table as a per-donut column
         # OOD scores are extracted in the same order as donuts from TARTS
         # internal data, and both come from the same TARTS run, so they
@@ -1251,3 +1244,80 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutTable=donutTable,
             donutQualityTable=donutQualityTable,
         )
+
+    def _unpackStampData(self, stamp: DonutStamp | None) -> tuple:
+        """Override parent method to handle missing intrinsic maps.
+
+        The neural task does not use intrinsic Zernike tables, so this method
+        returns NaN for intrinsic values instead of trying to access
+        intrinsicMapIntra or intrinsicMapExtra attributes.
+
+        Parameters
+        ----------
+        stamp : DonutStamp or None
+            The DonutStamp object to unpack data from.
+
+        Returns
+        -------
+        fieldAngle : `astropy.units.Quantity`
+            The field angle of the stamp in degrees.
+        centroid : `astropy.units.Quantity`
+            The centroid position of the stamp in pixels.
+        intrinsics : `astropy.units.Quantity`
+            The intrinsic Zernike coefficients (always NaN for neural task).
+        """
+        if stamp is None:
+            fieldAngle = np.array(np.nan, dtype=POS2F_DTYPE) * u.deg
+            centroid = np.array((np.nan, np.nan), dtype=POS2F_DTYPE) * u.pixel
+            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
+        else:
+            fieldAngle = np.array(stamp.calcFieldXY(), dtype=POS2F_DTYPE) * u.deg
+            centroid = (
+                np.array(
+                    (stamp.centroid_position.x, stamp.centroid_position.y),
+                    dtype=POS2F_DTYPE,
+                )
+                * u.pixel
+            )
+            # Neural task doesn't use intrinsic maps, so return NaN intrinsics
+            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
+
+        return fieldAngle, centroid, intrinsics
+
+    def _updateAverageRowWithAggregatedZernikes(
+        self, zkTable: QTable, aggregatedZernikes: np.ndarray
+    ) -> None:
+        """Populate the average row of `zkTable` with neural aggregated data.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.QTable`
+            Table returned by ``createZkTable`` containing placeholder values.
+            The first row corresponds to the aggregate (average) entry.
+        aggregatedZernikes : `numpy.ndarray`
+            One-dimensional array of aggregated Zernike coefficients produced
+            by TARTS (in microns).
+        """
+        if len(zkTable) == 0:
+            return
+
+        opd_columns = zkTable.meta["opd_columns"]
+        intrinsic_columns = zkTable.meta["intrinsic_columns"]
+        deviation_columns = zkTable.meta["deviation_columns"]
+        agg = aggregatedZernikes[0]
+        if len(agg) != len(opd_columns):
+            raise ValueError(
+                "Neural aggregated Zernike vector length "
+                f"{len(agg)} does not match expected "
+                f"{len(opd_columns)} OPD columns."
+            )
+
+        agg_quant = (agg * u.micron).to(u.nm)
+        avg_row = zkTable[zkTable["label"] == "average"]
+
+        for value, column in zip(agg_quant, opd_columns):
+            avg_row[column] = value
+        for column in intrinsic_columns:
+            avg_row[column] = np.nan * u.nm
+        for column in deviation_columns:
+            avg_row[column] = np.nan * u.nm
