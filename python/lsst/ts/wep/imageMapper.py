@@ -786,9 +786,7 @@ class ImageMapper:
                     vPupilCirc=vCenter,
                     rPupilCirc=radius,  # type: ignore
                     fwdMap=(
-                        None
-                        if fwdMap is None
-                        else (uImage[idx], vImage[idx], jac[..., idx], jacDet[idx])
+                        None if fwdMap is None else (uImage[idx], vImage[idx], jac[..., idx], jacDet[idx])
                     ),
                 )
 
@@ -1090,9 +1088,7 @@ class ImageMapper:
         if dilateBlends != "auto":
             dilateBlends = int(dilateBlends)
             if dilateBlends < 0:
-                raise ValueError(
-                    "dilateBlends must be a non-negative integer, or 'auto'."
-                )
+                raise ValueError("dilateBlends must be a non-negative integer, or 'auto'.")
 
     def createPupilMasks(
         self,
@@ -1274,9 +1270,7 @@ class ImageMapper:
             )
 
         # Get the image grid inside the pupil
-        uImage, vImage, inside = self._getImageGridInsidePupil(
-            zkCoeff, nollIndices, image
-        )
+        uImage, vImage, inside = self._getImageGridInsidePupil(zkCoeff, nollIndices, image)
 
         # Get the inverse mapping from image plane to pupil plane
         if _invMap is None:
@@ -1464,9 +1458,7 @@ class ImageMapper:
             )
             template = stamp.mask.copy()
         else:
-            template = self.mapPupilToImage(
-                stamp, zkCoeff, nollIndices, **maskKwargs
-            ).image
+            template = self.mapPupilToImage(stamp, zkCoeff, nollIndices, **maskKwargs).image
 
         # Center the image
         stamp.image = centerWithTemplate(stamp.image, template, rMax)

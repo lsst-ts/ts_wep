@@ -38,18 +38,14 @@ from lsst.ts.wep.utils import (
 )
 
 
-def estimate_zk_pair(
-    args: tuple[DonutStamps, DonutStamps, WfEstimator]
-) -> tuple[np.array, dict, dict]:
+def estimate_zk_pair(args: tuple[DonutStamps, DonutStamps, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a pair of donuts."""
     donutExtra, donutIntra, wfEstimator = args
     zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
     return zk, zkMeta, wfEstimator.history
 
 
-def estimate_zk_single(
-    args: tuple[DonutStamps, WfEstimator]
-) -> tuple[np.array, dict, dict]:
+def estimate_zk_single(args: tuple[DonutStamps, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a single donut."""
     donut, wfEstimator = args
     zk, zkMeta = wfEstimator.estimateZk(donut.wep_im)
@@ -195,10 +191,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         # Save the histories (note if self.config.saveHistory is False,
         # this is just an empty dictionary)
-        histories_dict = {
-            f"pair{i}": convertHistoryToMetadata(hist)
-            for i, hist in enumerate(histories)
-        }
+        histories_dict = {f"pair{i}": convertHistoryToMetadata(hist) for i, hist in enumerate(histories)}
         self.metadata["history"] = histories_dict
 
         return zkArray, zkMeta
@@ -237,10 +230,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             one for each donut.
         """
         # Loop over individual donut stamps with a process pool
-        args = [
-            (donut, wfEstimator)
-            for donut in itertools.chain(donutStampsExtra, donutStampsIntra)
-        ]
+        args = [(donut, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
         results = self._applyToList(estimate_zk_single, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
@@ -255,9 +245,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         for i in range(len(donutStampsExtra)):
             histories_dict[f"extra{i}"] = convertHistoryToMetadata(histories[i])
         for i in range(len(donutStampsIntra)):
-            histories_dict[f"intra{i}"] = convertHistoryToMetadata(
-                histories[i + len(donutStampsExtra)]
-            )
+            histories_dict[f"intra{i}"] = convertHistoryToMetadata(histories[i + len(donutStampsExtra)])
         self.metadata["history"] = histories_dict
 
         return zkArray, zkMeta
@@ -315,6 +303,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         )
 
         self.log.info("Using %d cores", numCores)
+        self.log.info("Noll indices: %s", self.config.nollIndices)
         if len(donutStampsExtra) > 0 and len(donutStampsIntra) > 0:
             zernikes, zkMeta = self.estimateFromPairs(
                 donutStampsExtra, donutStampsIntra, wfEst, numCores=numCores
@@ -322,8 +311,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         else:
             if wfEst.algo.requiresPairs:
                 raise ValueError(
-                    f"Wavefront algorithm `{wfEst.algo.__class__.__name__}` "
-                    "requires pairs of donuts."
+                    f"Wavefront algorithm `{wfEst.algo.__class__.__name__}` requires pairs of donuts."
                 )
             zernikes, zkMeta = self.estimateFromIndivStamps(
                 donutStampsExtra, donutStampsIntra, wfEst, numCores=numCores

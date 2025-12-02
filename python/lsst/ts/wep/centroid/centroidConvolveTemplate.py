@@ -196,9 +196,7 @@ class CentroidConvolveTemplate(CentroidDefault):
             templateImgBinary = copy(imageBinary)
 
         nDonutsAssertStr = "nDonuts must be an integer >= 1 or -1"
-        assert ((nDonuts >= 1) | (nDonuts == -1)) & (
-            type(nDonuts) is int
-        ), nDonutsAssertStr
+        assert ((nDonuts >= 1) | (nDonuts == -1)) & (type(nDonuts) is int), nDonutsAssertStr
         # ruff: noqa
 
         # We set the mode to be "same" because we need to return the same
@@ -208,9 +206,7 @@ class CentroidConvolveTemplate(CentroidDefault):
         # Then we rank the pixel values keeping only those above
         # some fraction of the highest value.
         rankedConvolve = np.argsort(tempConvolve.flatten())[::-1]
-        cutoff = len(
-            np.where(tempConvolve.flatten() > peakThreshold * np.max(tempConvolve))[0]
-        )
+        cutoff = len(np.where(tempConvolve.flatten() > peakThreshold * np.max(tempConvolve))[0])
         rankedConvolveCutoff = rankedConvolve[:cutoff]
         nx, ny = np.unravel_index(rankedConvolveCutoff, np.shape(imageBinary))
 

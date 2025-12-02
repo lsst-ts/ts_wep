@@ -269,14 +269,22 @@ def plotPupilMaskElements(
     rmax = rmax if np.isfinite(rmax) else np.abs(innerR).max()
     lim = 1.15 * rmax
     lim = lim if np.isfinite(lim) else None
-    ax.set(
-        xlim=(-lim, +lim),
-        ylim=(-lim, +lim),
-        xlabel="meters",
-        ylabel="meters",
-        aspect="equal",
-        title=rf"$\theta\,=\,${rTheta:.2f}$\!^\circ$",
-    )
+    if lim is not None:
+        ax.set(
+            xlim=(-lim, +lim),
+            ylim=(-lim, +lim),
+            xlabel="meters",
+            ylabel="meters",
+            aspect="equal",
+            title=rf"$\theta\,=\,${rTheta:.2f}$\!^\circ$",
+        )
+    else:
+        ax.set(
+            xlabel="meters",
+            ylabel="meters",
+            aspect="equal",
+            title=rf"$\theta\,=\,${rTheta:.2f}$\!^\circ$",
+        )
 
     # Draw the legend?
     if legend:

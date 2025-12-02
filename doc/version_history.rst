@@ -6,6 +6,127 @@
 Version History
 ##################
 
+.. WARNING: DO NOT MANUALLY EDIT THIS FILE.
+
+   Release notes are now managed using towncrier.
+   The following comment marks the start of the automatically managed content.
+   For help in how to create the "news fragments" see the README page in the
+   doc directory.
+
+   Do not remove the following comment line.
+
+.. towncrier release notes start
+
+.. _lsst.ts.wep-16.2.0:
+
+-------------
+16.2.0
+-------------
+
+* Fix CalcZernikesNeuralTask to handle missing intrinsic maps by overriding
+  `_unpackStampData()` method to return NaN for intrinsic values (neural task
+  does not use intrinsic Zernike tables).
+* Fix CalcZernikesNeuralTask `createZkTable()` call to remove unsupported
+  `zkCoeffCombined` argument that was causing TypeError in production pipelines.
+
+.. _lsst.ts.wep-16.1.1:
+
+-------------
+16.1.1
+-------------
+
+* To ensure bakcwards compatibility with DM stack < w_2025_43 remove the change in 16.0.1 update for centroid error limit and only add it in test pipeline as an additional config.
+
+.. _lsst.ts.wep-16.1.0:
+
+-------------
+16.1.0
+-------------
+
+* Change default estimateZernikesTask in CalcZernikesTask to Danish.
+
+.. _lsst.ts.wep-16.0.2:
+
+-------------
+16.0.2
+-------------
+
+* Change intrinsic map interpolation to LinearNDInterpolator when handling irregular grid of intrinsic Zernike measurements that appear due to vignetting in the model that creates the maps.
+* Add small test for intrinsic map creation in test_calcZernikesDanishTaskCwfs.py.
+
+.. _lsst.ts.wep-16.0.1:
+
+-------------
+16.0.1
+-------------
+
+* Update astromTask defaults inside refitWcsTask to turn off new default centroid error limit added in DM stack w_2025_46.
+
+.. _lsst.ts.wep-16.0.0:
+
+-------------
+16.0.0
+-------------
+
+* Added intrinsic tables to CalcZernikesTask. Intrinsics and wavefront deviations are now saved in the Zernikes table.
+* CombineZernikesTask now operates on the Zernikes table, rather than on the old arrays.
+
+.. _lsst.ts.wep-15.1.0:
+
+-------------
+15.1.0
+-------------
+
+* Add CalcZernikesNeuralTask for neural network-based Zernike estimation using TARTS
+  (Triple-stage Alignment and Reconstruction using Transformer Systems for Active Optics).
+* Add new config option `oodModelPath` to pass an Out of Distribution (OOD) model directory to TARTS
+  (forwarded as `ood_model_path` to NeuralActiveOpticsSys).
+* Add per-donut `ood_score` column to the `zernikes` table when available from
+  TARTS; falls back to NaN when the OOD model is not loaded or the score is
+  missing.
+
+.. _lsst.ts.wep-15.0.2:
+
+-------------
+15.0.2
+-------------
+
+* Add model parameters to metadata in Danish estimator outputs.
+
+.. _lsst.ts.wep-15.0.1:
+
+-------------
+15.0.1
+-------------
+
+* Fix donut mask selection in calculateSN of cutOutDonutsBase.
+
+.. _lsst.ts.wep-15.0.0:
+
+-------------
+15.0.0
+-------------
+
+* Fix CalcZernikesUnpairedTask to handle new `numCores` parameter in estimateZernikes.
+* Redefine Unpaired tasks to run on each detector independently.
+* Remove cutOutDonutsUnpairedTask since it replicates code in cutOutDonutsCwfsTask.
+
+.. _lsst.ts.wep-14.17.2:
+
+-------------
+ 14.17.2
+-------------
+
+* Run ruff format after upgrade in lsst-ts/ts_pre_commit_conf.
+
+.. _lsst.ts.wep-14.17.1:
+
+-------------
+ 14.17.1
+-------------
+
+* Fix mypy issues in image.py and plotUtils.py
+
 .. _lsst.ts.wep-14.17.0:
 
 -------------

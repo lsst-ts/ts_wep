@@ -30,6 +30,7 @@ from lsst.ts.wep.task.combineZernikesBase import (
     CombineZernikesBaseTask,
 )
 from lsst.ts.wep.utils import conditionalSigmaClip
+from astropy.table import Table
 
 
 class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
@@ -53,6 +54,12 @@ class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
         This is to prevent clipping based upon the highest Zernikes which
         have smaller values and more variation from noise.""",
     )
+    zkClipType: pexConfig.Field = pexConfig.Field(
+        dtype=str,
+        default="deviation",
+        doc="""Which type of Zernikes to perform clipping on. Options are:
+        'opd', 'intrinsic', 'deviation'.""",
+    )
 
 
 class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
@@ -73,34 +80,44 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             self.sigmaClipKwargs[key] = val
         self.maxZernClip = self.config.maxZernClip
         self.stdMin = self.config.stdMin
+        self.zkClipType = self.config.zkClipType
 
-    def combineZernikes(
-        self, zernikeArray: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _combineZernikes(self, zkTable: Table) -> Table:
+        # Extract the array of Zernikes to perform clipping on
+        if self.zkClipType == "opd":
+            columns = zkTable.meta["opd_columns"]
+        elif self.zkClipType == "intrinsic":
+            columns = zkTable.meta["intrinsic_columns"]
+        elif self.zkClipType == "deviation":
+            columns = zkTable.meta["deviation_columns"]
+        else:
+            raise ValueError(f"Unknown zkClipType: {self.zkClipType}")
+        subTable = zkTable[zkTable["label"] != "average"][columns]
+        zernikeArray = np.array([subTable[col] for col in columns]).T
+
+        # Perform conditional sigma clipping
         sigArray = conditionalSigmaClip(
             zernikeArray, sigmaClipKwargs=self.sigmaClipKwargs, stdMin=self.stdMin
         )
-        # Create a binary flag array that indicates
-        # donuts have outlier values. This array is 1 if
-        # it has any outlier values.
-        # If all available donuts have a clipped value in the
-        # first maxZernClip coefficients then reduce maxZernClip by 1
-        # until we get one that passes.
+        # Create a binary flag array that indicates donuts have outlier values.
+        # This array is 1 if it has any outlier values. If all available donuts
+        # have a clipped value in the first maxZernClip coefficients then
+        # reduce maxZernClip by 1 until we get one that passes.
         numRejected = len(sigArray)
         effMaxZernClip = self.maxZernClip + 1
 
         while numRejected == len(sigArray):
             effMaxZernClip -= 1
-            binaryFlagArray = np.any(
-                np.isnan(sigArray[:, :effMaxZernClip]), axis=1
-            ).astype(int)
+            binaryFlagArray = np.any(np.isnan(sigArray[:, :effMaxZernClip]), axis=1).astype(int)
             numRejected = np.sum(binaryFlagArray)
+
         # Identify which rows to use when calculating final mean
         keepIdx = ~np.array(binaryFlagArray, dtype=bool)
+        used = zkTable["used"][zkTable["label"] != "average"]
+        used[keepIdx] = True
+        zkTable["used"][zkTable["label"] != "average"] = used
 
-        self.log.info(
-            f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}."
-        )
+        self.log.info(f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}.")
         if effMaxZernClip < self.maxZernClip:
             self.log.warning(
                 f"EffMaxZernClip ({effMaxZernClip}) was less than MaxZernClip config ({self.maxZernClip})."
@@ -108,4 +125,10 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.metadata["maxZernClip"] = self.maxZernClip
         self.metadata["effMaxZernClip"] = effMaxZernClip
 
-        return np.mean(zernikeArray[keepIdx], axis=0), binaryFlagArray
+        # Calculate means
+        for j in zkTable.meta["noll_indices"]:
+            self._setAvg(zkTable, f"Z{j}", np.nanmean, useIdx=keepIdx)
+            self._setAvg(zkTable, f"Z{j}_intrinsic", np.nanmean, useIdx=keepIdx)
+            self._setAvg(zkTable, f"Z{j}_deviation", np.nanmean, useIdx=keepIdx)
+
+        return zkTable

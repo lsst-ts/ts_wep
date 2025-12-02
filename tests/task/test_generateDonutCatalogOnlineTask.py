@@ -39,9 +39,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         boresightRa = 0.0
         boresightDec = 0.0
         boresightRotAng = 0.0
-        self.refCatInterface = RefCatalogInterface(
-            boresightRa, boresightDec, boresightRotAng
-        )
+        self.refCatInterface = RefCatalogInterface(boresightRa, boresightDec, boresightRotAng)
 
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
@@ -60,9 +58,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         self.config = GenerateDonutCatalogOnlineTaskConfig()
         self.task = GenerateDonutCatalogOnlineTask(config=self.config)
 
-        self.camera = self.butler.get(
-            "camera", instrument="LSSTCam", collections=["LSSTCam/calib/unbounded"]
-        )
+        self.camera = self.butler.get("camera", instrument="LSSTCam", collections=["LSSTCam/calib/unbounded"])
 
     def _getRefCat(self) -> list:
         refCatList = list()
@@ -70,9 +66,7 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            refCatList.append(
-                self.butler.getDeferred(ref, collections=["refcats/gen2"])
-            )
+            refCatList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
 
         return refCatList
 
@@ -114,12 +108,10 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         detector = self.camera[detectorName]
         detWcs = self.refCatInterface.getDetectorWcs(detector)
         dataIds = [131072, 188416]
-        cat0 = self.butler.get(
-            self.catalogName, dataId={"htm7": dataIds[0]}, collections=self.collections
-        )
-        cat1 = self.butler.get(
-            self.catalogName, dataId={"htm7": dataIds[1]}, collections=self.collections
-        )[2:]
+        cat0 = self.butler.get(self.catalogName, dataId={"htm7": dataIds[0]}, collections=self.collections)
+        cat1 = self.butler.get(self.catalogName, dataId={"htm7": dataIds[1]}, collections=self.collections)[
+            2:
+        ]
         taskCat = task.run(self.dataRefs, detector, detWcs)
         donutCatalog = taskCat.donutCatalog
 
@@ -150,9 +142,5 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
         refFluxes = np.array([15.0, 15.0, 15.0, 17.5]) * units.ABmag
         self.assertCountEqual(donutCatalog["g_flux"], refFluxes.to(units.nJy))
-        np.testing.assert_array_equal(
-            [[]] * 4, list(donutCatalog.meta["blend_centroid_x"])
-        )
-        np.testing.assert_array_equal(
-            [[]] * 4, list(donutCatalog.meta["blend_centroid_y"])
-        )
+        np.testing.assert_array_equal([[]] * 4, list(donutCatalog.meta["blend_centroid_x"]))
+        np.testing.assert_array_equal([[]] * 4, list(donutCatalog.meta["blend_centroid_y"]))

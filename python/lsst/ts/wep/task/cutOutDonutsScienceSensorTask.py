@@ -46,7 +46,8 @@ from .pairTask import ExposurePairer
 
 
 class CutOutDonutsScienceSensorTaskConnections(
-    CutOutDonutsBaseTaskConnections, dimensions=("detector", "instrument")  # type: ignore
+    CutOutDonutsBaseTaskConnections,
+    dimensions=("detector", "instrument"),  # type: ignore
 ):
     exposures = ct.Input(
         doc="Input exposure to make measurements on",
@@ -137,47 +138,29 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         camera = butlerQC.get(inputRefs.camera)
 
         visitInfoDict = {
-            v.dataId["visit"]: convertDictToVisitInfo(
-                butlerQC.get(v).meta["visit_info"]
-            )
+            v.dataId["visit"]: convertDictToVisitInfo(butlerQC.get(v).meta["visit_info"])
             for v in inputRefs.donutCatalog
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
-        donutStampsIntraHandleDict = {
-            v.dataId["visit"]: v for v in outputRefs.donutStampsIntra
-        }
-        donutStampsExtraHandleDict = {
-            v.dataId["visit"]: v for v in outputRefs.donutStampsExtra
-        }
+        donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
+        donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}
 
         if hasattr(inputRefs, "donutVisitPairTable"):
-            pairs = self.pairer.run(
-                visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable)
-            )
+            pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable))
         else:
             pairs = self.pairer.run(visitInfoDict)
         for pair in pairs:
-            exposures = butlerQC.get(
-                [exposureHandleDict[k] for k in [pair.intra, pair.extra]]
-            )
-            donutCats = butlerQC.get(
-                [donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]]
-            )
+            exposures = butlerQC.get([exposureHandleDict[k] for k in [pair.intra, pair.extra]])
+            donutCats = butlerQC.get([donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]])
             outputs = self.run(exposures, donutCats, camera)
-            butlerQC.put(
-                outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra]
-            )
+            butlerQC.put(outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra])
             butlerQC.put(
                 outputs.donutStampsIntra,
-                donutStampsIntraHandleDict[
-                    pair.extra
-                ],  # Intentionally use extra id for intra stamps here
+                donutStampsIntraHandleDict[pair.extra],  # Intentionally use extra id for intra stamps here
             )
 
-    def assignExtraIntraIdx(
-        self, focusZVal0: float, focusZVal1: float, cameraName: str
-    ) -> tuple[int, int]:
+    def assignExtraIntraIdx(self, focusZVal0: float, focusZVal1: float, cameraName: str) -> tuple[int, int]:
         """
         Identify which exposure in the list is the extra-focal and which
         is the intra-focal based upon `FOCUSZ` parameter in header.

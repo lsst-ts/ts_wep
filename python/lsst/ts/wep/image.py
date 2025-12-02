@@ -165,10 +165,7 @@ class Image:
         if isinstance(value, str) or isinstance(value, DefocalType):
             self._defocalType = DefocalType(value)
         else:
-            raise TypeError(
-                "defocalType must be a DefocalType Enum, "
-                "or one of the corresponding strings."
-            )
+            raise TypeError("defocalType must be a DefocalType Enum, or one of the corresponding strings.")
 
     @property
     def bandLabel(self) -> BandLabel:
@@ -197,15 +194,10 @@ class Image:
             self._bandLabel = BandLabel(value)
         elif isinstance(value, str):
             self._bandLabel = (
-                BandLabel(value)
-                if value in {band_label.value for band_label in BandLabel}
-                else BandLabel.REF
+                BandLabel(value) if value in {band_label.value for band_label in BandLabel} else BandLabel.REF
             )
         else:
-            raise TypeError(
-                "bandLabel must be a BandLabel Enum, "
-                "or one of the corresponding strings."
-            )
+            raise TypeError("bandLabel must be a BandLabel Enum, or one of the corresponding strings.")
 
     @property
     def planeType(self) -> PlaneType:
@@ -229,10 +221,7 @@ class Image:
         if isinstance(value, str) or isinstance(value, PlaneType):
             self._planeType = PlaneType(value)
         else:
-            raise TypeError(
-                "planeType must be a PlaneType Enum, "
-                "or one of the corresponding strings."
-            )
+            raise TypeError("planeType must be a PlaneType Enum, or one of the corresponding strings.")
 
     @property
     def blendOffsets(self) -> Union[np.ndarray, None]:
@@ -260,13 +249,13 @@ class Image:
             value = np.zeros((0, 2))
 
         # Convert to float array
-        value = np.atleast_2d(value).astype(float)
+        value = np.atleast_2d(np.array(value, dtype=float))
+        assert isinstance(value, np.ndarray)  # for mypy
 
         # Check shape
         if value.shape[1] != 2 or value.ndim != 2:
             raise ValueError(
-                "blendOffsets must have shape (N, 2), "
-                "where N is the number of blends you wish to mask."
+                "blendOffsets must have shape (N, 2), where N is the number of blends you wish to mask."
             )
 
         self._blendOffsets = value

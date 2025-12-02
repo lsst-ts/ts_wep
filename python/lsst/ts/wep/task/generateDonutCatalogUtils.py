@@ -173,13 +173,8 @@ def donutCatalogToAstropy(
                 blendCX.append(list())
                 blendCY.append(list())
         elif isinstance(blendCentersX, list) and isinstance(blendCentersY, list):
-            lengthErrMsg = (
-                "blendCentersX and blendCentersY need "
-                + "to be same length as donutCatalog."
-            )
-            if (len(blendCentersX) != len(donutCatalog)) or (
-                len(blendCentersY) != len(donutCatalog)
-            ):
+            lengthErrMsg = "blendCentersX and blendCentersY need " + "to be same length as donutCatalog."
+            if (len(blendCentersX) != len(donutCatalog)) or (len(blendCentersY) != len(donutCatalog)):
                 raise ValueError(lengthErrMsg)
             xyMismatchErrMsg = (
                 "Each list in blendCentersX must have the same "
@@ -192,10 +187,7 @@ def donutCatalogToAstropy(
             blendCX = blendCentersX
             blendCY = blendCentersY
         else:
-            blendErrMsg = (
-                "blendCentersX and blendCentersY must be"
-                + " both be None or both be a list."
-            )
+            blendErrMsg = "blendCentersX and blendCentersY must be" + " both be None or both be a list."
             raise ValueError(blendErrMsg)
 
     fieldObjects = QTable()
@@ -239,7 +231,6 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable) -> QTable:
     `astropy.table.QTable`
         Catalog with relevant exposure metadata added to catalog metadata.
     """
-
     visitInfo = exposure.visitInfo
 
     catVisitInfo = dict()
@@ -252,15 +243,11 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable) -> QTable:
     catVisitInfo["boresight_alt"] = visitAzAlt.getLatitude().asDegrees() * u.deg
     catVisitInfo["boresight_az"] = visitAzAlt.getLongitude().asDegrees() * u.deg
 
-    catVisitInfo["boresight_rot_angle"] = (
-        visitInfo.boresightRotAngle.asDegrees() * u.deg
-    )
+    catVisitInfo["boresight_rot_angle"] = visitInfo.boresightRotAngle.asDegrees() * u.deg
     catVisitInfo["rot_type_name"] = visitInfo.rotType.name
     catVisitInfo["rot_type_value"] = visitInfo.rotType.value
 
-    catVisitInfo["boresight_par_angle"] = (
-        visitInfo.boresightParAngle.asDegrees() * u.deg
-    )
+    catVisitInfo["boresight_par_angle"] = visitInfo.boresightParAngle.asDegrees() * u.deg
 
     catVisitInfo["focus_z"] = visitInfo.focusZ * u.mm
     catVisitInfo["mjd"] = visitInfo.date.toAstropy().tai.mjd
@@ -268,12 +255,8 @@ def addVisitInfoToCatTable(exposure: Exposure, donutCat: QTable) -> QTable:
     catVisitInfo["instrument_label"] = visitInfo.instrumentLabel
 
     catVisitInfo["observatory_elevation"] = visitInfo.observatory.getElevation() * u.m
-    catVisitInfo["observatory_latitude"] = (
-        visitInfo.observatory.getLatitude().asDegrees() * u.deg
-    )
-    catVisitInfo["observatory_longitude"] = (
-        visitInfo.observatory.getLongitude().asDegrees() * u.deg
-    )
+    catVisitInfo["observatory_latitude"] = visitInfo.observatory.getLatitude().asDegrees() * u.deg
+    catVisitInfo["observatory_longitude"] = visitInfo.observatory.getLongitude().asDegrees() * u.deg
     catVisitInfo["ERA"] = visitInfo.era.asDegrees() * u.deg
     catVisitInfo["exposure_time"] = visitInfo.exposureTime * u.s
 

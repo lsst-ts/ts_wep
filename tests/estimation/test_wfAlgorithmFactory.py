@@ -42,18 +42,14 @@ class TestWfAlgorithmFactory(unittest.TestCase):
 
     def testCreateDanishAlgorithm(self) -> None:
         # Make sure it returns the correct type
-        self.assertIsInstance(
-            WfAlgorithmFactory.createWfAlgorithm("danish"), DanishAlgorithm
-        )
+        self.assertIsInstance(WfAlgorithmFactory.createWfAlgorithm("danish"), DanishAlgorithm)
         self.assertIsInstance(
             WfAlgorithmFactory.createWfAlgorithm(WfAlgorithmName.Danish),
             DanishAlgorithm,
         )
 
         # Make sure config parameters are propagated
-        algo = WfAlgorithmFactory.createWfAlgorithm(
-            "danish", {"lstsqKwargs": dict(ftol=1e-5)}
-        )
+        algo = WfAlgorithmFactory.createWfAlgorithm("danish", {"lstsqKwargs": dict(ftol=1e-5)})
         self.assertEqual(algo.lstsqKwargs["ftol"], 1e-5)
 
     def testBadAlgoName(self) -> None:

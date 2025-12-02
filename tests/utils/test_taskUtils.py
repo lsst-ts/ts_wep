@@ -65,9 +65,7 @@ class TestTaskUtils(unittest.TestCase):
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            refCatList.append(
-                self.butler.getDeferred(ref, collections=["refcats/gen2"])
-            )
+            refCatList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
 
         return refCatList
 
@@ -89,9 +87,7 @@ class TestTaskUtils(unittest.TestCase):
             "detector": 94,
             "exposure": 4021123106001,
         }
-        testExposure = self.butler.get(
-            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
-        )
+        testExposure = self.butler.get("raw", dataId=testDataId, collections="LSSTCam/raw/all")
         # From the test data provided this will create
         # a catalog of 4 objects.
         donutCatSmall = refObjLoader.loadPixelBox(
@@ -143,13 +139,9 @@ class TestTaskUtils(unittest.TestCase):
 
         # Test writing with task name
         taskName = "lsst.ts.wep.testTask"
-        testCmdTask = self._writePipetaskCmd(
-            repoName, instrument, collections, runName, taskName=taskName
-        )
+        testCmdTask = self._writePipetaskCmd(repoName, instrument, collections, runName, taskName=taskName)
 
-        pipeOutTask = writePipetaskCmd(
-            repoName, runName, instrument, collections, taskName=taskName
-        )
+        pipeOutTask = writePipetaskCmd(repoName, runName, instrument, collections, taskName=taskName)
         self.assertEqual(testCmdTask, pipeOutTask)
 
         # Test writing with pipeline
@@ -177,15 +169,9 @@ class TestTaskUtils(unittest.TestCase):
 
     def testGetCameraFromButlerName(self) -> None:
         # Test camera loading
-        self.assertEqual(
-            obs_lsst.LsstCam().getCamera(), getCameraFromButlerName("LSSTCam")
-        )
-        self.assertEqual(
-            obs_lsst.LsstComCam().getCamera(), getCameraFromButlerName("LSSTComCam")
-        )
-        self.assertEqual(
-            obs_lsst.Latiss().getCamera(), getCameraFromButlerName("LATISS")
-        )
+        self.assertEqual(obs_lsst.LsstCam().getCamera(), getCameraFromButlerName("LSSTCam"))
+        self.assertEqual(obs_lsst.LsstComCam().getCamera(), getCameraFromButlerName("LSSTComCam"))
+        self.assertEqual(obs_lsst.Latiss().getCamera(), getCameraFromButlerName("LATISS"))
         # Test error
         badCamType = "badCam"
         errMsg = f"Camera {badCamType} is not supported."
@@ -220,9 +206,7 @@ class TestTaskUtils(unittest.TestCase):
 
         # Test override config file
         assertInstEqual(
-            getTaskInstrument(
-                "LSSTCam", "R40_SW1", instConfigFile="policy:instruments/AuxTel.yaml"
-            ),
+            getTaskInstrument("LSSTCam", "R40_SW1", instConfigFile="policy:instruments/AuxTel.yaml"),
             Instrument(configFile="policy:instruments/AuxTel.yaml"),
         )
 
@@ -238,9 +222,7 @@ class TestTaskUtils(unittest.TestCase):
         camera = obs_lsst.LsstCam().getCamera()
 
         # Create a reference template
-        templateRef = createTemplateForDetector(
-            camera.get("R00_SW1"), "intra", nPixels=180
-        )
+        templateRef = createTemplateForDetector(camera.get("R00_SW1"), "intra", nPixels=180)
 
         # Check that the butler orientations are all the same
         for raft in ["R00", "R40", "R44", "R04"]:
@@ -252,14 +234,11 @@ class TestTaskUtils(unittest.TestCase):
 
                 # Check that butler orientation all matches reference
                 # (binary_opening removes small artifacts from centering)
-                template = createTemplateForDetector(
-                    detector, defocalType, nPixels=len(templateRef)
-                )
+                template = createTemplateForDetector(detector, defocalType, nPixels=len(templateRef))
                 diff = binary_opening(template - templateRef, iterations=2)
                 assert np.allclose(diff, 0)
 
     def testConvertDictToVisitInfo(self) -> None:
-
         donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
         fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
         catTableWithMeta = addVisitInfoToCatTable(testExposure, fieldObjects)
@@ -269,20 +248,14 @@ class TestTaskUtils(unittest.TestCase):
         # Test keys and results are the same from VisitInfo round trip
         self.assertEqual(roundTripVisitInfo.focusZ, testExposure.visitInfo.focusZ)
         self.assertEqual(roundTripVisitInfo.id, testExposure.visitInfo.id)
-        self.assertEqual(
-            roundTripVisitInfo.boresightRaDec, testExposure.visitInfo.boresightRaDec
-        )
+        self.assertEqual(roundTripVisitInfo.boresightRaDec, testExposure.visitInfo.boresightRaDec)
         if testExposure.visitInfo.boresightAzAlt.isFinite():
             # Test that they are equal if they are not nan
-            self.assertEqual(
-                roundTripVisitInfo.boresightAzAlt, testExposure.visitInfo.boresightAzAlt
-            )
+            self.assertEqual(roundTripVisitInfo.boresightAzAlt, testExposure.visitInfo.boresightAzAlt)
         else:
             # If testExposure has nan value, round trip should as well
             self.assertFalse(roundTripVisitInfo.boresightAzAlt.isFinite())
-        self.assertEqual(
-            roundTripVisitInfo.instrumentLabel, testExposure.visitInfo.instrumentLabel
-        )
+        self.assertEqual(roundTripVisitInfo.instrumentLabel, testExposure.visitInfo.instrumentLabel)
         self.assertEqual(
             roundTripVisitInfo.boresightParAngle,
             testExposure.visitInfo.boresightParAngle,
@@ -292,15 +265,11 @@ class TestTaskUtils(unittest.TestCase):
             testExposure.visitInfo.boresightRotAngle,
         )
         self.assertEqual(roundTripVisitInfo.rotType, testExposure.visitInfo.rotType)
-        self.assertEqual(
-            roundTripVisitInfo.exposureTime, testExposure.visitInfo.exposureTime
-        )
+        self.assertEqual(roundTripVisitInfo.exposureTime, testExposure.visitInfo.exposureTime)
         self.assertAlmostEqual(
             roundTripVisitInfo.date.toPython(),
             testExposure.visitInfo.date.toPython(),
             delta=datetime.timedelta(seconds=1e-3),
         )
-        self.assertEqual(
-            roundTripVisitInfo.observatory, testExposure.visitInfo.observatory
-        )
+        self.assertEqual(roundTripVisitInfo.observatory, testExposure.visitInfo.observatory)
         self.assertEqual(roundTripVisitInfo.era, testExposure.visitInfo.era)

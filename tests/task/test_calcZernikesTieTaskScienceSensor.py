@@ -34,6 +34,7 @@ from lsst.ts.wep.task import (
     CombineZernikesSigmaClipTask,
     DonutStamps,
     DonutStampSelectorTask,
+    EstimateZernikesTieTask,
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -71,7 +72,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
                 cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
                 runProgram(cleanUpCmd)
 
-            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
             instrument = "lsst.obs.lsst.LsstCam"
             pipelineYaml = os.path.join(
                 testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
@@ -97,6 +98,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
     def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
+        self.config.estimateZernikes.retarget(EstimateZernikesTieTask)
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = Butler.from_config(self.repoDir)
@@ -107,13 +109,33 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "detector": 94,
             "exposure": 4021123106001,
             "visit": 4021123106001,
+            "physical_filter": "g",
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106002,
             "visit": 4021123106002,
+            "physical_filter": "g",
         }
+        self.donutStampsExtra = self.butler.get(
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        self.donutStampsIntra = self.butler.get(
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        self.intrinsicTables = [
+            self.butler.get(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdExtra,
+                collections=["LSSTCam/aos/intrinsic"],
+            ),
+            self.butler.get(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdIntra,
+                collections=["LSSTCam/aos/intrinsic"],
+            ),
+        ]
 
     def testValidateConfigs(self) -> None:
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesSigmaClipTask)
@@ -136,9 +158,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        zernCoeff = self.task.estimateZernikes.run(
-            donutStampsExtra, donutStampsIntra
-        ).zernikes
+        zernCoeff = self.task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(donutStampsExtra), 25))
 
@@ -149,7 +169,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        structNormal = self.task.run(donutStampsIntra, donutStampsExtra)
+        structNormal = self.task.run(donutStampsIntra, donutStampsExtra, self.intrinsicTables)
 
         # check that 4 elements are created
         self.assertEqual(len(structNormal), 4)
@@ -165,9 +185,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         for row in structNormal.zernikes:
             if row["label"] == "average":
                 continue
-            zkRaw2[i] = np.array(
-                [row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
-            )
+            zkRaw2[i] = np.array([row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
             i += 1
         np.testing.assert_allclose(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
 
@@ -202,16 +220,14 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         # Turn on the donut stamp selector
         self.task.doDonutStampSelector = True
-        structSelect = self.task.run(donutStampsIntra, donutStampsExtra)
+        structSelect = self.task.run(donutStampsIntra, donutStampsExtra, self.intrinsicTables)
         # check that donut quality is reported for all donuts
         self.assertEqual(
             len(structSelect.donutQualityTable),
             len(donutStampsExtra) + len(donutStampsIntra),
         )
         # Check DEFOCAL_TYPE assigned properly
-        extra_count = len(
-            np.where(structSelect.donutQualityTable["DEFOCAL_TYPE"] == "extra")[0]
-        )
+        extra_count = len(np.where(structSelect.donutQualityTable["DEFOCAL_TYPE"] == "extra")[0])
         self.assertEqual(extra_count, len(donutStampsExtra))
 
         # check that all desired quantities are included
@@ -227,7 +243,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "MAX_POWER_GRAD_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
-            "RADIUS"
+            "RADIUS",
         ]
         np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
@@ -235,6 +251,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         structNull = self.task.run(
             DonutStamps([], metadata=copy(donutStampsExtra.metadata)),
             DonutStamps([], metadata=copy(donutStampsExtra.metadata)),
+            self.intrinsicTables,
         )
 
         for struct in [structNormal, structNull]:
@@ -251,16 +268,5 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.config.donutStampSelector.maxSelect = 0
         self.task = CalcZernikesTask(config=self.config)
-        structAllDonutsFail = self.task.run(donutStampsIntra, donutStampsExtra)
+        structAllDonutsFail = self.task.run(donutStampsIntra, donutStampsExtra, self.intrinsicTables)
         self.assertEqual(len(structAllDonutsFail.donutQualityTable), 6)
-
-    def testGetCombinedZernikes(self) -> None:
-        testArr = np.zeros((2, 19))
-        testArr[1] += 2.0
-        combinedZernikesStruct = self.task.combineZernikes.run(testArr)
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.combinedZernikes, np.ones(19)
-        )
-        np.testing.assert_array_equal(
-            combinedZernikesStruct.flags, np.zeros(len(testArr))
-        )

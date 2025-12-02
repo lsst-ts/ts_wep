@@ -40,7 +40,8 @@ from lsst.utils.timer import timeMethod
 
 
 class CutOutDonutsCwfsTaskConnections(
-    CutOutDonutsBaseTaskConnections, dimensions=("exposure", "detector", "instrument")  # type: ignore
+    CutOutDonutsBaseTaskConnections,
+    dimensions=("exposure", "detector", "instrument"),  # type: ignore
 ):
     exposure = connectionTypes.Input(
         doc="Input exposure to make measurements on",

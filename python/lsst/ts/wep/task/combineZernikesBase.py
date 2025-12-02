@@ -23,11 +23,12 @@ __all__ = ["CombineZernikesBaseConfig", "CombineZernikesBaseTask"]
 
 import abc
 import logging
-from typing import Any
+from typing import Any, Callable
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import numpy as np
+from astropy.table import Table
 
 
 class CombineZernikesBaseConfig(pexConfig.Config):
@@ -48,76 +49,105 @@ class CombineZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         pipeBase.Task.__init__(self, **kwargs)
         self.log = logging.getLogger(type(self).__name__)  # type: ignore
 
-    def run(self, zernikeArray: np.ndarray) -> pipeBase.Struct:
+    @staticmethod
+    def _setAvg(
+        zkTable: Table,
+        colName: str,
+        function: Callable = np.nanmean,
+        useIdx: list | None = None,
+    ) -> None:
+        """Set average value for a Zernike column.
+
+        This is an abstract method meant to be used in subclasses.
+        It sets the "average" for the given column using the function,
+        only considering the rows indicated by useIdx.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.Table`
+            The full zernike table, to be altered in place.
+        colName : `str`
+            The name of the column to set the average value for.
+        function : `callable`, optional
+            The function to use to calculate the average value.
+            It should take a single argument which is an array
+            of values to average. (default is `np.nanmean`)
+        useIdx : `list` of `int` or `None`, optional
+            The indices of the rows to use when calculating
+            the average value. If None, all rows are used.
+            (default is None)
+        """
+        if useIdx is None:
+            useIdx = list(range(len(zkTable[zkTable["label"] != "average"])))
+
+        avg = function(zkTable[zkTable["label"] != "average"][colName][useIdx])
+        zkTable[colName][zkTable["label"] == "average"] = avg
+
+    @abc.abstractmethod
+    def _combineZernikes(self, zkTable: Table) -> None:
+        """
+        Abstract method to be implemented by subclasses.
+        This method should implement the specific algorithm to
+        combine the Zernike coefficients from each individual donut
+        pair into a single set of coefficients for the detector.
+
+        This function should modify the provided table in-place.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.Table`
+            Table containing zernike coefficients for each donut (pair).
+        """
+        raise NotImplementedError("Subclasses must implement _combineZernikes method.")
+
+    def combineZernikes(self, zkTable: Table) -> Table:
+        """Combine Zernikes from each donut (pair) into one set for detector.
+
+        Parameters
+        ----------
+        zkTable : `astropy.table.Table`
+            Table containing zernike coefficients for each donut (pair).
+
+        Returns
+        -------
+        `astropy.table.Table`
+            The input table with the averaged Zernike coefficients and
+            combination flags added.
+        """
+        # This is to protect the input table from modification
+        combinedTable = zkTable.copy()
+        self._combineZernikes(combinedTable)
+        return combinedTable
+
+    def run(self, zkTable: Table) -> pipeBase.Struct:
         """
         Combine the zernikes from the input array of Zernike
         coefficients from each individual donut pair.
 
         Parameters
         ----------
-        zernikeArray : numpy.ndarray
-            The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the array should
-            be the set of Zernike coefficients for a single
-            donut pair.
+        zkTable : `astropy.table.Table`
+            Table containing zernike coefficients for each donut (pair).
 
         Returns
         -------
         struct : `lsst.pipe.base.Struct`
             The struct contains the following data:
-
-            - combinedZernikes : numpy.ndarray
-                The final combined Zernike coefficients from the CCD.
-            - combineFlags : numpy.ndarray
-                Flag indicating a particular set of Zernike
-                coefficients was not used in the final estimate.
-                If the values in a row in the `zernikeArray`
-                were used then its index is 0.
-                A value of 1 means the coefficients from that row
-                in the input `zernikeArray` were not used.
+            - combinedTable : `astropy.table.Table`
+                The input table with the averaged Zernike coefficients and
+                combination flags added.
         """
-
-        combinedZernikes, flags = self.combineZernikes(zernikeArray)
+        combinedTable = self.combineZernikes(zkTable)
 
         # Make sure that flags contains only integers
-        flags = np.array(flags, dtype=int)
+        flags = np.array(~combinedTable[combinedTable["label"] != "average"]["used"], dtype=int)
         self.log.info(
-            f"Using {len(flags)-np.sum(flags)} pairs out of {len(zernikeArray)} "
-            "in final Zernike estimate."
+            f"Using {len(flags) - np.sum(flags)} pairs out of {len(flags)} in final Zernike estimate."
         )
 
         # Save flags and summary values in task metadata
         self.metadata["numDonutsTotal"] = len(flags)
         self.metadata["numDonutsUsed"] = len(flags) - np.sum(flags)
         self.metadata["numDonutsRejected"] = np.sum(flags)
-        self.metadata["combineZernikesFlags"] = list(flags)
-        return pipeBase.Struct(combinedZernikes=combinedZernikes, flags=flags)
-
-    @abc.abstractmethod
-    def combineZernikes(
-        self, zernikeArray: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Class specific algorithm to combine the Zernike
-        coefficients from each individual donut pair into
-        a single set of coefficients for the detector.
-
-        Parameters
-        ----------
-        zernikeArray : numpy.ndarray
-            The full set of zernike coefficients for each pair
-            of donuts on the CCD. Each row of the array should
-            be the set of Zernike coefficients for a single
-            donut pair.
-
-        Returns
-        -------
-        numpy.ndarray
-            The final combined Zernike coefficients from the CCD.
-        numpy.ndarray
-            A binary array where a value of 0 in any index indicates
-            that the row in the `zernikeArray` was used
-            in the final combination and a value of 1 indicates it
-            was not included in the final combination.
-        """
-        raise NotImplementedError("CombineZernikesBaseTask is abstract.")
+        self.metadata["combineZernikesFlags"] = flags.tolist()
+        return pipeBase.Struct(combinedTable=combinedTable, flags=flags)

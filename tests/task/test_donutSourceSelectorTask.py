@@ -179,14 +179,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # Test that sourceLimit can only be positive integer or -1
         self.config.sourceLimit = 0
         self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
-        errMsg = str(
-            "config.sourceLimit must be a positive integer "
-            + "or turned off by setting it to '-1'"
-        )
+        errMsg = str("config.sourceLimit must be a positive integer " + "or turned off by setting it to '-1'")
         with self.assertRaises(ValueError, msg=errMsg):
-            testCatStruct = self.task.selectSources(
-                minimalCat, detector, self.filterName
-            )
+            testCatStruct = self.task.selectSources(minimalCat, detector, self.filterName)
 
         # Test that setting sourceLimit returns all selected sources
         self.config.sourceLimit = -1

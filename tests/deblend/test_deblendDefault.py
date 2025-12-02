@@ -35,19 +35,11 @@ class TestDeblendDefault(unittest.TestCase):
 
     def testGenerateMultiDonutWithWrongInputs(self) -> None:
         img = np.random.rand(4, 4)
-        self.assertRaises(
-            ValueError, self.deblend.generateMultiDonut, img, -1.3, 0.3, 45.0
-        )
-        self.assertRaises(
-            ValueError, self.deblend.generateMultiDonut, img, 0, 0.3, 45.0
-        )
+        self.assertRaises(ValueError, self.deblend.generateMultiDonut, img, -1.3, 0.3, 45.0)
+        self.assertRaises(ValueError, self.deblend.generateMultiDonut, img, 0, 0.3, 45.0)
 
-        self.assertRaises(
-            ValueError, self.deblend.generateMultiDonut, img, 1.3, -0.3, 45.0
-        )
-        self.assertRaises(
-            ValueError, self.deblend.generateMultiDonut, img, 1.3, 1.3, 45.0
-        )
+        self.assertRaises(ValueError, self.deblend.generateMultiDonut, img, 1.3, -0.3, 45.0)
+        self.assertRaises(ValueError, self.deblend.generateMultiDonut, img, 1.3, 1.3, 45.0)
 
     def testGenerateMultiDonut(self) -> None:
         template = self._getTemplate()

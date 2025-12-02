@@ -63,11 +63,9 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
                 cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
                 runProgram(cleanUpCmd)
 
-            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
             instrument = "lsst.obs.lsst.LsstCam"
-            pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
-            )
+            pipelineYaml = os.path.join(testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml")
 
             pipeCmd = writePipetaskCmd(
                 cls.repoDir,
@@ -123,7 +121,6 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
             runProgram(cleanUpCmd)
 
     def testPipeline(self) -> None:
-
         # Compare the interactive run to pipetask run results
         donutStampsExtra_extraId = self.butler.get(
             "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
@@ -139,21 +136,13 @@ class TestReassignDonutsCwfsTask(lsst.utils.tests.TestCase):
         )
 
         # Test that reassigned stamps are correctly assigned
-        for reassignStamp, origStamp in zip(
-            donutStampsExtra_extraId, donutStampsExtraCwfs_extraId
-        ):
+        for reassignStamp, origStamp in zip(donutStampsExtra_extraId, donutStampsExtraCwfs_extraId):
             self.assertMaskedImagesAlmostEqual(reassignStamp.stamp_im, origStamp.stamp_im)  # type: ignore
-        for reassignStamp, origStamp in zip(
-            donutStampsIntra_extraId, donutStampsIntraCwfs_intraId
-        ):
+        for reassignStamp, origStamp in zip(donutStampsIntra_extraId, donutStampsIntraCwfs_intraId):
             self.assertMaskedImagesAlmostEqual(reassignStamp.stamp_im, origStamp.stamp_im)  # type: ignore
 
         # Test that the intra-focal id does not get reassigned stamps
         with self.assertRaises(DatasetNotFoundError):
-            self.butler.get(
-                "donutStampsExtra", dataId=self.dataIdIntra, collections=[self.runName]
-            )
+            self.butler.get("donutStampsExtra", dataId=self.dataIdIntra, collections=[self.runName])
         with self.assertRaises(DatasetNotFoundError):
-            self.butler.get(
-                "donutStampsIntra", dataId=self.dataIdIntra, collections=[self.runName]
-            )
+            self.butler.get("donutStampsIntra", dataId=self.dataIdIntra, collections=[self.runName])

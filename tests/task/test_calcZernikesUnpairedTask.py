@@ -31,6 +31,7 @@ from lsst.ts.wep.task import (
     CalcZernikesTaskConfig,
     CalcZernikesUnpairedTask,
     CalcZernikesUnpairedTaskConfig,
+    DonutStamps,
     EstimateZernikesDanishTask,
     EstimateZernikesTieTask,
 )
@@ -63,33 +64,37 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
-        cls.runName = "run1"
-        if cls.runName in collectionsList:
-            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-            runProgram(cleanUpCmd)
-
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
-        instrument = "lsst.obs.lsst.LsstCam"
-        cls.cameraName = "LSSTCam"
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCutoutsUnpairedPipeline.yaml"
-        )
         if "pretest_run_science" in collectionsList:
-            pipelineYaml += "#cutOutDonutsUnpairedTask"
-            collections += ",pretest_run_science"
+            cls.runName = "pretest_run_science"
+        else:
+            cls.runName = "run1"
+            if cls.runName in collectionsList:
+                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+                runProgram(cleanUpCmd)
 
-        pipeCmd = writePipetaskCmd(
-            cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
-        )
-        # Make sure we are using the right exposure+detector combinations
-        pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
-        pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
-        runProgram(pipeCmd)
+            collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
+            instrument = "lsst.obs.lsst.LsstCam"
+            pipelineYaml = os.path.join(
+                testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
+            )
+
+            pipeCmd = writePipetaskCmd(
+                cls.repoDir,
+                cls.runName,
+                instrument,
+                collections,
+                pipelineYaml=pipelineYaml,
+            )
+            # Make sure we are using the right exposure+detector combinations
+            pipeCmd += ' -d "exposure IN (4021123106001, 4021123106002) AND '
+            pipeCmd += 'detector NOT IN (191, 192, 195, 196, 199, 200, 203, 204)"'
+            runProgram(pipeCmd)
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
-        runProgram(cleanUpCmd)
+        if cls.runName == "run1":
+            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+            runProgram(cleanUpCmd)
 
     def setUp(self) -> None:
         self.butler = Butler.from_config(self.repoDir)
@@ -100,21 +105,28 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             "detector": 94,
             "exposure": 4021123106001,
             "visit": 4021123106001,
+            "physical_filter": "g",
         }
         self.dataIdIntra = {
             "instrument": "LSSTCam",
             "detector": 94,
             "exposure": 4021123106002,
             "visit": 4021123106002,
+            "physical_filter": "g",
         }
 
     def testWithAndWithoutPairs(self) -> None:
         # Load data from butler
         donutStampsExtra = self.butler.get(
-            "donutStamps", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutStampsIntra = self.butler.get(
-            "donutStamps", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        intrinsicTable = self.butler.get(
+            "intrinsic_aberrations_temp",
+            dataId=self.dataIdExtra,
+            collections=["LSSTCam/aos/intrinsic"],
         )
 
         # Loop over EstimateZernikes subtasks
@@ -124,7 +136,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             config.estimateZernikes.retarget(subtask)
             pairedTask = CalcZernikesTask(config=config)
 
-            pairedZk = pairedTask.run(donutStampsExtra, donutStampsIntra)
+            pairedZk = pairedTask.run(donutStampsExtra, donutStampsIntra, 2 * [intrinsicTable])
             pairedZk = pairedZk.outputZernikesAvg
 
             # Calculate Zernikes with stamps unpaired
@@ -132,8 +144,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             config.estimateZernikes.retarget(subtask)
             unpairedTask = CalcZernikesUnpairedTask(config=config)
 
-            extraZk = unpairedTask.run(donutStampsExtra).outputZernikesAvg
-            intraZk = unpairedTask.run(donutStampsIntra).outputZernikesAvg
+            extraZk = unpairedTask.run(donutStampsExtra, intrinsicTable).outputZernikesAvg
+            intraZk = unpairedTask.run(donutStampsIntra, intrinsicTable).outputZernikesAvg
             meanZk = np.mean([extraZk, intraZk], axis=0)
 
             # Check that results are similar
@@ -143,10 +155,15 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
     def testTable(self) -> None:
         # Load data from butler
         donutStampsExtra = self.butler.get(
-            "donutStamps", dataId=self.dataIdExtra, collections=[self.runName]
+            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName]
         )
         donutStampsIntra = self.butler.get(
-            "donutStamps", dataId=self.dataIdIntra, collections=[self.runName]
+            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
+        )
+        intrinsicTable = self.butler.get(
+            "intrinsic_aberrations_temp",
+            dataId=self.dataIdExtra,
+            collections=["LSSTCam/aos/intrinsic"],
         )
 
         # Loop over EstimateZernikes subtasks
@@ -156,18 +173,14 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 config = CalcZernikesUnpairedTaskConfig()
                 config.estimateZernikes.retarget(subtask)
                 task = CalcZernikesUnpairedTask(config=config)
-                structNormal = task.run(stamps)
+                structNormal = task.run(stamps, intrinsicTable)
 
                 # check that 4 elements are created
                 self.assertEqual(len(structNormal), 4)
 
                 zkAvg1 = structNormal.outputZernikesAvg[0]
-                zkAvgRow = structNormal.zernikes[
-                    structNormal.zernikes["label"] == "average"
-                ][0]
-                zkAvg2 = np.array(
-                    [zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
-                )
+                zkAvgRow = structNormal.zernikes[structNormal.zernikes["label"] == "average"][0]
+                zkAvg2 = np.array([zkAvgRow[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
                 np.testing.assert_allclose(zkAvg1, zkAvg2, rtol=1e-6, atol=0)
 
                 zkRaw1 = structNormal.outputZernikesRaw
@@ -176,9 +189,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                 for row in structNormal.zernikes:
                     if row["label"] == "average":
                         continue
-                    zkRaw2[i] = np.array(
-                        [row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)]
-                    )
+                    zkRaw2[i] = np.array([row[f"Z{i}"].to_value(u.micron) for i in range(4, 29)])
                     i += 1
                 np.testing.assert_allclose(zkRaw1, zkRaw2, rtol=1e-6, atol=0)
 
@@ -200,9 +211,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "intra_max_power_grad",
                     "extra_max_power_grad",
                 ]
-                self.assertLessEqual(
-                    set(desired_colnames), set(structNormal.zernikes.colnames)
-                )
+                self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
 
                 # Check metadata keys exist
                 self.assertIn("cam_name", structNormal.zernikes.meta)
@@ -218,7 +227,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
 
                 # Turn on the donut stamp selector
                 task.doDonutStampSelector = True
-                structSelect = task.run(stamps)
+                structSelect = task.run(stamps, intrinsicTable)
                 # check that donut quality is reported for all donuts
                 self.assertEqual(
                     len(structSelect.donutQualityTable),
@@ -238,14 +247,13 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "MAX_POWER_GRAD_SELECT",
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
-                    "RADIUS"
+                    "RADIUS",
                 ]
-                np.testing.assert_array_equal(
-                    np.sort(colnames), np.sort(desired_colnames)
-                )
+                np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 
                 # test null run
-                structNull = task.run([])
+                emptyStamps = DonutStamps([], metadata=stamps.metadata)
+                structNull = task.run(emptyStamps, intrinsicTable)
 
                 for struct in [structNormal, structNull]:
                     # test that in accordance with declared connections,
@@ -256,3 +264,11 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
                     self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
                     self.assertIsInstance(struct.zernikes, QTable)
+
+    def testRaiseErrorNoneStamps(self) -> None:
+        with self.assertRaises(ValueError) as cm:
+            task = CalcZernikesUnpairedTask()
+            task.createZkTableMetadata()
+        self.assertEqual(
+            str(cm.exception), "No metadata in either DonutStamps object. Cannot create Zk table metadata."
+        )

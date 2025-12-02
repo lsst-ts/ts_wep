@@ -312,6 +312,7 @@ class DanishAlgorithm(WfAlgorithm):
             result = None
             zkFit = np.full_like(zkStart, np.nan)
             zkSum = np.full_like(zkStart, np.nan)
+            fwhm = np.nan
             if saveHistory:
                 modelImage = np.full_like(img, np.nan)
 
@@ -337,6 +338,10 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Save final fwhm value in metadata
         zkMeta = {"fwhm": fwhm}
+        # Add model information
+        zkMeta["model_dx"] = dx
+        zkMeta["model_dy"] = dy
+        zkMeta["model_sky_level"] = backgroundStd**2
 
         return zkSum, hist, zkMeta
 
@@ -409,13 +414,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Set field radius to max value from mask params
         fieldRadius = np.deg2rad(
-            np.max(
-                [
-                    edge["thetaMax"]
-                    for item in instrument.maskParams.values()
-                    for edge in item.values()
-                ]
-            )
+            np.max([edge["thetaMax"] for item in instrument.maskParams.values() for edge in item.values()])
         )
 
         # Create model
@@ -514,6 +513,10 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Save final fwhm value in metadata
         zkMeta = {"fwhm": fwhm}
+        # Add model information
+        zkMeta["model_dx"] = dxs
+        zkMeta["model_dy"] = dys
+        zkMeta["model_sky_level"] = skyLevels
 
         return zkSum, hist, zkMeta
 

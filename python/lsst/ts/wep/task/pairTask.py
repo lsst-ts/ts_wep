@@ -63,8 +63,7 @@ class ExposurePairerConfig(pexConfig.Config):
 
     ignoreThresholds: pexConfig.Field = pexConfig.Field[bool](
         doc=(
-            "If True, ignore time, pointing, and rotation thresholds.  Useful when grouping by "
-            "exposure.group"
+            "If True, ignore time, pointing, and rotation thresholds.  Useful when grouping by exposure.group"
         ),
         default=False,
     )
@@ -148,9 +147,7 @@ class ExposurePairer(pipeBase.Task):
             dec = radec.getLatitude().asRadians()
             mjd = visitInfo.date.toAstropy().mjd
             rtp = (
-                visitInfo.boresightParAngle
-                - visitInfo.boresightRotAngle
-                - (np.pi / 2 * radians)
+                visitInfo.boresightParAngle - visitInfo.boresightRotAngle - (np.pi / 2 * radians)
             ).asDegrees()
             focusZ = visitInfo.focusZ
             table.add_row([exposure, ra, dec, mjd, focusZ, rtp])
@@ -170,9 +167,7 @@ class ExposurePairer(pipeBase.Task):
 
         extraTable = table[np.abs(table["focusZ"] - best_offset) < thresh]
         focalTable = table[np.abs(table["focusZ"] - best_offset + separation) < thresh]
-        intraTable = table[
-            np.abs(table["focusZ"] - best_offset + 2 * separation) < thresh
-        ]
+        intraTable = table[np.abs(table["focusZ"] - best_offset + 2 * separation) < thresh]
 
         # For each extra focal exposure, find the best intra focal exposure.
         # Note that it's possible that the same intra exposure is paired with
@@ -193,24 +188,13 @@ class ExposurePairer(pipeBase.Task):
             if self.config.ignoreThresholds:
                 nearby = np.ones(len(intraTable), dtype=bool)
             else:
-                nearby = (
-                    np.abs(intraTable["mjd"] - row["mjd"]) * 86400
-                    < self.config.timeThreshold
-                )
-                nearby &= (
-                    np.abs(intraTable["rtp"] - row["rtp"])
-                    < self.config.rotationThreshold
-                )
-                nearby &= (
-                    row["radec"].separation(intraTable["radec"]).arcsec
-                    < self.config.pointingThreshold
-                )
+                nearby = np.abs(intraTable["mjd"] - row["mjd"]) * 86400 < self.config.timeThreshold
+                nearby &= np.abs(intraTable["rtp"] - row["rtp"]) < self.config.rotationThreshold
+                nearby &= row["radec"].separation(intraTable["radec"]).arcsec < self.config.pointingThreshold
             if np.any(nearby):
                 nearbyTable = intraTable[nearby]
                 # Pick the nearest remaining point in radec
-                nearest_idx = np.argmin(
-                    row["radec"].separation(nearbyTable["radec"]).deg
-                )
+                nearest_idx = np.argmin(row["radec"].separation(nearbyTable["radec"]).deg)
                 nearest_row = nearbyTable[nearest_idx]
                 value = [row["exposure"], nearest_row["exposure"]]
                 for r in [row, nearest_row]:
@@ -234,9 +218,7 @@ class ExposurePairer(pipeBase.Task):
             "focalTable": focalTable,
         }
 
-    def run(
-        self, visitInfos: typing.Dict[int, afwImage.VisitInfo]
-    ) -> typing.List[IntraExtraIdxPair]:
+    def run(self, visitInfos: typing.Dict[int, afwImage.VisitInfo]) -> typing.List[IntraExtraIdxPair]:
         """
         Pair up the intra- and extra-focal exposures.
         """

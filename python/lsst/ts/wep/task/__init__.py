@@ -6,7 +6,6 @@ from .combineZernikesSigmaClipTask import *
 from .cutOutDonutsBase import *
 from .cutOutDonutsCwfsTask import *
 from .cutOutDonutsScienceSensorTask import *
-from .cutOutDonutsUnpairedTask import *
 from .donutQuickMeasurementTask import *
 from .donutSourceSelectorTask import *
 from .donutStamp import *
@@ -24,3 +23,4 @@ from .generateDonutFromRefitWcsTask import *
 from .pairTask import *
 from .reassignCwfsCutoutsTask import *
 from .refCatalogInterface import *
+from .calcZernikesNeuralTask import *

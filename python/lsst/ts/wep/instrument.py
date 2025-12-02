@@ -233,8 +233,7 @@ class Instrument:
             return self.getBatoidModel().pupilSize
         else:
             raise ValueError(
-                "There is currently no diameter set. "
-                "Please set either the diameter, or the batoidModelName."
+                "There is currently no diameter set. Please set either the diameter, or the batoidModelName."
             )
 
     @diameter.setter
@@ -379,15 +378,11 @@ class Instrument:
 
             # Calculate the equivalent detector offset
             result = minimize_scalar(
-                lambda offset: np.abs(
-                    (self.offsetToZ4Defocus(offset) - dZ4optic) / dZ4optic
-                ),
+                lambda offset: np.abs((self.offsetToZ4Defocus(offset) - dZ4optic) / dZ4optic),
                 bounds=(-0.1, 0.1),
             )
             if not result.success or result.fun > 1e-3:
-                raise RuntimeError(
-                    "Calculating defocalOffset from batoidOffsetValue failed."
-                )
+                raise RuntimeError("Calculating defocalOffset from batoidOffsetValue failed.")
 
             # Save the calculated offset
             defocalOffsetBatoid = np.abs(result.x)
@@ -561,8 +556,7 @@ class Instrument:
                 enumDictValue[BandLabel.REF] = enumDictValue[self.refBand]
             except KeyError:
                 raise ValueError(
-                    "The wavelength dictionary must contain a wavelength "
-                    "for the reference band."
+                    "The wavelength dictionary must contain a wavelength for the reference band."
                 )
             value = enumDictValue
         elif value is not None:
@@ -1076,16 +1070,12 @@ class Instrument:
     @lru_cache(100)
     def createZernikeBasis(self, jmax: int) -> np.ndarray:
         uPupil, vPupil = self.createPupilGrid()
-        return createZernikeBasis(
-            uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
-        )
+        return createZernikeBasis(uPupil, vPupil, jmax=jmax, obscuration=self.obscuration)
 
     @lru_cache(100)
     def createZernikeGradBasis(self, jmax: int) -> np.ndarray:
         uPupil, vPupil = self.createPupilGrid()
-        return createZernikeGradBasis(
-            uPupil, vPupil, jmax=jmax, obscuration=self.obscuration
-        )
+        return createZernikeGradBasis(uPupil, vPupil, jmax=jmax, obscuration=self.obscuration)
 
     def createImageGrid(self, nPixels: int) -> tuple[np.ndarray, np.ndarray]:
         """Create an (nPixel x nPixel) grid for the image.

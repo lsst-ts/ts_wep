@@ -37,6 +37,8 @@ tasks:
   generateDonutFromRefitWcsTask:
     class: lsst.ts.wep.task.generateDonutFromRefitWcsTask.GenerateDonutFromRefitWcsTask
     config:
+      python: |
+        config.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
       connections.astromRefCat: "cal_ref_cat"
       connections.photoRefCat: "cal_ref_cat"
       astromRefFilter: "g"

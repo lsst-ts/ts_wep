@@ -83,12 +83,8 @@ if __name__ == "__main__":
     fieldWFSx = [1.176, -1.176, -1.176, 1.176]
     fieldWFSy = [1.176, 1.176, -1.176, -1.176]
     pointAngle = np.arange(nArm) * (2 * np.pi) / nArm
-    fieldX = np.concatenate(
-        [np.zeros(1), np.kron(armLen, np.cos(pointAngle)), fieldWFSx]
-    )
-    fieldY = np.concatenate(
-        [np.zeros(1), np.kron(armLen, np.sin(pointAngle)), fieldWFSy]
-    )
+    fieldX = np.concatenate([np.zeros(1), np.kron(armLen, np.cos(pointAngle)), fieldWFSx])
+    fieldY = np.concatenate([np.zeros(1), np.kron(armLen, np.sin(pointAngle)), fieldWFSy])
 
     fieldXY = np.array([fieldX, fieldY]).T
 

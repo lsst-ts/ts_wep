@@ -58,9 +58,7 @@ class TestImage(unittest.TestCase):
             Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel=1)
 
     def testBandLabelStringNotInEnum(self) -> None:
-        image = Image(
-            np.zeros((160, 160)), (0, 0), "intra", bandLabel="NOT_AN_ENUMERATION"
-        )
+        image = Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel="NOT_AN_ENUMERATION")
         assert image.bandLabel == BandLabel.REF
 
     def testBadPlaneType(self) -> None:

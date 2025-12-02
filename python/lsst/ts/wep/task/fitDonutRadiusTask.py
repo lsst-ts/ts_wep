@@ -129,9 +129,7 @@ class FitDonutRadiusTask(pipeBase.Task):
         failedFlagArray = []
 
         for stamp in stampSet:
-            xLeft, xRight, donutRadius, flag = self.fit_radius(
-                stamp.stamp_im.image.array
-            )
+            xLeft, xRight, donutRadius, flag = self.fit_radius(stamp.stamp_im.image.array)
             radiiArray.append(donutRadius)
             leftEdgeArray.append(xLeft)
             rightEdgeArray.append(xRight)
@@ -216,9 +214,7 @@ class FitDonutRadiusTask(pipeBase.Task):
             left_edge = left_default_edge
             right_edge = right_default_edge
             fail_flag = 1
-            self.log.warning(
-                f"Setting left edge to {left_edge} and right edge to {right_edge}"
-            )
+            self.log.warning(f"Setting left edge to {left_edge} and right edge to {right_edge}")
 
         # Catch successful fit with bad values
         if left_edge < 0:

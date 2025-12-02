@@ -55,12 +55,8 @@ class TestSingleThreading(unittest.TestCase):
             "1",
             "OPENBLAS_NUM_THREADS should be set to 1",
         )
-        self.assertEqual(
-            os.environ["MKL_NUM_THREADS"], "1", "MKL_NUM_THREADS should be set to 1"
-        )
-        self.assertEqual(
-            os.environ["OMP_NUM_THREADS"], "1", "OMP_NUM_THREADS should be set to 1"
-        )
+        self.assertEqual(os.environ["MKL_NUM_THREADS"], "1", "MKL_NUM_THREADS should be set to 1")
+        self.assertEqual(os.environ["OMP_NUM_THREADS"], "1", "OMP_NUM_THREADS should be set to 1")
 
         # Check additional environment variables
         self.assertEqual(
@@ -73,9 +69,7 @@ class TestSingleThreading(unittest.TestCase):
             "1",
             "VECLIB_MAXIMUM_THREADS should be set to 1",
         )
-        self.assertEqual(
-            os.environ["BLIS_NUM_THREADS"], "1", "BLIS_NUM_THREADS should be set to 1"
-        )
+        self.assertEqual(os.environ["BLIS_NUM_THREADS"], "1", "BLIS_NUM_THREADS should be set to 1")
 
     def test_threadpool_limits(self) -> None:
         # Call the function to enforce single-threading

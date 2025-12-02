@@ -35,9 +35,7 @@ def main() -> None:
         required=True,
         metavar="TEXT",
     )
-    parser.add_argument(
-        "-c", "--collection", help="Collection name.", required=True, metavar="NAME"
-    )
+    parser.add_argument("-c", "--collection", help="Collection name.", required=True, metavar="NAME")
     parser.add_argument(
         "-o",
         type=str,

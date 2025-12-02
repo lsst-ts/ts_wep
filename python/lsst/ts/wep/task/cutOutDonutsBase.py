@@ -54,7 +54,8 @@ from scipy.signal import correlate
 
 
 class CutOutDonutsBaseTaskConnections(
-    pipeBase.PipelineTaskConnections, dimensions=("exposure", "instrument")  # type: ignore
+    pipeBase.PipelineTaskConnections,
+    dimensions=("exposure", "instrument"),  # type: ignore
 ):
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
@@ -78,7 +79,8 @@ class CutOutDonutsBaseTaskConnections(
 
 
 class CutOutDonutsBaseTaskConfig(
-    pipeBase.PipelineTaskConfig, pipelineConnections=CutOutDonutsBaseTaskConnections  # type: ignore
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=CutOutDonutsBaseTaskConnections,  # type: ignore
 ):
     # Config setting for pipeline task with defaults
     donutStampSize: pexConfig.Field = pexConfig.Field(
@@ -175,9 +177,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Set Variance Plane Warning only once
         self.varianceWarningSet = False
 
-    def shiftCenters(
-        self, centerArr: np.ndarray, boundary: float, distance: float
-    ) -> np.ndarray:
+    def shiftCenters(self, centerArr: np.ndarray, boundary: float, distance: float) -> np.ndarray:
         """Shift the centers of sources if the distance to
         boundary is less than required.
 
@@ -264,13 +264,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Shift stamp center if necessary
         xCentersShifted = copy(xCenters)
         yCentersShifted = copy(yCenters)
-        xCentersShifted = self.shiftCenters(
-            xCentersShifted, expDim.getX(), initialHalfWidth
-        )
+        xCentersShifted = self.shiftCenters(xCentersShifted, expDim.getX(), initialHalfWidth)
         xCentersShifted = self.shiftCenters(xCentersShifted, 0, initialHalfWidth)
-        yCentersShifted = self.shiftCenters(
-            yCentersShifted, expDim.getY(), initialHalfWidth
-        )
+        yCentersShifted = self.shiftCenters(yCentersShifted, expDim.getY(), initialHalfWidth)
         yCentersShifted = self.shiftCenters(yCentersShifted, 0, initialHalfWidth)
 
         # Stamp BBox defined by corner pixel and extent
@@ -284,9 +280,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         for initX, initY in zip(initXCorners, initYCorners):
             # Define BBox and get cutout from exposure
             initCornerPoint = lsst.geom.Point2I(initX, initY)
-            initBBox = lsst.geom.Box2I(
-                initCornerPoint, lsst.geom.Extent2I(initialCutoutSize)
-            )
+            initBBox = lsst.geom.Box2I(initCornerPoint, lsst.geom.Extent2I(initialCutoutSize))
             initialCutout = exposure[initBBox]
 
             # Find the centroid by finding the max point in an initial
@@ -347,21 +341,46 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         mask = stamp.stamp_im.mask
         varianceArray = stamp.stamp_im.variance.array
 
-        # The following are example donut mask values:
-        # maskPlaneDict={'BAD': 0, 'BLEND': 10, 'CR': 3, 'DETECTED': 5,
-        # 'DETECTED_NEGATIVE': 6, 'DONUT': 9, 'EDGE': 4, 'INTRP': 2,
-        # 'NO_DATA': 8, 'SAT': 1, 'SUSPECT': 7}
+        # The mask plane value dictionary can be obtained via
+        # mask.getMaskPlaneDict(). They can be changed, hence
+        # avoid presuming any hard-coded values.
+        # We find which bit corresponds to DONUT presence with
+        # getPlaneBitMask method. We use bitwise_and to test
+        # for whether that bit is set. For example
+        # Pixel value: 73728 in binary: 10010000000000000
+        #                               ││└─ bit 0 (BAD)
+        #                               │└── bit 13 (DONUT) ✓ SET
+        #                               └─── bit 16 (PARTLY_VIGNETTED) ✓ SET
+        ## The Bitwise AND Operation (`&`)
+        # If `donutPlaneBit` is `2^13 = 8192`, which in binary is:
+        #    ```
+        #    8192 in binary: 10000000000000
+        #                    └─ only bit 13 is set
+        # Example with value 73728 (has DONUT bit set)
+        #      10010000000000000  (73728 - original mask value)
+        #    & 00010000000000000  (8192 - DONUT bit mask)
+        #    -------------------
+        #      00010000000000000  (8192 - result is non-zero!)
+        #
+        # Example with value 65536 (NO DONUT bit)
+        #      10000000000000000  (65536 - only PARTLY_VIGNETTED)
+        #    & 00010000000000000  (8192 - DONUT bit mask)
+        #    -------------------
+        #      00000000000000000  (0 - result is zero)
 
-        # The total mask value per pixel reflects that,
-        # So that each mask pixel has a value of
-        # eg.0, 512, 1024 for LSSTCam,
-        # or 0, 2048 for auxTel
-        # Thus to find out the number of pixels
-        # taken by the donut mask we sum all
-        # the nonzero mask pixels.
-        donutMaskPlane = mask.getMaskPlane("DONUT")
-        donutMask = mask.array == np.power(2, donutMaskPlane)
+        donutPlaneBit = mask.getPlaneBitMask("DONUT")
+        blendBit = mask.getPlaneBitMask("BLEND")
+        satBit = mask.getPlaneBitMask("SAT")
+        crBit = mask.getPlaneBitMask("CR")
+        # Select pixels with DONUT set AND BLEND, SAT, CR not set
+        # In extreme cases where all donut is SAT, the SN value
+        # will equal NaN as the donut is not usable
+        hasDonut = (mask.array & donutPlaneBit) > 0
+        notBlend = (mask.array & blendBit) == 0
+        notSat = (mask.array & satBit) == 0
+        notCr = (mask.array & crBit) == 0
 
+        donutMask = hasDonut & notBlend & notSat & notCr
         # Number of pixels taken by the donut in the original donut mask
         nPxMask = np.sum(donutMask)
 
@@ -391,8 +410,13 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             )
             bkgndMask = ~binary_dilation(donutMask, iterations=self.bkgDilationIter)
             xsection = bkgndMask[:, width // 2]
-        # Remove any other masked pixels including blends
-        bkgndMask[mask.array > 0] = 0
+        # Below, we exclude only problematic mask planes, not all masks
+        # Define which mask planes are bad for background estimation
+        bad_planes = ["BAD", "SAT", "CR", "INTRP", "NO_DATA", "SUSPECT", "EDGE", "BLEND"]
+        bad_mask_bit = mask.getPlaneBitMask(bad_planes)
+
+        # Remove pixels with any of these bad flags
+        bkgndMask[mask.array & bad_mask_bit > 0] = 0
 
         backgroundImageStdev = imageArray[bkgndMask].std()  # per pixel
         sqrtMeanVariance = np.sqrt(np.mean(varianceArray[bkgndMask]))
@@ -439,9 +463,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
         return snDict
 
-    def filterBadRecentering(
-        self, xShifts: np.ndarray, yShifts: np.ndarray
-    ) -> np.ndarray:
+    def filterBadRecentering(self, xShifts: np.ndarray, yShifts: np.ndarray) -> np.ndarray:
         """Filter out donuts that are recentered far away from the median
         shift of all donuts. The median is subtracted to account for a constant
         shift due to any constant offsets from the WCS used to calculate
@@ -543,9 +565,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         inputDonutStamps.metadata["BORESIGHT_DEC_RAD"] = (
             donutCatalog.meta["visit_info"]["boresight_dec"].to(u.rad).value
         )
-        inputDonutStamps.metadata["RADIUS"] = (
-            donutCatalog.meta["visit_info"]["donut_radius"]
-        )
+        inputDonutStamps.metadata["RADIUS"] = donutCatalog.meta["visit_info"]["donut_radius"]
 
         return inputDonutStamps
 
@@ -679,9 +699,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
             # Get the final cutout
             finalCorner = lsst.geom.Point2I(donutRow["xCorner"], donutRow["yCorner"])
-            finalBBox = lsst.geom.Box2I(
-                finalCorner, lsst.geom.Extent2I(self.donutStampSize)
-            )
+            finalBBox = lsst.geom.Box2I(finalCorner, lsst.geom.Extent2I(self.donutStampSize))
             finalCutout = exposure[finalBBox].clone()
 
             # Save MaskedImage to stamp
@@ -722,14 +740,10 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             # Be careful to get the cd matrix from the linearized WCS instead
             # of the one from the full WCS.
             wcs = exposure.wcs
-            centroid_position = Point2D(
-                donutRow["finalDonutX"], donutRow["finalDonutY"]
-            )
+            centroid_position = Point2D(donutRow["finalDonutX"], donutRow["finalDonutY"])
             linearTransform = wcs.linearizePixelToSky(centroid_position, degrees)
             cdMatrix = linearTransform.getLinear().getMatrix()
-            linear_wcs = makeSkyWcs(
-                centroid_position, wcs.pixelToSky(centroid_position), cdMatrix
-            )
+            linear_wcs = makeSkyWcs(centroid_position, wcs.pixelToSky(centroid_position), cdMatrix)
 
             donutStamp = DonutStamp(
                 stamp_im=finalStamp,
@@ -778,17 +792,11 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
 
         # Save the donut flux as magnitude
         fluxLabel = next(
-            (
-                colName
-                for colName in donutCatalog.columns
-                if colName.endswith(f"{bandLabel}_flux")
-            ),
+            (colName for colName in donutCatalog.columns if colName.endswith(f"{bandLabel}_flux")),
             None,
         )
         if fluxLabel is not None and len(donutCatalog[fluxLabel]) > 0:
-            stampsMetadata["MAG"] = (donutCatalog[fluxLabel].value * u.nJy).to_value(
-                u.ABmag
-            )
+            stampsMetadata["MAG"] = (donutCatalog[fluxLabel].value * u.nJy).to_value(u.ABmag)
         else:
             stampsMetadata["MAG"] = np.array([])
         # Save the original centroid values
@@ -797,22 +805,14 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save the centroid shift
         stampsMetadata["CENT_DX"] = donutCatalog["xShift"]
         stampsMetadata["CENT_DY"] = donutCatalog["yShift"]
-        stampsMetadata["CENT_DR"] = np.sqrt(
-            donutCatalog["xShift"] ** 2 + donutCatalog["yShift"] ** 2
-        )
+        stampsMetadata["CENT_DR"] = np.sqrt(donutCatalog["xShift"] ** 2 + donutCatalog["yShift"] ** 2)
 
         if len(finalStamps) > 0:
-            self.metadata[f"recenterFlags{defocalType.value.capitalize()}"] = list(
-                recenterFlags
-            )
+            self.metadata[f"recenterFlags{defocalType.value.capitalize()}"] = list(recenterFlags)
 
         # Save the S/N values
-        stampsMetadata["SN"] = np.array(
-            [snQuant[i]["SN"] for i in range(len(snQuant))], dtype=float
-        )
-        stampsMetadata["SIGNAL_MEAN"] = np.array(
-            [snQuant[i]["signal_mean"] for i in range(len(snQuant))]
-        )
+        stampsMetadata["SN"] = np.array([snQuant[i]["SN"] for i in range(len(snQuant))], dtype=float)
+        stampsMetadata["SIGNAL_MEAN"] = np.array([snQuant[i]["signal_mean"] for i in range(len(snQuant))])
         stampsMetadata["SIGNAL_SUM"] = np.array(
             [snQuant[i]["signal_sum"] for i in range(len(snQuant))], dtype=float
         )
@@ -856,9 +856,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         maxPowerGradKLess10 = np.array(maxPowerGradKLess10).astype(float)
         stampsMetadata["MAX_POWER_GRAD"] = maxPowerGradKLess10
 
-        finalDonutStamps = DonutStamps(
-            finalStamps, metadata=stampsMetadata, use_archive=True
-        )
+        finalDonutStamps = DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
         # Refresh to pull original metadata into stamps
         # Necessary when running full pipeline interactively.
         finalDonutStamps._refresh_metadata()

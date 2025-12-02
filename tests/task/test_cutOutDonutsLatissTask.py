@@ -86,9 +86,7 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         collections = "LATISS/raw/all,LATISS/calib"
         instrument = "lsst.obs.lsst.Latiss"
         cls.cameraName = "LATISS"
-        pipelineYaml = os.path.join(
-            testPipelineConfigDir, "testCutoutsLatissPipeline.yaml"
-        )
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsLatissPipeline.yaml")
 
         pipeCmd = writePipetaskCmd(
             cls.repoDir, cls.runName, instrument, collections, pipelineYaml=pipelineYaml
@@ -123,15 +121,11 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         focusZextra = -1.5
         focusZintra = -1.2
 
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZextra, focusZintra, "LATISS"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZextra, focusZintra, "LATISS")
         self.assertEqual(extraIdx, 0)
         self.assertEqual(intraIdx, 1)
         # invert the order
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(
-            focusZintra, focusZextra, "LATISS"
-        )
+        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZintra, focusZextra, "LATISS")
         self.assertEqual(extraIdx, 1)
         self.assertEqual(intraIdx, 0)
 
@@ -147,19 +141,11 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
     def testTaskRun(self) -> None:
         # Grab two exposures from the same detector at two different visits to
         # get extra and intra
-        exposureExtra = self.butler.get(
-            "post_isr_image", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        exposureIntra = self.butler.get(
-            "post_isr_image", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        exposureExtra = self.butler.get("post_isr_image", dataId=self.dataIdExtra, collections=[self.runName])
+        exposureIntra = self.butler.get("post_isr_image", dataId=self.dataIdIntra, collections=[self.runName])
 
-        donutTableExtra = self.butler.get(
-            "donutTable", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        donutTableIntra = self.butler.get(
-            "donutTable", dataId=self.dataIdIntra, collections=[self.runName]
-        )
+        donutTableExtra = self.butler.get("donutTable", dataId=self.dataIdExtra, collections=[self.runName])
+        donutTableIntra = self.butler.get("donutTable", dataId=self.dataIdIntra, collections=[self.runName])
         camera = self.butler.get(
             "camera",
             dataId={"instrument": "LATISS"},
@@ -169,9 +155,7 @@ class TestCutOutDonutsLatissTask(lsst.utils.tests.TestCase):
         # Test return values when no sources in catalog
         noSrcDonutTable = donutTableExtra.copy()
         noSrcDonutTable.remove_rows(slice(None))
-        testOutNoSrc = self.task.run(
-            [exposureExtra, exposureIntra], [noSrcDonutTable] * 2, camera
-        )
+        testOutNoSrc = self.task.run([exposureExtra, exposureIntra], [noSrcDonutTable] * 2, camera)
 
         self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
         self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)

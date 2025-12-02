@@ -34,9 +34,7 @@ class TestCentroidFindFactory(unittest.TestCase):
     """Test the CentroidFindFactory class."""
 
     def testCreateCentroidFindRandomWalk(self) -> None:
-        centroidFind = CentroidFindFactory.createCentroidFind(
-            CentroidFindType.RandomWalk
-        )
+        centroidFind = CentroidFindFactory.createCentroidFind(CentroidFindType.RandomWalk)
         self.assertTrue(isinstance(centroidFind, CentroidRandomWalk))
 
     def testCreateCentroidFindOtsu(self) -> None:
@@ -44,15 +42,11 @@ class TestCentroidFindFactory(unittest.TestCase):
         self.assertTrue(isinstance(centroidFind, CentroidOtsu))
 
     def testCreateCentroidFindConvolveTemplate(self) -> None:
-        centroidFind = CentroidFindFactory.createCentroidFind(
-            CentroidFindType.ConvolveTemplate
-        )
+        centroidFind = CentroidFindFactory.createCentroidFind(CentroidFindType.ConvolveTemplate)
         self.assertTrue(isinstance(centroidFind, CentroidConvolveTemplate))
 
     def testCreateCentroidFindWrongType(self) -> None:
-        self.assertRaises(
-            ValueError, CentroidFindFactory.createCentroidFind, "wrongType"
-        )
+        self.assertRaises(ValueError, CentroidFindFactory.createCentroidFind, "wrongType")
 
 
 if __name__ == "__main__":

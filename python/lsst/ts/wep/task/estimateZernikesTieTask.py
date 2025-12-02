@@ -66,8 +66,7 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
     compGain: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=0.6,
-        doc="Gain used to update Zernikes for image compensation. "
-        + "(the default is 0.6)",
+        doc="Gain used to update Zernikes for image compensation. " + "(the default is 0.6)",
     )
     centerTol: pexConfig.Field = pexConfig.Field(
         dtype=float,
@@ -79,8 +78,7 @@ class EstimateZernikesTieConfig(EstimateZernikesBaseConfig):
     centerBinary: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
-        doc="Whether to use a binary template when centering the image. "
-        + "(the default is True)",
+        doc="Whether to use a binary template when centering the image. " + "(the default is True)",
     )
     convergeTol: pexConfig.Field = pexConfig.Field(
         dtype=float,

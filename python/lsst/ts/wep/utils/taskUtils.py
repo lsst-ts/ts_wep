@@ -428,8 +428,7 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata | dict | str) -> di
         # Otherwise, recurse on keys and values
         else:
             _metadata = {
-                convertMetadataToHistory(key): convertMetadataToHistory(val)
-                for key, val in metadata.items()
+                convertMetadataToHistory(key): convertMetadataToHistory(val) for key, val in metadata.items()
             }
 
     # Convert "None" strings back to None and numeric strings to floats/ints

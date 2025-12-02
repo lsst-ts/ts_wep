@@ -34,9 +34,7 @@ class TestDeblendDonutFactory(unittest.TestCase):
         self.assertTrue(isinstance(deblendDonut, DeblendAdapt))
 
     def testCreateDeblendDonutWrongType(self) -> None:
-        self.assertRaises(
-            ValueError, DeblendDonutFactory.createDeblendDonut, "wrongType"
-        )
+        self.assertRaises(ValueError, DeblendDonutFactory.createDeblendDonut, "wrongType")
 
 
 if __name__ == "__main__":

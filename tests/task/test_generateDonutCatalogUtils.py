@@ -52,9 +52,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             datasetType="cal_ref_cat", collections=["refcats/gen2"]
         ).expanded()
         for ref in datasetGenerator:
-            refCatList.append(
-                self.butler.getDeferred(ref, collections=["refcats/gen2"])
-            )
+            refCatList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
 
         return refCatList
 
@@ -76,9 +74,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "detector": 94,
             "exposure": 4021123106001,
         }
-        testExposure = self.butler.get(
-            "raw", dataId=testDataId, collections="LSSTCam/raw/all"
-        )
+        testExposure = self.butler.get("raw", dataId=testDataId, collections="LSSTCam/raw/all")
         # From the test data provided this will create
         # a catalog of 4 objects.
         donutCatSmall = refObjLoader.loadPixelBox(
@@ -140,9 +136,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         # This will happen even if we turn off donut selection
         edgeMargin = 1000
-        donutCatSmall, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", None, edgeMargin
-        )
+        donutCatSmall, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, edgeMargin)
         self.assertEqual(len(donutCatSmall), 1)
 
     def testRunSelectionNoTask(self) -> None:
@@ -162,9 +156,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         # When passing None instead of a DonutSourceSelectorTask
         # we should get the full catalog without cuts.
-        unchangedCat, blendX, blendY = runSelection(
-            refObjLoader, detector, wcs, "g", None, 60
-        )
+        unchangedCat, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, 60)
         self.assertEqual(len(unchangedCat), 4)
         self.assertEqual(blendX, [[]] * 4)
         self.assertEqual(blendY, [[]] * 4)
@@ -242,12 +234,8 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         fieldObjectsBlends.meta["blend_centroid_x"][1].append(5)
         fieldObjectsBlends.meta["blend_centroid_y"][1].append(3)
-        self.assertListEqual(
-            fieldObjectsBlends.meta["blend_centroid_x"], [[], [5], [], []]
-        )
-        self.assertListEqual(
-            fieldObjectsBlends.meta["blend_centroid_y"], [[], [3], [], []]
-        )
+        self.assertListEqual(fieldObjectsBlends.meta["blend_centroid_x"], [[], [5], [], []])
+        self.assertListEqual(fieldObjectsBlends.meta["blend_centroid_y"], [[], [3], [], []])
 
     def testDonutCatalogToAstropyWithBlendCenters(self) -> None:
         donutCatSmall = self._createTestDonutCat()
@@ -262,12 +250,8 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         fieldObjects = donutCatalogToAstropy(
             donutCatSmall, "g", blendCentersX=blendCentersX, blendCentersY=blendCentersY
         )
-        self.assertListEqual(
-            list(fieldObjects.meta["blend_centroid_x"]), [list()] * len(donutCatSmall)
-        )
-        self.assertListEqual(
-            list(fieldObjects.meta["blend_centroid_y"]), [list()] * len(donutCatSmall)
-        )
+        self.assertListEqual(list(fieldObjects.meta["blend_centroid_x"]), [list()] * len(donutCatSmall))
+        self.assertListEqual(list(fieldObjects.meta["blend_centroid_y"]), [list()] * len(donutCatSmall))
 
         blendValsX = [
             donutCatSmall["centroid_x"][0] + 10.0,
@@ -318,10 +302,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         donutCatZero = QTable(names=columnList)
 
         # Test blendCenters are both supplied or both left as None
-        blendErrMsg = (
-            "blendCentersX and blendCentersY must be"
-            + " both be None or both be a list."
-        )
+        blendErrMsg = "blendCentersX and blendCentersY must be" + " both be None or both be a list."
         with self.assertRaises(ValueError) as context:
             donutCatalogToAstropy(donutCatZero, "g", blendCentersX=[])
         self.assertTrue(blendErrMsg in str(context.exception))
@@ -330,10 +311,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         self.assertTrue(blendErrMsg in str(context.exception))
 
         # Test blendCenters must be same length as donutCat
-        lengthErrMsg = (
-            "blendCentersX and blendCentersY must be"
-            + " both be None or both be a list."
-        )
+        lengthErrMsg = "blendCentersX and blendCentersY must be" + " both be None or both be a list."
         with self.assertRaises(ValueError) as context:
             donutCatalogToAstropy(donutCatZero, "g", blendCentersX=[[], []])
         self.assertTrue(lengthErrMsg in str(context.exception))
@@ -361,7 +339,6 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         self.assertTrue(xyMismatchErrMsg in str(context.exception))
 
     def testAddVisitInfoToCatTable(self) -> None:
-
         donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
         fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
         catTableWithMeta = addVisitInfoToCatTable(testExposure, fieldObjects)
@@ -383,7 +360,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             "observatory_longitude",
             "ERA",
             "exposure_time",
-            "donut_radius"
+            "donut_radius",
         ]
 
         self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))

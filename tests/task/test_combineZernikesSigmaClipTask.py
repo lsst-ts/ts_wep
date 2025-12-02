@@ -19,15 +19,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import numbers
 import unittest
 
-import lsst.pipe.base as pipeBase
 import numpy as np
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import (
     CombineZernikesSigmaClipTask,
     CombineZernikesSigmaClipTaskConfig,
 )
+from astropy.table import Table
 
 
 class TestCombineZernikesSigmaClipTask(unittest.TestCase):
@@ -35,13 +34,25 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.config = CombineZernikesSigmaClipTaskConfig()
         self.task = CombineZernikesSigmaClipTask()
 
-    def prepareTestData(self) -> tuple[np.ndarray, np.ndarray]:
-        inputArray = np.ones((101, 10))
-        inputArray[50:100] += 2.0
-        inputArray[100] += 100.0
-        outputFlags = np.zeros(101, dtype=int)
-        outputFlags[100] = 1
-        return inputArray, outputFlags
+    def prepareTestTable(self) -> Table:
+        label = ["average"] + [f"pair{i}" for i in range(101)]
+        used = [True] + 101 * [False]
+        table = Table([label, used], names=["label", "used"])
+
+        nollIndices = np.arange(4, 12)
+        table.meta["noll_indices"] = nollIndices
+        table.meta["opd_columns"] = [f"Z{j}" for j in nollIndices]
+        table.meta["intrinsic_columns"] = [f"Z{j}_intrinsic" for j in nollIndices]
+        table.meta["deviation_columns"] = [f"Z{j}_deviation" for j in nollIndices]
+
+        for i in table.meta["noll_indices"]:
+            table[f"Z{i}"] = [np.nan] + [101.0] + 50 * [1.0] + 50 * [3.0]
+        for i in table.meta["noll_indices"]:
+            table[f"Z{i}_intrinsic"] = [np.nan] + 50 * [1.0] + 50 * [3.0] + [101.0]
+        for i in table.meta["noll_indices"]:
+            table[f"Z{i}_deviation"] = [np.nan] + 49 * [1.0] + 49 * [3.0] + 3 * [101.0]
+
+        return table
 
     def testValidateConfigs(self) -> None:
         self.assertEqual(
@@ -49,76 +60,84 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
             self.task.sigmaClipKwargs,
         )
         self.assertEqual(3, self.task.maxZernClip)
+
         self.config.sigmaClipKwargs["sigma"] = 2.0
         self.config.stdMin = 0.005
         self.config.maxZernClip = 5
-        self.task = CombineZernikesSigmaClipTask(config=self.config)
-        self.assertEqual(2.0, self.task.sigmaClipKwargs["sigma"])
-        self.assertEqual(0.005, self.task.stdMin)
-        self.assertEqual(5, self.task.maxZernClip)
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        self.assertEqual(2.0, task.sigmaClipKwargs["sigma"])
+        self.assertEqual(0.005, task.stdMin)
+        self.assertEqual(5, task.maxZernClip)
 
     def testCombineZernikes(self) -> None:
-        zernikeArray, trueFlags = self.prepareTestData()
-        combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
-        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
-        np.testing.assert_array_equal(trueFlags, testFlags)
-        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
+        inTable = self.prepareTestTable()
+        outTable = self.task.combineZernikes(inTable)
 
-        # Test that the conditional sigma clipping works
-        combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray * 1e-4)
-        np.testing.assert_array_almost_equal(np.ones(10) * 2.98e-4, combinedZernikes)
-        trueFlags[100] = 0
-        np.testing.assert_array_equal(trueFlags, testFlags)
-        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
+        # Check all the averages
+        avg = outTable[outTable["label"] == "average"]
+        self.assertTrue(all(avg[col] > 2 for col in avg.meta["opd_columns"]))
+        self.assertTrue(all(avg[col] < 2 for col in avg.meta["intrinsic_columns"]))
+        self.assertTrue(np.allclose([avg[col] for col in avg.meta["deviation_columns"]], 2.0))
 
-        # Test that zernikes higher than maxZernClip don't remove
-        # a row from the final averaging
-        zernikeArray[0, 3:] += 100.0
-        zernikeArray[49, 3:] -= 100.0
-        # Revert the change in the 100th row from previous test
-        trueFlags[100] = 1
-        combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
-        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
-        np.testing.assert_array_equal(trueFlags, testFlags)
-        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
-
-        # Test that changing the maxZernClip parameter does change
-        # whether a row is removed from the final result
-        zernikeArray[50, 3:] += 100.0
-        zernikeArray[51, 3:] -= 100.0
-        self.config.maxZernClip = 5
-        self.task = CombineZernikesSigmaClipTask(config=self.config)
-        combinedZernikes, testFlags = self.task.combineZernikes(zernikeArray)
-        np.testing.assert_array_equal(np.ones(10) * 2.0, combinedZernikes)
-        trueFlags[0] = 1
-        trueFlags[49:52] = 1
-        np.testing.assert_array_equal(trueFlags, testFlags)
-        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
+        # Check used
+        self.assertTrue(outTable["used"].tolist() == 99 * [True] + 3 * [False])
 
     def testCombineZernikesEffectiveMaxZernClip(self) -> None:
-        testWhileZernikeArray = np.ones((3, 10))
-        testWhileZernikeArray[0, 4] = 3
-        testWhileZernikeArray[1, 3] = 3
-        testWhileZernikeArray[2, 2] = 3
+        inTable = self.prepareTestTable()
+        inTable[1]["Z7_deviation"] = 1e2
 
-        # Test that changing the maxZernClip parameter does change
-        # whether a row is removed from the final result
-        self.config.maxZernClip = 6
-        self.task = CombineZernikesSigmaClipTask(config=self.config)
-        combinedZernikes, testFlags = self.task.combineZernikes(testWhileZernikeArray)
-        np.testing.assert_array_equal(testWhileZernikeArray[0], combinedZernikes)
-        self.assertEqual(self.task.metadata["maxZernClip"], 6)
-        self.assertEqual(self.task.metadata["effMaxZernClip"], 4)
-        trueFlags = np.array([0, 1, 1])
-        np.testing.assert_array_equal(trueFlags, testFlags)
-        self.assertTrue(isinstance(testFlags[0], numbers.Integral))
+        # Test that zernikes higher than maxZernClip don't trigger flagging
+        outTable = self.task.combineZernikes(inTable)
+        self.assertTrue(outTable[outTable["label"] == "average"]["Z7_deviation"] > 2)
+        self.assertTrue(outTable["used"].tolist() == 99 * [True] + 3 * [False])
+
+        # Test that raising maxZernClip does trigger flagging
+        self.config.maxZernClip = 5
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        outTable = task.combineZernikes(inTable)
+        self.assertFalse(outTable[1]["used"])
 
     def testTaskRun(self) -> None:
-        zernikeArray, trueFlags = self.prepareTestData()
-        combinedZernikesStruct = self.task.run(zernikeArray)
-        self.assertEqual(type(combinedZernikesStruct), pipeBase.Struct)
-        np.testing.assert_array_equal(
-            np.ones(10) * 2.0, combinedZernikesStruct.combinedZernikes
-        )
-        np.testing.assert_array_equal(trueFlags, combinedZernikesStruct.flags)
-        self.assertTrue(isinstance(combinedZernikesStruct.flags[0], numbers.Integral))
+        inTable = self.prepareTestTable()
+        output = self.task.run(inTable)
+
+        outTable = output.combinedTable
+
+        # Check all the averages
+        avg = outTable[outTable["label"] == "average"]
+        self.assertTrue(all(avg[col] > 2 for col in avg.meta["opd_columns"]))
+        self.assertTrue(all(avg[col] < 2 for col in avg.meta["intrinsic_columns"]))
+        self.assertTrue(np.allclose([avg[col] for col in avg.meta["deviation_columns"]], 2.0))
+
+        # Check used
+        self.assertTrue(outTable["used"].tolist() == 99 * [True] + 3 * [False])
+
+        # Check flags
+        flags = output.flags
+        self.flags = flags
+        np.allclose(flags, 98 * [0] + 3 * [1])
+
+    def testZkClipType(self) -> None:
+        inTable = self.prepareTestTable()
+
+        # Test cutting on OPD
+        self.config.zkClipType = "opd"
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        outTable = task.combineZernikes(inTable)
+
+        avg = outTable[outTable["label"] == "average"]
+        self.assertTrue(np.allclose([avg[col] for col in avg.meta["opd_columns"]], 2.0))
+        self.assertTrue(all(avg[col] > 2 for col in avg.meta["intrinsic_columns"]))
+        self.assertTrue(all(avg[col] > 2 for col in avg.meta["deviation_columns"]))
+        self.assertTrue(outTable["used"].tolist() == [True] + [False] + 100 * [True])
+
+        # Test cutting on intrinsics
+        self.config.zkClipType = "intrinsic"
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        outTable = task.combineZernikes(inTable)
+
+        avg = outTable[outTable["label"] == "average"]
+        self.assertTrue(all(avg[col] > 2 for col in avg.meta["opd_columns"]))
+        self.assertTrue(np.allclose([avg[col] for col in avg.meta["intrinsic_columns"]], 2.0))
+        self.assertTrue(all(avg[col] > 2 for col in avg.meta["deviation_columns"]))
+        self.assertTrue(outTable["used"].tolist() == 101 * [True] + [False])

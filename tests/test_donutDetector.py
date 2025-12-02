@@ -82,16 +82,10 @@ class TestDonutDetector(unittest.TestCase):
             ],
         )
         np.testing.assert_array_equal(labeledDf["blended"], [False, True, True])
-        self.assertListEqual(
-            labeledDf["blended_with"].values.tolist(), [None, [2], [1]]
-        )
+        self.assertListEqual(labeledDf["blended_with"].values.tolist(), [None, [2], [1]])
         np.testing.assert_array_equal(labeledDf["num_blended_neighbors"], [0, 1, 1])
-        self.assertListEqual(
-            labeledDf["x_blend_center"].values.tolist(), [[], [120.0], [100.0]]
-        )
-        self.assertListEqual(
-            labeledDf["y_blend_center"].values.tolist(), [[], [100.0], [100.0]]
-        )
+        self.assertListEqual(labeledDf["x_blend_center"].values.tolist(), [[], [120.0], [100.0]])
+        self.assertListEqual(labeledDf["y_blend_center"].values.tolist(), [[], [100.0], [100.0]])
 
     def testDetectDonuts(self) -> None:
         template, testImg = self._makeData(480, 60)
@@ -118,6 +112,4 @@ class TestDonutDetector(unittest.TestCase):
             list(donutDf["x_blend_center"]),
             [[donutDf.iloc[1]["x_center"]], [donutDf.iloc[0]["x_center"]]],
         )
-        np.testing.assert_array_equal(
-            list(donutDf["y_blend_center"]), [[240.0], [240.0]]
-        )
+        np.testing.assert_array_equal(list(donutDf["y_blend_center"]), [[240.0], [240.0]])

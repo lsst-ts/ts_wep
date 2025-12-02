@@ -45,13 +45,11 @@ def pytest_configure(config: Config) -> None:
                 cleanUpCmd = writeCleanUpRepoCmd(config.testInfo["repoDir"], runName)
                 runProgram(cleanUpCmd)
 
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all"
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
         instrument = "lsst.obs.lsst.LsstCam"
 
         # Run CWFS Pipeline
-        pipelineYamlCwfs = os.path.join(
-            testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml"
-        )
+        pipelineYamlCwfs = os.path.join(testPipelineConfigDir, "testCalcZernikesCwfsSetupPipeline.yaml")
         pipelineYamlScience = os.path.join(
             testPipelineConfigDir, "testCalcZernikesScienceSensorSetupPipeline.yaml"
         )

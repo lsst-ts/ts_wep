@@ -108,12 +108,8 @@ class TestInstrument(unittest.TestCase):
         inst = Instrument()
 
         # First check the shape
-        self.assertEqual(
-            inst.getIntrinsicZernikes(0, 0, nollIndices=np.arange(4, 67)).shape, (63,)
-        )
-        self.assertEqual(
-            inst.getIntrinsicZernikes(1, 1.1, nollIndices=np.arange(4, 23)).shape, (19,)
-        )
+        self.assertEqual(inst.getIntrinsicZernikes(0, 0, nollIndices=np.arange(4, 67)).shape, (63,))
+        self.assertEqual(inst.getIntrinsicZernikes(1, 1.1, nollIndices=np.arange(4, 23)).shape, (19,))
 
         # Now check that in-place changes don't impact the cache
         intrZk = inst.getIntrinsicZernikes(1, 1)
@@ -126,15 +122,11 @@ class TestInstrument(unittest.TestCase):
 
         # First check the shape
         self.assertEqual(
-            inst.getOffAxisCoeff(
-                0, 0, "intra", nollIndicesModel=np.arange(4, 67)
-            ).shape,
+            inst.getOffAxisCoeff(0, 0, "intra", nollIndicesModel=np.arange(4, 67)).shape,
             (63,),
         )
         self.assertEqual(
-            inst.getOffAxisCoeff(
-                1, 1.1, "extra", nollIndicesModel=np.arange(4, 23)
-            ).shape,
+            inst.getOffAxisCoeff(1, 1.1, "extra", nollIndicesModel=np.arange(4, 23)).shape,
             (19,),
         )
 

@@ -171,18 +171,12 @@ class DonutStamp(AbstractStamp):
             # If this is an old version of the stamps without a defocal
             # distance set this to default value of 1.5 mm.
             defocal_distance=(
-                metadata.getArray("DFC_DIST")[index]
-                if metadata.get("DFC_DIST") is not None
-                else 1.5
+                metadata.getArray("DFC_DIST")[index] if metadata.get("DFC_DIST") is not None else 1.5
             ),
             # "BANDPASS" stands for the exposure bandpass
             # If this is an old version of the stamps without bandpass
             # information then an empty string ("") will be set as default.
-            bandpass=(
-                metadata.getArray("BANDPASS")[index]
-                if metadata.get("BANDPASS") is not None
-                else ""
-            ),
+            bandpass=(metadata.getArray("BANDPASS")[index] if metadata.get("BANDPASS") is not None else ""),
         )
 
     def getCamera(self) -> Camera:
@@ -205,6 +199,8 @@ class DonutStamp(AbstractStamp):
     def calcFieldXY(self) -> tuple[float, float]:
         """
         Calculate the X, Y field position of the centroid in degrees.
+
+        Note the coordinate system is DVCS!
 
         Returns
         -------

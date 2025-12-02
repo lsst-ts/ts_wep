@@ -350,12 +350,8 @@ class TestImageMapper(unittest.TestCase):
         self.assertTrue(np.allclose(image.mask, 0))
         mapper.createPupilMasks(image, doMaskBlends=True, ignorePlane=True)
         self.assertTrue(np.allclose(image.mask, 0))
-        self.assertTrue(
-            np.allclose(mapper.mapImageToPupil(image, doMaskBlends=True).image, 0)
-        )
-        self.assertTrue(
-            np.allclose(mapper.mapPupilToImage(image, doMaskBlends=True).image, 0)
-        )
+        self.assertTrue(np.allclose(mapper.mapImageToPupil(image, doMaskBlends=True).image, 0))
+        self.assertTrue(np.allclose(mapper.mapPupilToImage(image, doMaskBlends=True).image, 0))
 
         # Non-zero blend offset removes a portion of the flux
         image.blendOffsets = [[50, 50]]
@@ -440,9 +436,7 @@ class TestImageMapper(unittest.TestCase):
             mapper.createPupilMasks(image, dilateBlends=-1, ignorePlane=True)
 
         # Test that you CAN dilate blends for a fractional mask
-        mapper.createImageMasks(
-            image, isBinary=False, dilateBlends=1, doMaskBlends=True
-        )
+        mapper.createImageMasks(image, isBinary=False, dilateBlends=1, doMaskBlends=True)
         mapper.createPupilMasks(
             image,
             isBinary=False,
@@ -528,9 +522,7 @@ class TestImageMapper(unittest.TestCase):
                 )
                 self.assertGreater(blendMask.sum(), mask0.sum())
             except AssertionError:
-                raise AssertionError(
-                    f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}"
-                )
+                raise AssertionError(f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}")
 
         # Test image masks
         _testCreateBlendMask(isIntra=True, isPupilMask=False)
@@ -586,9 +578,7 @@ class TestImageMapper(unittest.TestCase):
             try:
                 np.testing.assert_array_almost_equal(blendMask, dilatedMask)
             except AssertionError:
-                raise AssertionError(
-                    f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}"
-                )
+                raise AssertionError(f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}")
 
         # Test image masks
         _testAutoDilate(isIntra=True, isPupilMask=False)

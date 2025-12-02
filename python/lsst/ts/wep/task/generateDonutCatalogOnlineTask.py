@@ -41,9 +41,7 @@ from lsst.utils.timer import timeMethod
 class GenerateDonutCatalogOnlineTaskConfig(pexConfig.Config):
     """Configuration for GenerateDonutCatalogOnlineTask."""
 
-    filterName: pexConfig.Field = pexConfig.Field(
-        doc="Reference filter", dtype=str, default="g"
-    )
+    filterName: pexConfig.Field = pexConfig.Field(doc="Reference filter", dtype=str, default="g")
     donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutSourceSelectorTask, doc="How to select donut targets."
     )
@@ -124,9 +122,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
 
         try:
             self.log.info("Running Donut Selector")
-            donutSelectorTask = (
-                self.donutSelector if self.config.doDonutSelection is True else None
-            )
+            donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
             refSelection, blendCentersX, blendCentersY = runSelection(
                 refObjLoader,
                 detector,
@@ -148,10 +144,6 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
             blendCentersX = None
             blendCentersY = None
 
-        fieldObjects = donutCatalogToAstropy(
-            refSelection, filterName, blendCentersX, blendCentersY
-        )
-        fieldObjects["detector"] = np.array(
-            [detector.getName()] * len(fieldObjects), dtype=str
-        )
+        fieldObjects = donutCatalogToAstropy(refSelection, filterName, blendCentersX, blendCentersY)
+        fieldObjects["detector"] = np.array([detector.getName()] * len(fieldObjects), dtype=str)
         return pipeBase.Struct(donutCatalog=fieldObjects)

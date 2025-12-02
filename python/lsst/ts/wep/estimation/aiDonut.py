@@ -27,9 +27,7 @@ from lsst.ts.wep.utils import getModulePath, makeDense, makeSparse
 
 __all__ = ["AiDonutAlgorithm"]
 
-DEFAULT_MODEL_PATH = (
-    getModulePath() + "/tests/testData/testAiModels/test_aidonut_model_file.pt"
-)
+DEFAULT_MODEL_PATH = getModulePath() + "/tests/testData/testAiModels/test_aidonut_model_file.pt"
 
 
 class AiDonutAlgorithm(WfAlgorithm):
