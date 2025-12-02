@@ -40,7 +40,9 @@ Note also that ``towncrier`` can be installed from PyPI or conda-forge.
 Updating Version History
 ========================
 
-Developers add news fragments in the PRs to develop.
-After the PR with changes and news fragment are merged to develop the developer updates the main branch with the develop branch.
-Then the developer updates the version history with towncrier when tagging a new release on main.
-Finally those changes to main are then merged back into develop.
+The steps to update the version history are as follows:
+
+1. Developers add news fragments in the PRs to the ``develop`` branch.
+2. After the PR with changes and accompanying news fragment is merged to ``develop``, the developer then updates the ``main`` branch with the ``develop`` branch.
+3. Next, use the build command above to update ``version_history.rst`` with towncrier and add this change as a new commit on ``main``.
+4. Finally, merge the ``main`` branch with the updated version history back into ``develop``.
