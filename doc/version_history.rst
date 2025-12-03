@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v16.3.0 (2025-12-02)
+====================
+
+Documentation
+-------------
+
+- - Changed version history to use towncrier.
+  - Added README in doc/news to explain new documentation workflow. (`DM-53241 <https://rubinobs.atlassian.net//browse/DM-53241>`_)
+
+
 .. _lsst.ts.wep-16.2.0:
 
 -------------
