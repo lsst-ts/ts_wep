@@ -22,9 +22,10 @@
 import os
 
 import astropy.units as u
-import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable
+
+import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,

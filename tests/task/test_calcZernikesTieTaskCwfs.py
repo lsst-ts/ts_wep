@@ -21,8 +21,9 @@
 
 import os
 
-import lsst.utils.tests
 import numpy as np
+
+import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,

@@ -27,12 +27,13 @@ __all__ = [
 
 from typing import Any
 
+from astropy.table import QTable
+
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
-from astropy.table import QTable
 from lsst.ts.wep.task.cutOutDonutsBase import (
     CutOutDonutsBaseTask,
     CutOutDonutsBaseTaskConfig,

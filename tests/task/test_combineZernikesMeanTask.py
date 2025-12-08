@@ -21,10 +21,11 @@
 
 import unittest
 
-import lsst.pipe.base as pipeBase
 import numpy as np
-from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 from astropy.table import Table
+
+import lsst.pipe.base as pipeBase
+from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 
 
 class TestCombineZernikesMeanTask(unittest.TestCase):

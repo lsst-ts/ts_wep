@@ -23,6 +23,7 @@ import os
 import unittest
 
 import threadpoolctl
+
 from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
 

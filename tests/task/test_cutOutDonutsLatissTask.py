@@ -23,8 +23,9 @@ import getpass
 import os
 import tempfile
 
-import lsst.utils.tests
 import pytest
+
+import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,

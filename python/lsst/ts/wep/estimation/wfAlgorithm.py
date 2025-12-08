@@ -25,6 +25,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
+
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.utils import (
     checkNollIndices,

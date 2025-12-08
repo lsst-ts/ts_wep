@@ -24,10 +24,11 @@ __all__ = ["DonutStamp"]
 from dataclasses import dataclass, field
 from typing import Optional
 
+import numpy as np
+
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
 import lsst.geom
-import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.afw.geom import SkyWcs
 from lsst.daf.base import PropertyList

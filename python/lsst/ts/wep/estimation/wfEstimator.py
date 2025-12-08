@@ -24,6 +24,7 @@ __all__ = ["WfEstimator"]
 from typing import Optional, Sequence, Union
 
 import numpy as np
+
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory

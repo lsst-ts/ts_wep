@@ -25,9 +25,10 @@ import unittest
 from copy import copy
 
 import astropy.units as u
-import lsst.afw.image as afwImage
 import numpy as np
 from astropy.table import QTable
+
+import lsst.afw.image as afwImage
 from lsst.daf.butler import Butler
 from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task import (

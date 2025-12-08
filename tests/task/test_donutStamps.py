@@ -22,10 +22,11 @@
 import tempfile
 from copy import copy
 
+import numpy as np
+
 import lsst.afw.image as afwImage
 import lsst.geom
 import lsst.utils.tests
-import numpy as np
 from lsst.daf.base import PropertyList
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps

@@ -28,12 +28,13 @@ __all__ = [
 from typing import Any
 
 import astropy.units as u
+import numpy as np
+from astropy.table import QTable
+
 import lsst.afw.image as afwImage
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-import numpy as np
-from astropy.table import QTable
 from lsst.afw.cameraGeom import Camera
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations

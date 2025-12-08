@@ -24,6 +24,7 @@ __all__ = ["DeblendDefault"]
 from typing import Any
 
 import numpy as np
+
 from lsst.ts.wep.centroid import CentroidFindFactory
 from lsst.ts.wep.utils import CentroidFindType
 

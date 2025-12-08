@@ -25,10 +25,11 @@ import inspect
 from typing import Iterable
 
 import numpy as np
+from scipy.ndimage import gaussian_filter
+
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import DefocalType, binArray, makeSparse
-from scipy.ndimage import gaussian_filter
 
 
 class TieAlgorithm(WfAlgorithm):

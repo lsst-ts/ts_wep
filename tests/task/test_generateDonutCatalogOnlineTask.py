@@ -22,9 +22,10 @@
 import os
 import unittest
 
-import lsst.geom
 import numpy as np
 from astropy import units
+
+import lsst.geom
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task.generateDonutCatalogOnlineTask import (
     GenerateDonutCatalogOnlineTask,

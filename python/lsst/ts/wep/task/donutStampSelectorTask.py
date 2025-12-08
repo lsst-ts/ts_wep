@@ -23,10 +23,11 @@ __all__ = ["DonutStampSelectorTaskConfig", "DonutStampSelectorTask"]
 
 from typing import Any
 
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import QTable
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import readConfigYaml
 from lsst.utils.timer import timeMethod

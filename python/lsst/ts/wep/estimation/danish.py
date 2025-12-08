@@ -26,11 +26,12 @@ import warnings
 import danish
 import numpy as np
 from galsim import GalSimFFTSizeError
+from scipy.ndimage import binary_erosion
+from scipy.optimize import least_squares
+
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import binArray
-from scipy.ndimage import binary_erosion
-from scipy.optimize import least_squares
 
 
 class DanishAlgorithm(WfAlgorithm):

@@ -19,14 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import importlib.util
-import pytest
+import os
 import tempfile
+
+import numpy as np
+import pytest
 import yaml
 
 import lsst.utils.tests
-import numpy as np
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task import CalcZernikesNeuralTask, CalcZernikesNeuralTaskConfig
 from lsst.ts.wep.utils import (

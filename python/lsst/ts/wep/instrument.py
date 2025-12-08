@@ -29,9 +29,10 @@ from typing import Sequence
 
 import batoid
 import numpy as np
+from scipy.optimize import minimize_scalar
+
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, EnumDict
 from lsst.ts.wep.utils.ioUtils import mergeConfigWithFile
-from scipy.optimize import minimize_scalar
 
 from .utils.zernikeUtils import createZernikeBasis, createZernikeGradBasis
 

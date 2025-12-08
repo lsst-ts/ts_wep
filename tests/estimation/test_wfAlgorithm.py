@@ -23,6 +23,7 @@ import unittest
 from typing import Any
 
 import numpy as np
+
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation import WfAlgorithm
 

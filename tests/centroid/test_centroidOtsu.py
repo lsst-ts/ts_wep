@@ -23,6 +23,7 @@ import os
 import unittest
 
 import numpy as np
+
 from lsst.ts.wep.centroid import CentroidOtsu
 from lsst.ts.wep.utils import getModulePath
 

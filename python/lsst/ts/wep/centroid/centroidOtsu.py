@@ -22,8 +22,9 @@
 __all__ = ["CentroidOtsu"]
 
 import numpy as np
-from lsst.ts.wep.centroid.centroidDefault import CentroidDefault
 from skimage.filters import threshold_otsu
+
+from lsst.ts.wep.centroid.centroidDefault import CentroidDefault
 
 
 class CentroidOtsu(CentroidDefault):

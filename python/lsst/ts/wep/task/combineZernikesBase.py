@@ -25,10 +25,11 @@ import abc
 import logging
 from typing import Any, Callable
 
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import Table
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 
 
 class CombineZernikesBaseConfig(pexConfig.Config):

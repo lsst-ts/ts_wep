@@ -24,9 +24,11 @@ import inspect
 import os
 import unittest
 
-import lsst.obs.lsst as obs_lsst
 import numpy as np
 from astropy.table import QTable
+from scipy.ndimage import binary_opening
+
+import lsst.obs.lsst as obs_lsst
 from lsst.afw.image import VisitInfo
 from lsst.daf.butler import Butler
 from lsst.meas.algorithms import ReferenceObjectLoader
@@ -44,7 +46,6 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
-from scipy.ndimage import binary_opening
 
 
 class TestTaskUtils(unittest.TestCase):

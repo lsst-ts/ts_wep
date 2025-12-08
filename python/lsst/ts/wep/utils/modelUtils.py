@@ -25,11 +25,12 @@ from typing import Tuple, Union
 
 import galsim
 import numpy as np
+from scipy.ndimage import shift
+from scipy.signal import convolve
+
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.instrument import Instrument
-from scipy.ndimage import shift
-from scipy.signal import convolve
 
 
 def forwardModelPair(
