@@ -311,7 +311,13 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("model_dx", zkCalcPairs.meta["estimatorInfo"])
         self.assertIn("model_dy", zkCalcPairs.meta["estimatorInfo"])
         self.assertIn("model_sky_level", zkCalcPairs.meta["estimatorInfo"])
-        self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["fwhm"]))
+        self.assertIn("lstsq_cost", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("lstsq_optimality", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("lstsq_nfev", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("lstsq_njev", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("lstsq_status", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("lstsq_success", zkCalcPairs.meta["estimatorInfo"])
+        self.assertEqual(10, len(zkCalcPairs.meta["estimatorInfo"]["fwhm"]))
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:
