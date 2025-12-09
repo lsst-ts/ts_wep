@@ -17,6 +17,33 @@ Version History
 
 .. towncrier release notes start
 
+16.4.0 (2025-12-09)
+===================
+
+New Features
+------------
+
+- Included all scalar metadata returned by `scipy.optimize.least_squares` to the metadata returned by Danish (`DM-53552 <https://rubinobs.atlassian.net//browse/DM-53552>`_)
+
+
+Bug Fixes
+---------
+
+- * Simplify CalcZernikesNeuralTask `_updateAverageRowWithAggregatedZernikes()` to
+    query average row by label instead of assuming index position for better
+    robustness.
+  * Fix CalcZernikesNeuralTask to correctly handle 2D `aggregatedZernikes` array
+    from TARTS by extracting the first row.
+  * Set intrinsic and deviation columns to NaN for all rows in neural task output
+    since the neural task does not use intrinsic Zernike tables. (`DM-53473 <https://rubinobs.atlassian.net//browse/DM-53473>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Run with new ruff settings from ts_pre_commit_conf. (`DM-53557 <https://rubinobs.atlassian.net//browse/DM-53557>`_)
+
+
 v16.3.0 (2025-12-02)
 ====================
 
