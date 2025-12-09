@@ -271,7 +271,7 @@ class WfEstimator:
         self,
         I1: Image,
         I2: Optional[Image] = None,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, dict]:
         """Estimate Zernike coefficients of the wavefront from the stamp(s).
 
         Parameters
@@ -286,6 +286,9 @@ class WfEstimator:
         -------
         np.ndarray
             Zernike coefficients estimated from the stamp(s)
+        dict
+            Metadata containing extra output from wavefront estimation
+            algorithm.
 
         Raises
         ------
