@@ -24,9 +24,10 @@ __all__ = ["GenerateDonutCatalogOnlineTaskConfig", "GenerateDonutCatalogOnlineTa
 import warnings
 from typing import Any
 
+import numpy as np
+
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-import numpy as np
 from lsst.afw.cameraGeom import Detector
 from lsst.afw.geom import SkyWcs
 from lsst.meas.algorithms import ReferenceObjectLoader

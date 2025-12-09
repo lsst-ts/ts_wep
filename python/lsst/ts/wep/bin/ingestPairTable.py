@@ -25,6 +25,7 @@ import time
 from argparse import ArgumentParser
 
 from astropy.table import Table
+
 from lsst.daf.butler import Butler, CollectionType, DatasetType, DimensionUniverse
 
 

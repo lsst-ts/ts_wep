@@ -23,6 +23,7 @@ import unittest
 
 import numpy as np
 import pandas as pd
+
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.donutDetector import DonutDetector
 from lsst.ts.wep.utils import createTemplateForDetector

@@ -28,12 +28,13 @@ __all__ = [
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable
+
 from lsst.afw.cameraGeom import Detector
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import Exposure
 from lsst.meas.algorithms import ReferenceObjectLoader
-from lsst.ts.wep.task import DonutSourceSelectorTask
 from lsst.ts.wep.donutSizeCorrelator import DonutSizeCorrelator
+from lsst.ts.wep.task import DonutSourceSelectorTask
 
 
 def runSelection(

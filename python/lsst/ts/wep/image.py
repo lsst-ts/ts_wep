@@ -25,8 +25,9 @@ from copy import deepcopy
 from typing import Optional, Union
 
 import numpy as np
-from lsst.ts.wep.utils import BandLabel, DefocalType, PlaneType
 from typing_extensions import Self
+
+from lsst.ts.wep.utils import BandLabel, DefocalType, PlaneType
 
 
 class Image:

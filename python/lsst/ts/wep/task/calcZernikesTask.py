@@ -30,10 +30,12 @@ from itertools import zip_longest
 from typing import Any, cast
 
 import astropy.units as u
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import QTable, Table, vstack
+from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -46,7 +48,6 @@ from lsst.ts.wep.task.donutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
 from lsst.ts.wep.task.estimateZernikesDanishTask import EstimateZernikesDanishTask
 from lsst.utils.timer import timeMethod
-from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 intra_focal_ids = set([192, 196, 200, 204])

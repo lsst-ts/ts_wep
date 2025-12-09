@@ -25,10 +25,11 @@ from copy import copy
 
 import numpy as np
 import pandas as pd
+from scipy.spatial.distance import cdist
+
 from lsst.ts.wep.centroid import CentroidFindFactory
 from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
 from lsst.ts.wep.utils import CentroidFindType
-from scipy.spatial.distance import cdist
 
 
 class DonutDetector(object):

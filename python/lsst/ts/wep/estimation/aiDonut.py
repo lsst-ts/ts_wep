@@ -21,6 +21,7 @@
 
 import numpy as np
 import torch
+
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import getModulePath, makeDense, makeSparse

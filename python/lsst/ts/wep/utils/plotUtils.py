@@ -33,10 +33,11 @@ from typing import Optional, Union
 import batoid
 import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def plotZernike(

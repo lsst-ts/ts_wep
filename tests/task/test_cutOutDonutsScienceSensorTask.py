@@ -22,9 +22,10 @@
 import os
 from copy import copy
 
-import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable
+
+import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,

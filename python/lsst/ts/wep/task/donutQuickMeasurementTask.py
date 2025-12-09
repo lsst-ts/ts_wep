@@ -24,16 +24,17 @@ __all__ = ["DonutQuickMeasurementTaskConfig", "DonutQuickMeasurementTask"]
 from copy import copy
 from typing import Any
 
+import numpy as np
+from scipy.signal import correlate
+
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-import numpy as np
 from lsst.afw.image import Exposure
 from lsst.meas.base import MeasurementError
 from lsst.pipe.tasks.quickFrameMeasurement import (
     QuickFrameMeasurementTask,
     QuickFrameMeasurementTaskConfig,
 )
-from scipy.signal import correlate
 
 
 class DonutQuickMeasurementTaskConfig(QuickFrameMeasurementTaskConfig):

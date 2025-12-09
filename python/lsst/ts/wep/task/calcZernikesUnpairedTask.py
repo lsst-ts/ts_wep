@@ -25,9 +25,10 @@ __all__ = [
     "CalcZernikesUnpairedTask",
 ]
 
-import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import QTable, Table
+
+import lsst.pipe.base as pipeBase
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps

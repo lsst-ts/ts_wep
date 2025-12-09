@@ -23,14 +23,15 @@ from typing import Any
 
 import galsim
 import numpy as np
+from scipy.interpolate import interpn
+from scipy.ndimage import binary_dilation, shift
+
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.enumUtils import BandLabel, DefocalType, PlaneType
 from lsst.ts.wep.utils.ioUtils import configClass
 from lsst.ts.wep.utils.miscUtils import centerWithTemplate, polygonContains
 from lsst.ts.wep.utils.zernikeUtils import makeDense, zernikeGradEval
-from scipy.interpolate import interpn
-from scipy.ndimage import binary_dilation, shift
 
 
 class ImageMapper:

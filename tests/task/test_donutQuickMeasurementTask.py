@@ -24,6 +24,7 @@ import unittest
 
 import numpy as np
 import pandas as pd
+
 from lsst.daf.butler import Butler
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.task.donutQuickMeasurementTask import (

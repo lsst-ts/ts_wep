@@ -29,12 +29,13 @@ import os
 import warnings
 from typing import Any
 
+import numpy as np
+
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-import numpy as np
 from lsst.meas.algorithms import LoadReferenceObjectsConfig, ReferenceObjectLoader
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (

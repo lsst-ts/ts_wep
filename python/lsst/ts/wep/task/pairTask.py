@@ -31,12 +31,13 @@ __all__ = [
 import typing
 from typing import Any
 
-import lsst.afw.image as afwImage
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
+
+import lsst.afw.image as afwImage
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.geom import radians
 
 

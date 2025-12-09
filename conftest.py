@@ -2,6 +2,7 @@ import os
 
 from _pytest.config import Config
 from _pytest.config.argparsing import Parser
+
 from lsst.daf.butler import Butler
 from lsst.ts.wep.utils import (
     getModulePath,

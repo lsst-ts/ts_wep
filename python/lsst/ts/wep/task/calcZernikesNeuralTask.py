@@ -29,23 +29,22 @@ import os
 from copy import deepcopy
 from typing import Any
 
+import astropy.units as u
 import numpy as np
 import torch
-import astropy.units as u
 from astropy.table import QTable
 
 import lsst.afw.image as afwImage
 import lsst.geom
-import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.daf.base import PropertyList
 from lsst.pipe.base import connectionTypes
-from lsst.utils.timer import timeMethod
-
+from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
+from lsst.utils.timer import timeMethod
 
 # Define the position 2D float dtype for the zernikes table
 POS2F_DTYPE = np.dtype([("x", "<f4"), ("y", "<f4")])

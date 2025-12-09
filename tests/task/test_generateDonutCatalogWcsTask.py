@@ -21,9 +21,10 @@
 
 import os
 
-import lsst.geom
 import numpy as np
 from astropy.table import vstack
+
+import lsst.geom
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,

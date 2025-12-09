@@ -22,8 +22,9 @@
 import os
 import unittest
 
-import lsst.geom
 from astropy.table import QTable
+
+import lsst.geom
 from lsst.daf.butler import Butler
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.obs.base import createInitialSkyWcsFromBoresight
