@@ -22,8 +22,9 @@
 import unittest
 
 import numpy as np
-from lsst.ts.wep.centroid import CentroidDefault
 from scipy.ndimage import generate_binary_structure, iterate_structure
+
+from lsst.ts.wep.centroid import CentroidDefault
 
 
 class TestCentroidDefault(unittest.TestCase):

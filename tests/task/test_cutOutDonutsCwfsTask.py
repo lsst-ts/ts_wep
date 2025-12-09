@@ -22,9 +22,10 @@
 import os
 from copy import copy
 
+from astropy.table import QTable
+
 import lsst.afw.image as afwImage
 import lsst.utils.tests
-from astropy.table import QTable
 from lsst.afw.cameraGeom import Camera
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task.cutOutDonutsCwfsTask import (

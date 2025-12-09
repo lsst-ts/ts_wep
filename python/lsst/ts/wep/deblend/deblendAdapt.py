@@ -22,10 +22,6 @@
 __all__ = ["DeblendAdapt"]
 
 import numpy as np
-from lsst.ts.wep.centroid import CentroidFindFactory
-from lsst.ts.wep.deblend.deblendDefault import DeblendDefault
-from lsst.ts.wep.deblend.nelderMeadModify import nelderMeadModify
-from lsst.ts.wep.utils import CentroidFindType
 from scipy.ndimage import (
     binary_closing,
     binary_erosion,
@@ -35,6 +31,11 @@ from scipy.ndimage import (
 )
 from scipy.optimize import minimize_scalar
 from skimage.filters import threshold_local
+
+from lsst.ts.wep.centroid import CentroidFindFactory
+from lsst.ts.wep.deblend.deblendDefault import DeblendDefault
+from lsst.ts.wep.deblend.nelderMeadModify import nelderMeadModify
+from lsst.ts.wep.utils import CentroidFindType
 
 
 class DeblendAdapt(DeblendDefault):

@@ -22,8 +22,9 @@
 __all__ = ["CombineZernikesMeanTask"]
 
 import numpy as np
-from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
 from astropy.table import Table
+
+from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
 
 
 class CombineZernikesMeanTask(CombineZernikesBaseTask):

@@ -38,9 +38,10 @@ from contextlib import ExitStack
 from typing import TextIO
 
 import astropy.units as u
+import numpy as np
+
 import lsst.obs.lsst as obs_lsst
 import lsst.pipe.base as pipeBase
-import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, Camera, Detector, DetectorType
 from lsst.afw.coord import Observatory
 from lsst.afw.image import RotType, VisitInfo

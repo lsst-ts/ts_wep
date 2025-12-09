@@ -23,6 +23,9 @@ import typing
 from copy import copy
 from typing import Any
 
+import numpy as np
+from astropy.table import QTable
+
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwTable
 import lsst.geom
@@ -30,8 +33,6 @@ import lsst.meas.base as measBase
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-import numpy as np
-from astropy.table import QTable
 from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base.task import TaskError

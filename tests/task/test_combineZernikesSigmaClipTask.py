@@ -22,11 +22,12 @@
 import unittest
 
 import numpy as np
+from astropy.table import Table
+
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import (
     CombineZernikesSigmaClipTask,
     CombineZernikesSigmaClipTaskConfig,
 )
-from astropy.table import Table
 
 
 class TestCombineZernikesSigmaClipTask(unittest.TestCase):

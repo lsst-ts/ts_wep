@@ -1,15 +1,16 @@
 from typing import Any
 
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import numpy as np
 from astropy.table import QTable
-from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import binArray
-from lsst.utils.timer import timeMethod
 from scipy.ndimage import gaussian_filter
 from scipy.signal import find_peaks
 from skimage.measure import profile_line
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+from lsst.ts.wep.task.donutStamps import DonutStamps
+from lsst.ts.wep.utils import binArray
+from lsst.utils.timer import timeMethod
 
 __all__ = [
     "FitDonutRadiusTaskConfig",

@@ -23,6 +23,7 @@ import os
 import unittest
 
 import numpy as np
+
 from lsst.ts.wep.centroid import CentroidRandomWalk
 from lsst.ts.wep.utils import getModulePath
 

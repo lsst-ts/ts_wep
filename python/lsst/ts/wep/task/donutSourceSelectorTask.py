@@ -24,17 +24,18 @@ __all__ = ["DonutSourceSelectorTaskConfig", "DonutSourceSelectorTask"]
 from typing import Any
 
 import astropy.units as u
-import lsst.geom
-import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 import numpy as np
 import pandas as pd
 from astropy.table import Table
+from sklearn.neighbors import NearestNeighbors
+
+import lsst.geom
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Detector
 from lsst.meas.algorithms.sourceSelector import _getFieldFromCatalog
 from lsst.ts.wep.utils import readConfigYaml
 from lsst.utils.timer import timeMethod
-from sklearn.neighbors import NearestNeighbors
 
 
 class DonutSourceSelectorTaskConfig(pexConfig.Config):

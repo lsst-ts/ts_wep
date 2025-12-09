@@ -22,10 +22,11 @@
 import os
 from copy import copy
 
-import lsst.afw.image as afwImage
-import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable, vstack
+
+import lsst.afw.image as afwImage
+import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task.generateDonutDirectDetectTask import (
     GenerateDonutDirectDetectTask,

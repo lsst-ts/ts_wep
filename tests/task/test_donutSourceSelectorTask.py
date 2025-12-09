@@ -25,6 +25,7 @@ import unittest
 import astropy.units as u
 import numpy as np
 import pandas as pd
+
 from lsst.daf.butler import Butler
 from lsst.pex.config import FieldValidationError
 from lsst.ts.wep.task.donutSourceSelectorTask import (

@@ -22,10 +22,11 @@
 import numbers
 import unittest
 
-import lsst.pipe.base as pipeBase
 import numpy as np
-from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
 from astropy.table import Table
+
+import lsst.pipe.base as pipeBase
+from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
 
 
 class TestCombineZernikesBaseTask(unittest.TestCase):

@@ -22,16 +22,17 @@
 import unittest
 
 import numpy as np
+from scipy.ndimage import shift
+
 from lsst.ts.wep.utils import (
+    binArray,
     centerWithTemplate,
     conditionalSigmaClip,
     extractArray,
     padArray,
     polygonContains,
     rotMatrix,
-    binArray,
 )
-from scipy.ndimage import shift
 
 
 class TestMiscUtils(unittest.TestCase):

@@ -25,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 from batoid.optic import CompoundOptic
+
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils import getConfigDir, readConfigYaml
 

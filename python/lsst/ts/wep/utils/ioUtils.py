@@ -38,6 +38,7 @@ from typing import Any, Union
 
 import numpy as np
 import yaml
+
 from lsst.utils import getPackageDir
 
 

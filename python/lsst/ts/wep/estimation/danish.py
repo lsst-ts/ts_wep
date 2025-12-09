@@ -26,11 +26,12 @@ import warnings
 import danish
 import numpy as np
 from galsim import GalSimFFTSizeError
+from scipy.ndimage import binary_erosion
+from scipy.optimize import least_squares
+
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import binArray
-from scipy.ndimage import binary_erosion
-from scipy.optimize import least_squares
 
 
 class DanishAlgorithm(WfAlgorithm):
@@ -336,12 +337,17 @@ class DanishAlgorithm(WfAlgorithm):
         else:
             hist = {}
 
-        # Save final fwhm value in metadata
-        zkMeta = {"fwhm": fwhm}
-        # Add model information
-        zkMeta["model_dx"] = dx
-        zkMeta["model_dy"] = dy
-        zkMeta["model_sky_level"] = backgroundStd**2
+        # Save model scalars
+        zkMeta = {
+            "fwhm": fwhm,
+            "model_dx": dx,
+            "model_dy": dy,
+            "model_sky_level": backgroundStd**2,
+        }
+
+        # Save scalar metadata from least_squares
+        for key in ["cost", "optimality", "nfev", "njev", "status", "success"]:
+            zkMeta[f"lstsq_{key}"] = result.get(key, None)
 
         return zkSum, hist, zkMeta
 
@@ -511,12 +517,17 @@ class DanishAlgorithm(WfAlgorithm):
         else:
             hist = {}
 
-        # Save final fwhm value in metadata
-        zkMeta = {"fwhm": fwhm}
-        # Add model information
-        zkMeta["model_dx"] = dxs
-        zkMeta["model_dy"] = dys
-        zkMeta["model_sky_level"] = skyLevels
+        # Save model scalars
+        zkMeta = {
+            "fwhm": fwhm,
+            "model_dx": dxs,
+            "model_dy": dys,
+            "model_sky_level": skyLevels,
+        }
+
+        # Save scalar metadata from least_squares
+        for key in ["cost", "optimality", "nfev", "njev", "status", "success"]:
+            zkMeta[f"lstsq_{key}"] = result.get(key, None)
 
         return zkSum, hist, zkMeta
 

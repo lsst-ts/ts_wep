@@ -22,6 +22,7 @@
 import unittest
 
 import numpy as np
+
 from lsst.ts.wep.centroid import CentroidConvolveTemplate
 
 

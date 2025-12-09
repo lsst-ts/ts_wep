@@ -34,6 +34,7 @@ pytest_session.txt
 .flake8
 .isort.cfg
 .mypy.ini
+towncrier.toml
 
 # Existing Phosim Donut Templates
 policy/cwfs/donutTemplateData/phosimTemplates/

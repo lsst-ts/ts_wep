@@ -25,8 +25,9 @@ from typing import Any
 
 import batoid
 import numpy as np
-from lsst.ts.wep import Image, ImageMapper, Instrument
 from scipy.ndimage import binary_erosion, binary_opening, shift
+
+from lsst.ts.wep import Image, ImageMapper, Instrument
 
 
 class TestImageMapper(unittest.TestCase):

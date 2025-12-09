@@ -1,17 +1,19 @@
 import os
-import lsst.utils.tests
+
 import numpy as np
+
+import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.obs.lsst import LsstCam
 from lsst.ts.wep.donutSizeCorrelator import DonutSizeCorrelator
 from lsst.ts.wep.utils import (
+    DefocalType,
+    createTemplateForDetector,
     getModulePath,
+    getTaskInstrument,
     runProgram,
     writeCleanUpRepoCmd,
     writePipetaskCmd,
-    DefocalType,
-    createTemplateForDetector,
-    getTaskInstrument,
 )
 
 

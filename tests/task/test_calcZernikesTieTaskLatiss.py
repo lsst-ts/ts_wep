@@ -23,9 +23,10 @@ import getpass
 import os
 import tempfile
 
-import lsst.utils.tests
 import numpy as np
 import pytest
+
+import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,

@@ -1,8 +1,9 @@
-import lsst.afw.image
 import numpy as np
-from lsst.ts.wep.utils import binArray
 from scipy.ndimage import binary_dilation
 from scipy.signal import correlate, find_peaks, peak_prominences
+
+import lsst.afw.image
+from lsst.ts.wep.utils import binArray
 
 
 class DonutSizeCorrelator:

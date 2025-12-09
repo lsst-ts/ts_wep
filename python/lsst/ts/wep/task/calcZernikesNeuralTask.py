@@ -29,23 +29,22 @@ import os
 from copy import deepcopy
 from typing import Any
 
+import astropy.units as u
 import numpy as np
 import torch
-import astropy.units as u
 from astropy.table import QTable
 
 import lsst.afw.image as afwImage
 import lsst.geom
-import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.daf.base import PropertyList
 from lsst.pipe.base import connectionTypes
-from lsst.utils.timer import timeMethod
-
+from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
+from lsst.utils.timer import timeMethod
 
 # Define the position 2D float dtype for the zernikes table
 POS2F_DTYPE = np.dtype([("x", "<f4"), ("y", "<f4")])
@@ -1295,8 +1294,13 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             Table returned by ``createZkTable`` containing placeholder values.
             The first row corresponds to the aggregate (average) entry.
         aggregatedZernikes : `numpy.ndarray`
-            One-dimensional array of aggregated Zernike coefficients produced
-            by TARTS (in microns).
+            Two-dimensional array of aggregated Zernike coefficients produced
+            by TARTS (in microns) with shape (1, nZernikes).
+
+        Notes
+        -----
+        This method sets intrinsic and deviation columns to NaN for all rows
+        since the neural task does not use intrinsic Zernike tables.
         """
         if len(zkTable) == 0:
             return
@@ -1304,20 +1308,26 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         opd_columns = zkTable.meta["opd_columns"]
         intrinsic_columns = zkTable.meta["intrinsic_columns"]
         deviation_columns = zkTable.meta["deviation_columns"]
+
+        # Extract 1D array from 2D input (always shape (1, nZernikes))
         agg = aggregatedZernikes[0]
+
         if len(agg) != len(opd_columns):
             raise ValueError(
-                "Neural aggregated Zernike vector length "
-                f"{len(agg)} does not match expected "
-                f"{len(opd_columns)} OPD columns."
+                f"Neural aggregated Zernike vector length {len(agg)} "
+                f"does not match expected {len(opd_columns)} OPD columns. "
+                f"AggregatedZernikes shape: {aggregatedZernikes.shape}"
             )
 
-        agg_quant = (agg * u.micron).to(u.nm)
-        avg_row = zkTable[zkTable["label"] == "average"]
+        # Get index of average row (always present)
+        avg_idx = np.where(zkTable["label"] == "average")[0][0]
 
+        # Convert to Quantity in nanometers and update OPD columns
+        agg_quant = (agg * u.micron).to(u.nm)
         for value, column in zip(agg_quant, opd_columns):
-            avg_row[column] = value
-        for column in intrinsic_columns:
-            avg_row[column] = np.nan * u.nm
-        for column in deviation_columns:
-            avg_row[column] = np.nan * u.nm
+            zkTable[column][avg_idx] = value
+
+        # Set intrinsic and deviation columns to NaN for all rows
+        # (neural task doesn't use intrinsic maps)
+        for column in intrinsic_columns + deviation_columns:
+            zkTable[column] = np.nan * u.nm

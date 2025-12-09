@@ -3,8 +3,10 @@ lint.ignore = [
 ]
 line-length = 110
 exclude = ["__init__.py", "doc/conf.py"]
-lint.select = ["E", "F", "N", "W"]
+lint.select = ["E", "F", "I", "N", "W"]
 [lint.pycodestyle]
 max-doc-length = 79
 [lint.pydocstyle]
 convention = "numpy"
+[lint.isort]
+known-first-party = ["lsst"]

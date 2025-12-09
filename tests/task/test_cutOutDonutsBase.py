@@ -21,9 +21,11 @@
 
 import os
 
-import lsst.utils.tests
 import numpy as np
 from astropy.table import QTable
+from scipy.signal import correlate
+
+import lsst.utils.tests
 from lsst.afw import image as afwImage
 from lsst.daf.base import PropertySet
 from lsst.daf.butler import Butler
@@ -41,7 +43,6 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
-from scipy.signal import correlate
 
 
 class TestCutOutDonutsBase(lsst.utils.tests.TestCase):

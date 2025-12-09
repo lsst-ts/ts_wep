@@ -23,14 +23,15 @@ __all__ = ["CombineZernikesSigmaClipTaskConfig", "CombineZernikesSigmaClipTask"]
 
 from typing import Any
 
-import lsst.pex.config as pexConfig
 import numpy as np
+from astropy.table import Table
+
+import lsst.pex.config as pexConfig
 from lsst.ts.wep.task.combineZernikesBase import (
     CombineZernikesBaseConfig,
     CombineZernikesBaseTask,
 )
 from lsst.ts.wep.utils import conditionalSigmaClip
-from astropy.table import Table
 
 
 class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):

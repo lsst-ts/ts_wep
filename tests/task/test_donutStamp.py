@@ -21,17 +21,18 @@
 
 import unittest
 
+import numpy as np
+from scipy.ndimage import rotate
+
 import lsst.afw.image as afwImage
 import lsst.geom
 import lsst.obs.lsst as obs_lsst
-import numpy as np
 from lsst.afw.cameraGeom import FIELD_ANGLE, FOCAL_PLANE, PIXELS
 from lsst.daf.base import PropertyList
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.utils import BandLabel, DefocalType
-from scipy.ndimage import rotate
 
 
 class TestDonutStamp(unittest.TestCase):

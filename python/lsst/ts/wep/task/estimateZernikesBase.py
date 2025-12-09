@@ -26,9 +26,10 @@ import itertools
 import multiprocessing as mp
 from typing import Any, Callable, Iterable
 
+import numpy as np
+
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-import numpy as np
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (

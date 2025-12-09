@@ -22,6 +22,7 @@
 import unittest
 
 import numpy as np
+
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.utils import BandLabel
 
