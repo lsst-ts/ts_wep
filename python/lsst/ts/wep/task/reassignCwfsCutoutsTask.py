@@ -28,6 +28,7 @@ __all__ = [
 from typing import Any
 
 import lsst.pipe.base as pipeBase
+import lsst.pex.config as pexConfig
 from lsst.daf.butler import DataCoordinate
 from lsst.pipe.base import connectionTypes
 
@@ -69,9 +70,13 @@ class ReassignCwfsCutoutsTaskConnections(
         seen = set()
         while to_do:
             data_id = to_do.pop()
+            # Make sure the intra focal data id is not processed
+            # by this task. The way RA runs the custom QG builder
+            # will ensure the extra focal quantum has the intra
+            # focal input.
             if data_id["detector"] in extra_focal_ids:
                 seen.add(data_id)
-            elif data_id["detector"] in intra_focal_ids:
+            elif (data_id["detector"] in intra_focal_ids) and (not self.config.customQG):
                 extra_focal_data_id = DataCoordinate.standardize(
                     data_id, detector=int(data_id["detector"]) - 1
                 )
@@ -92,7 +97,10 @@ class ReassignCwfsCutoutsTaskConfig(
     pipeBase.PipelineTaskConfig,
     pipelineConnections=ReassignCwfsCutoutsTaskConnections,  # type: ignore
 ):
-    pass
+    customQG: pexConfig.Field = pexConfig.Field[bool](
+        doc="Whether this task is being run with a custom quantum graph builder. ",
+        default=False,
+    )
 
 
 class ReassignCwfsCutoutsTask(pipeBase.PipelineTask):
