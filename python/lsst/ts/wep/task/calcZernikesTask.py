@@ -72,7 +72,7 @@ class CalcZernikesTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
     )
-    intrinsicTables = connectionTypes.Input(
+    intrinsicTables = connectionTypes.PrerequisiteInput(
         doc="Intrinsic Zernike Map for the instrument",
         dimensions=("detector", "instrument", "physical_filter"),
         storageClass="ArrowAstropy",
