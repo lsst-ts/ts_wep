@@ -27,7 +27,7 @@ __all__ = [
 
 import abc
 from itertools import zip_longest
-from typing import Any, cast
+from typing import Any, cast, Sequence
 
 import astropy.units as u
 import numpy as np
@@ -36,7 +36,8 @@ from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-from lsst.daf.butler import DataCoordinate
+from lsst.daf.butler import DataCoordinate, DatasetType, Registry, DatasetRef
+
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -52,6 +53,20 @@ from lsst.utils.timer import timeMethod
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 intra_focal_ids = set([192, 196, 200, 204])
 extra_focal_ids = set([191, 195, 199, 203])
+
+
+def lookupIntrinsicTables(
+    datasetType: DatasetType,
+    registry: Registry,
+    dataId: DataCoordinate,
+    collections: Sequence[str]
+) -> list[DatasetRef]:
+    """Assumes that the dataId is always for the extra focal at present
+    """
+    ref1 = registry.findDataset(datasetType, dataId, collections=collections)
+    dataId2 = DataCoordinate.standardize(dataId, detector=dataId["detector"] + 1)
+    ref2 = registry.findDataset(datasetType, dataId2, collections=collections)
+    return [ref1, ref2]
 
 
 class CalcZernikesTaskConnections(
@@ -76,6 +91,7 @@ class CalcZernikesTaskConnections(
         storageClass="ArrowAstropy",
         name="intrinsic_aberrations_temp",
         multiple=True,
+        lookupFunction=lookupIntrinsicTables,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -101,27 +117,6 @@ class CalcZernikesTaskConnections(
         storageClass="AstropyQTable",
         name="donutQualityTable",
     )
-
-    def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
-        """Add intrinsicTables inputs from intra-focal donuts to the
-        tasks running on extra-focal data ids."""
-        to_do = set(adjuster.iter_data_ids())
-        seen = set()
-        while to_do:
-            data_id = to_do.pop()
-            if data_id["detector"] in extra_focal_ids:
-                intra_focal_data_id = DataCoordinate.standardize(
-                    data_id, detector=int(data_id["detector"]) + 1
-                )
-
-                assert intra_focal_data_id in seen or intra_focal_data_id in to_do, (
-                    f"DataId {intra_focal_data_id} not found in seen or to_do sets."
-                )
-
-                intra_inputs = adjuster.get_inputs(intra_focal_data_id)
-                adjuster.add_input(data_id, "intrinsicTables", intra_inputs["intrinsicTables"][0])
-            elif data_id["detector"] in intra_focal_ids:
-                seen.add(data_id)
 
 
 class CalcZernikesTaskConfig(
