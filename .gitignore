@@ -38,3 +38,5 @@ towncrier.toml
 
 # Existing Phosim Donut Templates
 policy/cwfs/donutTemplateData/phosimTemplates/
+.ruff.toml
+towncrier.toml
