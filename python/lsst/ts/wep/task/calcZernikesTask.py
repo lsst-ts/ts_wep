@@ -65,10 +65,14 @@ def lookupIntrinsicTables(
 ) -> list[DatasetRef]:
     """Assumes that the dataId is always for the extra focal at present
     """
-    ref1 = registry.findDataset(datasetType, dataId, collections=collections)
-    dataId2 = DataCoordinate.standardize(dataId, detector=dataId["detector"] + 1)
-    ref2 = registry.findDataset(datasetType, dataId2, collections=collections)
-    return [ref1, ref2]
+    detector = dataId["detector"]
+    isCornerChip = (detector in intra_focal_ids) or (detector in extra_focal_ids)
+
+    refs = [registry.findDataset(datasetType, dataId, collections=collections)]
+    if isCornerChip:  # we're running a CWFS pair, not a FAM image
+        dataId2 = DataCoordinate.standardize(dataId, detector=dataId["detector"] + 1)
+        refs.append(registry.findDataset(datasetType, dataId2, collections=collections))
+    return refs
 
 
 class CalcZernikesTaskConnections(
