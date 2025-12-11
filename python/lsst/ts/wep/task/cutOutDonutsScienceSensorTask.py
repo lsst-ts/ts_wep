@@ -56,6 +56,19 @@ class CutOutDonutsScienceSensorTaskConnections(
         storageClass="Exposure",
         name="post_isr_image",
         multiple=True,
+        minimum=2,
+    )
+    donutCatalog = ct.Input(
+        doc="Donut Locations",
+        dimensions=(
+            "visit",
+            "detector",
+            "instrument",
+        ),
+        storageClass="AstropyQTable",
+        name="donutTable",
+        multiple=True,
+        minimum=2,
     )
     donutVisitPairTable = ct.Input(
         doc="Visit pair table",
