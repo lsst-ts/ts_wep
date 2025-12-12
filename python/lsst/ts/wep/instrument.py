@@ -989,7 +989,7 @@ class Instrument:
         zk = self._getIntrinsicZernikesCached(
             xAngle=xAngle,
             yAngle=yAngle,
-            defocalType=defocalType,
+            defocalType=None,
             band=band,
             jmax=max(nollIndicesIntr),
         )
