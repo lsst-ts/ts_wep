@@ -164,6 +164,11 @@ class GenerateDonutFromRefitWcsTaskConfig(
     edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Size of detector edge margin in pixels", dtype=int, default=80
     )
+    minProperMotion: pexConfig.Field = pexConfig.Field(
+        doc="Proper motion cut (in rad/yr) for astrometric reference objects.",
+        dtype=float,
+        default=1.0e-8,
+    )
 
     # Took these defaults from atmospec/centroiding which I used
     # as a template for implementing WCS fitting in a task.
@@ -400,6 +405,15 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                     donutSelectorTask,
                     edgeMargin,
                 )
+
+                # Run some basic filtering to try and avoid AGN contamination
+                minProperMotion = self.config.minProperMotion
+                totalPm = np.hypot(refSelection["pm_ra"], refSelection["pm_dec"])
+                goodPm = totalPm >= minProperMotion
+                refSelection = refSelection[goodPm]
+                blendCentersX = [blendCentersX[i] for i in range(len(goodPm)) if goodPm[i]]
+                blendCentersY = [blendCentersY[i] for i in range(len(goodPm)) if goodPm[i]]
+
                 # Create list of filters to include in final catalog
                 filterList = self.config.catalogFilterList
                 availableRefFilters = [
