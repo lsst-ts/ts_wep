@@ -243,6 +243,21 @@ class TestInstrument(unittest.TestCase):
         for key in keys:
             self.assertEqual(getattr(lsst, key), getattr(comcam, key))
 
+    def test_intrinsicZernikesDefocused(self) -> None:
+        inst = Instrument()
+        z4_intra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="intra", nollIndices=[4])
+        z4_extra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="extra", nollIndices=[4])
+        self.assertTrue(np.isclose(-z4_extra, z4_intra, rtol=1e-2))
+
+    def test_offsetCamera(self) -> None:
+        """Just test shifting camera vs detector gives different intrinsics."""
+        inst1 = Instrument()
+        inst2 = Instrument(batoidOffsetOptic="LSSTCamera")
+        for dftype in ["intra", "extra"]:
+            zk_1 = inst1.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)
+            zk_2 = inst2.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)
+            self.assertFalse(np.allclose(zk_1, zk_2, rtol=1e-2))
+
 
 if __name__ == "__main__":
     # Do the unit test

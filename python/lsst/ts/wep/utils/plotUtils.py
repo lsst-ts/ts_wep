@@ -429,7 +429,7 @@ def plotMapperResiduals(
     uImage, vImage, *_ = mapper._constructForwardMap(
         uPupil,
         vPupil,
-        mapper.instrument.getIntrinsicZernikes(*angle, band, jmax=22),
+        mapper.instrument.getIntrinsicZernikes(*angle, band=band, nollIndices=np.arange(4, 23)),
         Image(np.zeros((1, 1)), angle, defocalType, band),
     )
 

@@ -283,16 +283,16 @@ class WfAlgorithm(ABC):
         if startWithIntrinsic or returnWfDev:
             zkIntrinsicI1 = instrument.getIntrinsicZernikes(
                 *I1.fieldAngle,
-                I1.bandLabel,
-                nollIndices,
+                band=I1.bandLabel,
+                nollIndices=nollIndices,
             )
             zkIntrinsicI2 = (
                 None
                 if I2 is None
                 else instrument.getIntrinsicZernikes(
                     *I2.fieldAngle,
-                    I2.bandLabel,
-                    nollIndices,
+                    band=I2.bandLabel,
+                    nollIndices=nollIndices,
                 )
             )
 

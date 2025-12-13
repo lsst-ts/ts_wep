@@ -1267,7 +1267,7 @@ class ImageMapper:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
                 *image.fieldAngle,
-                image.bandLabel,
+                band=image.bandLabel,
             )
 
         # Get the image grid inside the pupil
@@ -1376,7 +1376,7 @@ class ImageMapper:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
                 *dummyImage.fieldAngle,
-                dummyImage.bandLabel,
+                band=dummyImage.bandLabel,
             )
 
         # Project the pupil onto the image plane
@@ -1445,7 +1445,7 @@ class ImageMapper:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
                 *image.fieldAngle,
-                image.bandLabel,
+                band=image.bandLabel,
             )
 
         # Create the image template
@@ -1513,7 +1513,7 @@ class ImageMapper:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
                 *image.fieldAngle,
-                image.bandLabel,
+                band=image.bandLabel,
             )
 
         # Get the image grid inside the pupil
@@ -1606,7 +1606,7 @@ class ImageMapper:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
                 *image.fieldAngle,
-                image.bandLabel,
+                band=image.bandLabel,
             )
 
         # Construct the forward mapping

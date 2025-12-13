@@ -633,7 +633,11 @@ class Instrument:
     @property
     def batoidOffsetOptic(self) -> str | None:
         """The optic that is offset in the Batoid model."""
-        return self._batoidOffsetOptic
+        # Default to the detector if value not explicitly set
+        if self._batoidOffsetOptic is None and self.batoidModelName is not None:
+            return "Detector"
+        else:
+            return self._batoidOffsetOptic
 
     @batoidOffsetOptic.setter
     def batoidOffsetOptic(self, value: str | None) -> None:
@@ -734,6 +738,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
+        defocalType: DefocalType | None,
         band: BandLabel | str,
         jmax: int,
     ) -> np.ndarray:
@@ -747,6 +752,9 @@ class Instrument:
             The x-component of the field angle in degrees.
         yAngle : float
             The y-component of the field angle in degrees.
+        defocalType : DefocalType or str or None
+            The DefocalType Enum or corresponding string, specifying which side
+            of focus to model. If None, the model is not defocused.
         band : BandLabel or str, optional
             The BandLabel Enum or corresponding string, specifying which batoid
             model to load. Only relevant if self.batoidModelName contains
@@ -768,6 +776,13 @@ class Instrument:
         # If there is no batoid model, just return zeros
         if batoidModel is None:
             return np.zeros(jmax + 1)
+
+        # Offset the focal plane
+        if defocalType is not None:
+            defocalType = DefocalType(defocalType)
+            defocalSign = +1 if defocalType == DefocalType.Extra else -1
+            offset = [0, 0, defocalSign * self.defocalOffset]
+            batoidModel = batoidModel.withLocallyShiftedOptic(self.batoidOffsetOptic, offset)
 
         # Get the wavelength
         if len(self.wavelength) > 1:
@@ -794,6 +809,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
+        defocalType: DefocalType | None = None,
         band: BandLabel | str = BandLabel.REF,
         nollIndices: Sequence[int] = tuple(np.arange(4, 79)),
     ) -> np.ndarray:
@@ -805,6 +821,9 @@ class Instrument:
             The x-component of the field angle in degrees.
         yAngle : float
             The y-component of the field angle in degrees.
+        defocalType : DefocalType or str or None
+            The DefocalType Enum or corresponding string, specifying which side
+            of focus to model. If None, the model is not defocused.
         band : BandLabel or str, optional
             The BandLabel Enum or corresponding string, specifying which batoid
             model to load. Only relevant if self.batoidModelName contains
@@ -822,7 +841,13 @@ class Instrument:
         nollIndices = np.array(nollIndices)
 
         # Retrieve cached Zernikes
-        zk = self._getIntrinsicZernikesCached(xAngle, yAngle, band, max(nollIndices))
+        zk = self._getIntrinsicZernikesCached(
+            xAngle=xAngle,
+            yAngle=yAngle,
+            defocalType=defocalType,
+            band=band,
+            jmax=max(nollIndices),
+        )
 
         return zk[nollIndices]
 
@@ -831,7 +856,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType,
+        defocalType: DefocalType | None,
         band: BandLabel | str,
         jmax: int,
     ) -> np.ndarray:
@@ -843,9 +868,9 @@ class Instrument:
             The x-component of the field angle in degrees.
         yAngle : float
             The y-component of the field angle in degrees.
-        defocalType : DefocalType or str
+        defocalType : DefocalType or str or None
             The DefocalType Enum or corresponding string, specifying which side
-            of focus to model.
+            of focus to model. If None, the model is not defocused.
         band : BandLabel or str
             The BandLabel Enum or corresponding string, specifying which
             batoid model to load. Only relevant if self.batoidModelName
@@ -877,10 +902,11 @@ class Instrument:
             return np.zeros(jmax + 1)
 
         # Offset the focal plane
-        defocalType = DefocalType(defocalType)
-        defocalSign = +1 if defocalType == DefocalType.Extra else -1
-        offset = [0, 0, defocalSign * self.defocalOffset]
-        batoidModel = batoidModel.withLocallyShiftedOptic("Detector", offset)
+        if defocalType is not None:
+            defocalType = DefocalType(defocalType)
+            defocalSign = +1 if defocalType == DefocalType.Extra else -1
+            offset = [0, 0, defocalSign * self.defocalOffset]
+            batoidModel = batoidModel.withLocallyShiftedOptic(self.batoidOffsetOptic, offset)
 
         # Get the wavelength
         if len(self.wavelength) > 1:
@@ -909,7 +935,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType,
+        defocalType: DefocalType | None,
         band: BandLabel | str = BandLabel.REF,
         nollIndicesModel: Sequence = tuple(np.arange(4, 79)),
         nollIndicesIntr: Sequence = tuple(np.arange(4, 79)),
@@ -922,9 +948,9 @@ class Instrument:
             The x-component of the field angle in degrees.
         yAngle : float
             The y-component of the field angle in degrees.
-        defocalType : DefocalType or str
+        defocalType : DefocalType or str or None
             The DefocalType Enum or corresponding string, specifying which side
-            of focus to model.
+            of focus to model. If None, the model is not defocused.
         band : BandLabel or str, optional
             The BandLabel Enum or corresponding string, specifying which
             batoid model to load. Only relevant if self.batoidModelName
@@ -952,19 +978,20 @@ class Instrument:
 
         # Get zernikeTA
         zkTA = self._getIntrinsicZernikesTACached(
-            xAngle,
-            yAngle,
-            defocalType,
-            band,
-            max(nollIndicesModel),
+            xAngle=xAngle,
+            yAngle=yAngle,
+            defocalType=defocalType,
+            band=band,
+            jmax=max(nollIndicesModel),
         )
 
         # Get regular intrinsic zernikes
         zk = self._getIntrinsicZernikesCached(
-            xAngle,
-            yAngle,
-            band,
-            max(nollIndicesIntr),
+            xAngle=xAngle,
+            yAngle=yAngle,
+            defocalType=None,
+            band=band,
+            jmax=max(nollIndicesIntr),
         )
 
         # Subtract intrinsics from zernikeTA
