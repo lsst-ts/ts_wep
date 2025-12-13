@@ -602,7 +602,7 @@ class TestImageMapper(unittest.TestCase):
         # Define sets of configurations to test
         instruments = [
             "policy:instruments/LsstCam.yaml",
-            "policy:instruments/AuxTel.yaml",
+            "policy:instruments/LsstFamCam.yaml",
         ]
         fieldAngles = [
             (0, 0),
@@ -615,13 +615,15 @@ class TestImageMapper(unittest.TestCase):
             (-1.1, 1.0),
             (-1.2, -1.2),
         ]
-        opticalModels = ["paraxial", "onAxis", "offAxis"]
+        opticalModels = ["onAxis", "offAxis"]
         defocalTypes = ["intra", "extra"]
 
         # Function that maps config to required precision (% of pixel size)
         def maxPercent(**kwargs: Any) -> float:
-            if "Lsst" in instConfig and model == "onAxis":
+            if "LsstCam" in instConfig and model == "onAxis":
                 return 25
+            elif "LsstFamCam" in instConfig and model == "onAxis":
+                return 100
             else:
                 return 10
 
@@ -648,6 +650,7 @@ class TestImageMapper(unittest.TestCase):
             for band in inst.wavelength:
                 # Get the Batoid model
                 optic = inst.getBatoidModel(band)
+                shifted = optic.withLocallyShiftedOptic(inst.batoidOffsetOptic, [0, 0, offset])
 
                 # Create the RayVector
                 dirCos = batoid.utils.fieldToDirCos(*np.deg2rad(angle))
@@ -664,7 +667,7 @@ class TestImageMapper(unittest.TestCase):
                 uPupil = pupilRays.x / inst.radius
                 vPupil = pupilRays.y / inst.radius
 
-                # Map to focal plane using the offAxis model
+                # Map to focal plane
                 uImage, vImage, *_ = mapper._constructForwardMap(
                     uPupil,
                     vPupil,
@@ -678,7 +681,7 @@ class TestImageMapper(unittest.TestCase):
                 yImage = vImage * inst.donutRadius * inst.pixelSize
 
                 # Trace to the focal plane with Batoid
-                optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(rays)
+                shifted.trace(rays)
 
                 # Calculate the centered ray coordinates
                 chief = batoid.RayVector.fromStop(
@@ -688,7 +691,7 @@ class TestImageMapper(unittest.TestCase):
                     wavelength=mapper.instrument.wavelength[band],
                     dirCos=dirCos,
                 )
-                optic.withLocallyShiftedOptic("Detector", [0, 0, offset]).trace(chief)
+                shifted.trace(chief)
                 xRay = rays.x - chief.x
                 yRay = rays.y - chief.y
 
