@@ -19,10 +19,16 @@ def pytest_addoption(parser: Parser) -> None:
         default=False,
         help="Run WEP pipeline before all tests.",
     )
+    parser.addoption(
+        "--skip-pretest",
+        action="store_true",
+        default=False,
+        help="Skip pre-test WEP pipeline run.",
+    )
 
 
 def pytest_configure(config: Config) -> None:
-    if config.getoption("--run-pretest"):
+    if config.getoption("--run-pretest") and not config.getoption("--skip-pretest"):
         print("Running pre-test command...")
 
         # Set up the butler repository config
@@ -80,7 +86,7 @@ def pytest_configure(config: Config) -> None:
 
 
 def pytest_unconfigure(config: Config) -> None:
-    if config.getoption("--run-pretest"):
+    if config.getoption("--run-pretest") and not config.getoption("--skip-pretest"):
         print("Running cleanup...")
         for runName in [
             config.testInfo["runNameCwfs"],
