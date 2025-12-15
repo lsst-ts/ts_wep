@@ -167,10 +167,6 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
-        donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
-        donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}
-        donutTableIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutTableIntra}
-        donutTableExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutTableExtra}
 
         if hasattr(inputRefs, "donutVisitPairTable"):
             pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable))
@@ -180,15 +176,15 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             exposures = butlerQC.get([exposureHandleDict[k] for k in [pair.intra, pair.extra]])
             donutCats = butlerQC.get([donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]])
             outputs = self.run(exposures, donutCats, camera)
-            butlerQC.put(outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra])
+            butlerQC.put(outputs.donutStampsExtra, outputRefs.donutTableExtra.dataId["visit"])
             butlerQC.put(
                 outputs.donutStampsIntra,
-                donutStampsIntraHandleDict[pair.extra],  # Intentionally use extra id for intra stamps here
+                outputRefs.donutTableExtra.dataId["visit"],  # Intentionally use extra id for intra stamps here
             )
-            butlerQC.put(outputs.donutTableExtra, donutTableExtraHandleDict[pair.extra])
+            butlerQC.put(outputs.donutTableExtra, outputRefs.donutTableExtra.dataId["visit"])
             butlerQC.put(
                 outputs.donutTableIntra,
-                donutTableIntraHandleDict[pair.extra],  # Intentionally use extra id for intra tables here
+                outputRefs.donutTableExtra.dataId["visit"],  # Intentionally use extra id for intra tables here
             )
 
     def assignExtraIntraIdx(self, focusZVal0: float, focusZVal1: float, cameraName: str) -> tuple[int, int]:
