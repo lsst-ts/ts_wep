@@ -81,12 +81,14 @@ class CutOutDonutsScienceSensorTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtra",
+        multiple=True
     )
     donutStampsIntra = ct.Output(
         doc="Intra-focal Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
+        multiple=True
     )
     donutTablesIntra = ct.Output(
         doc="Intra-focal Donut Postage Stamp Table",
