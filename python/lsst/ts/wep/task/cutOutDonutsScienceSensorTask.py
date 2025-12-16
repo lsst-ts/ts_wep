@@ -88,17 +88,19 @@ class CutOutDonutsScienceSensorTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
     )
-    donutTableIntra = ct.Output(
+    donutTablesIntra = ct.Output(
         doc="Intra-focal Donut Postage Stamp Table",
         dimensions=("visit", "detector", "instrument"),
         storageClass="AstropyQTable",
         name="donutTableIntra",
+        multiple=True
     )
-    donutTableExtra = ct.Output(
+    donutTablesExtra = ct.Output(
         doc="Extra-focal Donut Postage Stamp Table",
         dimensions=("visit", "detector", "instrument"),
         storageClass="AstropyQTable",
         name="donutTableExtra",
+        multiple=True
     )
 
     def __init__(self, *, config: Any | None = None) -> None:
@@ -167,6 +169,10 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
+        donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
+        donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}
+        donutTablesIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutTablesIntra}
+        donutTablesExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutTablesExtra}
 
         if hasattr(inputRefs, "donutVisitPairTable"):
             pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable))
@@ -176,15 +182,15 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             exposures = butlerQC.get([exposureHandleDict[k] for k in [pair.intra, pair.extra]])
             donutCats = butlerQC.get([donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]])
             outputs = self.run(exposures, donutCats, camera)
-            butlerQC.put(outputs.donutStampsExtra, outputRefs.donutTableExtra.dataId["visit"])
+            butlerQC.put(outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra])
             butlerQC.put(
                 outputs.donutStampsIntra,
-                outputRefs.donutTableExtra.dataId["visit"],  # Intentionally use extra id for intra stamps here
+                donutStampsIntraHandleDict[pair.extra]  # Intentionally use extra id for intra stamps here
             )
-            butlerQC.put(outputs.donutTableExtra, outputRefs.donutTableExtra.dataId["visit"])
+            butlerQC.put(outputs.donutTableExtra, donutTablesExtraHandleDict[pair.extra])
             butlerQC.put(
                 outputs.donutTableIntra,
-                outputRefs.donutTableExtra.dataId["visit"],  # Intentionally use extra id for intra tables here
+                donutTablesIntraHandleDict[pair.extra]  # Intentionally use extra id for intra tables here
             )
 
     def assignExtraIntraIdx(self, focusZVal0: float, focusZVal1: float, cameraName: str) -> tuple[int, int]:
