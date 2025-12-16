@@ -130,6 +130,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             collections=["LSSTCam/aos/intrinsic"],
         )
 
+        # Modify the intrinsic table to allow explicit value testing below
+        intrinsicTable["Z4"] = 50e-9  # nm
+
         # Loop over EstimateZernikes subtasks
         for subtask in [EstimateZernikesTieTask, EstimateZernikesDanishTask]:
             # Calculate Zernikes with stamps paired
@@ -145,13 +148,21 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             config.estimateZernikes.retarget(subtask)
             unpairedTask = CalcZernikesUnpairedTask(config=config)
 
-            extraZk = unpairedTask.run(donutStampsExtra, intrinsicTable).outputZernikesAvg
-            intraZk = unpairedTask.run(donutStampsIntra, intrinsicTable).outputZernikesAvg
+            outputExtra = unpairedTask.run(donutStampsExtra, intrinsicTable)
+            outputIntra = unpairedTask.run(donutStampsIntra, intrinsicTable)
+            extraZk = outputExtra.outputZernikesAvg
+            intraZk = outputIntra.outputZernikesAvg
             meanZk = np.mean([extraZk, intraZk], axis=0)
 
             # Check that results are similar
             diff = np.sqrt(np.sum((meanZk - pairedZk) ** 2))
             self.assertLess(diff, 0.17)
+
+            # Check the stored intrinsic Z4 is close to modified value
+            for struct in [outputExtra, outputIntra]:
+                table = struct.zernikes
+                intrinsicZ4 = table[table["label"] == "average"]["Z4_intrinsic"][0]
+                self.assertTrue(np.isclose(intrinsicZ4.to_value("nm"), 50.0))
 
     def testTable(self) -> None:
         # Load data from butler

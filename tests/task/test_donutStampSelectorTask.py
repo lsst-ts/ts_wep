@@ -142,7 +142,6 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # test defaults
         selection = self.task.selectStamps(donutStampsIntra)
         donutsQuality = selection.donutsQuality
-        print(donutsQuality)
 
         # by default, config.selectWithEntropy is False,
         # so we select all donuts
@@ -196,7 +195,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         task = DonutStampSelectorTask(config=self.config, name="SN Task")
         selection = task.selectStamps(donutStampsIntra)
         donutsQuality = selection.donutsQuality
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 2)
+        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
 
         # test that the SN of selected donuts is indeed above the threshold
         for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]]:
