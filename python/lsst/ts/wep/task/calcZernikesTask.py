@@ -250,7 +250,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if stamp is None:
             fieldAngle = np.array(np.nan, dtype=pos2f_dtype) * u.deg
             centroid = np.array((np.nan, np.nan), dtype=pos2f_dtype) * u.pixel
-            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
+            intrinsics = np.full(len(self.nollIndices), np.nan) * u.micron
         else:
             fieldAngle = np.array(stamp.calcFieldXY(), dtype=pos2f_dtype) * u.deg
             centroid = (
