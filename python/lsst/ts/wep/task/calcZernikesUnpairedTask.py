@@ -58,7 +58,7 @@ class CalcZernikesUnpairedTaskConnections(
         storageClass="StampsBase",
         name="donutStamps",
     )
-    intrinsicTable = connectionTypes.Input(
+    intrinsicTable = connectionTypes.PrerequisiteInput(
         doc="Intrinsic Zernike Map for the instrument",
         dimensions=("detector", "instrument", "physical_filter"),
         storageClass="ArrowAstropy",
