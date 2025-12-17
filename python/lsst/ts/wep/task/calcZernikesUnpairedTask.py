@@ -34,6 +34,18 @@ from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTask
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
 
+def lookupIntrinsicTables(
+    datasetType: DatasetType,
+    registry: Registry,
+    dataId: DataCoordinate,
+    collections: Sequence[str]
+) -> list[DatasetRef]:
+    detector = dataId["detector"]
+    isCornerChip = (detector in intra_focal_ids) or (detector in extra_focal_ids)
+
+    refs = [registry.findDataset(datasetType, dataId, collections=collections)]
+    return refs
+
 
 class CalcZernikesUnpairedTaskConnections(
     pipeBase.PipelineTaskConnections,
@@ -50,6 +62,7 @@ class CalcZernikesUnpairedTaskConnections(
         dimensions=("detector", "instrument", "physical_filter"),
         storageClass="ArrowAstropy",
         name="intrinsic_aberrations_temp",
+        lookupFunction=lookupIntrinsicTables,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
