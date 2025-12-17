@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
 import numpy as np
 import torch
 
@@ -64,7 +65,7 @@ class AiDonutAlgorithm(WfAlgorithm):
         device: str = "cpu",
     ) -> None:
         self.device = device
-        self.modelPath = modelPath
+        self.modelPath = os.path.expandvars(modelPath)
 
     @property
     def requiresPairs(self) -> bool:
