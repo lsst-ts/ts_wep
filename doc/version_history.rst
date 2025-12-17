@@ -17,6 +17,21 @@ Version History
 
 .. towncrier release notes start
 
+v16.5.0 (2025-12-16)
+====================
+
+New Features
+------------
+
+- Correctly handling FAM by shifting entire camera in batoid model. (`DM-53134 <https://rubinobs.atlassian.net//browse/DM-53134>`_)
+
+
+Bug Fixes
+---------
+
+- Fixed bug with intrinsics in unpaired Zernike calculation task. (`DM-53632 <https://rubinobs.atlassian.net//browse/DM-53632>`_)
+
+
 16.4.0 (2025-12-09)
 ===================
 
