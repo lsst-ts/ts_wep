@@ -25,6 +25,7 @@ __all__ = [
     "CalcZernikesUnpairedTask",
 ]
 
+from typing import Sequence
 import numpy as np
 from astropy.table import QTable, Table
 
@@ -33,6 +34,8 @@ from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
+from lsst.daf.butler import DatasetType, Registry, DataCoordinate, DatasetRef
+
 
 def lookupIntrinsicTables(
     datasetType: DatasetType,
@@ -40,8 +43,6 @@ def lookupIntrinsicTables(
     dataId: DataCoordinate,
     collections: Sequence[str]
 ) -> list[DatasetRef]:
-    detector = dataId["detector"]
-    isCornerChip = (detector in intra_focal_ids) or (detector in extra_focal_ids)
 
     refs = [registry.findDataset(datasetType, dataId, collections=collections)]
     return refs
