@@ -193,6 +193,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         # verify remaining desired columns exist in zernikes table
         desired_colnames = [
             "used",
+            "intra_donut_id",
+            "extra_donut_id",
             "intra_field",
             "extra_field",
             "intra_centroid",
@@ -244,6 +246,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "MAX_POWER_GRAD_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
+            "DONUT_ID",
             "RADIUS",
         ]
         np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))

@@ -68,6 +68,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         dfcTypes[:halfStampIdx] = [DefocalType.Intra.value] * halfStampIdx
         dfcDists = np.ones(nStamps) * 1.5
         bandpass = ["r"] * nStamps
+        donutId = ["0000"] * nStamps
 
         # Test mixture of donuts with blends and those without
         blendCentX[-1] = "nan"
@@ -85,6 +86,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         metadata["DFC_TYPE"] = dfcTypes
         metadata["DFC_DIST"] = dfcDists
         metadata["BANDPASS"] = bandpass
+        metadata["DONUT_ID"] = donutId
 
         donutStampList = [DonutStamp.factory(stampList[idx], metadata, idx) for idx in range(nStamps)]
 
@@ -115,6 +117,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
                 self.assertEqual(stamp1.defocal_type, stamp2.defocal_type)
                 self.assertEqual(stamp1.defocal_distance, stamp2.defocal_distance)
                 self.assertEqual(stamp1.bandpass, stamp2.bandpass)
+                self.assertEqual(stamp1.donut_id, stamp2.donut_id)
 
     def testGetSkyPositions(self) -> None:
         skyPos = self.donutStamps.getSkyPositions()
@@ -171,6 +174,10 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         bandpasses = self.donutStamps.getBandpasses()
         self.assertListEqual(bandpasses, ["r"] * self.nStamps)
 
+    def testGetDonutId(self) -> None:
+        donutId = self.donutStamps.getIds()
+        self.assertListEqual(donutId, ["0000"] * self.nStamps)
+
     def testAppend(self) -> None:
         """Test ability to append to a Stamps object"""
         self.donutStamps.append(self.donutStamps[0])
@@ -180,7 +187,7 @@ class TestDonutStamps(lsst.utils.tests.TestCase):
         self._roundtrip(self.donutStamps)
         # check if appending something other than a DonutStamp raises
         with self.assertRaises(ValueError) as context:
-            self.donutStamps.append("hello world")
+            self.donutStamps.append("hello world")  # type: ignore[arg-type]
         self.assertEqual("Objects added must be a DonutStamp object.", str(context.exception))
 
     def testExtend(self) -> None:

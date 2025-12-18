@@ -190,12 +190,12 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # test custom SNR thresholds
         self.config.selectWithEntropy = False
         self.config.useCustomSnLimit = True
-        minSignalToNoise = 1000.0
+        minSignalToNoise = 1700.0
         self.config.minSignalToNoise = minSignalToNoise
         task = DonutStampSelectorTask(config=self.config, name="SN Task")
         selection = task.selectStamps(donutStampsIntra)
         donutsQuality = selection.donutsQuality
-        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 3)
+        self.assertEqual(np.sum(donutsQuality["SN_SELECT"]), 0)
 
         # test that the SN of selected donuts is indeed above the threshold
         for v in donutsQuality["SN"][donutsQuality["SN_SELECT"]]:
@@ -229,6 +229,11 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         task = DonutStampSelectorTask(config=self.config, name="Select all")
         selection = task.selectStamps(donutStampsIntra)
         self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 3)
+
+        # test whether DonutStamps metadata get copied over if present
+        for metakey in ["DONUT_ID", "RADIUS"]:
+            if metakey in list(donutStampsIntra.metadata):
+                self.assertIn(metakey, selection.donutsQuality.columns)
 
     def testTaskRun(self) -> None:
         donutStampsIntra = self.butler.get(

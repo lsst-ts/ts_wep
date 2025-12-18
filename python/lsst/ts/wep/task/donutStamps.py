@@ -59,6 +59,8 @@ class DonutStamps(StampsBase):
         self.metadata["DFC_DIST"] = [dfc_dist for dfc_dist in defocal_distances]
         bandpasses = self.getBandpasses()
         self.metadata["BANDPASS"] = [bandpass for bandpass in bandpasses]
+        donut_ids = self.getIds()
+        self.metadata["DONUT_ID"] = [idx for idx in donut_ids]
 
     def getSkyPositions(self) -> list:
         """
@@ -180,6 +182,17 @@ class DonutStamps(StampsBase):
             Bandpass name for each stamp.
         """
         return [stamp.bandpass for stamp in self]
+
+    def getIds(self) -> list:
+        """
+        Get the id for each stamp.
+
+        Returns
+        -------
+        list [str]
+            Id name for each stamp.
+        """
+        return [stamp.donut_id for stamp in self]
 
     def append(self, newStamp: DonutStamp) -> None:
         """Add an additional stamp.
