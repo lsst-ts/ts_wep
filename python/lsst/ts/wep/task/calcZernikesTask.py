@@ -575,6 +575,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsIntra = selectedIntraStamps
 
         # Set the intrinsic map interpolators
+        self.log.info("Creating intrinsic map.")
         if self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
             # If both intra and extra focal donuts are from the same detector,
             # then we only have one intrinsic table to use for both.
@@ -585,6 +586,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTables[1])
 
         # Estimate Zernikes from the collection of selected stamps
+        self.log.info("Starting Zernike Estimation")
         zkCoeffRaw = self.estimateZernikes.run(self.stampsExtra, self.stampsIntra, numCores=numCores)
 
         # Save the outputs in the table

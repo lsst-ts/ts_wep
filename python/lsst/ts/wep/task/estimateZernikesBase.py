@@ -23,6 +23,7 @@ __all__ = ["EstimateZernikesBaseConfig", "EstimateZernikesBaseTask"]
 
 import abc
 import itertools
+import logging
 import multiprocessing as mp
 from typing import Any, Callable, Iterable
 
@@ -42,14 +43,25 @@ from lsst.ts.wep.utils import (
 def estimate_zk_pair(args: tuple[DonutStamps, DonutStamps, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a pair of donuts."""
     donutExtra, donutIntra, wfEstimator = args
+    log = logging.getLogger(__name__)
+    log.info(
+        "Calculating Zernikes for Extra Donut %s, Intra Donut %s", *(donutExtra.donut_id, donutIntra.donut_id)
+    )
     zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
+    log.info(
+        "Num Iterations for Extra Donut %s, Intra Donut %s: nfev = %i",
+        *(donutExtra.donut_id, donutIntra.donut_id, zkMeta["lstsq_nfev"]),
+    )
     return zk, zkMeta, wfEstimator.history
 
 
 def estimate_zk_single(args: tuple[DonutStamps, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a single donut."""
     donut, wfEstimator = args
+    log = logging.getLogger(__name__)
+    log.info("Calculating Zernikes for Donut %s", donut.donut_id)
     zk, zkMeta = wfEstimator.estimateZk(donut.wep_im)
+    log.info("Num Iterations for Donut %s: nfev = %i", *(donut.donut_id, zkMeta["lstsq_nfev"]))
     return zk, zkMeta, wfEstimator.history
 
 
@@ -175,6 +187,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             method selected and contains a list of values,
             one for each pair of donuts.
         """
+        self.log.info("Estimating paired Zernikes.")
         # Loop over pairs in a multiprocessing pool
         args = [
             (donutExtra, donutIntra, wfEstimator)
@@ -230,6 +243,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             method selected and contains a list of values,
             one for each donut.
         """
+        self.log.info("Estimating single sided Zernikes.")
         # Loop over individual donut stamps with a process pool
         args = [(donut, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
         results = self._applyToList(estimate_zk_single, args, numCores)
