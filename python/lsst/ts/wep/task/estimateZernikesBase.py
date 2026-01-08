@@ -49,9 +49,15 @@ def estimate_zk_pair(args: tuple[DonutStamps, DonutStamps, WfEstimator]) -> tupl
     )
     zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
     log.info(
-        "Num Iterations for Extra Donut %s, Intra Donut %s: nfev = %i",
-        *(donutExtra.donut_id, donutIntra.donut_id, zkMeta["lstsq_nfev"]),
+        "Zernike estimation completed for Extra Donut %s, Intra Donut %s",
+        *(donutExtra.donut_id, donutIntra.donut_id),
     )
+    # Log number of function evaluations if available (currently only danish)
+    if "lstsq_nfev" in zkMeta:
+        log.info(
+            "Num Iterations for Donut Pair (%s, %s): nfev = %i",
+            *(donutExtra.donut_id, donutIntra.donut_id, zkMeta["lstsq_nfev"]),
+        )
     return zk, zkMeta, wfEstimator.history
 
 
@@ -61,7 +67,10 @@ def estimate_zk_single(args: tuple[DonutStamps, WfEstimator]) -> tuple[np.array,
     log = logging.getLogger(__name__)
     log.info("Calculating Zernikes for Donut %s", donut.donut_id)
     zk, zkMeta = wfEstimator.estimateZk(donut.wep_im)
-    log.info("Num Iterations for Donut %s: nfev = %i", *(donut.donut_id, zkMeta["lstsq_nfev"]))
+    log.info("Zernike estimation completed for Donut %s", donut.donut_id)
+    # Log number of function evaluations if available (currently only danish)
+    if "lstsq_nfev" in zkMeta:
+        log.info("Num Iterations for Donut %s: nfev = %i", *(donut.donut_id, zkMeta["lstsq_nfev"]))
     return zk, zkMeta, wfEstimator.history
 
 
