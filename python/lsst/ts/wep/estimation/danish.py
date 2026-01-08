@@ -21,6 +21,7 @@
 
 __all__ = ["DanishAlgorithm"]
 
+import logging
 import warnings
 
 import danish
@@ -65,6 +66,7 @@ class DanishAlgorithm(WfAlgorithm):
         self.binning = binning
         self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
         self.jointFitPair = jointFitPair
+        self.log = logging.getLogger(__name__)
 
     @property
     def requiresPairs(self) -> bool:
@@ -424,6 +426,7 @@ class DanishAlgorithm(WfAlgorithm):
         )
 
         # Create model
+        self.log.info("Creating multi-donut model with danish.")
         model = danish.MultiDonutModel(
             factory,
             z_refs=zkRefs,
@@ -443,6 +446,7 @@ class DanishAlgorithm(WfAlgorithm):
         bounds[4] = [0.1, 5.0]
         bounds = [list(b) for b in zip(*bounds)]
 
+        self.log.info("Starting least squares optimization.")
         # Use scipy to optimize the parameters
         try:
             result = least_squares(
