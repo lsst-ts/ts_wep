@@ -28,7 +28,7 @@ import danish
 import numpy as np
 from galsim import GalSimFFTSizeError
 from scipy.ndimage import binary_erosion
-from scipy.optimize import least_squares
+from scipy.optimize import OptimizeResult, least_squares
 
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
@@ -277,6 +277,15 @@ class DanishAlgorithm(WfAlgorithm):
         # Create the initial guess for the model parameters
         x0 = [0.0, 0.0, 1.0] + [0.0] * len(nollIndices)
 
+        self.log.info("Starting least squares optimization.")
+        opt_result_keys = ["nit", "nfev", "cost"]
+
+        def callback(*, intermediate_result: OptimizeResult) -> None:
+            self.log.info(
+                "Iter: %i, Total nfev: %i, Cost: %f",
+                *(intermediate_result[key] for key in opt_result_keys),
+            )
+
         # Use scipy to optimize the parameters
         try:
             result = least_squares(
@@ -284,6 +293,7 @@ class DanishAlgorithm(WfAlgorithm):
                 jac=model.jac,
                 x0=x0,
                 args=(img, backgroundStd**2),
+                callback=callback,
                 **self.lstsqKwargs,
             )
             result = dict(result)
@@ -447,6 +457,14 @@ class DanishAlgorithm(WfAlgorithm):
         bounds = [list(b) for b in zip(*bounds)]
 
         self.log.info("Starting least squares optimization.")
+        opt_result_keys = ["nit", "nfev", "cost"]
+
+        def callback(*, intermediate_result: OptimizeResult) -> None:
+            self.log.info(
+                "Iter: %i, Total nfev: %i, Cost: %f",
+                *(intermediate_result[key] for key in opt_result_keys),
+            )
+
         # Use scipy to optimize the parameters
         try:
             result = least_squares(
@@ -455,6 +473,7 @@ class DanishAlgorithm(WfAlgorithm):
                 x0=x0,
                 args=(imgs, skyLevels),
                 bounds=bounds,
+                callback=callback,
                 **self.lstsqKwargs,
             )
             result = dict(result)
