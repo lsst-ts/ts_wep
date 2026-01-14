@@ -273,12 +273,14 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         if detectorName in self.intraFocalNames:
             defocalType = DefocalType.Intra
 
+        self.log.info(f"Loading instrument {camName} for detector {detectorName}")
         # Load the instrument
         instrument = getTaskInstrument(
             camName,
             detectorName,
             self.config.instConfigFile,
         )
+        self.log.info("Creating donut template")
         try:
             # Create the image template for the detector
             template = createTemplateForDetector(
@@ -305,15 +307,18 @@ That means that the provided exposure is very close to focus"
             return pipeBase.Struct(donutCatalog=donutCatUpd)
 
         # Run background subtraction
+        self.log.info("Running background subtraction")
         self.subtractBackground.run(exposure=exposure)
 
         # Trim the exposure by the margin
+        self.log.info("Trimming exposure edges")
         edgeMargin = self.config.edgeMargin
         bbox = exposure.getBBox()
         trimmedBBox = bbox.erodedBy(edgeMargin)
         exposureTrim = exposure[trimmedBBox].clone()
 
         # Run the measurement task
+        self.log.info("Running donut detection and measurement")
         objData = self.measurementTask.run(
             exposureTrim,
             template,
