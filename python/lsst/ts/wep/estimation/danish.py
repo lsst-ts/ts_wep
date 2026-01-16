@@ -56,6 +56,9 @@ class DanishAlgorithm(WfAlgorithm):
         Whether to jointly fit intra/extra pairs, when a pair is provided.
         If False, Zernikes are estimated for each individually, then
         averaged. (the default is True)
+    modelSpiderShadows: bool = False,
+        Whether to include the spider shadows or not in the danish forward
+        model.
     """
 
     def __init__(
@@ -63,10 +66,12 @@ class DanishAlgorithm(WfAlgorithm):
         lstsqKwargs: dict | None = None,
         binning: int = 1,
         jointFitPair: bool = True,
+        modelSpiderShadows: bool = False,
     ) -> None:
         self.binning = binning
         self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
         self.jointFitPair = jointFitPair
+        self.modelSpiderShadows = modelSpiderShadows
         self.log = logging.getLogger(__name__)
 
     @property
@@ -603,9 +608,11 @@ class DanishAlgorithm(WfAlgorithm):
         dict
             Output from the danish algorithm to pass on as metadata.
         """
-        if rtp is not None:
+        if rtp is not None and self.modelSpiderShadows:
             rtp = rtp.wrap_at("180d").to_value("degree")
             self.log.info("Using RTP angle %s deg.", rtp)
+        else:
+            rtp = None
         # Create the Danish donut factory
         factory = danish.DonutFactory(
             R_outer=instrument.radius,
