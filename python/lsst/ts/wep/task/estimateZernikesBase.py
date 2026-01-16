@@ -159,8 +159,11 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         list
             A list of results from applying the function to the arguments.
         """
-        with mp.Pool(processes=numCores) as pool:
-            results = pool.map(fun, args)
+        if numCores == 1:
+            results = [fun(arg) for arg in args]
+        else:
+            with mp.Pool(processes=numCores) as pool:
+                results = pool.map(fun, args)
 
         return results
 
