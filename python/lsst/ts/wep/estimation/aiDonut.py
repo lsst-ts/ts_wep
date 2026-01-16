@@ -22,6 +22,7 @@
 import numpy as np
 import torch
 
+from astropy.coordinates import Angle
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import getModulePath, makeDense, makeSparse
@@ -134,6 +135,7 @@ class AiDonutAlgorithm(WfAlgorithm):
         self,
         I1: Image,
         I2: Image | None,
+        rtp: Angle | None,
         zkStartI1: np.ndarray,
         zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
@@ -149,6 +151,8 @@ class AiDonutAlgorithm(WfAlgorithm):
             An Image object containing an intra- or extra-focal donut image.
         I2 : Image or None
             A second image, on the opposite side of focus from I1. Can be None.
+        rtp : Angle or None
+            The rotation angle of the camera on the telescope.  Unused here.
         zkStartI1 : np.ndarray
             Starting Zernikes for I1 (unused; exists for compatibility).
         zkStartI2 : np.ndarray or None

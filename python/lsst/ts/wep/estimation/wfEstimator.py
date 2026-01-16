@@ -25,6 +25,7 @@ from typing import Optional, Sequence, Union
 
 import numpy as np
 
+from astropy.coordinates import Angle
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
@@ -272,6 +273,7 @@ class WfEstimator:
         self,
         I1: Image,
         I2: Optional[Image] = None,
+        rtp: Optional[Angle] = None,
     ) -> tuple[np.ndarray, dict]:
         """Estimate Zernike coefficients of the wavefront from the stamp(s).
 
@@ -282,6 +284,8 @@ class WfEstimator:
         I2 : Image, optional
             A second image, on the opposite side of focus from I1.
             (the default is None)
+        rtp : Angle, optional
+            The rotation angle of the camera on the telescope.
 
         Returns
         -------
@@ -299,6 +303,7 @@ class WfEstimator:
         return self.algo.estimateZk(
             I1=I1,
             I2=I2,
+            rtp=rtp,
             nollIndices=self.nollIndices,
             instrument=self.instrument,
             startWithIntrinsic=self.startWithIntrinsic,

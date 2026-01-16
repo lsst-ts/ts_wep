@@ -26,6 +26,7 @@ import warnings
 
 import danish
 import numpy as np
+from astropy.coordinates import Angle
 from galsim import GalSimFFTSizeError
 from scipy.ndimage import binary_erosion
 from scipy.optimize import OptimizeResult, least_squares
@@ -564,6 +565,7 @@ class DanishAlgorithm(WfAlgorithm):
         self,
         I1: Image,
         I2: Image | None,
+        rtp: Angle | None,
         zkStartI1: np.ndarray,
         zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
@@ -578,6 +580,8 @@ class DanishAlgorithm(WfAlgorithm):
             An Image object containing an intra- or extra-focal donut image.
         I2 : Image or None
             A second image, on the opposite side of focus from I1. Can be None.
+        rtp : Angle or None
+            The rotation angle of the camera on the telescope.
         zkStartI1 : np.ndarray
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
@@ -599,6 +603,9 @@ class DanishAlgorithm(WfAlgorithm):
         dict
             Output from the danish algorithm to pass on as metadata.
         """
+        if rtp is not None:
+            rtp = rtp.wrap_at("180d").to_value("degree")
+            self.log.info("Using RTP angle %s deg.", rtp)
         # Create the Danish donut factory
         factory = danish.DonutFactory(
             R_outer=instrument.radius,
@@ -606,6 +613,7 @@ class DanishAlgorithm(WfAlgorithm):
             mask_params=instrument.maskParams,
             focal_length=instrument.focalLength,
             pixel_scale=instrument.pixelSize * self.binning,
+            spider_angle=rtp
         )
 
         if I2 is None or not self.jointFitPair:
