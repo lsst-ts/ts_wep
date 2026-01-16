@@ -29,6 +29,8 @@ from typing import Any, Callable, Iterable
 
 import numpy as np
 
+from astropy.coordinates import Angle
+from lsst.daf.base import PropertyList
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
@@ -41,14 +43,14 @@ from lsst.ts.wep.utils import (
 )
 
 
-def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, Angle, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a pair of donuts."""
-    donutExtra, donutIntra, wfEstimator = args
+    donutExtra, donutIntra, rtp, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(
         "Calculating Zernikes for Extra Donut %s, Intra Donut %s", *(donutExtra.donut_id, donutIntra.donut_id)
     )
-    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im)
+    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, rtp)
     log.info(
         "Zernike estimation completed for Extra Donut %s, Intra Donut %s",
         *(donutExtra.donut_id, donutIntra.donut_id),
@@ -62,12 +64,12 @@ def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, WfEstimator]) -> tuple[
     return zk, zkMeta, wfEstimator.history
 
 
-def estimate_zk_single(args: tuple[DonutStamp, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_single(args: tuple[DonutStamp, Angle, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a single donut."""
-    donut, wfEstimator = args
+    donut, rtp, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info("Calculating Zernikes for Donut %s", donut.donut_id)
-    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im)
+    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, rtp)
     log.info("Zernike estimation completed for Donut %s", donut.donut_id)
     # Log number of function evaluations if available (currently only danish)
     if "lstsq_nfev" in zkMeta:
@@ -168,6 +170,24 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return results
 
+    @staticmethod
+    def _get_rtp(metadata: PropertyList) -> Angle:
+        """Get the camera rotator angle
+
+        Parameters
+        ----------
+        metadata : `lsst.daf.base.PropertyList`
+            Metadata from which to extract the rotator angle.
+
+        Returns
+        -------
+        Angle
+            The rotation angle of the camera on the telescope.
+        """
+        rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
+        q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        return Angle(q - rsp - np.pi/2, "rad")
+
     def estimateFromPairs(
         self,
         donutStampsExtra: DonutStamps,
@@ -201,9 +221,10 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             one for each pair of donuts.
         """
         self.log.info("Estimating paired Zernikes.")
+        rtp = self._get_rtp(donutStampsExtra.metadata)
         # Loop over pairs in a multiprocessing pool
         args = [
-            (donutExtra, donutIntra, wfEstimator)
+            (donutExtra, donutIntra, rtp, wfEstimator)
             for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra)
         ]
         results = self._applyToList(estimate_zk_pair, args, numCores)
@@ -257,8 +278,9 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             one for each donut.
         """
         self.log.info("Estimating single sided Zernikes.")
+        rtp = self._get_rtp(donutStampsExtra.metadata)
         # Loop over individual donut stamps with a process pool
-        args = [(donut, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
+        args = [(donut, rtp, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
         results = self._applyToList(estimate_zk_single, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
