@@ -432,7 +432,13 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Set field radius to max value from mask params
         fieldRadius = np.deg2rad(
-            np.max([edge["thetaMax"] for item in instrument.maskParams.values() for edge in item.values()])
+            np.max(
+                [
+                    edge["thetaMax"]
+                    for key, item in instrument.maskParams.items() if key != "Spider_3D"
+                    for edge in item.values()
+                ]
+            )
         )
 
         # Create model
