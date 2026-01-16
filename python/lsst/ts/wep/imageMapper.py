@@ -752,6 +752,8 @@ class ImageMapper:
 
         # Loop over each mask element
         for item in maskParams:
+            if item == "Spider_3D":
+                continue
             for edge in maskParams[item]:
                 # Get the params for this object
                 params = maskParams[item][edge]
