@@ -32,6 +32,7 @@ import numpy as np
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
+from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
     WfAlgorithmName,
@@ -40,7 +41,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-def estimate_zk_pair(args: tuple[DonutStamps, DonutStamps, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a pair of donuts."""
     donutExtra, donutIntra, wfEstimator = args
     log = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ def estimate_zk_pair(args: tuple[DonutStamps, DonutStamps, WfEstimator]) -> tupl
     return zk, zkMeta, wfEstimator.history
 
 
-def estimate_zk_single(args: tuple[DonutStamps, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_single(args: tuple[DonutStamp, WfEstimator]) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a single donut."""
     donut, wfEstimator = args
     log = logging.getLogger(__name__)
