@@ -24,6 +24,7 @@ __all__ = ["TieAlgorithm"]
 import inspect
 from typing import Iterable
 
+from astropy.coordinates import Angle
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
@@ -666,6 +667,7 @@ class TieAlgorithm(WfAlgorithm):
         self,
         I1: Image,
         I2: Image | None,  # type: ignore[override]
+        rtp: Angle | None,
         zkStartI1: np.ndarray,
         zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
@@ -680,6 +682,8 @@ class TieAlgorithm(WfAlgorithm):
             An Image object containing an intra- or extra-focal donut image.
         I2 : Image or None
             A second image, on the opposite side of focus from I1. Can be None.
+        rtp : Angle or None
+            The rotation angle of the camera on the telescope.  Unused here.
         zkStartI1 : np.ndarray
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
