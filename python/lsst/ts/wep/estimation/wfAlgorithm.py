@@ -26,6 +26,7 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
+from astropy.coordinates import Angle
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.utils import (
     checkNollIndices,
@@ -167,6 +168,7 @@ class WfAlgorithm(ABC):
         self,
         I1: Image,
         I2: Optional[Image],
+        rtp: Optional[Angle],
         zkStartI1: np.ndarray,
         zkStartI2: Optional[np.ndarray],
         nollIndices: np.ndarray,
@@ -213,6 +215,7 @@ class WfAlgorithm(ABC):
         self,
         I1: Image,
         I2: Optional[Image] = None,
+        rtp: Optional[Angle] = None,
         nollIndices: Sequence = tuple(np.arange(4, 23)),
         instrument: Optional[Instrument] = None,
         startWithIntrinsic: bool = True,
@@ -228,6 +231,9 @@ class WfAlgorithm(ABC):
             An Image object containing an intra- or extra-focal donut image.
         I2 : DonutStamp, optional
             A second image, on the opposite side of focus from I1.
+            (the default is None)
+        rtp : Angle, optional
+            The rotation angle of the camera on the telescope.
             (the default is None)
         nollIndices : Sequence, optional
             List, tuple, or array of Noll indices for which you wish to
@@ -252,7 +258,6 @@ class WfAlgorithm(ABC):
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
             (the default is False)
-
         Returns
         -------
         np.ndarray
@@ -311,6 +316,7 @@ class WfAlgorithm(ABC):
         zk, zkMeta = self._estimateZk(
             I1=I1,
             I2=I2,
+            rtp=rtp,
             zkStartI1=zkStartI1,
             zkStartI2=zkStartI2,
             nollIndices=nollIndices,
