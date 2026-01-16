@@ -35,6 +35,7 @@ import os
 import shlex
 import subprocess
 from contextlib import ExitStack
+from numbers import Number
 from typing import TextIO
 
 import astropy.units as u
@@ -419,35 +420,35 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata | dict | str) -> di
         metadata = convertMetadataToHistory(metadata.to_dict())
 
     # If this is a dict...
-    elif isinstance(metadata, dict):
+    if isinstance(metadata, dict):
         # If these are the keys, convert to an array
         if set(metadata.keys()) == {"shape", "dtype", "values"}:
-            _metadata = np.array(
+            return np.array(
                 metadata["values"],
                 dtype=metadata["dtype"],
             ).reshape([int(val) for val in metadata["shape"]])
         # Otherwise, recurse on keys and values
         else:
-            _metadata = {
+            return {
                 convertMetadataToHistory(key): convertMetadataToHistory(val) for key, val in metadata.items()
             }
 
     # Convert "None" strings back to None and numeric strings to floats/ints
-    elif isinstance(metadata, str):
+    if isinstance(metadata, str):
         if metadata == "None":
-            _metadata = None
-        elif "." in metadata:
-            try:
-                _metadata = float(metadata)
-            except:  # noqa: E722
-                pass
+            return None
         else:
             try:
                 _metadata = int(metadata)
-            except:  # noqa: E722
-                pass
+            except ValueError:
+                try:
+                    _metadata = float(metadata)
+                except ValueError:
+                    _metadata = metadata
+            return _metadata
 
-    return _metadata
+    # Not a str or dict, so return as is
+    return metadata
 
 
 def convertDictToVisitInfo(
