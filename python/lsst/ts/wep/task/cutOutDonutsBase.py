@@ -30,6 +30,7 @@ from typing import Any
 
 import astropy.units as u
 import numpy as np
+from astropy.stats import sigma_clip
 from astropy.table import QTable
 from scipy.ndimage import binary_dilation
 from scipy.signal import correlate
@@ -323,9 +324,13 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
             np.array(peakHeight),
         )
 
-    def calculateSN(self, stamp: DonutStamp) -> dict:
+    def calculateSN(self, stamp: "DonutStamp") -> dict:
         """
         Calculate signal-to-noise ratio.
+
+        Uses sigma-clipping to exclude outlier pixels (e.g., unmasked
+        hot pixels) from the signal calculation to prevent artificially
+        inflated SNR values from single bright pixels.
 
         Parameters
         ----------
@@ -335,7 +340,15 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         Returns
         -------
         dict
-             A dictionary of calculated quantities
+             A dictionary of calculated quantities including both raw and
+             sigma-clipped SNR values.
+
+        Notes
+        -----
+        Hot pixels that are not flagged in the mask can cause artificially
+        high SNR values. This method uses 5-sigma clipping on the donut
+        pixels to mitigate this issue. The clipped SNR (`SN_clipped`)
+        should be preferred for quality filtering.
         """
 
         imageArray = stamp.stamp_im.image.array
@@ -383,14 +396,35 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
 
         donutMask = hasDonut & notBlend & notSat & notCr
         # Number of pixels taken by the donut in the original donut mask
-        nPxMask = np.sum(donutMask)
+        nPxMaskOriginal = np.sum(donutMask)
+
+        # Apply sigma-clipping to exclude outlier pixels
+        # (e.g., unmasked hot pixels). This prevents single bright
+        # pixels from artificially inflating the SNR.
+        donutPixels = imageArray[donutMask]
+        clipped = sigma_clip(donutPixels, sigma=5, maxiters=3, masked=True)
+
+        # Count of good (non-clipped) pixels
+        nPxClipped = int(np.sum(clipped.mask))  # number of rejected pixels
+        nPxMask = int(np.sum(~clipped.mask))  # number of good pixels
+
+        # Log warning if pixels were clipped (likely hot pixels)
+        if nPxClipped > 0:
+            self.log.debug(f"Sigma-clipping removed {nPxClipped} outlier pixel(s) from SNR calculation")
+
+        # Get good (non-clipped) pixels for signal calculation
+        goodPixels = clipped.compressed()
 
         # Signal estimate based on the donut mean
-        signalMean = imageArray[donutMask].mean()  # per pixel
+        signalMean = goodPixels.mean() if len(goodPixels) > 0 else 0.0
         ttlSignalMean = nPxMask * signalMean
 
         # Signal estimate based on the sum of donut pixels
+        # Keep original (unclipped) for backwards compatibility
         ttlSignalSum = np.sum(imageArray[donutMask])
+
+        # Clipped signal sum (robust to hot pixels)
+        ttlSignalSumClipped = np.sum(goodPixels)
 
         # Background noise estimate:
         # expand the inverted mask to remove donut contribution
@@ -406,8 +440,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         while (~xsection[0]) and (self.bkgDilationIter > 1):
             self.bkgDilationIter -= 1
             self.log.warning(
-                f"Binary dilation of donut mask reached the edge of the image; \
-reducing the amount of donut mask dilation to {self.bkgDilationIter}"
+                f"Binary dilation of donut mask reached the edge of the "
+                f"image; reducing the amount of donut mask dilation to "
+                f"{self.bkgDilationIter}"
             )
             bkgndMask = ~binary_dilation(donutMask, iterations=self.bkgDilationIter)
             xsection = bkgndMask[:, width // 2]
@@ -426,40 +461,63 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # outside of the dilated donut mask
         backgroundImageVariance = imageArray[bkgndMask].var()
 
-        # The mean image value  in the background region
+        # The mean image value in the background region
         backgroundImageMean = np.mean(imageArray[bkgndMask])
 
         # Total noise based on the variance of the image background
         ttlNoiseBkgndVariance = np.sqrt(backgroundImageVariance * nPxMask)
 
-        # Noise based on the sum of variance plane pixels inside the donut mask
-        ttlNoiseDonutVariance = np.sqrt(varianceArray[donutMask].sum())
+        # Noise based on the sum of variance plane pixels inside the
+        # donut mask, excluding the same outlier pixels that were
+        # sigma-clipped from the signal.
+        # Map the clipped mask back to the original array indices.
+        donutIndices = np.where(donutMask)
+        goodPixelMask = ~clipped.mask
+        goodDonutMask = np.zeros_like(donutMask)
+        goodDonutMask[donutIndices[0][goodPixelMask], donutIndices[1][goodPixelMask]] = True
+
+        ttlNoiseDonutVariance = np.sqrt(varianceArray[goodDonutMask].sum())
+
+        # Also compute noise using original mask for backwards compatibility
+        ttlNoiseDonutVarianceOriginal = np.sqrt(varianceArray[donutMask].sum())
 
         # Avoid zero division in case variance plane doesn't exist
-        if ttlNoiseDonutVariance > 0:
-            sn = ttlSignalSum / ttlNoiseDonutVariance
-        # Legacy behavior: if variance plance was not calculated,
+        if ttlNoiseDonutVarianceOriginal > 0:
+            sn = ttlSignalSum / ttlNoiseDonutVarianceOriginal
+        # Legacy behavior: if variance plane was not calculated,
         # use the image background variance
         else:
             sn = ttlSignalSum / ttlNoiseBkgndVariance
             # Only warn about missing variance plane once per task
             if self.varianceWarningSet is False:
                 self.log.warning(
-                    "Missing variance plane; \
-    using the variance of image background for noise estimate."
+                    "Missing variance plane; using the variance of image background for noise estimate."
                 )
                 self.varianceWarningSet = True
+
+        # Calculate clipped SNR (robust to hot pixels)
+        # This is the preferred value for quality filtering
+        if ttlNoiseDonutVariance > 0:
+            snClipped = ttlSignalSumClipped / ttlNoiseDonutVariance
+        else:
+            snClipped = ttlSignalSumClipped / ttlNoiseBkgndVariance
+
         snDict = {
+            # New clipped values (preferred for quality filtering)
+            "SN_clipped": snClipped,
+            "signal_sum_clipped": ttlSignalSumClipped,
+            "n_px_clipped": nPxClipped,
+            # Original values (kept for backwards compatibility)
             "SN": sn,
             "signal_mean": ttlSignalMean,
             "signal_sum": ttlSignalSum,
-            "n_px_mask": nPxMask,
+            "n_px_mask": nPxMaskOriginal,
             "background_image_stdev": backgroundImageStdev,
             "sqrt_mean_variance": sqrtMeanVariance,
             "background_image_variance": backgroundImageVariance,
             "background_image_mean": backgroundImageMean,
             "ttl_noise_bkgnd_variance": ttlNoiseBkgndVariance,
-            "ttl_noise_donut_variance": ttlNoiseDonutVariance,
+            "ttl_noise_donut_variance": ttlNoiseDonutVarianceOriginal,
         }
 
         return snDict
@@ -824,6 +882,17 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         stampsMetadata["NPX_MASK"] = np.array(
             [snQuant[i]["n_px_mask"] for i in range(len(snQuant))], dtype=float
         )
+
+        stampsMetadata["SN_CLIPPED"] = np.array(
+            [snQuant[i]["SN_clipped"] for i in range(len(snQuant))], dtype=float
+        )
+        stampsMetadata["SIGNAL_SUM_CLIPPED"] = np.array(
+            [snQuant[i]["signal_sum_clipped"] for i in range(len(snQuant))], dtype=float
+        )
+        stampsMetadata["NPX_CLIPPED"] = np.array(
+            [snQuant[i]["n_px_clipped"] for i in range(len(snQuant))], dtype=int
+        )
+
         stampsMetadata["BKGD_STDEV"] = np.array(
             [snQuant[i]["background_image_stdev"] for i in range(len(snQuant))],
             dtype=float,
