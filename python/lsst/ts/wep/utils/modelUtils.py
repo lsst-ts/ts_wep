@@ -167,8 +167,14 @@ def forwardModelPair(
     skyLevel = _skyLevel if skyLevel is None else skyLevel
 
     # Sample random field angles?
-    _maxAngle = np.max(
-        [params["thetaMax"] for edge in mapper.instrument.maskParams.values() for params in edge.values()]
+    _maxAngle = np.deg2rad(
+        np.max(
+            [
+                edge["thetaMax"]
+                for key, item in mapper.instrument.maskParams.items() if key != "Spider_3D"
+                for edge in item.values()
+            ]
+        )
     )
     _fieldAngleRadius = rng.uniform(0, _maxAngle)
     _fieldAngleAzimuth = rng.uniform(0, 2 * np.pi)
