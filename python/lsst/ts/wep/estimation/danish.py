@@ -59,6 +59,9 @@ class DanishAlgorithm(WfAlgorithm):
     modelSpiderShadows: bool = False,
         Whether to include the spider shadows or not in the danish forward
         model.
+    bkgOrder: int = 0,
+        The order of the background polynomial to fit. A value of -1 means
+        no background fitting, a value of 0 is a constant background, etc.
     """
 
     def __init__(
@@ -67,11 +70,13 @@ class DanishAlgorithm(WfAlgorithm):
         binning: int = 1,
         jointFitPair: bool = True,
         modelSpiderShadows: bool = False,
+        bkgOrder: int = 0,
     ) -> None:
         self.binning = binning
         self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
         self.jointFitPair = jointFitPair
         self.modelSpiderShadows = modelSpiderShadows
+        self.bkgOrder = bkgOrder
         self.log = logging.getLogger(__name__)
 
     @property
@@ -278,10 +283,12 @@ class DanishAlgorithm(WfAlgorithm):
             thx=angle[0],
             thy=angle[1],
             npix=img.shape[0],
+            bkg_order=self.bkgOrder,
         )
 
         # Create the initial guess for the model parameters
-        x0 = [0.0, 0.0, 1.0] + [0.0] * len(nollIndices)
+        x0 = [np.sum(img), 0.0, 0.0, 1.0] + [0.0] * len(nollIndices)
+        x0 += [0.0] * model.nbkg
 
         self.log.info("Starting least squares optimization.")
         opt_result_keys = ["nit", "nfev", "cost"]
@@ -305,8 +312,13 @@ class DanishAlgorithm(WfAlgorithm):
             result = dict(result)
 
             # Unpack the parameters
-            dx, dy, fwhm, *zkFit = result["x"]
-            zkFit = np.array(zkFit)
+            params = model.unpack_params(result["x"])
+            flux = params["flux"]
+            dx = params["dx"]
+            dy = params["dy"]
+            fwhm = params["fwhm"]
+            bkg = params["bkg"]
+            zkFit = np.array(params["z_fit"])
 
             # Add the starting zernikes back into the result
             zkSum = zkFit + zkStart
@@ -316,22 +328,19 @@ class DanishAlgorithm(WfAlgorithm):
 
             # If we're saving the history, compute the model image
             if saveHistory:
-                modelImage = model.model(
-                    dx,
-                    dy,
-                    fwhm,
-                    zkFit,
-                    sky_level=backgroundStd**2,
-                    flux=img.sum(),
-                )
+                modelImage = model.model(**params)
 
         # Sometimes this happens with Danish :(
         except GalSimFFTSizeError:
             # Fill dummy objects
-            result = None
+            result = {}
             zkFit = np.full_like(zkStart, np.nan)
             zkSum = np.full_like(zkStart, np.nan)
             fwhm = np.nan
+            dx = np.nan
+            dy = np.nan
+            flux = np.nan
+            bkg = ()
             if saveHistory:
                 modelImage = np.full_like(img, np.nan)
 
@@ -360,7 +369,8 @@ class DanishAlgorithm(WfAlgorithm):
             "fwhm": fwhm,
             "model_dx": dx,
             "model_dy": dy,
-            "model_sky_level": backgroundStd**2,
+            "model_flux": flux,
+            "model_bkg": bkg,
         }
 
         # Save scalar metadata from least_squares
@@ -449,7 +459,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Create model
         self.log.info("Creating multi-donut model with danish.")
-        model = danish.MultiDonutModel(
+        model = danish.DZMultiDonutModel(
             factory,
             z_refs=zkRefs,
             dz_terms=dzTerms,
@@ -457,15 +467,17 @@ class DanishAlgorithm(WfAlgorithm):
             thxs=thxs,
             thys=thys,
             npix=imgs[0].shape[0],
+            bkg_order=self.bkgOrder
         )
 
         # Initial guess
-        x0 = [0.0] * 2 + [0.0] * 2 + [0.7] + [0.0] * len(dzTerms)
+        x0 = [np.sum(img) for img in imgs] + [0.0] * 2 + [0.0] * 2 + [1.0] + [0.0] * len(dzTerms)
+        x0 += [0.0] * model.nbkg * 2
 
-        # FWHM is the 4th (counting from 0) fit variable
+        # FWHM is the 6th (counting from 0) fit variable
         # set bounds between 0.1 and 5.0 arcsec.
-        bounds = [[-np.inf, np.inf]] * (5 + len(dzTerms))
-        bounds[4] = [0.1, 5.0]
+        bounds = [[-np.inf, np.inf]] * len(x0)
+        bounds[6] = [0.1, 5.0]
         bounds = [list(b) for b in zip(*bounds)]
 
         self.log.info("Starting least squares optimization.")
@@ -491,7 +503,13 @@ class DanishAlgorithm(WfAlgorithm):
             result = dict(result)
 
             # Unpack the parameters
-            dxs, dys, fwhm, zkFit = model.unpack_params(result["x"])
+            params = model.unpack_params(result["x"])
+            fluxes = params["fluxes"]
+            dxs = params["dxs"]
+            dys = params["dys"]
+            fwhm = params["fwhm"]
+            bkgs = params["bkgs"]
+            zkFit = params["wavefront_params"]
 
             # Add the starting zernikes back into the result
             zkSum = zkFit + np.nanmean([zkStartI1, zkStartI2], axis=0)
@@ -501,19 +519,17 @@ class DanishAlgorithm(WfAlgorithm):
 
             # If we're saving the history, compute the model image
             if saveHistory:
-                modelImages = model.model(
-                    dxs,
-                    dys,
-                    fwhm,
-                    zkFit,
-                    sky_levels=skyLevels,
-                    fluxes=np.sum(imgs, axis=(1, 2)),
-                )
+                modelImages = model.model(**params)
 
         # Sometimes this happens with Danish :(
         except GalSimFFTSizeError:
             # Fill dummy objects
             result = None
+            fwhm = np.nan
+            dxs = (np.nan, np.nan)
+            dys = (np.nan, np.nan)
+            fluxes = (np.nan, np.nan)
+            bkgs = ((), ())
             zkFit = np.full_like(zkStartI1, np.nan)
             zkSum = np.full_like(zkStartI1, np.nan)
             if saveHistory:
@@ -557,7 +573,8 @@ class DanishAlgorithm(WfAlgorithm):
             "fwhm": fwhm,
             "model_dx": dxs,
             "model_dy": dys,
-            "model_sky_level": skyLevels,
+            "model_flux": fluxes,
+            "model_bkg": bkgs,
         }
 
         # Save scalar metadata from least_squares
