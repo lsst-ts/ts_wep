@@ -26,6 +26,7 @@ from astropy.table import vstack
 
 import lsst.geom
 from lsst.daf.butler import Butler
+from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
@@ -73,14 +74,27 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         self.assertEqual(self.task.config.anyFilterMapsToThis, "phot_g_mean")
         self.assertEqual(self.task.config.edgeMargin, 100)
 
-    def testAnyFilterMapsToThis(self) -> None:
-        self.config.anyFilterMapsToThis = "r"
-        self.task = GenerateDonutCatalogWcsTask(config=self.config)
+    def testConfigCatalogFilterListErr(self) -> None:
+        self.config.catalogFilterList = ["lsst_u"]
+        task = GenerateDonutCatalogWcsTask(config=self.config)
 
-        refCatList = self._getRefCat()
-        refObjLoader = self.task.getRefObjLoader(refCatList)
+        # Test that requesting a filter in the donut catalog
+        # that isn't in the reference catalog raises an error
+        errMsg = str(
+            "Filter(s) {'lsst_u'} not in available columns in "
+            "reference catalog. Check catalogFilterList config "
+            "(currently set as ['lsst_u']). "
+            "Available ref catalog filters are ['g']."
+        )
 
-        self.assertEqual(refObjLoader.config.anyFilterMapsToThis, "r")
+        exposure = self.butler.get(
+            "raw",
+            collections=["LSSTCam/raw/all"],
+            dataId={"exposure": 4021123106001, "instrument": "LSSTCam", "detector": 94},
+        )
+        with self.assertRaises(TaskError) as context:
+            task.run(self._getRefCat(), exposure)
+        self.assertEqual(str(context.exception), errMsg)
 
     def testGetRefObjLoader(self) -> None:
         refCatList = self._getRefCat()
