@@ -69,7 +69,7 @@ def estimate_zk_single(args: tuple[DonutStamp, Angle, WfEstimator]) -> tuple[np.
     donut, rtp, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info("Calculating Zernikes for Donut %s", donut.donut_id)
-    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, rtp)
+    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, rtp)
     log.info("Zernike estimation completed for Donut %s", donut.donut_id)
     # Log number of function evaluations if available (currently only danish)
     if "lstsq_nfev" in zkMeta:
@@ -171,21 +171,27 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         return results
 
     @staticmethod
-    def _get_rtp(metadata: PropertyList) -> Angle:
+    def _get_rtp(donutStamps):
         """Get the camera rotator angle
 
         Parameters
         ----------
-        metadata : `lsst.daf.base.PropertyList`
-            Metadata from which to extract the rotator angle.
+        donutStamps : DonutStamps
+            Donut postage stamps holding rotator metadata.
 
         Returns
         -------
         Angle
             The rotation angle of the camera on the telescope.
         """
-        rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
-        q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        if not donutStamps:
+            return Angle(np.nan, "rad")
+        metadata = donutStamps.metadata
+        try:
+            rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
+            q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
+        except KeyError:
+            return Angle(np.nan, "rad")
         return Angle(q - rsp - np.pi/2, "rad")
 
     def estimateFromPairs(
@@ -221,7 +227,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             one for each pair of donuts.
         """
         self.log.info("Estimating paired Zernikes.")
-        rtp = self._get_rtp(donutStampsExtra.metadata)
+        rtp = self._get_rtp(donutStampsExtra)
         # Loop over pairs in a multiprocessing pool
         args = [
             (donutExtra, donutIntra, rtp, wfEstimator)
@@ -278,7 +284,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             one for each donut.
         """
         self.log.info("Estimating single sided Zernikes.")
-        rtp = self._get_rtp(donutStampsExtra.metadata)
+        rtp = self._get_rtp(donutStampsExtra)
         # Loop over individual donut stamps with a process pool
         args = [(donut, rtp, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
         results = self._applyToList(estimate_zk_single, args, numCores)
