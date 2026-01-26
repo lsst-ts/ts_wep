@@ -15,6 +15,7 @@ from .estimateZernikesBase import *
 from .estimateZernikesAiDonutTask import *
 from .estimateZernikesDanishTask import *
 from .estimateZernikesTieTask import *
+from .genDonutCatWcsDirectBackupTask import *
 from .generateDonutCatalogOnlineTask import *
 from .generateDonutCatalogUtils import *
 from .generateDonutCatalogWcsTask import *
