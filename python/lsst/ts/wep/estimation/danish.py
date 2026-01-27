@@ -361,6 +361,13 @@ class DanishAlgorithm(WfAlgorithm):
         for key in ["cost", "optimality", "nfev", "njev", "status", "success"]:
             zkMeta[f"lstsq_{key}"] = result.get(key, None)
 
+        # If least_squares failed, mark fit as unsuccessful
+        # This includes reaching the maximum number of function evaluations
+        if zkMeta["lstsq_success"] <= 0:
+            zkMeta["fit_success"] = False
+        else:
+            zkMeta["fit_success"] = True
+
         return zkSum, hist, zkMeta
 
     def _estimatePairZk(
@@ -551,6 +558,13 @@ class DanishAlgorithm(WfAlgorithm):
         # Save scalar metadata from least_squares
         for key in ["cost", "optimality", "nfev", "njev", "status", "success"]:
             zkMeta[f"lstsq_{key}"] = result.get(key, None)
+
+        # If least_squares failed, mark fit as unsuccessful
+        # This includes reaching the maximum number of function evaluations
+        if zkMeta["lstsq_success"] <= 0:
+            zkMeta["fit_success"] = False
+        else:
+            zkMeta["fit_success"] = True
 
         return zkSum, hist, zkMeta
 

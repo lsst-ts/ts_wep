@@ -593,6 +593,15 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
+        # If we have a fit failure recorded then replace Zernikes
+        # with NaNs for those donuts so we don't use them in combining.
+        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
+            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
+            failIdx = np.where(~np.array(fitSuccess))[0]
+            for j in self.nollIndices:
+                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
+                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan  # +1 to skip average row
+
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
 
