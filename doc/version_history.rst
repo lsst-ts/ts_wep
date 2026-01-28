@@ -17,6 +17,34 @@ Version History
 
 .. towncrier release notes start
 
+v16.6.0 (2026-01-28)
+====================
+
+New Features
+------------
+
+- Add fit failure metadata for danish. Look for fit failures in the estimate Zernikes methods and reject those donuts from the averaging if found. (`DM-53906 <https://rubinobs.atlassian.net//browse/DM-53906>`_)
+
+
+Bug Fixes
+---------
+
+- Add doCentroidErrorLimit=False to refitWcs defaults to get catalogs to pass through initial filtering in astrometry source selection. (`DM-53585 <https://rubinobs.atlassian.net//browse/DM-53585>`_)
+- Changed donutQuickMeasurementTask to use fft for correlation in scipy.signal.correlate. Added logging to generateDonutDirectTask and donutQuickMeasurementTask. (`DM-53827 <https://rubinobs.atlassian.net//browse/DM-53827>`_)
+
+
+Documentation
+-------------
+
+- Add additional logging statements in routines related to Zernike estimation including output from inside scipy.optimize.least_squares. (`DM-53756 <https://rubinobs.atlassian.net//browse/DM-53756>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Add donut_id generated during the creation of donut table. (`DM-52459 <https://rubinobs.atlassian.net//browse/DM-52459>`_)
+
+
 v16.5.0 (2025-12-16)
 ====================
 
