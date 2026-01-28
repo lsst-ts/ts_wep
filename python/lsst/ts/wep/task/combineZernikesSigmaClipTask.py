@@ -107,7 +107,7 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         numRejected = len(sigArray)
         effMaxZernClip = self.maxZernClip + 1
 
-        while numRejected == len(sigArray):
+        while numRejected == len(sigArray) and effMaxZernClip > 1:
             effMaxZernClip -= 1
             binaryFlagArray = np.any(np.isnan(sigArray[:, :effMaxZernClip]), axis=1).astype(int)
             numRejected = np.sum(binaryFlagArray)

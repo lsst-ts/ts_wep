@@ -353,3 +353,20 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
                 intrinsicTableVignetted["Z4"].to("um").value[0],
             )
             self.assertIsInstance(intrinsicMapVignetted, LinearNDInterpolator)
+
+    def testFitFailureWithMaxIterations(self) -> None:
+        # Set max iterations very low to force fit failures
+        self.config.estimateZernikes.lstsqKwargs["max_nfev"] = 1
+        self.task = CalcZernikesTask(config=self.config, name="Base Task")
+
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
+
+        # Check that all donuts were marked as NOT successfully fit
+        fit_success = zkCalc.meta["estimatorInfo"]["fit_success"]
+        for success in fit_success:
+            self.assertFalse(success)
+
+        # Check that the used column in the table is all False except for average row
+        for i in range(1, len(zkCalc)):
+            self.assertFalse(zkCalc["used"][i])
+        self.assertTrue(zkCalc["used"][0])  # Average row should still be True

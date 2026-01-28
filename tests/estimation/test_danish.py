@@ -153,6 +153,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                     "lstsq_njev",
                     "lstsq_status",
                     "lstsq_success",
+                    "fit_success",
                 ],
                 list(metaDict.keys()),
             )
