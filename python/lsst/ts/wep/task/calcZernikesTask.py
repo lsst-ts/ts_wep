@@ -299,6 +299,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("extra_frac_bad_pix", "<f4"),
             ("intra_max_power_grad", "<f4"),
             ("extra_max_power_grad", "<f4"),
+            ("intra_donut_id", "<U21"),
+            ("extra_donut_id", "<U21"),
         ]
         for j in self.nollIndices:
             dtype.append((f"Z{j}", "<f4"))
@@ -362,6 +364,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_frac_bad_pix": np.nan,
                 "intra_max_power_grad": np.nan,
                 "extra_max_power_grad": np.nan,
+                "intra_donut_id": "",
+                "extra_donut_id": "",
             }
         )
         for i, (intra, extra, zk) in enumerate(
@@ -400,7 +404,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             row["extra_field"] = extraAngle
             row["intra_centroid"] = intraCentroid
             row["extra_centroid"] = extraCentroid
-            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "DONUT_ID"]:
                 for stamps, foc in [
                     (self.stampsIntra, "intra"),
                     (self.stampsExtra, "extra"),
@@ -408,7 +412,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                     if len(stamps) > 0 and key in stamps.metadata:
                         val = stamps.metadata.getArray(key)[i]
                     else:
-                        val = np.nan
+                        val = "" if key == "DONUT_ID" else np.nan
                     row[f"{foc}_{key.lower()}"] = val
             zkTable.add_row(row)
 
@@ -493,6 +497,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             "RADIUS",
             "RADIUS_FAIL_FLAG",
             "DEFOCAL_TYPE",
+            "DONUT_ID",
         ]
         if qualityTable is None:
             donutQualityTable = QTable({name: [] for name in qualityTableCols})
@@ -570,6 +575,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsIntra = selectedIntraStamps
 
         # Set the intrinsic map interpolators
+        self.log.info("Creating intrinsic map.")
         if self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
             # If both intra and extra focal donuts are from the same detector,
             # then we only have one intrinsic table to use for both.
@@ -580,11 +586,21 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTables[1])
 
         # Estimate Zernikes from the collection of selected stamps
+        self.log.info("Starting Zernike Estimation")
         zkCoeffRaw = self.estimateZernikes.run(self.stampsExtra, self.stampsIntra, numCores=numCores)
 
         # Save the outputs in the table
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
+
+        # If we have a fit failure recorded then replace Zernikes
+        # with NaNs for those donuts so we don't use them in combining.
+        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
+            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
+            failIdx = np.where(~np.array(fitSuccess))[0]
+            for j in self.nollIndices:
+                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
+                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan  # +1 to skip average row
 
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable

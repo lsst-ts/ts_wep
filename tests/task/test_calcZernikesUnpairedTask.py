@@ -222,6 +222,8 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "extra_frac_bad_pix",
                     "intra_max_power_grad",
                     "extra_max_power_grad",
+                    "intra_donut_id",
+                    "extra_donut_id",
                 ]
                 self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
 
@@ -260,6 +262,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     "FINAL_SELECT",
                     "DEFOCAL_TYPE",
                     "RADIUS",
+                    "DONUT_ID",
                 ]
                 np.testing.assert_array_equal(np.sort(colnames), np.sort(desired_colnames))
 

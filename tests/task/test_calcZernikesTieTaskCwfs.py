@@ -264,6 +264,10 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         # Increase length of extra list
         stampsExtra.extend([stampsExtra[0]])
 
+        # Refresh metadata ensures arrays
+        # are same length as new donut stamp list
+        stampsExtra._refresh_metadata()
+
         # Now estimate Zernikes
         self.task.run(stampsExtra, stampsIntra, self.intrinsicTables)
 

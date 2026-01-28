@@ -367,3 +367,20 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         self.assertTrue(isinstance(catTableWithMeta.meta["visit_info"], dict))
         # Test columns are all present
         self.assertCountEqual(visitInfoKeys, catTableWithMeta.meta["visit_info"].keys())
+
+        # Test that donut_id column is present
+        self.assertIn("donut_id", catTableWithMeta.colnames)
+
+        # Test that donut_id has correct length
+        self.assertEqual(len(catTableWithMeta["donut_id"]), len(fieldObjects))
+
+        # Test that donut_id has correct format: {visit}_{detId:03d}_{idx:03d}
+        visit = testExposure.visitInfo.id
+        detId = testExposure.detector.getId()
+
+        for idx, donut_id in enumerate(catTableWithMeta["donut_id"]):
+            expected_id = f"{visit}_{str(detId).zfill(3)}_{str(idx).zfill(3)}"
+            self.assertEqual(donut_id, expected_id)
+
+        # Test that all donut_ids are unique
+        self.assertEqual(len(set(catTableWithMeta["donut_id"])), len(catTableWithMeta))

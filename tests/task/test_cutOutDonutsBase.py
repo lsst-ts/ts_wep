@@ -25,6 +25,7 @@ import numpy as np
 from astropy.table import QTable
 from scipy.signal import correlate
 
+import lsst.geom
 import lsst.utils.tests
 from lsst.afw import image as afwImage
 from lsst.daf.base import PropertySet
@@ -434,6 +435,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "BORESIGHT_RA_RAD",
             "BORESIGHT_DEC_RAD",
             "BANDPASS",
+            "DONUT_ID",
         ]
         self.assertCountEqual(metadata, expectedMetadata)
 

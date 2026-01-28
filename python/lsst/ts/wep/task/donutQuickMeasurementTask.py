@@ -119,19 +119,23 @@ class DonutQuickMeasurementTask(QuickFrameMeasurementTask):
         # subtracting the median from the image.
         # We will add it back later to return the
         # image to its original state when the task is done.
+        self.log.info(f"Subtracting median background level: {median}")
         exp.image -= median
         expImageCopy = copy(exp.image.array)
         if self.config.doPreConvolution:
+            self.log.info("Pre-convolving image with donut template")
             if template is None:
                 errMsg = str(
                     "Template required if doPreConvolution " + "configuration parameter is set to True."
                 )
                 raise ValueError(errMsg)
             exp.image.array = np.array(
-                correlate(exp.image.array, template, mode="same"),
+                correlate(exp.image.array, template, mode="same", method="fft"),
                 dtype=exp.image.array.dtype,
             )
+        self.log.info("Installing PSF for exposure")
         self.installPsf.run(exp)
+        self.log.info("Detecting objects in exposure")
         sources = self.detectObjectsInExp(
             exp,
             nSigma=self.config.nSigmaDetection,

@@ -211,6 +211,12 @@ class DonutStampSelectorTask(pipeBase.Task):
         # initiate these by selecting all donuts
         entropySelect = np.ones(len(donutStamps), dtype="bool")
 
+        # Collect donut id values
+        if "DONUT_ID" in list(donutStamps.metadata):
+            donutId = donutStamps.metadata.getArray("DONUT_ID")
+        else:
+            donutId = np.zeros(len(donutStamps), dtype="str")
+
         # Collect the entropy information if available
         entropyValue = np.full(len(donutStamps), np.nan)
         if "ENTROPY" in list(donutStamps.metadata):
@@ -320,6 +326,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 maxPowerGradSelect,
                 donutRadii,
                 selected,
+                donutId,
             ],
             names=[
                 "SN",
@@ -332,6 +339,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "MAX_POWER_GRAD_SELECT",
                 "RADIUS",
                 "FINAL_SELECT",
+                "DONUT_ID",
             ],
         )
         # Add all configuration used for selection criteria as metadata;
