@@ -363,10 +363,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        if zkMeta["lstsq_success"] <= 0:
-            zkMeta["fit_success"] = False
-        else:
-            zkMeta["fit_success"] = True
+        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
 
         return zkSum, hist, zkMeta
 
@@ -561,10 +558,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        if zkMeta["lstsq_success"] <= 0:
-            zkMeta["fit_success"] = False
-        else:
-            zkMeta["fit_success"] = True
+        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
 
         return zkSum, hist, zkMeta
 
