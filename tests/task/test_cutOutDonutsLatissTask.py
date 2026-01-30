@@ -39,6 +39,7 @@ from lsst.ts.wep.utils import (
     writePipetaskCmd,
 )
 
+
 @pytest.mark.skip
 @pytest.mark.skipif(
     os.path.exists("/sdf/data/rubin/repo/main") is False,
