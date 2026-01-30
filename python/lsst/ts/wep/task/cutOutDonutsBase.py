@@ -352,7 +352,7 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         #                               ││└─ bit 0 (BAD)
         #                               │└── bit 13 (DONUT) ✓ SET
         #                               └─── bit 16 (PARTLY_VIGNETTED) ✓ SET
-        ## The Bitwise AND Operation (`&`)
+        # The Bitwise AND Operation (`&`)
         # If `donutPlaneBit` is `2^13 = 8192`, which in binary is:
         #    ```
         #    8192 in binary: 10000000000000

@@ -35,7 +35,6 @@ import os
 import shlex
 import subprocess
 from contextlib import ExitStack
-from numbers import Number
 from typing import TextIO
 
 import astropy.units as u

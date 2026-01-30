@@ -30,7 +30,6 @@ from typing import Any, Callable, Iterable
 import numpy as np
 
 from astropy.coordinates import Angle
-from lsst.daf.base import PropertyList
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
