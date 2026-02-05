@@ -584,7 +584,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if not intrinsicTables:
             self.intrinsicMapExtra = None
             self.intrinsicMapIntra = None
-        if self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
+        elif self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
             # If both intra and extra focal donuts are from the same detector,
             # then we only have one intrinsic table to use for both.
             self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTables[0])
