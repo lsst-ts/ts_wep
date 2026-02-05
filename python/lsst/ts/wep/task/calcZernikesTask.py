@@ -31,6 +31,7 @@ from typing import Any, cast
 
 import astropy.units as u
 import numpy as np
+from astropy.stats import sigma_clip
 from astropy.table import QTable, Table, vstack
 from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
@@ -43,6 +44,7 @@ from lsst.pipe.base import (
     QuantumContext,
     connectionTypes,
 )
+from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamp, DonutStamps
 from lsst.ts.wep.task.donutStampSelectorTask import DonutStampSelectorTask
@@ -158,6 +160,9 @@ class CalcZernikesTaskConfig(
         dtype=bool,
         default=True,
     )
+    doBlurClip: pexConfig.Field = pexConfig.Field(
+        doc="Remove donuts with outlier donut blur fwhm from" + "final averages.", dtype=bool, default=True
+    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
@@ -187,6 +192,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.makeSubtask("donutStampSelector")
 
         self.doDonutStampSelector = config.doDonutStampSelector
+        self.doBlurClip = config.doBlurClip
 
         # Initialize the donut stamps to empty placeholders
         self.stampsExtra = DonutStamps([])
@@ -517,6 +523,35 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             donutQualityTable=donutQualityTable,
         )
 
+    def blurClip(self, zkTable: QTable) -> QTable:
+        """
+        Look at the donut blur values returned for all values in a sensor and
+        use sigma clipping to remove donuts that are outliers.
+
+        Parameters
+        ----------
+        zkTable : astropy.table.QTable
+            Zernike table.
+
+        Returns
+        -------
+        astropy.table.QTable
+            Zernike table where donuts with outlier donut blur values
+            have been changed to false and the average recomputed.
+        """
+
+        useIdx = np.where((zkTable["used"]) & (zkTable["label"] != "average"))[0]
+        # account for average row with "- 1" on index below
+        fwhmList = np.array(zkTable.meta["estimatorInfo"]["fwhm"])[useIdx - 1]
+        blurMask = sigma_clip(fwhmList, stdfunc="mad_std", sigma_lower=99).mask
+        dropIdx = useIdx[np.where(blurMask)[0]]
+        zkTable["used"][dropIdx] = False
+        zkTable.meta["estimatorInfo"]["blur_clipped"] = np.isin(np.arange(1, len(zkTable)), dropIdx).tolist()
+        # Calculate the average correctly
+        combineZernikesMean = CombineZernikesMeanTask().combineZernikes(zkTable)
+
+        return combineZernikesMean
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
@@ -600,10 +635,14 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             failIdx = np.where(~np.array(fitSuccess))[0]
             for j in self.nollIndices:
                 zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
-                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan  # +1 to skip average row
+                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
 
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
+
+        # Implement Blur Clip
+        if self.doBlurClip and ("fwhm" in zkTable.meta["estimatorInfo"].keys()):
+            zkTable = self.blurClip(zkTable)
 
         avg = zkTable[zkTable["label"] == "average"]
         outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
