@@ -76,6 +76,7 @@ class CalcZernikesTaskConnections(
         storageClass="ArrowAstropy",
         name="intrinsic_aberrations_temp",
         multiple=True,
+        minimum=0,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -119,7 +120,8 @@ class CalcZernikesTaskConnections(
                 )
 
                 intra_inputs = adjuster.get_inputs(intra_focal_data_id)
-                adjuster.add_input(data_id, "intrinsicTables", intra_inputs["intrinsicTables"][0])
+                if "intrinsicTables" in intra_inputs and intra_inputs["intrinsicTables"]:
+                    adjuster.add_input(data_id, "intrinsicTables", intra_inputs["intrinsicTables"][0])
             elif data_id["detector"] in intra_focal_ids:
                 seen.add(data_id)
 
@@ -270,7 +272,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             # swap x and y), however stamp.calcFieldXY() returns coordinates
             # in the DVCS instead of CCS, which is equivalent to already
             # swapping x and y. Therefore we will not reverse the order here.
-            intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron  # type: ignore
+            if intrinsicMap is None:
+                intrinsics = np.zeros(len(self.nollIndices)) * u.micron
+            else:
+                intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron  # type: ignore
 
         return fieldAngle, centroid, intrinsics
 
@@ -576,7 +581,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         # Set the intrinsic map interpolators
         self.log.info("Creating intrinsic map.")
-        if self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
+        if not intrinsicTables:
+            self.intrinsicMapExtra = None
+            self.intrinsicMapIntra = None
+        elif self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
             # If both intra and extra focal donuts are from the same detector,
             # then we only have one intrinsic table to use for both.
             self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTables[0])

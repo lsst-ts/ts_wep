@@ -331,7 +331,18 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("intrinsic_columns", zkCalcPairs.meta)
         self.assertIn("deviation_columns", zkCalcPairs.meta)
 
+        # Check metadata works with no intrinsic tables
+        zkCalcNoIntrinsic = self.task.run(
+            self.donutStampsExtra, self.donutStampsIntra, intrinsicTables=[]
+        ).zernikes
+        self.assertIn("cam_name", zkCalcNoIntrinsic.meta)
+        self.assertIn("noll_indices", zkCalcNoIntrinsic.meta)
+        self.assertIn("intrinsic_columns", zkCalcNoIntrinsic.meta)
+
     def testCreateIntrinsicMap(self) -> None:
+        # Test that None input returns None
+        self.assertIsNone(self.task._createIntrinsicMap(None))
+
         for intrinsicTable in self.intrinsicTables:
             # Create intrinsic maps with complete grid
             intrinsicMap = self.task._createIntrinsicMap(intrinsicTable)
@@ -370,3 +381,41 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         for i in range(1, len(zkCalc)):
             self.assertFalse(zkCalc["used"][i])
         self.assertTrue(zkCalc["used"][0])  # Average row should still be True
+
+    def testRunWithoutIntrinsicTables(self) -> None:
+        """Test that the task runs successfully with no intrinsic tables."""
+        result = self.task.run(self.donutStampsExtra, self.donutStampsIntra, intrinsicTables=[])
+
+        # Check outputs exist and have correct shape
+        self.assertEqual(result.outputZernikesRaw.shape[1], 25)
+        self.assertEqual(result.outputZernikesAvg.shape, (1, 25))
+        self.assertIsNotNone(result.zernikes)
+
+        # Intrinsic columns should be zero (no intrinsic correction)
+        for j in self.task.nollIndices:
+            # Skip average row (index 0), check pair rows
+            for i in range(1, len(result.zernikes)):
+                self.assertEqual(result.zernikes[f"Z{j}_intrinsic"][i].to("um").value, 0.0)
+
+        # Deviation should equal the raw Zernike (since intrinsic is zero)
+        for j in self.task.nollIndices:
+            for i in range(1, len(result.zernikes)):
+                np.testing.assert_allclose(
+                    result.zernikes[f"Z{j}_deviation"][i].to("um").value,
+                    result.zernikes[f"Z{j}"][i].to("um").value,
+                )
+
+    def testIntrinsicTablesAffectDeviation(self) -> None:
+        """Verify that providing intrinsic tables changes the deviation values."""
+        resultWith = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables)
+        resultWithout = self.task.run(self.donutStampsExtra, self.donutStampsIntra, intrinsicTables=[])
+
+        # Raw Zernikes should be the same (intrinsics don't affect estimation)
+        np.testing.assert_array_equal(resultWith.outputZernikesRaw, resultWithout.outputZernikesRaw)
+
+        # But deviations should differ (since intrinsics are subtracted)
+        devWith = [resultWith.zernikes[f"Z{j}_deviation"][1].to("um").value for j in self.task.nollIndices]
+        devWithout = [
+            resultWithout.zernikes[f"Z{j}_deviation"][1].to("um").value for j in self.task.nollIndices
+        ]
+        self.assertFalse(np.allclose(devWith, devWithout))
