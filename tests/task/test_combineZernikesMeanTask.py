@@ -34,7 +34,7 @@ class TestCombineZernikesMeanTask(unittest.TestCase):
 
     def prepareTestTable(self) -> Table:
         label = ["average"] + [f"pair{i}" for i in range(10)]
-        used = [True] + 10 * [False]
+        used = [True] + 10 * [True]
         z4 = [-1.0] + list(np.arange(10))
         table = Table([label, used, z4], names=["label", "used", "Z4"])
         table.meta["opd_columns"] = ["Z4"]
@@ -47,6 +47,15 @@ class TestCombineZernikesMeanTask(unittest.TestCase):
         outTable = self.task.combineZernikes(inTable)
         self.assertTrue(all(outTable["used"]))
         self.assertEqual(outTable[outTable["label"] == "average"]["Z4"], np.arange(10).mean())
+
+    def testCombineZernikesWithRejection(self) -> None:
+        inTable = self.prepareTestTable()
+        inTable["used"][2] = False  # Reject one of the pairs
+        outTable = self.task.combineZernikes(inTable)
+        # Avg should be used, pairs should be used except the rejected one
+        self.assertTrue([outTable["used"][:2]] + list(outTable["used"][3:]))
+        expected_mean = (np.arange(10).sum() - 1) / 9  # Exclude the rejected pair
+        self.assertEqual(outTable[outTable["label"] == "average"]["Z4"], expected_mean)
 
     def testTaskRun(self) -> None:
         inTable = self.prepareTestTable()
