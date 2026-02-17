@@ -632,6 +632,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # with NaNs for those donuts so we don't use them in combining.
         if "fit_success" in zkTable.meta["estimatorInfo"].keys():
             fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
+            if np.sum(fitSuccess) == 0:
+                self.log.info("All donuts had fit failures. Returning empty results.")
+                return self.empty(qualityTable=donutQualityTable, zernikeTable=zkTable)
             failIdx = np.where(~np.array(fitSuccess))[0]
             for j in self.nollIndices:
                 zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row

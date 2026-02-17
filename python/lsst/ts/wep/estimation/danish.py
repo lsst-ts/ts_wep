@@ -360,6 +360,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_dx": dx,
             "model_dy": dy,
             "model_sky_level": backgroundStd**2,
+            "chi_square": chi_sq,
         }
 
         # Save scalar metadata from least_squares
