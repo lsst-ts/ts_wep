@@ -320,6 +320,7 @@ class DanishAlgorithm(WfAlgorithm):
                 )
 
             # Calculate chi-square
+            # For more info, see comment in _estimatePairZk.
             chi = np.array(model.chi(result["x"], img, backgroundStd**2))
             chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
             self.log.info("Chi-square: %.2f", chi_sq)
@@ -509,6 +510,11 @@ class DanishAlgorithm(WfAlgorithm):
                 )
 
             # Calculate chi-square
+            # This reduced chi-square is usually much higher
+            # than one. Not unexpected because residuals are significantly
+            # correlated. Where one pixel is high, very likely the neighboring
+            # pixels are also high. Still useful as an indicator
+            # of relative fit quality between sources.
             chi = np.array(model.chi(result["x"], imgs, skyLevels))
             chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
             self.log.info("Chi-square: %.2f", chi_sq)
