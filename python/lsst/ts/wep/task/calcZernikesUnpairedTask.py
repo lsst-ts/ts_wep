@@ -145,14 +145,16 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             self.stampsExtra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
-            self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTable)
-            self.intrinsicMapIntra = None
+            if self.config.useIntrinsicZernikes:
+                self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTable)
+                self.intrinsicMapIntra = None
         else:
             self.stampsIntra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
-            self.intrinsicMapExtra = None
-            self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTable)
+            if self.config.useIntrinsicZernikes:
+                self.intrinsicMapExtra = None
+                self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTable)
 
         # Estimate Zernikes
         zkCoeffRaw = self.estimateZernikes.run(

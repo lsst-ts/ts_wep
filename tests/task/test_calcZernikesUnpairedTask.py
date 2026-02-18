@@ -150,6 +150,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             # Calculate Zernikes with stamps unpaired
             config = CalcZernikesUnpairedTaskConfig()
             config.estimateZernikes.retarget(subtask)
+            config.useIntrinsicZernikes = True
             unpairedTask = CalcZernikesUnpairedTask(config=config)
 
             outputExtra = unpairedTask.run(donutStampsExtra, intrinsicTable)
