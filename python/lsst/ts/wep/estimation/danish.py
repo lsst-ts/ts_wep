@@ -328,10 +328,12 @@ class DanishAlgorithm(WfAlgorithm):
         # Sometimes this happens with Danish :(
         except GalSimFFTSizeError:
             # Fill dummy objects
-            result = None
+            result = {}
             zkFit = np.full_like(zkStart, np.nan)
             zkSum = np.full_like(zkStart, np.nan)
             fwhm = np.nan
+            dx = np.nan
+            dy = np.nan
             if saveHistory:
                 modelImage = np.full_like(img, np.nan)
 
@@ -370,7 +372,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = (zkMeta["lstsq_success"] or 0) > 0
 
         return zkSum, hist, zkMeta
 
@@ -522,7 +524,10 @@ class DanishAlgorithm(WfAlgorithm):
         # Sometimes this happens with Danish :(
         except GalSimFFTSizeError:
             # Fill dummy objects
-            result = None
+            result = {}
+            dxs = np.full(2, np.nan)
+            dys = np.full(2, np.nan)
+            fwhm = np.nan
             zkFit = np.full_like(zkStartI1, np.nan)
             zkSum = np.full_like(zkStartI1, np.nan)
             if saveHistory:
@@ -576,7 +581,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = (zkMeta["lstsq_success"] or 0) > 0
 
         return zkSum, hist, zkMeta
 

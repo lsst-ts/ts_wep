@@ -97,6 +97,16 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         intrinsicTable: Table,
         numCores: int = 1,
     ) -> pipeBase.Struct:
+        # Prepopulate stamps so we always have the metadata available, even if
+        # the stamps are empty or none are selected.
+        defocalType = donutStamps.metadata["DFC_TYPE"]
+        if defocalType == "extra":
+            self.stampsIntra = DonutStamps([])
+            self.stampsExtra = donutStamps
+        else:
+            self.stampsIntra = donutStamps
+            self.stampsExtra = DonutStamps([])
+
         if len(donutStamps) == 0:
             self.log.info("No donut stamps available.")
             return self.empty()
@@ -121,7 +131,6 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         # Assign stamps to either intra or extra, and build intrinsic map
         defocalType = donutStamps.metadata["DFC_TYPE"]
         if defocalType == "extra":
-            self.stampsIntra = DonutStamps([])
             self.stampsExtra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
@@ -129,7 +138,6 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             self.intrinsicMapIntra = None
         else:
             self.stampsIntra = selectedDonuts
-            self.stampsExtra = DonutStamps([])
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
             self.intrinsicMapExtra = None
