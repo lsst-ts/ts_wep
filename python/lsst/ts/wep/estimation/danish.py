@@ -424,7 +424,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] is not None and zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = (zkMeta["lstsq_success"] or 0) > 0
 
         return zkSum, hist, zkMeta
 
@@ -661,9 +661,9 @@ class DanishAlgorithm(WfAlgorithm):
             # Fill dummy objects
             result = dict()
             fwhm = np.nan
-            dxs = (np.nan, np.nan)
-            dys = (np.nan, np.nan)
-            fluxes = (np.nan, np.nan)
+            dxs = np.full(2, np.nan)
+            dys = np.full(2, np.nan)
+            fluxes = np.full(2, np.nan)
             chi_sq = np.nan
             bkgs = ((), ())
             zkFit = np.full_like(zkStartI1, np.nan)
@@ -720,7 +720,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] is not None and zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = (zkMeta["lstsq_success"] or 0) > 0
 
         return zkSum, hist, zkMeta
 
