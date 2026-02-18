@@ -63,24 +63,18 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         testDataDir = os.path.join(moduleDir, "tests", "testData")
         testPipelineConfigDir = os.path.join(testDataDir, "pipelineConfigs")
         cls.repoDir = os.path.join(testDataDir, "gen3TestRepo")
-        cls.pairTableName = "run2_pair_table"
-        cls.run2Name = "run2"
-        cls.run3Name = "run3"
         cls.cameraName = "LSSTCam"
 
         # Check that runs don't already exist due to previous improper cleanup
         butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
         collectionsList = list(registry.queryCollections())
-        cleanUpList = [cls.pairTableName, cls.run2Name, cls.run3Name]
         if "pretest_run_science" in collectionsList:
             cls.runName = "pretest_run_science"
         else:
             cls.runName = "run1"
-            cleanUpList.append(cls.runName)
-        for runName in cleanUpList:
-            if runName in collectionsList:
-                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, runName)
+            if "run1" in collectionsList:
+                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, "run1")
                 runProgram(cleanUpCmd)
 
         # Point to the collections for the reference catalogs,
@@ -88,11 +82,8 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         # that comes from `butler write-curated-calibrations`.
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
         instrument = "lsst.obs.lsst.LsstCam"
-        if runName == "run1":
-            instrument = "lsst.obs.lsst.LsstCam"
-            cls.cameraName = "LSSTCam"
+        if cls.runName == "run1":
             pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsFamPipeline_unpaired.yaml")
-
             pipeCmd = writePipetaskCmd(
                 cls.repoDir,
                 cls.runName,
@@ -102,42 +93,16 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             )
             pipeCmd += " -d 'exposure IN (4021123106001..4021123106007)'"
             runProgram(pipeCmd)
-
-        # Test ingestion of pair table
-        cmd = "ingestPairTable.py"
-        cmd += f" -b {cls.repoDir}"
-        cmd += f" -o {cls.pairTableName}"
-        cmd += f" --instrument {cls.cameraName}"
-        cmd += f" {os.path.join(testDataDir, 'pairTable.ecsv')}"
-        runProgram(cmd)
-
-        # Run cutouts with table pairer
-        collections += "," + cls.runName + "," + cls.pairTableName
-        pipeCmd = writePipetaskCmd(
-            cls.repoDir,
-            cls.run2Name,
-            instrument,
-            collections,
-            pipelineYaml=os.path.join(testPipelineConfigDir, "testCutoutsFamPipelineTablePairer.yaml"),
-        )
-        pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
-        runProgram(pipeCmd)
-
-        # Try Group Pairer
-        pipeCmd = writePipetaskCmd(
-            cls.repoDir,
-            "run3",
-            instrument,
-            collections,
-            pipelineYaml=os.path.join(
-                testPipelineConfigDir, "testCutoutsFamPipelineGroupPairer_unpaired.yaml"
-            ),
-        )
-        pipeCmd += " -d 'exposure IN (4021123106001..4021123106009)'"
-        runProgram(pipeCmd)
+        elif cls.runName == "pretest_run_science":
+            collections += ",pretest_run_science"
+            pipelineYaml = os.path.join(
+                testPipelineConfigDir, "testCutoutsFamPipeline_unpaired.yaml#cutOutDonutsScienceSensorTask"
+            )
+            pipeCmd += " -d 'exposure IN (4021123106001..4021123106007)'"
+            runProgram(pipeCmd)
 
     def setUp(self) -> None:
-        self.config = CutOutDonutsScienceSensorTaskConfig()
+        self.config = CutOutDonutsScienceSensorTaskConfig(runPaired=False)
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
         self.butler = Butler.from_config(self.repoDir)
@@ -347,62 +312,9 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
                     return False
         return True
 
-    def testTaskRunTablePairer(self) -> None:
-        # Get everything via the extra ID
-        intraStamps1 = self.butler.get(
-            "donutStampsScienceSensor", dataId=self.dataIdIntra, collections=[self.runName]
-        )
-        intraStamps2 = self.butler.get(
-            "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.run2Name]
-        )
-
-        extraStamps1 = self.butler.get(
-            "donutStampsScienceSensor", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        extraStamps2 = self.butler.get(
-            "donutStampsExtra", dataId=self.dataIdExtra, collections=[self.run2Name]
-        )
-
-        for md1, md2 in [
-            (intraStamps1.metadata, intraStamps2.metadata),
-            (extraStamps1.metadata, extraStamps2.metadata),
-        ]:
-            self.assertTrue(self.compareMetadata(md1, md2))
-
-        for s1, s2 in zip(intraStamps1, intraStamps2):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)  # type: ignore
-        for s1, s2 in zip(extraStamps1, extraStamps2):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s2.stamp_im)  # type: ignore
-
-    def testTaskRunGroupPairer(self) -> None:
-        # Get everything via the extra ID
-        intraStamps1 = self.butler.get(
-            "donutStampsScienceSensor", dataId=self.dataIdIntra, collections=[self.runName]
-        )
-        intraStamps3 = self.butler.get(
-            "donutStampsScienceSensor", dataId=self.dataIdIntra, collections=[self.run3Name]
-        )
-
-        extraStamps1 = self.butler.get(
-            "donutStampsScienceSensor", dataId=self.dataIdExtra, collections=[self.runName]
-        )
-        extraStamps3 = self.butler.get(
-            "donutStampsScienceSensor", dataId=self.dataIdExtra, collections=[self.run3Name]
-        )
-
-        for md1, md3 in [
-            (intraStamps1.metadata, intraStamps3.metadata),
-            (extraStamps1.metadata, extraStamps3.metadata),
-        ]:
-            self.assertTrue(self.compareMetadata(md1, md3))
-        for s1, s3 in zip(intraStamps1, intraStamps3):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)  # type: ignore
-        for s1, s3 in zip(extraStamps1, extraStamps3):
-            self.assertMaskedImagesAlmostEqual(s1.stamp_im, s3.stamp_im)  # type: ignore
-
     @classmethod
     def tearDownClass(cls) -> None:
-        tearDownRunList = [cls.pairTableName, cls.run2Name, cls.run3Name]
+        tearDownRunList = list()
         if cls.runName == "run1":
             tearDownRunList.append(cls.runName)
         for runName in tearDownRunList:
