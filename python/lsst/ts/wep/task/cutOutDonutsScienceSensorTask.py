@@ -135,6 +135,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self.runPaired = self.config.runPaired
         self.makeSubtask("pairer")
 
     def runQuantum(
@@ -163,7 +164,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
-        if self.config.runPaired:
+        if self.runPaired:
             donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
             donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}
         else:
@@ -178,7 +179,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             exposures = butlerQC.get([exposureHandleDict[k] for k in [pair.intra, pair.extra]])
             donutCats = butlerQC.get([donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]])
             outputs = self.run(exposures, donutCats, camera)
-            if self.config.runPaired:
+            if self.runPaired:
                 self.log.info("Running CutOutDonutsScienceSensorTask in paired mode.")
                 butlerQC.put(outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra])
                 butlerQC.put(
