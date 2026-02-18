@@ -20,20 +20,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-from copy import copy
-
-import numpy as np
-from astropy.table import QTable
 
 import lsst.utils.tests
-from lsst.daf.butler import Butler
+from lsst.daf.butler import Butler, DatasetNotFoundError
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
 )
-from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
 from lsst.ts.wep.utils import (
-    DefocalType,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
@@ -68,38 +62,31 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
         # Check that runs don't already exist due to previous improper cleanup
         butler = Butler.from_config(cls.repoDir)
         registry = butler.registry
+        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
+        instrument = "lsst.obs.lsst.LsstCam"
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsFamPipeline_unpaired.yaml")
         collectionsList = list(registry.queryCollections())
+        cls.runName = "run1"
         if "pretest_run_science" in collectionsList:
-            cls.runName = "pretest_run_science"
-        else:
-            cls.runName = "run1"
-            if "run1" in collectionsList:
-                cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, "run1")
-                runProgram(cleanUpCmd)
+            collections += ",pretest_run_science"
+            pipelineYaml += "#cutOutDonutsScienceSensorTask"
+        elif cls.runName in collectionsList:
+            cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
+            runProgram(cleanUpCmd)
 
         # Point to the collections for the reference catalogs,
         # the raw images and the camera model in the calib directory
         # that comes from `butler write-curated-calibrations`.
-        collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
-        instrument = "lsst.obs.lsst.LsstCam"
-        if cls.runName == "run1":
-            pipelineYaml = os.path.join(testPipelineConfigDir, "testCutoutsFamPipeline_unpaired.yaml")
-            pipeCmd = writePipetaskCmd(
-                cls.repoDir,
-                cls.runName,
-                instrument,
-                collections,
-                pipelineYaml=pipelineYaml,
-            )
-            pipeCmd += " -d 'exposure IN (4021123106001..4021123106007)'"
-            runProgram(pipeCmd)
-        elif cls.runName == "pretest_run_science":
-            collections += ",pretest_run_science"
-            pipelineYaml = os.path.join(
-                testPipelineConfigDir, "testCutoutsFamPipeline_unpaired.yaml#cutOutDonutsScienceSensorTask"
-            )
-            pipeCmd += " -d 'exposure IN (4021123106001..4021123106007)'"
-            runProgram(pipeCmd)
+
+        pipeCmd = writePipetaskCmd(
+            cls.repoDir,
+            cls.runName,
+            instrument,
+            collections,
+            pipelineYaml=pipelineYaml,
+        )
+        pipeCmd += " -d 'exposure IN (4021123106001..4021123106007)'"
+        runProgram(pipeCmd)
 
     def setUp(self) -> None:
         self.config = CutOutDonutsScienceSensorTaskConfig(runPaired=False)
@@ -124,193 +111,26 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
     def testValidateConfigs(self) -> None:
         self.config.donutStampSize = 120
         self.config.initialCutoutPadding = 290
+        self.config.runPaired = False
         self.task = CutOutDonutsScienceSensorTask(config=self.config)
 
         self.assertEqual(self.task.donutStampSize, 120)
         self.assertEqual(self.task.initialCutoutPadding, 290)
+        self.assertFalse(self.task.runPaired)
 
-    def testAssignExtraIntraIdxLsstCam(self) -> None:
-        focusZNegative = -1
-        focusZPositive = 1
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZNegative, focusZPositive, "LSSTCam")
-        self.assertEqual(extraIdx, 1)
-        self.assertEqual(intraIdx, 0)
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZPositive, focusZNegative, "LSSTCam")
-        self.assertEqual(extraIdx, 0)
-        self.assertEqual(intraIdx, 1)
-
-    def testAssignExtraIntraIdxLsstComCam(self) -> None:
-        focusZNegative = -1
-        focusZPositive = 1
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZNegative, focusZPositive, "LSSTComCam")
-        self.assertEqual(extraIdx, 1)
-        self.assertEqual(intraIdx, 0)
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZPositive, focusZNegative, "LSSTComCam")
-        self.assertEqual(extraIdx, 0)
-        self.assertEqual(intraIdx, 1)
-
-    def testAssignExtraIntraIdxLsstComCamSim(self) -> None:
-        focusZNegative = -1
-        focusZPositive = 1
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZNegative, focusZPositive, "LSSTComCamSim")
-        self.assertEqual(extraIdx, 1)
-        self.assertEqual(intraIdx, 0)
-
-        extraIdx, intraIdx = self.task.assignExtraIntraIdx(focusZPositive, focusZNegative, "LSSTComCamSim")
-        self.assertEqual(extraIdx, 0)
-        self.assertEqual(intraIdx, 1)
-
-    def testAssignExtraIntraIdxInvalidCamera(self) -> None:
-        cameraName = "WrongCam"
-        with self.assertRaises(ValueError) as context:
-            self.task.assignExtraIntraIdx(-1, 1, cameraName)
-        errorStr = str(
-            f"Invalid cameraName parameter: {cameraName}. Camera must  "
-            "be one of: 'LSSTCam', 'LSSTComCam', 'LSSTComCamSim' or 'LATISS'",
-        )
-        self.assertEqual(errorStr, str(context.exception))
-
-    def testTaskRun(self) -> None:
-        # Grab two exposures from the same detector at two different visits to
-        # get extra and intra
-        exposureExtra = self.butler.get("post_isr_image", dataId=self.dataIdExtra, collections=[self.runName])
-        exposureIntra = self.butler.get("post_isr_image", dataId=self.dataIdIntra, collections=[self.runName])
-
-        donutCatalogExtra = self.butler.get("donutTable", dataId=self.dataIdExtra, collections=[self.runName])
-        donutCatalogIntra = self.butler.get("donutTable", dataId=self.dataIdIntra, collections=[self.runName])
-        camera = self.butler.get(
-            "camera",
-            dataId={"instrument": "LSSTCam"},
-            collections="LSSTCam/calib/unbounded",
-        )
-
-        # Test return values when no sources in catalog
-        columns = [
-            "coord_ra",
-            "coord_dec",
-            "centroid_x",
-            "centroid_y",
-            "source_flux",
-            "detector",
-        ]
-        noSrcDonutCatalog = QTable({column: [] for column in columns})
-        noSrcDonutCatalog = addVisitInfoToCatTable(exposureExtra, noSrcDonutCatalog)
-        testOutNoSrc = self.task.run([exposureExtra, exposureIntra], [noSrcDonutCatalog] * 2, camera)
-
-        self.assertEqual(len(testOutNoSrc.donutStampsExtra), 0)
-        self.assertEqual(len(testOutNoSrc.donutStampsIntra), 0)
-
-        # Test normal behavior
-        taskOut = self.task.run(
-            [copy(exposureIntra), copy(exposureExtra)],
-            [donutCatalogExtra, donutCatalogIntra],
-            camera,
-        )
-
-        testExtraStamps = self.task.cutOutStamps(
-            exposureExtra, donutCatalogExtra, DefocalType.Extra, camera.getName()
-        )
-        testIntraStamps = self.task.cutOutStamps(
-            exposureIntra, donutCatalogIntra, DefocalType.Intra, camera.getName()
-        )
-
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsExtra, testExtraStamps):
-            self.assertMaskedImagesAlmostEqual(donutStamp.stamp_im, cutOutStamp.stamp_im)  # type: ignore
-        for donutStamp, cutOutStamp in zip(taskOut.donutStampsIntra, testIntraStamps):
-            self.assertMaskedImagesAlmostEqual(donutStamp.stamp_im, cutOutStamp.stamp_im)  # type: ignore
-
-        # Check that the new metadata is stored in butler
-        donutStamps = self.butler.get(
+    def testPipelineOutput(self) -> None:
+        # This mode should not affect anything except the butler output.
+        donutStampsExtra = self.butler.get(
             "donutStampsScienceSensor", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        metadata = list(donutStamps.metadata)
-        expectedMetadata = [
-            "RA_DEG",
-            "DEC_DEG",
-            "DET_NAME",
-            "CAM_NAME",
-            "DFC_TYPE",
-            "DFC_DIST",
-            "MAG",
-            "CENT_X0",
-            "CENT_Y0",
-            "CENT_X",
-            "CENT_Y",
-            "CENT_DX",
-            "CENT_DY",
-            "CENT_DR",
-            "BLEND_CX",
-            "BLEND_CY",
-            "X0",
-            "Y0",
-            "SN",
-            "SIGNAL_MEAN",
-            "SIGNAL_SUM",
-            "NPX_MASK",
-            "BKGD_STDEV",
-            "SQRT_MEAN_VAR",
-            "BKGD_VAR",
-            "BACKGROUND_IMAGE_MEAN",
-            "NOISE_VAR_BKGD",
-            "NOISE_VAR_DONUT",
-            "EFFECTIVE",
-            "ENTROPY",
-            "PEAK_HEIGHT",
-            "MJD",
-            "BORESIGHT_ROT_ANGLE_RAD",
-            "BORESIGHT_PAR_ANGLE_RAD",
-            "BORESIGHT_ALT_RAD",
-            "BORESIGHT_AZ_RAD",
-            "BORESIGHT_RA_RAD",
-            "BORESIGHT_DEC_RAD",
-            "BANDPASS",
-        ]
-        # Test that all expected metadata is included in the butler
-        self.assertEqual(np.sum(np.in1d(expectedMetadata, metadata)), len(expectedMetadata))
-        for measure in [
-            "SIGNAL_SUM",
-            "SIGNAL_MEAN",
-            "NOISE_VAR_BKGD",
-            "NOISE_VAR_DONUT",
-            "EFFECTIVE",
-            "ENTROPY",
-            "PEAK_HEIGHT",
-        ]:
-            self.assertEqual(len(donutStamps), len(donutStamps.metadata.getArray(measure)))
+        self.assertEqual(len(donutStampsExtra), 3)
+        donutStampsIntra = self.butler.get(
+            "donutStampsScienceSensor", dataId=self.dataIdIntra, collections=[self.runName]
+        )
+        self.assertEqual(len(donutStampsIntra), 3)
 
-    @staticmethod
-    def compareMetadata(metadata1: dict, metadata2: dict) -> bool:
-        for k, v in metadata1.items():
-            if k.startswith("LSST BUTLER"):
-                continue
-            try:
-                v2 = metadata2[k]
-            except KeyError:
-                # key not in metadata2, so unequal.
-                return False
-
-            if isinstance(v, (int, float, np.number)):
-                if not isinstance(v2, (int, float, np.number)):
-                    return False
-
-                # Special case since nan != nan
-                if np.isnan(v):
-                    if np.isnan(v2):
-                        continue
-                    else:
-                        return False
-
-                if v != v2:
-                    return False
-            else:
-                if v != v2:
-                    return False
-        return True
+        with self.assertRaises(DatasetNotFoundError):
+            self.butler.get("donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName])
 
     @classmethod
     def tearDownClass(cls) -> None:
