@@ -216,6 +216,16 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         # Test that detector names are present
         self.assertEqual(np.unique(fitCatalog["detector"]), "R22_S11")
 
+        # Test that all centroids are within the detector
+        # bounding box eroded by edgeMargin
+        detector = preFitExp_S11.getDetector()
+        bbox = detector.getBBox()
+        erodedBBox = bbox.erodedBy(task.config.edgeMargin)
+        self.assertTrue(np.all(fitCatalog["centroid_x"] >= erodedBBox.getMinX()))
+        self.assertTrue(np.all(fitCatalog["centroid_x"] <= erodedBBox.getMaxX()))
+        self.assertTrue(np.all(fitCatalog["centroid_y"] >= erodedBBox.getMinY()))
+        self.assertTrue(np.all(fitCatalog["centroid_y"] <= erodedBBox.getMaxY()))
+
     def testConfigCatalogFilterListErr(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 
@@ -269,14 +279,17 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
             fitWcs.getSkyOrigin().getDec().asDegrees(),
             preFitExp_S11.wcs.getSkyOrigin().getDec().asDegrees(),
         )
-        # Test that catalog is the same
-        np.testing.assert_array_equal(fitCatalog["centroid_x"], directDetectCat["centroid_x"])
-        np.testing.assert_array_equal(fitCatalog["centroid_y"], directDetectCat["centroid_y"])
-        np.testing.assert_array_equal(fitCatalog["coord_ra"], directDetectCat["coord_ra"])
-        np.testing.assert_array_equal(fitCatalog["coord_dec"], directDetectCat["coord_dec"])
+        # Test that catalog centroids are a subset of the original
+        # (clipping may have removed some edge sources)
+        for col in ["centroid_x", "centroid_y", "coord_ra", "coord_dec"]:
+            for val in fitCatalog[col]:
+                self.assertIn(val, directDetectCat[col])
         # Test metadata flag
         self.assertFalse(task.metadata["wcsFitSuccess"])
         self.assertFalse(task.metadata["refCatalogSuccess"])
+
+        # Test that detector column and visit info are present
+        self.assertIn("detector", fitCatalog.colnames)
 
     def testRefCatalogFailureWithNoCatalogs(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
@@ -313,14 +326,19 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
                 np.array(preFitExp_S11.wcs.getPixelOrigin()),
             )
         )
-        # But that catalog is the same
-        np.testing.assert_array_equal(fitCatalog["centroid_x"], directDetectCat["centroid_x"])
-        np.testing.assert_array_equal(fitCatalog["centroid_y"], directDetectCat["centroid_y"])
-        np.testing.assert_array_equal(fitCatalog["coord_ra"], directDetectCat["coord_ra"])
-        np.testing.assert_array_equal(fitCatalog["coord_dec"], directDetectCat["coord_dec"])
+        # Test that catalog centroids are a subset of the original
+        # (clipping may have removed some edge sources)
+        for col in ["centroid_x", "centroid_y", "coord_ra", "coord_dec"]:
+            for val in fitCatalog[col]:
+                self.assertIn(val, directDetectCat[col])
         # Test metadata flags
         self.assertTrue(task.metadata["wcsFitSuccess"])
         self.assertFalse(task.metadata["refCatalogSuccess"])
+
+        # Test that detector column and visit info are present
+        # in the early-return path
+        self.assertIn("detector", fitCatalog.colnames)
+        self.assertEqual(np.unique(fitCatalog["detector"]), "R22_S11")
 
     def testRefCatalogFailureWithNonExistentPhotoRefFilter(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
@@ -358,14 +376,94 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
                 np.array(preFitExp_S11.wcs.getPixelOrigin()),
             )
         )
-        # But that catalog is the same
-        np.testing.assert_array_equal(fitCatalog["centroid_x"], directDetectCat["centroid_x"])
-        np.testing.assert_array_equal(fitCatalog["centroid_y"], directDetectCat["centroid_y"])
-        np.testing.assert_array_equal(fitCatalog["coord_ra"], directDetectCat["coord_ra"])
-        np.testing.assert_array_equal(fitCatalog["coord_dec"], directDetectCat["coord_dec"])
+        # Test that catalog centroids are a subset of the original
+        # (clipping may have removed some edge sources)
+        for col in ["centroid_x", "centroid_y", "coord_ra", "coord_dec"]:
+            for val in fitCatalog[col]:
+                self.assertIn(val, directDetectCat[col])
         # Test metadata flags
         self.assertTrue(task.metadata["wcsFitSuccess"])
         self.assertFalse(task.metadata["refCatalogSuccess"])
+
+        # Test that detector column and visit info are present
+        # in the early-return path
+        self.assertIn("detector", fitCatalog.colnames)
+        self.assertEqual(np.unique(fitCatalog["detector"]), "R22_S11")
+
+    def testClipDonutCatalogToDetector(self) -> None:
+        """Test that _clipDonutCatalogToDetector removes sources
+        outside the detector bounding box."""
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+        detector = preFitExp_S11.getDetector()
+        bbox = detector.getBBox()
+
+        # Create a catalog with some sources inside and outside the bbox
+        edgeMargin = self.task.config.edgeMargin
+        erodedBBox = bbox.erodedBy(edgeMargin)
+        midX = (erodedBBox.getMinX() + erodedBBox.getMaxX()) / 2
+        midY = (erodedBBox.getMinY() + erodedBBox.getMaxY()) / 2
+
+        catalog = QTable(
+            {
+                "centroid_x": [
+                    midX,  # inside
+                    midY,  # inside (using midY as x)
+                    -100.0,  # outside (negative)
+                    bbox.getMaxX() + 100.0,  # outside (beyond max)
+                    erodedBBox.getMinX() - 1.0,  # outside eroded bbox
+                ],
+                "centroid_y": [
+                    midY,  # inside
+                    midX,  # inside (using midX as y)
+                    midY,  # y is fine but x is out
+                    midY,  # y is fine but x is out
+                    midY,  # y is fine but x is out
+                ],
+            }
+        )
+
+        # Test that warning log is emitted for removed sources
+        with self.assertLogs(self.logger.name, level="WARNING") as context:
+            clipped = self.task._clipDonutCatalogToDetector(catalog, detector)
+        self.assertIn(
+            "Removed 3 donuts outside detector bounding box",
+            context.output[0],
+        )
+
+        # Only the first two sources should survive
+        self.assertEqual(len(clipped), 2)
+        np.testing.assert_array_almost_equal(clipped["centroid_x"], [midX, midY])
+        np.testing.assert_array_almost_equal(clipped["centroid_y"], [midY, midX])
+
+    def testClipDonutCatalogPreservesAll(self) -> None:
+        """Test that _clipDonutCatalogToDetector keeps all sources
+        when they are all inside the bounding box."""
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+        detector = preFitExp_S11.getDetector()
+        bbox = detector.getBBox()
+        edgeMargin = self.task.config.edgeMargin
+        erodedBBox = bbox.erodedBy(edgeMargin)
+
+        # All sources well inside the eroded bbox
+        catalog = QTable(
+            {
+                "centroid_x": [
+                    erodedBBox.getMinX() + 50,
+                    erodedBBox.getMaxX() - 50,
+                    (erodedBBox.getMinX() + erodedBBox.getMaxX()) / 2,
+                ],
+                "centroid_y": [
+                    erodedBBox.getMinY() + 50,
+                    erodedBBox.getMaxY() - 50,
+                    (erodedBBox.getMinY() + erodedBBox.getMaxY()) / 2,
+                ],
+            }
+        )
+
+        clipped = self.task._clipDonutCatalogToDetector(catalog, detector)
+        self.assertEqual(len(clipped), len(catalog))
+        np.testing.assert_array_almost_equal(clipped["centroid_x"], catalog["centroid_x"])
+        np.testing.assert_array_almost_equal(clipped["centroid_y"], catalog["centroid_y"])
 
     def testPipelineOutputsInButler(self) -> None:
         """Verify that outputs with given names are stored in butler."""
