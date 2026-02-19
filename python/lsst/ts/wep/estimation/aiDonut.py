@@ -182,13 +182,13 @@ class AiDonutAlgorithm(WfAlgorithm):
         # Stack inputs into a batch
         imgs = [I1.image]
         fxs, fys = [I1.fieldAngle[0]], [I1.fieldAngle[1]]
-        focalFlags = [1 if I1.defocalType == "intra" else 0]
+        focalFlags = [1 if I1.defocalType.value == "intra" else 0]
         bands = ["ugrizy".index(I1.bandLabel.value)]
         if I2 is not None:
             imgs.append(I2.image)
             fxs.append(I2.fieldAngle[0])
             fys.append(I2.fieldAngle[1])
-            focalFlags.append(1 if I2.defocalType == "intra" else 0)
+            focalFlags.append(1 if I2.defocalType.value == "intra" else 0)
             bands.append("ugrizy".index(I2.bandLabel.value))
 
         # Stack arrays

@@ -426,7 +426,7 @@ def conditionalSigmaClip(array: np.ndarray, sigmaClipKwargs: dict, stdMin: float
     for i in range(array.shape[1]):  # Iterate over columns
         column = array[:, i]
         # Apply sigma clipping if the standard deviation exceeds std_min
-        if np.std(column) > stdMin:
+        if np.nanstd(column) > stdMin:
             clipped = sigma_clip(column, **sigmaClipKwargs)
             # Replace processedArray column data with clipped data,
             # maintaining masked as NaN

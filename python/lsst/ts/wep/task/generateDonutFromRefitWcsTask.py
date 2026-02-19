@@ -300,6 +300,50 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
         return sourceCat
 
+    def _clipDonutCatalogToDetector(
+        self,
+        donutCatalog: QTable,
+        detector: lsst.afw.cameraGeom.Detector,
+    ) -> QTable:
+        """Clip donut catalog to only include sources within the
+        detector bounding box, eroded by the configured edgeMargin.
+
+        This acts as a final safety net to ensure no donuts outside
+        the detector bounds make it into the output catalog,
+        regardless of which code path produced the catalog.
+
+        Parameters
+        ----------
+        donutCatalog : `astropy.table.QTable`
+            Donut catalog to clip.
+        detector : `lsst.afw.cameraGeom.Detector`
+            Detector object from the camera.
+
+        Returns
+        -------
+        clippedCatalog : `astropy.table.QTable`
+            Catalog with only sources inside the eroded bounding box.
+        """
+        bbox = detector.getBBox()
+        erodedBBox = bbox.erodedBy(self.config.edgeMargin)
+
+        inBounds = np.array(
+            [
+                erodedBBox.contains(lsst.geom.Point2I(int(x), int(y)))
+                for x, y in zip(donutCatalog["centroid_x"], donutCatalog["centroid_y"])
+            ]
+        )
+
+        nRemoved = len(donutCatalog) - np.sum(inBounds)
+        if nRemoved > 0:
+            self.log.warning(
+                "Removed %d donuts outside detector bounding box (eroded by %d px edge margin).",
+                nRemoved,
+                self.config.edgeMargin,
+            )
+
+        return donutCatalog[inBounds]
+
     @timeMethod
     def run(
         self,
@@ -370,6 +414,10 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 self.log.warning("No catalogs cover this detector.")
                 donutCatalog = fitDonutCatalog
                 self.log.warning(catCreateErrorMsg)
+                detectorName = detector.getName()
+                donutCatalog["detector"] = np.array([detectorName] * len(donutCatalog), dtype=str)
+                donutCatalog = addVisitInfoToCatTable(exposure, donutCatalog)
+                donutCatalog = self._clipDonutCatalogToDetector(donutCatalog, detector)
                 return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
 
             # Check that specified filter exists in catalogs
@@ -386,6 +434,10 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 self.log.warning(filterFailMsg)
                 donutCatalog = fitDonutCatalog
                 self.log.warning(catCreateErrorMsg)
+                detectorName = detector.getName()
+                donutCatalog["detector"] = np.array([detectorName] * len(donutCatalog), dtype=str)
+                donutCatalog = addVisitInfoToCatTable(exposure, donutCatalog)
+                donutCatalog = self._clipDonutCatalogToDetector(donutCatalog, detector)
                 return pipeBase.Struct(outputExposure=exposure, donutCatalog=donutCatalog)
 
             try:
@@ -440,6 +492,12 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         detectorName = exposure.getDetector().getName()
         donutCatalog["detector"] = np.array([detectorName] * len(donutCatalog), dtype=str)
         donutCatalog = addVisitInfoToCatTable(exposure, donutCatalog)
+
+        # Clip donut catalog to detector bounds as a final safety net.
+        # This catches donuts outside the bounding box from all code paths:
+        # fallback to fitDonutCatalog, WCS-projection edge effects, etc.
+        donutCatalog = self._clipDonutCatalogToDetector(donutCatalog, exposure.getDetector())
+
         # We want the original image array with the new WCS
         # attached to it if the WCS fitting was successful.
         if self.metadata["wcsFitSuccess"] is True:
