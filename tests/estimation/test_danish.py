@@ -147,6 +147,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                     "model_dx",
                     "model_dy",
                     "model_sky_level",
+                    "chi_square",
                     "lstsq_cost",
                     "lstsq_optimality",
                     "lstsq_nfev",

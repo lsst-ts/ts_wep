@@ -28,6 +28,7 @@ enforce_single_threading()
 
 import lsst.utils.tests
 import numpy as np
+from astropy.table import vstack
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task import (
     CalcZernikesTask,
@@ -317,6 +318,9 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("lstsq_njev", zkCalcPairs.meta["estimatorInfo"])
         self.assertIn("lstsq_status", zkCalcPairs.meta["estimatorInfo"])
         self.assertIn("lstsq_success", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("fit_success", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("chi_square", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("blur_clipped", zkCalcPairs.meta["estimatorInfo"])
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["fwhm"]))
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
@@ -370,3 +374,18 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         for i in range(1, len(zkCalc)):
             self.assertFalse(zkCalc["used"][i])
         self.assertTrue(zkCalc["used"][0])  # Average row should still be True
+
+    def testBlurClip(self) -> None:
+        # Get sample zernike table
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
+        zkCalc = vstack([zkCalc, zkCalc[1:], zkCalc[1:]])  # Add extra rows to test minus average row
+        donut_blur = len(zkCalc) * [1.0]
+        donut_blur[0] = 10.0  # Set the average row to be very blurred to force it to be clipped
+        zkCalc.meta["estimatorInfo"]["fwhm"] = donut_blur
+        zkCalc["used"] = True  # Set all rows to be used before clipping
+
+        # Run the blurClip method
+        zkOut = self.task.blurClip(zkCalc)
+        used_true = len(zkOut) * [True]
+        used_true[1] = False  # First row should be clipped, but average row should still be used
+        self.assertEqual(list(zkOut["used"]), used_true)

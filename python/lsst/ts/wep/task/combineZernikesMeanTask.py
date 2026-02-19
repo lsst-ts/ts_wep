@@ -34,8 +34,9 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
     """
 
     def _combineZernikes(self, zkTable: Table) -> Table:
-        # Set all donuts to used (no rejection in this simple mean)
-        zkTable["used"] = True
+        # Use all donuts where used is True (no rejection
+        # in this simple mean but will leave out previous rejections)
+        useIdx = np.where(zkTable[zkTable["label"] != "average"]["used"])[0]
 
         # Calculate mean of every Zernike column
         zk_columns = (
@@ -44,6 +45,6 @@ class CombineZernikesMeanTask(CombineZernikesBaseTask):
             + zkTable.meta["deviation_columns"]
         )
         for col in zk_columns:
-            self._setAvg(zkTable, col, np.nanmean)
+            self._setAvg(zkTable, col, np.nanmean, useIdx=useIdx)
 
         return zkTable

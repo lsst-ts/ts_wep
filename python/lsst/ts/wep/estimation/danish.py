@@ -319,6 +319,12 @@ class DanishAlgorithm(WfAlgorithm):
                     flux=img.sum(),
                 )
 
+            # Calculate chi-square
+            # For more info, see comment in _estimatePairZk.
+            chi = np.array(model.chi(result["x"], img, backgroundStd**2))
+            chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
+            self.log.info("Chi-square: %.2f", chi_sq)
+
         # Sometimes this happens with Danish :(
         except GalSimFFTSizeError:
             # Fill dummy objects
@@ -355,6 +361,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_dx": dx,
             "model_dy": dy,
             "model_sky_level": backgroundStd**2,
+            "chi_square": chi_sq,
         }
 
         # Save scalar metadata from least_squares
@@ -502,6 +509,16 @@ class DanishAlgorithm(WfAlgorithm):
                     fluxes=np.sum(imgs, axis=(1, 2)),
                 )
 
+            # Calculate chi-square
+            # This reduced chi-square is usually much higher
+            # than one. Not unexpected because residuals are significantly
+            # correlated. Where one pixel is high, very likely the neighboring
+            # pixels are also high. Still useful as an indicator
+            # of relative fit quality between sources.
+            chi = np.array(model.chi(result["x"], imgs, skyLevels))
+            chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
+            self.log.info("Chi-square: %.2f", chi_sq)
+
         # Sometimes this happens with Danish :(
         except GalSimFFTSizeError:
             # Fill dummy objects
@@ -550,6 +567,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_dx": dxs,
             "model_dy": dys,
             "model_sky_level": skyLevels,
+            "chi_square": chi_sq,
         }
 
         # Save scalar metadata from least_squares
