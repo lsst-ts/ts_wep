@@ -1,1 +1,0 @@
-before the changes aiDonut will always default to intra because without .value it was never True 
