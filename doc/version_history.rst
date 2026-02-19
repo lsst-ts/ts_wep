@@ -17,6 +17,23 @@ Version History
 
 .. towncrier release notes start
 
+v16.7.0 (2026-02-18)
+====================
+
+New Features
+------------
+
+- Add Donut Blur FWHM clipping in calcZernikes results. (`DM-53585 <https://rubinobs.atlassian.net//browse/DM-53585>`_)
+
+
+Bug Fixes
+---------
+
+- before the changes aiDonut will always default to intra because without .value it was never True (`patch <https://github.com/lsst-ts/ts_wep/pull/67>`_)
+- Add ``_clipDonutCatalogToDetector`` to filter donuts outside the detector bounding box on all code paths.
+  Fix early-return paths missing detector name column and visit info metadata. (`DM-54173 <https://rubinobs.atlassian.net//browse/DM-54173>`_)
+
+
 v16.6.0 (2026-01-28)
 ====================
 
