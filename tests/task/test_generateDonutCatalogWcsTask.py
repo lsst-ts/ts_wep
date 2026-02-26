@@ -26,6 +26,7 @@ from astropy.table import vstack
 
 import lsst.geom
 from lsst.daf.butler import Butler
+from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
     GenerateDonutCatalogWcsTaskConfig,
@@ -43,6 +44,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
     def setUp(self) -> None:
         self.config = GenerateDonutCatalogWcsTaskConfig()
         self.config.donutSelector.unblendedSeparation = 1
+        self.config.catalogFilterList = ["g"]
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         moduleDir = getModulePath()
@@ -65,22 +67,74 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
     def testValidateConfigs(self) -> None:
         self.config.doDonutSelection = False
-        self.config.anyFilterMapsToThis = "phot_g_mean"
+        self.config.photoRefFilter = "g"
+        self.config.catalogFilterList = ["lsst_u", "lsst_g"]
         self.config.edgeMargin = 100
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
         self.assertEqual(self.task.config.doDonutSelection, False)
-        self.assertEqual(self.task.config.anyFilterMapsToThis, "phot_g_mean")
+        self.assertEqual(self.task.config.photoRefFilter, "g")
+        self.assertEqual(self.task.config.catalogFilterList, ["lsst_u", "lsst_g"])
         self.assertEqual(self.task.config.edgeMargin, 100)
 
-    def testAnyFilterMapsToThis(self) -> None:
-        self.config.anyFilterMapsToThis = "r"
-        self.task = GenerateDonutCatalogWcsTask(config=self.config)
+    def testConfigPhotoRefFilterErr(self) -> None:
+        self.config.photoRefFilter = "g"
+        self.config.photoRefFilterPrefix = "lsst_"
+        task = GenerateDonutCatalogWcsTask(config=self.config)
+        exposure = self.butler.get(
+            "raw",
+            collections=["LSSTCam/raw/all"],
+            dataId={"exposure": 4021123106001, "instrument": "LSSTCam", "detector": 94},
+        )
 
-        refCatList = self._getRefCat()
-        refObjLoader = self.task.getRefObjLoader(refCatList)
+        # Test that setting both photoRefFilter and
+        # photoRefFilterPrefix raises an error
+        errMsg = str("photoRefFilter and photoRefFilterConfig cannot both be set.")
+        with self.assertRaises(ValueError) as context:
+            task.run(self._getRefCat(), exposure)
+        self.assertEqual(str(context.exception), errMsg)
 
-        self.assertEqual(refObjLoader.config.anyFilterMapsToThis, "r")
+    def testConfigCatalogFilterListErr(self) -> None:
+        self.config.catalogFilterList = ["lsst_u"]
+        task = GenerateDonutCatalogWcsTask(config=self.config)
+
+        # Test that requesting a filter in the donut catalog
+        # that isn't in the reference catalog raises an error
+        errMsg = str(
+            "Filter(s) {'lsst_u'} not in available columns in "
+            "reference catalog. Check catalogFilterList config "
+            "(currently set as ['lsst_u']). "
+            "Available ref catalog filters are ['g']."
+        )
+
+        exposure = self.butler.get(
+            "raw",
+            collections=["LSSTCam/raw/all"],
+            dataId={"exposure": 4021123106001, "instrument": "LSSTCam", "detector": 94},
+        )
+        with self.assertRaises(TaskError) as context:
+            task.run(self._getRefCat(), exposure)
+        self.assertEqual(str(context.exception), errMsg)
+
+    def testNoRefCat(self) -> None:
+        self.config.catalogFilterList = ["g"]
+        task = GenerateDonutCatalogWcsTask(config=self.config)
+
+        # Test that an area with no reference catalogs
+        # issues a warning and returns an empty catalog.
+        warnMsg = str("No catalogs cover this detector. Returning empty catalog.")
+
+        exposure = self.butler.get(
+            "raw",
+            collections=["LSSTCam/raw/all"],
+            dataId={"exposure": 4021123106001, "instrument": "LSSTCam", "detector": 94},
+        )
+        with self.assertWarns(RuntimeWarning) as context:
+            task.run(list(), exposure)
+        self.assertEqual(str(context.warning), warnMsg)
+
+        # Metadata should also reflect that no reference catalogs were present.
+        task.metadata["refCatalogsPresent"] = False
 
     def testGetRefObjLoader(self) -> None:
         refCatList = self._getRefCat()
@@ -294,3 +348,6 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         fluxTruth[:6] = 3630780.5477010026
         fluxTruth[6:] = 363078.0547701003
         self.assertCountEqual(outputTable["g_flux"].value, fluxTruth)
+
+        # Check that success is recorded in task metadata
+        self.assertTrue(self.task.metadata["refCatalogsPresent"])

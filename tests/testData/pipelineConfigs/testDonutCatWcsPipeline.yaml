@@ -34,4 +34,4 @@ tasks:
     config:
       donutSelector.unblendedSeparation: 1
       donutSelector.useCustomMagLimit: True
-
+      catalogFilterList: ["g"]
