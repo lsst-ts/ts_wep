@@ -56,6 +56,19 @@ class CutOutDonutsScienceSensorTaskConnections(
         storageClass="Exposure",
         name="post_isr_image",
         multiple=True,
+        minimum=2,
+    )
+    donutCatalog = ct.Input(
+        doc="Donut Locations",
+        dimensions=(
+            "visit",
+            "detector",
+            "instrument",
+        ),
+        storageClass="AstropyQTable",
+        name="donutTable",
+        multiple=True,
+        minimum=2,
     )
     donutVisitPairTable = ct.Input(
         doc="Visit pair table",
@@ -68,14 +81,28 @@ class CutOutDonutsScienceSensorTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtra",
-        multiple=True,
+        multiple=True
     )
     donutStampsIntra = ct.Output(
         doc="Intra-focal Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
-        multiple=True,
+        multiple=True
+    )
+    donutTablesIntra = ct.Output(
+        doc="Intra-focal Donut Postage Stamp Table",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutTableIntra",
+        multiple=True
+    )
+    donutTablesExtra = ct.Output(
+        doc="Extra-focal Donut Postage Stamp Table",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutTableExtra",
+        multiple=True
     )
 
     def __init__(self, *, config: Any | None = None) -> None:
@@ -144,8 +171,6 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
-        donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
-        donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}
 
         if hasattr(inputRefs, "donutVisitPairTable"):
             pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable))
@@ -155,11 +180,18 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             exposures = butlerQC.get([exposureHandleDict[k] for k in [pair.intra, pair.extra]])
             donutCats = butlerQC.get([donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]])
             outputs = self.run(exposures, donutCats, camera)
-            butlerQC.put(outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra])
-            butlerQC.put(
-                outputs.donutStampsIntra,
-                donutStampsIntraHandleDict[pair.extra],  # Intentionally use extra id for intra stamps here
-            )
+
+            # Intentionally use extra id for intra stamps here
+            (donutStampsIntraRef,) = [ref for ref in outputRefs.donutStampsIntra if ref.dataId["visit"] == pair.extra]
+            (donutStampsExtraRef,) = [ref for ref in outputRefs.donutStampsExtra if ref.dataId["visit"] == pair.extra]
+            butlerQC.put(outputs.donutStampsExtra, donutStampsExtraRef)
+            butlerQC.put(outputs.donutStampsIntra, donutStampsIntraRef)
+
+            # Intentionally use extra id for intra stamps here
+            (donutTableIntraRef,) = [ref for ref in outputRefs.donutTablesIntra if ref.dataId["visit"] == pair.extra]
+            (donutTableExtraRef,) = [ref for ref in outputRefs.donutTablesExtra if ref.dataId["visit"] == pair.extra]
+            butlerQC.put(outputs.donutTableExtra, donutTableExtraRef)
+            butlerQC.put(outputs.donutTableIntra, donutTableIntraRef)
 
     def assignExtraIntraIdx(self, focusZVal0: float, focusZVal1: float, cameraName: str) -> tuple[int, int]:
         """
@@ -277,4 +309,6 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         return pipeBase.Struct(
             donutStampsExtra=donutStampsExtra,
             donutStampsIntra=donutStampsIntra,
+            donutTableExtra=donutCatalog[extraExpIdx],
+            donutTableIntra=donutCatalog[intraExpIdx],
         )
