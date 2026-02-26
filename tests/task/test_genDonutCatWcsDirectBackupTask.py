@@ -24,12 +24,10 @@ import os
 import numpy as np
 from astropy.table import vstack
 
-import lsst.geom
 from lsst.daf.butler import Butler
-from lsst.pipe.base.task import TaskError
-from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
-    GenerateDonutCatalogWcsTask,
-    GenerateDonutCatalogWcsTaskConfig,
+from lsst.ts.wep.task.genDonutCatWcsDirectBackupTask import (
+    GenDonutCatWcsDirectBackupTask,
+    GenDonutCatWcsDirectBackupTaskConfig,
 )
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -40,17 +38,18 @@ from lsst.ts.wep.utils import (
 from lsst.utils.tests import TestCase
 
 
-class TestGenerateDonutCatalogWcsTask(TestCase):
+class TestGenDonutCatWcsDirectBackupTask(TestCase):
+    """Test the GenDonutCatWcsDirectBackupTask."""
+
     def setUp(self) -> None:
-        self.config = GenerateDonutCatalogWcsTaskConfig()
-        self.config.donutSelector.unblendedSeparation = 1
-        self.task = GenerateDonutCatalogWcsTask(config=self.config)
+        self.config = GenDonutCatWcsDirectBackupTaskConfig()
+        self.task = GenDonutCatWcsDirectBackupTask(
+            config=self.config,
+        )
 
         moduleDir = getModulePath()
         self.testDataDir = os.path.join(moduleDir, "tests", "testData")
         self.repoDir = os.path.join(self.testDataDir, "gen3TestRepo")
-        self.centerRaft = ["R22_S10", "R22_S11"]
-
         self.butler = Butler.from_config(self.repoDir)
         self.registry = self.butler.registry
 
@@ -64,57 +63,15 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         return refCatList
 
-    def testValidateConfigs(self) -> None:
-        self.config.doDonutSelection = False
-        self.config.anyFilterMapsToThis = "phot_g_mean"
-        self.config.edgeMargin = 100
-        self.task = GenerateDonutCatalogWcsTask(config=self.config)
-
-        self.assertEqual(self.task.config.doDonutSelection, False)
-        self.assertEqual(self.task.config.anyFilterMapsToThis, "phot_g_mean")
-        self.assertEqual(self.task.config.edgeMargin, 100)
-
-    def testConfigCatalogFilterListErr(self) -> None:
-        self.config.catalogFilterList = ["lsst_u"]
-        task = GenerateDonutCatalogWcsTask(config=self.config)
-
-        # Test that requesting a filter in the donut catalog
-        # that isn't in the reference catalog raises an error
-        errMsg = str(
-            "Filter(s) {'lsst_u'} not in available columns in "
-            "reference catalog. Check catalogFilterList config "
-            "(currently set as ['lsst_u']). "
-            "Available ref catalog filters are ['g']."
-        )
-
+    def testWcsFailure(self) -> None:
         exposure = self.butler.get(
             "raw",
             collections=["LSSTCam/raw/all"],
             dataId={"exposure": 4021123106001, "instrument": "LSSTCam", "detector": 94},
         )
-        with self.assertRaises(TaskError) as context:
-            task.run(self._getRefCat(), exposure)
-        self.assertEqual(str(context.exception), errMsg)
-
-    def testGetRefObjLoader(self) -> None:
-        refCatList = self._getRefCat()
-        refObjLoader = self.task.getRefObjLoader(refCatList)
-
-        # Check that our refObjLoader loads the available objects
-        # within a given search radius
-        donutCatSmall = refObjLoader.loadSkyCircle(
-            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
-            lsst.geom.Angle(0.5, lsst.geom.degrees),
-            filterName="g",
-        )
-        self.assertEqual(len(donutCatSmall.refCat), 8)
-
-        donutCatFull = refObjLoader.loadSkyCircle(
-            lsst.geom.SpherePoint(0.0, 0.0, lsst.geom.degrees),
-            lsst.geom.Angle(2.5, lsst.geom.degrees),
-            filterName="g",
-        )
-        self.assertEqual(len(donutCatFull.refCat), 24)
+        # dataRefs = self._getRefCat()
+        task_out = self.task.run(exposure=exposure, refCatList=list())
+        print(task_out)
 
     def testPipeline(self) -> None:
         """
@@ -128,7 +85,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         collections = "refcats/gen2,LSSTCam/calib,LSSTCam/raw/all,LSSTCam/aos/intrinsic"
         exposureId = 4021123106001  # Exposure ID for test extra-focal image
         testPipelineConfigDir = os.path.join(self.testDataDir, "pipelineConfigs")
-        pipelineYaml = os.path.join(testPipelineConfigDir, "testDonutCatWcsPipeline.yaml")
+        pipelineYaml = os.path.join(testPipelineConfigDir, "testDonutCatWcsWithBackupPipeline.yaml")
         pipetaskCmd = writePipetaskCmd(
             self.repoDir, runName, instrument, collections, pipelineYaml=pipelineYaml
         )
@@ -173,6 +130,16 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         )
         donutCatTable_S10 = pipelineButler.get(
             "donutTable",
+            dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
+            collections=[f"{runName}"],
+        )
+        S11CatTaskMetadata = pipelineButler.get(
+            "genDonutCatWcsDirectBackup_metadata",
+            dataId={"instrument": "LSSTCam", "detector": 94, "visit": exposureId},
+            collections=[f"{runName}"],
+        )
+        S10CatTaskMetadata = pipelineButler.get(
+            "genDonutCatWcsDirectBackup_metadata",
             dataId={"instrument": "LSSTCam", "detector": 93, "visit": exposureId},
             collections=[f"{runName}"],
         )
@@ -233,78 +200,16 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         fluxTruth[6:] = 363078.0547701003
         self.assertCountEqual(outputTable["g_flux"].value, fluxTruth)
 
+        # Check table and task metadata
+        self.assertEqual(donutCatTable_S11.meta["catalog_method"], "wcs")
+        self.assertEqual(donutCatTable_S10.meta["catalog_method"], "wcs")
+        self.assertTrue(
+            S11CatTaskMetadata.metadata["genDonutCatWcsDirectBackup"].scalars["wcs_catalog_success"]
+        )
+        self.assertTrue(
+            S10CatTaskMetadata.metadata["genDonutCatWcsDirectBackup"].scalars["wcs_catalog_success"]
+        )
+
         # Clean up
         cleanUpCmd = writeCleanUpRepoCmd(self.repoDir, runName)
         runProgram(cleanUpCmd)
-
-    def testDonutCatalogGeneration(self) -> None:
-        """
-        Test that task creates a QTable with detector information.
-        """
-
-        # Create list of deferred loaders for the ref cat
-        deferredList = []
-        datasetGenerator = self.registry.queryDatasets(
-            datasetType="cal_ref_cat", collections=["refcats/gen2"]
-        ).expanded()
-        for ref in datasetGenerator:
-            deferredList.append(self.butler.getDeferred(ref, collections=["refcats/gen2"]))
-        expGenerator = self.registry.queryDatasets(
-            datasetType="raw",
-            collections=["LSSTCam/raw/all"],
-            dimensions=["exposure", "instrument"],
-            dataId={"exposure": 4021123106001, "instrument": "LSSTCam"},
-        ).expanded()
-        expList = []
-        for expRef in expGenerator:
-            expList.append(self.butler.get("raw", dataId=expRef.dataId, collections=["LSSTCam/raw/all"]))
-
-        # run task on all exposures
-        donutCatTableList = []
-        donutCatXPixelList = []
-        donutCatYPixelList = []
-        # Set task to take all donuts regardless of magnitude
-        self.task.config.donutSelector.useCustomMagLimit = True
-        for exposure in expList:
-            taskOutput = self.task.run(deferredList, exposure)
-            self.assertEqual(len(taskOutput.donutCatalog), 4)
-            donutCatTableList.append(taskOutput.donutCatalog)
-            # Get pixel locations with proper wcs
-            donutX, donutY = exposure.wcs.skyToPixelArray(
-                taskOutput.donutCatalog["coord_ra"],
-                taskOutput.donutCatalog["coord_dec"],
-            )
-            donutCatXPixelList.append(donutX)
-            donutCatYPixelList.append(donutY)
-
-        # concatenate catalogs from each exposure into a single catalog
-        # to compare against the test input reference catalog
-        outputTable = donutCatTableList[0]
-        for donutCat in donutCatTableList[1:]:
-            outputTable = vstack([outputTable, donutCat])
-
-        # Compare ra, dec info to original input catalog
-        inputCat = np.genfromtxt(
-            os.path.join(self.testDataDir, "phosimOutput", "realComCam", "skyComCamInfo.txt"),
-            names=["id", "ra", "dec", "mag"],
-        )
-
-        self.assertEqual(len(outputTable), 8)
-        self.assertCountEqual(np.radians(inputCat["ra"]), outputTable["coord_ra"].value)
-        self.assertCountEqual(np.radians(inputCat["dec"]), outputTable["coord_dec"].value)
-        np.testing.assert_allclose(
-            np.sort(np.array(donutCatXPixelList).flatten()),
-            np.sort(outputTable["centroid_x"]),
-            atol=1e-14,
-            rtol=1e-14,
-        )
-        np.testing.assert_allclose(
-            np.sort(np.array(donutCatYPixelList).flatten()),
-            np.sort(outputTable["centroid_y"]),
-            atol=1e-14,
-            rtol=1e-14,
-        )
-        fluxTruth = np.ones(8)
-        fluxTruth[:6] = 3630780.5477010026
-        fluxTruth[6:] = 363078.0547701003
-        self.assertCountEqual(outputTable["g_flux"].value, fluxTruth)
