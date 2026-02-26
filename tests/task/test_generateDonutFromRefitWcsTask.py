@@ -291,6 +291,32 @@ class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):
         # Test that detector column and visit info are present
         self.assertIn("detector", fitCatalog.colnames)
 
+    def testWcsFailureWithDifferentSelectorConfig(self) -> None:
+        preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
+
+        # Set cutoff so there will be no sources and fit will fail
+        self.config.astromTask.referenceSelector.magLimit.maximum = 8.0
+        self.config.astromTask.referenceSelector.magLimit.fluxField = "g_flux"
+        self.config.astromRefFilter = "g"
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
+
+        # Fit the WCS with the task
+        fitWcsOutput = task.run(dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs)
+        fitCatalog = fitWcsOutput.donutCatalog
+
+        # Should be the same catalog since we didn't modify
+        # donutSelectorTask configs.
+        self.assertEqual(len(directDetectCat), len(fitCatalog))
+
+        self.config.donutSelector.maxFieldDist = 0.03
+        task = GenerateDonutFromRefitWcsTask(config=self.config)
+        fitWcsOutputFieldMax = task.run(dataRefs, copy(preFitExp_S11), directDetectCat, dataRefs)
+        fitCatalogFieldMax = fitWcsOutputFieldMax.donutCatalog
+
+        # Should now reduce the amount of source in the catalog
+        # since the output should have the new maxFieldDist applied
+        self.assertLess(len(fitCatalogFieldMax), len(fitCatalog))
+
     def testRefCatalogFailureWithNoCatalogs(self) -> None:
         preFitExp_S11, directDetectCat, dataRefs = self._getInputData()
 

@@ -360,6 +360,21 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         self.astromTask.refObjLoader.config.anyFilterMapsToThis = self.config.astromRefFilter
         afwCat = self.formatDonutCatalog(fitDonutCatalog)
         originalExposure = copy(exposure)
+        bandLabel = originalExposure.filter.bandLabel
+
+        # WCS has been fit but scatter is too high, so use original
+        # catalog but make cuts according to desired final catalog
+        # since we may allow more donuts for WCS fitting than we want
+        # in the final catalog.
+        if self.config.doDonutSelection:
+            self.log.info("Running Donut Selector")
+            fitDonutCatalog[f"{bandLabel}_flux"] = fitDonutCatalog["source_flux"]
+            donutSelection = self.donutSelector.run(fitDonutCatalog, exposure.detector, bandLabel)
+            trimmedDirectCatalog = fitDonutCatalog[donutSelection.selected]
+            trimmedDirectCatalog.meta["blend_centroid_x"] = donutSelection.blendCentersX
+            trimmedDirectCatalog.meta["blend_centroid_y"] = donutSelection.blendCentersY
+        else:
+            trimmedDirectCatalog = fitDonutCatalog
 
         successfulFit = False
         # Set a parameter in the metadata to
@@ -380,7 +395,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             else:
                 # WCS has been fit but scatter is
                 # too high, so use original catalog
-                donutCatalog = fitDonutCatalog
+                donutCatalog = trimmedDirectCatalog
                 self.log.warning("Returning original exposure and WCS and direct detect catalog as output.")
 
         except (RuntimeError, TaskError, IndexError, ValueError, AttributeError) as e:
@@ -397,7 +412,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 raise TaskError("Failing task due to wcs fit failure.")
             else:
                 # this is set to None when the fit fails, so restore it
-                donutCatalog = fitDonutCatalog
+                donutCatalog = trimmedDirectCatalog
                 self.log.warning("Returning original exposure and WCS and direct detect catalog as output.")
 
         if successfulFit:
@@ -412,7 +427,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             # Check that there are catalogs
             if len(photoRefCat) == 0:
                 self.log.warning("No catalogs cover this detector.")
-                donutCatalog = fitDonutCatalog
+                donutCatalog = trimmedDirectCatalog
                 self.log.warning(catCreateErrorMsg)
                 detectorName = detector.getName()
                 donutCatalog["detector"] = np.array([detectorName] * len(donutCatalog), dtype=str)
@@ -432,7 +447,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             if f"{filterName}_flux" not in photoRefCat[0].get().schema:
                 filterFailMsg = f"Photometric Reference Catalog does not contain photoRefFilter: {filterName}"
                 self.log.warning(filterFailMsg)
-                donutCatalog = fitDonutCatalog
+                donutCatalog = trimmedDirectCatalog
                 self.log.warning(catCreateErrorMsg)
                 detectorName = detector.getName()
                 donutCatalog["detector"] = np.array([detectorName] * len(donutCatalog), dtype=str)
@@ -486,7 +501,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             # available for the region covered by detector
             except RuntimeError:
                 self.log.warning("No catalogs cover this detector.")
-                donutCatalog = fitDonutCatalog
+                donutCatalog = trimmedDirectCatalog
                 self.log.warning(catCreateErrorMsg)
 
         detectorName = exposure.getDetector().getName()
