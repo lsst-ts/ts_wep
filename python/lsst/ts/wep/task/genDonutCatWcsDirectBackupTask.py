@@ -33,6 +33,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogWcsTask import (
     GenerateDonutCatalogWcsTask,
 )
@@ -100,6 +101,12 @@ class GenDonutCatWcsDirectBackupTaskConfig(
         doc="Task to generate direct detection catalog. "
         + "Used as a backup when wcs catalog generation fails.",
     )
+    donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=DonutSourceSelectorTask, doc="How to select donut targets."
+    )
+    doDonutSelection: pexConfig.Field = pexConfig.Field(
+        doc="Whether or not to run donut selector.", dtype=bool, default=True
+    )
 
 
 class GenDonutCatWcsDirectBackupTask(
@@ -119,6 +126,8 @@ class GenDonutCatWcsDirectBackupTask(
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
+        # self.makeSubtask("donutSelector")
+        self.config.wcsCatTask.donutSelector = self.config.donutSelector
         self.makeSubtask("wcsCatTask")
 
     @timeMethod
@@ -147,6 +156,7 @@ class GenDonutCatWcsDirectBackupTask(
         self.metadata["wcs_catalog_success"] = False
         try:
             self.log.info("Attempting WCS-based donut catalog generation.")
+            self.wcsCatTask.donutSelector = self.donutSelector
             result = self.wcsCatTask.run(
                 refCatalogs=refCatalogs,
                 exposure=exposure,
@@ -157,6 +167,7 @@ class GenDonutCatWcsDirectBackupTask(
             return result
         except RuntimeWarning as e:
             self.makeSubtask("directDetectTask")
+            self.directDetectTask.donutSelector = self.donutSelector
             self.log.info(
                 f"WCS catalog generation failed with error: {e}. "
                 "Falling back to direct detection catalog generation."
