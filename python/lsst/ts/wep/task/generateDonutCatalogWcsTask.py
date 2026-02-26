@@ -189,6 +189,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         detectorWcs = exposure.getWcs()
         edgeMargin = self.config.edgeMargin
         filterName = exposure.filter.bandLabel
+        filterList = self.config.catalogFilterList
         # Check that specified filter exists in catalogs
         if self.config.photoRefFilter is not None and self.config.photoRefFilterPrefix is not None:
             raise ValueError("photoRefFilter and photoRefFilterConfig cannot both be set.")
@@ -210,7 +211,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                 edgeMargin,
             )
             # Create list of filters to include in final catalog
-            filterList = self.config.catalogFilterList
             availableRefFilters = [
                 col[:-5] for col in refSelection.schema.getNames() if col.endswith("_flux")
             ]
@@ -225,10 +225,8 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                     f"Available ref catalog filters are {availableRefFilters}."
                 )
 
-            # Add photoRefFilter if not present and get its index
-            if filterName not in filterList:
-                filterList.append(filterName)
-            sortFilterIdx = filterList.index(filterName)
+            # Record success in task metdata
+            self.metadata["refCatalogsPresent"] = True
 
         # Except RuntimeError caused when no reference catalog
         # available for the region covered by detector
@@ -240,6 +238,14 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             refSelection = None
             blendCentersX = None
             blendCentersY = None
+
+            # Record failure in task metadata
+            self.metadata["refCatalogsPresent"] = False
+
+        # Add photoRefFilter if not present and get its index
+        if filterName not in filterList:
+            filterList.append(filterName)
+        sortFilterIdx = filterList.index(filterName)
 
         fieldObjects = donutCatalogToAstropy(
             refSelection, filterList, blendCentersX, blendCentersY, sortFilterIdx=sortFilterIdx
