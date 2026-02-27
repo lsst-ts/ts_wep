@@ -362,6 +362,7 @@ class DanishAlgorithm(WfAlgorithm):
             chi = np.array(model.chi(result["x"], img, backgroundStd**2))
             chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
             self.log.info("Chi-square: %.2f", chi_sq)
+            exception_status = ""
 
         # Sometimes this happens with Danish :(
         except (GalSimFFTSizeError, ValueError) as e:
@@ -375,6 +376,8 @@ class DanishAlgorithm(WfAlgorithm):
                 self.log.warning(f"Returning nans for fit due to following galsim error: {str(e)}")
             else:
                 raise
+            exception_status = str(e)
+
             # Fill dummy objects
             result = dict()
             zkFit = np.full_like(zkStart, np.nan)
@@ -416,6 +419,7 @@ class DanishAlgorithm(WfAlgorithm):
             "chi_square": chi_sq,
             "model_flux": flux,
             "model_bkg": bkg,
+            "exception_status": exception_status,
         }
 
         # Save scalar metadata from least_squares
@@ -644,6 +648,7 @@ class DanishAlgorithm(WfAlgorithm):
             chi = np.array(model.chi(result["x"], imgs, skyLevels))
             chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
             self.log.info("Chi-square: %.2f", chi_sq)
+            exception_status = ""
 
         # Sometimes this happens with Danish :(
         except (GalSimFFTSizeError, ValueError) as e:
@@ -658,6 +663,7 @@ class DanishAlgorithm(WfAlgorithm):
             else:
                 raise
             self.log.warning("Returning nans for fit due to %s", msg)
+            exception_status = str(e)
             # Fill dummy objects
             result = dict()
             fwhm = np.nan
@@ -712,6 +718,7 @@ class DanishAlgorithm(WfAlgorithm):
             "chi_square": chi_sq,
             "model_flux": fluxes,
             "model_bkg": bkgs,
+            "exception_status": exception_status,
         }
 
         # Save scalar metadata from least_squares
