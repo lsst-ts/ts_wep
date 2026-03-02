@@ -163,6 +163,9 @@ class CalcZernikesTaskConfig(
     doBlurClip: pexConfig.Field = pexConfig.Field(
         doc="Remove donuts with outlier donut blur fwhm from" + "final averages.", dtype=bool, default=True
     )
+    doResidualClip: pexConfig.Field = pexConfig.Field(
+        doc="Remove donuts with residual blend flags from estimateZernikes.", dtype=bool, default=True
+    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
@@ -193,6 +196,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         self.doDonutStampSelector = config.doDonutStampSelector
         self.doBlurClip = config.doBlurClip
+        self.doResidualClip = config.doResidualClip
 
         # Initialize the donut stamps to empty placeholders
         self.stampsExtra = DonutStamps([])
@@ -639,6 +643,13 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             for j in self.nollIndices:
                 zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
                 zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+
+        if self.doResidualClip:
+            # If we have residual blend flags, then clip those donuts.
+            if "residual_blend_flags" in zkTable.meta["estimatorInfo"].keys():
+                residualBlendFlags = zkTable.meta["estimatorInfo"]["residual_blend_flags"]
+                failIdx = np.where(np.sum(residualBlendFlags, axis=1))[0]
+                zkTable["used"][failIdx + 1] = False  # +1 to skip average row
 
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
