@@ -203,6 +203,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
         selected = np.zeros(len(sourceCat), dtype=bool)
         if len(selected) == 0:
+            self.log.info("No sources in input catalog. Returning empty catalog.")
             return pipeBase.Struct(
                 selected=selected,
                 blendCentersX=None,
@@ -230,7 +231,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
         magSelected = np.ones(len(sourceCat), dtype=bool)
         magSelected &= mag < (magMax + minMagDiff)
         mag = mag[magSelected]
+        self.log.info("%d/%d sources passed initial magnitude cut.", len(mag), len(sourceCat))
         if len(mag) == 0:
+            self.log.info("No source passed magnitude cuts. Returning empty catalog.")
             return pipeBase.Struct(
                 selected=selected,
                 blendCentersX=None,
@@ -273,6 +276,12 @@ class DonutSourceSelectorTask(pipeBase.Task):
         # Go through catalog with nearest neighbor information
         # and keep sources that match our configuration settings
         srcOn = -1
+        edgeCut = 0
+        maxFieldDistCut = 0
+        magCut = 0
+        fainterSrcCut = 0
+        unblendedRadCut = 0
+        blendCut = 0
         for nbrDist, idxList in zip(radDist, radIdx):
             srcOn += 1
             # Move on if source is within unblendedSeparation
@@ -280,16 +289,19 @@ class DonutSourceSelectorTask(pipeBase.Task):
             srcX = magSortedDf["x"].iloc[srcOn]
             srcY = magSortedDf["y"].iloc[srcOn]
             if trimmedBBox.contains(srcX, srcY) is False:
+                edgeCut += 1
                 continue
 
             # If distance from field center is greater than
             # maxFieldDist discard the source and move on
             if magSortedDf["fieldDist"].iloc[srcOn] > self.config.maxFieldDist:
+                maxFieldDistCut += 1
                 continue
 
             # If this source's magnitude is outside our bounds then discard
             srcMag = magSortedDf["mag"].iloc[srcOn]
             if (srcMag > magMax) | (srcMag < magMin):
+                magCut += 1
                 continue
 
             # If there is no overlapping source keep
@@ -305,20 +317,28 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
                 # Measure distances to overlapping objects
                 blendSeparations = nbrDist[1:]
+                insideUnblendedRadius = blendSeparations < unblendedSeparation
                 blendTooClose = blendSeparations < minBlendedSeparation
 
                 # If this is the fainter source of the overlaps move on
                 if np.min(magDiff) < 0.0:
+                    fainterSrcCut += 1
                     continue
                 # If this source overlaps but is brighter than all its
                 # overlapping sources by minMagDiff then keep it
                 elif np.min(magDiff) >= minMagDiff:
                     index.append(groupIndices[srcOn])
                     sourcesKept += 1
+                # Too many bright sources inside the unblendedSeparation
+                # distance so move on
+                elif np.sum(insideUnblendedRadius & magTooClose) > maxBlended:
+                    unblendedRadCut += 1
+                    continue
                 # If the centers of any blended objects with a magnitude
                 # within minMagDiff of the source magnitude
                 # are closer than minBlendedSeparation move on
                 elif np.sum(blendTooClose & magTooClose) > 0:
+                    blendCut += 1
                     continue
                 # If the number of overlapping sources with magnitudes close
                 # enough to count as blended is less than or equal to
@@ -364,7 +384,22 @@ class DonutSourceSelectorTask(pipeBase.Task):
         selectedBlendCentersX = [blendCentersX[idx] for idx in sortedIndex]
         selectedBlendCentersY = [blendCentersY[idx] for idx in sortedIndex]
 
-        self.log.info("Selected %d/%d references", selected.sum(), len(sourceCat))
+        self.log.info("Selected %d/%d references", selected.sum(), len(mag))
+        self.log.info(
+            "%d sources were cut for being too close to the edge, "
+            + "%d were cut for being too far from the field center, "
+            + "%d were cut for being outside of magnitude limits, "
+            + "%d were cut for having too many bright sources inside the unblended radius, "
+            + "%d were cut for being the fainter source in a blend, and "
+            + "%d were cut for being blended with too many bright sources with "
+            + "too small of a separation.",
+            edgeCut,
+            maxFieldDistCut,
+            magCut,
+            unblendedRadCut,
+            fainterSrcCut,
+            blendCut,
+        )
 
         return pipeBase.Struct(
             selected=selected,
