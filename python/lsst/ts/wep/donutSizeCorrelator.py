@@ -62,7 +62,7 @@ class DonutSizeCorrelator:
             The image array, prepped for correlation.
         """
         # Extract image and mask arrays
-        image = exposure.image.array
+        image = exposure.image.array.copy()
 
         # Subtract off approximate background from image
         image -= np.median(image)
