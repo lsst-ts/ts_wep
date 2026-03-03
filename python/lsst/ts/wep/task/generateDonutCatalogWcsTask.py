@@ -36,7 +36,8 @@ import lsst.afw.table as afwTable
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-from lsst.meas.algorithms import LoadReferenceObjectsConfig, ReferenceObjectLoader
+from lsst.meas.algorithms import ReferenceObjectLoader
+from lsst.pipe.base.task import TaskError
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
     addVisitInfoToCatTable,
@@ -105,7 +106,26 @@ class GenerateDonutCatalogWcsTaskConfig(
     # When matching photometric filters are not available in
     # the reference catalog (e.g. Gaia) use anyFilterMapsToThis
     # to get sources out of the catalog.
-    anyFilterMapsToThis = LoadReferenceObjectsConfig.anyFilterMapsToThis
+    photoRefFilter: pexConfig.Field = pexConfig.Field(
+        doc="Set filter to use in Photometry catalog. "
+        + "Cannot set both this and photoRefFilterPrefix. "
+        + "If neither is set then will just try to use the name of the exposure filter.",
+        dtype=str,
+        optional=True,
+    )
+    photoRefFilterPrefix: pexConfig.Field = pexConfig.Field(
+        doc="Set filter prefix to use. "
+        + "Will then try to use exposure band label with given catalog prefix. "
+        + "Cannot set both this and photoRefFilter. "
+        + "If neither is set then will just try to use the name of the exposure filter.",
+        dtype=str,
+        optional=True,
+    )
+    catalogFilterList: pexConfig.ListField = pexConfig.ListField(
+        dtype=str,
+        doc="Filters from reference catalog to include in donut catalog.",
+        default=["lsst_u", "lsst_g", "lsst_r", "lsst_i", "lsst_z", "lsst_y"],
+    )
 
 
 class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
@@ -149,7 +169,6 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         refObjLoader = ReferenceObjectLoader(
             dataIds=[ref.dataId for ref in refCatalogList],
             refCats=refCatalogList,
-            config=LoadReferenceObjectsConfig(anyFilterMapsToThis=self.config.anyFilterMapsToThis),
         )
         # This removes the padding around the border of detector BBox when
         # matching to reference catalog.
@@ -168,9 +187,16 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
 
         detector = exposure.getDetector()
         detectorWcs = exposure.getWcs()
-        anyFilterMapsToThis = self.config.anyFilterMapsToThis
         edgeMargin = self.config.edgeMargin
-        filterName = exposure.filter.bandLabel if anyFilterMapsToThis is None else anyFilterMapsToThis
+        filterName = exposure.filter.bandLabel
+        filterList = self.config.catalogFilterList
+        # Check that specified filter exists in catalogs
+        if self.config.photoRefFilter is not None and self.config.photoRefFilterPrefix is not None:
+            raise ValueError("photoRefFilter and photoRefFilterConfig cannot both be set.")
+        if self.config.photoRefFilter is not None:
+            filterName = self.config.photoRefFilter
+        elif self.config.photoRefFilterPrefix is not None:
+            filterName = f"{self.config.photoRefFilterPrefix}_{exposure.filter.bandLabel}"
 
         try:
             # Match detector layout to reference catalog
@@ -184,6 +210,23 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                 donutSelectorTask,
                 edgeMargin,
             )
+            # Create list of filters to include in final catalog
+            availableRefFilters = [
+                col[:-5] for col in refSelection.schema.getNames() if col.endswith("_flux")
+            ]
+
+            # Validate all requested filters exist
+            missing_filters = set(filterList) - set(availableRefFilters)
+            if missing_filters:
+                raise TaskError(
+                    f"Filter(s) {missing_filters} not in available columns"
+                    " in reference catalog. Check catalogFilterList config "
+                    f"(currently set as {filterList}). "
+                    f"Available ref catalog filters are {availableRefFilters}."
+                )
+
+            # Record success in task metdata
+            self.metadata["refCatalogsPresent"] = True
 
         # Except RuntimeError caused when no reference catalog
         # available for the region covered by detector
@@ -196,7 +239,17 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             blendCentersX = None
             blendCentersY = None
 
-        fieldObjects = donutCatalogToAstropy(refSelection, filterName, blendCentersX, blendCentersY)
+            # Record failure in task metadata
+            self.metadata["refCatalogsPresent"] = False
+
+        # Add photoRefFilter if not present and get its index
+        if filterName not in filterList:
+            filterList.append(filterName)
+        sortFilterIdx = filterList.index(filterName)
+
+        fieldObjects = donutCatalogToAstropy(
+            refSelection, filterList, blendCentersX, blendCentersY, sortFilterIdx=sortFilterIdx
+        )
         fieldObjects["detector"] = np.array([detector.getName()] * len(fieldObjects), dtype=str)
 
         fieldObjects = addVisitInfoToCatTable(exposure, fieldObjects)
