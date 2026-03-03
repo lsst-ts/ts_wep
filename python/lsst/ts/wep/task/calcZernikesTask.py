@@ -163,6 +163,9 @@ class CalcZernikesTaskConfig(
     doBlurClip: pexConfig.Field = pexConfig.Field(
         doc="Remove donuts with outlier donut blur fwhm from" + "final averages.", dtype=bool, default=True
     )
+    doResidualClip: pexConfig.Field = pexConfig.Field(
+        doc="Remove donuts with residual blend flags from estimateZernikes.", dtype=bool, default=True
+    )
 
 
 class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
@@ -193,6 +196,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         self.doDonutStampSelector = config.doDonutStampSelector
         self.doBlurClip = config.doBlurClip
+        self.doResidualClip = config.doResidualClip
 
         # Initialize the donut stamps to empty placeholders
         self.stampsExtra = DonutStamps([])
@@ -402,7 +406,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
             row: dict = dict()
             row["label"] = f"pair{i + 1}"
-            row["used"] = False  # Placeholder for now
+            row["used"] = True  # Placeholder for now
             row.update({f"Z{j}": zk[i] for i, j in enumerate(self.nollIndices)})
             row.update({f"Z{j}_intrinsic": intrinsics[i] for i, j in enumerate(self.nollIndices)})
             row.update({f"Z{j}_deviation": deviation[i] for i, j in enumerate(self.nollIndices)})
@@ -544,6 +548,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # account for average row with "- 1" on index below
         fwhmList = np.array(zkTable.meta["estimatorInfo"]["fwhm"])[useIdx - 1]
         blurMask = sigma_clip(fwhmList, stdfunc="mad_std", sigma_lower=99).mask
+        print(fwhmList, blurMask)
         dropIdx = useIdx[np.where(blurMask)[0]]
         zkTable["used"][dropIdx] = False
         zkTable.meta["estimatorInfo"]["blur_clipped"] = np.isin(np.arange(1, len(zkTable)), dropIdx).tolist()
@@ -628,6 +633,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
+        print(zkTable)
+
         # If we have a fit failure recorded then replace Zernikes
         # with NaNs for those donuts so we don't use them in combining.
         if "fit_success" in zkTable.meta["estimatorInfo"].keys():
@@ -639,6 +646,18 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             for j in self.nollIndices:
                 zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
                 zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+
+        print(zkTable)
+
+        if self.doResidualClip:
+            # If we have residual blend flags, then clip those donuts.
+            if "residual_blend_flags" in zkTable.meta["estimatorInfo"].keys():
+                residualBlendFlags = zkTable.meta["estimatorInfo"]["residual_blend_flags"]
+                failIdx = np.where(np.sum(residualBlendFlags, axis=1))[0]
+                print(failIdx)
+                zkTable["used"][failIdx + 1] = False  # +1 to skip average row
+
+        print(zkTable)
 
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable

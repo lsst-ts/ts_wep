@@ -23,12 +23,14 @@ __all__ = ["DanishAlgorithm"]
 
 import logging
 import warnings
+from copy import copy
 
 import danish
 import numpy as np
 from galsim import GalSimFFTSizeError
 from scipy.ndimage import binary_erosion
 from scipy.optimize import OptimizeResult, least_squares
+from scipy.signal import find_peaks
 
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
@@ -499,15 +501,17 @@ class DanishAlgorithm(WfAlgorithm):
             galSimFFTSizeError = False
 
             # If we're saving the history, compute the model image
-            if saveHistory:
-                modelImages = model.model(
-                    dxs,
-                    dys,
-                    fwhm,
-                    zkFit,
-                    sky_levels=skyLevels,
-                    fluxes=np.sum(imgs, axis=(1, 2)),
-                )
+            # if saveHistory:
+            modelImages = model.model(
+                dxs,
+                dys,
+                fwhm,
+                zkFit,
+                sky_levels=skyLevels,
+                fluxes=np.sum(imgs, axis=(1, 2)),
+            )
+            residuals = [img - modelImage for img, modelImage in zip(imgs, modelImages)]
+            residualBlendFlags = [self.residualBlendFinder(residual) for residual in residuals]
 
             # Calculate chi-square
             # This reduced chi-square is usually much higher
@@ -568,6 +572,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_dy": dys,
             "model_sky_level": skyLevels,
             "chi_square": chi_sq,
+            "residual_blend_flags": residualBlendFlags,
         }
 
         # Save scalar metadata from least_squares
@@ -579,6 +584,39 @@ class DanishAlgorithm(WfAlgorithm):
         zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
 
         return zkSum, hist, zkMeta
+
+    def residualBlendFinder(self, residualIm: np.ndarray) -> bool:
+        """
+        Check the residual image for signs of blending along the edges
+        of the stamp.
+
+        Parameters
+        ----------
+        residualIm : np.ndarray
+            The residual image after subtracting the best-fit model
+            from the data.
+
+        Returns
+        -------
+        bool
+            True if there are signs of blending in the residual image,
+            False otherwise.
+        """
+        residualBlendFlag = False
+        residualBlocked = copy(residualIm)
+        # Block out all flux except for the edges of the stamp
+        residualBlocked[5:-5, 5:-5] = 0.0
+        # Create a histogram of the residual values along the edges
+        count, bins = np.histogram(residualBlocked, range=(0.001, max(residualBlocked.flatten())), bins=10)
+        print(count, bins)
+        refHeight = count[0]
+        # Set reference height to be at least 20 percent of the initial peak
+        peaks, peakDict = find_peaks(count[1:], height=0.2 * refHeight)
+        print(peaks, peakDict)
+        if len(peaks) > 0:
+            residualBlendFlag = True
+
+        return residualBlendFlag
 
     def _estimateZk(
         self,
