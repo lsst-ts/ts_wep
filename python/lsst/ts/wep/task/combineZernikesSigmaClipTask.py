@@ -93,7 +93,10 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             columns = zkTable.meta["deviation_columns"]
         else:
             raise ValueError(f"Unknown zkClipType: {self.zkClipType}")
-        subTable = zkTable[zkTable["label"] != "average"][columns]
+        print(zkTable)
+        subTableIdx = np.where((zkTable["label"] != "average") & (zkTable["used"]))[0]
+        print(subTableIdx)
+        subTable = zkTable[subTableIdx][columns]
         zernikeArray = np.array([subTable[col] for col in columns]).T
 
         # Perform conditional sigma clipping
@@ -114,9 +117,9 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
 
         # Identify which rows to use when calculating final mean
         keepIdx = ~np.array(binaryFlagArray, dtype=bool)
-        used = zkTable["used"][zkTable["label"] != "average"]
+        used = zkTable["used"][subTableIdx]
         used[keepIdx] = True
-        zkTable["used"][zkTable["label"] != "average"] = used
+        zkTable["used"][subTableIdx] = used
 
         self.log.info(f"MaxZernClip config: {self.maxZernClip}. MaxZernClip used: {effMaxZernClip}.")
         if effMaxZernClip < self.maxZernClip:
@@ -126,10 +129,11 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.metadata["maxZernClip"] = self.maxZernClip
         self.metadata["effMaxZernClip"] = effMaxZernClip
 
+        useIdx = np.where((zkTable[zkTable["label"] != "average"]["used"]))[0]
         # Calculate means
         for j in zkTable.meta["noll_indices"]:
-            self._setAvg(zkTable, f"Z{j}", np.nanmean, useIdx=keepIdx)
-            self._setAvg(zkTable, f"Z{j}_intrinsic", np.nanmean, useIdx=keepIdx)
-            self._setAvg(zkTable, f"Z{j}_deviation", np.nanmean, useIdx=keepIdx)
+            self._setAvg(zkTable, f"Z{j}", np.nanmean, useIdx=useIdx)
+            self._setAvg(zkTable, f"Z{j}_intrinsic", np.nanmean, useIdx=useIdx)
+            self._setAvg(zkTable, f"Z{j}_deviation", np.nanmean, useIdx=useIdx)
 
         return zkTable

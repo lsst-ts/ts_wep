@@ -608,9 +608,11 @@ class DanishAlgorithm(WfAlgorithm):
         residualBlocked[5:-5, 5:-5] = 0.0
         # Create a histogram of the residual values along the edges
         count, bins = np.histogram(residualBlocked, range=(0.001, max(residualBlocked.flatten())), bins=10)
+        print(count, bins)
         refHeight = count[0]
-        # Set reference height to be at least 25 percent of the initial peak
-        peaks, peakDict = find_peaks(count[1:], height=0.25 * refHeight)
+        # Set reference height to be at least 20 percent of the initial peak
+        peaks, peakDict = find_peaks(count[1:], height=0.2 * refHeight)
+        print(peaks, peakDict)
         if len(peaks) > 0:
             residualBlendFlag = True
 
