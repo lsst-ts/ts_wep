@@ -437,7 +437,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
             # Check that specified filter exists in catalogs
             if self.config.photoRefFilter is not None and self.config.photoRefFilterPrefix is not None:
-                raise ValueError("photoRefFilter and photoRefFilterConfig cannot both be set.")
+                raise ValueError("photoRefFilter and photoRefFilterPrefix cannot both be set.")
             if self.config.photoRefFilter is not None:
                 filterName = self.config.photoRefFilter
             elif self.config.photoRefFilterPrefix is not None:

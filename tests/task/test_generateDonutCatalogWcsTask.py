@@ -89,7 +89,7 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
 
         # Test that setting both photoRefFilter and
         # photoRefFilterPrefix raises an error
-        errMsg = str("photoRefFilter and photoRefFilterConfig cannot both be set.")
+        errMsg = str("photoRefFilter and photoRefFilterPrefix cannot both be set.")
         with self.assertRaises(ValueError) as context:
             task.run(self._getRefCat(), exposure)
         self.assertEqual(str(context.exception), errMsg)
