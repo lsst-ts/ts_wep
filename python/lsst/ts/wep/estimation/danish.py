@@ -324,14 +324,24 @@ class DanishAlgorithm(WfAlgorithm):
             chi = np.array(model.chi(result["x"], img, backgroundStd**2))
             chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
             self.log.info("Chi-square: %.2f", chi_sq)
+            exception_status = ""
 
         # Sometimes this happens with Danish :(
-        except GalSimFFTSizeError:
+        except (GalSimFFTSizeError, ValueError) as e:
+            exception_status = str(e)
+            if isinstance(e, ValueError):
+                # This one we know about.  Any others would be good to be informed
+                # about, so re-raise.
+                if not "zero-size array to reduction operation maximum" in str(e):
+                    raise
             # Fill dummy objects
-            result = None
+            result = {}
             zkFit = np.full_like(zkStart, np.nan)
             zkSum = np.full_like(zkStart, np.nan)
             fwhm = np.nan
+            dx = np.nan
+            dy = np.nan
+            chi_sq = np.nan
             if saveHistory:
                 modelImage = np.full_like(img, np.nan)
 
@@ -362,6 +372,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_dy": dy,
             "model_sky_level": backgroundStd**2,
             "chi_square": chi_sq,
+            "exception_status": exception_status,
         }
 
         # Save scalar metadata from least_squares
@@ -370,7 +381,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = (zkMeta["lstsq_success"] or 0) > 0
 
         return zkSum, hist, zkMeta
 
@@ -518,11 +529,22 @@ class DanishAlgorithm(WfAlgorithm):
             chi = np.array(model.chi(result["x"], imgs, skyLevels))
             chi_sq = np.sum(chi**2) / (len(chi) - len(result["x"]))
             self.log.info("Chi-square: %.2f", chi_sq)
+            exception_status = ""
 
         # Sometimes this happens with Danish :(
-        except GalSimFFTSizeError:
+        except (GalSimFFTSizeError, ValueError) as e:
+            if isinstance(e, ValueError):
+                # This one we know about.  Any others would be good to be informed
+                # about, so re-raise.
+                if not "zero-size array to reduction operation maximum" in str(e):
+                    raise
+            exception_status = str(e)
             # Fill dummy objects
-            result = None
+            result = {}
+            dxs = np.full(2, np.nan)
+            dys = np.full(2, np.nan)
+            fwhm = np.nan
+            chi_sq = np.nan
             zkFit = np.full_like(zkStartI1, np.nan)
             zkSum = np.full_like(zkStartI1, np.nan)
             if saveHistory:
@@ -568,6 +590,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_dy": dys,
             "model_sky_level": skyLevels,
             "chi_square": chi_sq,
+            "exception_status": exception_status,
         }
 
         # Save scalar metadata from least_squares
@@ -576,7 +599,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = (zkMeta["lstsq_success"] or 0) > 0
 
         return zkSum, hist, zkMeta
 
