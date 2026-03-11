@@ -24,8 +24,8 @@ __all__ = ["TieAlgorithm"]
 import inspect
 from typing import Iterable
 
-from astropy.coordinates import Angle
 import numpy as np
+from astropy.coordinates import Angle
 from scipy.ndimage import gaussian_filter
 
 from lsst.ts.wep import Image, ImageMapper, Instrument
