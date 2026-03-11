@@ -159,9 +159,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 ],
                 list(metaDict.keys()),
             )
-        np.testing.assert_allclose(
-            pairMeta["fwhm"], [intraMeta["fwhm"], extraMeta["fwhm"]], atol=0.01
-        )
+        np.testing.assert_allclose(pairMeta["fwhm"], [intraMeta["fwhm"], extraMeta["fwhm"]], atol=0.01)
         np.testing.assert_allclose(
             pairMeta["model_dx"], [intraMeta["model_dx"], extraMeta["model_dx"]], atol=0.01
         )

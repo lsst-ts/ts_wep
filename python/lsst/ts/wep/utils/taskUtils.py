@@ -35,7 +35,7 @@ import os
 import shlex
 import subprocess
 from contextlib import ExitStack
-from typing import TextIO
+from typing import Any, TextIO
 
 import astropy.units as u
 import numpy as np
@@ -399,7 +399,7 @@ def convertHistoryToMetadata(history: dict) -> pipeBase.TaskMetadata:
     return history
 
 
-def convertMetadataToHistory(metadata: pipeBase.TaskMetadata | dict | str) -> dict:
+def convertMetadataToHistory(metadata: pipeBase.TaskMetadata | dict | str | None) -> Any:
     """Convert the history from the metadata back to original format.
 
     Parameters
@@ -411,8 +411,8 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata | dict | str) -> di
 
     Returns
     -------
-    dict
-        The history dictionary
+    Any
+        The history dictionary or converted value
     """
     # If this is a TaskMetadata object, convert to dict and recurse
     if isinstance(metadata, pipeBase.TaskMetadata):
@@ -437,6 +437,7 @@ def convertMetadataToHistory(metadata: pipeBase.TaskMetadata | dict | str) -> di
         if metadata == "None":
             return None
         else:
+            _metadata: Any
             try:
                 _metadata = int(metadata)
             except ValueError:
