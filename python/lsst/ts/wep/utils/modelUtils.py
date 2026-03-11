@@ -171,7 +171,8 @@ def forwardModelPair(
         np.max(
             [
                 edge["thetaMax"]
-                for key, item in mapper.instrument.maskParams.items() if key != "Spider_3D"
+                for key, item in mapper.instrument.maskParams.items()
+                if key != "Spider_3D"
                 for edge in item.values()
             ]
         )
