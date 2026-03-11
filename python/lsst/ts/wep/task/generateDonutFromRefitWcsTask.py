@@ -373,8 +373,15 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
             trimmedDirectCatalog = fitDonutCatalog[donutSelection.selected]
             trimmedDirectCatalog.meta["blend_centroid_x"] = donutSelection.blendCentersX
             trimmedDirectCatalog.meta["blend_centroid_y"] = donutSelection.blendCentersY
+            trimmedDirectCatalog.meta["blend_mag"] = donutSelection.blendMags
+            trimmedDirectCatalog.meta["blend_separation"] = donutSelection.blendSeparations
+            trimmedDirectCatalog.meta["blend_mag_diff"] = donutSelection.blendMagDiffs
         else:
             trimmedDirectCatalog = fitDonutCatalog
+            # Ensure blend metadata keys exist for downstream consumers
+            for key in ("blend_mag", "blend_separation", "blend_mag_diff"):
+                if key not in trimmedDirectCatalog.meta:
+                    trimmedDirectCatalog.meta[key] = [[] for _ in range(len(trimmedDirectCatalog))]
 
         successfulFit = False
         # Set a parameter in the metadata to
@@ -460,13 +467,15 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                 self.log.info("Running Donut Selector")
                 donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
                 edgeMargin = self.config.edgeMargin
-                refSelection, blendCentersX, blendCentersY = runSelection(
-                    photoRefObjLoader,
-                    detector,
-                    exposure.wcs,
-                    filterName,
-                    donutSelectorTask,
-                    edgeMargin,
+                refSelection, blendCentersX, blendCentersY, blendMags, blendSeparations, blendMagDiffs = (
+                    runSelection(
+                        photoRefObjLoader,
+                        detector,
+                        exposure.wcs,
+                        filterName,
+                        donutSelectorTask,
+                        edgeMargin,
+                    )
                 )
                 # Create list of filters to include in final catalog
                 filterList = self.config.catalogFilterList
@@ -494,6 +503,9 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                     filterList,
                     blendCentersX,
                     blendCentersY,
+                    blendMags=blendMags,
+                    blendSeparations=blendSeparations,
+                    blendMagDiffs=blendMagDiffs,
                     sortFilterIdx=sortFilterIdx,
                 )
                 self.metadata["refCatalogSuccess"] = True
