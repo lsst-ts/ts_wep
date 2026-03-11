@@ -470,7 +470,8 @@ class DanishAlgorithm(WfAlgorithm):
             np.max(
                 [
                     edge["thetaMax"]
-                    for key, item in instrument.maskParams.items() if key != "Spider_3D"
+                    for key, item in instrument.maskParams.items()
+                    if key != "Spider_3D"
                     for edge in item.values()
                 ]
             )
@@ -486,7 +487,7 @@ class DanishAlgorithm(WfAlgorithm):
             thxs=thxs,
             thys=thys,
             npix=imgs[0].shape[0],
-            bkg_order=self.bkgOrder
+            bkg_order=self.bkgOrder,
         )
 
         # Initial guess
@@ -671,7 +672,7 @@ class DanishAlgorithm(WfAlgorithm):
             mask_params=instrument.maskParams,
             focal_length=instrument.focalLength,
             pixel_scale=instrument.pixelSize * self.binning,
-            spider_angle=rtp
+            spider_angle=rtp,
         )
 
         if I2 is None or not self.jointFitPair:
