@@ -98,9 +98,9 @@ class TestWfEstimator(unittest.TestCase):
                 zk0, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
-                    "ftol": 1e-1,
-                    "xtol": 1e-1,
-                    "gtol": 1e-1,
+                    "ftol": 1e-2,
+                    "xtol": 1e-2,
+                    "gtol": 1e-2,
                     "max_nfev": 10,
                     "verbose": 2,
                 }
@@ -117,9 +117,9 @@ class TestWfEstimator(unittest.TestCase):
                 zk1, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
-                    "ftol": 1e-1,
-                    "xtol": 1e-1,
-                    "gtol": 1e-1,
+                    "ftol": 1e-2,
+                    "xtol": 1e-2,
+                    "gtol": 1e-2,
                     "max_nfev": 10,
                     "verbose": 2,
                 }
@@ -144,10 +144,10 @@ class TestWfEstimator(unittest.TestCase):
                 zk0, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
-                    "ftol": 1e-1,
-                    "xtol": 1e-1,
-                    "gtol": 1e-1,
-                    "max_nfev": 10,
+                    "ftol": 1e-2,
+                    "xtol": 1e-2,
+                    "gtol": 1e-2,
+                    "max_nfev": 20,
                     "verbose": 2,
                 }
                 zk0, _ = wfEst.estimateZk(intra, extra)
@@ -159,10 +159,10 @@ class TestWfEstimator(unittest.TestCase):
                 zk1, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
-                    "ftol": 1e-1,
-                    "xtol": 1e-1,
-                    "gtol": 1e-1,
-                    "max_nfev": 10,
+                    "ftol": 1e-2,
+                    "xtol": 1e-2,
+                    "gtol": 1e-2,
+                    "max_nfev": 20,
                     "verbose": 2,
                 }
                 zk1, _ = wfEst.estimateZk(intra, extra)
@@ -183,9 +183,9 @@ class TestWfEstimator(unittest.TestCase):
                 opd, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
-                    "ftol": 1e-1,
-                    "xtol": 1e-1,
-                    "gtol": 1e-1,
+                    "ftol": 1e-2,
+                    "xtol": 1e-2,
+                    "gtol": 1e-2,
                     "max_nfev": 10,
                     "verbose": 2,
                 }
@@ -198,9 +198,9 @@ class TestWfEstimator(unittest.TestCase):
                 wfDev, _ = wfEst.estimateZk(intra, extra)
             else:
                 wfEst.algo.lstsqKwargs = {
-                    "ftol": 1e-1,
-                    "xtol": 1e-1,
-                    "gtol": 1e-1,
+                    "ftol": 1e-2,
+                    "xtol": 1e-2,
+                    "gtol": 1e-2,
                     "max_nfev": 10,
                     "verbose": 2,
                 }
@@ -230,9 +230,9 @@ class TestWfEstimator(unittest.TestCase):
                     zk[units], _ = wfEst.estimateZk(intra, extra)
                 else:
                     wfEst.algo.lstsqKwargs = {
-                        "ftol": 1e-1,
-                        "xtol": 1e-1,
-                        "gtol": 1e-1,
+                        "ftol": 1e-2,
+                        "xtol": 1e-2,
+                        "gtol": 1e-2,
                         "max_nfev": 10,
                         "verbose": 2,
                     }
