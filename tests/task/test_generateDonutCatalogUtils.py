@@ -111,7 +111,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         # If we have a magLimit at 17 we should cut out
         # the one source at 17.5.
         edgeMargin = 60
-        donutCatBrighterThan17, blendX, blendY = runSelection(
+        donutCatBrighterThan17, blendX, blendY, blendMag, blendSep, blendMagDiff = runSelection(
             refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
         )
         self.assertEqual(len(donutCatBrighterThan17), 3)
@@ -122,7 +122,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         donutSelectorConfig.magMax = 18.0
         donutSelectorConfig.unblendedSeparation = 1
         donutSelectorTask = DonutSourceSelectorTask(config=donutSelectorConfig)
-        donutCatFull, blendX, blendY = runSelection(
+        donutCatFull, blendX, blendY, blendMag, blendSep, blendMagDiff = runSelection(
             refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
         )
         self.assertEqual(len(donutCatFull), 4)
@@ -130,14 +130,16 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         # If we set the margin to a large value we will exclude
         # most sources from the catalog
         edgeMargin = 1000
-        donutCatSmall, blendX, blendY = runSelection(
+        donutCatSmall, blendX, blendY, blendMag, blendSep, blendMagDiff = runSelection(
             refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
         )
         self.assertEqual(len(donutCatSmall), 1)
 
         # This will happen even if we turn off donut selection
         edgeMargin = 1000
-        donutCatSmall, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, edgeMargin)
+        donutCatSmall, blendX, blendY, blendMag, blendSep, blendMagDiff = runSelection(
+            refObjLoader, detector, wcs, "g", None, edgeMargin
+        )
         self.assertEqual(len(donutCatSmall), 1)
 
     def testRunSelectionNoTask(self) -> None:
@@ -157,13 +159,26 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         # When passing None instead of a DonutSourceSelectorTask
         # we should get the full catalog without cuts.
-        unchangedCat, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, 60)
+        unchangedCat, blendX, blendY, blendMag, blendSep, blendMagDiff = runSelection(
+            refObjLoader, detector, wcs, "g", None, 60
+        )
         self.assertEqual(len(unchangedCat), 4)
         self.assertEqual(blendX, [[]] * 4)
         self.assertEqual(blendY, [[]] * 4)
+        self.assertEqual(blendMag, [[]] * 4)
+        self.assertEqual(blendSep, [[]] * 4)
+        self.assertEqual(blendMagDiff, [[]] * 4)
 
     def testDonutCatalogToAstropy(self) -> None:
         donutCatSmall = self._createTestDonutCat()
+
+        expectedMetaKeys = [
+            "blend_centroid_x",
+            "blend_centroid_y",
+            "blend_mag",
+            "blend_separation",
+            "blend_mag_diff",
+        ]
 
         fieldObjects = donutCatalogToAstropy(donutCatSmall, ["g"])
         self.assertEqual(len(fieldObjects), 4)
@@ -177,13 +192,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 "g_flux",
             ],
         )
-        self.assertCountEqual(
-            fieldObjects.meta.keys(),
-            [
-                "blend_centroid_x",
-                "blend_centroid_y",
-            ],
-        )
+        self.assertCountEqual(fieldObjects.meta.keys(), expectedMetaKeys)
 
         # Test that behavior is the same when filterName is a str
         fieldObjects = donutCatalogToAstropy(donutCatSmall, "g")
@@ -198,13 +207,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 "g_flux",
             ],
         )
-        self.assertCountEqual(
-            fieldObjects.meta.keys(),
-            [
-                "blend_centroid_x",
-                "blend_centroid_y",
-            ],
-        )
+        self.assertCountEqual(fieldObjects.meta.keys(), expectedMetaKeys)
 
         # Test that None returns an empty QTable
         fieldObjectsNone = donutCatalogToAstropy(None, "g")
@@ -219,13 +222,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 "g_flux",
             ],
         )
-        self.assertCountEqual(
-            fieldObjectsNone.meta.keys(),
-            [
-                "blend_centroid_x",
-                "blend_centroid_y",
-            ],
-        )
+        self.assertCountEqual(fieldObjectsNone.meta.keys(), expectedMetaKeys)
 
         # Test that blendCentersX and blendCentersY
         # get assigned correctly.
@@ -253,6 +250,10 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         )
         self.assertListEqual(list(fieldObjects.meta["blend_centroid_x"]), [list()] * len(donutCatSmall))
         self.assertListEqual(list(fieldObjects.meta["blend_centroid_y"]), [list()] * len(donutCatSmall))
+        # New blend metadata should also be present as empty lists
+        self.assertListEqual(list(fieldObjects.meta["blend_mag"]), [list()] * len(donutCatSmall))
+        self.assertListEqual(list(fieldObjects.meta["blend_separation"]), [list()] * len(donutCatSmall))
+        self.assertListEqual(list(fieldObjects.meta["blend_mag_diff"]), [list()] * len(donutCatSmall))
 
         blendValsX = [
             donutCatSmall["centroid_x"][0] + 10.0,
@@ -289,6 +290,48 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
             list(fieldObjectsTwoBlends.meta["blend_centroid_y"]),
             [[blendValsY[0]], [], [blendValsY[1]], []],
         )
+
+    def testDonutCatalogToAstropyWithBlendMetadata(self) -> None:
+        """Test that blend mag, separation, and mag diff fields are
+        correctly propagated through donutCatalogToAstropy."""
+        donutCatSmall = self._createTestDonutCat()
+        # Make fluxes distinct for consistent sort order
+        donutCatSmall["g_flux"][1] -= 0.1
+        donutCatSmall["g_flux"][2] -= 0.02
+        nSrc = len(donutCatSmall)
+
+        blendCentersX: list = [list() for _ in range(nSrc)]
+        blendCentersY: list = [list() for _ in range(nSrc)]
+        blendMags: list = [list() for _ in range(nSrc)]
+        blendSeparations: list = [list() for _ in range(nSrc)]
+        blendMagDiffs: list = [list() for _ in range(nSrc)]
+
+        # Add a blend to source 0
+        blendCentersX[0] = [100.0]
+        blendCentersY[0] = [200.0]
+        blendMags[0] = [18.5]
+        blendSeparations[0] = [42.0]
+        blendMagDiffs[0] = [1.2]
+
+        fieldObjects = donutCatalogToAstropy(
+            donutCatSmall,
+            "g",
+            blendCentersX=blendCentersX,
+            blendCentersY=blendCentersY,
+            blendMags=blendMags,
+            blendSeparations=blendSeparations,
+            blendMagDiffs=blendMagDiffs,
+        )
+
+        # Source 0 is brightest so should remain first after sort
+        self.assertEqual(fieldObjects.meta["blend_mag"][0], [18.5])
+        self.assertEqual(fieldObjects.meta["blend_separation"][0], [42.0])
+        self.assertEqual(fieldObjects.meta["blend_mag_diff"][0], [1.2])
+        # Other sources should have empty lists
+        for i in range(1, nSrc):
+            self.assertListEqual(fieldObjects.meta["blend_mag"][i], [])
+            self.assertListEqual(fieldObjects.meta["blend_separation"][i], [])
+            self.assertListEqual(fieldObjects.meta["blend_mag_diff"][i], [])
 
     def testDonutCatalogToAstropyErrors(self) -> None:
         columnList = [
@@ -338,6 +381,27 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
                 blendCentersY=[[4], [], [], []],
             )
         self.assertTrue(xyMismatchErrMsg in str(context.exception))
+
+        # Test that blend metadata fields raise on length mismatch
+        nSrc = len(donutCatSmall)
+        with self.assertRaises(ValueError):
+            donutCatalogToAstropy(
+                donutCatSmall,
+                "g",
+                blendMags=[[] for _ in range(nSrc + 1)],
+            )
+        with self.assertRaises(ValueError):
+            donutCatalogToAstropy(
+                donutCatSmall,
+                "g",
+                blendSeparations=[[] for _ in range(nSrc + 1)],
+            )
+        with self.assertRaises(ValueError):
+            donutCatalogToAstropy(
+                donutCatSmall,
+                "g",
+                blendMagDiffs=[[] for _ in range(nSrc + 1)],
+            )
 
     def testAddVisitInfoToCatTable(self) -> None:
         donutCatSmall, testExposure = self._createTestDonutCat(returnExposure=True)
