@@ -28,8 +28,8 @@ import multiprocessing as mp
 from typing import Any, Callable, Iterable
 
 import numpy as np
-
 from astropy.coordinates import Angle
+
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
@@ -170,7 +170,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         return results
 
     @staticmethod
-    def _get_rtp(donutStamps):
+    def _get_rtp(donutStamps: DonutStamps | None) -> Angle:
         """Get the camera rotator angle
 
         Parameters
@@ -191,7 +191,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
         except KeyError:
             return Angle(np.nan, "rad")
-        return Angle(q - rsp - np.pi/2, "rad")
+        return Angle(q - rsp - np.pi / 2, "rad")
 
     def estimateFromPairs(
         self,
