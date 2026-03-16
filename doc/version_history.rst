@@ -17,6 +17,18 @@ Version History
 
 .. towncrier release notes start
 
+v16.8.0 (2026-03-16)
+====================
+
+New Features
+------------
+
+- Update generateDonutCatalogWcsTask with reference filter options already available in refitWcs version.
+  Minor update to donutSizeCorrelator to use copy of input images in order to not change the input image when running. (`DM-53904 <https://rubinobs.atlassian.net//browse/DM-53904>`_)
+- Add ability to reselect direct detect catalog in cases of wcs fit failure to match the desired configuration of the wcs catalogs.
+  This lets us specify permissive boundaries in our direct detect catalog to get more sources for matching to the WCS and then if needed restrict things like field distance in the final catalog if the direct detect catalog gets passed on instead of a WCS-based catalog. (`DM-54201 <https://rubinobs.atlassian.net//browse/DM-54201>`_)
+
+
 v16.7.0 (2026-02-18)
 ====================
 
