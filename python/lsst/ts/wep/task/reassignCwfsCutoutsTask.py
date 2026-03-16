@@ -27,8 +27,8 @@ __all__ = [
 
 from typing import Any
 
-import lsst.pipe.base as pipeBase
 import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate
 from lsst.pipe.base import connectionTypes
 
@@ -40,6 +40,8 @@ class ReassignCwfsCutoutsTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("visit", "detector", "instrument"),  # type: ignore
 ):
+    config: Any  # For adjust_all_quanta which needs config
+
     donutStampsIn = connectionTypes.Input(
         doc="Donut Postage Stamp Images with either Intra-focal or Extra-focal detector id.",
         dimensions=("visit", "detector", "instrument"),

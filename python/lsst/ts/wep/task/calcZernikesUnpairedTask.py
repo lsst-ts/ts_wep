@@ -26,24 +26,21 @@ __all__ = [
 ]
 
 from typing import Sequence
+
 import numpy as np
 from astropy.table import QTable, Table
 
 import lsst.pipe.base as pipeBase
+from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
-from lsst.daf.butler import DatasetType, Registry, DataCoordinate, DatasetRef
 
 
 def lookupIntrinsicTables(
-    datasetType: DatasetType,
-    registry: Registry,
-    dataId: DataCoordinate,
-    collections: Sequence[str]
-) -> list[DatasetRef]:
-
+    datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
+) -> list[DatasetRef | None]:
     refs = [registry.findDataset(datasetType, dataId, collections=collections)]
     return refs
 
@@ -63,7 +60,7 @@ class CalcZernikesUnpairedTaskConnections(
         dimensions=("detector", "instrument", "physical_filter"),
         storageClass="ArrowAstropy",
         name="intrinsic_aberrations_temp",
-        lookupFunction=lookupIntrinsicTables,
+        lookupFunction=lookupIntrinsicTables,  # type: ignore
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
