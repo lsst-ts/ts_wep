@@ -81,28 +81,28 @@ class CutOutDonutsScienceSensorTaskConnections(
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsExtra",
-        multiple=True
+        multiple=True,
     )
     donutStampsIntra = ct.Output(
         doc="Intra-focal Donut Postage Stamp Images",
         dimensions=("visit", "detector", "instrument"),
         storageClass="StampsBase",
         name="donutStampsIntra",
-        multiple=True
+        multiple=True,
     )
     donutTablesIntra = ct.Output(
         doc="Intra-focal Donut Postage Stamp Table",
         dimensions=("visit", "detector", "instrument"),
         storageClass="AstropyQTable",
         name="donutTableIntra",
-        multiple=True
+        multiple=True,
     )
     donutTablesExtra = ct.Output(
         doc="Extra-focal Donut Postage Stamp Table",
         dimensions=("visit", "detector", "instrument"),
         storageClass="AstropyQTable",
         name="donutTableExtra",
-        multiple=True
+        multiple=True,
     )
 
     def __init__(self, *, config: Any | None = None) -> None:
@@ -182,14 +182,22 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             outputs = self.run(exposures, donutCats, camera)
 
             # Intentionally use extra id for intra stamps here
-            (donutStampsIntraRef,) = [ref for ref in outputRefs.donutStampsIntra if ref.dataId["visit"] == pair.extra]
-            (donutStampsExtraRef,) = [ref for ref in outputRefs.donutStampsExtra if ref.dataId["visit"] == pair.extra]
+            (donutStampsIntraRef,) = [
+                ref for ref in outputRefs.donutStampsIntra if ref.dataId["visit"] == pair.extra
+            ]
+            (donutStampsExtraRef,) = [
+                ref for ref in outputRefs.donutStampsExtra if ref.dataId["visit"] == pair.extra
+            ]
             butlerQC.put(outputs.donutStampsExtra, donutStampsExtraRef)
             butlerQC.put(outputs.donutStampsIntra, donutStampsIntraRef)
 
             # Intentionally use extra id for intra stamps here
-            (donutTableIntraRef,) = [ref for ref in outputRefs.donutTablesIntra if ref.dataId["visit"] == pair.extra]
-            (donutTableExtraRef,) = [ref for ref in outputRefs.donutTablesExtra if ref.dataId["visit"] == pair.extra]
+            (donutTableIntraRef,) = [
+                ref for ref in outputRefs.donutTablesIntra if ref.dataId["visit"] == pair.extra
+            ]
+            (donutTableExtraRef,) = [
+                ref for ref in outputRefs.donutTablesExtra if ref.dataId["visit"] == pair.extra
+            ]
             butlerQC.put(outputs.donutTableExtra, donutTableExtraRef)
             butlerQC.put(outputs.donutTableIntra, donutTableIntraRef)
 

@@ -27,7 +27,7 @@ __all__ = [
 
 import abc
 from itertools import zip_longest
-from typing import Any, cast, Sequence
+from typing import Any, Sequence, cast
 
 import astropy.units as u
 import numpy as np
@@ -37,8 +37,7 @@ from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-from lsst.daf.butler import DataCoordinate, DatasetType, Registry, DatasetRef
-
+from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -58,19 +57,15 @@ extra_focal_ids = set([191, 195, 199, 203])
 
 
 def lookupIntrinsicTables(
-    datasetType: DatasetType,
-    registry: Registry,
-    dataId: DataCoordinate,
-    collections: Sequence[str]
-) -> list[DatasetRef]:
-    """Assumes that the dataId is always for the extra focal at present
-    """
+    datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
+) -> list[DatasetRef | None]:
+    """Assumes that the dataId is always for the extra focal at present"""
     detector = dataId["detector"]
     isCornerChip = (detector in intra_focal_ids) or (detector in extra_focal_ids)
 
     refs = [registry.findDataset(datasetType, dataId, collections=collections)]
     if isCornerChip:  # we're running a CWFS pair, not a FAM image
-        dataId2 = DataCoordinate.standardize(dataId, detector=dataId["detector"] + 1)
+        dataId2 = DataCoordinate.standardize(dataId, detector=int(dataId["detector"]) + 1)
         refs.append(registry.findDataset(datasetType, dataId2, collections=collections))
     return refs
 
@@ -97,7 +92,7 @@ class CalcZernikesTaskConnections(
         storageClass="ArrowAstropy",
         name="intrinsic_aberrations_temp",
         multiple=True,
-        lookupFunction=lookupIntrinsicTables,
+        lookupFunction=lookupIntrinsicTables,  # type: ignore
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
