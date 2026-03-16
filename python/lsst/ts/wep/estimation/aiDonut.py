@@ -214,7 +214,10 @@ class AiDonutAlgorithm(WfAlgorithm):
                 focalFlags_tch,
                 bands_tch,
             )
-        outputs = outputs.cpu().numpy()  # shape: (2, n_zernikes)
+        #outputs = outputs.cpu().numpy()  # shape: (2, n_zernikes)
+        zk_outputs, blur = outputs
+        outputs = zk_outputs.cpu().numpy()  # shape: (2, n_zernikes)
+        blur = blur.cpu().numpy()
 
         # Average the two estimates
         zk = outputs.mean(axis=0)
@@ -239,6 +242,7 @@ class AiDonutAlgorithm(WfAlgorithm):
             self._history |= {
                 "nollIndices": nollIndices,
                 "zk": zk,
+                "blur": blur,
             }
 
-        return zk, {}
+        return  zk, {"blur": blur}
