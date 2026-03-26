@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v16.9.0 (2026-03-26)
+====================
+
+New Features
+------------
+
+- Make reassignCwfsCutoutsTask not reassign cutouts to extra-focal CWFS detectors when run by RA in the custom Quantum Graph Builder scenario. (`DM-53578 <https://rubinobs.atlassian.net//browse/DM-53578>`_)
+- Upgraded AiDonut to return the estimated donut blur, but remain backwards-compatible with old models that do not estimate donut blur. (`DM-54405 <https://rubinobs.atlassian.net//browse/DM-54405>`_)
+
+
 v16.8.0 (2026-03-16)
 ====================
 
