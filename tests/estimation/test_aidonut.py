@@ -48,3 +48,29 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         _, intra, extra = forwardModelPair(seed=1234)
         with self.assertRaises(ValueError):
             algo.estimateZk(intra, extra, nollIndices=[4, 5, 6, 123, 124])
+
+    def testOutputs(self) -> None:
+        """Test the algorithm returns expected outputs."""
+        algo = AiDonutAlgorithm()
+        _, intra, extra = forwardModelPair(seed=1234)
+        nollIndices = [4, 5, 6]
+        zk, zkMeta = algo.estimateZk(intra, extra, nollIndices=nollIndices)
+        self.assertEqual(zk.shape[0], len(nollIndices))
+        self.assertIn("fwhm", zkMeta)
+
+    def testHistory(self) -> None:
+        """Test that history is populated correctly."""
+        algo = AiDonutAlgorithm()
+        _, intra, extra = forwardModelPair(seed=1234)
+        nollIndices = [4, 5, 6]
+        algo.estimateZk(intra, extra, nollIndices=nollIndices, saveHistory=True)
+        self.assertIn("modelPath", algo.history)
+        self.assertIn("device", algo.history)
+        self.assertIn("modelNollIndices", algo.history)
+        for defocalType in [intra.defocalType.value, extra.defocalType.value]:
+            self.assertIn(defocalType, algo.history)
+            self.assertIn("zk", algo.history[defocalType])
+            self.assertIn("fwhm", algo.history[defocalType])
+        self.assertIn("nollIndices", algo.history)
+        self.assertIn("zk", algo.history)
+        self.assertIn("fwhm", algo.history)

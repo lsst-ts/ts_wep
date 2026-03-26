@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
+
 import numpy as np
 import torch
 
@@ -64,7 +66,7 @@ class AiDonutAlgorithm(WfAlgorithm):
         device: str = "cpu",
     ) -> None:
         self.device = device
-        self.modelPath = modelPath
+        self.modelPath = os.path.expandvars(modelPath)
 
     @property
     def requiresPairs(self) -> bool:
@@ -214,10 +216,18 @@ class AiDonutAlgorithm(WfAlgorithm):
                 focalFlags_tch,
                 bands_tch,
             )
-        outputs = outputs.cpu().numpy()  # shape: (2, n_zernikes)
 
-        # Average the two estimates
-        zk = outputs.mean(axis=0)
+        # Split outputs and handle old models that don't return FWHM
+        if isinstance(outputs, tuple):
+            outZk = outputs[0].cpu().numpy()
+            outFwhm = outputs[1].cpu().numpy()
+        else:
+            outZk = outputs.cpu().numpy()
+            outFwhm = np.full((len(imgs), 1), np.nan)
+
+        # Record average outputs
+        zk = outZk.mean(axis=0)
+        zkMeta = {"fwhm": outFwhm.mean(axis=0)}
 
         # Only return requested nollIndices
         zk = makeDense(zk, self.model.nollIndices)
@@ -230,15 +240,24 @@ class AiDonutAlgorithm(WfAlgorithm):
                 "modelPath": self.modelPath,
                 "device": self.device,
                 "modelNollIndices": self.model.nollIndices,
-                I1.defocalType.value: outputs[0],
+                I1.defocalType.value: {
+                    "zk": outZk[0],
+                    "fwhm": outFwhm[0],
+                },
             }
             # Save Zernikes for I2, if present
             if I2 is not None:
-                self._history |= {I2.defocalType.value: outputs[1]}
+                self._history |= {
+                    I2.defocalType.value: {
+                        "zk": outZk[1],
+                        "fwhm": outFwhm[1],
+                    }
+                }
             # Average Zernikes
             self._history |= {
                 "nollIndices": nollIndices,
                 "zk": zk,
+                "fwhm": zkMeta["fwhm"],
             }
 
-        return zk, {}
+        return zk, zkMeta
