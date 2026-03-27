@@ -27,7 +27,7 @@ import warnings
 import danish
 import numpy as np
 from astropy.coordinates import Angle
-from galsim import GalSimFFTSizeError
+from galsim import GalSimFFTSizeError, GalSimFFTSizeWarning
 from scipy.ndimage import binary_erosion
 from scipy.optimize import OptimizeResult, least_squares
 
@@ -337,15 +337,16 @@ class DanishAlgorithm(WfAlgorithm):
             self.log.info("Chi-square: %.2f", chi_sq)
 
         # Sometimes this happens with Danish :(
-        except GalSimFFTSizeError:
+        except (GalSimFFTSizeError, GalSimFFTSizeWarning, MemoryError):
             # Fill dummy objects
-            result = {}
+            result = dict()
             zkFit = np.full_like(zkStart, np.nan)
             zkSum = np.full_like(zkStart, np.nan)
             fwhm = np.nan
             dx = np.nan
             dy = np.nan
             flux = np.nan
+            chi_sq = np.nan
             bkg = ()
             if saveHistory:
                 modelImage = np.full_like(img, np.nan)
@@ -386,7 +387,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = zkMeta["lstsq_success"] is not None and zkMeta["lstsq_success"] > 0
 
         return zkSum, hist, zkMeta
 
@@ -544,13 +545,14 @@ class DanishAlgorithm(WfAlgorithm):
             self.log.info("Chi-square: %.2f", chi_sq)
 
         # Sometimes this happens with Danish :(
-        except GalSimFFTSizeError:
+        except (GalSimFFTSizeError, GalSimFFTSizeWarning, MemoryError):
             # Fill dummy objects
-            result = None
+            result = dict()
             fwhm = np.nan
             dxs = (np.nan, np.nan)
             dys = (np.nan, np.nan)
             fluxes = (np.nan, np.nan)
+            chi_sq = np.nan
             bkgs = ((), ())
             zkFit = np.full_like(zkStartI1, np.nan)
             zkSum = np.full_like(zkStartI1, np.nan)
@@ -606,7 +608,7 @@ class DanishAlgorithm(WfAlgorithm):
 
         # If least_squares failed, mark fit as unsuccessful
         # This includes reaching the maximum number of function evaluations
-        zkMeta["fit_success"] = zkMeta["lstsq_success"] > 0
+        zkMeta["fit_success"] = zkMeta["lstsq_success"] is not None and zkMeta["lstsq_success"] > 0
 
         return zkSum, hist, zkMeta
 
