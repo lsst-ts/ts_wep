@@ -25,9 +25,10 @@ import logging
 import warnings
 
 import danish
+import galsim
 import numpy as np
 from astropy.coordinates import Angle
-from galsim import GalSimFFTSizeError, GalSimFFTSizeWarning
+from galsim import GalSimFFTSizeError
 from scipy.ndimage import binary_erosion
 from scipy.optimize import OptimizeResult, least_squares
 from scipy.stats import median_abs_deviation
@@ -79,6 +80,8 @@ class DanishAlgorithm(WfAlgorithm):
         self.modelSpiderShadows = modelSpiderShadows
         self.bkgOrder = bkgOrder
         self.log = logging.getLogger(__name__)
+
+        galsim.errors.raise_fft_size_error = True
 
     @property
     def requiresPairs(self) -> bool:
@@ -345,7 +348,8 @@ class DanishAlgorithm(WfAlgorithm):
             self.log.info("Chi-square: %.2f", chi_sq)
 
         # Sometimes this happens with Danish :(
-        except (GalSimFFTSizeError, GalSimFFTSizeWarning, MemoryError):
+        except GalSimFFTSizeError:
+            self.log.info("GalSimFFTSize Error occurred. Returning nans for fit.")
             # Fill dummy objects
             result = dict()
             zkFit = np.full_like(zkStart, np.nan)
@@ -489,6 +493,7 @@ class DanishAlgorithm(WfAlgorithm):
             thys=thys,
             npix=imgs[0].shape[0],
             bkg_order=self.bkgOrder,
+            # galsim_params={'maximum_fft_size': 65536}
         )
 
         # Initial guess
@@ -553,7 +558,8 @@ class DanishAlgorithm(WfAlgorithm):
             self.log.info("Chi-square: %.2f", chi_sq)
 
         # Sometimes this happens with Danish :(
-        except (GalSimFFTSizeError, GalSimFFTSizeWarning, MemoryError):
+        except GalSimFFTSizeError:
+            self.log.info("GalSimFFTSize Error occurred. Returning nans for fit.")
             # Fill dummy objects
             result = dict()
             fwhm = np.nan
