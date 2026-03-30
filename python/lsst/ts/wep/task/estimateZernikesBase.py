@@ -46,19 +46,17 @@ def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, Angle, WfEstimator]) ->
     """Estimate Zernike coefficients for a pair of donuts."""
     donutExtra, donutIntra, rtp, wfEstimator = args
     log = logging.getLogger(__name__)
-    log.info(
-        "Calculating Zernikes for Extra Donut %s, Intra Donut %s", *(donutExtra.donut_id, donutIntra.donut_id)
-    )
+    log.info(f"Calculating Zernikes for Extra Donut {donutExtra.donut_id}, Intra Donut {donutIntra.donut_id}")
     zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, rtp)
     log.info(
-        "Zernike estimation completed for Extra Donut %s, Intra Donut %s",
-        *(donutExtra.donut_id, donutIntra.donut_id),
+        f"Zernike estimation completed for Extra Donut {donutExtra.donut_id}, "
+        f"Intra Donut {donutIntra.donut_id}"
     )
     # Log number of function evaluations if available (currently only danish)
     if "lstsq_nfev" in zkMeta:
         log.info(
-            "Num Iterations for Donut Pair (%s, %s): nfev = %i",
-            *(donutExtra.donut_id, donutIntra.donut_id, zkMeta["lstsq_nfev"]),
+            f"Num Iterations for Donut Pair ({donutExtra.donut_id}, "
+            f"{donutIntra.donut_id}): nfev = {zkMeta['lstsq_nfev']}"
         )
     return zk, zkMeta, wfEstimator.history
 
@@ -67,12 +65,12 @@ def estimate_zk_single(args: tuple[DonutStamp, Angle, WfEstimator]) -> tuple[np.
     """Estimate Zernike coefficients for a single donut."""
     donut, rtp, wfEstimator = args
     log = logging.getLogger(__name__)
-    log.info("Calculating Zernikes for Donut %s", donut.donut_id)
+    log.info(f"Calculating Zernikes for Donut {donut.donut_id}")
     zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, rtp)
-    log.info("Zernike estimation completed for Donut %s", donut.donut_id)
+    log.info(f"Zernike estimation completed for Donut {donut.donut_id}")
     # Log number of function evaluations if available (currently only danish)
     if "lstsq_nfev" in zkMeta:
-        log.info("Num Iterations for Donut %s: nfev = %i", *(donut.donut_id, zkMeta["lstsq_nfev"]))
+        log.info(f"Num Iterations for Donut {donut.donut_id}: nfev = {zkMeta['lstsq_nfev']}")
     return zk, zkMeta, wfEstimator.history
 
 

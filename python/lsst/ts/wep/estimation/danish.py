@@ -341,13 +341,16 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Sometimes this happens with Danish :(
         except (GalSimFFTSizeError, ValueError) as e:
-            if isinstance(e, GalSimFFTSizeError):
-                msg = "GalSimFFTSizeError occurred."
-            elif "zero-size array" in str(e):
-                msg = "Empty optical kernel — aberrations pushed rays out of pupil."
+            if isinstance(e, GalSimFFTSizeError) or any(
+                msg in str(e)
+                for msg in [
+                    "zero-size array",
+                    "cannot convert float NaN to integer",
+                ]
+            ):
+                self.log.warning(f"Returning nans for fit due to following galsim error: {str(e)}")
             else:
                 raise
-            self.log.warning("%s Returning nans for fit.", msg)
             # Fill dummy objects
             result = dict()
             zkFit = np.full_like(zkStart, np.nan)
@@ -563,7 +566,7 @@ class DanishAlgorithm(WfAlgorithm):
                 msg = "Empty optical kernel — aberrations pushed rays out of pupil."
             else:
                 raise
-            self.log.warning("%s Returning nans for fit.", msg)
+            self.log.warning(f"Returning nans for fit due to {msg}")
             # Fill dummy objects
             result = dict()
             fwhm = np.nan
