@@ -333,13 +333,13 @@ class DonutStampSelectorTask(pipeBase.Task):
         if "BORDER_FRACTION" in list(donutStamps.metadata):
             fillVals = np.asarray(donutStamps.metadata.getArray("BORDER_FRACTION"))
             borderFraction[: len(fillVals)] = fillVals
-            if self.config.selectBorderFraction:
+            if self.config.selectWithBorderFraction:
                 borderFractionSelect = borderFraction > self.config.maxBorderFraction
                 self.log.info(
                     f"{sum(borderFractionSelect)} of {len(borderFractionSelect)} "
                     "donuts passed border fraction selection."
                 )
-        elif self.config.selectBorderFraction:
+        elif self.config.selectWithBorderFraction:
             self.log.warning(
                 "selectBorderFraction==True but BORDER_FRACTION not in stamp metadata."
             )
