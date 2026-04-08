@@ -298,8 +298,27 @@ class DanishAlgorithm(WfAlgorithm):
         )
 
         # Create the initial guess for the model parameters
-        x0 = [np.sum(img), 0.0, 0.0, 1.0] + [0.0] * len(nollIndices)
-        x0 += [0.0] * model.nbkg
+        # x0 = [np.sum(img), 0.0, 0.0, 1.0] + [0.0] * len(nollIndices)
+        # x0 += [0.0] * model.nbkg
+
+        x0 = model.pack_params(
+            flux=np.sum(img),
+            dx=0.0,
+            dy=0.0,
+            fwhm=1.0,
+            bkg=[0.0] * model.nbkg,
+            z_fit=[0.0] * len(nollIndices),
+        )
+
+        bounds = model.pack_params(
+            flux=[0.0, np.inf],
+            dx=[-np.inf, np.inf],
+            dy=[-np.inf, np.inf],
+            fwhm=[0.1, 5.0],
+            bkg=[[-np.inf, np.inf]] * model.nbkg,
+            z_fit=[[-np.inf, np.inf]] * len(nollIndices),
+        )
+        bounds = [list(b) for b in zip(*bounds)]
 
         self.log.info("Starting least squares optimization.")
         opt_result_keys = ["nit", "nfev", "cost"]
@@ -506,13 +525,25 @@ class DanishAlgorithm(WfAlgorithm):
         )
 
         # Initial guess
-        x0 = [np.sum(img) for img in imgs] + [0.0] * 2 + [0.0] * 2 + [1.0] + [0.0] * len(dzTerms)
-        x0 += [0.0] * model.nbkg * 2
+        x0 = model.pack_params(
+            fluxes=[np.sum(img) for img in imgs],
+            dxs=[0.0, 0.0],
+            dys=[0.0, 0.0],
+            fwhm=1.0,
+            bkgs=[[0.0] * model.nbkg] * 2,
+            wavefront_params=[0.0] * len(dzTerms),
+        )
 
         # FWHM is the 6th (counting from 0) fit variable
         # set bounds between 0.1 and 5.0 arcsec.
-        bounds = [[-np.inf, np.inf]] * len(x0)
-        bounds[6] = [0.1, 5.0]
+        bounds = model.pack_params(
+            fluxes=[[0.0, np.inf]] * len(imgs),
+            dxs=[[-np.inf, np.inf]] * len(imgs),
+            dys=[[-np.inf, np.inf]] * len(imgs),
+            fwhm=[0.1, 5.0],
+            bkgs=[[[-np.inf, np.inf]] * model.nbkg] * 2,
+            wavefront_params=[[-np.inf, np.inf]] * len(dzTerms),
+        )
         bounds = [list(b) for b in zip(*bounds)]
 
         self.log.info("Starting least squares optimization.")
