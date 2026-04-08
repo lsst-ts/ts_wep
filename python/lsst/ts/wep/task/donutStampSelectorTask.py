@@ -93,8 +93,7 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
         dtype=float,
         default=0.02,
         doc=str(
-            "The bright pixel border fraction to use (keep donuts only with"
-            + " fewer bright border pixels)."
+            "The bright pixel border fraction to use (keep donuts only with" + " fewer bright border pixels)."
         ),
     )
     maxEntropy: pexConfig.Field = pexConfig.Field(
@@ -164,9 +163,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         """
         result = self.selectStamps(donutStamps)
 
-        selectedStamps = DonutStamps(
-            [donutStamps[i] for i in range(len(donutStamps)) if result.selected[i]]
-        )
+        selectedStamps = DonutStamps([donutStamps[i] for i in range(len(donutStamps)) if result.selected[i]])
         selectedStamps._refresh_metadata()
         # Need to copy a few other fields by hand
         for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "BORDER_FRACTION"]:
@@ -244,9 +241,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                     f"{sum(entropySelect)} of {len(entropySelect)} donuts passed entropy selection."
                 )
         elif self.config.selectWithEntropy:
-            self.log.warning(
-                "selectWithEntropy==True but ENTROPY not in stamp metadata."
-            )
+            self.log.warning("selectWithEntropy==True but ENTROPY not in stamp metadata.")
 
         # Collect the donut radius metric from stamps metadata
         if "RADIUS" in list(donutStamps.metadata):
@@ -276,14 +271,10 @@ class DonutStampSelectorTask(pipeBase.Task):
 
                 # Select using the given threshold
                 snSelect = snThreshold < snValue
-                self.log.info(
-                    f"{sum(snSelect)} of {len(snSelect)} donuts passed SNR selection."
-                )
+                self.log.info(f"{sum(snSelect)} of {len(snSelect)} donuts passed SNR selection.")
 
         elif self.config.selectWithSignalToNoise:
-            self.log.warning(
-                "selectWithSignalToNoise==True but SN not in stamp metadata."
-            )
+            self.log.warning("selectWithSignalToNoise==True but SN not in stamp metadata.")
 
         # By default select all donuts,  only overwritten
         # if selectWithFracBadPixels is True
@@ -300,9 +291,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                     f"{sum(fracBadPixSelect)} of {len(fracBadPixSelect)} donuts passed bad pixel selection."
                 )
         elif self.config.selectWithFracBadPixels:
-            self.log.warning(
-                "selectWithFracBadPixels==True but FRAC_BAD_PIX not in stamp metadata."
-            )
+            self.log.warning("selectWithFracBadPixels==True but FRAC_BAD_PIX not in stamp metadata.")
 
         # By default select all donuts,  only overwritten
         # if selectWithMaxPowerGrad is True
@@ -320,9 +309,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                     "donuts passed power spectrum selection."
                 )
         elif self.config.selectWithMaxPowerGrad:
-            self.log.warning(
-                "selectWithMaxPowerGrad==True but MAX_POWER_GRAD not in stamp metadata."
-            )
+            self.log.warning("selectWithMaxPowerGrad==True but MAX_POWER_GRAD not in stamp metadata.")
 
         # By default select all donuts,  only overwritten
         # if selectBorderFraction is True
@@ -340,22 +327,12 @@ class DonutStampSelectorTask(pipeBase.Task):
                     "donuts passed border fraction selection."
                 )
         elif self.config.selectWithBorderFraction:
-            self.log.warning(
-                "selectBorderFraction==True but BORDER_FRACTION not in stamp metadata."
-            )
+            self.log.warning("selectBorderFraction==True but BORDER_FRACTION not in stamp metadata.")
 
         # choose only donuts that satisfy all selected conditions
         if self.config.doSelection:
-            selected = (
-                entropySelect
-                * snSelect
-                * fracBadPixSelect
-                * maxPowerGradSelect
-                * borderFractionSelect
-            )
-            self.log.info(
-                f"{sum(selected)} of {len(selected)} donuts passed combined selection criteria."
-            )
+            selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect * borderFractionSelect
+            self.log.info(f"{sum(selected)} of {len(selected)} donuts passed combined selection criteria.")
             # make sure we don't select more than maxSelect
             if self.config.maxSelect != -1:
                 selected[np.cumsum(selected) > self.config.maxSelect] = False
@@ -389,11 +366,11 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "ENTROPY",
                 "FRAC_BAD_PIX",
                 "MAX_POWER_GRAD",
-                "BORDER_FRACTION" "SN_SELECT",
+                "BORDER_FRACTIONSN_SELECT",
                 "ENTROPY_SELECT",
                 "FRAC_BAD_PIX_SELECT",
                 "MAX_POWER_GRAD_SELECT",
-                "BORDER_FRACTION_SELECT" "RADIUS",
+                "BORDER_FRACTION_SELECTRADIUS",
                 "FINAL_SELECT",
                 "DONUT_ID",
             ],
