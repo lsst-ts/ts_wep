@@ -370,7 +370,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
 
         # Initialize cache for per-donut OOD scores
         self._lastOodScores: list[float] = []
-        # Cache per-donut Zernike components from TARTS internal data (CCS, microns)
+        # Cache per-donut Zernike components from TARTS internal data
+        # (CCS, microns)
         self._lastZkDeviationsCcs: list[np.ndarray] = []
         self._lastZkIntrinsicsCcs: list[np.ndarray] = []
 
@@ -1260,7 +1261,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
     def _extractTartsZkVector(
         self, donutData: dict[str, Any], key: str, fallback_key: str | None = None
     ) -> np.ndarray:
-        """Extract self.nollIndices components from a TARTS internal-data vector."""
+        """Extract self.nollIndices components from TARTS internal data."""
         source = donutData.get(key, None)
         if source is None and fallback_key is not None:
             source = donutData.get(fallback_key, None)
@@ -1292,8 +1293,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         denseOcs = rot @ dense
         return np.array([denseOcs[int(n)] for n in self.nollIndices], dtype=float)
 
-    def _populateNeuralZernikeTableColumns(self, zkTable: QTable, exposure: afwImage.Exposure) -> None:
-        """Populate OPD/intrinsic/deviation columns from neural internal data."""
+    def _populateNeuralZernikeTableColumns(
+        self, zkTable: QTable, exposure: afwImage.Exposure
+    ) -> None:
+        """Populate OPD/intrinsic/deviation columns from neural data."""
         if len(zkTable) == 0:
             return
 
