@@ -300,7 +300,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("intra_max_power_grad", "<f4"),
             ("extra_max_power_grad", "<f4"),
             ("intra_border_fraction", "<f4"),
-            ("extra_border_Fraction", "<f4"),
+            ("extra_border_fraction", "<f4"),
             ("intra_donut_id", "<U21"),
             ("extra_donut_id", "<U21"),
         ]
