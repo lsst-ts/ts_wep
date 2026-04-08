@@ -635,7 +635,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
 
         # Combine Zernikes
-        zkTable = self.combineZernikes.run(zkTable).combinedTable
+        combineZernikesOut = self.combineZernikes.run(zkTable)
+        zkTable = combineZernikesOut.combinedTable
+        zkTable.meta["estimatorInfo"]["zern_clipped"] = np.array(combineZernikesOut.flags.tolist(), dtype=bool)
 
         # Implement Blur Clip
         if self.doBlurClip and ("fwhm" in zkTable.meta["estimatorInfo"].keys()):
