@@ -299,6 +299,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             ("extra_frac_bad_pix", "<f4"),
             ("intra_max_power_grad", "<f4"),
             ("extra_max_power_grad", "<f4"),
+            ("intra_border_fraction", "<f4"),
+            ("extra_border_Fraction", "<f4"),
             ("intra_donut_id", "<U21"),
             ("extra_donut_id", "<U21"),
         ]
@@ -364,6 +366,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_frac_bad_pix": np.nan,
                 "intra_max_power_grad": np.nan,
                 "extra_max_power_grad": np.nan,
+                "intra_border_fraction": np.nan,
+                "extra_border_fraction": np.nan,
                 "intra_donut_id": "",
                 "extra_donut_id": "",
             }
@@ -404,7 +408,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             row["extra_field"] = extraAngle
             row["intra_centroid"] = intraCentroid
             row["extra_centroid"] = extraCentroid
-            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "DONUT_ID"]:
+            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "BORDER_FRACTION", "DONUT_ID"]:
                 for stamps, foc in [
                     (self.stampsIntra, "intra"),
                     (self.stampsExtra, "extra"),
@@ -491,8 +495,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         qualityTableCols = [
             "SN",
             "ENTROPY",
+            "BORDER_FRACTION"
             "ENTROPY_SELECT",
             "SN_SELECT",
+            "BORDER_FRACTION_SELECT"
             "FINAL_SELECT",
             "RADIUS",
             "RADIUS_FAIL_FLAG",
