@@ -298,9 +298,6 @@ class DanishAlgorithm(WfAlgorithm):
         )
 
         # Create the initial guess for the model parameters
-        # x0 = [np.sum(img), 0.0, 0.0, 1.0] + [0.0] * len(nollIndices)
-        # x0 += [0.0] * model.nbkg
-
         x0 = model.pack_params(
             flux=np.sum(img),
             dx=0.0,
