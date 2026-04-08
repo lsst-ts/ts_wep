@@ -503,7 +503,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         qualityTableCols = [
             "SN",
             "ENTROPY",
-            "BORDER_FRACTIONENTROPY_SELECT",
+            "BORDER_FRACTION",
+            "ENTROPY_SELECT",
             "SN_SELECT",
             "BORDER_FRACTION_SELECT",
             "FINAL_SELECT",
