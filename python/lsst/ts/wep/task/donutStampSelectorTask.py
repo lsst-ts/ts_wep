@@ -321,7 +321,7 @@ class DonutStampSelectorTask(pipeBase.Task):
             fillVals = np.asarray(donutStamps.metadata.getArray("BORDER_FRACTION"))
             borderFraction[: len(fillVals)] = fillVals
             if self.config.selectWithBorderFraction:
-                borderFractionSelect = borderFraction > self.config.maxBorderFraction
+                borderFractionSelect = borderFraction < self.config.maxBorderFraction
                 self.log.info(
                     f"{sum(borderFractionSelect)} of {len(borderFractionSelect)} "
                     "donuts passed border fraction selection."
