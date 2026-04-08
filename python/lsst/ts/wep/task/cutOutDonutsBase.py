@@ -29,11 +29,14 @@ from copy import copy
 from typing import Any
 
 import astropy.units as u
+import numpy as np
+from astropy.table import QTable
+from scipy.ndimage import binary_dilation, gaussian_filter
+from scipy.signal import correlate
+
 import lsst.afw.cameraGeom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-import numpy as np
-from astropy.table import QTable
 from lsst.afw.geom import makeSkyWcs
 from lsst.afw.image import Exposure
 from lsst.daf.base import PropertyList
@@ -43,10 +46,12 @@ from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
-from lsst.ts.wep.utils import (DefocalType, calcStampPowerSpectrum,
-                               createTemplateForDetector, getTaskInstrument)
-from scipy.ndimage import binary_dilation, gaussian_filter
-from scipy.signal import correlate
+from lsst.ts.wep.utils import (
+    DefocalType,
+    calcStampPowerSpectrum,
+    createTemplateForDetector,
+    getTaskInstrument,
+)
 
 
 class CutOutDonutsBaseTaskConnections(
