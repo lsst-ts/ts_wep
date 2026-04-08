@@ -74,6 +74,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                         "gtol": 1e-2,
                         "max_nfev": 10,
                         "verbose": 2,
+                        "x_scale": "jac",
                     },
                 )
                 # Get the test data
@@ -85,7 +86,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                     zkEst, _ = dan.estimateZk(*images)
 
                     # Check that results are fairly accurate
-                    self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-5)
+                    self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
     def testAccuracyWithBinning(self) -> None:
         for jointFitPair in [True, False]:
@@ -100,6 +101,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                         "gtol": 1e-2,
                         "max_nfev": 10,
                         "verbose": 2,
+                        "x_scale": "jac",
                     },
                     binning=2,
                 )
@@ -122,7 +124,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 for images in [[intra, extra], [intra], [extra]]:
                     # Estimate Zernikes (in meters)
                     zkEst, _ = danBin.estimateZk(*images, saveHistory=True)
-                    self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-5)
+                    self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
                     # Test that we binned the images.
                     if "intra" in danBin.history:
