@@ -427,6 +427,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
             "MAX_POWER_GRAD",
+            "BORDER_FRACTION",
             "MJD",
             "BORESIGHT_ROT_ANGLE_RAD",
             "BORESIGHT_PAR_ANGLE_RAD",
