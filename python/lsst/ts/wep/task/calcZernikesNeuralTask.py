@@ -994,8 +994,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             for donut in tartsInternalData
         ]
         self._lastZkIntrinsicsCcs = [
-            self._extractTartsZkVector(donut, "zk_intrinsics_CCS")
-            for donut in tartsInternalData
+            self._extractTartsZkVector(donut, "zk_intrinsics_CCS") for donut in tartsInternalData
         ]
 
         # Count valid OOD scores for logging
@@ -1293,9 +1292,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         denseOcs = rot @ dense
         return np.array([denseOcs[int(n)] for n in self.nollIndices], dtype=float)
 
-    def _populateNeuralZernikeTableColumns(
-        self, zkTable: QTable, exposure: afwImage.Exposure
-    ) -> None:
+    def _populateNeuralZernikeTableColumns(self, zkTable: QTable, exposure: afwImage.Exposure) -> None:
         """Populate OPD/intrinsic/deviation columns from neural data."""
         if len(zkTable) == 0:
             return
