@@ -30,6 +30,7 @@ from copy import deepcopy
 from typing import Any
 
 import astropy.units as u
+import galsim
 import numpy as np
 import torch
 from astropy.table import QTable
@@ -369,6 +370,9 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
 
         # Initialize cache for per-donut OOD scores
         self._lastOodScores: list[float] = []
+        # Cache per-donut Zernike components from TARTS internal data (CCS, microns)
+        self._lastZkDeviationsCcs: list[np.ndarray] = []
+        self._lastZkIntrinsicsCcs: list[np.ndarray] = []
 
     def validate(self) -> None:
         """Validate configuration parameters."""
@@ -984,6 +988,14 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         oodScores = [float(d.get("ood_score", np.nan)) for d in tartsInternalData]
         # Cache for later use when creating the zernikes table
         self._lastOodScores = oodScores
+        self._lastZkDeviationsCcs = [
+            self._extractTartsZkVector(donut, "zk_deviations_CCS", fallback_key="zernikes")
+            for donut in tartsInternalData
+        ]
+        self._lastZkIntrinsicsCcs = [
+            self._extractTartsZkVector(donut, "zk_intrinsics_CCS")
+            for donut in tartsInternalData
+        ]
 
         # Count valid OOD scores for logging
         validCount = int(np.sum(np.isfinite(oodScores)))
@@ -1193,6 +1205,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         zernikesTable = self.createZkTable(zkCoeffRaw=zkCoeffRaw)
         self._updateAverageRowWithAggregatedZernikes(zernikesTable, aggregatedZernikes)
+        self._populateNeuralZernikeTableColumns(zernikesTable, exposure)
         # Add OOD scores to zernikes table as a per-donut column
         # OOD scores are extracted in the same order as donuts from TARTS
         # internal data, and both come from the same TARTS run, so they
@@ -1243,6 +1256,96 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutTable=donutTable,
             donutQualityTable=donutQualityTable,
         )
+
+    def _extractTartsZkVector(
+        self, donutData: dict[str, Any], key: str, fallback_key: str | None = None
+    ) -> np.ndarray:
+        """Extract self.nollIndices components from a TARTS internal-data vector."""
+        source = donutData.get(key, None)
+        if source is None and fallback_key is not None:
+            source = donutData.get(fallback_key, None)
+        if source is None:
+            return np.full(len(self.nollIndices), np.nan, dtype=float)
+
+        fullVec = np.ravel(self._toNumpy(source)).astype(float)
+        out = np.full(len(self.nollIndices), np.nan, dtype=float)
+        for i, noll in enumerate(self.nollIndices):
+            idx = int(noll) - 4
+            if 0 <= idx < len(fullVec):
+                out[i] = fullVec[idx]
+        return out
+
+    def _getCcsToOcsRotationAngle(self, exposure: afwImage.Exposure) -> float:
+        """Compute CCS->OCS rotation angle for Zernike vectors."""
+        q_parAngle_rad = exposure.visitInfo.boresightParAngle.asRadians()
+        rot_angle_rad = exposure.visitInfo.boresightRotAngle.asRadians()
+        return q_parAngle_rad - rot_angle_rad - np.pi / 2.0
+
+    def _rotateZernikeVectorCcsToOcs(self, zkCcs: np.ndarray, rtp: float) -> np.ndarray:
+        """Rotate sparse Noll vector from CCS to OCS in microns."""
+        jmax = int(max(self.nollIndices))
+        dense = np.zeros(jmax + 1, dtype=float)
+        for value, noll in zip(zkCcs, self.nollIndices):
+            dense[int(noll)] = value
+
+        rot = galsim.zernike.zernikeRotMatrix(jmax, rtp)
+        denseOcs = rot @ dense
+        return np.array([denseOcs[int(n)] for n in self.nollIndices], dtype=float)
+
+    def _populateNeuralZernikeTableColumns(self, zkTable: QTable, exposure: afwImage.Exposure) -> None:
+        """Populate OPD/intrinsic/deviation columns from neural internal data."""
+        if len(zkTable) == 0:
+            return
+
+        try:
+            rtp = self._getCcsToOcsRotationAngle(exposure)
+        except (AttributeError, RuntimeError) as e:
+            self.log.warning(
+                "Missing visitInfo boresight angles for CCS->OCS Zernike conversion (%s); "
+                "writing CCS values to output table.",
+                e,
+            )
+            rtp = None
+
+        numRowsDonut = max(0, len(zkTable) - 1)
+        numCached = min(numRowsDonut, len(self._lastZkDeviationsCcs), len(self._lastZkIntrinsicsCcs))
+        if numCached == 0:
+            return
+
+        allTotalOcs: list[np.ndarray] = []
+        allIntrOcs: list[np.ndarray] = []
+        allDevOcs: list[np.ndarray] = []
+
+        for i in range(numCached):
+            devCcs = self._lastZkDeviationsCcs[i]
+            intrCcs = self._lastZkIntrinsicsCcs[i]
+            if rtp is None:
+                devOcs = devCcs
+                intrOcs = intrCcs
+            else:
+                devOcs = self._rotateZernikeVectorCcsToOcs(devCcs, rtp)
+                intrOcs = self._rotateZernikeVectorCcsToOcs(intrCcs, rtp)
+            totalOcs = devOcs + intrOcs
+
+            allDevOcs.append(devOcs)
+            allIntrOcs.append(intrOcs)
+            allTotalOcs.append(totalOcs)
+
+            rowIdx = i + 1  # index 0 is average row
+            for modeIdx, noll in enumerate(self.nollIndices):
+                zkTable[f"Z{noll}"][rowIdx] = (totalOcs[modeIdx] * u.micron).to(u.nm)
+                zkTable[f"Z{noll}_intrinsic"][rowIdx] = (intrOcs[modeIdx] * u.micron).to(u.nm)
+                zkTable[f"Z{noll}_deviation"][rowIdx] = (devOcs[modeIdx] * u.micron).to(u.nm)
+
+        # Average row from donut rows in OCS
+        avgIdx = np.where(zkTable["label"] == "average")[0][0]
+        avgTotal = np.nanmedian(np.stack(allTotalOcs, axis=0), axis=0)
+        avgIntr = np.nanmedian(np.stack(allIntrOcs, axis=0), axis=0)
+        avgDev = np.nanmedian(np.stack(allDevOcs, axis=0), axis=0)
+        for modeIdx, noll in enumerate(self.nollIndices):
+            zkTable[f"Z{noll}"][avgIdx] = (avgTotal[modeIdx] * u.micron).to(u.nm)
+            zkTable[f"Z{noll}_intrinsic"][avgIdx] = (avgIntr[modeIdx] * u.micron).to(u.nm)
+            zkTable[f"Z{noll}_deviation"][avgIdx] = (avgDev[modeIdx] * u.micron).to(u.nm)
 
     def _unpackStampData(self, stamp: DonutStamp | None) -> tuple:
         """Override parent method to handle missing intrinsic maps.
