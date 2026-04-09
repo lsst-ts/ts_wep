@@ -24,6 +24,7 @@ __all__ = ["CombineZernikesSigmaClipTaskConfig", "CombineZernikesSigmaClipTask"]
 from typing import Any
 
 import numpy as np
+import astropy.units as u
 from astropy.table import Table
 
 import lsst.pex.config as pexConfig
@@ -44,7 +45,7 @@ class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
     )
     stdMin: pexConfig.Field = pexConfig.Field(
         dtype=float,
-        default=0.005,
+        default=0.1,
         doc="Minimum threshold for clipping the standard deviation in um.",
     )
     maxZernClip: pexConfig.Field = pexConfig.Field(
@@ -94,7 +95,7 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         else:
             raise ValueError(f"Unknown zkClipType: {self.zkClipType}")
         subTable = zkTable[zkTable["label"] != "average"][columns]
-        zernikeArray = np.array([subTable[col] for col in columns]).T
+        zernikeArray = np.array([subTable[col].to(u.um) for col in columns]).T
 
         # Perform conditional sigma clipping
         sigArray = conditionalSigmaClip(
