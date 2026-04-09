@@ -21,6 +21,7 @@
 
 import unittest
 
+import astropy.units as u
 import numpy as np
 from astropy.table import Table
 
@@ -33,6 +34,7 @@ from lsst.ts.wep.task.combineZernikesSigmaClipTask import (
 class TestCombineZernikesSigmaClipTask(unittest.TestCase):
     def setUp(self) -> None:
         self.config = CombineZernikesSigmaClipTaskConfig()
+        self.config.stdMin = 0.005
         self.task = CombineZernikesSigmaClipTask()
 
     def prepareTestTable(self) -> Table:
@@ -47,11 +49,11 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         table.meta["deviation_columns"] = [f"Z{j}_deviation" for j in nollIndices]
 
         for i in table.meta["noll_indices"]:
-            table[f"Z{i}"] = [np.nan] + [101.0] + 50 * [1.0] + 50 * [3.0]
+            table[f"Z{i}"] = np.array([np.nan] + [101.0] + 50 * [1.0] + 50 * [3.0]) * u.nm
         for i in table.meta["noll_indices"]:
-            table[f"Z{i}_intrinsic"] = [np.nan] + 50 * [1.0] + 50 * [3.0] + [101.0]
+            table[f"Z{i}_intrinsic"] = np.array([np.nan] + 50 * [1.0] + 50 * [3.0] + [101.0]) * u.nm
         for i in table.meta["noll_indices"]:
-            table[f"Z{i}_deviation"] = [np.nan] + 49 * [1.0] + 49 * [3.0] + 3 * [101.0]
+            table[f"Z{i}_deviation"] = np.array([np.nan] + 49 * [1.0] + 49 * [3.0] + 3 * [101.0]) * u.nm
 
         return table
 
