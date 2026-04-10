@@ -35,7 +35,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
     def setUp(self) -> None:
         self.config = CombineZernikesSigmaClipTaskConfig()
         self.config.stdMin = 0.005
-        self.task = CombineZernikesSigmaClipTask()
+        self.task = CombineZernikesSigmaClipTask(config=self.config)
 
     def prepareTestTable(self) -> Table:
         label = ["average"] + [f"pair{i}" for i in range(101)]
@@ -65,11 +65,11 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertEqual(3, self.task.maxZernClip)
 
         self.config.sigmaClipKwargs["sigma"] = 2.0
-        self.config.stdMin = 0.005
+        self.config.stdMin = 0.05
         self.config.maxZernClip = 5
         task = CombineZernikesSigmaClipTask(config=self.config)
         self.assertEqual(2.0, task.sigmaClipKwargs["sigma"])
-        self.assertEqual(0.005, task.stdMin)
+        self.assertEqual(0.05, task.stdMin)
         self.assertEqual(5, task.maxZernClip)
 
     def testCombineZernikes(self) -> None:
