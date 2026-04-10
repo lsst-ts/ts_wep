@@ -23,8 +23,8 @@ __all__ = ["CombineZernikesSigmaClipTaskConfig", "CombineZernikesSigmaClipTask"]
 
 from typing import Any
 
-import numpy as np
 import astropy.units as u
+import numpy as np
 from astropy.table import Table
 
 import lsst.pex.config as pexConfig
