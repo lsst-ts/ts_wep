@@ -29,6 +29,7 @@ import numpy as np
 from galsim import GalSimFFTSizeError
 from scipy.ndimage import binary_erosion
 from scipy.optimize import OptimizeResult, least_squares
+from scipy.stats import median_abs_deviation
 
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
@@ -196,14 +197,21 @@ class DanishAlgorithm(WfAlgorithm):
             mapper = ImageMapper(instrument, "offAxis")
             mapper.createImageMasks(image, zkStart)
 
-        # Get robust estimate of background noise
+        # Grow the mask edges by 10 pixels.
         maskBackground = binary_erosion(image.maskBackground, iterations=10)
-        background = image.image[maskBackground]
-        q75, q25 = np.percentile(background, [75, 25])
-        backgroundStd = (q75 - q25) / 1.349
+
+        # Robust estimate of background noise by looking at
+        # shift-and-delta. This should still be masked to
+        # avoid the donut pixels themselves which have signal
+        # and higher variance.
+        backgroundStd = median_abs_deviation(
+            (image.image[1:] - image.image[:-1])[maskBackground[:-1, :]],
+            scale="normal",
+        ) / np.sqrt(2.0)
+
         # danish expects background to be subtracted out, so we
         # subtract the median background value from the image.
-        backgroundMedian = np.median(background)
+        backgroundMedian = np.median(image.image[maskBackground])
         image.image -= backgroundMedian
 
         # Get the image array
