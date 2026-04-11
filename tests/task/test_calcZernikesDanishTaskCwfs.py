@@ -330,6 +330,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("fit_success", zkCalcPairs.meta["estimatorInfo"])
         self.assertIn("chi_square", zkCalcPairs.meta["estimatorInfo"])
         self.assertIn("blur_clipped", zkCalcPairs.meta["estimatorInfo"])
+        self.assertIn("zern_clipped", zkCalcPairs.meta["estimatorInfo"])
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["fwhm"]))
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
@@ -402,3 +403,19 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         used_true = len(zkOut) * [True]
         used_true[1] = False  # First row should be clipped, but average row should still be used
         self.assertEqual(list(zkOut["used"]), used_true)
+
+    def testZernClipping(self) -> None:
+        # Add the first source into each set of stamps again.
+        # That will ensure that the middle pair will get clipped
+        # since it will have a deviation that will trigger sigma clipping
+        self.donutStampsExtra.append(self.donutStampsExtra[0])
+        self.donutStampsExtra._refresh_metadata()
+        self.donutStampsIntra.append(self.donutStampsIntra[0])
+        self.donutStampsIntra._refresh_metadata()
+        # Trim the metadata keys that will cause issues when appending
+        for key in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "MAG"]:
+            self.donutStampsExtra.metadata.pop(key)
+            self.donutStampsIntra.metadata.pop(key)
+        self.task.doDonutStampSelector = False
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
+        self.assertEqual(list(zkCalc.meta["estimatorInfo"]["zern_clipped"]), [False, True, False])
