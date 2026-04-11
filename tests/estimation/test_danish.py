@@ -74,6 +74,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                         "gtol": 1e-2,
                         "max_nfev": 10,
                         "verbose": 2,
+                        "x_scale": "jac",
                     },
                 )
                 # Get the test data
@@ -100,6 +101,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                         "gtol": 1e-2,
                         "max_nfev": 10,
                         "verbose": 2,
+                        "x_scale": "jac",
                     },
                     binning=2,
                 )
