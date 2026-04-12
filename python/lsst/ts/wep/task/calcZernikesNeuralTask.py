@@ -45,6 +45,7 @@ from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTask
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
+from lsst.ts.wep.utils.zernikeUtils import checkNollIndices, makeSparse
 from lsst.utils.timer import timeMethod
 
 # Define the position 2D float dtype for the zernikes table
@@ -167,7 +168,10 @@ class CalcZernikesNeuralTaskConfig(
     nollIndices : list[int]
         List of Noll indices to calculate. Default is Z4-Z22 (4-22),
         excluding piston (Z1), tip (Z2), and tilt (Z3) which are
-        typically not measured in wavefront sensing.
+        typically not measured in wavefront sensing. Values must be
+        unique, ascending, at least 4, and include complete azimuthal
+        pairs (same rules as ``EstimateZernikesBaseTask``; enforced by
+        ``checkNollIndices`` at task initialization).
     cropSize : int
         Size of donut crop in pixels (width and height). Default is 160 pixels,
         which matches the TARTS neural network training data format.
@@ -210,7 +214,9 @@ class CalcZernikesNeuralTaskConfig(
     nollIndices: pexConfig.Field = pexConfig.ListField(
         doc="List of Noll indices to calculate. Default is Z4-Z22 (4-22), "
         "excluding piston (Z1), tip (Z2), and tilt (Z3) which are "
-        "typically not measured in wavefront sensing.",
+        "typically not measured in wavefront sensing. Indices must be "
+        "unique, ascending, >= 4, and include complete azimuthal pairs "
+        "(see ``checkNollIndices`` in zernikeUtils).",
         dtype=int,
         default=[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
     )
@@ -381,13 +387,14 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         Raises
         ------
         ValueError
-            If ``nollIndices`` is empty or any Noll index is less than 1.
+            If ``nollIndices`` is empty or fails ``checkNollIndices`` (each
+            index must be >= 4, unique, ascending, and azimuthal pairs must
+            be complete), matching ``makeSparse`` / ``makeDense`` requirements
+            in ``zernikeUtils``.
         """
-        # Validate Noll indices
         if len(self.nollIndices) == 0:
             raise ValueError("nollIndices cannot be empty")
-        if any(idx < 1 for idx in self.nollIndices):
-            raise ValueError("Noll indices must be >= 1")
+        checkNollIndices(np.array(self.nollIndices))
 
     def _isPytorchTensor(self, obj: Any) -> bool:
         """Return whether ``obj`` is a ``torch.Tensor``.
@@ -1332,10 +1339,12 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
 
         Notes
         -----
-        The implementation assumes the TARTS vector uses the usual ordering
-        where index ``k`` corresponds to Noll index ``k + 4`` (so Noll 4 is
-        stored at offset 0). Values outside the available length are set to
-        NaN rather than extrapolated.
+        Indexing matches ``makeSparse`` in ``zernikeUtils``: offset ``k`` in
+        the TARTS vector is Noll ``k + 4``. ``self.nollIndices`` is validated
+        at task init (all indices >= 4). If the TARTS vector is shorter than
+        needed for the configured maximum Noll index, it is right-padded with
+        NaNs before calling ``makeSparse``, so missing high-order modes are
+        NaN rather than raising.
         """
         source = donutData.get(key, None)
         if source is None and fallback_key is not None:
@@ -1344,12 +1353,13 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             return np.full(len(self.nollIndices), np.nan, dtype=float)
 
         fullVec = np.ravel(self._toNumpy(source)).astype(float)
-        out = np.full(len(self.nollIndices), np.nan, dtype=float)
-        for i, noll in enumerate(self.nollIndices):
-            idx = int(noll) - 4
-            if 0 <= idx < len(fullVec):
-                out[i] = fullVec[idx]
-        return out
+        nolls = np.asarray(self.nollIndices, dtype=int)
+        requiredLen = int(nolls.max()) - 3
+        if len(fullVec) < requiredLen:
+            padded = np.full(requiredLen, np.nan, dtype=float)
+            padded[: len(fullVec)] = fullVec
+            fullVec = padded
+        return np.asarray(makeSparse(fullVec, nolls), dtype=float)
 
     def _getCcsToOcsRotationAngle(self, exposure: afwImage.Exposure) -> float:
         """Compute the rotation angle from CCS to OCS for Zernike vectors.
