@@ -271,6 +271,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
     # Class constants for processing
     EXPECTED_IMAGE_DIMENSIONS = 3  # Expected dimensions for TARTS output
     LOG_PRECISION = 3  # Decimal precision for logging Zernike values
+    # Statistic for the neural OPD/intrinsic/deviation aggregate row labeled
+    # "average"; see _populateNeuralZernikeTableColumns. Copied to
+    # zkTable.meta["average_row_aggregation"] on output tables.
+    AVERAGE_ROW_AGGREGATION_METHOD = "nanmedian"
 
     ConfigClass = CalcZernikesNeuralTaskConfig
     _DefaultName = "calcZernikesNeuralTask"
@@ -1449,7 +1453,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         The aggregate (``label == "average"``) row is updated with the
         nanmedian across donuts for total, intrinsic, and deviation in OCS
         (or CCS if rotation is unavailable). OPD columns store
-        ``intrinsic + deviation`` in nanometers.
+        ``intrinsic + deviation`` in nanometers. ``zkTable.meta`` receives
+        ``average_row_aggregation`` set to ``AVERAGE_ROW_AGGREGATION_METHOD``
+        so consumers know the row label ``average`` refers to this statistic,
+        not a mean (see also ``run`` for nanmedian on ``ood_score``).
         """
         if len(zkTable) == 0:
             return
@@ -1494,7 +1501,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
                 zkTable[f"Z{noll}_intrinsic"][rowIdx] = (intrOcs[modeIdx] * u.micron).to(u.nm)
                 zkTable[f"Z{noll}_deviation"][rowIdx] = (devOcs[modeIdx] * u.micron).to(u.nm)
 
-        # Average row from donut rows in OCS
+        # Aggregate row from donut rows in OCS (nanmedian; on-sky validation)
         avgIdx = np.where(zkTable["label"] == "average")[0][0]
         avgTotal = np.nanmedian(np.stack(allTotalOcs, axis=0), axis=0)
         avgIntr = np.nanmedian(np.stack(allIntrOcs, axis=0), axis=0)
@@ -1503,6 +1510,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             zkTable[f"Z{noll}"][avgIdx] = (avgTotal[modeIdx] * u.micron).to(u.nm)
             zkTable[f"Z{noll}_intrinsic"][avgIdx] = (avgIntr[modeIdx] * u.micron).to(u.nm)
             zkTable[f"Z{noll}_deviation"][avgIdx] = (avgDev[modeIdx] * u.micron).to(u.nm)
+
+        zkTable.meta["average_row_aggregation"] = self.AVERAGE_ROW_AGGREGATION_METHOD
 
     def _unpackStampData(self, stamp: DonutStamp | None) -> tuple:
         """Override parent method to handle missing intrinsic maps.
