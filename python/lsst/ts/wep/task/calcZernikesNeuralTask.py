@@ -376,7 +376,13 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self._lastZkIntrinsicsCcs: list[np.ndarray] = []
 
     def validate(self) -> None:
-        """Validate configuration parameters."""
+        """Validate configuration parameters for the neural Zernike task.
+
+        Raises
+        ------
+        ValueError
+            If ``nollIndices`` is empty or any Noll index is less than 1.
+        """
         # Validate Noll indices
         if len(self.nollIndices) == 0:
             raise ValueError("nollIndices cannot be empty")
@@ -384,11 +390,40 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             raise ValueError("Noll indices must be >= 1")
 
     def _isPytorchTensor(self, obj: Any) -> bool:
-        """Check if object is a PyTorch tensor."""
+        """Return whether ``obj`` is a ``torch.Tensor``.
+
+        Parameters
+        ----------
+        obj : Any
+            Object to test.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``obj`` is a PyTorch tensor, otherwise ``False``.
+        """
         return isinstance(obj, torch.Tensor)
 
     def _toNumpy(self, obj: Any) -> np.ndarray:
-        """Convert PyTorch tensor or other object to numpy array."""
+        """Convert a PyTorch tensor or array-like object to a NumPy array.
+
+        Parameters
+        ----------
+        obj : Any
+            Value to convert. Tensors are moved to CPU before conversion.
+            Existing ``numpy.ndarray`` instances are returned unchanged.
+            Other types are passed to ``numpy.array``.
+
+        Returns
+        -------
+        numpy.ndarray
+            NumPy array view or copy of ``obj``.
+
+        Notes
+        -----
+        Calling this on a CUDA tensor performs a host transfer when
+        ``obj`` is a ``torch.Tensor``.
+        """
         if self._isPytorchTensor(obj):
             return obj.cpu().numpy()
         elif isinstance(obj, np.ndarray):
@@ -459,9 +494,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         str
             String indicating defocal type: "intra" or "extra".
 
-        Raises:
-            ValueError: If defocal type cannot be determined from detector
-                name.
+        Raises
+        ------
+        ValueError
+            If the detector name does not end with ``_SW0`` or ``_SW1``.
         """
         detectorName = exposure.getDetector().getName()
         self.log.debug("Detector name: '%s'", detectorName)
@@ -742,6 +778,9 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             The donut stamps collection.
         exposure : afwImage.Exposure
             The exposure containing the donut data.
+        defocalType : str, optional
+            Defocal side label for logging and metadata consistency. Must be
+            ``"intra"`` or ``"extra"``. Default is ``"intra"``.
 
         Returns
         -------
@@ -1117,6 +1156,9 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         exposure : lsst.afw.image.Exposure
             The LSST exposure data containing donut stamps. This should
             contain proper WCS information for the TARTS neural network.
+        numCores : int, optional
+            Reserved for API compatibility with the base class; not used by
+            this neural implementation. Default is 1.
 
         Returns
         -------
@@ -1260,7 +1302,41 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
     def _extractTartsZkVector(
         self, donutData: dict[str, Any], key: str, fallback_key: str | None = None
     ) -> np.ndarray:
-        """Extract self.nollIndices components from TARTS internal data."""
+        """Extract configured Noll modes from one TARTS internal-data dict.
+
+        ``donutData`` is one element from ``get_internal_data()``. TARTS may
+        expose per-donut Zernike content under different keys
+        (for example ``zk_deviations_CCS`` vs. a legacy ``zernikes`` key).
+        This helper selects the vector stored under ``key``, optionally
+        falling back to ``fallback_key``, then picks the entries that align
+        with ``self.nollIndices``.
+
+        Parameters
+        ----------
+        donutData : dict[str, Any]
+            Single-donut dictionary from TARTS
+            ``NeuralActiveOpticsSys.get_internal_data()``.
+        key : str
+            Primary dictionary key for the full Zernike vector in camera
+            coordinates (CCS), in microns.
+        fallback_key : str, optional
+            Secondary key to try if ``key`` is missing or maps to ``None``.
+            If both are missing, the returned vector is all-NaN.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D float array of length ``len(self.nollIndices)``, in microns,
+            ordered consistently with ``self.nollIndices``. Missing keys or
+            out-of-range indices are filled with ``numpy.nan``.
+
+        Notes
+        -----
+        The implementation assumes the TARTS vector uses the usual ordering
+        where index ``k`` corresponds to Noll index ``k + 4`` (so Noll 4 is
+        stored at offset 0). Values outside the available length are set to
+        NaN rather than extrapolated.
+        """
         source = donutData.get(key, None)
         if source is None and fallback_key is not None:
             source = donutData.get(fallback_key, None)
@@ -1276,13 +1352,57 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         return out
 
     def _getCcsToOcsRotationAngle(self, exposure: afwImage.Exposure) -> float:
-        """Compute CCS->OCS rotation angle for Zernike vectors."""
+        """Compute the rotation angle from CCS to OCS for Zernike vectors.
+
+        Uses the same convention as ``createDonutTable`` for the parallactic
+        and boresight rotation angles.
+
+        Parameters
+        ----------
+        exposure : lsst.afw.image.Exposure
+            Exposure whose ``visitInfo`` supplies ``boresightParAngle`` and
+            ``boresightRotAngle``.
+
+        Returns
+        -------
+        float
+            Rotation angle ``rtp`` in radians,
+            ``parallactic - rotation - pi/2``.
+
+        Raises
+        ------
+        AttributeError
+            If required ``visitInfo`` fields are missing.
+        RuntimeError
+            If angle access fails at runtime.
+        """
         q_parAngle_rad = exposure.visitInfo.boresightParAngle.asRadians()
         rot_angle_rad = exposure.visitInfo.boresightRotAngle.asRadians()
         return q_parAngle_rad - rot_angle_rad - np.pi / 2.0
 
     def _rotateZernikeVectorCcsToOcs(self, zkCcs: np.ndarray, rtp: float) -> np.ndarray:
-        """Rotate sparse Noll vector from CCS to OCS in microns."""
+        """Rotate a sparse Zernike coefficient vector from CCS to OCS.
+
+        The input ``zkCcs`` holds only the modes in ``self.nollIndices``.
+        Coefficients are embedded into a dense Noll-indexed vector, rotated
+        with GalSim's ``zernikeRotMatrix``, and the configured modes are
+        extracted again.
+
+        Parameters
+        ----------
+        zkCcs : numpy.ndarray
+            1-D array of Zernike coefficients in microns, same length and
+            order as ``self.nollIndices``.
+        rtp : float
+            Rotation angle in radians, typically from
+            `_getCcsToOcsRotationAngle`.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D float array of rotated coefficients in microns, ordered like
+            ``self.nollIndices``.
+        """
         jmax = int(max(self.nollIndices))
         dense = np.zeros(jmax + 1, dtype=float)
         for value, noll in zip(zkCcs, self.nollIndices):
@@ -1293,7 +1413,34 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         return np.array([denseOcs[int(n)] for n in self.nollIndices], dtype=float)
 
     def _populateNeuralZernikeTableColumns(self, zkTable: QTable, exposure: afwImage.Exposure) -> None:
-        """Populate OPD/intrinsic/deviation columns from neural data."""
+        """Fill OPD, intrinsic, and deviation columns using cached TARTS data.
+
+        Uses ``self._lastZkDeviationsCcs`` and ``self._lastZkIntrinsicsCcs``
+        populated during ``calcZernikesFromExposure``. When boresight angles
+        are available, deviations and intrinsics are rotated from CCS to OCS
+        before writing; otherwise CCS values are written and a warning is
+        logged.
+
+        Parameters
+        ----------
+        zkTable : astropy.table.QTable
+            Table produced by ``createZkTable``, with row 0 the aggregate
+            label and subsequent rows per donut.
+        exposure : lsst.afw.image.Exposure
+            Exposure used for CCS-to-OCS rotation metadata.
+
+        Returns
+        -------
+        None
+            Updates ``zkTable`` in place.
+
+        Notes
+        -----
+        The aggregate (``label == "average"``) row is updated with the
+        nanmedian across donuts for total, intrinsic, and deviation in OCS
+        (or CCS if rotation is unavailable). OPD columns store
+        ``intrinsic + deviation`` in nanometers.
+        """
         if len(zkTable) == 0:
             return
 
