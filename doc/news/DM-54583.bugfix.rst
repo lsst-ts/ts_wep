@@ -1,0 +1,3 @@
+Updated neural Zernike table population in ``CalcZernikesNeuralTask`` to
+store deviation/intrinsic/total values consistently from TARTS internal data.
+Also applies CCS-to-OCS conversion before writing OPD table columns.
