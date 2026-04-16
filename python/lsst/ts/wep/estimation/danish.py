@@ -522,8 +522,14 @@ class DanishAlgorithm(WfAlgorithm):
         )
 
         # Initial guess
+        # Floor flux at 1.0 to avoid negative values after background
+        # subtraction, which would violate the [0, inf] bound.
+        # A near-zero or negative flux means the donut is likely not going
+        # to be useful; the fit will either converge to something sensible
+        # or result in a poor chi-square that can be filtered downstream.
+        fluxes_init = [np.clip(np.sum(img), 1e3, 1e8) for img in imgs]
         x0 = model.pack_params(
-            fluxes=[np.sum(img) for img in imgs],
+            fluxes=fluxes_init,
             dxs=[0.0, 0.0],
             dys=[0.0, 0.0],
             fwhm=1.0,
@@ -543,7 +549,52 @@ class DanishAlgorithm(WfAlgorithm):
         )
         bounds = [list(b) for b in zip(*bounds)]
 
+        # Safety net: clamp x0 to lie within bounds in case any
+        # parameter (not just flux) ends up outside the allowed range.
+        # Log diagnostics before clamping so we can see the raw values.
+
+        # Log initial guess and bounds for diagnostics
         self.log.info("Starting least squares optimization.")
+        self.log.info(
+            "Pair fit raw img sums: [%.4f, %.4f], floored flux x0: [%.4f, %.4f]",
+            np.sum(img1),
+            np.sum(img2),
+            fluxes_init[0],
+            fluxes_init[1],
+        )
+        self.log.info(
+            "Pair fit img1 shape=%s min=%.4f max=%.4f sum=%.4f, img2 shape=%s min=%.4f max=%.4f sum=%.4f",
+            img1.shape,
+            img1.min(),
+            img1.max(),
+            np.sum(img1),
+            img2.shape,
+            img2.min(),
+            img2.max(),
+            np.sum(img2),
+        )
+        self.log.info(
+            "Pair fit backgroundStd1=%.4f, backgroundStd2=%.4f",
+            backgroundStd1,
+            backgroundStd2,
+        )
+
+        # Check for x0 vs bounds violations before clamping
+        lb, ub = np.array(bounds[0]), np.array(bounds[1])
+        x0_arr = np.array(x0)
+        violations = np.where((x0_arr < lb) | (x0_arr > ub))[0]
+        if len(violations) > 0:
+            self.log.warning(
+                "Pair fit x0 VIOLATES BOUNDS at indices %s: x0=%s, lower=%s, upper=%s. Clamping to bounds.",
+                violations,
+                x0_arr[violations],
+                lb[violations],
+                ub[violations],
+            )
+
+        # Apply the clamp
+        x0 = np.clip(x0, bounds[0], bounds[1])
+
         opt_result_keys = ["nit", "nfev", "cost"]
 
         def callback(*, intermediate_result: OptimizeResult) -> None:
@@ -600,9 +651,13 @@ class DanishAlgorithm(WfAlgorithm):
                 msg = "GalSimFFTSizeError occurred."
             elif "zero-size array" in str(e):
                 msg = "Empty optical kernel — aberrations pushed rays out of pupil."
+            elif "Initial guess is outside of provided bounds" in str(e):
+                msg = "Initial guess outside bounds (likely negative flux after background subtraction)."
+            elif "cannot convert float NaN to integer" in str(e):
+                msg = "NaN encountered in conversion."
             else:
                 raise
-            self.log.warning(f"Returning nans for fit due to {msg}")
+            self.log.warning("Returning nans for fit due to %s", msg)
             # Fill dummy objects
             result = dict()
             fwhm = np.nan
