@@ -124,7 +124,6 @@ class AiDonutAlgorithm(WfAlgorithm):
             raise FileNotFoundError(f"Model file not found: {value}") from e
         self.model.eval()  # Put in evaluation mode
 
-        # If loading the model succeeded, save the path
         self._modelPath = value
 
     @property
@@ -253,8 +252,6 @@ class AiDonutAlgorithm(WfAlgorithm):
             weights = np.exp(-outZk_err / self.temperature)
             weights = weights / weights.sum(axis=0, keepdims=True)
             zk = (outZk * weights).sum(axis=0)
-            
-
         else:
             zk = outZk.mean(axis=0)
             print('not using weighted mean')
