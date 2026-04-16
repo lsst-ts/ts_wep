@@ -30,8 +30,7 @@ from lsst.ts.wep.utils import getModulePath, makeDense, makeSparse
 
 __all__ = ["AiDonutAlgorithm"]
 
-DEFAULT_MODEL_PATH = getModulePath() + "/tests/testData/testAiModels/test_aidonu
-t_model_file.pt"
+DEFAULT_MODEL_PATH = getModulePath() + "/tests/testData/testAiModels/test_aidonut_model_file.pt"
 
 # Temperature parameter for softmax weighting of predictions
 # based on model-reported uncertainties. Lower values make the
@@ -120,8 +119,7 @@ class AiDonutAlgorithm(WfAlgorithm):
         """
         # Load the model
         try:
-            self.model = torch.load(value, map_location=self.device, weights_onl
-y=False)
+            self.model = torch.load(value, map_location=self.device, weights_only=False)
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Model file not found: {value}") from e
         self.model.eval()  # Put in evaluation mode
@@ -286,8 +284,7 @@ y=False)
                 self._history |= {
                     I2.defocalType.value: {
                         "zk": outZk[1],
-                        "zk_err": outZk_err[1] if outZk_err is not None else Non
-e,
+                        "zk_err": outZk_err[1] if outZk_err is not None else None,
                         "fwhm": outFwhm[1],
                     }
                 }
