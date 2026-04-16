@@ -30,7 +30,13 @@ from lsst.ts.wep.utils import getModulePath, makeDense, makeSparse
 
 __all__ = ["AiDonutAlgorithm"]
 
-DEFAULT_MODEL_PATH = getModulePath() + "/tests/testData/testAiModels/test_aidonut_model_file.pt"
+DEFAULT_MODEL_PATH = getModulePath() + "/tests/testData/testAiModels/test_aidonu
+t_model_file.pt"
+
+# Temperature parameter for softmax weighting of predictions
+# based on model-reported uncertainties. Lower values make the
+# weighting more aggressive (more trust in low-error predictions).
+DEFAULT_TEMPERATURE = 0.005
 
 
 class AiDonutAlgorithm(WfAlgorithm):
@@ -43,6 +49,11 @@ class AiDonutAlgorithm(WfAlgorithm):
         model requirements. Default is a test model included with ts_wep.
     device : str, optional
         Device to load the model on ('cpu' or 'cuda'). Default is 'cpu'.
+    temperature : float, optional
+        Temperature parameter for softmax weighting of predictions
+        when both intra- and extra-focal images are provided. Lower
+        values place more weight on the prediction with lower
+        estimated error. Default is 1.0.
 
     Model Requirements
     ------------------
@@ -64,8 +75,10 @@ class AiDonutAlgorithm(WfAlgorithm):
         self,
         modelPath: str = DEFAULT_MODEL_PATH,
         device: str = "cpu",
+        temperature: float = DEFAULT_TEMPERATURE,
     ) -> None:
         self.device = device
+        self.temperature = temperature
         self.modelPath = os.path.expandvars(modelPath)
 
     @property
@@ -107,7 +120,8 @@ class AiDonutAlgorithm(WfAlgorithm):
         """
         # Load the model
         try:
-            self.model = torch.load(value, map_location=self.device, weights_only=False)
+            self.model = torch.load(value, map_location=self.device, weights_onl
+y=False)
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Model file not found: {value}") from e
         self.model.eval()  # Put in evaluation mode
@@ -122,6 +136,7 @@ class AiDonutAlgorithm(WfAlgorithm):
         The history is a dictionary with the following entries:
         - "modelPath" - path to the PyTorch model file
         - "device" - device used for inference
+        - "temperature" - temperature used for weighted averaging
         - "modelNollIndices" - Noll indices the model predicts
         - "intra" and/or "extra" - All Zernikes returned by model for images
         - "nollIndices" - Noll indices for which Zernikes are returned
@@ -170,7 +185,7 @@ class AiDonutAlgorithm(WfAlgorithm):
             Zernike coefficients for the provided Noll indices, estimated from
             the images, in meters.
         dict
-            Empty dictionary (exists for compatibility).
+            Dictionary containing metadata such as FWHM estimates.
         """
         # First, let's make sure we haven't requested any Zernikes
         # the model doesn't predict
@@ -217,21 +232,40 @@ class AiDonutAlgorithm(WfAlgorithm):
                 bands_tch,
             )
 
-        # Split outputs and handle old models that don't return FWHM
+        # Split outputs and handle models with varying return values.
+        # Models may return:
+        #   - a single tensor (zk only)
+        #   - a 2-tuple (zk, zk_err)
+        #   - a 3-tuple (zk, zk_err, fwhm)
         if isinstance(outputs, tuple):
             outZk = outputs[0].cpu().numpy()
-            outFwhm = outputs[1].cpu().numpy()
+            outZk_err = outputs[1].cpu().numpy() if len(outputs) > 1 else None
+            outFwhm = outputs[2].cpu().numpy() if len(outputs) > 2 else np.full(
+(len(imgs), 2), np.nan)
         else:
             outZk = outputs.cpu().numpy()
-            outFwhm = np.full((len(imgs), 1), np.nan)
+            outZk_err = outputs[1].cpu().numpy() if len(outputs) > 1 else None
+            outFwhm = np.full((len(imgs), 2), np.nan)
 
-        # Record average outputs
-        zk = outZk.mean(axis=0)
+        # Compute weighted average using model uncertainties if available,
+        # otherwise fall back to a simple mean.
+        # Weighting uses softmax(-err / temperature) so that predictions
+        # with lower estimated error receive higher weight.
+        if outZk_err is not None:
+            weights = np.exp(-outZk_err / self.temperature)
+            weights = weights / weights.sum(axis=0, keepdims=True)
+            zk = (outZk * weights).sum(axis=0)
+            
+
+        else:
+            zk = outZk.mean(axis=0)
+            print('not using weighted mean')
         zkMeta = {"fwhm": outFwhm.mean(axis=0)}
 
         # Only return requested nollIndices
         zk = makeDense(zk, self.model.nollIndices)
         zk = makeSparse(zk, nollIndices)
+
 
         # Save history if requested
         if saveHistory:
@@ -239,9 +273,11 @@ class AiDonutAlgorithm(WfAlgorithm):
             self._history = {
                 "modelPath": self.modelPath,
                 "device": self.device,
+                "temperature": self.temperature,
                 "modelNollIndices": self.model.nollIndices,
                 I1.defocalType.value: {
                     "zk": outZk[0],
+                    "zk_err": outZk_err[0] if outZk_err is not None else None,
                     "fwhm": outFwhm[0],
                 },
             }
@@ -250,6 +286,8 @@ class AiDonutAlgorithm(WfAlgorithm):
                 self._history |= {
                     I2.defocalType.value: {
                         "zk": outZk[1],
+                        "zk_err": outZk_err[1] if outZk_err is not None else Non
+e,
                         "fwhm": outFwhm[1],
                     }
                 }
