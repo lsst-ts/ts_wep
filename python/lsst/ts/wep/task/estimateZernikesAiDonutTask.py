@@ -44,6 +44,13 @@ class EstimateZernikesAiDonutConfig(EstimateZernikesBaseConfig):
         default="cpu",
         doc="Device to run the model on ('cpu' or 'cuda').",
     )
+    temperature: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        default=0.005,
+        doc="Temperature for softmax weighting of predictions based on model "
+        "uncertainty. Lower values put greater weight on lower-uncertainty "
+        "predictions.",
+    )
 
 
 class EstimateZernikesAiDonutTask(EstimateZernikesBaseTask):

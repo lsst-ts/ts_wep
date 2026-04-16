@@ -42,6 +42,15 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             AiDonutAlgorithm(modelPath="non_existent_model.pt", device="cpu")
 
+    def testBadTemperature(self) -> None:
+        """Test that bad temperature raises error."""
+        with self.assertRaises(ValueError):
+            AiDonutAlgorithm(temperature=-1.0)
+        with self.assertRaises(ValueError):
+            AiDonutAlgorithm(temperature=0.0)
+        with self.assertRaises(TypeError):
+            AiDonutAlgorithm(temperature="invalid")
+
     def testBadNollIndices(self) -> None:
         """Test that bad noll indices raise error."""
         algo = AiDonutAlgorithm()
@@ -57,6 +66,7 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         zk, zkMeta = algo.estimateZk(intra, extra, nollIndices=nollIndices)
         self.assertEqual(zk.shape[0], len(nollIndices))
         self.assertIn("fwhm", zkMeta)
+        self.assertIn("weight", zkMeta)
 
     def testHistory(self) -> None:
         """Test that history is populated correctly."""
@@ -70,7 +80,9 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         for defocalType in [intra.defocalType.value, extra.defocalType.value]:
             self.assertIn(defocalType, algo.history)
             self.assertIn("zk", algo.history[defocalType])
+            self.assertIn("zkScore", algo.history[defocalType])
             self.assertIn("fwhm", algo.history[defocalType])
         self.assertIn("nollIndices", algo.history)
         self.assertIn("zk", algo.history)
         self.assertIn("fwhm", algo.history)
+        self.assertIn("weight", algo.history)
