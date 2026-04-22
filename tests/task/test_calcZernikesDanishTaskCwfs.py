@@ -337,26 +337,30 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
     def testCreateIntrinsicMap(self) -> None:
         for intrinsicTable in self.intrinsicTables:
-            # Create intrinsic maps with complete grid
-            intrinsicMap = self.task._createIntrinsicMap(intrinsicTable)
-            self.assertEqual(
-                intrinsicMap(
-                    [intrinsicTable["y"].to("deg").value[0], intrinsicTable["x"].to("deg").value[0]]
-                )[0][0],
-                intrinsicTable["Z4"].to("um").value[0],
-            )
-            self.assertIsInstance(intrinsicMap, RegularGridInterpolator)
-            # Create intrinsic maps with "vignetted" grid (remove some points)
-            intrinsicTableVignetted = intrinsicTable[10:]
-            intrinsicMapVignetted = self.task._createIntrinsicMap(intrinsicTableVignetted)
-            self.assertEqual(
-                intrinsicMapVignetted(
-                    intrinsicTableVignetted["y"].to("deg").value[0],
-                    intrinsicTableVignetted["x"].to("deg").value[0],
-                )[0],
-                intrinsicTableVignetted["Z4"].to("um").value[0],
-            )
-            self.assertIsInstance(intrinsicMapVignetted, LinearNDInterpolator)
+            # For tests below, we will sort tables in
+            # two different orders to make sure nothing
+            # depends on table ordering
+            for order in (["x", "y"], ["y", "x"]):
+                table = intrinsicTable.copy()
+                table.sort(order)
+
+                # Create intrinsic maps with complete grid
+                intrinsicMap = self.task._createIntrinsicMap(table)
+                self.assertEqual(
+                    intrinsicMap([table["y"].to("deg").value[2], table["x"].to("deg").value[2]])[0, 0],
+                    table["Z4"].to("um").value[2],
+                )
+
+                # Create intrinsic maps with "vignetted" grid (remove some points)
+                tableVignetted = table[10:]
+                intrinsicMapVignetted = self.task._createIntrinsicMap(tableVignetted)
+                self.assertEqual(
+                    intrinsicMapVignetted(
+                        tableVignetted["y"].to("deg").value[0],
+                        tableVignetted["x"].to("deg").value[0],
+                    )[0],
+                    tableVignetted["Z4"].to("um").value[0],
+                )
 
     def testFitFailureWithMaxIterations(self) -> None:
         # Set max iterations very low to force fit failures

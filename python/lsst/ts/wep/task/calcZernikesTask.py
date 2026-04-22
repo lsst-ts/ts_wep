@@ -33,7 +33,7 @@ import astropy.units as u
 import numpy as np
 from astropy.stats import sigma_clip
 from astropy.table import QTable, Table, vstack
-from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
+from scipy.interpolate import LinearNDInterpolator
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -212,21 +212,13 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Extract arrays of field angle (deg)
         x = intrinsicTable["x"].to("deg").value
         y = intrinsicTable["y"].to("deg").value
-        x_grid = np.unique(x)
-        y_grid = np.unique(y)
 
         # Extract intrinsic Zernike coefficients (microns)
         zkTable = intrinsicTable[[f"Z{i}" for i in self.nollIndices]]
         zks = np.column_stack([zkTable[col].to("um").value for col in zkTable.colnames])
 
-        # Create the interpolator
-        if (len(x_grid) * len(y_grid)) == len(intrinsicTable):
-            # If the grid is regular and complete, use RegularGridInterpolator
-            values = zks.reshape(y_grid.size, x_grid.size, -1)
-            interpolator = RegularGridInterpolator((y_grid, x_grid), values)
-        else:
-            # Otherwise, use LinearNDInterpolator
-            interpolator = LinearNDInterpolator(np.column_stack([y, x]), zks)
+        # Create interpolator
+        interpolator = LinearNDInterpolator(np.column_stack([y, x]), zks)
 
         return interpolator
 
