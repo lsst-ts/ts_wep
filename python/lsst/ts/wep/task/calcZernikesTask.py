@@ -260,7 +260,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
             # The interpolator expects points in CCS, but fieldAngle above
             # is in DVCS, so we need to swap x and y (transpose)
-            intrinsics = intrinsicMap(fieldAngle.value[::-1].tolist()) * u.micron
+            fieldAngleCCS = fieldAngle.value[::-1]
+            intrinsics = intrinsicMap(fieldAngleCCS.tolist()) * u.micron  # type: ignore
 
         return fieldAngle, centroid, intrinsics
 
