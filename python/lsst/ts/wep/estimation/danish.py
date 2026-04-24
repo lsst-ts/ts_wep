@@ -370,6 +370,7 @@ class DanishAlgorithm(WfAlgorithm):
                 for msg in [
                     "zero-size array",
                     "cannot convert float NaN to integer",
+                    "must not contain infs or NaNs",
                 ]
             ):
                 self.log.warning(f"Returning nans for fit due to following galsim error: {str(e)}")
@@ -655,6 +656,8 @@ class DanishAlgorithm(WfAlgorithm):
                 msg = "Initial guess outside bounds (likely negative flux after background subtraction)."
             elif "cannot convert float NaN to integer" in str(e):
                 msg = "NaN encountered in conversion."
+            elif "must not contain infs or NaNs" in str(e):
+                msg = "NaN/Inf in Jacobian (likely bad donut with negative flux)."
             else:
                 raise
             self.log.warning("Returning nans for fit due to %s", msg)
