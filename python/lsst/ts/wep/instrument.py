@@ -42,6 +42,32 @@ def _getBatoidModelFromFileName(filename: str) -> batoid.Optic:
     return batoid.Optic.fromYaml(filename)
 
 
+def hackBatoidModel(band, x_ccs_deg, y_ccs_deg):
+    fiducial = _getBatoidModelFromFileName(f"Rubin_v3.14_{band.value}.yaml")
+    from batoid_rubin import LSSTBuilder
+    from lsst.obs.lsst import LsstCam
+    from lsst.afw.cameraGeom import FIELD_ANGLE
+    from lsst.geom import Point2D
+    camera = LsstCam().getCamera()
+    x_dvcs_rad = np.deg2rad(y_ccs_deg)
+    y_dvcs_rad = np.deg2rad(x_ccs_deg)
+    det = camera.findDetectors(
+        Point2D(x_dvcs_rad, y_dvcs_rad),
+        FIELD_ANGLE
+    )[0].getId()
+    builder = LSSTBuilder(
+        fiducial,
+        fea_dir="/sdf/home/j/jmeyers3/.local/batoid_rubin_data",
+        bend_dir="/sdf/home/j/jmeyers3/.local/batoid_rubin_data",
+        ccd_height_map_dir="/sdf/home/j/jmeyers3/.local/batoid_rubin_data",
+        dof_coord_system="OCS",
+        flip_m2_bending_modes=False,
+        dof_angle_units="degree",
+    )
+    batoidModel = builder.build_det(det)
+    return batoidModel
+
+
 class Instrument:
     """Object with relevant geometry of the primary mirror and focal plane.
 
@@ -771,7 +797,8 @@ class Instrument:
         band = BandLabel(band)
 
         # Get the batoid model
-        batoidModel = self.getBatoidModel(band)
+        # batoidModel = self.getBatoidModel(band)
+        batoidModel = hackBatoidModel(band, xAngle, yAngle)
 
         # If there is no batoid model, just return zeros
         if batoidModel is None:
@@ -895,7 +922,8 @@ class Instrument:
         band = BandLabel(band)
 
         # Get the batoid model
-        batoidModel = self.getBatoidModel(band)
+        # batoidModel = self.getBatoidModel(band)
+        batoidModel = hackBatoidModel(band, xAngle, yAngle)
 
         # If there is no batoid model, just return zeros
         if batoidModel is None:
