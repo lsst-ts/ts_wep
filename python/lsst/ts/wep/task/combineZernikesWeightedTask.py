@@ -91,8 +91,6 @@ class CombineZernikesWeightedTask(CombineZernikesSigmaClipTask):
         weight = estimator_info.get("weight", None)
         if weight is not None:
             weight = np.array(weight)
-            if weight.ndim == 2:
-                weight = weight.mean(axis=1)
             weight = weight[use_idx]
             if np.all(np.isfinite(weight)) and weight.sum() > 0:
                 weight = weight / weight.sum()
