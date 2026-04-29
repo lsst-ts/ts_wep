@@ -117,9 +117,9 @@ class AiDonutAlgorithm(WfAlgorithm):
             Temperature parameter. Must be a positive float.
         """
         if not isinstance(value, (int, float)):
-            raise TypeError("Temperature must be a float.")
+            raise TypeError("Temperature must be a number.")
         if value <= 0:
-            raise ValueError("Temperature must be a positive float.")
+            raise ValueError("Temperature must be positive.")
         self._temperature = float(value)
 
     @property
@@ -248,7 +248,7 @@ class AiDonutAlgorithm(WfAlgorithm):
 
         # Split outputs. Models may return:
         #   - a single tensor (zk only)
-        #   - a 2-tuple (zk, zkScore)
+        #   - a 2-tuple (zk, fwhm)
         #   - a 3-tuple (zk, zkScore, fwhm)
         if isinstance(outputs, tuple):
             outZk = outputs[0].cpu().numpy()
@@ -263,11 +263,16 @@ class AiDonutAlgorithm(WfAlgorithm):
         # otherwise fall back to a simple mean.
         # Weighting uses softmax(-score / temperature) so that predictions
         # with lower estimated error receive higher weight.
-        if np.all(np.isfinite(outZkScore)):
-            rawWeights = np.exp(-outZkScore / self.temperature)
+        finite_mask = np.isfinite(outZkErr)
+        if finite_mask.any():
+            rawWeights = np.where(finite_mask, np.exp(-outZkErr / self.temperature), 0.0)
             pairWeight = float(rawWeights.sum())
             weights = rawWeights / rawWeights.sum(axis=0, keepdims=True)
-            zk = (outZk * weights).sum(axis=0)
+            zk = np.where(
+                finite_mask.any(axis=0),
+                (outZk * weights).sum(axis=0),
+                outZk.mean(axis=0),
+            )
         else:
             pairWeight = 1.0
             zk = outZk.mean(axis=0)
