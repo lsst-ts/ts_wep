@@ -72,7 +72,7 @@ class TestCombineZernikesWeightedTask(unittest.TestCase):
             inTable = _makeTable(nPairs, weights)
             outTable = self.task.combineZernikes(inTable)
             self.assertTrue(all(outTable["used"]))
-            # All weight on pair 9: expected = j + 9, unweighted mean would be j + 4.5
+            # All weight on pair 9: expected = j + 9, not unweighted j + 4.5
             for j, col in enumerate(ALL_COLS):
                 self.assertAlmostEqual(
                     float(outTable[outTable["label"] == "average"][col][0]), float(j + 9)
