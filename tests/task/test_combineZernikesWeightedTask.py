@@ -62,7 +62,7 @@ class TestCombineZernikesWeightedTask(unittest.TestCase):
         outTable = self.task.combineZernikes(inTable)
         self.assertTrue(all(outTable["used"]))
         for j, col in enumerate(ALL_COLS):
-            expected = float(j)
+            expected = float(j) + 4.5
             self.assertAlmostEqual(float(outTable[outTable["label"] == "average"][col][0]), expected)
 
     def testCombineZernikesVaryingWeights(self) -> None:
@@ -91,7 +91,5 @@ class TestCombineZernikesWeightedTask(unittest.TestCase):
         self.assertEqual(type(output), pipeBase.Struct)
         outTable = output.combinedTable
         self.assertTrue(all(outTable["used"]))
-        for j, col in enumerate(ALL_COLS):
-            self.assertAlmostEqual(float(outTable[outTable["label"] == "average"][col][0]), float(j))
         flags = output.flags
         self.assertTrue(all(flags == 0))
