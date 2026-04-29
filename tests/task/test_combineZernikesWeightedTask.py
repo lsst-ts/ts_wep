@@ -66,18 +66,17 @@ class TestCombineZernikesWeightedTask(unittest.TestCase):
             self.assertAlmostEqual(float(outTable[outTable["label"] == "average"][col][0]), expected)
 
     def testCombineZernikesVaryingWeights(self) -> None:
-            nPairs = 10
-            weights = np.zeros(nPairs)
-            weights[9] = 1.0
-            inTable = _makeTable(nPairs, weights)
-            outTable = self.task.combineZernikes(inTable)
-            self.assertTrue(all(outTable["used"]))
-            # All weight on pair 9: expected = j + 9, not unweighted j + 4.5
-            for j, col in enumerate(ALL_COLS):
-                self.assertAlmostEqual(
-                    float(outTable[outTable["label"] == "average"][col][0]), float(j + 9)
-                )
-
+        nPairs = 10
+        weights = np.zeros(nPairs)
+        weights[9] = 1.0
+        inTable = _makeTable(nPairs, weights)
+        outTable = self.task.combineZernikes(inTable)
+        self.assertTrue(all(outTable["used"]))
+        # All weight on pair 9: expected = j + 9, not unweighted j + 4.5
+        for j, col in enumerate(ALL_COLS):
+            self.assertAlmostEqual(
+                float(outTable[outTable["label"] == "average"][col][0]), float(j + 9)
+            )
     def testCombineZernikesWithRejection(self) -> None:
         nPairs = 10
         inTable = _makeTable(nPairs, np.ones(nPairs), outlierPairIdx=0)
