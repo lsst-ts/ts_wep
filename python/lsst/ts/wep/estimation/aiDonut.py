@@ -116,7 +116,7 @@ class AiDonutAlgorithm(WfAlgorithm):
         value : float
             Temperature parameter. Must be a positive float.
         """
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError("Temperature must be a number.")
         if value <= 0:
             raise ValueError("Temperature must be positive.")
@@ -248,7 +248,7 @@ class AiDonutAlgorithm(WfAlgorithm):
 
         # Split outputs. Models may return:
         #   - a single tensor (zk only)
-        #   - a 2-tuple (zk, fwhm)
+        #   - a 2-tuple (zk, zkScore)
         #   - a 3-tuple (zk, zkScore, fwhm)
         if isinstance(outputs, tuple):
             outZk = outputs[0].cpu().numpy()
