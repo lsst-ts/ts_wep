@@ -259,20 +259,20 @@ class AiDonutAlgorithm(WfAlgorithm):
             outZkScore = np.full_like(outZk, np.nan)
             outFwhm = np.full((len(imgs), 2), np.nan)
 
-        # Compute weighted average using model uncertainties if available,
-        # otherwise fall back to a simple mean.
-        # Weighting uses softmax(-score / temperature) so that predictions
-        # with lower estimated error receive higher weight.
-        finite_mask = np.isfinite(outZkScore)
+        # Zero out entire stamp if any of its scores are NaN — a NaN score
+        # for one Zernike indicates the whole stamp prediction is unreliable.
+        # This allows the other stamp in the pair to still contribute normally.
+        finite_mask = np.isfinite(outZkScore).all(axis=1)  # (N,) per stamp
         if finite_mask.any():
-            rawWeights = np.where(finite_mask, np.exp(-outZkScore / self.temperature), 0.0)
-            pairWeight = float(rawWeights.sum())
-            weights = rawWeights / rawWeights.sum(axis=0, keepdims=True)
-            zk = np.where(
-                finite_mask.any(axis=0),
-                (outZk * weights).sum(axis=0),
-                outZk.mean(axis=0),
+            rawWeights = np.where(
+                finite_mask[:, None],
+                np.exp(-outZkScore / self.temperature),
+                0.0,
             )
+            pairWeight = float(rawWeights.sum())
+            col_sums = rawWeights.sum(axis=0, keepdims=True)
+            weights = np.where(col_sums > 0, rawWeights / col_sums, 1.0 / finite_mask.sum())
+            zk = (outZk * weights).sum(axis=0)
         else:
             pairWeight = 1.0
             zk = outZk.mean(axis=0)
