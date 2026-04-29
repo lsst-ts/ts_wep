@@ -263,9 +263,9 @@ class AiDonutAlgorithm(WfAlgorithm):
         # otherwise fall back to a simple mean.
         # Weighting uses softmax(-score / temperature) so that predictions
         # with lower estimated error receive higher weight.
-        finite_mask = np.isfinite(outZkErr)
+        finite_mask = np.isfinite(outZkScore)
         if finite_mask.any():
-            rawWeights = np.where(finite_mask, np.exp(-outZkErr / self.temperature), 0.0)
+            rawWeights = np.where(finite_mask, np.exp(-outZkScore / self.temperature), 0.0)
             pairWeight = float(rawWeights.sum())
             weights = rawWeights / rawWeights.sum(axis=0, keepdims=True)
             zk = np.where(
