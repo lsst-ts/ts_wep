@@ -38,7 +38,8 @@ def _makeTable(nPairs: int, weights: np.ndarray, outlierPairIdx: int | None = No
     used = [True] + nPairs * [False]
     cols: dict = {"label": label, "used": used}
     for j, col in enumerate(ALL_COLS):
-        vals = list(np.zeros(nPairs) + j)
+        # pair i in column j has value j + i, so pairs differ from each other
+        vals = [float(j + i) for i in range(nPairs)]
         if outlierPairIdx is not None:
             vals[outlierPairIdx] = 1e6
         cols[col] = [-1.0] + vals
@@ -65,15 +66,17 @@ class TestCombineZernikesWeightedTask(unittest.TestCase):
             self.assertAlmostEqual(float(outTable[outTable["label"] == "average"][col][0]), expected)
 
     def testCombineZernikesVaryingWeights(self) -> None:
-        nPairs = 10
-        weights = np.zeros(nPairs)
-        weights[9] = 1.0
-        inTable = _makeTable(nPairs, weights)
-        outTable = self.task.combineZernikes(inTable)
-        self.assertTrue(all(outTable["used"]))
-        # With all weight on pair 9, average should equal pair 9 values (= j)
-        for j, col in enumerate(ALL_COLS):
-            self.assertAlmostEqual(float(outTable[outTable["label"] == "average"][col][0]), float(j))
+            nPairs = 10
+            weights = np.zeros(nPairs)
+            weights[9] = 1.0
+            inTable = _makeTable(nPairs, weights)
+            outTable = self.task.combineZernikes(inTable)
+            self.assertTrue(all(outTable["used"]))
+            # All weight on pair 9: expected = j + 9, unweighted mean would be j + 4.5
+            for j, col in enumerate(ALL_COLS):
+                self.assertAlmostEqual(
+                    float(outTable[outTable["label"] == "average"][col][0]), float(j + 9)
+                )
 
     def testCombineZernikesWithRejection(self) -> None:
         nPairs = 10
