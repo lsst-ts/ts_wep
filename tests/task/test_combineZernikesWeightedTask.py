@@ -96,8 +96,4 @@ class TestCombineZernikesWeightedTask(unittest.TestCase):
         # Verify the averaged values per column (matches testCombineZernikes).
         for j, col in enumerate(ALL_COLS):
             expected = float(j) + 4.5
-            self.assertAlmostEqual(
-                float(outTable[outTable["label"] == "average"][col][0]),
-                expected,
-            )
-
+            self.assertAlmostEqual(float(outTable[outTable["label"] == "average"][col][0]), expected)
