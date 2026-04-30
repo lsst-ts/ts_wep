@@ -62,11 +62,29 @@ class AiDonutAlgorithm(WfAlgorithm):
         - focalFlag - 1 for intra-focal, 0 for extra-focal
         - band - integer 0-5 indicating filter band (ugrizy)
 
-    - Must output a tensor of shape (N, n_zernikes), where n_zernikes is the
-      number of Zernike coefficients predicted, starting with Noll index 4.
+    - Must output one of:
+
+        - a tensor of shape (N, n_zernikes), where n_zernikes is the
+          number of Zernike coefficients predicted, starting with Noll
+          index 4.
+        - a 2-tuple ``(zk, zkScore)``, where ``zk`` is the tensor above
+          and ``zkScore`` is a tensor of shape (N, n_zernikes) giving a
+          per-coefficient confidence score (lower is better). ``zkScore``
+          is used for softmax weighting between intra/extra predictions.
+        - a 3-tuple ``(zk, zkScore, fwhm)``, where ``fwhm`` is a tensor
+          of shape (N, 2) giving FWHM estimates for each stamp.
+
     - Zernikes must be returned in meters.
     - Must have a ``nollIndices`` attribute listing the Noll indices
       corresponding to the output coefficients.
+
+    .. warning::
+
+        This is a breaking change from earlier versions of this algorithm,
+        where a 2-tuple output was interpreted as ``(zk, fwhm)``. The
+        second element of a 2-tuple is now ``zkScore``, not ``fwhm``.
+        Models that previously returned ``(zk, fwhm)`` must be updated
+        to return either ``zk`` alone or the 3-tuple ``(zk, zkScore, fwhm)``.
     """
 
     def __init__(
