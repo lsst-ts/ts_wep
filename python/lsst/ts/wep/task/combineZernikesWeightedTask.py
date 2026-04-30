@@ -85,13 +85,13 @@ class CombineZernikesWeightedTask(CombineZernikesSigmaClipTask):
         super()._combineZernikes(zkTable)
 
         # Redo the average using weights over the sigma-clipped survivors.
-        use_idx = np.where(zkTable[zkTable["label"] != "average"]["used"])[0]
+        useIdx = np.where(zkTable[zkTable["label"] != "average"]["used"])[0]
 
-        estimator_info = zkTable.meta.get("estimatorInfo", {})
-        weight = estimator_info.get("weight", None)
+        estimatorInfo = zkTable.meta.get("estimatorInfo", {})
+        weight = estimatorInfo.get("weight", None)
         if weight is not None:
             weight = np.array(weight)
-            weight = weight[use_idx]
+            weight = weight[useIdx]
             if np.all(np.isfinite(weight)) and weight.sum() > 0:
                 weight = weight / weight.sum()
             else:
@@ -100,11 +100,11 @@ class CombineZernikesWeightedTask(CombineZernikesSigmaClipTask):
         def _mean(vals: np.ndarray) -> np.float64:
             return _weightedMean(vals, weight)
 
-        zk_columns = (
+        zkColumns = (
             zkTable.meta["opd_columns"]
             + zkTable.meta["intrinsic_columns"]
             + zkTable.meta["deviation_columns"]
         )
-        for col in zk_columns:
-            self._setAvg(zkTable, col, _mean, useIdx=use_idx)
+        for col in zkColumns:
+            self._setAvg(zkTable, col, _mean, useIdx=useIdx)
         return zkTable
