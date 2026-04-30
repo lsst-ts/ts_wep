@@ -93,3 +93,11 @@ class TestCombineZernikesWeightedTask(unittest.TestCase):
         self.assertTrue(all(outTable["used"]))
         flags = output.flags
         self.assertTrue(all(flags == 0))
+        # Verify the averaged values per column (matches testCombineZernikes).
+        for j, col in enumerate(ALL_COLS):
+            expected = float(j) + 4.5
+            self.assertAlmostEqual(
+                float(outTable[outTable["label"] == "average"][col][0]),
+                expected,
+            )
+
