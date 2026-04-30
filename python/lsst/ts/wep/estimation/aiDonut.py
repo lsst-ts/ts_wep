@@ -43,29 +43,58 @@ class AiDonutAlgorithm(WfAlgorithm):
         model requirements. Default is a test model included with ts_wep.
     device : str, optional
         Device to load the model on ('cpu' or 'cuda'). Default is 'cpu'.
+    temperature : float, optional
+        Temperature parameter for softmax weighting of predictions
+        when both intra- and extra-focal images are provided. Must be
+        a positive float. Lower values place more weight on the prediction
+        with lower estimated error. Default is 0.005.
 
-    Model Requirements
-    ------------------
-    - must be saved in TorchScript format
-    - must accept following inputs:
+    Notes
+    -----
+    Model Requirements:
+
+    - Must be saved in TorchScript format.
+    - Must accept the following inputs:
+
         - img - batch of images with shape (N, 1, H, W), where N is 1 or 2.
         - fx - field angle in x (degrees)
         - fy - field angle in y (degrees)
         - focalFlag - 1 for intra-focal, 0 for extra-focal
         - band - integer 0-5 indicating filter band (ugrizy)
-    - must output a tensor of shape (N, n_zernikes), where n_zernikes is the
-    number of Zernike coefficients predicted, starting with Noll index 4.
+
+    - Must output one of:
+
+        - a tensor of shape (N, n_zernikes), where n_zernikes is the
+          number of Zernike coefficients predicted, starting with Noll
+          index 4.
+        - a 2-tuple ``(zk, zkScore)``, where ``zk`` is the tensor above
+          and ``zkScore`` is a tensor of shape (N, n_zernikes) giving a
+          per-coefficient confidence score (lower is better). ``zkScore``
+          is used for softmax weighting between intra/extra predictions.
+        - a 3-tuple ``(zk, zkScore, fwhm)``, where ``fwhm`` is a tensor
+          of shape (N, 2) giving FWHM estimates for each stamp.
+
     - Zernikes must be returned in meters.
-    - must have a `nollIndices` attribute that lists the Noll indices
-    corresponding to the output coefficients.
+    - Must have a ``nollIndices`` attribute listing the Noll indices
+      corresponding to the output coefficients.
+
+    .. warning::
+
+        This is a breaking change from earlier versions of this algorithm,
+        where a 2-tuple output was interpreted as ``(zk, fwhm)``. The
+        second element of a 2-tuple is now ``zkScore``, not ``fwhm``.
+        Models that previously returned ``(zk, fwhm)`` must be updated
+        to return either ``zk`` alone or the 3-tuple ``(zk, zkScore, fwhm)``.
     """
 
     def __init__(
         self,
         modelPath: str = DEFAULT_MODEL_PATH,
         device: str = "cpu",
+        temperature: float = 0.005,
     ) -> None:
         self.device = device
+        self.temperature = temperature
         self.modelPath = os.path.expandvars(modelPath)
 
     @property
@@ -92,6 +121,26 @@ class AiDonutAlgorithm(WfAlgorithm):
         self._device = value
 
     @property
+    def temperature(self) -> float:
+        """Temperature parameter for softmax weighting of predictions."""
+        return self._temperature
+
+    @temperature.setter
+    def temperature(self, value: float) -> None:
+        """Set the temperature parameter.
+
+        Parameters
+        ----------
+        value : float
+            Temperature parameter. Must be a positive float.
+        """
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("Temperature must be a number.")
+        if value <= 0:
+            raise ValueError("Temperature must be positive.")
+        self._temperature = float(value)
+
+    @property
     def modelPath(self) -> str:
         """Path to the PyTorch model file."""
         return self._modelPath
@@ -105,27 +154,26 @@ class AiDonutAlgorithm(WfAlgorithm):
         value : str
             Path to the PyTorch model file.
         """
-        # Load the model
         try:
             self.model = torch.load(value, map_location=self.device, weights_only=False)
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Model file not found: {value}") from e
-        self.model.eval()  # Put in evaluation mode
-
-        # If loading the model succeeded, save the path
-        self._modelPath = value
+        self.model.eval()  # Put model in evaluation mode
+        self._modelPath = value  # If loading model succeeded, save path
 
     @property
     def history(self) -> dict:
         """The algorithm history.
 
         The history is a dictionary with the following entries:
+
         - "modelPath" - path to the PyTorch model file
         - "device" - device used for inference
+        - "temperature" - temperature used for weighted averaging
         - "modelNollIndices" - Noll indices the model predicts
-        - "intra" and/or "extra" - All Zernikes returned by model for images
+        - "intra" and/or "extra" - all Zernikes returned by the model
         - "nollIndices" - Noll indices for which Zernikes are returned
-        - "zk" - the final, averaged zernike estimate
+        - "zk" - the final, averaged Zernike estimate
 
         Note the units for all Zernikes are in meters, and all Zernikes start
         with Noll index 4.
@@ -142,8 +190,7 @@ class AiDonutAlgorithm(WfAlgorithm):
         instrument: Instrument,
         saveHistory: bool,
     ) -> tuple[np.ndarray, dict]:
-        """
-        Estimate Zernike coefficients using a PyTorch model.
+        """Estimate Zernike coefficients using a PyTorch model.
 
         Parameters
         ----------
@@ -156,24 +203,23 @@ class AiDonutAlgorithm(WfAlgorithm):
         zkStartI2 : np.ndarray or None
             Starting Zernikes for I2 (unused; exists for compatibility).
         nollIndices : np.ndarray
-            Noll indices for which you wish to estimate Zernike coefficients.
+            Noll indices for which to estimate Zernike coefficients.
         instrument : Instrument
             Instrument object (unused; exists for compatibility).
         saveHistory : bool
-            Whether to save the algorithm history in the self.history
-            attribute. If True, then self.history contains information
+            Whether to save the algorithm history in the ``self.history``
+            attribute. If True, then ``self.history`` contains information
             about the most recent time the algorithm was run.
 
         Returns
         -------
-        np.ndarray
+        zk : np.ndarray
             Zernike coefficients for the provided Noll indices, estimated from
             the images, in meters.
-        dict
-            Empty dictionary (exists for compatibility).
+        zkMeta : dict
+            Dictionary containing metadata such as FWHM estimates and weights.
         """
-        # First, let's make sure we haven't requested any Zernikes
-        # the model doesn't predict
+        # Verify the model supports all requested Noll indices.
         if not set(nollIndices).issubset(set(self.model.nollIndices.tolist())):
             raise ValueError(
                 f"Requested Noll indices {nollIndices.tolist()} are not "
@@ -181,9 +227,10 @@ class AiDonutAlgorithm(WfAlgorithm):
                 f"{self.model.nollIndices.tolist()}."
             )
 
-        # Stack inputs into a batch
+        # Stack inputs into a batch.
         imgs = [I1.image]
-        fxs, fys = [I1.fieldAngle[0]], [I1.fieldAngle[1]]
+        fxs = [I1.fieldAngle[0]]
+        fys = [I1.fieldAngle[1]]
         focalFlags = [1 if I1.defocalType.value == "intra" else 0]
         bands = ["ugrizy".index(I1.bandLabel.value)]
         if I2 is not None:
@@ -193,71 +240,93 @@ class AiDonutAlgorithm(WfAlgorithm):
             focalFlags.append(1 if I2.defocalType.value == "intra" else 0)
             bands.append("ugrizy".index(I2.bandLabel.value))
 
-        # Stack arrays
-        imgs_np = np.stack(imgs, axis=0)
-        fxs_np = np.array(fxs).reshape(-1, 1)
-        fys_np = np.array(fys).reshape(-1, 1)
-        focalFlags_np = np.array(focalFlags).reshape(-1, 1)
-        bands_np = np.array(bands).reshape(-1, 1)
+        # Convert to numpy arrays.
+        imgsNp = np.stack(imgs, axis=0)
+        fxsNp = np.array(fxs).reshape(-1, 1)
+        fysNp = np.array(fys).reshape(-1, 1)
+        focalFlagsNp = np.array(focalFlags).reshape(-1, 1)
+        bandsNp = np.array(bands).reshape(-1, 1)
 
-        # Convert to torch
-        imgs_tch = torch.from_numpy(imgs_np).float().to(self.device)
-        fxs_tch = torch.from_numpy(fxs_np).float().to(self.device)
-        fys_tch = torch.from_numpy(fys_np).float().to(self.device)
-        focalFlags_tch = torch.from_numpy(focalFlags_np).float().to(self.device)
-        bands_tch = torch.from_numpy(bands_np).float().to(self.device)
+        # Convert to torch tensors.
+        imgsTch = torch.from_numpy(imgsNp).float().to(self.device)
+        fxsTch = torch.from_numpy(fxsNp).float().to(self.device)
+        fysTch = torch.from_numpy(fysNp).float().to(self.device)
+        focalFlagsTch = torch.from_numpy(focalFlagsNp).float().to(self.device)
+        bandsTch = torch.from_numpy(bandsNp).float().to(self.device)
 
-        # Run model
+        # Run the model.
         with torch.no_grad():
             outputs = self.model(
-                imgs_tch,
-                fxs_tch,
-                fys_tch,
-                focalFlags_tch,
-                bands_tch,
+                imgsTch,
+                fxsTch,
+                fysTch,
+                focalFlagsTch,
+                bandsTch,
             )
 
-        # Split outputs and handle old models that don't return FWHM
+        # Split outputs. Models may return:
+        #   - a single tensor (zk only)
+        #   - a 2-tuple (zk, zkScore)
+        #   - a 3-tuple (zk, zkScore, fwhm)
         if isinstance(outputs, tuple):
             outZk = outputs[0].cpu().numpy()
-            outFwhm = outputs[1].cpu().numpy()
+            outZkScore = outputs[1].cpu().numpy() if len(outputs) > 1 else np.full_like(outZk, np.nan)
+            outFwhm = outputs[2].cpu().numpy() if len(outputs) > 2 else np.full((len(imgs), 2), np.nan)
         else:
             outZk = outputs.cpu().numpy()
-            outFwhm = np.full((len(imgs), 1), np.nan)
+            outZkScore = np.full_like(outZk, np.nan)
+            outFwhm = np.full((len(imgs), 2), np.nan)
 
-        # Record average outputs
-        zk = outZk.mean(axis=0)
-        zkMeta = {"fwhm": outFwhm.mean(axis=0)}
+        # Zero out entire stamp if any of its scores are NaN — a NaN score
+        # for one Zernike indicates the whole stamp prediction is unreliable.
+        # This allows the other stamp in the pair to still contribute normally.
+        finite_mask = np.isfinite(outZkScore).all(axis=1)  # (N,) per stamp
+        if finite_mask.any():
+            rawWeights = np.where(
+                finite_mask[:, None],
+                np.exp(-outZkScore / self.temperature),
+                0.0,
+            )
+            pairWeight = float(rawWeights.sum())
+            col_sums = rawWeights.sum(axis=0, keepdims=True)
+            weights = np.where(col_sums > 0, rawWeights / col_sums, 1.0 / finite_mask.sum())
+            zk = (outZk * weights).sum(axis=0)
+        else:
+            pairWeight = 1.0
+            zk = outZk.mean(axis=0)
 
-        # Only return requested nollIndices
+        zkMeta = {"fwhm": outFwhm.mean(axis=0), "weight": pairWeight}
+
+        # Sparsify zk to the requested Noll indices.
         zk = makeDense(zk, self.model.nollIndices)
         zk = makeSparse(zk, nollIndices)
 
-        # Save history if requested
+        # Save history if requested.
         if saveHistory:
-            # Metadata and I1 Zernikes
             self._history = {
                 "modelPath": self.modelPath,
                 "device": self.device,
+                "temperature": self.temperature,
                 "modelNollIndices": self.model.nollIndices,
                 I1.defocalType.value: {
                     "zk": outZk[0],
+                    "zkScore": outZkScore[0],
                     "fwhm": outFwhm[0],
                 },
             }
-            # Save Zernikes for I2, if present
             if I2 is not None:
                 self._history |= {
                     I2.defocalType.value: {
                         "zk": outZk[1],
+                        "zkScore": outZkScore[1],
                         "fwhm": outFwhm[1],
                     }
                 }
-            # Average Zernikes
             self._history |= {
                 "nollIndices": nollIndices,
                 "zk": zk,
                 "fwhm": zkMeta["fwhm"],
+                "weight": zkMeta["weight"],
             }
 
         return zk, zkMeta
