@@ -97,6 +97,14 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
     def setUp(self) -> None:
         self.config = CalcZernikesTaskConfig()
+        self.config.estimateZernikes.lstsqKwargs = {
+            "ftol": 1.0e-3,
+            "xtol": 1.0e-3,
+            "gtol": 1.0e-3,
+            "max_nfev": 30,
+            "verbose": 2,
+            "x_scale": "jac",
+        }
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = Butler.from_config(self.repoDir)
