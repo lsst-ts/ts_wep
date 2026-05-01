@@ -69,9 +69,9 @@ class TestDanishAlgorithm(unittest.TestCase):
                 dan = DanishAlgorithm(
                     jointFitPair=jointFitPair,
                     lstsqKwargs={
-                        "ftol": 1e-2,
-                        "xtol": 1e-2,
-                        "gtol": 1e-2,
+                        "ftol": 1e-3,
+                        "xtol": 1e-3,
+                        "gtol": 1e-3,
                         "max_nfev": 10,
                         "verbose": 2,
                         "x_scale": "jac",
@@ -96,9 +96,9 @@ class TestDanishAlgorithm(unittest.TestCase):
                 danBin = DanishAlgorithm(
                     jointFitPair=jointFitPair,
                     lstsqKwargs={
-                        "ftol": 1e-2,
-                        "xtol": 1e-2,
-                        "gtol": 1e-2,
+                        "ftol": 1e-3,
+                        "xtol": 1e-3,
+                        "gtol": 1e-3,
                         "max_nfev": 10,
                         "verbose": 2,
                         "x_scale": "jac",
