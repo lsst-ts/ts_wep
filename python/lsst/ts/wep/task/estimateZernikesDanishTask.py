@@ -50,6 +50,16 @@ class EstimateZernikesDanishConfig(EstimateZernikesBaseConfig):
         doc="Whether to jointly fit intra/extra pairs, when a pair is provided. "
         + "If False, Zernikes are estimated for each individually, then averaged. ",
     )
+    modelSpiderShadows: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Whether to include the spider shadows or not in the danish forward " + "model.",
+    )
+    bkgOrder: pexConfig.Field = pexConfig.Field(
+        dtype=int,
+        default=-1,
+        doc="Order of the background polynomial to fit. A value of -1 means no " + "background fitting.",
+    )
 
 
 class EstimateZernikesDanishTask(EstimateZernikesBaseTask):

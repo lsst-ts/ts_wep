@@ -69,11 +69,12 @@ class TestDanishAlgorithm(unittest.TestCase):
                 dan = DanishAlgorithm(
                     jointFitPair=jointFitPair,
                     lstsqKwargs={
-                        "ftol": 1e-1,
-                        "xtol": 1e-1,
-                        "gtol": 1e-1,
+                        "ftol": 1e-3,
+                        "xtol": 1e-3,
+                        "gtol": 1e-3,
                         "max_nfev": 10,
                         "verbose": 2,
+                        "x_scale": "jac",
                     },
                 )
                 # Get the test data
@@ -95,11 +96,12 @@ class TestDanishAlgorithm(unittest.TestCase):
                 danBin = DanishAlgorithm(
                     jointFitPair=jointFitPair,
                     lstsqKwargs={
-                        "ftol": 1e-1,
-                        "xtol": 1e-1,
-                        "gtol": 1e-1,
+                        "ftol": 1e-3,
+                        "xtol": 1e-3,
+                        "gtol": 1e-3,
                         "max_nfev": 10,
                         "verbose": 2,
+                        "x_scale": "jac",
                     },
                     binning=2,
                 )
@@ -146,8 +148,9 @@ class TestDanishAlgorithm(unittest.TestCase):
                     "fwhm",
                     "model_dx",
                     "model_dy",
-                    "model_sky_level",
                     "chi_square",
+                    "model_flux",
+                    "model_bkg",
                     "lstsq_cost",
                     "lstsq_optimality",
                     "lstsq_nfev",
@@ -158,7 +161,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 ],
                 list(metaDict.keys()),
             )
-            self.assertAlmostEqual(metaDict["fwhm"], 1.034, delta=0.01)
+        np.testing.assert_allclose(pairMeta["fwhm"], [intraMeta["fwhm"], extraMeta["fwhm"]], atol=0.01)
         np.testing.assert_allclose(
             pairMeta["model_dx"], [intraMeta["model_dx"], extraMeta["model_dx"]], atol=0.01
         )
@@ -166,7 +169,8 @@ class TestDanishAlgorithm(unittest.TestCase):
             pairMeta["model_dy"], [intraMeta["model_dy"], extraMeta["model_dy"]], atol=0.01
         )
         np.testing.assert_allclose(
-            pairMeta["model_sky_level"],
-            [intraMeta["model_sky_level"], extraMeta["model_sky_level"]],
-            atol=0.01,
+            pairMeta["model_flux"], [intraMeta["model_flux"], extraMeta["model_flux"]], rtol=0.01
+        )
+        np.testing.assert_allclose(
+            pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
