@@ -151,6 +151,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                     "chi_square",
                     "model_flux",
                     "model_bkg",
+                    "exception_status",
                     "lstsq_cost",
                     "lstsq_optimality",
                     "lstsq_nfev",
