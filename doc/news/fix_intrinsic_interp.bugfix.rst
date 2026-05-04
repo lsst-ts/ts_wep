@@ -1,1 +1,0 @@
-Fixed bug in intrinsic interpolation (by removing RegularGridInterpolator) in which results depended on the order in which the points were stored in the intrinsic tables.
