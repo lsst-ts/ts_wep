@@ -3,6 +3,7 @@ from .calcZernikesUnpairedTask import *
 from .combineZernikesBase import *
 from .combineZernikesMeanTask import *
 from .combineZernikesSigmaClipTask import *
+from .combineZernikesWeightedTask import *
 from .cutOutDonutsBase import *
 from .cutOutDonutsCwfsTask import *
 from .cutOutDonutsScienceSensorTask import *
