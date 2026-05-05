@@ -97,6 +97,20 @@ class CutOutDonutsScienceSensorTaskConnections(
         name="donutStampsScienceSensor",
         multiple=True,
     )
+    donutTablesIntra = ct.Output(
+        doc="Intra-focal Donut Postage Stamp Table",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutTableIntra",
+        multiple=True,
+    )
+    donutTablesExtra = ct.Output(
+        doc="Extra-focal Donut Postage Stamp Table",
+        dimensions=("visit", "detector", "instrument"),
+        storageClass="AstropyQTable",
+        name="donutTableExtra",
+        multiple=True,
+    )
 
     def __init__(self, *, config: Any | None = None) -> None:
         super().__init__(config=config)
@@ -117,6 +131,8 @@ class CutOutDonutsScienceSensorTaskConnections(
             if config.runPaired:
                 del self.donutStampsOut
             else:
+                del self.donutTablesIntra
+                del self.donutTablesExtra
                 del self.donutStampsExtra
                 del self.donutStampsIntra
 
@@ -180,6 +196,8 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         if self.runPaired:
             donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
             donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}
+            donutTablesIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutTablesIntra}
+            donutTablesExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutTablesExtra}
         else:
             donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsOut}
             donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsOut}
@@ -201,6 +219,9 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
                         pair.extra
                     ],  # Intentionally use extra id for intra stamps here
                 )
+                butlerQC.put(outputs.donutTableExtra, donutTablesExtraHandleDict[pair.extra])
+                # Intentionally use extra id for intra table here
+                butlerQC.put(outputs.donutTableIntra, donutTablesIntraHandleDict[pair.extra])
             else:
                 self.log.info("Running CutOutDonutsScienceSensorTask in unpaired mode.")
                 butlerQC.put(outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra])
