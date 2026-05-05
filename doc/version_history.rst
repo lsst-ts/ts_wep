@@ -17,6 +17,39 @@ Version History
 
 .. towncrier release notes start
 
+v17.0.0 (2026-05-04)
+====================
+
+New Features
+------------
+
+- Added uncertainty-weighted averaging of Zernike predictions in AiDonutAlgorithm.
+  When the model returns per-prediction error estimates, predictions with lower
+  estimated error receive higher weight via softmax weighting with a configurable
+  temperature parameter.
+  **Breaking change:** ``AiDonutAlgorithm`` now interprets a 2-tuple model
+  output as ``(zk, zkScore)`` instead of ``(zk, fwhm)``. Models that
+  previously returned ``(zk, fwhm)`` must be updated to return either
+  ``zk`` alone or the 3-tuple ``(zk, zkScore, fwhm)``.
+- Updated to be compatible with danish v1.0.0. (`DM-54280 <https://rubinobs.atlassian.net//browse/DM-54280>`_)
+
+
+Bug Fixes
+---------
+
+- Fixed bug in intrinsic interpolation (by removing RegularGridInterpolator) in which results depended on the order in which the points were stored in the intrinsic tables.
+- Updated neural Zernike table population in ``CalcZernikesNeuralTask`` to
+  store deviation/intrinsic/total values consistently from TARTS internal data.
+  Also applies CCS-to-OCS conversion before writing OPD table columns. (`DM-54583 <https://rubinobs.atlassian.net//browse/DM-54583>`_)
+- Fixed bounds violation crash in _estimatePairZk and added diagnostics to danish. (`DM-54694 <https://rubinobs.atlassian.net//browse/DM-54694>`_)
+
+
+Performance Enhancement
+-----------------------
+
+- Update prepDanish background noise (skyLevel) computation. (`RSO-246 <https://rubinobs.atlassian.net//browse/RSO-246>`_)
+
+
 v16.9.0 (2026-03-26)
 ====================
 
