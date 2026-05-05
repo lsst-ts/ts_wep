@@ -209,6 +209,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "extra_frac_bad_pix",
             "intra_max_power_grad",
             "extra_max_power_grad",
+            "intra_border_fraction",
+            "extra_border_fraction",
         ]
         self.assertLessEqual(set(desired_colnames), set(structNormal.zernikes.colnames))
 
@@ -236,6 +238,8 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         # check that all desired quantities are included
         colnames = list(structSelect.donutQualityTable.columns)
         desired_colnames = [
+            "BORDER_FRACTION",
+            "BORDER_FRACTION_SELECT",
             "SN",
             "ENTROPY",
             "ENTROPY_SELECT",

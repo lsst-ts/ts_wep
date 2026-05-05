@@ -31,7 +31,7 @@ from typing import Any
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable
-from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_dilation, gaussian_filter
 from scipy.signal import correlate
 
 import lsst.afw.cameraGeom
@@ -137,6 +137,21 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         default=["SAT", "BAD", "NO_DATA", "INTRP"],
     )
+    smoothSigmaBorderFraction: pexConfig.Field = pexConfig.Field(
+        doc="Gaussian smoothing sigma in pixels for border fraction calculation.",
+        dtype=float,
+        default=1.0,
+    )
+    thresholdK: pexConfig.Field = pexConfig.Field(
+        doc="Threshold = median + k * MAD for border fraction calculation.",
+        dtype=float,
+        default=5.0,
+    )
+    borderWidth: pexConfig.Field = pexConfig.Field(
+        doc="Width of border band used for border fraction calculation.",
+        dtype=int,
+        default=5,
+    )
 
 
 class CutOutDonutsBaseTask(pipeBase.PipelineTask):
@@ -206,6 +221,57 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         centerArrCopy[shiftNeeded] = boundary - np.sign(delta[shiftNeeded]) * distance
 
         return centerArrCopy
+
+    def calculateBorderFraction(
+        self,
+        stamp_im: np.ndarray,
+        smooth_sigma: float = 1.0,
+        threshold_k: float = 5.0,
+        border_width: int = 5,
+    ) -> float:
+        """Shift the centers of sources if the distance to
+        boundary is less than required.
+
+        Parameters
+        ----------
+        stamp_im : np.ndarray
+            Stamp image.
+        smooth_sigma : float
+            The gaussian kernel over which to smooth the stamp.
+        threshold_k : float
+            Threshold = median + k * MAD when threshold_mode="mad".
+        border_width : float
+            Width of border band used for border tests.
+
+        Returns
+        -------
+        float
+            Fraction of bright pixels in the border region.
+        """
+
+        # Lightly smooth the donut stamp
+        stamp_im = gaussian_filter(stamp_im, smooth_sigma)
+
+        # Distance between the center points and boundary
+        med = np.median(stamp_im)
+        mad = np.median(np.abs(stamp_im - med))
+
+        # Gaussian-equivalent scale estimate
+        sigma_est = 1.4826 * mad if mad > 0 else np.std(stamp_im)
+        threshold = med + threshold_k * sigma_est
+
+        mask = stamp_im > threshold
+
+        border = np.zeros_like(stamp_im, dtype=bool)
+        border[:border_width, :] = True
+        border[-border_width:, :] = True
+        border[:, :border_width] = True
+        border[:, -border_width:] = True
+
+        border_pixels = int((mask & border).sum())
+        border_fraction = border_pixels / np.sum(border)
+
+        return float(border_fraction)
 
     def calculateFinalCentroids(
         self,
@@ -413,7 +479,16 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             xsection = bkgndMask[:, width // 2]
         # Below, we exclude only problematic mask planes, not all masks
         # Define which mask planes are bad for background estimation
-        bad_planes = ["BAD", "SAT", "CR", "INTRP", "NO_DATA", "SUSPECT", "EDGE", "BLEND"]
+        bad_planes = [
+            "BAD",
+            "SAT",
+            "CR",
+            "INTRP",
+            "NO_DATA",
+            "SUSPECT",
+            "EDGE",
+            "BLEND",
+        ]
         bad_mask_bit = mask.getPlaneBitMask(bad_planes)
 
         # Remove pixels with any of these bad flags
@@ -680,6 +755,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Max gradient in the stamp power spectrum for k < 10
         maxPowerGradKLess10 = list()
 
+        # Fraction of bright pixels in the border region
+        borderFraction = list()
+
         for idx, donutRow in enumerate(donutCatalog):
             # Make an initial cutout larger than the actual final stamp
             # so that we can centroid to get the stamp centered exactly
@@ -787,6 +865,16 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             # Max gradient below k=10
             maxPowerGradKLess10.append(np.max(np.diff(spectrum[:10])))
 
+            # Calculate fraction of bright pixels in border
+            borderFraction.append(
+                self.calculateBorderFraction(
+                    donutStamp.stamp_im.image.array,
+                    self.config.smoothSigmaBorderFraction,
+                    self.config.thresholdK,
+                    self.config.borderWidth,
+                )
+            )
+
             finalStamps.append(donutStamp)
 
         # Add additional information into metadata
@@ -860,6 +948,10 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save max gradient in the stamp power spectrum for k < 10
         maxPowerGradKLess10 = np.array(maxPowerGradKLess10).astype(float)
         stampsMetadata["MAX_POWER_GRAD"] = maxPowerGradKLess10
+
+        # Save fraction of bright pixels in the border region
+        borderFraction = np.array(borderFraction).astype(float)
+        stampsMetadata["BORDER_FRACTION"] = borderFraction
 
         finalDonutStamps = DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
         # Refresh to pull original metadata into stamps

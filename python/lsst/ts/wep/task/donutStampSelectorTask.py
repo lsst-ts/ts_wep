@@ -68,6 +68,12 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
         + "reject galaxy-donuts which are very blurry and therefore have most "
         + "of their power at low k.",
     )
+    selectWithBorderFraction: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Whether to use the fraction of bright pixels in the border area  "
+        + "in deciding to use the donut.  ",
+    )
     useCustomSnLimit: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
@@ -81,6 +87,13 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
             "The minimum signal to noise threshold to use (keep donuts only above the value)."
             + " This is used only if useCustomSnLimit is True."
             + " If used, it overrides values from snLimitStar.yaml."
+        ),
+    )
+    maxBorderFraction: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        default=0.02,
+        doc=str(
+            "The bright pixel border fraction to use (keep donuts only with" + " fewer bright border pixels)."
         ),
     )
     maxEntropy: pexConfig.Field = pexConfig.Field(
@@ -153,7 +166,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         selectedStamps = DonutStamps([donutStamps[i] for i in range(len(donutStamps)) if result.selected[i]])
         selectedStamps._refresh_metadata()
         # Need to copy a few other fields by hand
-        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "BORDER_FRACTION"]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
                     [
@@ -298,9 +311,27 @@ class DonutStampSelectorTask(pipeBase.Task):
         elif self.config.selectWithMaxPowerGrad:
             self.log.warning("selectWithMaxPowerGrad==True but MAX_POWER_GRAD not in stamp metadata.")
 
+        # By default select all donuts,  only overwritten
+        # if selectBorderFraction is True
+        borderFractionSelect = np.ones(len(donutStamps), dtype="bool")
+
+        # collect fraction-of-pixels-on-border information if available
+        borderFraction = np.full(len(donutStamps), np.nan)
+        if "BORDER_FRACTION" in list(donutStamps.metadata):
+            fillVals = np.asarray(donutStamps.metadata.getArray("BORDER_FRACTION"))
+            borderFraction[: len(fillVals)] = fillVals
+            if self.config.selectWithBorderFraction:
+                borderFractionSelect = borderFraction < self.config.maxBorderFraction
+                self.log.info(
+                    f"{sum(borderFractionSelect)} of {len(borderFractionSelect)} "
+                    "donuts passed border fraction selection."
+                )
+        elif self.config.selectWithBorderFraction:
+            self.log.warning("selectBorderFraction==True but BORDER_FRACTION not in stamp metadata.")
+
         # choose only donuts that satisfy all selected conditions
         if self.config.doSelection:
-            selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect
+            selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect * borderFractionSelect
             self.log.info(f"{sum(selected)} of {len(selected)} donuts passed combined selection criteria.")
             # make sure we don't select more than maxSelect
             if self.config.maxSelect != -1:
@@ -320,10 +351,12 @@ class DonutStampSelectorTask(pipeBase.Task):
                 entropyValue,
                 fracBadPix,
                 maxPowerGrad,
+                borderFraction,
                 snSelect,
                 entropySelect,
                 fracBadPixSelect,
                 maxPowerGradSelect,
+                borderFractionSelect,
                 donutRadii,
                 selected,
                 donutId,
@@ -333,10 +366,12 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "ENTROPY",
                 "FRAC_BAD_PIX",
                 "MAX_POWER_GRAD",
+                "BORDER_FRACTION",
                 "SN_SELECT",
                 "ENTROPY_SELECT",
                 "FRAC_BAD_PIX_SELECT",
                 "MAX_POWER_GRAD_SELECT",
+                "BORDER_FRACTION_SELECT",
                 "RADIUS",
                 "FINAL_SELECT",
                 "DONUT_ID",
