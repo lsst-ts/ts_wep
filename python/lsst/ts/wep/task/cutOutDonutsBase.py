@@ -633,6 +633,10 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Final locations of blended sources in pixels
         finalBlendXList = list()
         finalBlendYList = list()
+        # Per-blend metadata: magnitude, separation (px), and mag difference
+        finalBlendMagList = list()
+        finalBlendSepList = list()
+        finalBlendMagDiffList = list()
 
         # Keep track of recentering failures
         recenterFlags = np.zeros(len(donutCatalog), dtype=int)
@@ -664,6 +668,12 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         donutCatalog["xShift"] = np.array(xShifts, dtype=int)
         donutCatalog["yShift"] = np.array(yShifts, dtype=int)
         donutCatalog["recenterFlags"] = recenterFlags
+
+        # Backward-compatible access for blend metadata;
+        # older catalogs may not have these keys.
+        blendMagData = catalogMeta.get("blend_mag", [[] for _ in range(len(donutCatalog))])
+        blendSepData = catalogMeta.get("blend_separation", [[] for _ in range(len(donutCatalog))])
+        blendMagDiffData = catalogMeta.get("blend_mag_diff", [[] for _ in range(len(donutCatalog))])
 
         # Calculation of SN quantities
         snQuant = list()
@@ -713,20 +723,35 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
                 # Save centroid positions as str so we can store in header
                 blendStrX = ""
                 blendStrY = ""
-                for blend_cx, blend_cy in zip(
+                blendStrMag = ""
+                blendStrSep = ""
+                blendStrMagDiff = ""
+                for blend_cx, blend_cy, blend_m, blend_sep, blend_md in zip(
                     catalogMeta["blend_centroid_x"][idx],
                     catalogMeta["blend_centroid_y"][idx],
+                    blendMagData[idx],
+                    blendSepData[idx],
+                    blendMagDiffData[idx],
                 ):
                     blend_final_x = blend_cx + donutRow["xShift"]
                     blend_final_y = blend_cy + donutRow["yShift"]
                     blendStrX += f"{blend_final_x:.2f},"
                     blendStrY += f"{blend_final_y:.2f},"
+                    blendStrMag += f"{blend_m:.4f},"
+                    blendStrSep += f"{blend_sep:.2f},"
+                    blendStrMagDiff += f"{blend_md:.4f},"
                 # Remove comma from last entry
                 if len(blendStrX) > 0:
                     blendStrX = blendStrX[:-1]
                     blendStrY = blendStrY[:-1]
+                    blendStrMag = blendStrMag[:-1]
+                    blendStrSep = blendStrSep[:-1]
+                    blendStrMagDiff = blendStrMagDiff[:-1]
                 finalBlendXList.append(blendStrX)
                 finalBlendYList.append(blendStrY)
+                finalBlendMagList.append(blendStrMag)
+                finalBlendSepList.append(blendStrSep)
+                finalBlendMagDiffList.append(blendStrMagDiff)
 
                 # Prepare blend centroid position information
                 if len(catalogMeta["blend_centroid_x"][idx]) > 0:
@@ -860,6 +885,11 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save max gradient in the stamp power spectrum for k < 10
         maxPowerGradKLess10 = np.array(maxPowerGradKLess10).astype(float)
         stampsMetadata["MAX_POWER_GRAD"] = maxPowerGradKLess10
+
+        # Save per-blend metadata: magnitude, separation, and mag difference
+        stampsMetadata["BLEND_MAG"] = np.array(finalBlendMagList)
+        stampsMetadata["BLEND_SEP"] = np.array(finalBlendSepList)
+        stampsMetadata["BLEND_MAG_DIFF"] = np.array(finalBlendMagDiffList)
 
         finalDonutStamps = DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
         # Refresh to pull original metadata into stamps
