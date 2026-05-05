@@ -203,8 +203,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         Returns
         -------
         interpolator : scipy.interpolate.RegularGridInterpolator or None
-            Interpolator for the intrinsic Zernike map,
-            or None if no table is provided.
+            Interpolator for the intrinsic Zernike map, or None if no
+            table is provided. Note the interpolator expects points
+            in degrees, in CCS, and return intrinsics in microns.
         """
         if intrinsicTable is None:
             return None
@@ -218,7 +219,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zks = np.column_stack([zkTable[col].to("um").value for col in zkTable.colnames])
 
         # Create interpolator
-        interpolator = LinearNDInterpolator(np.column_stack([y, x]), zks)
+        interpolator = LinearNDInterpolator(np.column_stack([x, y]), zks)
 
         return interpolator
 
@@ -257,12 +258,10 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             else:
                 intrinsicMap = self.intrinsicMapIntra
 
-            # Note that if you compare to the _createIntrinsicMap method you
-            # might think we would need to reverse the fieldAngle here (i.e.
-            # swap x and y), however stamp.calcFieldXY() returns coordinates
-            # in the DVCS instead of CCS, which is equivalent to already
-            # swapping x and y. Therefore we will not reverse the order here.
-            intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron  # type: ignore
+            # The interpolator expects points in CCS, but fieldAngle above
+            # is in DVCS, so we need to swap x and y (transpose)
+            fieldAngleCCS = fieldAngle.value[::-1]
+            intrinsics = intrinsicMap(fieldAngleCCS.tolist()) * u.micron  # type: ignore
 
         return fieldAngle, centroid, intrinsics
 

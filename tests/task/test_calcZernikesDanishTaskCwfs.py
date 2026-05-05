@@ -355,20 +355,21 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
                 # Create intrinsic maps with complete grid
                 intrinsicMap = self.task._createIntrinsicMap(table)
+                interpolated = intrinsicMap([table["x"].to("deg").value[2], table["y"].to("deg").value[2]])
                 self.assertEqual(
-                    intrinsicMap([table["y"].to("deg").value[2], table["x"].to("deg").value[2]])[0, 0],
+                    interpolated[0, 0],
                     table["Z4"].to("um").value[2],
                 )
 
                 # Create intrinsic maps with "vignetted" grid (remove some points)
                 tableVignetted = table[10:]
                 intrinsicMapVignetted = self.task._createIntrinsicMap(tableVignetted)
+                interpolated = intrinsicMapVignetted(
+                    [tableVignetted["x"].to("deg").value[2], tableVignetted["y"].to("deg").value[2]]
+                )
                 self.assertEqual(
-                    intrinsicMapVignetted(
-                        tableVignetted["y"].to("deg").value[0],
-                        tableVignetted["x"].to("deg").value[0],
-                    )[0],
-                    tableVignetted["Z4"].to("um").value[0],
+                    interpolated[0, 0],
+                    tableVignetted["Z4"].to("um").value[2],
                 )
 
     def testFitFailureWithMaxIterations(self) -> None:
