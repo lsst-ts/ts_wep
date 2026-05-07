@@ -69,8 +69,8 @@ def estimate_zk_single(args: tuple[DonutStamp, Angle, WfEstimator]) -> tuple[np.
     zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, rtp)
     log.info(f"Zernike estimation completed for Donut {donut.donut_id}")
     # Log number of function evaluations if available (currently only danish)
-    if "lstsq_nfev" in zkMeta:
-        log.info(f"Num Iterations for Donut {donut.donut_id}: nfev = {zkMeta['lstsq_nfev']}")
+    if (nfev := zkMeta.get("lstsq_nfev")) is not None:
+        log.info("Num Iterations for Donut %s: nfev = %i", *(donut.donut_id, nfev))
     return zk, zkMeta, wfEstimator.history
 
 
