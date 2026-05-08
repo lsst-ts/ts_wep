@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.1.0 (2026-05-08)
+====================
+
+New Features
+------------
+
+- Add ability to run pipelines on science sensors in unpaired mode. (`DM-53676 <https://rubinobs.atlassian.net//browse/DM-53676>`_)
+
+
 v17.0.0 (2026-05-04)
 ====================
 
