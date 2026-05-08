@@ -1,0 +1,14 @@
+# This yaml file is used to define the tasks and configuration of
+# a Gen 3 pipeline used for testing in ts_wep.
+description: wep pipeline snippet, to rerun cutouts after making catalogs but using the group pairer
+instrument: lsst.obs.lsst.LsstCam
+tasks:
+  cutOutDonutsScienceSensorGroupTask:
+    class: lsst.ts.wep.task.cutOutDonutsScienceSensorTask.CutOutDonutsScienceSensorTask
+    config:
+      python: |
+        from lsst.ts.wep.task.pairTask import GroupPairer
+        config.pairer.retarget(GroupPairer)
+      donutStampSize: 160
+      initialCutoutPadding: 40
+      runPaired: False
