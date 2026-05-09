@@ -20,13 +20,16 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
+from unittest.mock import patch
 
 from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
 enforce_single_threading()
 
 # Then import libraries
+import danish as danish_pkg  # noqa: E402
 import numpy as np  # noqa: E402
+from astropy.coordinates import Angle  # noqa: E402
 
 from lsst.ts.wep.estimation import DanishAlgorithm  # noqa: E402
 from lsst.ts.wep.utils.modelUtils import forwardModelPair  # noqa: E402
@@ -175,3 +178,33 @@ class TestDanishAlgorithm(unittest.TestCase):
         np.testing.assert_allclose(
             pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
+
+    def testDoAoiThroughput(self) -> None:
+        """Test that doAoiThroughput passes correct bandpass_filter and airmass
+        to DonutFactory. Uses max_nfev=1 to keep runtime minimal."""
+        _, intra, extra = forwardModelPair()
+        dan = DanishAlgorithm(doAoiThroughput=True, lstsqKwargs={"max_nfev": 1})
+
+        # 45 deg altitude → raw airmass = 1/sin(45°) ≈ 1.414 → rounds to 1.4
+        altitude = Angle(np.pi / 4, "rad")
+
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutFactory",
+            wraps=danish_pkg.DonutFactory,
+        ) as mock_factory:
+            dan.estimateZk(intra, extra, altitude=altitude)
+
+        call_kwargs = mock_factory.call_args.kwargs
+        self.assertEqual(call_kwargs["bandpass_filter"], "r")
+        self.assertAlmostEqual(call_kwargs["airmass"], 1.4)
+
+        # With NaN altitude, airmass should fall back to the default (1.2)
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutFactory",
+            wraps=danish_pkg.DonutFactory,
+        ) as mock_factory:
+            dan.estimateZk(intra, extra, altitude=Angle(np.nan, "rad"))
+
+        call_kwargs = mock_factory.call_args.kwargs
+        self.assertEqual(call_kwargs["bandpass_filter"], "r")
+        self.assertAlmostEqual(call_kwargs["airmass"], 1.2)

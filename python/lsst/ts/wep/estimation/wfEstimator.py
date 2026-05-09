@@ -274,6 +274,7 @@ class WfEstimator:
         I1: Image,
         I2: Optional[Image] = None,
         rtp: Optional[Angle] = None,
+        altitude: Optional[Angle] = None,
     ) -> tuple[np.ndarray, dict]:
         """Estimate Zernike coefficients of the wavefront from the stamp(s).
 
@@ -286,6 +287,9 @@ class WfEstimator:
             (the default is None)
         rtp : Angle, optional
             The rotation angle of the camera on the telescope.
+        altitude : Angle or None, optional
+            Boresight altitude.
+            (the default is None)
 
         Returns
         -------
@@ -310,4 +314,5 @@ class WfEstimator:
             returnWfDev=self.returnWfDev,
             units=self.units,
             saveHistory=self.saveHistory,
+            altitude=altitude,
         )

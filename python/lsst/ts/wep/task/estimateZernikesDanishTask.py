@@ -35,30 +35,41 @@ class EstimateZernikesDanishConfig(EstimateZernikesBaseConfig):
     lstsqKwargs: pexConfig.DictField = pexConfig.DictField(
         keytype=str,
         default=dict(),
-        doc="A dictionary containing any of the keyword arguments for "
-        + "scipy.optimize.least_squares, except `fun`, `x0`, `jac`, or `args`.",
+        doc=(
+            "A dictionary containing any of the keyword arguments for "
+            "scipy.optimize.least_squares, except `fun`, `x0`, `jac`, or `args`."
+        ),
     )
     binning: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=1,
-        doc="Binning factor to apply to the donut stamps before estimating "
-        + "Zernike coefficients. A value of 1 means no binning.",
+        doc=(
+            "Binning factor to apply to the donut stamps before estimating "
+            "Zernike coefficients. A value of 1 means no binning."
+        ),
     )
     jointFitPair: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=True,
-        doc="Whether to jointly fit intra/extra pairs, when a pair is provided. "
-        + "If False, Zernikes are estimated for each individually, then averaged. ",
+        doc=(
+            "Whether to jointly fit intra/extra pairs, when a pair is provided. "
+            "If False, Zernikes are estimated for each individually, then averaged. "
+        ),
     )
     modelSpiderShadows: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
-        doc="Whether to include the spider shadows or not in the danish forward " + "model.",
+        doc="Whether to include the spider shadows or not in the danish forward model.",
     )
     bkgOrder: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=-1,
-        doc="Order of the background polynomial to fit. A value of -1 means no " + "background fitting.",
+        doc="Order of the background polynomial to fit. A value of -1 means no background fitting.",
+    )
+    doAoiThroughput: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc=("Whether to apply angle-of-incidence throughput correction in the danish forward model."),
     )
 
 

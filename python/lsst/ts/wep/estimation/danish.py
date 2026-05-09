@@ -64,6 +64,9 @@ class DanishAlgorithm(WfAlgorithm):
     bkgOrder: int = 0,
         The order of the background polynomial to fit. A value of -1 means
         no background fitting, a value of 0 is a constant background, etc.
+    doAoiThroughput : bool, optional
+        Whether to apply angle-of-incidence throughput correction in the
+        danish forward model. (the default is False)
     """
 
     def __init__(
@@ -73,12 +76,14 @@ class DanishAlgorithm(WfAlgorithm):
         jointFitPair: bool = True,
         modelSpiderShadows: bool = False,
         bkgOrder: int = 0,
+        doAoiThroughput: bool = False,
     ) -> None:
         self.binning = binning
         self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
         self.jointFitPair = jointFitPair
         self.modelSpiderShadows = modelSpiderShadows
         self.bkgOrder = bkgOrder
+        self.doAoiThroughput = doAoiThroughput
         self.log = logging.getLogger(__name__)
 
         galsim.errors.raise_fft_size_error = True
@@ -741,6 +746,7 @@ class DanishAlgorithm(WfAlgorithm):
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
+        altitude: Angle | None = None,
     ) -> tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
@@ -764,6 +770,10 @@ class DanishAlgorithm(WfAlgorithm):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
+        altitude : Angle or None, optional
+            Boresight altitude, used to compute airmass for the
+            angle-of-incidence throughput correction when doAoiThroughput
+            is True. (the default is None)
 
         Returns
         -------
@@ -778,6 +788,22 @@ class DanishAlgorithm(WfAlgorithm):
             self.log.info("Using RTP angle %s deg.", rtp)
         else:
             rtp = None
+        # Determine AOI throughput correction parameters
+        bandpass_filter = None
+        airmass = 1.2  # default if no altitude provided.
+        if self.doAoiThroughput:
+            band = I1.bandLabel.value
+            if band in ("u", "g", "r", "i", "z", "y"):
+                bandpass_filter = band
+            else:
+                self.log.warning(
+                    "Bandpass '%s' not supported for AOI throughput correction; skipping.",
+                    band,
+                )
+            if altitude is not None and np.isfinite(altitude.rad):
+                raw_airmass = 1.0 / np.sin(altitude.rad)
+                airmass = float(np.clip(round(raw_airmass, 1), 1.0, 2.5))
+
         # Create the Danish donut factory
         factory = danish.DonutFactory(
             R_outer=instrument.radius,
@@ -786,6 +812,8 @@ class DanishAlgorithm(WfAlgorithm):
             focal_length=instrument.focalLength,
             pixel_scale=instrument.pixelSize * self.binning,
             spider_angle=rtp,
+            bandpass_filter=bandpass_filter,
+            airmass=airmass,
         )
 
         if I2 is None or not self.jointFitPair:
