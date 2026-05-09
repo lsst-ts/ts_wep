@@ -42,12 +42,14 @@ from lsst.ts.wep.utils import (
 )
 
 
-def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, Angle, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_pair(
+    args: tuple[DonutStamp, DonutStamp, Angle, Angle, WfEstimator],
+) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a pair of donuts."""
-    donutExtra, donutIntra, rtp, wfEstimator = args
+    donutExtra, donutIntra, rtp, altitude, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Extra Donut {donutExtra.donut_id}, Intra Donut {donutIntra.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, rtp)
+    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, rtp, altitude)
     log.info(
         f"Zernike estimation completed for Extra Donut {donutExtra.donut_id}, "
         f"Intra Donut {donutIntra.donut_id}"
@@ -61,12 +63,14 @@ def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, Angle, WfEstimator]) ->
     return zk, zkMeta, wfEstimator.history
 
 
-def estimate_zk_single(args: tuple[DonutStamp, Angle, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_single(
+    args: tuple[DonutStamp, Angle, Angle, WfEstimator],
+) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a single donut."""
-    donut, rtp, wfEstimator = args
+    donut, rtp, altitude, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Donut {donut.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, rtp)
+    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, rtp, altitude)
     log.info(f"Zernike estimation completed for Donut {donut.donut_id}")
     # Log number of function evaluations if available (currently only danish)
     if (nfev := zkMeta.get("lstsq_nfev")) is not None:
@@ -191,6 +195,27 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             return Angle(np.nan, "rad")
         return Angle(q - rsp - np.pi / 2, "rad")
 
+    @staticmethod
+    def _get_altitude(donutStamps: DonutStamps | None) -> Angle:
+        """Get the boresight altitude.
+
+        Parameters
+        ----------
+        donutStamps : DonutStamps
+            Donut postage stamps holding boresight metadata.
+
+        Returns
+        -------
+        Angle
+            The boresight altitude. Returns NaN if not available.
+        """
+        if not donutStamps:
+            return Angle(np.nan, "rad")
+        try:
+            return Angle(donutStamps.metadata["BORESIGHT_ALT_RAD"], "rad")
+        except KeyError:
+            return Angle(np.nan, "rad")
+
     def estimateFromPairs(
         self,
         donutStampsExtra: DonutStamps,
@@ -225,9 +250,10 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         """
         self.log.info("Estimating paired Zernikes.")
         rtp = self._get_rtp(donutStampsExtra)
+        altitude = self._get_altitude(donutStampsExtra)
         # Loop over pairs in a multiprocessing pool
         args = [
-            (donutExtra, donutIntra, rtp, wfEstimator)
+            (donutExtra, donutIntra, rtp, altitude, wfEstimator)
             for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra)
         ]
         results = self._applyToList(estimate_zk_pair, args, numCores)
@@ -282,8 +308,12 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         """
         self.log.info("Estimating single sided Zernikes.")
         rtp = self._get_rtp(donutStampsExtra)
+        altitude = self._get_altitude(donutStampsExtra)
         # Loop over individual donut stamps with a process pool
-        args = [(donut, rtp, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
+        args = [
+            (donut, rtp, altitude, wfEstimator)
+            for donut in itertools.chain(donutStampsExtra, donutStampsIntra)
+        ]
         results = self._applyToList(estimate_zk_single, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)

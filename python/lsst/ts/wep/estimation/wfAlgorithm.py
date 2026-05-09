@@ -174,6 +174,7 @@ class WfAlgorithm(ABC):
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
+        altitude: Optional[Angle] = None,
     ) -> Tuple[np.ndarray, dict]:
         """Private Zernike estimation method that should be subclassed.
 
@@ -199,6 +200,9 @@ class WfAlgorithm(ABC):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
+        altitude : Angle or None, optional
+            Boresight altitude.
+            (the default is None)
 
         Returns
         -------
@@ -222,6 +226,7 @@ class WfAlgorithm(ABC):
         returnWfDev: bool = False,
         units: str = "m",
         saveHistory: bool = False,
+        altitude: Optional[Angle] = None,
     ) -> Tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
@@ -258,6 +263,10 @@ class WfAlgorithm(ABC):
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
             (the default is False)
+        altitude : Angle or None, optional
+            Boresight altitude.
+            (the default is None)
+
         Returns
         -------
         np.ndarray
@@ -322,6 +331,7 @@ class WfAlgorithm(ABC):
             nollIndices=nollIndices,
             instrument=instrument,
             saveHistory=saveHistory,
+            altitude=altitude,
         )
 
         # Calculate the wavefront deviation?
