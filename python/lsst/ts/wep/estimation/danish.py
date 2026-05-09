@@ -23,6 +23,7 @@ __all__ = ["DanishAlgorithm"]
 
 import logging
 import warnings
+from typing import Callable
 
 import danish
 import galsim
@@ -67,6 +68,11 @@ class DanishAlgorithm(WfAlgorithm):
     doAoiThroughput : bool, optional
         Whether to apply angle-of-incidence throughput correction in the
         danish forward model. (the default is False)
+    alpha : float, optional
+        Fractional systematic uncertainty for the loss function. The
+        effective per-pixel variance becomes var + model + (alpha*model)**2,
+        which caps per-pixel SNR. A value of 0 (the default) recovers the
+        standard chi-squared loss.
     """
 
     def __init__(
@@ -77,6 +83,7 @@ class DanishAlgorithm(WfAlgorithm):
         modelSpiderShadows: bool = False,
         bkgOrder: int = 0,
         doAoiThroughput: bool = False,
+        alpha: float = 0.0,
     ) -> None:
         self.binning = binning
         self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
@@ -84,6 +91,7 @@ class DanishAlgorithm(WfAlgorithm):
         self.modelSpiderShadows = modelSpiderShadows
         self.bkgOrder = bkgOrder
         self.doAoiThroughput = doAoiThroughput
+        self.alpha = alpha
         self.log = logging.getLogger(__name__)
 
         galsim.errors.raise_fft_size_error = True
@@ -257,6 +265,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
+        loss_fn: Callable = danish.chi2_loss,
     ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for a single donut stamp.
 
@@ -274,6 +283,9 @@ class DanishAlgorithm(WfAlgorithm):
             The Danish donut factory
         saveHistory : bool
             Whether to create a history to be saved
+        loss_fn : callable, optional
+            Loss function to pass to SingleDonutModel.
+            (the default is danish.chi2_loss)
 
         Returns
         -------
@@ -300,6 +312,7 @@ class DanishAlgorithm(WfAlgorithm):
             thy=angle[1],
             npix=img.shape[0],
             bkg_order=self.bkgOrder,
+            loss_fn=loss_fn,
         )
 
         # Create the initial guess for the model parameters
@@ -447,6 +460,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
+        loss_fn: Callable = danish.chi2_loss,
     ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for pairs of donut stamps.
 
@@ -470,6 +484,9 @@ class DanishAlgorithm(WfAlgorithm):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
+        loss_fn : callable, optional
+            Loss function to pass to DZMultiDonutModel.
+            (the default is danish.chi2_loss)
 
         Returns
         -------
@@ -527,6 +544,7 @@ class DanishAlgorithm(WfAlgorithm):
             thys=thys,
             npix=imgs[0].shape[0],
             bkg_order=self.bkgOrder,
+            loss_fn=loss_fn,
             # galsim_params={'maximum_fft_size': 65536}
         )
 
@@ -804,6 +822,9 @@ class DanishAlgorithm(WfAlgorithm):
                 raw_airmass = 1.0 / np.sin(altitude.rad)
                 airmass = float(np.clip(round(raw_airmass, 1), 1.0, 2.5))
 
+        # Create the loss function
+        loss_fn = danish.systematic_loss(self.alpha)
+
         # Create the Danish donut factory
         factory = danish.DonutFactory(
             R_outer=instrument.radius,
@@ -828,6 +849,7 @@ class DanishAlgorithm(WfAlgorithm):
                 instrument,
                 factory,
                 saveHistory,
+                loss_fn,
             )
 
             if I2 is not None:
@@ -839,6 +861,7 @@ class DanishAlgorithm(WfAlgorithm):
                     instrument,
                     factory,
                     saveHistory,
+                    loss_fn,
                 )
 
                 # Average the Zernikes
@@ -860,6 +883,7 @@ class DanishAlgorithm(WfAlgorithm):
                 instrument,
                 factory,
                 saveHistory,
+                loss_fn,
             )
 
         if saveHistory:

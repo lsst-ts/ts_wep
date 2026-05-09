@@ -179,6 +179,46 @@ class TestDanishAlgorithm(unittest.TestCase):
             pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
 
+    def testSystematicLossAlpha(self) -> None:
+        """Test that alpha is passed as loss_fn to SingleDonutModel and
+        DZMultiDonutModel. Uses max_nfev=1 to keep runtime minimal."""
+        _, intra, extra = forwardModelPair()
+
+        # Single-donut path: verify loss_fn != chi2_loss for alpha=0.05
+        dan = DanishAlgorithm(alpha=0.05, lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.SingleDonutModel",
+            wraps=danish_pkg.SingleDonutModel,
+        ) as mock_model:
+            dan.estimateZk(intra)
+
+        loss_fn_nonzero = mock_model.call_args.kwargs["loss_fn"]
+        self.assertIsNot(loss_fn_nonzero, danish_pkg.chi2_loss)
+
+        # Pair path: verify DZMultiDonutModel also receives the loss_fn
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DZMultiDonutModel",
+            wraps=danish_pkg.DZMultiDonutModel,
+        ) as mock_model:
+            dan.estimateZk(intra, extra)
+
+        self.assertIsNot(mock_model.call_args.kwargs["loss_fn"], danish_pkg.chi2_loss)
+
+        # Default alpha=0: loss_fn should behave identically to chi2_loss
+        dan_default = DanishAlgorithm(lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.SingleDonutModel",
+            wraps=danish_pkg.SingleDonutModel,
+        ) as mock_model:
+            dan_default.estimateZk(intra)
+
+        loss_fn_zero = mock_model.call_args.kwargs["loss_fn"]
+        data, model_vals, var = np.ones(10), np.ones(10) * 2, np.ones(10)
+        np.testing.assert_array_equal(
+            loss_fn_zero(data, model_vals, var),
+            danish_pkg.chi2_loss(data, model_vals, var),
+        )
+
     def testDoAoiThroughput(self) -> None:
         """Test that doAoiThroughput passes correct bandpass_filter and airmass
         to DonutFactory. Uses max_nfev=1 to keep runtime minimal."""

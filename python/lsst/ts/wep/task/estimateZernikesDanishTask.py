@@ -71,6 +71,17 @@ class EstimateZernikesDanishConfig(EstimateZernikesBaseConfig):
         default=False,
         doc=("Whether to apply angle-of-incidence throughput correction in the danish forward model."),
     )
+    systematicLossAlpha: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        default=0.0,
+        doc=(
+            "Fractional systematic uncertainty for the danish loss function. "
+            "The effective per-pixel variance becomes var + model + (alpha * model)**2, "
+            "which caps per-pixel SNR and down-weights pixels dominated by unmodeled "
+            "correlated residuals. A value of 0 (the default) recovers the standard "
+            "chi-squared loss."
+        ),
+    )
 
 
 class EstimateZernikesDanishTask(EstimateZernikesBaseTask):
