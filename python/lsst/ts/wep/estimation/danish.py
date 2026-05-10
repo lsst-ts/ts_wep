@@ -265,7 +265,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-        loss_fn: Callable = danish.chi2_loss,
+        loss_fn: Callable | None = None,
     ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for a single donut stamp.
 
@@ -283,9 +283,10 @@ class DanishAlgorithm(WfAlgorithm):
             The Danish donut factory
         saveHistory : bool
             Whether to create a history to be saved
-        loss_fn : callable, optional
+        loss_fn : callable or None, optional
             Loss function to pass to SingleDonutModel.
-            (the default is danish.chi2_loss)
+            If None, the danish default (chi2_loss) is used.
+            (the default is None)
 
         Returns
         -------
@@ -304,6 +305,9 @@ class DanishAlgorithm(WfAlgorithm):
         )
 
         # Create the Danish donut model
+        model_kwargs: dict = {}
+        if loss_fn is not None:
+            model_kwargs["loss_fn"] = loss_fn
         model = danish.SingleDonutModel(
             factory,
             z_ref=zkRef,
@@ -312,7 +316,7 @@ class DanishAlgorithm(WfAlgorithm):
             thy=angle[1],
             npix=img.shape[0],
             bkg_order=self.bkgOrder,
-            loss_fn=loss_fn,
+            **model_kwargs,
         )
 
         # Create the initial guess for the model parameters
@@ -460,7 +464,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
-        loss_fn: Callable = danish.chi2_loss,
+        loss_fn: Callable | None = None,
     ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for pairs of donut stamps.
 
@@ -484,9 +488,10 @@ class DanishAlgorithm(WfAlgorithm):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
-        loss_fn : callable, optional
+        loss_fn : callable or None, optional
             Loss function to pass to DZMultiDonutModel.
-            (the default is danish.chi2_loss)
+            If None, the danish default (chi2_loss) is used.
+            (the default is None)
 
         Returns
         -------
@@ -535,6 +540,9 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Create model
         self.log.info("Creating multi-donut model with danish.")
+        model_kwargs = {}
+        if loss_fn is not None:
+            model_kwargs["loss_fn"] = loss_fn
         model = danish.DZMultiDonutModel(
             factory,
             z_refs=zkRefs,
@@ -544,7 +552,7 @@ class DanishAlgorithm(WfAlgorithm):
             thys=thys,
             npix=imgs[0].shape[0],
             bkg_order=self.bkgOrder,
-            loss_fn=loss_fn,
+            **model_kwargs,
             # galsim_params={'maximum_fft_size': 65536}
         )
 
@@ -821,10 +829,16 @@ class DanishAlgorithm(WfAlgorithm):
                 raw_airmass = 1.0 / np.sin(altitude.rad)
                 airmass = float(np.clip(round(raw_airmass, 1), 1.0, 2.5))
 
-        # Create the loss function
-        loss_fn = danish.systematic_loss(self.systematicLossAlpha)
+        # Create the loss function (requires danish v1.1)
+        loss_fn = None
+        if self.systematicLossAlpha != 0:
+            loss_fn = danish.systematic_loss(self.systematicLossAlpha)
 
         # Create the Danish donut factory
+        factory_kwargs: dict = {}
+        if self.doAoiThroughput:
+            factory_kwargs["bandpass_filter"] = bandpass_filter
+            factory_kwargs["airmass"] = airmass
         factory = danish.DonutFactory(
             R_outer=instrument.radius,
             R_inner=instrument.radius * instrument.obscuration,
@@ -832,8 +846,7 @@ class DanishAlgorithm(WfAlgorithm):
             focal_length=instrument.focalLength,
             pixel_scale=instrument.pixelSize * self.binning,
             spider_angle=rtp,
-            bandpass_filter=bandpass_filter,
-            airmass=airmass,
+            **factory_kwargs,
         )
 
         if I2 is None or not self.jointFitPair:
