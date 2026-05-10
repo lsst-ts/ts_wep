@@ -34,6 +34,7 @@ __all__ = [
 import inspect
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Union
 
 import numpy as np
@@ -142,7 +143,7 @@ def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
     return config
 
 
-def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
+def mergeConfigWithFile(configFile: Union[Path, str, None], **kwargs: Any) -> dict:
     """Merge the passed keyword arguments with the values stored in the file.
 
     If configFile is not provided, the keyword arguments are returned verbatim.
