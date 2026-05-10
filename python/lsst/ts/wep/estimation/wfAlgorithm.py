@@ -25,9 +25,9 @@ from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
-from astropy.coordinates import Angle
 
 from lsst.ts.wep import Image, Instrument
+from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.utils import (
     checkNollIndices,
     convertZernikesToPsfWidth,
@@ -168,13 +168,12 @@ class WfAlgorithm(ABC):
         self,
         I1: Image,
         I2: Optional[Image],
-        rtp: Optional[Angle],
         zkStartI1: np.ndarray,
         zkStartI2: Optional[np.ndarray],
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
-        altitude: Optional[Angle] = None,
+        obs: Optional[ObservingConditions] = None,
     ) -> Tuple[np.ndarray, dict]:
         """Private Zernike estimation method that should be subclassed.
 
@@ -200,8 +199,8 @@ class WfAlgorithm(ABC):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
-        altitude : Angle or None, optional
-            Boresight altitude.
+        obs : ObservingConditions or None, optional
+            Per-observation telescope pointing state (rotator angle, altitude).
             (the default is None)
 
         Returns
@@ -219,14 +218,13 @@ class WfAlgorithm(ABC):
         self,
         I1: Image,
         I2: Optional[Image] = None,
-        rtp: Optional[Angle] = None,
+        obs: Optional[ObservingConditions] = None,
         nollIndices: Sequence = tuple(np.arange(4, 23)),
         instrument: Optional[Instrument] = None,
         startWithIntrinsic: bool = True,
         returnWfDev: bool = False,
         units: str = "m",
         saveHistory: bool = False,
-        altitude: Optional[Angle] = None,
     ) -> Tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
@@ -237,8 +235,8 @@ class WfAlgorithm(ABC):
         I2 : DonutStamp, optional
             A second image, on the opposite side of focus from I1.
             (the default is None)
-        rtp : Angle, optional
-            The rotation angle of the camera on the telescope.
+        obs : ObservingConditions or None, optional
+            Per-observation telescope pointing state (rotator angle, altitude).
             (the default is None)
         nollIndices : Sequence, optional
             List, tuple, or array of Noll indices for which you wish to
@@ -263,9 +261,6 @@ class WfAlgorithm(ABC):
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
             (the default is False)
-        altitude : Angle or None, optional
-            Boresight altitude.
-            (the default is None)
 
         Returns
         -------
@@ -325,13 +320,12 @@ class WfAlgorithm(ABC):
         zk, zkMeta = self._estimateZk(
             I1=I1,
             I2=I2,
-            rtp=rtp,
             zkStartI1=zkStartI1,
             zkStartI2=zkStartI2,
             nollIndices=nollIndices,
             instrument=instrument,
             saveHistory=saveHistory,
-            altitude=altitude,
+            obs=obs,
         )
 
         # Calculate the wavefront deviation?

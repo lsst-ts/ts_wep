@@ -23,9 +23,9 @@ import os
 
 import numpy as np
 import torch
-from astropy.coordinates import Angle
 
 from lsst.ts.wep import Image, Instrument
+from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import getModulePath, makeDense, makeSparse
 
@@ -185,12 +185,12 @@ class AiDonutAlgorithm(WfAlgorithm):
         self,
         I1: Image,
         I2: Image | None,
-        rtp: Angle | None,
         zkStartI1: np.ndarray,
         zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
+        obs: ObservingConditions | None = None,
     ) -> tuple[np.ndarray, dict]:
         """Estimate Zernike coefficients using a PyTorch model.
 
@@ -200,8 +200,6 @@ class AiDonutAlgorithm(WfAlgorithm):
             An Image object containing an intra- or extra-focal donut image.
         I2 : Image or None
             A second image, on the opposite side of focus from I1. Can be None.
-        rtp : Angle or None
-            The rotation angle of the camera on the telescope.  Unused here.
         zkStartI1 : np.ndarray
             Starting Zernikes for I1 (unused; exists for compatibility).
         zkStartI2 : np.ndarray or None
@@ -214,6 +212,9 @@ class AiDonutAlgorithm(WfAlgorithm):
             Whether to save the algorithm history in the ``self.history``
             attribute. If True, then ``self.history`` contains information
             about the most recent time the algorithm was run.
+        obs : ObservingConditions or None, optional
+            Per-observation telescope pointing state. Unused by AiDonut.
+            (the default is None)
 
         Returns
         -------

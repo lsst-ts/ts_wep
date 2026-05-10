@@ -25,10 +25,10 @@ import inspect
 from typing import Iterable
 
 import numpy as np
-from astropy.coordinates import Angle
 from scipy.ndimage import gaussian_filter
 
 from lsst.ts.wep import Image, ImageMapper, Instrument
+from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import DefocalType, binArray, makeSparse
 
@@ -667,12 +667,12 @@ class TieAlgorithm(WfAlgorithm):
         self,
         I1: Image,
         I2: Image | None,  # type: ignore[override]
-        rtp: Angle | None,
         zkStartI1: np.ndarray,
         zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
+        obs: ObservingConditions | None = None,
     ) -> tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
@@ -682,8 +682,6 @@ class TieAlgorithm(WfAlgorithm):
             An Image object containing an intra- or extra-focal donut image.
         I2 : Image or None
             A second image, on the opposite side of focus from I1. Can be None.
-        rtp : Angle or None
-            The rotation angle of the camera on the telescope.  Unused here.
         zkStartI1 : np.ndarray
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
@@ -697,6 +695,9 @@ class TieAlgorithm(WfAlgorithm):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
+        obs : ObservingConditions or None, optional
+            Per-observation telescope pointing state. Unused by TIE.
+            (the default is None)
 
         Returns
         -------

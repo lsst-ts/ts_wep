@@ -31,7 +31,7 @@ import danish as danish_pkg  # noqa: E402
 import numpy as np  # noqa: E402
 from astropy.coordinates import Angle  # noqa: E402
 
-from lsst.ts.wep.estimation import DanishAlgorithm  # noqa: E402
+from lsst.ts.wep.estimation import DanishAlgorithm, ObservingConditions  # noqa: E402
 from lsst.ts.wep.utils.modelUtils import forwardModelPair  # noqa: E402
 
 # Directly configure NumPy if using version that supports it
@@ -185,7 +185,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         _, intra, extra = forwardModelPair()
 
         # Single-donut path: verify loss_fn != chi2_loss for alpha=0.05
-        dan = DanishAlgorithm(alpha=0.05, lstsqKwargs={"max_nfev": 1})
+        dan = DanishAlgorithm(systematicLossAlpha=0.05, lstsqKwargs={"max_nfev": 1})
         with patch(
             "lsst.ts.wep.estimation.danish.danish.SingleDonutModel",
             wraps=danish_pkg.SingleDonutModel,
@@ -205,7 +205,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         self.assertIsNot(mock_model.call_args.kwargs["loss_fn"], danish_pkg.chi2_loss)
 
         # Default alpha=0: loss_fn should behave identically to chi2_loss
-        dan_default = DanishAlgorithm(lstsqKwargs={"max_nfev": 1})
+        dan_default = DanishAlgorithm(systematicLossAlpha=0.0, lstsqKwargs={"max_nfev": 1})
         with patch(
             "lsst.ts.wep.estimation.danish.danish.SingleDonutModel",
             wraps=danish_pkg.SingleDonutModel,
@@ -226,24 +226,24 @@ class TestDanishAlgorithm(unittest.TestCase):
         dan = DanishAlgorithm(doAoiThroughput=True, lstsqKwargs={"max_nfev": 1})
 
         # 45 deg altitude → raw airmass = 1/sin(45°) ≈ 1.414 → rounds to 1.4
-        altitude = Angle(np.pi / 4, "rad")
+        obs = ObservingConditions(altitude=Angle(np.pi / 4, "rad"))
 
         with patch(
             "lsst.ts.wep.estimation.danish.danish.DonutFactory",
             wraps=danish_pkg.DonutFactory,
         ) as mock_factory:
-            dan.estimateZk(intra, extra, altitude=altitude)
+            dan.estimateZk(intra, extra, obs=obs)
 
         call_kwargs = mock_factory.call_args.kwargs
         self.assertEqual(call_kwargs["bandpass_filter"], "r")
         self.assertAlmostEqual(call_kwargs["airmass"], 1.4)
 
-        # With NaN altitude, airmass should fall back to the default (1.2)
+        # With no altitude, airmass falls back to the default (1.2)
         with patch(
             "lsst.ts.wep.estimation.danish.danish.DonutFactory",
             wraps=danish_pkg.DonutFactory,
         ) as mock_factory:
-            dan.estimateZk(intra, extra, altitude=Angle(np.nan, "rad"))
+            dan.estimateZk(intra, extra, obs=ObservingConditions())
 
         call_kwargs = mock_factory.call_args.kwargs
         self.assertEqual(call_kwargs["bandpass_filter"], "r")
