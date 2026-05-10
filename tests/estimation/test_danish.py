@@ -28,6 +28,10 @@ enforce_single_threading()
 
 # Then import libraries
 import danish as danish_pkg  # noqa: E402
+from packaging.version import Version  # noqa: E402
+
+_DANISH_V1_1 = Version(danish_pkg.__version__) >= Version("1.1")
+_requires_danish_v1_1 = unittest.skipUnless(_DANISH_V1_1, "requires danish >= 1.1")
 import numpy as np  # noqa: E402
 from astropy.coordinates import Angle  # noqa: E402
 
@@ -179,6 +183,7 @@ class TestDanishAlgorithm(unittest.TestCase):
             pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
 
+    @_requires_danish_v1_1
     def testSystematicLossAlpha(self) -> None:
         """Test that alpha is passed as loss_fn to SingleDonutModel and
         DZMultiDonutModel. Uses max_nfev=1 to keep runtime minimal."""
@@ -219,6 +224,7 @@ class TestDanishAlgorithm(unittest.TestCase):
             danish_pkg.chi2_loss(data, model_vals, var),
         )
 
+    @_requires_danish_v1_1
     def testDoAoiThroughput(self) -> None:
         """Test that doAoiThroughput passes correct bandpass_filter and airmass
         to DonutFactory. Uses max_nfev=1 to keep runtime minimal."""
