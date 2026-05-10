@@ -22,6 +22,7 @@
 __all__ = ["CentroidConvolveTemplate"]
 
 from copy import copy
+from typing import Any
 
 import numpy as np
 from lsst.ts.wep.centroid.centroidDefault import CentroidDefault
@@ -59,6 +60,7 @@ class CentroidConvolveTemplate(CentroidDefault):
         imgDonut: np.ndarray,
         templateDonut: np.ndarray | None = None,
         peakThreshold: float = 0.95,
+        **kwargs: Any,
     ) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius.
 
@@ -104,6 +106,7 @@ class CentroidConvolveTemplate(CentroidDefault):
         imgBinary: np.ndarray,
         templateBinary: np.ndarray | None = None,
         peakThreshold: float = 0.95,
+        **kwargs: Any,
     ) -> tuple[float, float, float]:
         """Get the centroid data and effective weighting radius.
 
