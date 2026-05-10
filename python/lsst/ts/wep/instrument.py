@@ -132,6 +132,8 @@ class Instrument:
     batoidOffsetOptic and batoidOffsetValue are set.
     """
 
+    _wavelength: EnumDict | None
+
     def __init__(
         self,
         configFile: Path | str | None = "policy:instruments/LsstCam.yaml",
@@ -143,7 +145,7 @@ class Instrument:
         defocalOffset: float | None = None,
         pixelSize: float | None = None,
         refBand: BandLabel | str | None = None,
-        wavelength: float | dict | None = None,
+        wavelength: float | dict | EnumDict | None = None,
         batoidModelName: str | None = None,
         batoidOffsetOptic: str | None = None,
         batoidOffsetValue: float | None = None,
@@ -559,12 +561,11 @@ class Instrument:
                 raise ValueError(
                     "The wavelength dictionary must contain a wavelength for the reference band."
                 )
-            value = enumDictValue
+            self._wavelength = enumDictValue
         elif value is not None:
-            value = EnumDict(BandLabel, {BandLabel.REF: value, self.refBand: value})
-
-        # Set the new value
-        self._wavelength = value
+            self._wavelength = EnumDict(BandLabel, {BandLabel.REF: value, self.refBand: value})
+        else:
+            self._wavelength = None
 
         # Clear relevant caches
         self._getIntrinsicZernikesCached.cache_clear()
