@@ -24,9 +24,9 @@ __all__ = ["WfEstimator"]
 from typing import Optional, Sequence, Union
 
 import numpy as np
-from astropy.coordinates import Angle
 
 from lsst.ts.wep import Image, Instrument
+from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
 from lsst.ts.wep.utils import checkNollIndices, configClass
@@ -273,8 +273,7 @@ class WfEstimator:
         self,
         I1: Image,
         I2: Optional[Image] = None,
-        rtp: Optional[Angle] = None,
-        altitude: Optional[Angle] = None,
+        obs: Optional[ObservingConditions] = None,
     ) -> tuple[np.ndarray, dict]:
         """Estimate Zernike coefficients of the wavefront from the stamp(s).
 
@@ -285,10 +284,8 @@ class WfEstimator:
         I2 : Image, optional
             A second image, on the opposite side of focus from I1.
             (the default is None)
-        rtp : Angle, optional
-            The rotation angle of the camera on the telescope.
-        altitude : Angle or None, optional
-            Boresight altitude.
+        obs : ObservingConditions or None, optional
+            Per-observation telescope pointing state (rotator angle, altitude).
             (the default is None)
 
         Returns
@@ -307,12 +304,11 @@ class WfEstimator:
         return self.algo.estimateZk(
             I1=I1,
             I2=I2,
-            rtp=rtp,
+            obs=obs,
             nollIndices=self.nollIndices,
             instrument=self.instrument,
             startWithIntrinsic=self.startWithIntrinsic,
             returnWfDev=self.returnWfDev,
             units=self.units,
             saveHistory=self.saveHistory,
-            altitude=altitude,
         )
