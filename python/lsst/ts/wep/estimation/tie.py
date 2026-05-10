@@ -608,6 +608,7 @@ class TieAlgorithm(WfAlgorithm):
 
         # Replace the image with the pupil mask
         # (Convolving with Gaussian gives better results)
+        assert pupil.mask is not None  # createPupilMasks always sets the mask
         pupil.image = gaussian_filter(
             pupil.mask.astype(float),
             self.modelPupilKernelSize,
@@ -771,6 +772,10 @@ class TieAlgorithm(WfAlgorithm):
         zkBest = np.zeros_like(zkComp)  # Current best Zernike estimate
         zkSum = np.zeros_like(zkComp)  # Current best + starting Zernikes
 
+        # Compensated images (set each iteration; None before first iteration)
+        intraComp: Image | None = None
+        extraComp: Image | None = None
+
         # Get the compensation sequence
         compSequence = iter(self.compSequence)
 
@@ -822,30 +827,34 @@ class TieAlgorithm(WfAlgorithm):
                 )
 
             # Compensate images using the Zernikes
-            intraComp: Image = (
+            intraComp = (
                 pupil
                 if intraCent is None
                 else imageMapper.mapImageToPupil(
                     intraCent,
                     zkComp + zkStartIntra,
                     nollIndices,
-                    masks=None if i == 0 else intraComp.masks,  # noqa: F821
+                    masks=intraComp.masks if intraComp is not None else None,
                     **self.maskKwargs,
                 )
             )
-            extraComp: Image = (
+            assert intraComp is not None
+            extraComp = (
                 pupil
                 if extraCent is None
                 else imageMapper.mapImageToPupil(
                     extraCent,
                     zkComp + zkStartExtra,
                     nollIndices,
-                    masks=None if i == 0 else extraComp.masks,  # noqa: F821
+                    masks=extraComp.masks if extraComp is not None else None,
                     **self.maskKwargs,
                 )
             )
+            assert extraComp is not None
 
             # Apply a common pupil mask to each
+            assert intraComp.mask is not None
+            assert extraComp.mask is not None
             mask = (intraComp.mask >= 1) & (extraComp.mask >= 1)
             intraComp.image *= mask
             extraComp.image *= mask
