@@ -29,7 +29,7 @@ from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
-from lsst.ts.wep.utils import checkNollIndices, configClass
+from lsst.ts.wep.utils import WfAlgorithmName, checkNollIndices, configClass
 
 
 class WfEstimator:
@@ -81,7 +81,7 @@ class WfEstimator:
 
     def __init__(
         self,
-        algoName: str = "tie",
+        algoName: Union[str, WfAlgorithmName] = "tie",
         algoConfig: Union[dict, WfAlgorithm, None] = None,
         instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
         nollIndices: Sequence = tuple(np.arange(4, 12)),

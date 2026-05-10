@@ -210,7 +210,8 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Create reference Zernikes by adding off-axis coefficients to zkStart
         offAxisCoeff = instrument.getOffAxisCoeff(
-            *image.fieldAngle,
+            image.fieldAngle[0],
+            image.fieldAngle[1],
             image.defocalType,
             image.bandLabel,
             nollIndicesModel=np.arange(0, 79),
@@ -509,6 +510,7 @@ class DanishAlgorithm(WfAlgorithm):
             nollIndices=nollIndices,
             instrument=instrument,
         )
+        assert I2 is not None  # guaranteed by caller when jointFitPair is True
         img2, angle2, zkRef2, backgroundStd2 = self._prepDanish(
             image=I2,
             zkStart=zkStartI2,
