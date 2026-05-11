@@ -171,8 +171,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return results
 
-    @staticmethod
-    def _get_obs_conditions(donutStamps: DonutStamps | None) -> ObservingConditions:
+    def _get_obs_conditions(self, donutStamps: DonutStamps | None) -> ObservingConditions:
         """Extract per-observation pointing state from stamp metadata.
 
         Parameters
@@ -189,18 +188,18 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         if not donutStamps:
             return ObservingConditions()
         metadata = donutStamps.metadata
-        rtp = None
-        altitude = None
-        try:
-            rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
-            q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
-            rtp = Angle(q - rsp - np.pi / 2, "rad")
-        except KeyError:
-            pass
-        try:
-            altitude = Angle(metadata["BORESIGHT_ALT_RAD"], "rad")
-        except KeyError:
-            pass
+
+        def get_or_warn(key: str) -> float:
+            val = metadata.get(key, np.nan)
+            if np.isnan(val):
+                self.log.warning("%s missing from donut stamp metadata.", key)
+            return val
+
+        rsp = get_or_warn("BORESIGHT_ROT_ANGLE_RAD")
+        q = get_or_warn("BORESIGHT_PAR_ANGLE_RAD")
+        alt = get_or_warn("BORESIGHT_ALT_RAD")
+        rtp = None if np.isnan(rsp) or np.isnan(q) else Angle(q - rsp - np.pi / 2, "rad")
+        altitude = None if np.isnan(alt) else Angle(alt, "rad")
         return ObservingConditions(rtp=rtp, altitude=altitude)
 
     def estimateFromPairs(
