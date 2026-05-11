@@ -134,8 +134,10 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.metadata["effMaxZernClip"] = effMaxZernClip
 
         # Add table metadata about which Zernikes were rejected for each donut
-        zkTable.meta["estimatorInfo"]["zern_clipped"] = np.array(binaryFlagArray.tolist(), dtype=bool)
-        zkTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"] = effMaxZernClip
+        zkTable.meta["estimatorInfo"]["zern_clipped"] = binaryFlagArray.astype(bool).tolist()
+        # Store effMaxZernClip in list to be able to concatenate
+        # metadata from multiple detectors in donut_viz
+        zkTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"] = [effMaxZernClip]
         zkTable.meta["estimatorInfo"]["zern_clipped_rejected_noll_indices"] = nollIdxRejected
 
         # Calculate means

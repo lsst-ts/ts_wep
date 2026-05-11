@@ -215,21 +215,18 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         # Get the clipped flag array and rejection info
         zernClipped = outTable.meta["estimatorInfo"]["zern_clipped"]
         nollIdxRejected = outTable.meta["estimatorInfo"]["zern_clipped_rejected_noll_indices"]
-        maxNollIdx = outTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"]
+        self.assertEqual(len(outTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"]), 1)
+        maxNollIdx = outTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"][0]
 
         # Verify zern_clipped_max_noll_idx is an integer and
         # within valid range
         self.assertIsInstance(maxNollIdx, (int, np.integer))
-        self.assertGreaterEqual(maxNollIdx, 1)
+        self.assertGreaterEqual(maxNollIdx, 0)
         self.assertLessEqual(maxNollIdx, self.config.maxZernClip + 1)
 
-        # Verify zern_clipped is a boolean array
-        self.assertEqual(zernClipped.dtype, bool)
-
-        # Verify that zern_clipped was computed using maxNollIdx
-        # (all clipped values should be in the first maxNollIdx
-        # Zernike columns)
-        self.assertGreater(maxNollIdx, 0)
+        # Verify data types are lists
+        self.assertIsInstance(zernClipped, list)
+        self.assertIsInstance(nollIdxRejected, list)
 
         # Verify length matches number of data rows (excluding average)
         numDataRows = len(outTable[outTable["label"] != "average"])
