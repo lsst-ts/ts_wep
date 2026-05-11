@@ -137,7 +137,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         # This will happen even if we turn off donut selection
         edgeMargin = 1000
-        donutCatSmall, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, edgeMargin)
+        donutCatSmall, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, edgeMargin)  # type: ignore[arg-type]
         self.assertEqual(len(donutCatSmall), 1)
 
     def testRunSelectionNoTask(self) -> None:
@@ -157,7 +157,7 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
 
         # When passing None instead of a DonutSourceSelectorTask
         # we should get the full catalog without cuts.
-        unchangedCat, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, 60)
+        unchangedCat, blendX, blendY = runSelection(refObjLoader, detector, wcs, "g", None, 60)  # type: ignore[arg-type]
         self.assertEqual(len(unchangedCat), 4)
         self.assertEqual(blendX, [[]] * 4)
         self.assertEqual(blendY, [[]] * 4)

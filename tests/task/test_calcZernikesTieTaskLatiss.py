@@ -172,7 +172,7 @@ class TestCalcZernikesTieTaskLatiss(lsst.utils.tests.TestCase):
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
 
-        zernCoeff = self.task.run(donutStampsExtra, donutStampsIntra)
+        zernCoeff = self.task.run(donutStampsExtra, donutStampsIntra)  # type: ignore[call-arg]
 
         self.assertEqual(np.shape(zernCoeff.outputZernikesRaw), (len(donutStampsExtra), 19))
 

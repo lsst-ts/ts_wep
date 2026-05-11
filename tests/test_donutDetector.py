@@ -39,7 +39,7 @@ class TestDonutDetector(unittest.TestCase):
         # Create the template
         camera = LsstCam().getCamera()
         detector = camera.get("R22_S11")
-        template = createTemplateForDetector(detector, "extra")
+        template = createTemplateForDetector(detector, "extra")  # type: ignore[arg-type]
 
         templateHalfWidth = int(len(template) / 2)
 

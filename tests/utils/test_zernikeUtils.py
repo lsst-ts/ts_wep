@@ -79,7 +79,7 @@ class TestZernikeUtils(TestCase):
         for i in range(len(zkBasis)):
             coeff = np.zeros(i + 1)
             coeff[-1] = 1
-            np.allclose(zernikeEval(uGrid, vGrid, coeff), zkBasis[i])
+            np.allclose(zernikeEval(uGrid, vGrid, coeff), zkBasis[i])  # type: ignore[func-returns-value]
 
     def testZernikeGradEval(self) -> None:
         # Create a Zernike gradient basis
@@ -156,8 +156,8 @@ class TestZernikeUtils(TestCase):
         self.assertTrue(np.allclose(dzkB0[:, 4:, ...], dzkB4))
 
         # Evaluate Zernikes
-        wf0 = zernikeEval(u, v, [0, 0, 0, 0] + list(zkCoeff), jmin=0)
-        wf4 = zernikeEval(u, v, zkCoeff, jmin=4)
+        wf0 = zernikeEval(u, v, [0, 0, 0, 0] + list(zkCoeff), jmin=0)  # type: ignore[func-returns-value]
+        wf4 = zernikeEval(u, v, zkCoeff, jmin=4)  # type: ignore[func-returns-value]
         self.assertTrue(np.allclose(wf0, wf4))
 
         # Evaluate Zernike gradients
@@ -221,11 +221,11 @@ class TestZernikeUtils(TestCase):
         # Test bad indices
         for func in [makeSparse, makeDense]:
             with self.assertRaises(ValueError):
-                func([1, 2, 3], [3, 4, 5])
+                func([1, 2, 3], [3, 4, 5])  # type: ignore[operator]
             with self.assertRaises(ValueError):
-                func([1, 2, 3], [4, 6, 5])
+                func([1, 2, 3], [4, 6, 5])  # type: ignore[operator]
             with self.assertRaises(ValueError):
-                func([1, 2, 3], [4, 6, 6])
+                func([1, 2, 3], [4, 6, 6])  # type: ignore[operator]
 
     def testCheckNollIndices(self) -> None:
         # These values should all pass

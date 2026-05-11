@@ -59,7 +59,7 @@ class TestInstrument(unittest.TestCase):
 
     def testBadDefocalOffset(self) -> None:
         with self.assertRaises(ValueError):
-            Instrument(defocalOffset="bad")
+            Instrument(defocalOffset="bad")  # type: ignore[arg-type]
 
     def testBadPixelSize(self) -> None:
         with self.assertRaises(ValueError):
@@ -67,13 +67,13 @@ class TestInstrument(unittest.TestCase):
 
     def testBadWavelength(self) -> None:
         with self.assertRaises(TypeError):
-            Instrument(wavelength="bad")
+            Instrument(wavelength="bad")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             Instrument(wavelength={"u": 500e-9})
 
     def testBadBatoidModelName(self) -> None:
         with self.assertRaises(TypeError):
-            Instrument(batoidModelName=-1)
+            Instrument(batoidModelName=-1)  # type: ignore[arg-type]
 
     def testBadRefBand(self) -> None:
         with self.assertRaises(ValueError):
@@ -95,7 +95,7 @@ class TestInstrument(unittest.TestCase):
             inst.batoidModelName = None
             inst.batoidOffsetOptic = "Detector"
         with self.assertRaises(TypeError):
-            Instrument(batoidOffsetOptic=1)
+            Instrument(batoidOffsetOptic=1)  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             Instrument(batoidOffsetOptic="fake")
 
@@ -123,23 +123,23 @@ class TestInstrument(unittest.TestCase):
 
         # First check the shape
         self.assertEqual(
-            inst.getOffAxisCoeff(0, 0, "intra", nollIndicesModel=np.arange(4, 67)).shape,
+            inst.getOffAxisCoeff(0, 0, "intra", nollIndicesModel=np.arange(4, 67)).shape,  # type: ignore[arg-type]
             (63,),
         )
         self.assertEqual(
-            inst.getOffAxisCoeff(1, 1.1, "extra", nollIndicesModel=np.arange(4, 23)).shape,
+            inst.getOffAxisCoeff(1, 1.1, "extra", nollIndicesModel=np.arange(4, 23)).shape,  # type: ignore[arg-type]
             (19,),
         )
 
         # Now check that in-place changes don't impact the cache
-        coeff = inst.getOffAxisCoeff(0, 0, "intra")
+        coeff = inst.getOffAxisCoeff(0, 0, "intra")  # type: ignore[arg-type]
         coeff *= 3.14159
-        close = np.isclose(inst.getOffAxisCoeff(0, 0, "intra"), coeff, atol=0)
+        close = np.isclose(inst.getOffAxisCoeff(0, 0, "intra"), coeff, atol=0)  # type: ignore[arg-type]
         self.assertTrue(np.all(~close))
 
     def testBadMaskParams(self) -> None:
         with self.assertRaises(TypeError):
-            Instrument(maskParams="bad")
+            Instrument(maskParams="bad")  # type: ignore[arg-type]
 
     def testDefaultMaskParams(self) -> None:
         inst = Instrument()
@@ -245,8 +245,8 @@ class TestInstrument(unittest.TestCase):
 
     def test_intrinsicZernikesDefocused(self) -> None:
         inst = Instrument()
-        z4_intra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="intra", nollIndices=[4])
-        z4_extra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="extra", nollIndices=[4])
+        z4_intra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="intra", nollIndices=[4])  # type: ignore[arg-type]
+        z4_extra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="extra", nollIndices=[4])  # type: ignore[arg-type]
         self.assertTrue(np.isclose(-z4_extra, z4_intra, rtol=1e-2))
 
     def test_offsetCamera(self) -> None:
@@ -254,8 +254,8 @@ class TestInstrument(unittest.TestCase):
         inst1 = Instrument()
         inst2 = Instrument(batoidOffsetOptic="LSSTCamera")
         for dftype in ["intra", "extra"]:
-            zk_1 = inst1.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)
-            zk_2 = inst2.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)
+            zk_1 = inst1.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)  # type: ignore[arg-type]
+            zk_2 = inst2.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)  # type: ignore[arg-type]
             self.assertFalse(np.allclose(zk_1, zk_2, rtol=1e-2))
 
 

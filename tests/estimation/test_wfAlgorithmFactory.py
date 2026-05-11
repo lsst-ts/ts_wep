@@ -38,7 +38,7 @@ class TestWfAlgorithmFactory(unittest.TestCase):
 
         # Make sure config parameters are propagated
         algo = WfAlgorithmFactory.createWfAlgorithm("tie", {"maxIter": 30})
-        self.assertEqual(algo.maxIter, 30)
+        self.assertEqual(algo.maxIter, 30)  # type: ignore[attr-defined]
 
     def testCreateDanishAlgorithm(self) -> None:
         # Make sure it returns the correct type
@@ -50,7 +50,7 @@ class TestWfAlgorithmFactory(unittest.TestCase):
 
         # Make sure config parameters are propagated
         algo = WfAlgorithmFactory.createWfAlgorithm("danish", {"lstsqKwargs": dict(ftol=1e-5)})
-        self.assertEqual(algo.lstsqKwargs["ftol"], 1e-5)
+        self.assertEqual(algo.lstsqKwargs["ftol"], 1e-5)  # type: ignore[attr-defined]
 
     def testBadAlgoName(self) -> None:
         with self.assertRaises(ValueError):

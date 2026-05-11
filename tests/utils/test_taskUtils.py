@@ -201,7 +201,7 @@ class TestTaskUtils(unittest.TestCase):
             Instrument(configFile="policy:instruments/ComCam.yaml"),
         )
         assertInstEqual(
-            getTaskInstrument("LATISS", None),
+            getTaskInstrument("LATISS", None),  # type: ignore[arg-type]
             Instrument(configFile="policy:instruments/AuxTel.yaml"),
         )
 
@@ -212,7 +212,7 @@ class TestTaskUtils(unittest.TestCase):
         )
 
         with self.assertRaises(ValueError):
-            getTaskInstrument("fake", None)
+            getTaskInstrument("fake", None)  # type: ignore[arg-type]
 
         # Test LsstFamCam
         famcam = getTaskInstrument("LSSTCam", "R22_S01")
@@ -223,7 +223,7 @@ class TestTaskUtils(unittest.TestCase):
         camera = obs_lsst.LsstCam().getCamera()
 
         # Create a reference template
-        templateRef = createTemplateForDetector(camera.get("R00_SW1"), "intra", nPixels=180)
+        templateRef = createTemplateForDetector(camera.get("R00_SW1"), "intra", nPixels=180)  # type: ignore[arg-type]
 
         # Check that the butler orientations are all the same
         for raft in ["R00", "R40", "R44", "R04"]:
@@ -235,7 +235,7 @@ class TestTaskUtils(unittest.TestCase):
 
                 # Check that butler orientation all matches reference
                 # (binary_opening removes small artifacts from centering)
-                template = createTemplateForDetector(detector, defocalType, nPixels=len(templateRef))
+                template = createTemplateForDetector(detector, defocalType, nPixels=len(templateRef))  # type: ignore[arg-type]
                 diff = binary_opening(template - templateRef, iterations=2)
                 assert np.allclose(diff, 0)
 

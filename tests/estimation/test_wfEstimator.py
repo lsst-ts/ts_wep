@@ -51,11 +51,11 @@ class TestWfEstimator(unittest.TestCase):
 
     def testBadAlgoConfig(self) -> None:
         with self.assertRaises(TypeError):
-            WfEstimator(algoConfig=1)
+            WfEstimator(algoConfig=1)  # type: ignore[arg-type]
 
     def testBadInstConfig(self) -> None:
         with self.assertRaises(TypeError):
-            WfEstimator(instConfig=1)
+            WfEstimator(instConfig=1)  # type: ignore[arg-type]
         with self.assertRaises(FileNotFoundError):
             WfEstimator(instConfig="fake")
 
@@ -71,11 +71,11 @@ class TestWfEstimator(unittest.TestCase):
 
     def testBadStartWithIntrinsic(self) -> None:
         with self.assertRaises(TypeError):
-            WfEstimator(startWithIntrinsic="fake")
+            WfEstimator(startWithIntrinsic="fake")  # type: ignore[arg-type]
 
     def testBadReturnWfDev(self) -> None:
         with self.assertRaises(TypeError):
-            WfEstimator(returnWfDev="fake")
+            WfEstimator(returnWfDev="fake")  # type: ignore[arg-type]
 
     def testBadUnits(self) -> None:
         with self.assertRaises(ValueError):
@@ -83,7 +83,7 @@ class TestWfEstimator(unittest.TestCase):
 
     def testBadSaveHistory(self) -> None:
         with self.assertRaises(TypeError):
-            WfEstimator(saveHistory="fake")
+            WfEstimator(saveHistory="fake")  # type: ignore[arg-type]
 
     def testDifferentNollIndices(self) -> None:
         # Get the test data
@@ -94,10 +94,10 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate [4, 5, 6]
             wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6], units="m")
             if name == WfAlgorithmName.TIE:
-                wfEst.algo.optimizeLinAlg = False
+                wfEst.algo.optimizeLinAlg = False  # type: ignore[attr-defined]
                 zk0, _ = wfEst.estimateZk(intra, extra)
             else:
-                wfEst.algo.lstsqKwargs = {
+                wfEst.algo.lstsqKwargs = {  # type: ignore[attr-defined]
                     "ftol": 1e-2,
                     "xtol": 1e-2,
                     "gtol": 1e-2,
@@ -113,10 +113,10 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate with [4, 5, 6, 14, 15]
             wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 14, 15], units="m")
             if name == WfAlgorithmName.TIE:
-                wfEst.algo.optimizeLinAlg = False
+                wfEst.algo.optimizeLinAlg = False  # type: ignore[attr-defined]
                 zk1, _ = wfEst.estimateZk(intra, extra)
             else:
-                wfEst.algo.lstsqKwargs = {
+                wfEst.algo.lstsqKwargs = {  # type: ignore[attr-defined]
                     "ftol": 1e-2,
                     "xtol": 1e-2,
                     "gtol": 1e-2,
@@ -140,10 +140,10 @@ class TestWfEstimator(unittest.TestCase):
             wfEst = WfEstimator(algoName=name, startWithIntrinsic=True, units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst = WfEstimator(algoName=name, startWithIntrinsic=True, units="m")
-                wfEst.algo.optimizeLinAlg = False
+                wfEst.algo.optimizeLinAlg = False  # type: ignore[attr-defined]
                 zk0, _ = wfEst.estimateZk(intra, extra)
             else:
-                wfEst.algo.lstsqKwargs = {
+                wfEst.algo.lstsqKwargs = {  # type: ignore[attr-defined]
                     "ftol": 1e-2,
                     "xtol": 1e-2,
                     "gtol": 1e-2,
@@ -155,10 +155,10 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate starting with zeros
             wfEst = WfEstimator(algoName=name, startWithIntrinsic=False, units="m")
             if name == WfAlgorithmName.TIE:
-                wfEst.algo.optimizeLinAlg = False
+                wfEst.algo.optimizeLinAlg = False  # type: ignore[attr-defined]
                 zk1, _ = wfEst.estimateZk(intra, extra)
             else:
-                wfEst.algo.lstsqKwargs = {
+                wfEst.algo.lstsqKwargs = {  # type: ignore[attr-defined]
                     "ftol": 1e-2,
                     "xtol": 1e-2,
                     "gtol": 1e-2,
@@ -179,10 +179,10 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate OPD
             wfEst = WfEstimator(algoName=name, returnWfDev=False, units="m")
             if name == WfAlgorithmName.TIE:
-                wfEst.algo.optimizeLinAlg = False
+                wfEst.algo.optimizeLinAlg = False  # type: ignore[attr-defined]
                 opd, _ = wfEst.estimateZk(intra, extra)
             else:
-                wfEst.algo.lstsqKwargs = {
+                wfEst.algo.lstsqKwargs = {  # type: ignore[attr-defined]
                     "ftol": 1e-2,
                     "xtol": 1e-2,
                     "gtol": 1e-2,
@@ -194,10 +194,10 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate wavefront deviation
             wfEst = WfEstimator(algoName=name, returnWfDev=True, units="m")
             if name == WfAlgorithmName.TIE:
-                wfEst.algo.optimizeLinAlg = False
+                wfEst.algo.optimizeLinAlg = False  # type: ignore[attr-defined]
                 wfDev, _ = wfEst.estimateZk(intra, extra)
             else:
-                wfEst.algo.lstsqKwargs = {
+                wfEst.algo.lstsqKwargs = {  # type: ignore[attr-defined]
                     "ftol": 1e-2,
                     "xtol": 1e-2,
                     "gtol": 1e-2,
@@ -208,7 +208,7 @@ class TestWfEstimator(unittest.TestCase):
 
             # Make sure that OPD = wf dev + intrinsics
             zkInt = wfEst.instrument.getIntrinsicZernikes(
-                *intra.fieldAngle,
+                *intra.fieldAngle,  # type: ignore[misc]
                 nollIndices=np.arange(opd.size) + 4,
             )
 
@@ -226,10 +226,10 @@ class TestWfEstimator(unittest.TestCase):
             for units in ["m", "um", "nm", "arcsec"]:
                 wfEst = WfEstimator(algoName=name, units=units)
                 if name == WfAlgorithmName.TIE:
-                    wfEst.algo.optimizeLinAlg = False
+                    wfEst.algo.optimizeLinAlg = False  # type: ignore[attr-defined]
                     zk[units], _ = wfEst.estimateZk(intra, extra)
                 else:
-                    wfEst.algo.lstsqKwargs = {
+                    wfEst.algo.lstsqKwargs = {  # type: ignore[attr-defined]
                         "ftol": 1e-2,
                         "xtol": 1e-2,
                         "gtol": 1e-2,

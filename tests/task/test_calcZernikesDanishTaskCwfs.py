@@ -356,7 +356,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
                 # Create intrinsic maps with complete grid
                 intrinsicMap = self.task._createIntrinsicMap(table)
                 self.assertEqual(
-                    intrinsicMap([table["y"].to("deg").value[2], table["x"].to("deg").value[2]])[0, 0],
+                    intrinsicMap([table["y"].to("deg").value[2], table["x"].to("deg").value[2]])[0, 0],  # type: ignore[misc]
                     table["Z4"].to("um").value[2],
                 )
 
@@ -364,7 +364,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
                 tableVignetted = table[10:]
                 intrinsicMapVignetted = self.task._createIntrinsicMap(tableVignetted)
                 self.assertEqual(
-                    intrinsicMapVignetted(
+                    intrinsicMapVignetted(  # type: ignore[misc]
                         tableVignetted["y"].to("deg").value[0],
                         tableVignetted["x"].to("deg").value[0],
                     )[0],

@@ -123,7 +123,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
     ) -> tuple[afwImage.ExposureF, np.ndarray, np.ndarray, afwImage.ExposureF, np.ndarray]:
         # Generate donut template
         camera = LsstCam.getCamera()
-        template = createTemplateForDetector(camera.get("R22_S11"), "extra")
+        template = createTemplateForDetector(camera.get("R22_S11"), "extra")  # type: ignore[arg-type]
         template = np.pad(template, (self.task.donutStampSize - len(template)) // 2)
         correlatedImage = correlate(template, template)
         maxIdx = np.argmax(correlatedImage)

@@ -49,7 +49,7 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         with self.assertRaises(ValueError):
             AiDonutAlgorithm(temperature=0.0)
         with self.assertRaises(TypeError):
-            AiDonutAlgorithm(temperature="invalid")
+            AiDonutAlgorithm(temperature="invalid")  # type: ignore[arg-type]
 
     def testBadNollIndices(self) -> None:
         """Test that bad noll indices raise error."""
