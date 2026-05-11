@@ -113,6 +113,12 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             binaryFlagArray = np.any(np.isnan(sigArray[:, :effMaxZernClip]), axis=1).astype(int)
             numRejected = np.sum(binaryFlagArray)
 
+        # Identify which Zernikes were rejected for each donut
+        whereRejected = np.where(np.isnan(sigArray[:, :effMaxZernClip]))
+        nollIdxRejected = [[] for _ in range(len(sigArray))]
+        for donut_idx, zern_idx in zip(whereRejected[0], whereRejected[1]):
+            nollIdxRejected[donut_idx].append(int(zkTable.meta["noll_indices"][zern_idx]))
+
         # Identify which rows to use when calculating final mean
         keepIdx = ~np.array(binaryFlagArray, dtype=bool)
         used = zkTable["used"][zkTable["label"] != "average"]
@@ -126,6 +132,11 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             )
         self.metadata["maxZernClip"] = self.maxZernClip
         self.metadata["effMaxZernClip"] = effMaxZernClip
+
+        # Add table metadata about which Zernikes were rejected for each donut
+        zkTable.meta["estimatorInfo"]["zern_clipped"] = np.array(binaryFlagArray.tolist(), dtype=bool)
+        zkTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"] = effMaxZernClip
+        zkTable.meta["estimatorInfo"]["zern_clipped_rejected_noll_indices"] = nollIdxRejected
 
         # Calculate means
         for j in zkTable.meta["noll_indices"]:

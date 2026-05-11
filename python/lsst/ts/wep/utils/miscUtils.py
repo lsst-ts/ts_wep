@@ -398,13 +398,12 @@ def conditionalSigmaClip(array: np.ndarray, sigmaClipKwargs: dict, stdMin: float
     ----------
     array : np.ndarray
         Input array to be processed.
-    sigma : float
-        Number of standard deviations for the clipping limit.
+    sigmaClipKwargs : dict
+        Keyword arguments to pass to sigma_clip, including 'stdfunc'
+        which can be either "mad_std" or "std".
     stdMin : float
-        Minimum standard deviation to apply sigma clipping.
-    stdFunc : str
-        Function to calculate the standard deviation.
-        Can be either "mad_std" or "std"
+        Minimum standard deviation to apply sigma clipping
+        (the default is 0.005).
 
     Returns
     -------
@@ -414,7 +413,7 @@ def conditionalSigmaClip(array: np.ndarray, sigmaClipKwargs: dict, stdMin: float
     Raises
     ------
     ValueError
-        If stdFunc is not "mad_std" or "std"
+        If stdfunc is not "mad_std" or "std"
     """
 
     if sigmaClipKwargs["stdfunc"] not in ["mad_std", "std"]:

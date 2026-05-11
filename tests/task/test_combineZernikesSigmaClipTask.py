@@ -47,6 +47,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         table.meta["opd_columns"] = [f"Z{j}" for j in nollIndices]
         table.meta["intrinsic_columns"] = [f"Z{j}_intrinsic" for j in nollIndices]
         table.meta["deviation_columns"] = [f"Z{j}_deviation" for j in nollIndices]
+        table.meta["estimatorInfo"] = {}
 
         for i in table.meta["noll_indices"]:
             table[f"Z{i}"] = np.array([np.nan] + [101.0] + 50 * [1.0] + 50 * [3.0]) * u.nm
@@ -144,3 +145,115 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertTrue(np.allclose([avg[col] for col in avg.meta["intrinsic_columns"]], 2.0))
         self.assertTrue(all(avg[col] > 2 for col in avg.meta["deviation_columns"]))
         self.assertTrue(outTable["used"].tolist() == 101 * [True] + [False])
+
+    def testNollIdxRejected(self) -> None:
+        """
+        Test that nollIdxRejected correctly identifies clipped Zernike indices.
+        """
+        # Create a custom test table with specific outliers
+        inTable = self.prepareTestTable()
+
+        # Make the first donut (pair0) have an outlier in Z4
+        # (Noll index 4, column index 0)
+        # and Z5 (Noll index 5, column index 1) when using
+        # deviation clipping
+        nollIndices = inTable.meta["noll_indices"]
+        col_z4 = f"Z{nollIndices[0]}_deviation"  # Should be Z4_deviation
+        col_z5 = f"Z{nollIndices[1]}_deviation"  # Should be Z5_deviation
+
+        # Modify the first data row to have extreme values that
+        # will be clipped
+        inTable[1][col_z4] = 1000.0  # Extreme outlier
+        inTable[1][col_z5] = 1000.0  # Extreme outlier
+
+        # The second donut should have an outlier only in Z4
+        inTable[2][col_z4] = 1000.0
+
+        # Run the task with deviation clipping
+        self.config.zkClipType = "deviation"
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        outTable = task.combineZernikes(inTable)
+
+        # Verify that estimatorInfo exists and contains the noll indices
+        self.assertIn("estimatorInfo", outTable.meta)
+        self.assertIn("zern_clipped_rejected_noll_indices", outTable.meta["estimatorInfo"])
+        self.assertIn("zern_clipped_max_noll_index", outTable.meta["estimatorInfo"])
+
+        nollIdxRejected = outTable.meta["estimatorInfo"]["zern_clipped_rejected_noll_indices"]
+
+        # Verify structure: list of lists
+        self.assertIsInstance(nollIdxRejected, list)
+        self.assertEqual(len(nollIdxRejected), len(inTable[inTable["label"] != "average"]))
+
+        # First donut (index 0) should have Z4 and Z5 rejected
+        self.assertEqual(sorted(nollIdxRejected[0]), sorted([nollIndices[0], nollIndices[1]]))
+
+        # Second donut (index 1) should have only Z4 rejected
+        self.assertEqual(nollIdxRejected[1], [nollIndices[0]])
+
+        # Verify that nollIdxRejected entries are lists of
+        # integers (Noll indices)
+        for idx, rejected_indices in enumerate(nollIdxRejected):
+            self.assertIsInstance(rejected_indices, list)
+            for noll_idx in rejected_indices:
+                self.assertIsInstance(noll_idx, int)
+                self.assertIn(noll_idx, nollIndices)
+
+    def testZernClippedMetadata(self) -> None:
+        """Test that zern_clipped metadata is correctly added to zkTable."""
+        inTable = self.prepareTestTable()
+
+        # Run the task to add clipping information
+        outTable = self.task.combineZernikes(inTable)
+
+        # Verify that estimatorInfo exists and contains the required keys
+        self.assertIn("estimatorInfo", outTable.meta)
+        self.assertIn("zern_clipped", outTable.meta["estimatorInfo"])
+        self.assertIn("zern_clipped_rejected_noll_indices", outTable.meta["estimatorInfo"])
+        self.assertIn("zern_clipped_max_noll_index", outTable.meta["estimatorInfo"])
+
+        # Get the clipped flag array and rejection info
+        zernClipped = outTable.meta["estimatorInfo"]["zern_clipped"]
+        nollIdxRejected = outTable.meta["estimatorInfo"]["zern_clipped_rejected_noll_indices"]
+        maxNollIdx = outTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"]
+
+        # Verify zern_clipped_max_noll_idx is an integer and
+        # within valid range
+        self.assertIsInstance(maxNollIdx, (int, np.integer))
+        self.assertGreaterEqual(maxNollIdx, 1)
+        self.assertLessEqual(maxNollIdx, self.config.maxZernClip + 1)
+
+        # Verify zern_clipped is a boolean array
+        self.assertEqual(zernClipped.dtype, bool)
+
+        # Verify that zern_clipped was computed using maxNollIdx
+        # (all clipped values should be in the first maxNollIdx
+        # Zernike columns)
+        self.assertGreater(maxNollIdx, 0)
+
+        # Verify length matches number of data rows (excluding average)
+        numDataRows = len(outTable[outTable["label"] != "average"])
+        self.assertEqual(len(zernClipped), numDataRows)
+        self.assertEqual(len(nollIdxRejected), numDataRows)
+
+        # Verify consistency: if zern_clipped is True,
+        # nollIdxRejected should have entries
+        for idx, (isClipped, rejectedIndices) in enumerate(zip(zernClipped, nollIdxRejected)):
+            if isClipped:
+                self.assertGreater(
+                    len(rejectedIndices), 0, f"Row {idx} marked as clipped but has no rejected indices"
+                )
+            else:
+                self.assertEqual(
+                    len(rejectedIndices),
+                    0,
+                    f"Row {idx} not marked as clipped but has rejected indices: {rejectedIndices}",
+                )
+
+        # Verify that the used column is consistent with zern_clipped
+        usedValues = outTable["used"][outTable["label"] != "average"].tolist()
+        for idx, (isClipped, isUsed) in enumerate(zip(zernClipped, usedValues)):
+            if isClipped:
+                self.assertFalse(isUsed, f"Row {idx} is clipped but marked as used")
+            else:
+                self.assertTrue(isUsed, f"Row {idx} is not clipped but marked as unused")
