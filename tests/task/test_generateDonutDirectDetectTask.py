@@ -270,7 +270,9 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         )
 
         # Test that the length of catalogs is as expected
-        outputTable = vstack([taskOut_S11.donutCatalog, taskOut_S10.donutCatalog])
+        outputTable = vstack(
+            [taskOut_S11.donutCatalog, taskOut_S10.donutCatalog], metadata_conflicts="silent"
+        )
         self.assertEqual(len(outputTable), 6)
 
         # Test that the interactive output is as expected
@@ -366,7 +368,7 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
         self.assertEqual(np.unique(donutCatTable_S10["detector"]), "R22_S10")
 
         # Check outputs are correct
-        outputTable = vstack([donutCatTable_S11, donutCatTable_S10])
+        outputTable = vstack([donutCatTable_S11, donutCatTable_S10], metadata_conflicts="silent")
         self.assertEqual(len(outputTable), 6)
         self.assertCountEqual(
             outputTable.columns,
