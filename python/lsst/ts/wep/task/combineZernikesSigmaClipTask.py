@@ -115,7 +115,7 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
 
         # Identify which Zernikes were rejected for each donut
         whereRejected = np.where(np.isnan(sigArray[:, :effMaxZernClip]))
-        nollIdxRejected = [[] for _ in range(len(sigArray))]
+        nollIdxRejected: list[list[int]] = [[] for _ in range(len(sigArray))]
         for donut_idx, zern_idx in zip(whereRejected[0], whereRejected[1]):
             nollIdxRejected[donut_idx].append(int(zkTable.meta["noll_indices"][zern_idx]))
 
