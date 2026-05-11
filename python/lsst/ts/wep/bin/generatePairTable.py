@@ -128,7 +128,7 @@ def main() -> None:
     pairer = ExposurePairer(config=config)
 
     visitInfos = {
-        v.dataId["exposure"]: butler.get("raw.visitInfo", dataId=v.dataId)
+        int(v.dataId["exposure"]): butler.get("raw.visitInfo", dataId=v.dataId)
         for v in butler.registry.queryDatasets("raw", where=args.data_query)
     }
 

@@ -772,7 +772,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             snQuant.append(self.calculateSN(donutStamp))
 
             # Store entropy-based measure of donut quality
-            eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)
+            eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)  # type: ignore[misc]
             isEffective.append(eff)
             stampsEntropy.append(entro)
 

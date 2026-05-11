@@ -347,6 +347,7 @@ def createTemplateForDetector(
     # Create the Donut template
     if isBinary:
         imageMapper.createImageMasks(dummyImage, isBinary=True)
+        assert dummyImage.mask is not None
         template = dummyImage.mask.astype(int)
     else:
         template = imageMapper.mapPupilToImage(dummyImage)

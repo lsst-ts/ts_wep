@@ -63,7 +63,7 @@ class EstimateZernikesAiDonutTask(EstimateZernikesBaseTask):
         """Return the WfAlgorithmName enum."""
         return WfAlgorithmName.AiDonut
 
-    def _applyToList(self, fun: Callable, args: Iterable, numCores: int) -> list:
+    def _applyToList(self, fun: Callable, args: Iterable, numCores: int) -> list:  # type: ignore[override]
         """Apply a function to a list of arguments, optionally in parallel.
 
         Overriding this method from the base class to avoid multiprocessing

@@ -23,7 +23,10 @@ __all__ = ["CombineZernikesWeightedTask", "CombineZernikesWeightedConfig"]
 import numpy as np
 from astropy.table import Table
 
-from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
+from lsst.ts.wep.task.combineZernikesSigmaClipTask import (
+    CombineZernikesSigmaClipTask,
+    CombineZernikesSigmaClipTaskConfig,
+)
 
 
 def _weightedMean(vals: np.ndarray, weights: np.ndarray | None) -> np.float64:
@@ -49,7 +52,7 @@ def _weightedMean(vals: np.ndarray, weights: np.ndarray | None) -> np.float64:
     return np.average(vals[finite], weights=weights[finite])
 
 
-class CombineZernikesWeightedConfig(CombineZernikesSigmaClipTask.ConfigClass):
+class CombineZernikesWeightedConfig(CombineZernikesSigmaClipTaskConfig):
     """Configuration for CombineZernikesWeightedTask."""
 
     pass

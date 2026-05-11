@@ -102,7 +102,7 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
     _DefaultName = "calcZernikesUnpairedTask"
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         donutStamps: DonutStamps,
         intrinsicTable: Table,

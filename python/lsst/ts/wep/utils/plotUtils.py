@@ -344,7 +344,9 @@ def plotRoundTrip(
     pupilRecon = mapper.mapImageToPupil(image, zk)
 
     # Create the pupil mask
-    pupil = mapper.createPupilMask(image)
+    mapper.createPupilMasks(image)
+    assert image.mask is not None
+    pupil = image.mask
 
     # Plot everything!
     fig, axes = plt.subplots(1, 4, figsize=(10, 2), dpi=150)
@@ -406,7 +408,7 @@ def plotMapperResiduals(
     optic = instrument.getBatoidModel(band)
 
     # Determine the defocal offset
-    offset = -1 if defocalType == "intra" else +1
+    offset: float = -1 if defocalType == "intra" else +1
     offset *= instrument.defocalOffset
 
     # Create the Batoid RayVector
@@ -429,7 +431,8 @@ def plotMapperResiduals(
     uImage, vImage, *_ = mapper._constructForwardMap(
         uPupil,
         vPupil,
-        mapper.instrument.getIntrinsicZernikes(*angle, band=band, nollIndices=np.arange(4, 23)),
+        mapper.instrument.getIntrinsicZernikes(angle[0], angle[1], band=band, nollIndices=np.arange(4, 23)),
+        None,
         Image(np.zeros((1, 1)), angle, defocalType, band),
     )
 

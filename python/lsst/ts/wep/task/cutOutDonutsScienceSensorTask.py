@@ -161,6 +161,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
     ConfigClass = CutOutDonutsScienceSensorTaskConfig
     _DefaultName = "CutOutDonutsScienceSensorTask"
     config: CutOutDonutsScienceSensorTaskConfig
+    pairer: ExposurePairer
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -203,7 +204,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsOut}
 
         if hasattr(inputRefs, "donutVisitPairTable"):
-            pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable))
+            pairs = self.pairer.run(visitInfoDict, butlerQC.get(inputRefs.donutVisitPairTable))  # type: ignore[call-arg]
         else:
             pairs = self.pairer.run(visitInfoDict)
         for pair in pairs:

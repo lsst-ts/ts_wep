@@ -129,7 +129,7 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
                 detector,
                 detectorWcs,
                 filterName,
-                donutSelectorTask,
+                donutSelectorTask,  # type: ignore[arg-type]
                 edgeMargin,
             )
 

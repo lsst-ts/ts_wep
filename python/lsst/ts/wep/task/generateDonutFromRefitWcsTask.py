@@ -345,7 +345,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         return donutCatalog[inBounds]
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         astromRefCat: typing.List[afwTable.SimpleCatalog],
         exposure: afwImage.Exposure,
@@ -465,7 +465,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                     detector,
                     exposure.wcs,
                     filterName,
-                    donutSelectorTask,
+                    donutSelectorTask,  # type: ignore[arg-type]
                     edgeMargin,
                 )
                 # Create list of filters to include in final catalog
@@ -491,7 +491,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
 
                 donutCatalog = donutCatalogToAstropy(
                     refSelection,
-                    filterList,
+                    list(filterList),
                     blendCentersX,
                     blendCentersY,
                     sortFilterIdx=sortFilterIdx,

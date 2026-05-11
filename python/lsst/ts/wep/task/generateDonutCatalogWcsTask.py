@@ -207,7 +207,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
                 detector,
                 detectorWcs,
                 filterName,
-                donutSelectorTask,
+                donutSelectorTask,  # type: ignore[arg-type]
                 edgeMargin,
             )
             # Create list of filters to include in final catalog
@@ -248,7 +248,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         sortFilterIdx = filterList.index(filterName)
 
         fieldObjects = donutCatalogToAstropy(
-            refSelection, filterList, blendCentersX, blendCentersY, sortFilterIdx=sortFilterIdx
+            refSelection, list(filterList), blendCentersX, blendCentersY, sortFilterIdx=sortFilterIdx
         )
         fieldObjects["detector"] = np.array([detector.getName()] * len(fieldObjects), dtype=str)
 

@@ -170,7 +170,8 @@ class ImageMapper:
         elif self.opticalModel == "offAxis":
             # Get the off-axis coefficients
             offAxisCoeff = self.instrument.getOffAxisCoeff(
-                *image.fieldAngle,
+                image.fieldAngle[0],
+                image.fieldAngle[1],
                 image.defocalType,
                 image.bandLabel,
                 nollIndicesIntr=nollIndices,
@@ -528,7 +529,8 @@ class ImageMapper:
         # Determine which image pixels have corners inside the pupil
         dPixel = uImage[0, 1] - uImage[0, 0]
         corners = np.append(uImage[0] - dPixel / 2, uImage[0, -1] + dPixel / 2)
-        inside = polygonContains(*np.meshgrid(corners, corners), imageEdge)
+        xGrid, yGrid = np.meshgrid(corners, corners)
+        inside = polygonContains(xGrid, yGrid, imageEdge)
 
         # Select pixels that have at least one corner inside
         inside = inside[:-1, :-1] | inside[1:, :-1] | inside[:-1, 1:] | inside[1:, 1:]
@@ -831,6 +833,7 @@ class ImageMapper:
         """
         # Get the blend offsets. Note for extrafocal images, the orientation
         # is flipped with respect to the pupil
+        assert image.blendOffsets is not None
         blendOffsets = image.blendOffsets.copy()
         if isPupilMask and (image.defocalType == DefocalType.Extra):
             blendOffsets *= -1
@@ -989,6 +992,7 @@ class ImageMapper:
             sourceMask = sourceMask.astype(int)
 
         # Create the blend mask
+        assert image.blendOffsets is not None
         if len(image.blendOffsets) == 0:
             blendMask = np.zeros_like(mask)
         elif dilateBlends == "auto":
@@ -1268,7 +1272,8 @@ class ImageMapper:
         if zkCoeff is None:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
-                *image.fieldAngle,
+                image.fieldAngle[0],
+                image.fieldAngle[1],
                 band=image.bandLabel,
             )
 
@@ -1377,7 +1382,8 @@ class ImageMapper:
         if zkCoeff is None:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
-                *dummyImage.fieldAngle,
+                dummyImage.fieldAngle[0],
+                dummyImage.fieldAngle[1],
                 band=dummyImage.bandLabel,
             )
 
@@ -1446,7 +1452,8 @@ class ImageMapper:
         if zkCoeff is None:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
-                *image.fieldAngle,
+                image.fieldAngle[0],
+                image.fieldAngle[1],
                 band=image.bandLabel,
             )
 
@@ -1459,6 +1466,7 @@ class ImageMapper:
                 isBinary=True,
                 **maskKwargs,
             )
+            assert stamp.mask is not None
             template = stamp.mask.copy()
         else:
             template = self.mapPupilToImage(stamp, zkCoeff, nollIndices, **maskKwargs).image
@@ -1514,7 +1522,8 @@ class ImageMapper:
         if zkCoeff is None:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
-                *image.fieldAngle,
+                image.fieldAngle[0],
+                image.fieldAngle[1],
                 band=image.bandLabel,
             )
 
@@ -1553,6 +1562,8 @@ class ImageMapper:
 
         # Fill the image (this assumes that, except for vignetting,
         # the pupil is uniformly illuminated)
+        assert stamp.image is not None
+        assert stamp.mask is not None
         stamp.image = np.zeros_like(stamp.image)
         stamp.image[inside] = stamp.mask[inside] * jacDet
 
@@ -1607,7 +1618,8 @@ class ImageMapper:
         if zkCoeff is None:
             # Get the intrinsic Zernikes
             zkCoeff = self.instrument.getIntrinsicZernikes(
-                *image.fieldAngle,
+                image.fieldAngle[0],
+                image.fieldAngle[1],
                 band=image.bandLabel,
             )
 

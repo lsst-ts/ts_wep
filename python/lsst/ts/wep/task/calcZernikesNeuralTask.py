@@ -271,6 +271,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
     # Class constants for processing
     EXPECTED_IMAGE_DIMENSIONS = 3  # Expected dimensions for TARTS output
     LOG_PRECISION = 3  # Decimal precision for logging Zernike values
+
     # Statistic for the neural OPD/intrinsic/deviation aggregate row labeled
     # "average"; see _populateNeuralZernikeTableColumns. Copied to
     # zkTable.meta["average_row_aggregation"] on output tables.
@@ -1067,7 +1068,9 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         return aggregatedZernikes, donutStamps, deepcopy(self.tarts.total_zernikes)
 
-    def empty(self, qualityTable: QTable | None = None) -> pipeBase.Struct:
+    def empty(
+        self, qualityTable: QTable | None = None, zernikeTable: QTable | None = None
+    ) -> pipeBase.Struct:
         """Return empty results when no donuts are available for processing.
 
         This method creates empty output structures when the task cannot
@@ -1116,8 +1119,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutQualityTable = qualityTable
 
         # Set stamp attributes to None for empty case
-        self.stampsIntra = None
-        self.stampsExtra = None
+        self.stampsIntra = None  # type: ignore[assignment]
+        self.stampsExtra = None  # type: ignore[assignment]
 
         # Create empty Zernike table with metadata
         emptyZkTable = self.initZkTable()
@@ -1150,7 +1153,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         return struct
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         exposure: afwImage.Exposure,
         numCores: int = 1,
