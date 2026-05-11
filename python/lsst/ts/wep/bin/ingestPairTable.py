@@ -26,7 +26,7 @@ from argparse import ArgumentParser
 
 from astropy.table import Table
 
-from lsst.daf.butler import Butler, CollectionType, DatasetType, DimensionUniverse
+from lsst.daf.butler import Butler, CollectionType, DatasetType
 
 
 def main() -> None:
@@ -80,7 +80,7 @@ def main() -> None:
         "donutVisitPairTable",
         tuple(["instrument"]),
         "AstropyTable",
-        universe=DimensionUniverse(),
+        universe=butler.dimensions,
     )
     butler.registry.registerDatasetType(donutVisitPairTableDatasetType)
     logger.info("Registering donutVisitPairTable collection")

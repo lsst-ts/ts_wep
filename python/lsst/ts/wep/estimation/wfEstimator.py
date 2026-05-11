@@ -24,12 +24,12 @@ __all__ = ["WfEstimator"]
 from typing import Optional, Sequence, Union
 
 import numpy as np
-from astropy.coordinates import Angle
 
 from lsst.ts.wep import Image, Instrument
+from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.estimation.wfAlgorithmFactory import WfAlgorithmFactory
-from lsst.ts.wep.utils import checkNollIndices, configClass
+from lsst.ts.wep.utils import WfAlgorithmName, checkNollIndices, configClass
 
 
 class WfEstimator:
@@ -81,7 +81,7 @@ class WfEstimator:
 
     def __init__(
         self,
-        algoName: str = "tie",
+        algoName: Union[str, WfAlgorithmName] = "tie",
         algoConfig: Union[dict, WfAlgorithm, None] = None,
         instConfig: Union[str, dict, Instrument] = "policy:instruments/LsstCam.yaml",
         nollIndices: Sequence = tuple(np.arange(4, 12)),
@@ -273,7 +273,7 @@ class WfEstimator:
         self,
         I1: Image,
         I2: Optional[Image] = None,
-        rtp: Optional[Angle] = None,
+        obs: Optional[ObservingConditions] = None,
     ) -> tuple[np.ndarray, dict]:
         """Estimate Zernike coefficients of the wavefront from the stamp(s).
 
@@ -284,8 +284,9 @@ class WfEstimator:
         I2 : Image, optional
             A second image, on the opposite side of focus from I1.
             (the default is None)
-        rtp : Angle, optional
-            The rotation angle of the camera on the telescope.
+        obs : ObservingConditions or None, optional
+            Per-observation telescope pointing state (rotator angle, altitude).
+            (the default is None)
 
         Returns
         -------
@@ -303,7 +304,7 @@ class WfEstimator:
         return self.algo.estimateZk(
             I1=I1,
             I2=I2,
-            rtp=rtp,
+            obs=obs,
             nollIndices=self.nollIndices,
             instrument=self.instrument,
             startWithIntrinsic=self.startWithIntrinsic,

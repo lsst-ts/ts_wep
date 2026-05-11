@@ -23,17 +23,18 @@ __all__ = ["DanishAlgorithm"]
 
 import logging
 import warnings
+from typing import Callable
 
 import danish
 import galsim
 import numpy as np
-from astropy.coordinates import Angle
 from galsim import GalSimFFTSizeError
 from scipy.ndimage import binary_erosion
 from scipy.optimize import OptimizeResult, least_squares
 from scipy.stats import median_abs_deviation
 
 from lsst.ts.wep import Image, ImageMapper, Instrument
+from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
 from lsst.ts.wep.utils import binArray
 
@@ -64,6 +65,14 @@ class DanishAlgorithm(WfAlgorithm):
     bkgOrder: int = 0,
         The order of the background polynomial to fit. A value of -1 means
         no background fitting, a value of 0 is a constant background, etc.
+    doAoiThroughput : bool, optional
+        Whether to apply angle-of-incidence throughput correction in the
+        danish forward model. (the default is False)
+    systematicLossAlpha : float, optional
+        Fractional systematic uncertainty for the loss function. The
+        effective per-pixel variance becomes var + model + (alpha*model)**2,
+        which caps per-pixel SNR. A value of 0 (the default) recovers the
+        standard chi-squared loss.
     """
 
     def __init__(
@@ -73,12 +82,16 @@ class DanishAlgorithm(WfAlgorithm):
         jointFitPair: bool = True,
         modelSpiderShadows: bool = False,
         bkgOrder: int = 0,
+        doAoiThroughput: bool = False,
+        systematicLossAlpha: float = 0.0,
     ) -> None:
         self.binning = binning
         self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
         self.jointFitPair = jointFitPair
         self.modelSpiderShadows = modelSpiderShadows
         self.bkgOrder = bkgOrder
+        self.doAoiThroughput = doAoiThroughput
+        self.systematicLossAlpha = systematicLossAlpha
         self.log = logging.getLogger(__name__)
 
         galsim.errors.raise_fft_size_error = True
@@ -197,7 +210,8 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Create reference Zernikes by adding off-axis coefficients to zkStart
         offAxisCoeff = instrument.getOffAxisCoeff(
-            *image.fieldAngle,
+            image.fieldAngle[0],
+            image.fieldAngle[1],
             image.defocalType,
             image.bandLabel,
             nollIndicesModel=np.arange(0, 79),
@@ -252,6 +266,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
+        loss_fn: Callable | None = None,
     ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for a single donut stamp.
 
@@ -269,6 +284,10 @@ class DanishAlgorithm(WfAlgorithm):
             The Danish donut factory
         saveHistory : bool
             Whether to create a history to be saved
+        loss_fn : callable or None, optional
+            Loss function to pass to SingleDonutModel.
+            If None, the danish default (chi2_loss) is used.
+            (the default is None)
 
         Returns
         -------
@@ -287,6 +306,9 @@ class DanishAlgorithm(WfAlgorithm):
         )
 
         # Create the Danish donut model
+        model_kwargs: dict = {}
+        if loss_fn is not None:
+            model_kwargs["loss_fn"] = loss_fn
         model = danish.SingleDonutModel(
             factory,
             z_ref=zkRef,
@@ -295,6 +317,7 @@ class DanishAlgorithm(WfAlgorithm):
             thy=angle[1],
             npix=img.shape[0],
             bkg_order=self.bkgOrder,
+            **model_kwargs,
         )
 
         # Create the initial guess for the model parameters
@@ -442,6 +465,7 @@ class DanishAlgorithm(WfAlgorithm):
         instrument: Instrument,
         factory: danish.DonutFactory,
         saveHistory: bool,
+        loss_fn: Callable | None = None,
     ) -> tuple[np.ndarray, dict, dict]:
         """Estimate Zernikes (in meters) for pairs of donut stamps.
 
@@ -465,6 +489,10 @@ class DanishAlgorithm(WfAlgorithm):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
+        loss_fn : callable or None, optional
+            Loss function to pass to DZMultiDonutModel.
+            If None, the danish default (chi2_loss) is used.
+            (the default is None)
 
         Returns
         -------
@@ -482,6 +510,7 @@ class DanishAlgorithm(WfAlgorithm):
             nollIndices=nollIndices,
             instrument=instrument,
         )
+        assert I2 is not None  # guaranteed by caller when jointFitPair is True
         img2, angle2, zkRef2, backgroundStd2 = self._prepDanish(
             image=I2,
             zkStart=zkStartI2,
@@ -513,6 +542,9 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Create model
         self.log.info("Creating multi-donut model with danish.")
+        model_kwargs = {}
+        if loss_fn is not None:
+            model_kwargs["loss_fn"] = loss_fn
         model = danish.DZMultiDonutModel(
             factory,
             z_refs=zkRefs,
@@ -522,6 +554,7 @@ class DanishAlgorithm(WfAlgorithm):
             thys=thys,
             npix=imgs[0].shape[0],
             bkg_order=self.bkgOrder,
+            **model_kwargs,
             # galsim_params={'maximum_fft_size': 65536}
         )
 
@@ -735,12 +768,12 @@ class DanishAlgorithm(WfAlgorithm):
         self,
         I1: Image,
         I2: Image | None,
-        rtp: Angle | None,
         zkStartI1: np.ndarray,
         zkStartI2: np.ndarray | None,
         nollIndices: np.ndarray,
         instrument: Instrument,
         saveHistory: bool,
+        obs: ObservingConditions | None = None,
     ) -> tuple[np.ndarray, dict]:
         """Return the wavefront Zernike coefficients in meters.
 
@@ -750,8 +783,6 @@ class DanishAlgorithm(WfAlgorithm):
             An Image object containing an intra- or extra-focal donut image.
         I2 : Image or None
             A second image, on the opposite side of focus from I1. Can be None.
-        rtp : Angle or None
-            The rotation angle of the camera on the telescope.
         zkStartI1 : np.ndarray
             The starting Zernikes for I1 (in meters, for Noll indices >= 4)
         zkStartI2 : np.ndarray or None
@@ -764,6 +795,10 @@ class DanishAlgorithm(WfAlgorithm):
             Whether to save the algorithm history in the self.history
             attribute. If True, then self.history contains information
             about the most recent time the algorithm was run.
+        obs : ObservingConditions or None, optional
+            Per-observation telescope pointing state. The rotator angle is
+            used for spider shadow modeling; the altitude is used to compute
+            airmass for the AOI throughput correction. (the default is None)
 
         Returns
         -------
@@ -773,12 +808,39 @@ class DanishAlgorithm(WfAlgorithm):
         dict
             Output from the danish algorithm to pass on as metadata.
         """
+        rtp = obs.rtp if obs is not None else None
+        altitude = obs.altitude if obs is not None else None
         if rtp is not None and self.modelSpiderShadows:
             rtp = rtp.wrap_at("180d").to_value("degree")
             self.log.info("Using RTP angle %s deg.", rtp)
         else:
             rtp = None
+        # Determine AOI throughput correction parameters
+        bandpass_filter = None
+        airmass = 1.2  # default if no altitude provided.
+        if self.doAoiThroughput:
+            band = I1.bandLabel.value
+            if band in ("u", "g", "r", "i", "z", "y"):
+                bandpass_filter = band
+            else:
+                self.log.warning(
+                    "Bandpass '%s' not supported for AOI throughput correction; skipping.",
+                    band,
+                )
+            if altitude is not None:
+                raw_airmass = 1.0 / np.sin(altitude.rad)
+                airmass = float(np.clip(round(raw_airmass, 1), 1.0, 2.5))
+
+        # Create the loss function (requires danish v1.1)
+        loss_fn = None
+        if self.systematicLossAlpha != 0:
+            loss_fn = danish.systematic_loss(self.systematicLossAlpha)
+
         # Create the Danish donut factory
+        factory_kwargs: dict = {}
+        if self.doAoiThroughput:
+            factory_kwargs["bandpass_filter"] = bandpass_filter
+            factory_kwargs["airmass"] = airmass
         factory = danish.DonutFactory(
             R_outer=instrument.radius,
             R_inner=instrument.radius * instrument.obscuration,
@@ -786,6 +848,7 @@ class DanishAlgorithm(WfAlgorithm):
             focal_length=instrument.focalLength,
             pixel_scale=instrument.pixelSize * self.binning,
             spider_angle=rtp,
+            **factory_kwargs,
         )
 
         if I2 is None or not self.jointFitPair:
@@ -800,6 +863,7 @@ class DanishAlgorithm(WfAlgorithm):
                 instrument,
                 factory,
                 saveHistory,
+                loss_fn,
             )
 
             if I2 is not None:
@@ -811,6 +875,7 @@ class DanishAlgorithm(WfAlgorithm):
                     instrument,
                     factory,
                     saveHistory,
+                    loss_fn,
                 )
 
                 # Average the Zernikes
@@ -832,6 +897,7 @@ class DanishAlgorithm(WfAlgorithm):
                 instrument,
                 factory,
                 saveHistory,
+                loss_fn,
             )
 
         if saveHistory:
