@@ -34,7 +34,9 @@ class ObservingConditions:
     Parameters
     ----------
     rtp : Angle or None, optional
-        Rotation angle of the camera on the telescope.
+        Rotation angle of the camera on the telescope.  Note that this is
+        not the same as BORESIGHT_ROT_ANG, which is the rotation angle of
+        the camera on the sky.
         (the default is None, meaning unknown or not applicable)
     altitude : Angle or None, optional
         Boresight altitude.
