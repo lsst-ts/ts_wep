@@ -217,7 +217,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         ) as mock_model:
             dan_default.estimateZk(intra)
 
-        loss_fn_zero = mock_model.call_args.kwargs["loss_fn"]
+        loss_fn_zero = mock_model.call_args.kwargs.get("loss_fn", danish_pkg.chi2_loss)
         data, model_vals, var = np.ones(10), np.ones(10) * 2, np.ones(10)
         np.testing.assert_array_equal(
             loss_fn_zero(data, model_vals, var),
