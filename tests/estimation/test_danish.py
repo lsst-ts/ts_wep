@@ -20,15 +20,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
+from unittest.mock import patch
 
 from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
 enforce_single_threading()
 
 # Then import libraries
-import numpy as np  # noqa: E402
+import danish as danish_pkg  # noqa: E402
+from packaging.version import Version  # noqa: E402
 
-from lsst.ts.wep.estimation import DanishAlgorithm  # noqa: E402
+_DANISH_V1_1 = Version(danish_pkg.__version__) >= Version("1.1")
+_requires_danish_v1_1 = unittest.skipUnless(_DANISH_V1_1, "requires danish >= 1.1")
+import numpy as np  # noqa: E402
+from astropy.coordinates import Angle  # noqa: E402
+
+from lsst.ts.wep.estimation import DanishAlgorithm, ObservingConditions  # noqa: E402
 from lsst.ts.wep.utils.modelUtils import forwardModelPair  # noqa: E402
 
 # Directly configure NumPy if using version that supports it
@@ -83,7 +90,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 # Test estimation with pairs and single donuts:
                 for images in [[intra, extra], [intra], [extra]]:
                     # Estimate Zernikes (in meters)
-                    zkEst, _ = dan.estimateZk(*images)
+                    zkEst, _ = dan.estimateZk(*images)  # type: ignore[arg-type]
 
                     # Check that results are fairly accurate
                     self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
@@ -123,7 +130,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                 # Test estimation with pairs and single donuts:
                 for images in [[intra, extra], [intra], [extra]]:
                     # Estimate Zernikes (in meters)
-                    zkEst, _ = danBin.estimateZk(*images, saveHistory=True)
+                    zkEst, _ = danBin.estimateZk(*images, saveHistory=True)  # type: ignore[arg-type, misc]
                     self.assertLess(np.sqrt(np.sum((zkEst - zkTrue) ** 2)), 0.35e-6)
 
                     # Test that we binned the images.
@@ -175,3 +182,75 @@ class TestDanishAlgorithm(unittest.TestCase):
         np.testing.assert_allclose(
             pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
+
+    @_requires_danish_v1_1
+    def testSystematicLossAlpha(self) -> None:
+        """Test that alpha is passed as loss_fn to SingleDonutModel and
+        DZMultiDonutModel. Uses max_nfev=1 to keep runtime minimal."""
+        _, intra, extra = forwardModelPair()
+
+        # Single-donut path: verify loss_fn != chi2_loss for alpha=0.05
+        dan = DanishAlgorithm(systematicLossAlpha=0.05, lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.SingleDonutModel",
+            wraps=danish_pkg.SingleDonutModel,
+        ) as mock_model:
+            dan.estimateZk(intra)
+
+        loss_fn_nonzero = mock_model.call_args.kwargs["loss_fn"]
+        self.assertIsNot(loss_fn_nonzero, danish_pkg.chi2_loss)
+
+        # Pair path: verify DZMultiDonutModel also receives the loss_fn
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DZMultiDonutModel",
+            wraps=danish_pkg.DZMultiDonutModel,
+        ) as mock_model:
+            dan.estimateZk(intra, extra)
+
+        self.assertIsNot(mock_model.call_args.kwargs["loss_fn"], danish_pkg.chi2_loss)
+
+        # Default alpha=0: loss_fn should behave identically to chi2_loss
+        dan_default = DanishAlgorithm(systematicLossAlpha=0.0, lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.SingleDonutModel",
+            wraps=danish_pkg.SingleDonutModel,
+        ) as mock_model:
+            dan_default.estimateZk(intra)
+
+        loss_fn_zero = mock_model.call_args.kwargs.get("loss_fn", danish_pkg.chi2_loss)
+        data, model_vals, var = np.ones(10), np.ones(10) * 2, np.ones(10)
+        np.testing.assert_array_equal(
+            loss_fn_zero(data, model_vals, var),
+            danish_pkg.chi2_loss(data, model_vals, var),
+        )
+
+    @_requires_danish_v1_1
+    def testDoAoiThroughput(self) -> None:
+        """Test that doAoiThroughput passes correct bandpass_filter and airmass
+        to DonutFactory. Uses max_nfev=1 to keep runtime minimal."""
+        _, intra, extra = forwardModelPair()
+        dan = DanishAlgorithm(doAoiThroughput=True, lstsqKwargs={"max_nfev": 1})
+
+        # 45 deg altitude → raw airmass = 1/sin(45°) ≈ 1.414 → rounds to 1.4
+        obs = ObservingConditions(altitude=Angle(np.pi / 4, "rad"))
+
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutFactory",
+            wraps=danish_pkg.DonutFactory,
+        ) as mock_factory:
+            dan.estimateZk(intra, extra, obs=obs)
+
+        call_kwargs = mock_factory.call_args.kwargs
+        self.assertEqual(call_kwargs["bandpass_filter"], "r")
+        self.assertAlmostEqual(call_kwargs["airmass"], 1.4)
+
+        # With no altitude, airmass falls back to the default (1.2)
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutFactory",
+            wraps=danish_pkg.DonutFactory,
+        ) as mock_factory:
+            dan.estimateZk(intra, extra, obs=ObservingConditions())
+
+        call_kwargs = mock_factory.call_args.kwargs
+        self.assertEqual(call_kwargs["bandpass_filter"], "r")
+        self.assertAlmostEqual(call_kwargs["airmass"], 1.2)

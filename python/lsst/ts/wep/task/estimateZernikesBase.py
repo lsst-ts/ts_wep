@@ -32,7 +32,7 @@ from astropy.coordinates import Angle
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-from lsst.ts.wep.estimation import WfAlgorithm, WfAlgorithmFactory, WfEstimator
+from lsst.ts.wep.estimation import ObservingConditions, WfAlgorithm, WfAlgorithmFactory, WfEstimator
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -42,12 +42,14 @@ from lsst.ts.wep.utils import (
 )
 
 
-def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, Angle, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_pair(
+    args: tuple[DonutStamp, DonutStamp, ObservingConditions, WfEstimator],
+) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a pair of donuts."""
-    donutExtra, donutIntra, rtp, wfEstimator = args
+    donutExtra, donutIntra, obs, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Extra Donut {donutExtra.donut_id}, Intra Donut {donutIntra.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, rtp)
+    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, obs)
     log.info(
         f"Zernike estimation completed for Extra Donut {donutExtra.donut_id}, "
         f"Intra Donut {donutIntra.donut_id}"
@@ -61,12 +63,14 @@ def estimate_zk_pair(args: tuple[DonutStamp, DonutStamp, Angle, WfEstimator]) ->
     return zk, zkMeta, wfEstimator.history
 
 
-def estimate_zk_single(args: tuple[DonutStamp, Angle, WfEstimator]) -> tuple[np.array, dict, dict]:
+def estimate_zk_single(
+    args: tuple[DonutStamp, ObservingConditions, WfEstimator],
+) -> tuple[np.array, dict, dict]:
     """Estimate Zernike coefficients for a single donut."""
-    donut, rtp, wfEstimator = args
+    donut, obs, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Donut {donut.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, rtp)
+    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, obs)
     log.info(f"Zernike estimation completed for Donut {donut.donut_id}")
     # Log number of function evaluations if available (currently only danish)
     if (nfev := zkMeta.get("lstsq_nfev")) is not None:
@@ -167,29 +171,36 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return results
 
-    @staticmethod
-    def _get_rtp(donutStamps: DonutStamps | None) -> Angle:
-        """Get the camera rotator angle
+    def _get_obs_conditions(self, donutStamps: DonutStamps | None) -> ObservingConditions:
+        """Extract per-observation pointing state from stamp metadata.
 
         Parameters
         ----------
-        donutStamps : DonutStamps
-            Donut postage stamps holding rotator metadata.
+        donutStamps : DonutStamps or None
+            Donut postage stamps holding boresight metadata.
 
         Returns
         -------
-        Angle
-            The rotation angle of the camera on the telescope.
+        ObservingConditions
+            Rotator angle and altitude extracted from metadata.
+            Fields are None when the corresponding metadata key is absent.
         """
         if not donutStamps:
-            return Angle(np.nan, "rad")
+            return ObservingConditions()
         metadata = donutStamps.metadata
-        try:
-            rsp = metadata["BORESIGHT_ROT_ANGLE_RAD"]
-            q = metadata["BORESIGHT_PAR_ANGLE_RAD"]
-        except KeyError:
-            return Angle(np.nan, "rad")
-        return Angle(q - rsp - np.pi / 2, "rad")
+
+        def get_or_warn(key: str) -> float:
+            val = metadata.get(key, np.nan)
+            if np.isnan(val):
+                self.log.warning("%s missing from donut stamp metadata.", key)
+            return val
+
+        rsp = get_or_warn("BORESIGHT_ROT_ANGLE_RAD")
+        q = get_or_warn("BORESIGHT_PAR_ANGLE_RAD")
+        alt = get_or_warn("BORESIGHT_ALT_RAD")
+        rtp = None if np.isnan(rsp) or np.isnan(q) else Angle(q - rsp - np.pi / 2, "rad")
+        altitude = None if np.isnan(alt) else Angle(alt, "rad")
+        return ObservingConditions(rtp=rtp, altitude=altitude)
 
     def estimateFromPairs(
         self,
@@ -224,10 +235,10 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             one for each pair of donuts.
         """
         self.log.info("Estimating paired Zernikes.")
-        rtp = self._get_rtp(donutStampsExtra)
+        obs = self._get_obs_conditions(donutStampsExtra)
         # Loop over pairs in a multiprocessing pool
         args = [
-            (donutExtra, donutIntra, rtp, wfEstimator)
+            (donutExtra, donutIntra, obs, wfEstimator)
             for donutExtra, donutIntra in zip(donutStampsExtra, donutStampsIntra)
         ]
         results = self._applyToList(estimate_zk_pair, args, numCores)
@@ -281,9 +292,9 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             one for each donut.
         """
         self.log.info("Estimating single sided Zernikes.")
-        rtp = self._get_rtp(donutStampsExtra)
+        obs = self._get_obs_conditions(donutStampsExtra)
         # Loop over individual donut stamps with a process pool
-        args = [(donut, rtp, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
+        args = [(donut, obs, wfEstimator) for donut in itertools.chain(donutStampsExtra, donutStampsIntra)]
         results = self._applyToList(estimate_zk_single, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
