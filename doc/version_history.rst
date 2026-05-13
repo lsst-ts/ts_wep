@@ -17,6 +17,19 @@ Version History
 
 .. towncrier release notes start
 
+v17.2.0 (2026-05-13)
+====================
+
+New Features
+------------
+
+- Add support for danish v1.1 features:
+
+  - Add `systematicLossAlpha` configuration option to `DanishAlgorithm` to enable a robust systematic loss function during fitting.
+  - Add `doAoiThroughput` configuration option to `DanishAlgorithm` to enable angle-of-incidence throughput corrections.
+  - Add `ObservingConditions` dataclass to bundle per-observation metadata (rotator angle, altitude) into a single object passed through the estimation call chain. (`DM-54906 <https://rubinobs.atlassian.net//browse/DM-54906>`_)
+
+
 v17.1.0 (2026-05-08)
 ====================
 
