@@ -112,5 +112,60 @@ class TestApplyToList(unittest.TestCase):
         self.assertTrue(any("timed out" in msg for msg in cm.output))
 
 
+class TestGetObsConditions(unittest.TestCase):
+    def setUp(self) -> None:
+        self.task = _ConcreteTask()
+
+    def _makeStamps(self, metadata: dict) -> MagicMock:
+        # Only .metadata is needed; MagicMock auto-creates any other attribute
+        # that gets touched so we don't need a real stamp/butler object.
+        stamps = MagicMock()
+        stamps.metadata = metadata
+        return stamps
+
+    def testNoneInputReturnsEmpty(self) -> None:
+        result = self.task._get_obs_conditions(None)
+        self.assertIsInstance(result, ObservingConditions)
+        self.assertIsNone(result.rtp)
+        self.assertIsNone(result.altitude)
+
+    def testAllKeysPresent(self) -> None:
+        rsp = 0.1
+        q = 0.3
+        alt = 1.0
+        stamps = self._makeStamps(
+            {
+                "BORESIGHT_ROT_ANGLE_RAD": rsp,
+                "BORESIGHT_PAR_ANGLE_RAD": q,
+                "BORESIGHT_ALT_RAD": alt,
+            }
+        )
+        result = self.task._get_obs_conditions(stamps)
+
+        expected_rtp = Angle(q - rsp - np.pi / 2, "rad")
+        expected_alt = Angle(alt, "rad")
+        self.assertAlmostEqual(result.rtp.rad, expected_rtp.rad)
+        self.assertAlmostEqual(result.altitude.rad, expected_alt.rad)
+
+    def testMissingKeysYieldsNoneFields(self) -> None:
+        stamps = self._makeStamps({})
+        with self.assertLogs(level="WARNING") as cm:
+            result = self.task._get_obs_conditions(stamps)
+
+        self.assertIsNone(result.rtp)
+        self.assertIsNone(result.altitude)
+        # One warning per missing key
+        self.assertEqual(sum("missing" in msg for msg in cm.output), 3)
+
+    def testPartialMetadataNoneRtp(self) -> None:
+        # altitude present but rsp/q missing → rtp cannot be computed
+        stamps = self._makeStamps({"BORESIGHT_ALT_RAD": 0.8})
+        with self.assertLogs(level="WARNING"):
+            result = self.task._get_obs_conditions(stamps)
+
+        self.assertIsNone(result.rtp)
+        self.assertAlmostEqual(result.altitude.rad, 0.8)
+
+
 if __name__ == "__main__":
     unittest.main()
