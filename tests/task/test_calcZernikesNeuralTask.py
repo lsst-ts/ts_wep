@@ -44,10 +44,14 @@ enforce_single_threading()
 _TARTS_AVAILABLE = importlib.util.find_spec("tarts") is not None
 # TODO: Remove this module-wide skip once on-sky testing is complete and
 # TARTS becomes available in standard CI/test environments.
-pytestmark = pytest.mark.skipif(
-    not _TARTS_AVAILABLE,
-    reason="requires the TARTS package currently in development",
-)
+# Equivalent to @pytest.mark.pipeline and the skipif on every test below.
+pytestmark = [
+    pytest.mark.skipif(
+        not _TARTS_AVAILABLE,
+        reason="requires the TARTS package currently in development",
+    ),
+    pytest.mark.pipeline,
+]
 
 
 class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
@@ -176,7 +180,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         self.task = CalcZernikesNeuralTask(config=self.config, name="Neural Task")
 
         # Set the run name for data collection
-        self.runName = "pretest_run_cwfs"
+        self.runName = self.__class__.runName
 
         # Initialize Butler and registry for data loading
         self.butler = Butler.from_config(self.repoDir)

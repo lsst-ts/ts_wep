@@ -23,6 +23,7 @@ import os
 
 import astropy.units as u
 import numpy as np
+import pytest
 from astropy.table import QTable
 
 import lsst.utils.tests
@@ -42,6 +43,9 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):

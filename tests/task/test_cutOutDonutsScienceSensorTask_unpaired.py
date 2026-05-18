@@ -21,6 +21,8 @@
 
 import os
 
+import pytest
+
 import lsst.utils.tests
 from lsst.daf.butler import Butler, DatasetNotFoundError
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
@@ -33,6 +35,9 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):

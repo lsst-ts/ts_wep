@@ -32,7 +32,7 @@ __version__ = "{version}"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "-vsx --capture=no --run-pretest"
+addopts = "-vsx --capture=no"
 log_cli_level = "DEBUG"
 
 [project.optional-dependencies]

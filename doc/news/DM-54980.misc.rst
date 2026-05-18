@@ -1,0 +1,3 @@
+The pre-test Butler pipeline now runs automatically when pipeline integration tests are collected, rather than being forced on every ``pytest`` invocation via ``addopts``.
+Tests requiring the pipeline are marked with ``pytest.mark.pipeline``.
+Use ``-m "not pipeline"`` to exclude them and skip the pipeline setup entirely.

@@ -24,6 +24,7 @@ import unittest
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from lsst.daf.butler import Butler
 from lsst.obs.lsst import LsstCam
@@ -39,6 +40,9 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestDonutQuickMeasurementTask(unittest.TestCase):

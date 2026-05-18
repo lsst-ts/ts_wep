@@ -46,6 +46,11 @@ from lsst.ts.wep.utils import (
 )
 from scipy.interpolate import RegularGridInterpolator, LinearNDInterpolator
 
+import pytest
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
+
 
 class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
     runName: str
