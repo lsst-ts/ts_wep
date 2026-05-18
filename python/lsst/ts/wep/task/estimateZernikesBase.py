@@ -113,6 +113,13 @@ class EstimateZernikesBaseConfig(pexConfig.Config):
         + "estimation, but doing so will provide intermediate products from "
         + "the estimation process.",
     )
+    timeout: pexConfig.Field = pexConfig.Field(
+        dtype=int,
+        default=600,
+        doc="Timeout in seconds for the multiprocessing pool. If the pool "
+        + "does not complete within this time, an empty results list is "
+        + "returned.",
+    )
 
 
 class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
@@ -142,8 +149,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return WfAlgorithmFactory.createWfAlgorithm(self.wfAlgoName, algoConfig)
 
-    @staticmethod
-    def _applyToList(fun: Callable, args: Iterable, numCores: int) -> list:
+    def _applyToList(self, fun: Callable, args: Iterable, numCores: int) -> list:
         """Apply a function to a list of arguments, optionally in parallel.
 
         If numCores is 1, multiprocessing is bypassed entirely to avoid issues
@@ -167,7 +173,15 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             results = [fun(arg) for arg in args]
         else:
             with mp.Pool(processes=numCores) as pool:
-                results = pool.map(fun, args)
+                try:
+                    async_result = pool.map_async(fun, args)
+                    results = async_result.get(timeout=self.config.timeout)
+                except mp.TimeoutError:
+                    self.log.error(
+                        "Zernike estimation timed out after %d seconds. Returning empty results.",
+                        self.config.timeout,
+                    )
+                    results = []
 
         return results
 
