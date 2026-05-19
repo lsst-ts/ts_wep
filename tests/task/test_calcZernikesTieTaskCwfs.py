@@ -22,6 +22,7 @@
 import os
 
 import numpy as np
+import pytest
 
 import lsst.utils.tests
 from lsst.daf.butler import Butler
@@ -39,6 +40,9 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):

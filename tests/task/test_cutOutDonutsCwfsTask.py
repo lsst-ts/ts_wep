@@ -22,6 +22,7 @@
 import os
 from copy import copy
 
+import pytest
 from astropy.table import QTable
 
 import lsst.afw.image as afwImage
@@ -40,6 +41,9 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestCutOutDonutsCwfsTask(lsst.utils.tests.TestCase):

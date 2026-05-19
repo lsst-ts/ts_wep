@@ -22,6 +22,7 @@
 import os
 
 import numpy as np
+import pytest
 from astropy.table import QTable
 from scipy.signal import correlate
 
@@ -44,6 +45,9 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
