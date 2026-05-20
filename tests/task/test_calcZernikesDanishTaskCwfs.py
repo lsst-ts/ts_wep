@@ -393,6 +393,23 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             self.assertFalse(zkCalc["used"][i])
         self.assertTrue(zkCalc["used"][0])  # Average row should still be True
 
+        # Check that all metadata values are still populated even with fit failures
+        self.assertIn("estimatorInfo", zkCalc.meta)
+        self.assertIn("fwhm", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_dx", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_dy", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_flux", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_bkg", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_cost", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_optimality", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_nfev", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_njev", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_status", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_success", zkCalc.meta["estimatorInfo"])
+        self.assertIn("fit_success", zkCalc.meta["estimatorInfo"])
+        self.assertIn("chi_square", zkCalc.meta["estimatorInfo"])
+        self.assertIn("blur_clipped", zkCalc.meta["estimatorInfo"])
+
     def testBlurClip(self) -> None:
         # Get sample zernike table
         zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
