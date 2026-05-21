@@ -305,6 +305,45 @@ class DanishAlgorithm(WfAlgorithm):
             instrument=instrument,
         )
 
+        # Early bail-out for bad images.
+        # If the image has negative total flux after background subtraction,
+        # the donut is corrupted (e.g. bad amplifier, saturation bleed).
+        # Attempting to fit will produce NaN in the Jacobian and crash SVD.
+        if np.sum(img) <= 0:
+            self.log.warning(
+                "Skipping single donut: non-positive flux (sum=%.1f). "
+                "Returning NaN Zernikes.",
+                np.sum(img),
+            )
+            zkFit = np.full_like(zkStart, np.nan)
+            zkSum = np.full_like(zkStart, np.nan)
+            hist = {}
+            if saveHistory:
+                hist = {
+                    "image": img.copy(),
+                    "variance": backgroundStd**2,
+                    "nollIndices": nollIndices.copy(),
+                    "zkStart": zkStart.copy(),
+                    "lstsqResult": {},
+                    "zkFit": zkFit.copy(),
+                    "zkSum": zkSum.copy(),
+                    "model": np.full_like(img, np.nan),
+                    "GalSimFFTSizeError": True,
+                }
+            zkMeta = {
+                "fwhm": np.nan,
+                "model_dx": np.nan,
+                "model_dy": np.nan,
+                "chi_square": np.nan,
+                "model_flux": np.nan,
+                "model_bkg": (),
+                "exception_status": f"Non-positive flux: sum={np.sum(img):.1f}",
+                "fit_success": False,
+            }
+            for key in ["cost", "optimality", "nfev", "njev", "status", "success"]:
+                zkMeta[f"lstsq_{key}"] = None
+            return zkSum, hist, zkMeta
+
         # Create the Danish donut model
         model_kwargs: dict = {}
         if loss_fn is not None:
@@ -394,9 +433,10 @@ class DanishAlgorithm(WfAlgorithm):
                 for msg in [
                     "zero-size array",
                     "cannot convert float NaN to integer",
+                    "must not contain infs or NaNs",
                 ]
             ):
-                self.log.warning(f"Returning nans for fit due to following galsim error: {str(e)}")
+                self.log.warning(f"Returning nans for fit due to following error: {str(e)}")
             else:
                 raise
             exception_status = str(e)
@@ -517,6 +557,57 @@ class DanishAlgorithm(WfAlgorithm):
             nollIndices=nollIndices,
             instrument=instrument,
         )
+
+        # Early bail-out for bad images.
+        # If either image has negative total flux after background subtraction,
+        # the donut is corrupted (e.g. bad amplifier, saturation bleed).
+        # Attempting to fit will produce NaN in the Jacobian and crash SVD.
+        for i, (img, label) in enumerate([(img1, "img1"), (img2, "img2")]):
+            if np.sum(img) <= 0:
+                self.log.warning(
+                    "Skipping pair: %s has non-positive flux (sum=%.1f). "
+                    "Returning NaN Zernikes.",
+                    label, np.sum(img),
+                )
+                zkFit = np.full_like(zkStartI1, np.nan)
+                zkSum = np.full_like(zkStartI1, np.nan)
+                hist = {}
+                if saveHistory:
+                    hist[I1.defocalType.value] = {
+                        "image": img1.copy(),
+                        "variance": backgroundStd1**2,
+                        "nollIndices": nollIndices.copy(),
+                        "zkStart": zkStartI1.copy(),
+                        "lstsqResult": {},
+                        "zkFit": zkFit.copy(),
+                        "zkSum": zkSum.copy(),
+                        "model": np.full_like(img1, np.nan),
+                        "GalSimFFTSizeError": True,
+                    }
+                    hist[I2.defocalType.value] = {
+                        "image": img2.copy(),
+                        "variance": backgroundStd2**2,
+                        "nollIndices": nollIndices.copy(),
+                        "zkStart": zkStartI2.copy(),
+                        "lstsqResult": {},
+                        "zkFit": zkFit.copy(),
+                        "zkSum": zkSum.copy(),
+                        "model": np.full_like(img2, np.nan),
+                        "GalSimFFTSizeError": True,
+                    }
+                zkMeta = {
+                    "fwhm": np.nan,
+                    "model_dx": np.full(2, np.nan),
+                    "model_dy": np.full(2, np.nan),
+                    "chi_square": np.nan,
+                    "model_flux": np.full(2, np.nan),
+                    "model_bkg": ((), ()),
+                    "exception_status": f"Non-positive flux in {label}: sum={np.sum(img):.1f}",
+                    "fit_success": False,
+                }
+                for key in ["cost", "optimality", "nfev", "njev", "status", "success"]:
+                    zkMeta[f"lstsq_{key}"] = None
+                return zkSum, hist, zkMeta
 
         # Package these into lists for Danish
         imgs = [img1, img2]
@@ -690,9 +781,14 @@ class DanishAlgorithm(WfAlgorithm):
             elif "zero-size array" in str(e):
                 msg = "Empty optical kernel — aberrations pushed rays out of pupil."
             elif "Initial guess is outside of provided bounds" in str(e):
-                msg = "Initial guess outside bounds (likely negative flux after background subtraction)."
+                msg = (
+                    "Initial guess outside bounds "
+                    "(likely negative flux after background subtraction)."
+                )
             elif "cannot convert float NaN to integer" in str(e):
                 msg = "NaN encountered in conversion."
+            elif "must not contain infs or NaNs" in str(e):
+                msg = "NaN/Inf in Jacobian (likely from negative-flux image)."
             else:
                 raise
             self.log.warning("Returning nans for fit due to %s", msg)
