@@ -311,8 +311,7 @@ class DanishAlgorithm(WfAlgorithm):
         # Attempting to fit will produce NaN in the Jacobian and crash SVD.
         if np.sum(img) <= 0:
             self.log.warning(
-                "Skipping single donut: non-positive flux (sum=%.1f). "
-                "Returning NaN Zernikes.",
+                "Skipping single donut: non-positive flux (sum=%.1f). Returning NaN Zernikes.",
                 np.sum(img),
             )
             zkFit = np.full_like(zkStart, np.nan)
@@ -565,9 +564,9 @@ class DanishAlgorithm(WfAlgorithm):
         for i, (img, label) in enumerate([(img1, "img1"), (img2, "img2")]):
             if np.sum(img) <= 0:
                 self.log.warning(
-                    "Skipping pair: %s has non-positive flux (sum=%.1f). "
-                    "Returning NaN Zernikes.",
-                    label, np.sum(img),
+                    "Skipping pair: %s has non-positive flux (sum=%.1f). Returning NaN Zernikes.",
+                    label,
+                    np.sum(img),
                 )
                 zkFit = np.full_like(zkStartI1, np.nan)
                 zkSum = np.full_like(zkStartI1, np.nan)
@@ -588,7 +587,7 @@ class DanishAlgorithm(WfAlgorithm):
                         "image": img2.copy(),
                         "variance": backgroundStd2**2,
                         "nollIndices": nollIndices.copy(),
-                        "zkStart": zkStartI2.copy(),
+                        "zkStart": zkStartI2.copy() if zkStartI2 is not None else None,
                         "lstsqResult": {},
                         "zkFit": zkFit.copy(),
                         "zkSum": zkSum.copy(),
@@ -781,10 +780,7 @@ class DanishAlgorithm(WfAlgorithm):
             elif "zero-size array" in str(e):
                 msg = "Empty optical kernel — aberrations pushed rays out of pupil."
             elif "Initial guess is outside of provided bounds" in str(e):
-                msg = (
-                    "Initial guess outside bounds "
-                    "(likely negative flux after background subtraction)."
-                )
+                msg = "Initial guess outside bounds (likely negative flux after background subtraction)."
             elif "cannot convert float NaN to integer" in str(e):
                 msg = "NaN encountered in conversion."
             elif "must not contain infs or NaNs" in str(e):
