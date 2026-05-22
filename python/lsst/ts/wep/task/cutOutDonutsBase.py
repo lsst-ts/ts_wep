@@ -30,6 +30,7 @@ from typing import Any
 
 import astropy.units as u
 import numpy as np
+from astropy.stats import sigma_clip
 from astropy.table import QTable
 from scipy.ndimage import binary_dilation
 from scipy.signal import correlate
@@ -392,6 +393,21 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         # Signal estimate based on the sum of donut pixels
         ttlSignalSum = np.sum(imageArray[donutMask])
 
+        # Apply sigma-clipping to exclude outlier pixels (e.g. unmasked
+        # hot pixels or negative defects) from the clipped SNR calculation.
+        # This does not affect the original SN quantities above.
+        donutPixels = imageArray[donutMask]
+        clipped = sigma_clip(donutPixels, sigma=5, maxiters=3, masked=True)
+        goodPixels = clipped.compressed()
+
+        nPxClipped = int(np.sum(clipped.mask))
+
+        if nPxClipped > 0:
+            self.log.debug(f"Sigma-clipping removed {nPxClipped} outlier pixel(s) from SNR calculation")
+
+        # Clipped signal: sum of non-outlier donut pixels
+        ttlSignalSumClipped = float(np.sum(goodPixels))
+
         # Background noise estimate:
         # expand the inverted mask to remove donut contribution
         # the amount of default dilation was matched
@@ -430,15 +446,26 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         backgroundImageMean = np.mean(imageArray[bkgndMask])
 
         # Total noise based on the variance of the image background
+        # Uses original nPxMask (all donut pixels)
+        # to preserve existing behavior
         ttlNoiseBkgndVariance = np.sqrt(backgroundImageVariance * nPxMask)
 
         # Noise based on the sum of variance plane pixels inside the donut mask
+        # (original, unclipped)
         ttlNoiseDonutVariance = np.sqrt(varianceArray[donutMask].sum())
+
+        # Noise based on the sum of variance plane pixels for non-clipped
+        # donut pixels only
+        donutIndices = np.where(donutMask)
+        goodDonutMask = np.zeros_like(donutMask)
+        goodDonutMask[donutIndices[0][~clipped.mask], donutIndices[1][~clipped.mask]] = True
+        varianceSumClipped = float(varianceArray[goodDonutMask].sum())
+        ttlNoiseDonutVarianceClipped = np.sqrt(varianceSumClipped)
 
         # Avoid zero division in case variance plane doesn't exist
         if ttlNoiseDonutVariance > 0:
             sn = ttlSignalSum / ttlNoiseDonutVariance
-        # Legacy behavior: if variance plance was not calculated,
+        # Legacy behavior: if variance plane was not calculated,
         # use the image background variance
         else:
             sn = ttlSignalSum / ttlNoiseBkgndVariance
@@ -449,7 +476,17 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
     using the variance of image background for noise estimate."
                 )
                 self.varianceWarningSet = True
+
+        # Clipped SN: uses sigma-clipped signal and variance-plane noise
+        # over non-clipped pixels only. Falls back to background noise
+        # if variance plane is missing.
+        if ttlNoiseDonutVarianceClipped > 0:
+            snClipped = ttlSignalSumClipped / ttlNoiseDonutVarianceClipped
+        else:
+            snClipped = ttlSignalSumClipped / ttlNoiseBkgndVariance
+
         snDict = {
+            # Original quantities — names and values unchanged
             "SN": sn,
             "signal_mean": ttlSignalMean,
             "signal_sum": ttlSignalSum,
@@ -460,6 +497,12 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             "background_image_mean": backgroundImageMean,
             "ttl_noise_bkgnd_variance": ttlNoiseBkgndVariance,
             "ttl_noise_donut_variance": ttlNoiseDonutVariance,
+            # New sigma-clipped quantities
+            "SN_clipped": snClipped,
+            "signal_sum_clipped": ttlSignalSumClipped,
+            "n_px_clipped": nPxClipped,
+            "variance_sum_clipped": varianceSumClipped,
+            "ttl_noise_donut_variance_clipped": ttlNoiseDonutVarianceClipped,
         }
 
         return snDict
@@ -860,6 +903,19 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         # Save max gradient in the stamp power spectrum for k < 10
         maxPowerGradKLess10 = np.array(maxPowerGradKLess10).astype(float)
         stampsMetadata["MAX_POWER_GRAD"] = maxPowerGradKLess10
+
+        # Add clipped quantities
+        stampsMetadata["SN_CLIPPED"] = np.array([s["SN_clipped"] for s in snQuant], dtype=float)
+        stampsMetadata["SIGNAL_SUM_CLIPPED"] = np.array(
+            [s["signal_sum_clipped"] for s in snQuant], dtype=float
+        )
+        stampsMetadata["NPX_CLIPPED"] = np.array([s["n_px_clipped"] for s in snQuant], dtype=float)
+        stampsMetadata["VAR_SUM_CLIPPED"] = np.array(
+            [s["variance_sum_clipped"] for s in snQuant], dtype=float
+        )
+        stampsMetadata["NOISE_VAR_DONUT_CLIP"] = np.array(
+            [s["ttl_noise_donut_variance_clipped"] for s in snQuant], dtype=float
+        )
 
         finalDonutStamps = DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
         # Refresh to pull original metadata into stamps
