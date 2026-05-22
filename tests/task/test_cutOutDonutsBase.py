@@ -425,6 +425,12 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "BACKGROUND_IMAGE_MEAN",
             "NOISE_VAR_BKGD",
             "NOISE_VAR_DONUT",
+            # New clipped metadata keys
+            "SN_CLIPPED",
+            "SIGNAL_SUM_CLIPPED",
+            "NPX_CLIPPED",
+            "VAR_SUM_CLIPPED",
+            "NOISE_VAR_DONUT_CLIP",
             "EFFECTIVE",
             "ENTROPY",
             "RADIUS",
@@ -446,8 +452,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # test that the visit is properly stored
         self.assertEqual(self.dataIdExtra["visit"], donutStamps.metadata.getArray("VISIT")[0])
 
-        # test that each metric has been calculated
-        # for all donuts
+        # test that each metric has been calculated for all donuts
         for measure in [
             "SIGNAL_SUM",
             "SIGNAL_MEAN",
@@ -457,6 +462,12 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "ENTROPY",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
+            # New clipped metrics
+            "SN_CLIPPED",
+            "SIGNAL_SUM_CLIPPED",
+            "NPX_CLIPPED",
+            "VAR_SUM_CLIPPED",
+            "NOISE_VAR_DONUT_CLIP",
         ]:
             self.assertEqual(len(donutStamps), len(donutStamps.metadata.getArray(measure)))
 
@@ -465,10 +476,17 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         allowed_values = set([0, 1])
         self.assertTrue(allowed_values.issuperset(unique_values))
 
-        # test the calculation of SN
+        # test the calculation of SN (original, unclipped)
         sn_values = [2152.969905, 2574.566976, 2981.683746]
         sn_calculated = donutStamps.metadata.getArray("SN")
         np.testing.assert_allclose(np.sort(np.array(sn_calculated)), np.sort(np.array(sn_values)), rtol=1e-3)
+
+        # test that SN_clipped is finite for all donuts and that
+        # NPX_CLIPPED is non-negative
+        sn_clipped_values = donutStamps.metadata.getArray("SN_CLIPPED")
+        npx_clipped_values = donutStamps.metadata.getArray("NPX_CLIPPED")
+        self.assertTrue(np.all(np.isfinite(sn_clipped_values)))
+        self.assertTrue(np.all(np.array(npx_clipped_values) >= 0))
 
     def testFilterBadRecentering(self) -> None:
         maxRecenter = 25
@@ -509,6 +527,22 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             self.assertFalse(np.isnan(val))
         # Blended pixels should be excluded from the original donut mask now
         self.assertTrue(orig_sn_dict["n_px_mask"] > sn_dict["n_px_mask"])
+
+        # Check that all new clipped keys are present and non-NaN
+        for key in [
+            "SN_clipped",
+            "signal_sum_clipped",
+            "n_px_clipped",
+            "variance_sum_clipped",
+            "ttl_noise_donut_variance_clipped",
+        ]:
+            self.assertIn(key, sn_dict)
+            self.assertFalse(np.isnan(sn_dict[key]))
+
+        # Clipped pixel count must be non-negative and cannot exceed
+        # the total number of donut pixels
+        self.assertGreaterEqual(sn_dict["n_px_clipped"], 0)
+        self.assertLessEqual(sn_dict["n_px_clipped"], sn_dict["n_px_mask"])
 
     def testCalculateSNWithLargeMask(self) -> None:
         """Test that dilation correction loop runs and logs correctly."""
@@ -567,3 +601,87 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
         # Test a few values
         self.assertEqual(donutStamps.metadata.get("BANDPASS"), exposure.filter.bandLabel)
         self.assertEqual(donutStamps.metadata.get("VISIT"), self.dataIdExtra["visit"])
+
+    def testCalculateSNClipped(self) -> None:
+        """Test sigma-clipped SN quantities returned by calculateSN.
+
+        Checks:
+        - All new keys are present in the returned dict.
+        - n_px_clipped is non-negative and <= n_px_mask.
+        - signal_sum_clipped <= signal_sum when no negative outliers exist
+          (for normal donuts the clipped sum should not exceed the original).
+        - SN_clipped is finite.
+        - variance_sum_clipped <= variance_sum (fewer pixels → smaller sum).
+        - Injecting a known outlier pixel causes it to be clipped and
+          changes SN_clipped but leaves SN unchanged.
+        """
+        exposure, donutCatalog = self._getExpAndCatalog(DefocalType.Extra)
+        stamps = self.task.cutOutStamps(exposure, donutCatalog, DefocalType.Extra, self.cameraName)
+        stamp = stamps[0]
+
+        sn_dict = self.task.calculateSN(stamp)
+
+        # All new keys must be present
+        for key in [
+            "SN_clipped",
+            "signal_sum_clipped",
+            "n_px_clipped",
+            "variance_sum_clipped",
+            "ttl_noise_donut_variance_clipped",
+        ]:
+            self.assertIn(key, sn_dict)
+
+        # Basic sanity checks on clipped quantities
+        self.assertGreaterEqual(sn_dict["n_px_clipped"], 0)
+        self.assertLessEqual(sn_dict["n_px_clipped"], sn_dict["n_px_mask"])
+        self.assertTrue(np.isfinite(sn_dict["SN_clipped"]))
+        self.assertTrue(np.isfinite(sn_dict["SN"]))
+
+        # Variance sum over fewer pixels must be <= original variance sum
+        self.assertLessEqual(
+            sn_dict["variance_sum_clipped"],
+            # Allow tiny floating-point slack
+            sn_dict["ttl_noise_donut_variance"] ** 2 + 1e-6,
+        )
+
+        # --- Outlier injection test ---
+        # Inject a single extreme positive outlier into the donut region,
+        # then verify it gets clipped (n_px_clipped increases), while the
+        # original SN (which uses ttlSignalSum over the full mask)
+        # is unchanged
+        imageArray = stamp.stamp_im.image.array
+        mask = stamp.stamp_im.mask
+
+        donutPlaneBit = mask.getPlaneBitMask("DONUT")
+        blendBit = mask.getPlaneBitMask("BLEND")
+        satBit = mask.getPlaneBitMask("SAT")
+        crBit = mask.getPlaneBitMask("CR")
+        donutMask = (
+            ((mask.array & donutPlaneBit) > 0)
+            & ((mask.array & blendBit) == 0)
+            & ((mask.array & satBit) == 0)
+            & ((mask.array & crBit) == 0)
+        )
+        donut_ys, donut_xs = np.where(donutMask)
+        # Pick the first donut pixel and inject a large outlier
+        inject_y, inject_x = donut_ys[0], donut_xs[0]
+        original_value = imageArray[inject_y, inject_x]
+        outlier_value = float(imageArray[donutMask].mean() + 100 * imageArray[donutMask].std())
+        imageArray[inject_y, inject_x] = outlier_value
+
+        sn_dict_outlier = self.task.calculateSN(stamp)
+
+        # Restore the original pixel value
+        imageArray[inject_y, inject_x] = original_value
+
+        # The injected outlier should have been clipped
+        self.assertGreater(sn_dict_outlier["n_px_clipped"], sn_dict["n_px_clipped"])
+
+        # signal_sum (original, unclipped) must reflect the injected outlier
+        self.assertGreater(sn_dict_outlier["signal_sum"], sn_dict["signal_sum"])
+
+        # signal_sum_clipped should be much closer to the original
+        # (outlier excluded), i.e. the difference is smaller than the outlier
+        outlier_contribution = outlier_value - original_value
+        clipped_diff = abs(sn_dict_outlier["signal_sum_clipped"] - sn_dict["signal_sum_clipped"])
+        self.assertLess(clipped_diff, outlier_contribution)
