@@ -119,9 +119,9 @@ class Image:
         self._image = value.copy()
 
     @property
-    def fieldAngle(self) -> np.ndarray:
+    def fieldAngle(self) -> tuple[float, float]:
         """The field angle in degrees."""
-        return self._fieldAngle
+        return tuple(self._fieldAngle)
 
     @fieldAngle.setter
     def fieldAngle(self, value: Union[np.ndarray, tuple, list]) -> None:

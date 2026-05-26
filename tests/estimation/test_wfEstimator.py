@@ -28,7 +28,7 @@ enforce_single_threading()
 # Then import libraries
 import numpy as np  # noqa: E402
 
-from lsst.ts.wep.estimation import WfEstimator  # noqa: E402
+from lsst.ts.wep.estimation import DanishAlgorithm, TieAlgorithm, WfEstimator  # noqa: E402
 from lsst.ts.wep.utils import WfAlgorithmName, convertZernikesToPsfWidth  # noqa: E402
 from lsst.ts.wep.utils.modelUtils import forwardModelPair  # noqa: E402
 
@@ -94,9 +94,11 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate [4, 5, 6]
             wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6], units="m")
             if name == WfAlgorithmName.TIE:
+                assert isinstance(wfEst.algo, TieAlgorithm)
                 wfEst.algo.optimizeLinAlg = False
                 zk0, _ = wfEst.estimateZk(intra, extra)
-            else:
+            elif name == WfAlgorithmName.Danish:
+                assert isinstance(wfEst.algo, (DanishAlgorithm))
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-2,
                     "xtol": 1e-2,
@@ -113,9 +115,11 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate with [4, 5, 6, 14, 15]
             wfEst = WfEstimator(algoName=name, nollIndices=[4, 5, 6, 14, 15], units="m")
             if name == WfAlgorithmName.TIE:
+                assert isinstance(wfEst.algo, TieAlgorithm)
                 wfEst.algo.optimizeLinAlg = False
                 zk1, _ = wfEst.estimateZk(intra, extra)
-            else:
+            elif name == WfAlgorithmName.Danish:
+                assert isinstance(wfEst.algo, DanishAlgorithm)
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-2,
                     "xtol": 1e-2,
@@ -140,9 +144,11 @@ class TestWfEstimator(unittest.TestCase):
             wfEst = WfEstimator(algoName=name, startWithIntrinsic=True, units="m")
             if name == WfAlgorithmName.TIE:
                 wfEst = WfEstimator(algoName=name, startWithIntrinsic=True, units="m")
+                assert isinstance(wfEst.algo, TieAlgorithm)
                 wfEst.algo.optimizeLinAlg = False
                 zk0, _ = wfEst.estimateZk(intra, extra)
-            else:
+            elif name == WfAlgorithmName.Danish:
+                assert isinstance(wfEst.algo, DanishAlgorithm)
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-2,
                     "xtol": 1e-2,
@@ -155,9 +161,11 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate starting with zeros
             wfEst = WfEstimator(algoName=name, startWithIntrinsic=False, units="m")
             if name == WfAlgorithmName.TIE:
+                assert isinstance(wfEst.algo, TieAlgorithm)
                 wfEst.algo.optimizeLinAlg = False
                 zk1, _ = wfEst.estimateZk(intra, extra)
-            else:
+            elif name == WfAlgorithmName.Danish:
+                assert isinstance(wfEst.algo, DanishAlgorithm)
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-2,
                     "xtol": 1e-2,
@@ -179,9 +187,11 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate OPD
             wfEst = WfEstimator(algoName=name, returnWfDev=False, units="m")
             if name == WfAlgorithmName.TIE:
+                assert isinstance(wfEst.algo, TieAlgorithm)
                 wfEst.algo.optimizeLinAlg = False
                 opd, _ = wfEst.estimateZk(intra, extra)
-            else:
+            elif name == WfAlgorithmName.Danish:
+                assert isinstance(wfEst.algo, DanishAlgorithm)
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-2,
                     "xtol": 1e-2,
@@ -194,9 +204,11 @@ class TestWfEstimator(unittest.TestCase):
             # Estimate wavefront deviation
             wfEst = WfEstimator(algoName=name, returnWfDev=True, units="m")
             if name == WfAlgorithmName.TIE:
+                assert isinstance(wfEst.algo, TieAlgorithm)
                 wfEst.algo.optimizeLinAlg = False
                 wfDev, _ = wfEst.estimateZk(intra, extra)
-            else:
+            elif name == WfAlgorithmName.Danish:
+                assert isinstance(wfEst.algo, DanishAlgorithm)
                 wfEst.algo.lstsqKwargs = {
                     "ftol": 1e-2,
                     "xtol": 1e-2,
@@ -226,9 +238,11 @@ class TestWfEstimator(unittest.TestCase):
             for units in ["m", "um", "nm", "arcsec"]:
                 wfEst = WfEstimator(algoName=name, units=units)
                 if name == WfAlgorithmName.TIE:
+                    assert isinstance(wfEst.algo, TieAlgorithm)
                     wfEst.algo.optimizeLinAlg = False
                     zk[units], _ = wfEst.estimateZk(intra, extra)
-                else:
+                elif name == WfAlgorithmName.Danish:
+                    assert isinstance(wfEst.algo, DanishAlgorithm)
                     wfEst.algo.lstsqKwargs = {
                         "ftol": 1e-2,
                         "xtol": 1e-2,

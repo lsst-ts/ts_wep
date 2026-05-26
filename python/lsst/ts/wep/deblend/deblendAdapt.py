@@ -21,6 +21,8 @@
 
 __all__ = ["DeblendAdapt"]
 
+from typing import Any
+
 import numpy as np
 from scipy.ndimage import (
     binary_closing,
@@ -52,7 +54,7 @@ class DeblendAdapt(DeblendDefault):
         self.blockSizeInit = 33
 
     def deblendDonut(
-        self, imgToDeblend: np.ndarray, iniGuessXY: list[tuple]
+        self, imgToDeblend: np.ndarray, iniGuessXY: list[tuple], **kwargs: Any
     ) -> tuple[np.ndarray, float, float]:
         """Deblend the donut image.
 
