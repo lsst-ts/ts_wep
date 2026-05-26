@@ -30,6 +30,7 @@ import lsst.utils.tests
 import numpy as np
 from astropy.table import vstack
 from lsst.daf.butler import Butler
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
@@ -135,16 +136,20 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        self.intrinsicTables = [
-            self.butler.get(
-                "intrinsic_aberrations_temp",
-                dataId=self.dataIdExtra,
-                collections=["LSSTCam/aos/intrinsic"],
+        self.intrinsicZernikes = [
+            IntrinsicZernikes(
+                table=self.butler.get(
+                    "intrinsic_aberrations_temp",
+                    dataId=self.dataIdExtra,
+                    collections=["LSSTCam/aos/intrinsic"],
+                )
             ),
-            self.butler.get(
-                "intrinsic_aberrations_temp",
-                dataId=self.dataIdIntra | {"detector": 192},
-                collections=["LSSTCam/aos/intrinsic"],
+            IntrinsicZernikes(
+                table=self.butler.get(
+                    "intrinsic_aberrations_temp",
+                    dataId=self.dataIdIntra | {"detector": 192},
+                    collections=["LSSTCam/aos/intrinsic"],
+                )
             ),
         ]
 
@@ -282,8 +287,8 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
     def testTableMetadata(self) -> None:
         # First estimate without pairs
         emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
-        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, self.intrinsicTables).zernikes
-        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, self.intrinsicTables).zernikes
+        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, self.intrinsicZernikes).zernikes
+        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, self.intrinsicZernikes).zernikes
 
         # Check metadata keys exist for extra case
         self.assertIn("cam_name", zkCalcExtra.meta)
@@ -315,7 +320,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
         # Now estimate with pairs
         zkCalcPairs = self.task.run(
-            self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables
+            self.donutStampsExtra, self.donutStampsIntra, self.intrinsicZernikes
         ).zernikes
 
         # Check metadata keys exist for pairs case
@@ -349,39 +354,12 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("intrinsic_columns", zkCalcPairs.meta)
         self.assertIn("deviation_columns", zkCalcPairs.meta)
 
-    def testCreateIntrinsicMap(self) -> None:
-        for intrinsicTable in self.intrinsicTables:
-            # For tests below, we will sort tables in
-            # two different orders to make sure nothing
-            # depends on table ordering
-            for order in (["x", "y"], ["y", "x"]):
-                table = intrinsicTable.copy()
-                table.sort(order)
-
-                # Create intrinsic maps with complete grid
-                intrinsicMap = self.task._createIntrinsicMap(table)
-                self.assertEqual(
-                    intrinsicMap([table["y"].to("deg").value[2], table["x"].to("deg").value[2]])[0, 0],
-                    table["Z4"].to("um").value[2],
-                )
-
-                # Create intrinsic maps with "vignetted" grid (remove some points)
-                tableVignetted = table[10:]
-                intrinsicMapVignetted = self.task._createIntrinsicMap(tableVignetted)
-                self.assertEqual(
-                    intrinsicMapVignetted(
-                        tableVignetted["y"].to("deg").value[0],
-                        tableVignetted["x"].to("deg").value[0],
-                    )[0],
-                    tableVignetted["Z4"].to("um").value[0],
-                )
-
     def testFitFailureWithMaxIterations(self) -> None:
         # Set max iterations very low to force fit failures
         self.config.estimateZernikes.lstsqKwargs["max_nfev"] = 1
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
-        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicZernikes).zernikes
 
         # Check that all donuts were marked as NOT successfully fit
         fit_success = zkCalc.meta["estimatorInfo"]["fit_success"]
@@ -412,7 +390,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
     def testBlurClip(self) -> None:
         # Get sample zernike table
-        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables).zernikes
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicZernikes).zernikes
         zkCalc = vstack([zkCalc, zkCalc[1:], zkCalc[1:]])  # Add extra rows to test minus average row
         donut_blur = len(zkCalc) * [1.0]
         donut_blur[0] = 10.0  # Set the average row to be very blurred to force it to be clipped

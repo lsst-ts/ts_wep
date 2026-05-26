@@ -26,6 +26,7 @@ import pytest
 
 import lsst.utils.tests
 from lsst.daf.butler import Butler
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
@@ -121,16 +122,20 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         self.donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        self.intrinsicTables = [
-            self.butler.get(
-                "intrinsic_aberrations_temp",
-                dataId=self.dataIdExtra,
-                collections=["LSSTCam/aos/intrinsic"],
+        self.intrinsicZernikes = [
+            IntrinsicZernikes(
+                table=self.butler.get(
+                    "intrinsic_aberrations_temp",
+                    dataId=self.dataIdExtra,
+                    collections=["LSSTCam/aos/intrinsic"],
+                )
             ),
-            self.butler.get(
-                "intrinsic_aberrations_temp",
-                dataId=self.dataIdIntra | {"detector": 192},
-                collections=["LSSTCam/aos/intrinsic"],
+            IntrinsicZernikes(
+                table=self.butler.get(
+                    "intrinsic_aberrations_temp",
+                    dataId=self.dataIdIntra | {"detector": 192},
+                    collections=["LSSTCam/aos/intrinsic"],
+                )
             ),
         ]
 
@@ -273,7 +278,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         stampsExtra._refresh_metadata()
 
         # Now estimate Zernikes
-        self.task.run(stampsExtra, stampsIntra, self.intrinsicTables)
+        self.task.run(stampsExtra, stampsIntra, self.intrinsicZernikes)
 
     def testRequireConverge(self) -> None:
         config = CalcZernikesTaskConfig()
@@ -320,8 +325,8 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
     def testTableMetadata(self) -> None:
         # First estimate without pairs
         emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
-        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, self.intrinsicTables).zernikes
-        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, self.intrinsicTables).zernikes
+        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, self.intrinsicZernikes).zernikes
+        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, self.intrinsicZernikes).zernikes
 
         # Check metadata keys exist for extra case
         self.assertIn("cam_name", zkCalcExtra.meta)
@@ -345,7 +350,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # Now estimate with pairs
         zkCalcPairs = self.task.run(
-            self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables
+            self.donutStampsExtra, self.donutStampsIntra, self.intrinsicZernikes
         ).zernikes
 
         # Check metadata keys exist for pairs case

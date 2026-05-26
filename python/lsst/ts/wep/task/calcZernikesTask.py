@@ -32,12 +32,12 @@ from typing import Any, Sequence, cast
 import astropy.units as u
 import numpy as np
 from astropy.stats import sigma_clip
-from astropy.table import QTable, Table, vstack
-from scipy.interpolate import LinearNDInterpolator
+from astropy.table import QTable, vstack
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -56,7 +56,7 @@ intra_focal_ids = set([192, 196, 200, 204])
 extra_focal_ids = set([191, 195, 199, 203])
 
 
-def lookupIntrinsicTables(
+def lookupIntrinsicZernikes(
     datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
 ) -> list[DatasetRef | None]:
     """Assumes that the dataId is always for the extra focal at present"""
@@ -86,13 +86,14 @@ class CalcZernikesTaskConnections(
         storageClass="StampsBase",
         name="donutStampsIntra",
     )
-    intrinsicTables = connectionTypes.PrerequisiteInput(
-        doc="Intrinsic Zernike Map for the instrument",
+    intrinsicZernikes = connectionTypes.PrerequisiteInput(
+        doc="Intrinsic Zernike calibration for the instrument",
         dimensions=("detector", "instrument", "physical_filter"),
-        storageClass="ArrowAstropy",
-        name="intrinsic_aberrations_temp",
+        storageClass="IsrCalib",
+        name="intrinsicZernikes",
         multiple=True,
-        lookupFunction=lookupIntrinsicTables,  # type: ignore
+        isCalibration=True,
+        lookupFunction=lookupIntrinsicZernikes,  # type: ignore
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -192,36 +193,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = DonutStamps([])
         self.stampsIntra = DonutStamps([])
 
-    def _createIntrinsicMap(self, intrinsicTable: Table | None) -> LinearNDInterpolator | None:
-        """Create a RegularGridInterpolator for the intrinsic Zernike map.
-
-        Parameters
-        ----------
-        intrinsicTable : astropy.table.Table or None
-            Table containing the intrinsic Zernike coefficients.
-
-        Returns
-        -------
-        interpolator : scipy.interpolate.RegularGridInterpolator or None
-            Interpolator for the intrinsic Zernike map,
-            or None if no table is provided.
-        """
-        if intrinsicTable is None:
-            return None
-
-        # Extract arrays of field angle (deg)
-        x = intrinsicTable["x"].to("deg").value
-        y = intrinsicTable["y"].to("deg").value
-
-        # Extract intrinsic Zernike coefficients (microns)
-        zkTable = intrinsicTable[[f"Z{i}" for i in self.nollIndices]]
-        zks = np.column_stack([zkTable[col].to("um").value for col in zkTable.colnames])
-
-        # Create interpolator
-        interpolator = LinearNDInterpolator(np.column_stack([y, x]), zks)
-
-        return interpolator
-
     def _unpackStampData(self, stamp: DonutStamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
         """Unpack data from the stamp object, handling None stamps.
 
@@ -253,16 +224,23 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 * u.pixel
             )
             if stamp.defocal_type == "extra":
-                intrinsicMap = self.intrinsicMapExtra
+                intrinsicCalib = self.intrinsicZernikesExtra
             else:
-                intrinsicMap = self.intrinsicMapIntra
+                intrinsicCalib = self.intrinsicZernikesIntra
 
-            # Note that if you compare to the _createIntrinsicMap method you
-            # might think we would need to reverse the fieldAngle here (i.e.
-            # swap x and y), however stamp.calcFieldXY() returns coordinates
-            # in the DVCS instead of CCS, which is equivalent to already
-            # swapping x and y. Therefore we will not reverse the order here.
-            intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron  # type: ignore
+            # stamp.calcFieldXY() returns coordinates in the DVCS, which is
+            # equivalent to swapping x and y from CCS. So the first element
+            # of fieldAngle is the CCS y-coordinate and the second is the
+            # CCS x-coordinate, which is what IntrinsicZernikes expects.
+            ccs_y, ccs_x = fieldAngle.value.tolist()
+            intrinsics = (
+                intrinsicCalib.getIntrinsicZernikes(
+                    field_x=ccs_x,
+                    field_y=ccs_y,
+                    noll_indices=self.nollIndices,
+                )
+                * u.micron
+            )
 
         return fieldAngle, centroid, intrinsics
 
@@ -553,7 +531,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self,
         donutStampsExtra: DonutStamps,
         donutStampsIntra: DonutStamps,
-        intrinsicTables: list[Table],
+        intrinsicZernikes: list[IntrinsicZernikes],
         numCores: int = 1,
     ) -> pipeBase.Struct:
         # If no donuts are in the donutCatalog for a set of exposures
@@ -595,16 +573,15 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = selectedExtraStamps
         self.stampsIntra = selectedIntraStamps
 
-        # Set the intrinsic map interpolators
-        self.log.info("Creating intrinsic map.")
+        # Assign the intrinsic Zernike calibrations
         if self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
             # If both intra and extra focal donuts are from the same detector,
-            # then we only have one intrinsic table to use for both.
-            self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTables[0])
-            self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTables[0])
+            # then we only have one intrinsic calibration to use for both.
+            self.intrinsicZernikesExtra = intrinsicZernikes[0]
+            self.intrinsicZernikesIntra = intrinsicZernikes[0]
         else:
-            self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTables[0])
-            self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTables[1])
+            self.intrinsicZernikesExtra = intrinsicZernikes[0]
+            self.intrinsicZernikesIntra = intrinsicZernikes[1]
 
         # Estimate Zernikes from the collection of selected stamps
         self.log.info("Starting Zernike Estimation")
