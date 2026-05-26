@@ -206,7 +206,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         zkEst, meta = dan.estimateZk(intra)
 
         self.assertTrue(np.all(np.isnan(zkEst)))
-        self.assertIn("Non-positive flux", meta["exception_status"])
+        self.assertIn("Non-positive image flux", meta["exception_status"])
         self.assertFalse(meta["fit_success"])
 
     def testNegativeFluxSingleDonutWithHistory(self) -> None:
@@ -257,7 +257,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         zkEst, meta = dan.estimateZk(intra, extra)
 
         self.assertTrue(np.all(np.isnan(zkEst)))
-        self.assertIn("Non-positive flux", meta["exception_status"])
+        self.assertIn("Non-positive image flux", meta["exception_status"])
         self.assertFalse(meta["fit_success"])
 
     def testNegativeFluxPairSecondImage(self) -> None:
@@ -281,7 +281,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         zkEst, meta = dan.estimateZk(intra, extra)
 
         self.assertTrue(np.all(np.isnan(zkEst)))
-        self.assertIn("Non-positive flux", meta["exception_status"])
+        self.assertIn("Non-positive image flux", meta["exception_status"])
         self.assertFalse(meta["fit_success"])
 
     def testNegativeFluxPairWithHistory(self) -> None:
