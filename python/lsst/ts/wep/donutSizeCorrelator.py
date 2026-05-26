@@ -85,8 +85,6 @@ class DonutSizeCorrelator:
             image[:] = 0.0
         return image
 
-        return image
-
     @staticmethod
     def cropAndBinImage(
         image: np.ndarray,
