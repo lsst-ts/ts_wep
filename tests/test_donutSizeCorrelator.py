@@ -154,6 +154,24 @@ class TestDonutSizeCorrelator(lsst.utils.tests.TestCase):
         self.assertGreater(diameter, 200)
         self.assertTrue(abs(diameter - instrument.donutDiameter) < 25)  # Loose tolerance
 
+    def testPrepButlerExposureFullyMasked(self) -> None:
+        """Test that prepButlerExposure returns zeros when the entire
+        image is masked, instead of crashing on empty array max()."""
+        exposure = self.butler.get(
+            "post_isr_image",
+            dataId=self.dataId,
+            collections=[self.runName],
+        )
+
+        # Set every pixel to SAT so the entire mask is bad
+        exposure.mask.array[:] = exposure.mask.getPlaneBitMask("SAT")
+
+        image = self.correlator.prepButlerExposure(exposure)
+
+        self.assertIsInstance(image, np.ndarray)
+        self.assertTrue(np.all(np.isfinite(image)))  # No NaNs or infs
+        self.assertTrue(np.all(image == 0.0))  # All zeros
+
     @classmethod
     def tearDownClass(cls) -> None:
         cleanUpCmd = writeCleanUpRepoCmd(cls.repoDir, cls.runName)
