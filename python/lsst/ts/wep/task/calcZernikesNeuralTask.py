@@ -41,7 +41,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.daf.base import PropertyList
 from lsst.pipe.base import connectionTypes
-from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
+from lsst.ts.wep.task.calcZernikesBaseTask import CalcZernikesBaseTask
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
@@ -138,7 +138,7 @@ class CalcZernikesNeuralTaskConnections(
 
 
 class CalcZernikesNeuralTaskConfig(
-    CalcZernikesTaskConfig,
+    pipeBase.PipelineTaskConfig,
     pipelineConnections=CalcZernikesNeuralTaskConnections,  # type: ignore
 ):
     """Configuration for CalcZernikesNeuralTask.
@@ -241,7 +241,7 @@ class CalcZernikesNeuralTaskConfig(
     )
 
 
-class CalcZernikesNeuralTask(CalcZernikesTask):
+class CalcZernikesNeuralTask(CalcZernikesBaseTask):
     """Neural network-based Zernike estimation task using TARTS.
 
     This class uses the TARTS (Triple-stage Alignment and Reconstruction using
@@ -1067,7 +1067,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         return aggregatedZernikes, donutStamps, deepcopy(self.tarts.total_zernikes)
 
-    def empty(self, qualityTable: QTable | None = None) -> pipeBase.Struct:
+    def empty(
+        self,
+        qualityTable: QTable | None = None,
+    ) -> pipeBase.Struct:
         """Return empty results when no donuts are available for processing.
 
         This method creates empty output structures when the task cannot
@@ -1116,8 +1119,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutQualityTable = qualityTable
 
         # Set stamp attributes to None for empty case
-        self.stampsIntra = None
-        self.stampsExtra = None
+        self.stampsIntra = DonutStamps([])
+        self.stampsExtra = DonutStamps([])
 
         # Create empty Zernike table with metadata
         emptyZkTable = self.initZkTable()

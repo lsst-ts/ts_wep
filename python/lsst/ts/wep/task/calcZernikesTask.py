@@ -25,8 +25,6 @@ __all__ = [
     "CalcZernikesTask",
 ]
 
-import abc
-from itertools import zip_longest
 from typing import Any, Sequence, cast
 
 import astropy.units as u
@@ -44,6 +42,7 @@ from lsst.pipe.base import (
     QuantumContext,
     connectionTypes,
 )
+from lsst.ts.wep.task.calcZernikesBaseTask import CalcZernikesBaseTask
 from lsst.ts.wep.task.combineZernikesMeanTask import CombineZernikesMeanTask
 from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutStamps import DonutStamp, DonutStamps
@@ -159,7 +158,7 @@ class CalcZernikesTaskConfig(
     )
 
 
-class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
+class CalcZernikesTask(CalcZernikesBaseTask):
     """Base class for calculating Zernike coeffs from pairs of DonutStamps.
 
     This class joins the EstimateZernikes and CombineZernikes subtasks to
@@ -265,199 +264,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             intrinsics = intrinsicMap(fieldAngle.value.tolist()) * u.micron  # type: ignore
 
         return fieldAngle, centroid, intrinsics
-
-    def initZkTable(self) -> QTable:
-        """Initialize the table to store the Zernike coefficients
-
-        Returns
-        -------
-        table : `astropy.table.QTable`
-            Table to store the Zernike coefficients
-        """
-        dtype = [
-            ("label", "<U12"),
-            ("used", np.bool_),
-            ("intra_field", pos2f_dtype),
-            ("extra_field", pos2f_dtype),
-            ("intra_centroid", pos2f_dtype),
-            ("extra_centroid", pos2f_dtype),
-            ("intra_mag", "<f4"),
-            ("extra_mag", "<f4"),
-            ("intra_sn", "<f4"),
-            ("extra_sn", "<f4"),
-            ("intra_entropy", "<f4"),
-            ("extra_entropy", "<f4"),
-            ("intra_frac_bad_pix", "<f4"),
-            ("extra_frac_bad_pix", "<f4"),
-            ("intra_max_power_grad", "<f4"),
-            ("extra_max_power_grad", "<f4"),
-            ("intra_donut_id", "<U21"),
-            ("extra_donut_id", "<U21"),
-        ]
-        for j in self.nollIndices:
-            dtype.append((f"Z{j}", "<f4"))
-        for j in self.nollIndices:
-            dtype.append((f"Z{j}_intrinsic", "<f4"))
-        for j in self.nollIndices:
-            dtype.append((f"Z{j}_deviation", "<f4"))
-
-        table = QTable(dtype=dtype)
-
-        # Assign units where appropriate
-        table["intra_field"].unit = u.deg
-        table["extra_field"].unit = u.deg
-        table["intra_centroid"].unit = u.pixel
-        table["extra_centroid"].unit = u.pixel
-        for j in self.nollIndices:
-            table[f"Z{j}"].unit = u.nm
-        for j in self.nollIndices:
-            table[f"Z{j}_intrinsic"].unit = u.nm
-        for j in self.nollIndices:
-            table[f"Z{j}_deviation"].unit = u.nm
-
-        return table
-
-    def createZkTable(self, zkCoeffRaw: pipeBase.Struct) -> QTable:
-        """Create the Zernike table to store Zernike Coefficients.
-
-        Note this is written with the assumption that either extraStamps or
-        intraStamps MIGHT be empty. This is because calcZernikesUnpairedTask
-        also uses this method.
-
-        Parameters
-        ----------
-        zkCoeffRaw: pipeBase.Struct
-            All zernikes returned by self.estimateZernikes.run(...)
-
-        Returns
-        -------
-        table : `astropy.table.QTable`
-            Table with the Zernike coefficients
-        """
-        zkTable = self.initZkTable()
-        zkTable.add_row(
-            {
-                "label": "average",
-                "used": True,
-                **{f"Z{j}": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
-                **{f"Z{j}_intrinsic": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
-                **{f"Z{j}_deviation": np.nan * u.micron for i, j in enumerate(self.nollIndices)},
-                "intra_field": np.nan,
-                "extra_field": np.nan,
-                "intra_centroid": np.nan,
-                "extra_centroid": np.nan,
-                "intra_mag": np.nan,
-                "extra_mag": np.nan,
-                "intra_sn": np.nan,
-                "extra_sn": np.nan,
-                "intra_entropy": np.nan,
-                "extra_entropy": np.nan,
-                "intra_frac_bad_pix": np.nan,
-                "extra_frac_bad_pix": np.nan,
-                "intra_max_power_grad": np.nan,
-                "extra_max_power_grad": np.nan,
-                "intra_donut_id": "",
-                "extra_donut_id": "",
-            }
-        )
-        for i, (intra, extra, zk) in enumerate(
-            zip_longest(
-                self.stampsIntra,
-                self.stampsExtra,
-                zkCoeffRaw.zernikes,
-            )
-        ):
-            # If zk is None, we need to stop. This can happen when running
-            # paired Zernike estimation and the number of intra/extra stamps
-            # is not the same
-            if zk is None:
-                break
-
-            # Assign units
-            zk = zk * u.micron
-
-            # Unpack data from stamps, handling cases with None stamps
-            intraAngle, intraCentroid, intraIntrinsics = self._unpackStampData(intra)
-            extraAngle, extraCentroid, extraIntrinsics = self._unpackStampData(extra)
-
-            # Average the intrinsics
-            intrinsics = np.nanmean((intraIntrinsics, extraIntrinsics), axis=0) * u.micron
-
-            # Calculate the wavefront deviation
-            deviation = zk - intrinsics
-
-            row: dict = dict()
-            row["label"] = f"pair{i + 1}"
-            row["used"] = False  # Placeholder for now
-            row.update({f"Z{j}": zk[i] for i, j in enumerate(self.nollIndices)})
-            row.update({f"Z{j}_intrinsic": intrinsics[i] for i, j in enumerate(self.nollIndices)})
-            row.update({f"Z{j}_deviation": deviation[i] for i, j in enumerate(self.nollIndices)})
-            row["intra_field"] = intraAngle
-            row["extra_field"] = extraAngle
-            row["intra_centroid"] = intraCentroid
-            row["extra_centroid"] = extraCentroid
-            for key in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "DONUT_ID"]:
-                for stamps, foc in [
-                    (self.stampsIntra, "intra"),
-                    (self.stampsExtra, "extra"),
-                ]:
-                    if len(stamps) > 0 and key in stamps.metadata:
-                        val = stamps.metadata.getArray(key)[i]
-                    else:
-                        val = "" if key == "DONUT_ID" else np.nan
-                    row[f"{foc}_{key.lower()}"] = val
-            zkTable.add_row(row)
-
-        zkTable.meta = self.createZkTableMetadata()
-
-        return zkTable
-
-    def createZkTableMetadata(self) -> dict:
-        """Create the metadata for the Zernike table.
-
-        Returns
-        -------
-        metadata : dict
-            Metadata for the Zernike table
-        """
-        meta: dict = {}
-        meta["intra"] = {}
-        meta["extra"] = {}
-        cam_name = None
-
-        if not self.stampsIntra.metadata and not self.stampsExtra.metadata:
-            raise ValueError("No metadata in either DonutStamps object. Cannot create Zk table metadata.")
-
-        for dict_, stamps in [
-            (meta["intra"], self.stampsIntra),
-            (meta["extra"], self.stampsExtra),
-        ]:
-            if not stamps.metadata:
-                continue
-            dict_["det_name"] = stamps.metadata["DET_NAME"]
-            dict_["visit"] = stamps.metadata["VISIT"]
-            dict_["dfc_dist"] = stamps.metadata["DFC_DIST"]
-            dict_["band"] = stamps.metadata["BANDPASS"]
-            dict_["boresight_rot_angle_rad"] = stamps.metadata["BORESIGHT_ROT_ANGLE_RAD"]
-            dict_["boresight_par_angle_rad"] = stamps.metadata["BORESIGHT_PAR_ANGLE_RAD"]
-            dict_["boresight_alt_rad"] = stamps.metadata["BORESIGHT_ALT_RAD"]
-            dict_["boresight_az_rad"] = stamps.metadata["BORESIGHT_AZ_RAD"]
-            dict_["boresight_ra_rad"] = stamps.metadata["BORESIGHT_RA_RAD"]
-            dict_["boresight_dec_rad"] = stamps.metadata["BORESIGHT_DEC_RAD"]
-            dict_["mjd"] = stamps.metadata["MJD"]
-            if cam_name is None:
-                cam_name = stamps.metadata["CAM_NAME"]
-
-        meta["cam_name"] = cam_name
-        meta["noll_indices"] = self.nollIndices.list()
-        meta["opd_columns"] = [f"Z{j}" for j in self.nollIndices]
-        meta["intrinsic_columns"] = [f"Z{j}_intrinsic" for j in self.nollIndices]
-        meta["deviation_columns"] = [f"Z{j}_deviation" for j in self.nollIndices]
-
-        if self.stampsIntra.metadata and self.stampsExtra.metadata:
-            assert self.stampsIntra.metadata["CAM_NAME"] == self.stampsExtra.metadata["CAM_NAME"]
-
-        return meta
 
     def empty(
         self, qualityTable: QTable | None = None, zernikeTable: QTable | None = None
