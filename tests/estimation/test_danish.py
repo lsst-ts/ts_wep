@@ -183,6 +183,135 @@ class TestDanishAlgorithm(unittest.TestCase):
             pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
 
+    def testNegativeFluxSingleDonut(self) -> None:
+        """Test that a single donut with negative flux returns NaN Zernikes
+        instead of crashing with a ValueError in SVD."""
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+
+        dan = DanishAlgorithm(
+            lstsqKwargs={
+                "ftol": 1e-3,
+                "xtol": 1e-3,
+                "gtol": 1e-3,
+                "max_nfev": 10,
+                "x_scale": "jac",
+            },
+        )
+
+        # Corrupt the intra image to have negative total flux
+        # (simulates a bad amplifier or saturation bleed)
+        intra.image = -np.abs(intra.image) - 1000
+
+        # Should not raise — should return NaN Zernikes
+        zkEst, meta = dan.estimateZk(intra)
+
+        self.assertTrue(np.all(np.isnan(zkEst)))
+        self.assertIn("Non-positive image flux", meta["exception_status"])
+        self.assertFalse(meta["fit_success"])
+
+    def testNegativeFluxSingleDonutWithHistory(self) -> None:
+        """Test that saving history works for a negative-flux single donut."""
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+
+        dan = DanishAlgorithm(
+            lstsqKwargs={
+                "ftol": 1e-3,
+                "xtol": 1e-3,
+                "gtol": 1e-3,
+                "max_nfev": 10,
+                "x_scale": "jac",
+            },
+        )
+
+        intra.image = -np.abs(intra.image) - 1000
+
+        zkEst, meta = dan.estimateZk(intra, saveHistory=True)
+
+        self.assertTrue(np.all(np.isnan(zkEst)))
+
+        # Check history was populated
+        hist = dan.history
+        self.assertIn("intra", hist)
+        self.assertTrue(np.all(np.isnan(hist["intra"]["zkFit"])))
+        self.assertTrue(np.all(np.isnan(hist["intra"]["model"])))
+        self.assertTrue(hist["intra"]["GalSimFFTSizeError"])
+
+    def testNegativeFluxPairFirstImage(self) -> None:
+        """Test that a pair with a negative-flux first image returns NaN
+        Zernikes instead of crashing."""
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+
+        dan = DanishAlgorithm(
+            lstsqKwargs={
+                "ftol": 1e-3,
+                "xtol": 1e-3,
+                "gtol": 1e-3,
+                "max_nfev": 10,
+                "x_scale": "jac",
+            },
+        )
+
+        # Corrupt the intra (first) image
+        intra.image = -np.abs(intra.image) - 1000
+
+        zkEst, meta = dan.estimateZk(intra, extra)
+
+        self.assertTrue(np.all(np.isnan(zkEst)))
+        self.assertIn("Non-positive image flux", meta["exception_status"])
+        self.assertFalse(meta["fit_success"])
+
+    def testNegativeFluxPairSecondImage(self) -> None:
+        """Test that a pair with a negative-flux second image returns NaN
+        Zernikes instead of crashing."""
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+
+        dan = DanishAlgorithm(
+            lstsqKwargs={
+                "ftol": 1e-3,
+                "xtol": 1e-3,
+                "gtol": 1e-3,
+                "max_nfev": 10,
+                "x_scale": "jac",
+            },
+        )
+
+        # Corrupt the extra (second) image
+        extra.image = -np.abs(extra.image) - 1000
+
+        zkEst, meta = dan.estimateZk(intra, extra)
+
+        self.assertTrue(np.all(np.isnan(zkEst)))
+        self.assertIn("Non-positive image flux", meta["exception_status"])
+        self.assertFalse(meta["fit_success"])
+
+    def testNegativeFluxPairWithHistory(self) -> None:
+        """Test that saving history works for a negative-flux pair."""
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+
+        dan = DanishAlgorithm(
+            lstsqKwargs={
+                "ftol": 1e-3,
+                "xtol": 1e-3,
+                "gtol": 1e-3,
+                "max_nfev": 10,
+                "x_scale": "jac",
+            },
+        )
+
+        # Corrupt the extra image
+        extra.image = -np.abs(extra.image) - 1000
+
+        zkEst, meta = dan.estimateZk(intra, extra, saveHistory=True)
+
+        self.assertTrue(np.all(np.isnan(zkEst)))
+
+        hist = dan.history
+        self.assertIn("intra", hist)
+        self.assertIn("extra", hist)
+        self.assertTrue(np.all(np.isnan(hist["extra"]["zkFit"])))
+        self.assertTrue(np.all(np.isnan(hist["intra"]["zkFit"])))
+        self.assertTrue(hist["extra"]["GalSimFFTSizeError"])
+
     @_requires_danish_v1_1
     def testSystematicLossAlpha(self) -> None:
         """Test that alpha is passed as loss_fn to SingleDonutModel and
