@@ -17,6 +17,30 @@ Version History
 
 .. towncrier release notes start
 
+v17.3.0 (2026-05-27)
+====================
+
+New Features
+------------
+
+- ``EstimateZernikesBaseTask`` now has a ``timeout`` config field (default 600 s) that limits the multiprocessing pool during Zernike estimation. If the timeout is exceeded, an error is logged and an empty results list is returned. (`DM-54920 <https://rubinobs.atlassian.net//browse/DM-54920>`_)
+
+
+Bug Fixes
+---------
+
+- Prevent danish from returning ValueError for negative flux, instead return NaN Zernikes if sum(img) <= 0 after background subtraction. (`DM-54784 <https://rubinobs.atlassian.net//browse/DM-54784>`_)
+- Added blur_clipped metadata entry when all donuts have fit failures. (`RSO-562 <https://rubinobs.atlassian.net//browse/RSO-562>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- The pre-test Butler pipeline now runs automatically when pipeline integration tests are collected, rather than being forced on every ``pytest`` invocation via ``addopts``.
+  Tests requiring the pipeline are marked with ``pytest.mark.pipeline``.
+  Use ``-m "not pipeline"`` to exclude them and skip the pipeline setup entirely. (`DM-54980 <https://rubinobs.atlassian.net//browse/DM-54980>`_)
+
+
 v17.2.0 (2026-05-13)
 ====================
 
