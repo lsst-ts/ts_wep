@@ -42,6 +42,9 @@ from lsst.ts.wep.utils import (
     writePipetaskCmd,
 )
 
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
+
 
 @pytest.mark.skip
 @pytest.mark.skipif(

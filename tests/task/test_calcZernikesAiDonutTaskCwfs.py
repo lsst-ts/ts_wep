@@ -46,6 +46,11 @@ from lsst.ts.wep.utils import (
 
 TEST_MODEL_PATH = getModulePath() + "/tests/testData/testAiModels/test_aidonut_model_file.pt"
 
+import pytest
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
+
 
 class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
     runName: str

@@ -26,6 +26,7 @@ from copy import copy
 
 import astropy.units as u
 import numpy as np
+import pytest
 from astropy.table import QTable
 
 import lsst.afw.image as afwImage
@@ -43,6 +44,9 @@ from lsst.ts.wep.utils import (
     writeCleanUpRepoCmd,
     writePipetaskCmd,
 )
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestGenerateDonutFromRefitWcsTask(unittest.TestCase):

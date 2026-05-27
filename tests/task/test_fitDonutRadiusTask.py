@@ -2,6 +2,7 @@ import os
 
 import astropy
 import numpy as np
+import pytest
 
 import lsst.utils.tests
 from lsst.daf.butler import Butler
@@ -10,6 +11,9 @@ from lsst.ts.wep.task.fitDonutRadiusTask import (
     FitDonutRadiusTaskConfig,
 )
 from lsst.ts.wep.utils import getModulePath, runProgram, writeCleanUpRepoCmd
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
 
 
 class TestFitDonutRadiusTaskScienceSensor(lsst.utils.tests.TestCase):

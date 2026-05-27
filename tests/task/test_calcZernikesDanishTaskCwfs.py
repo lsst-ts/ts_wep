@@ -46,6 +46,11 @@ from lsst.ts.wep.utils import (
 )
 from scipy.interpolate import RegularGridInterpolator, LinearNDInterpolator
 
+import pytest
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
+
 
 class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
     runName: str
@@ -387,6 +392,23 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         for i in range(1, len(zkCalc)):
             self.assertFalse(zkCalc["used"][i])
         self.assertTrue(zkCalc["used"][0])  # Average row should still be True
+
+        # Check that all metadata values are still populated even with fit failures
+        self.assertIn("estimatorInfo", zkCalc.meta)
+        self.assertIn("fwhm", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_dx", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_dy", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_flux", zkCalc.meta["estimatorInfo"])
+        self.assertIn("model_bkg", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_cost", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_optimality", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_nfev", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_njev", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_status", zkCalc.meta["estimatorInfo"])
+        self.assertIn("lstsq_success", zkCalc.meta["estimatorInfo"])
+        self.assertIn("fit_success", zkCalc.meta["estimatorInfo"])
+        self.assertIn("chi_square", zkCalc.meta["estimatorInfo"])
+        self.assertIn("blur_clipped", zkCalc.meta["estimatorInfo"])
 
     def testBlurClip(self) -> None:
         # Get sample zernike table

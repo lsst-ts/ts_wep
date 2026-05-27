@@ -43,6 +43,11 @@ from lsst.ts.wep.utils import (
     writePipetaskCmd,
 )
 
+import pytest
+
+# Equivalent to @pytest.mark.pipeline on every test class/function below.
+pytestmark = pytest.mark.pipeline
+
 
 class TestCalcZernikesDanishTaskScienceSensor(lsst.utils.tests.TestCase):
     runName: str

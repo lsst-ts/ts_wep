@@ -351,6 +351,13 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Use scipy to optimize the parameters
         try:
+            # Reject images with non-positive flux before fitting.
+            # A negative sum means the donut is corrupted (e.g. bad
+            # amplifier, saturation bleed) and would produce NaN in
+            # the Jacobian, crashing SVD.
+            if np.sum(img) <= 0:
+                raise ValueError(f"Non-positive image flux (sum={np.sum(img):.1f})")
+
             result = least_squares(
                 model.chi,
                 jac=model.jac,
@@ -394,9 +401,11 @@ class DanishAlgorithm(WfAlgorithm):
                 for msg in [
                     "zero-size array",
                     "cannot convert float NaN to integer",
+                    "must not contain infs or NaNs",
+                    "Non-positive image flux",
                 ]
             ):
-                self.log.warning(f"Returning nans for fit due to following galsim error: {str(e)}")
+                self.log.warning(f"Returning nans for fit due to following error: {str(e)}")
             else:
                 raise
             exception_status = str(e)
@@ -642,6 +651,14 @@ class DanishAlgorithm(WfAlgorithm):
 
         # Use scipy to optimize the parameters
         try:
+            # Reject images with non-positive flux before fitting.
+            # A negative sum means the donut is corrupted (e.g. bad
+            # amplifier, saturation bleed) and would produce NaN in
+            # the Jacobian, crashing SVD.
+            for i, (img, label) in enumerate([(img1, "img1"), (img2, "img2")]):
+                if np.sum(img) <= 0:
+                    raise ValueError(f"Non-positive image flux in {label} (sum={np.sum(img):.1f})")
+
             result = least_squares(
                 model.chi,
                 jac=model.jac,
@@ -693,6 +710,10 @@ class DanishAlgorithm(WfAlgorithm):
                 msg = "Initial guess outside bounds (likely negative flux after background subtraction)."
             elif "cannot convert float NaN to integer" in str(e):
                 msg = "NaN encountered in conversion."
+            elif "must not contain infs or NaNs" in str(e):
+                msg = "NaN/Inf in Jacobian (likely from negative-flux image)."
+            elif "Non-positive image flux" in str(e):
+                msg = str(e)
             else:
                 raise
             self.log.warning("Returning nans for fit due to %s", msg)
