@@ -345,7 +345,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         return donutCatalog[inBounds]
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         astromRefCat: typing.List[afwTable.SimpleCatalog],
         exposure: afwImage.Exposure,

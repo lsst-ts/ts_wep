@@ -1067,7 +1067,11 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         return aggregatedZernikes, donutStamps, deepcopy(self.tarts.total_zernikes)
 
-    def empty(self, qualityTable: QTable | None = None) -> pipeBase.Struct:
+    def empty(
+        self,
+        qualityTable: QTable | None = None,
+        zernikeTable: Any | None = None,  # unused
+    ) -> pipeBase.Struct:
         """Return empty results when no donuts are available for processing.
 
         This method creates empty output structures when the task cannot
@@ -1081,6 +1085,9 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             Quality table created from donut stamp input. If provided, this
             table will be included in the output even if all donuts failed
             quality checks. If None, an empty quality table will be created.
+        zernikeTable : Any, optional
+            Unused. Accepted for compatibility with the parent class
+            `CalcZernikesTask.empty` signature.
 
         Returns
         -------
@@ -1116,8 +1123,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutQualityTable = qualityTable
 
         # Set stamp attributes to None for empty case
-        self.stampsIntra = None
-        self.stampsExtra = None
+        self.stampsIntra = DonutStamps([])
+        self.stampsExtra = DonutStamps([])
 
         # Create empty Zernike table with metadata
         emptyZkTable = self.initZkTable()
@@ -1150,7 +1157,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         return struct
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         exposure: afwImage.Exposure,
         numCores: int = 1,

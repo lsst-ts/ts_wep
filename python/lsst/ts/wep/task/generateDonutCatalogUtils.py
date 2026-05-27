@@ -42,7 +42,7 @@ def runSelection(
     detector: Detector,
     wcs: SkyWcs,
     filterName: str,
-    donutSelectorTask: DonutSourceSelectorTask,
+    donutSelectorTask: DonutSourceSelectorTask | None,
     edgeMargin: int,
 ) -> tuple[QTable, list, list]:
     """
