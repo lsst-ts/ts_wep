@@ -94,6 +94,7 @@ class CalcZernikesTaskConnections(
         multiple=True,
         isCalibration=True,
         lookupFunction=lookupIntrinsicZernikes,  # type: ignore
+        minimum=0,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -193,6 +194,11 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = DonutStamps([])
         self.stampsIntra = DonutStamps([])
 
+        # Intrinsic Zernike calibrations are assigned per-quantum in run().
+        # They stay None when the instrument is allowed to run without them.
+        self.intrinsicZernikesExtra: IntrinsicZernikes | None = None
+        self.intrinsicZernikesIntra: IntrinsicZernikes | None = None
+
     def _unpackStampData(self, stamp: DonutStamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
         """Unpack data from the stamp object, handling None stamps.
 
@@ -228,19 +234,24 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             else:
                 intrinsicCalib = self.intrinsicZernikesIntra
 
-            # stamp.calcFieldXY() returns coordinates in the DVCS, which is
-            # equivalent to swapping x and y from CCS. So the first element
-            # of fieldAngle is the CCS y-coordinate and the second is the
-            # CCS x-coordinate, which is what IntrinsicZernikes expects.
-            ccs_y, ccs_x = fieldAngle.value.tolist()
-            intrinsics = (
-                intrinsicCalib.getIntrinsicZernikes(
-                    field_x=ccs_x,
-                    field_y=ccs_y,
-                    noll_indices=self.nollIndices,
+            if intrinsicCalib is None:
+                # No intrinsic Zernike calibration available (allowed for
+                # instruments that do not require one, e.g. LATISS).
+                intrinsics = np.full(len(self.nollIndices), np.nan) * u.micron
+            else:
+                # stamp.calcFieldXY() returns coordinates in the DVCS, which is
+                # equivalent to swapping x and y from CCS. So the first element
+                # of fieldAngle is the CCS y-coordinate and the second is the
+                # CCS x-coordinate, which is what IntrinsicZernikes expects.
+                ccs_y, ccs_x = fieldAngle.value.tolist()
+                intrinsics = (
+                    intrinsicCalib.getIntrinsicZernikes(
+                        field_x=ccs_x,
+                        field_y=ccs_y,
+                        noll_indices=self.nollIndices,
+                    )
+                    * u.micron
                 )
-                * u.micron
-            )
 
         return fieldAngle, centroid, intrinsics
 
@@ -573,8 +584,26 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.stampsExtra = selectedExtraStamps
         self.stampsIntra = selectedIntraStamps
 
-        # Assign the intrinsic Zernike calibrations
-        if self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
+        # Assign the intrinsic Zernike calibrations. This input is optional
+        # (minimum=0): LATISS has no intrinsic Zernike calibration and may run
+        # without one, but the LSST cameras require it.
+        if len(intrinsicZernikes) == 0:
+            cameraName = self.stampsExtra[0].cam_name
+            if cameraName == "LATISS":
+                self.log.warning(
+                    "No intrinsic Zernike calibration found for %s; proceeding "
+                    "without it. Intrinsic and deviation columns will be NaN.",
+                    cameraName,
+                )
+                self.intrinsicZernikesExtra = None
+                self.intrinsicZernikesIntra = None
+            else:
+                raise RuntimeError(
+                    f"No intrinsic Zernike calibration found for instrument "
+                    f"{cameraName!r}, which requires one. Provide an input "
+                    f"collection containing the 'intrinsicZernikes' calibration."
+                )
+        elif self.stampsExtra[0].detector_name == self.stampsIntra[0].detector_name:
             # If both intra and extra focal donuts are from the same detector,
             # then we only have one intrinsic calibration to use for both.
             self.intrinsicZernikesExtra = intrinsicZernikes[0]
