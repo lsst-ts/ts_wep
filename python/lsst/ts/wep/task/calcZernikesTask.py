@@ -244,11 +244,18 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 # of fieldAngle is the CCS y-coordinate and the second is the
                 # CCS x-coordinate, which is what IntrinsicZernikes expects.
                 ccs_y, ccs_x = fieldAngle.value.tolist()
+                # getIntrinsicZernikes returns shape (1, nNoll) for a single
+                # field point; squeeze to 1-D so it lines up with the per-Zernike
+                # row assignment in createZkTable.
                 intrinsics = (
-                    intrinsicCalib.getIntrinsicZernikes(
-                        field_x=ccs_x,
-                        field_y=ccs_y,
-                        noll_indices=self.nollIndices,
+                    np.atleast_1d(
+                        np.squeeze(
+                            intrinsicCalib.getIntrinsicZernikes(
+                                field_x=ccs_x,
+                                field_y=ccs_y,
+                                noll_indices=self.nollIndices,
+                            )
+                        )
                     )
                     * u.micron
                 )
