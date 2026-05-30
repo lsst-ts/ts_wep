@@ -63,10 +63,10 @@ def lookupIntrinsicZernikes(
     detector = dataId["detector"]
     isCornerChip = (detector in intra_focal_ids) or (detector in extra_focal_ids)
 
-    refs = [registry.findDataset(datasetType, dataId, collections=collections)]
+    refs = [registry.findDataset(datasetType, dataId, collections=collections, timespan=dataId.timespan)]
     if isCornerChip:  # we're running a CWFS pair, not a FAM image
         dataId2 = DataCoordinate.standardize(dataId, detector=int(dataId["detector"]) + 1)
-        refs.append(registry.findDataset(datasetType, dataId2, collections=collections))
+        refs.append(registry.findDataset(datasetType, dataId2, collections=collections, timespan=dataId.timespan))
     return refs
 
 
