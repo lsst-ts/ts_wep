@@ -66,7 +66,9 @@ def lookupIntrinsicZernikes(
     refs = [registry.findDataset(datasetType, dataId, collections=collections, timespan=dataId.timespan)]
     if isCornerChip:  # we're running a CWFS pair, not a FAM image
         dataId2 = DataCoordinate.standardize(dataId, detector=int(dataId["detector"]) + 1)
-        refs.append(registry.findDataset(datasetType, dataId2, collections=collections, timespan=dataId.timespan))
+        refs.append(
+            registry.findDataset(datasetType, dataId2, collections=collections, timespan=dataId.timespan)
+        )
     return refs
 
 
@@ -245,8 +247,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 # CCS x-coordinate, which is what IntrinsicZernikes expects.
                 ccs_y, ccs_x = fieldAngle.value.tolist()
                 # getIntrinsicZernikes returns shape (1, nNoll) for a single
-                # field point; squeeze to 1-D so it lines up with the per-Zernike
-                # row assignment in createZkTable.
+                # field point; squeeze to 1-D so it lines up with the
+                # per-Zernike row assignment in createZkTable.
                 intrinsics = (
                     np.atleast_1d(
                         np.squeeze(
