@@ -88,10 +88,14 @@ class GenerateDonutTaskBaseConfig(
         doc="Task to perform background subtraction.",
     )
     doSubtractBackground: pexConfig.Field = pexConfig.Field(
-        doc="Do background subtration?", dtype=bool, default=True,
+        doc="Do background subtration?",
+        dtype=bool,
+        default=True,
     )
     doUnflattenBackgroundSubtractedImage: pexConfig.Field = pexConfig.Field(
-        doc="Unflatten after background subtraction?", dtype=bool, default=False,
+        doc="Unflatten after background subtraction?",
+        dtype=bool,
+        default=False,
     )
 
     def validate(self) -> None:
