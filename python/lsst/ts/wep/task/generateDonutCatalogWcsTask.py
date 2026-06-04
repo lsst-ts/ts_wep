@@ -149,6 +149,7 @@ class GenerateDonutCatalogWcsTask(GenerateDonutTaskBase):
         self,
         refCatalogs: list[afwTable.SimpleCatalog],
         exposure: afwImage.Exposure,
+        flat: afwImage.Exposure = None,
     ) -> pipeBase.Struct:
         refObjLoader = self.getRefObjLoader(refCatalogs)
 
@@ -165,7 +166,7 @@ class GenerateDonutCatalogWcsTask(GenerateDonutTaskBase):
         elif self.config.photoRefFilterPrefix is not None:
             filterName = f"{self.config.photoRefFilterPrefix}_{exposure.filter.bandLabel}"
 
-        self._subtractBackground(exposure)
+        self._subtractBackground(exposure, flat=flat)
 
         try:
             # Match detector layout to reference catalog

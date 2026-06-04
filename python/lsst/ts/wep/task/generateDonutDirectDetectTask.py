@@ -219,7 +219,7 @@ class GenerateDonutDirectDetectTask(GenerateDonutTaskBase):
         return donutTable
 
     @timeMethod
-    def run(self, exposure: Exposure, camera: Camera) -> pipeBase.Struct:
+    def run(self, exposure: Exposure, camera: Camera, flat: afwImage.Exposure = None) -> pipeBase.Struct:
         camName = camera.getName()
         detectorName = exposure.getDetector().getName()
         bandLabel = exposure.filter.bandLabel
@@ -267,7 +267,7 @@ That means that the provided exposure is very close to focus"
             donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
             return pipeBase.Struct(donutCatalog=donutCatUpd)
 
-        self._subtractBackground(exposure)
+        self._subtractBackground(exposure, flat=flat)
 
         # Trim the exposure by the margin
         self.log.info("Trimming exposure edges")

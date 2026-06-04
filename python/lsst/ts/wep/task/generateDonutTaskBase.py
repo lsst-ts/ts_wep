@@ -45,6 +45,13 @@ class GenerateDonutTaskBaseConnections(
         storageClass="Exposure",
         name="post_isr_image",
     )
+    flat = connectionTypes.PrerequisiteInput(
+        doc="Flat field image to un-flatten background-subtracted image.",
+        storageClass="ExposureF",
+        name="flat",
+        dimensions=["instrument", "detector", "physical_filter"],
+        isCalibration=True,
+    )
     donutCatalog = connectionTypes.Output(
         doc="Donut Locations",
         dimensions=(
@@ -55,6 +62,12 @@ class GenerateDonutTaskBaseConnections(
         storageClass="AstropyQTable",
         name="donutTable",
     )
+
+    def __init__(self, *, config=None):
+        super().__init__(config=config)
+
+        if not config.doUnflattenBackgroundSubtractedImage:
+            del self.flat
 
 
 class GenerateDonutTaskBaseConfig(
@@ -77,6 +90,17 @@ class GenerateDonutTaskBaseConfig(
     doSubtractBackground: pexConfig.Field = pexConfig.Field(
         doc="Do background subtration?", dtype=bool, default=True,
     )
+    doUnflattenBackgroundSubtractedImage: pexConfig.Field = pexConfig.Field(
+        doc="Unflatten after background subtraction?", dtype=bool, default=False,
+    )
+
+    def validate(self):
+        super().validate()
+
+        if self.doUnflattenBackgroundSubtractedImage and not self.doSubtractBackground:
+            raise ValueError(
+                "Cannot set doUnflattenBackgroundSubtractedImage if doSubtractBackground is False."
+            )
 
 
 class GenerateDonutTaskBase(pipeBase.PipelineTask):
@@ -99,13 +123,17 @@ class GenerateDonutTaskBase(pipeBase.PipelineTask):
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
-    def _subtractBackground(self, exposure: afwImage.Exposure):
-        """Subtract the background from the exposure.
+    def _subtractBackground(self, exposure: afwImage.Exposure, flat: afwImage.Exposure = None):
+        """Subtract the background from the exposure, and unflatten if configured.
 
         Parameters
         ----------
         exposure : `lsst.afw.image.Exposure`
+        flat : `lsst.afw.image.Exposure`, optional
         """
         if self.config.doSubtractBackground:
             self.log.info("Running background subtraction")
             self.subtractBackground.run(exposure=exposure)
+
+            if self.config.doUnflattenBackgroundSubtractedImage and flat is not None:
+                exposure.maskedImage *= flat.maskedImage
