@@ -63,7 +63,7 @@ class GenerateDonutTaskBaseConnections(
         name="donutTable",
     )
 
-    def __init__(self, *, config=None):
+    def __init__(self, *, config=None) -> None:
         super().__init__(config=config)
 
         if not config.doUnflattenBackgroundSubtractedImage:
@@ -94,7 +94,7 @@ class GenerateDonutTaskBaseConfig(
         doc="Unflatten after background subtraction?", dtype=bool, default=False,
     )
 
-    def validate(self):
+    def validate(self) -> None:
         super().validate()
 
         if self.doUnflattenBackgroundSubtractedImage and not self.doSubtractBackground:
@@ -123,7 +123,7 @@ class GenerateDonutTaskBase(pipeBase.PipelineTask):
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
-    def _subtractBackground(self, exposure: afwImage.Exposure, flat: afwImage.Exposure = None):
+    def _subtractBackground(self, exposure: afwImage.Exposure, flat: afwImage.Exposure = None) -> None:
         """Subtract the background from the exposure, and
         unflatten if configured.
 
