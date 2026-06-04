@@ -38,18 +38,18 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.afw.cameraGeom import Camera
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
-from lsst.meas.algorithms import SubtractBackgroundTask
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
-from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
+from lsst.ts.wep.task.generateDonutTaskBase import (
+    GenerateDonutTaskBase,
+    GenerateDonutTaskBaseConfig,
+    GenerateDonutTaskBaseConnections,
+)
 from lsst.ts.wep.utils import DefocalType, createTemplateForDetector, getTaskInstrument
 from lsst.utils.timer import timeMethod
 
 
-class GenerateDonutDirectDetectTaskConnections(
-    pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "visit", "detector"),  # type: ignore
-):
+class GenerateDonutDirectDetectTaskConnections(GenerateDonutTaskBaseConnections):
     """
     Specify the pipeline connections needed for
     GenerateDonutDirectDetectTask. We
@@ -57,22 +57,6 @@ class GenerateDonutDirectDetectTaskConnections(
     for a specified instrument.
     """
 
-    exposure = connectionTypes.Input(
-        doc="Input exposure to make measurements on",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="Exposure",
-        name="post_isr_image",
-    )
-    donutCatalog = connectionTypes.Output(
-        doc="Donut Locations",
-        dimensions=(
-            "visit",
-            "detector",
-            "instrument",
-        ),
-        storageClass="AstropyQTable",
-        name="donutTable",
-    )
     camera = connectionTypes.PrerequisiteInput(
         name="camera",
         storageClass="Camera",
@@ -84,7 +68,7 @@ class GenerateDonutDirectDetectTaskConnections(
 
 
 class GenerateDonutDirectDetectTaskConfig(
-    pipeBase.PipelineTaskConfig,
+    GenerateDonutTaskBaseConfig,
     pipelineConnections=GenerateDonutDirectDetectTaskConnections,  # type: ignore
 ):
     """
@@ -96,10 +80,6 @@ class GenerateDonutDirectDetectTaskConfig(
     measurementTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutQuickMeasurementTask,
         doc="How to run source detection and measurement.",
-    )
-    subtractBackground: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=SubtractBackgroundTask,
-        doc="Task to perform background subtraction.",
     )
     opticalModel: pexConfig.Field = pexConfig.Field(
         doc="Specify the optical model (offAxis, onAxis).",
@@ -123,18 +103,9 @@ class GenerateDonutDirectDetectTaskConfig(
         dtype=int,
         default=5,
     )
-    donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=DonutSourceSelectorTask, doc="How to select donut targets."
-    )
-    doDonutSelection: pexConfig.Field = pexConfig.Field(
-        doc="Whether or not to run donut selector.", dtype=bool, default=True
-    )
-    edgeMargin: pexConfig.Field = pexConfig.Field(
-        doc="Size of detector edge margin in pixels", dtype=int, default=80
-    )
 
 
-class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
+class GenerateDonutDirectDetectTask(GenerateDonutTaskBase):
     """
     Generate donut template and convolve with the defocal image to
     detect sources on the detectors for AOS.
@@ -144,21 +115,12 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
     _DefaultName = "generateDonutDirectDetectTask"
     config: GenerateDonutDirectDetectTaskConfig
     measurementTask: DonutQuickMeasurementTask
-    donutSelector: DonutSourceSelectorTask
-    subtractBackground: SubtractBackgroundTask
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         # Instantiate the quickFrameMeasurementTask
         self.makeSubtask("measurementTask")
-
-        # Set up the donut selector task if we need it
-        if self.config.doDonutSelection:
-            self.makeSubtask("donutSelector")
-
-        # Set up background subtraction task
-        self.makeSubtask("subtractBackground")
 
         # Set which sensors are intra focal
         # to create correct template
@@ -172,7 +134,6 @@ class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
         as coord_ra, coord_dec - these columns
         are required by EstimateZernikes, but not used explicitly
         downstream.
-
 
         Parameters
         ----------
@@ -306,9 +267,7 @@ That means that the provided exposure is very close to focus"
             donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
             return pipeBase.Struct(donutCatalog=donutCatUpd)
 
-        # Run background subtraction
-        self.log.info("Running background subtraction")
-        self.subtractBackground.run(exposure=exposure)
+        self._subtractBackground(exposure)
 
         # Trim the exposure by the margin
         self.log.info("Trimming exposure edges")
