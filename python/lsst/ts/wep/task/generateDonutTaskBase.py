@@ -63,7 +63,7 @@ class GenerateDonutTaskBaseConnections(
         name="donutTable",
     )
 
-    def __init__(self, *, config=None) -> None:
+    def __init__(self, *, config: pipeBase.PipelineTaskConfig = None) -> None:
         super().__init__(config=config)
 
         if not config.doUnflattenBackgroundSubtractedImage:
