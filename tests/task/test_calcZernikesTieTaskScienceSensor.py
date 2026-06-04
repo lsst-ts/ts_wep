@@ -179,7 +179,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        structNormal = self.task.run(donutStampsIntra, donutStampsExtra, self.intrinsicZernikes)
+        structNormal = self.task.run(donutStampsIntra, donutStampsExtra, *self.intrinsicZernikes)
 
         # check that 4 elements are created
         self.assertEqual(len(structNormal), 4)
@@ -232,7 +232,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         # Turn on the donut stamp selector
         self.task.doDonutStampSelector = True
-        structSelect = self.task.run(donutStampsIntra, donutStampsExtra, self.intrinsicZernikes)
+        structSelect = self.task.run(donutStampsIntra, donutStampsExtra, *self.intrinsicZernikes)
         # check that donut quality is reported for all donuts
         self.assertEqual(
             len(structSelect.donutQualityTable),
@@ -264,7 +264,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
         structNull = self.task.run(
             DonutStamps([], metadata=copy(donutStampsExtra.metadata)),
             DonutStamps([], metadata=copy(donutStampsExtra.metadata)),
-            self.intrinsicZernikes,
+            *self.intrinsicZernikes,
         )
 
         for struct in [structNormal, structNull]:
@@ -281,5 +281,5 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
 
         self.config.donutStampSelector.maxSelect = 0
         self.task = CalcZernikesTask(config=self.config)
-        structAllDonutsFail = self.task.run(donutStampsIntra, donutStampsExtra, self.intrinsicZernikes)
+        structAllDonutsFail = self.task.run(donutStampsIntra, donutStampsExtra, *self.intrinsicZernikes)
         self.assertEqual(len(structAllDonutsFail.donutQualityTable), 6)

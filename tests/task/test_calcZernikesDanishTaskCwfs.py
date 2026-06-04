@@ -287,8 +287,8 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
     def testTableMetadata(self) -> None:
         # First estimate without pairs
         emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
-        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, self.intrinsicZernikes).zernikes
-        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, self.intrinsicZernikes).zernikes
+        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, *self.intrinsicZernikes).zernikes
+        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, *self.intrinsicZernikes).zernikes
 
         # Check metadata keys exist for extra case
         self.assertIn("cam_name", zkCalcExtra.meta)
@@ -320,7 +320,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
         # Now estimate with pairs
         zkCalcPairs = self.task.run(
-            self.donutStampsExtra, self.donutStampsIntra, self.intrinsicZernikes
+            self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes
         ).zernikes
 
         # Check metadata keys exist for pairs case
@@ -359,7 +359,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.config.estimateZernikes.lstsqKwargs["max_nfev"] = 1
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
-        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicZernikes).zernikes
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes).zernikes
 
         # Check that all donuts were marked as NOT successfully fit
         fit_success = zkCalc.meta["estimatorInfo"]["fit_success"]
@@ -390,7 +390,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
 
     def testBlurClip(self) -> None:
         # Get sample zernike table
-        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, self.intrinsicZernikes).zernikes
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes).zernikes
         zkCalc = vstack([zkCalc, zkCalc[1:], zkCalc[1:]])  # Add extra rows to test minus average row
         donut_blur = len(zkCalc) * [1.0]
         donut_blur[0] = 10.0  # Set the average row to be very blurred to force it to be clipped

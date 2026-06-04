@@ -148,7 +148,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
             config.estimateZernikes.retarget(subtask)
             pairedTask = CalcZernikesTask(config=config)
 
-            pairedZk = pairedTask.run(donutStampsExtra, donutStampsIntra, 2 * [intrinsicZernikes])
+            pairedZk = pairedTask.run(
+                donutStampsExtra, donutStampsIntra, intrinsicZernikes, intrinsicZernikes
+            )
             pairedZk = pairedZk.outputZernikesAvg
 
             # Calculate Zernikes with stamps unpaired
