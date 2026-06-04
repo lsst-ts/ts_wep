@@ -38,19 +38,20 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.pipe.base.task import TaskError
-from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
     addVisitInfoToCatTable,
     donutCatalogToAstropy,
     runSelection,
 )
+from lsst.ts.wep.task.generateDonutTaskBase import (
+    GenerateDonutTaskBase,
+    GenerateDonutTaskBaseConfig,
+    GenerateDonutTaskBaseConnections,
+)
 from lsst.utils.timer import timeMethod
 
 
-class GenerateDonutCatalogWcsTaskConnections(
-    pipeBase.PipelineTaskConnections,
-    dimensions=("visit", "detector", "instrument"),  # type: ignore
-):
+class GenerateDonutCatalogWcsTaskConnections(GenerateDonutTaskBaseConnections):
     """
     Specify the pipeline connections needed for
     GenerateDonutCatalogWcsTask. We
@@ -66,26 +67,10 @@ class GenerateDonutCatalogWcsTaskConnections(
         deferLoad=True,
         name="cal_ref_cat",
     )
-    exposure = connectionTypes.Input(
-        doc="Input exposure to make measurements on",
-        dimensions=("exposure", "detector", "instrument"),
-        storageClass="Exposure",
-        name="post_isr_image",
-    )
-    donutCatalog = connectionTypes.Output(
-        doc="Donut Locations",
-        dimensions=(
-            "visit",
-            "detector",
-            "instrument",
-        ),
-        storageClass="AstropyQTable",
-        name="donutTable",
-    )
 
 
 class GenerateDonutCatalogWcsTaskConfig(
-    pipeBase.PipelineTaskConfig,
+    GenerateDonutTaskBaseConfig,
     pipelineConnections=GenerateDonutCatalogWcsTaskConnections,  # type: ignore
 ):
     """
@@ -94,15 +79,6 @@ class GenerateDonutCatalogWcsTaskConfig(
     that run to do the source selection.
     """
 
-    donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=DonutSourceSelectorTask, doc="How to select donut targets."
-    )
-    doDonutSelection: pexConfig.Field = pexConfig.Field(
-        doc="Whether or not to run donut selector.", dtype=bool, default=True
-    )
-    edgeMargin: pexConfig.Field = pexConfig.Field(
-        doc="Size of detector edge margin in pixels", dtype=int, default=80
-    )
     # When matching photometric filters are not available in
     # the reference catalog (e.g. Gaia) use anyFilterMapsToThis
     # to get sources out of the catalog.
@@ -128,7 +104,7 @@ class GenerateDonutCatalogWcsTaskConfig(
     )
 
 
-class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
+class GenerateDonutCatalogWcsTask(GenerateDonutTaskBase):
     """
     Create a WCS from boresight info and then use this
     with a reference catalog to select sources on the detectors for AOS.
@@ -138,13 +114,10 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
     _DefaultName = "generateDonutCatalogWcsTask"
 
     config: GenerateDonutCatalogWcsTaskConfig
-    donutSelector: DonutSourceSelectorTask
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        if self.config.doDonutSelection:
-            self.makeSubtask("donutSelector")
 
         # TODO: Temporary until DM-24162 is closed at which point we
         # can remove this
