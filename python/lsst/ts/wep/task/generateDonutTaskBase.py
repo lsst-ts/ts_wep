@@ -28,10 +28,10 @@ __all__ = [
 from typing import Any
 
 import lsst.afw.image as afwImage
-from lsst.meas.algorithms import SubtractBackgroundTask
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
+from lsst.meas.algorithms import SubtractBackgroundTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
 
