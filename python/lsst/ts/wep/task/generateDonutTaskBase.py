@@ -124,7 +124,8 @@ class GenerateDonutTaskBase(pipeBase.PipelineTask):
             self.makeSubtask("donutSelector")
 
     def _subtractBackground(self, exposure: afwImage.Exposure, flat: afwImage.Exposure = None):
-        """Subtract the background from the exposure, and unflatten if configured.
+        """Subtract the background from the exposure, and
+        unflatten if configured.
 
         Parameters
         ----------
@@ -136,4 +137,7 @@ class GenerateDonutTaskBase(pipeBase.PipelineTask):
             self.subtractBackground.run(exposure=exposure)
 
             if self.config.doUnflattenBackgroundSubtractedImage and flat is not None:
+                if not exposure.metadata.get("LSST ISR FLAT APPLIED", False):
+                    self.log.warning("Exposure was not flat-fielded; unflattening anyway.")
+
                 exposure.maskedImage *= flat.maskedImage
