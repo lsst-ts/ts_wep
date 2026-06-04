@@ -72,7 +72,7 @@ def main() -> None:
     parser.add_argument(
         "--input-dataset-type",
         type=str,
-        default="intrinsic_aberrations_temp",
+        required=True,
         help="Dataset type to read from. (default: intrinsic_aberrations_temp)",
         metavar="TYPE",
     )
