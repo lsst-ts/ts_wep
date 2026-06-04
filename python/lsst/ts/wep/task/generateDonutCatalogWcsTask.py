@@ -165,6 +165,8 @@ class GenerateDonutCatalogWcsTask(GenerateDonutTaskBase):
         elif self.config.photoRefFilterPrefix is not None:
             filterName = f"{self.config.photoRefFilterPrefix}_{exposure.filter.bandLabel}"
 
+        self._subtractBackground(exposure)
+
         try:
             # Match detector layout to reference catalog
             self.log.info("Running Donut Selector")
