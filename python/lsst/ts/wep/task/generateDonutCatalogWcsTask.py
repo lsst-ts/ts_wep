@@ -25,7 +25,6 @@ __all__ = [
     "GenerateDonutCatalogWcsTask",
 ]
 
-import os
 import warnings
 from typing import Any
 
@@ -117,11 +116,6 @@ class GenerateDonutCatalogWcsTask(GenerateDonutTaskBase):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-
-
-        # TODO: Temporary until DM-24162 is closed at which point we
-        # can remove this
-        os.environ["NUMEXPR_MAX_THREADS"] = "1"
 
     def getRefObjLoader(self, refCatalogList: list) -> ReferenceObjectLoader:
         """
