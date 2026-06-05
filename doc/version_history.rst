@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v17.4.0 (2026-06-04)
+====================
+
+New Features
+------------
+
+- ``CalcZernikesTask`` and ``CalcZernikesUnpairedTask`` now consume the ``IntrinsicZernikes`` calibration from ``lsst.ip.isr`` instead of an ad hoc ``intrinsic_aberrations_temp`` astropy table. The corresponding prerequisite connection is renamed to ``intrinsicZernikes`` with storage class ``IsrCalib`` and ``isCalibration=True``, and the in-task interpolator is delegated to ``IntrinsicZernikes.getIntrinsicZernikes``.
+  Added the ``ingestIntrinsicZernikes`` command-line tool. It reads ``intrinsic_aberrations_temp`` astropy tables from an existing butler collection (default ``LSSTCam/aos/intrinsic``), converts each into an ``lsst.ip.isr.IntrinsicZernikes`` calibration, puts them into a RUN collection, and optionally certifies them into a CALIBRATION collection with ``--certify-into``. The output dataset type ``intrinsicZernikes`` is registered as a calibration (storage class ``IsrCalib``) on first use. (`DM-55046 <https://rubinobs.atlassian.net//browse/DM-55046>`_)
+
+
 v17.3.0 (2026-05-27)
 ====================
 
