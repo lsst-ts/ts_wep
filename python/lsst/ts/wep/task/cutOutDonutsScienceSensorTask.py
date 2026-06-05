@@ -58,6 +58,13 @@ class CutOutDonutsScienceSensorTaskConnections(
         multiple=True,
         minimum=2,
     )
+    flat = ct.PrerequisiteInput(
+        doc="Flat field image to un-flatten background-subtracted image.",
+        storageClass="ExposureF",
+        name="flat",
+        dimensions=["instrument", "detector", "physical_filter"],
+        isCalibration=True,
+    )
     donutCatalog = ct.Input(
         doc="Donut Locations",
         dimensions=(
@@ -136,6 +143,9 @@ class CutOutDonutsScienceSensorTaskConnections(
                 del self.donutStampsExtra
                 del self.donutStampsIntra
 
+            if not config.doUnflattenBackgroundSubtractedImage:
+                del self.flat
+
 
 class CutOutDonutsScienceSensorTaskConfig(
     CutOutDonutsBaseTaskConfig,
@@ -193,6 +203,10 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
+        if self.config.doUnflattenBackgroundSubtractedImage:
+            flat = butlerQC.get(inputRefs.flat)
+        else:
+            flat = None
         if self.runPaired:
             donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
             donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}
@@ -209,7 +223,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         for pair in pairs:
             exposures = butlerQC.get([exposureHandleDict[k] for k in [pair.intra, pair.extra]])
             donutCats = butlerQC.get([donutCatalogHandleDict[k] for k in [pair.intra, pair.extra]])
-            outputs = self.run(exposures, donutCats, camera)
+            outputs = self.run(exposures, donutCats, camera, flat=flat)
             if self.runPaired:
                 self.log.info("Running CutOutDonutsScienceSensorTask in paired mode.")
                 butlerQC.put(outputs.donutStampsExtra, donutStampsExtraHandleDict[pair.extra])
@@ -295,6 +309,7 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         exposures: list[afwImage.Exposure],
         donutCatalog: list[QTable],
         camera: lsst.afw.cameraGeom.Camera,
+        flat: afwImage.Exposure = None,
     ) -> pipeBase.Struct:
         # Determine which exposure is intra-/extra-focal
         focusZ = (exposures[0].visitInfo.focusZ, exposures[1].visitInfo.focusZ)
@@ -307,12 +322,14 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
             donutCatalog[extraExpIdx],
             DefocalType.Extra,
             cameraName,
+            flat=flat,
         )
         donutStampsIntra = self.cutOutStamps(
             exposures[intraExpIdx],
             donutCatalog[intraExpIdx],
             DefocalType.Intra,
             cameraName,
+            flat=flat,
         )
 
         # If no donuts are in the donutCatalog for a set of exposures

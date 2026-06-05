@@ -50,6 +50,13 @@ class CutOutDonutsCwfsTaskConnections(
         storageClass="Exposure",
         name="post_isr_image",
     )
+    flat = connectionTypes.PrerequisiteInput(
+        doc="Flat field image to un-flatten background-subtracted image.",
+        storageClass="ExposureF",
+        name="flat",
+        dimensions=("instrument", "detector", "physical_filter"),
+        isCalibration=True,
+    )
     donutCatalog = connectionTypes.Input(
         doc="Donut Locations",
         dimensions=(
@@ -68,6 +75,13 @@ class CutOutDonutsCwfsTaskConnections(
         name="donutStampsCwfs",
         multiple=False,
     )
+
+    def __init__(self, *, config: Any | None = None) -> None:
+        super().__init__(config=config)
+
+        if config is not None:
+            if not config.doUnflattenBackgroundSubtractedImage:
+                del self.flat
 
 
 class CutOutDonutsCwfsTaskConfig(
@@ -114,6 +128,7 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
         exposure: afwImage.Exposure,
         donutCatalog: QTable,
         camera: lsst.afw.cameraGeom.Camera,
+        flat: afwImage.Exposure = None,
     ) -> pipeBase.Struct:
         cameraName = camera.getName()
 
@@ -144,6 +159,7 @@ class CutOutDonutsCwfsTask(CutOutDonutsBaseTask):
                 donutCatalog,
                 defocalType,
                 cameraName,
+                flat=flat,
             )
 
         return pipeBase.Struct(donutStampsOut=donutStampsOut)

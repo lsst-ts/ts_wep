@@ -110,9 +110,19 @@ class CutOutDonutsBaseTaskConfig(
         dtype=str,
         optional=True,
     )
+    doSubtractBackground: pexConfig.Field = pexConfig.Field(
+        doc="Do background subtration?",
+        dtype=bool,
+        default=True,
+    )
     subtractBackground: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=lsst.meas.algorithms.SubtractBackgroundTask,
         doc="Task to perform background subtraction.",
+    )
+    doUnflattenBackgroundSubtractedImage: pexConfig.Field = pexConfig.Field(
+        doc="Unflatten after background subtraction?",
+        dtype=bool,
+        default=False,
     )
     maxRecenterDistance: pexConfig.Field = pexConfig.Field(
         doc="Maximum distance (in pixels) to shift donut stamp centroid when "
@@ -171,8 +181,9 @@ class CutOutDonutsBaseTask(pipeBase.PipelineTask):
         self.instConfigFile = self.config.instConfigFile
         # Set the amount of mask dilation for background
         self.bkgDilationIter = self.config.bkgDilationIter
-        # Set up background subtraction task
-        self.makeSubtask("subtractBackground")
+        if self.config.doSubtractBackground:
+            # Set up background subtraction task
+            self.makeSubtask("subtractBackground")
         # Set max recentering distance in pixels
         self.maxRecenterDistance = self.config.maxRecenterDistance
         # Set Variance Plane Warning only once
@@ -576,6 +587,7 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         donutCatalog: QTable,
         defocalType: DefocalType,
         cameraName: str,
+        flat: Exposure = None,
     ) -> DonutStamps:
         """
         Cut out postage stamps for sources in catalog.
@@ -591,6 +603,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         cameraName : str
             Name of camera for the exposure. Can accept "LSSTCam",
             "LSSTComCam", "LATISS".
+        flat : lsst.afw.image.Exposure
+            Flat-field to unflatten background-subtracted image if
+            doUnflattenBackgroundSubtractedImage is True.
 
         Returns
         -------
@@ -603,8 +618,16 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         bandLabel = exposure.filter.bandLabel
         catalogMeta = donutCatalog.meta
 
-        # Run background subtraction
-        self.subtractBackground.run(exposure=exposure).background
+        if self.config.doSubtractBackground:
+            self.log.info("Running background subtraction")
+            self.subtractBackground.run(exposure=exposure)
+
+            if self.config.doUnflattenBackgroundSubtractedImage and flat is not None:
+                if not exposure.metadata.get("LSST ISR FLAT APPLIED", False):
+                    self.log.warning("Exposure was not flat-fielded; unflattening anyway.")
+
+                self.log.info("Unflattening background-subtracted image.")
+                exposure.maskedImage *= flat.maskedImage
 
         # Load the instrument
         instrument = getTaskInstrument(
