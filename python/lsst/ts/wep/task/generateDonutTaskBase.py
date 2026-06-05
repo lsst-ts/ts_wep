@@ -101,7 +101,7 @@ class GenerateDonutTaskBase(pipeBase.PipelineTask):
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
 
-    def _subtractBackground(self, exposure: afwImage.Exposure):
+    def _subtractBackground(self, exposure: afwImage.Exposure) -> None:
         """Subtract the background from the exposure.
 
         Parameters
