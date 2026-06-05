@@ -21,6 +21,7 @@ where = [ "python" ]
 [project.scripts]
 generatePairTable = "lsst.ts.wep:generatePairTable"
 ingestPairTable = "lsst.ts.wep:ingestPairTable"
+ingestIntrinsicZernikes = "lsst.ts.wep:ingestIntrinsicZernikes"
 
 [tool.setuptools_scm]
 write_to = "python/lsst/ts/wep/version.py"
