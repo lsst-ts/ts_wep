@@ -28,17 +28,18 @@ __all__ = [
 from typing import Sequence
 
 import numpy as np
-from astropy.table import QTable, Table
+from astropy.table import QTable
 
 import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
 
 
-def lookupIntrinsicTables(
+def lookupIntrinsicZernikes(
     datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
 ) -> list[DatasetRef | None]:
     refs = [registry.findDataset(datasetType, dataId, collections=collections)]
@@ -55,12 +56,13 @@ class CalcZernikesUnpairedTaskConnections(
         storageClass="StampsBase",
         name="donutStamps",
     )
-    intrinsicTable = connectionTypes.PrerequisiteInput(
-        doc="Intrinsic Zernike Map for the instrument",
+    intrinsicZernikes = connectionTypes.PrerequisiteInput(
+        doc="Intrinsic Zernike calibration for the instrument",
         dimensions=("detector", "instrument", "physical_filter"),
-        storageClass="ArrowAstropy",
-        name="intrinsic_aberrations_temp",
-        lookupFunction=lookupIntrinsicTables,  # type: ignore
+        storageClass="IsrCalib",
+        name="intrinsicZernikes",
+        isCalibration=True,
+        lookupFunction=lookupIntrinsicZernikes,  # type: ignore
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -105,7 +107,7 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
     def run(
         self,
         donutStamps: DonutStamps,
-        intrinsicTable: Table,
+        intrinsicZernikes: IntrinsicZernikes,
         numCores: int = 1,
     ) -> pipeBase.Struct:
         # Prepopulate stamps so we always have the metadata available, even if
@@ -139,20 +141,20 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
             selectedDonuts = donutStamps
             donutQualityTable = QTable([])
 
-        # Assign stamps to either intra or extra, and build intrinsic map
+        # Assign stamps to either intra or extra and the intrinsic calibration
         defocalType = donutStamps.metadata["DFC_TYPE"]
         if defocalType == "extra":
             self.stampsExtra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "extra"
-            self.intrinsicMapExtra = self._createIntrinsicMap(intrinsicTable)
-            self.intrinsicMapIntra = None
+            self.intrinsicZernikesExtra = intrinsicZernikes
+            self.intrinsicZernikesIntra = None
         else:
             self.stampsIntra = selectedDonuts
             if len(donutQualityTable) > 0:
                 donutQualityTable["DEFOCAL_TYPE"] = "intra"
-            self.intrinsicMapExtra = None
-            self.intrinsicMapIntra = self._createIntrinsicMap(intrinsicTable)
+            self.intrinsicZernikesExtra = None
+            self.intrinsicZernikesIntra = intrinsicZernikes
 
         # Estimate Zernikes
         zkCoeffRaw = self.estimateZernikes.run(

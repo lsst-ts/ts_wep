@@ -46,6 +46,8 @@ pytestmark = pytest.mark.pipeline
 
 
 class TestDonutQuickMeasurementTask(unittest.TestCase):
+    testDataDir: str
+    repoDir: str
     expNum: int
     detNum: int
     runName: str

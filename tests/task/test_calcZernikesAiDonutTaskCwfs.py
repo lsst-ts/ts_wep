@@ -29,6 +29,7 @@ enforce_single_threading()
 import lsst.utils.tests
 import numpy as np
 from lsst.daf.butler import Butler
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import (
     CalcZernikesTask,
     CalcZernikesTaskConfig,
@@ -130,16 +131,20 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         self.donutStampsIntra = self.butler.get(
             "donutStampsIntra", dataId=self.dataIdExtra, collections=[self.runName]
         )
-        self.intrinsicTables = [
-            self.butler.get(
-                "intrinsic_aberrations_temp",
-                dataId=self.dataIdExtra,
-                collections=["LSSTCam/aos/intrinsic"],
+        self.intrinsicZernikes = [
+            IntrinsicZernikes(
+                table=self.butler.get(
+                    "intrinsic_aberrations_temp",
+                    dataId=self.dataIdExtra,
+                    collections=["LSSTCam/aos/intrinsic"],
+                )
             ),
-            self.butler.get(
-                "intrinsic_aberrations_temp",
-                dataId=self.dataIdIntra | {"detector": 192},
-                collections=["LSSTCam/aos/intrinsic"],
+            IntrinsicZernikes(
+                table=self.butler.get(
+                    "intrinsic_aberrations_temp",
+                    dataId=self.dataIdIntra | {"detector": 192},
+                    collections=["LSSTCam/aos/intrinsic"],
+                )
             ),
         ]
 
@@ -160,8 +165,8 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
     def testTableMetadata(self) -> None:
         # First estimate without pairs
         emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)
-        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, self.intrinsicTables).zernikes
-        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, self.intrinsicTables).zernikes
+        zkCalcExtra = self.task.run(self.donutStampsExtra, emptyStamps, *self.intrinsicZernikes).zernikes
+        zkCalcIntra = self.task.run(emptyStamps, self.donutStampsIntra, *self.intrinsicZernikes).zernikes
 
         # Check metadata keys exist for extra case
         self.assertIn("cam_name", zkCalcExtra.meta)
@@ -185,7 +190,7 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
 
         # Now estimate with pairs
         zkCalcPairs = self.task.run(
-            self.donutStampsExtra, self.donutStampsIntra, self.intrinsicTables
+            self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes
         ).zernikes
 
         # Check metadata keys exist for pairs case

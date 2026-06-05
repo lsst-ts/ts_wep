@@ -1514,11 +1514,11 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         zkTable.meta["average_row_aggregation"] = self.AVERAGE_ROW_AGGREGATION_METHOD
 
     def _unpackStampData(self, stamp: DonutStamp | None) -> tuple:
-        """Override parent method to handle missing intrinsic maps.
+        """Override parent method to handle missing intrinsic calibrations.
 
-        The neural task does not use intrinsic Zernike tables, so this method
-        returns NaN for intrinsic values instead of trying to access
-        intrinsicMapIntra or intrinsicMapExtra attributes.
+        The neural task does not use intrinsic Zernike calibrations, so this
+        method returns NaN for intrinsic values instead of trying to access
+        ``intrinsicZernikesIntra`` or ``intrinsicZernikesExtra`` attributes.
 
         Parameters
         ----------
