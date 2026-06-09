@@ -78,7 +78,11 @@ class DonutSizeCorrelator:
         image[mask] = fillVal
 
         # Normalize the image
-        image /= image[~mask].max()
+        if np.any(~mask):
+            image /= image[~mask].max()
+        else:
+            # Entire image is masked — return zeros
+            image[:] = 0.0
         return image
 
     @staticmethod
