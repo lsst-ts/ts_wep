@@ -68,6 +68,13 @@ class DonutStampSelectorTaskConfig(pexConfig.Config):
         + "reject galaxy-donuts which are very blurry and therefore have most "
         + "of their power at low k.",
     )
+    selectWithRecenterFlags: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Whether to use the recenter flags from cutOutDonutsBase to reject donuts "
+        + "that had recentering issues. If True, any donut with a non-zero recenter flag "
+        + "will be rejected.",
+    )
     useCustomSnLimit: pexConfig.Field = pexConfig.Field(
         dtype=bool,
         default=False,
@@ -298,9 +305,22 @@ class DonutStampSelectorTask(pipeBase.Task):
         elif self.config.selectWithMaxPowerGrad:
             self.log.warning("selectWithMaxPowerGrad==True but MAX_POWER_GRAD not in stamp metadata.")
 
+        # Select with recenter flags if requested
+        recenterFlagsSelect = np.ones(len(donutStamps), dtype="bool")
+        if self.config.selectWithRecenterFlags:
+            if "RECENTER_FLAGS" in list(donutStamps.metadata):
+                recenterFlags = np.asarray(donutStamps.metadata.getArray("RECENTER_FLAGS"))
+                recenterFlagsSelect = recenterFlags == 0
+                self.log.info(
+                    f"{sum(recenterFlagsSelect)} of {len(recenterFlagsSelect)} donuts passed "
+                    + "recenter flag selection."
+                )
+            else:
+                self.log.warning("selectWithRecenterFlags==True but RECENTER_FLAGS not in stamp metadata.")
+
         # choose only donuts that satisfy all selected conditions
         if self.config.doSelection:
-            selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect
+            selected = entropySelect * snSelect * fracBadPixSelect * maxPowerGradSelect * recenterFlagsSelect
             self.log.info(f"{sum(selected)} of {len(selected)} donuts passed combined selection criteria.")
             # make sure we don't select more than maxSelect
             if self.config.maxSelect != -1:
@@ -324,6 +344,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 entropySelect,
                 fracBadPixSelect,
                 maxPowerGradSelect,
+                recenterFlagsSelect,
                 donutRadii,
                 selected,
                 donutId,
@@ -337,6 +358,7 @@ class DonutStampSelectorTask(pipeBase.Task):
                 "ENTROPY_SELECT",
                 "FRAC_BAD_PIX_SELECT",
                 "MAX_POWER_GRAD_SELECT",
+                "RECENTER_FLAGS_SELECT",
                 "RADIUS",
                 "FINAL_SELECT",
                 "DONUT_ID",
