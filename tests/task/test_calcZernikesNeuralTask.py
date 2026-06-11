@@ -195,6 +195,18 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             "exposure": self.visitNum,
         }
 
+    def _getIntrinsicZernikes(self, exposure, detector: int):
+        physicalFilter = getattr(exposure.filter, "physicalLabel", None) or exposure.filter.bandLabel
+        return self.butler.get(
+            "intrinsicZernikes",
+            dataId={
+                "instrument": "LSSTCam",
+                "detector": detector,
+                "physical_filter": physicalFilter,
+            },
+            collections=["LSSTCam/aos/intrinsic"],
+        )
+
     def testConfigurableNollIndices(self) -> None:
         """
         Test that Noll indices can be configured via the config.
@@ -234,9 +246,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify that we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.dataId["detector"])
 
         # Run the task with single exposure
-        values = self.task.run(exposure)
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
 
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results")
@@ -265,9 +282,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.dataId["detector"])
 
         # Run with valid exposure
-        values = self.task.run(exposure)
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
 
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results with valid exposure")
@@ -309,9 +331,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, dataId2["detector"])
 
         # Run with different detector exposure
-        values = self.task.run(exposure)
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
 
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results with different detector")
