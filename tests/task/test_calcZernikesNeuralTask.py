@@ -28,7 +28,9 @@ import pytest
 import yaml
 
 import lsst.utils.tests
+from lsst.afw.image import Exposure
 from lsst.daf.butler import Butler
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import CalcZernikesNeuralTask, CalcZernikesNeuralTaskConfig
 from lsst.ts.wep.utils import (
     getModulePath,
@@ -189,13 +191,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         # Define data ID for single exposure
         # Using detector 191 from the same visit
         self.visitNum = 2031063000001
+        self.detector: int = 191
         self.dataId = {
             "instrument": "LSSTCam",
-            "detector": 191,
+            "detector": self.detector,
             "exposure": self.visitNum,
         }
 
-    def _getIntrinsicZernikes(self, exposure, detector: int):
+    def _getIntrinsicZernikes(self, exposure: Exposure, detector: int) -> IntrinsicZernikes:
         physicalFilter = getattr(exposure.filter, "physicalLabel", None) or exposure.filter.bandLabel
         return self.butler.get(
             "intrinsicZernikes",
@@ -246,7 +249,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify that we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
-        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.dataId["detector"])
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.detector)
 
         # Run the task with single exposure
         values = self.task.run(
@@ -282,7 +285,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
-        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.dataId["detector"])
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.detector)
 
         # Run with valid exposure
         values = self.task.run(
@@ -321,9 +324,10 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         This tests the robustness with different data sources.
         """
         # Use a different detector (192 instead of 191)
+        detector2: int = 192
         dataId2 = {
             "instrument": "LSSTCam",
-            "detector": 192,
+            "detector": detector2,
             "exposure": self.visitNum,
         }
 
@@ -331,7 +335,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
-        intrinsicZernikes = self._getIntrinsicZernikes(exposure, dataId2["detector"])
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, detector2)
 
         # Run with different detector exposure
         values = self.task.run(
