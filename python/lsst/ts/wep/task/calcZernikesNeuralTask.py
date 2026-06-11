@@ -1446,10 +1446,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         """Fill OPD, intrinsic, and deviation columns using cached TARTS data.
 
         Uses ``self._lastZkDeviationsCcs`` and ``self._lastZkIntrinsicsCcs``
-        populated during ``calcZernikesFromExposure``. When boresight angles
-        are available, deviations and intrinsics are rotated from CCS to OCS
-        before writing; otherwise CCS values are written and a warning is
-        logged.
+        populated during ``calcZernikesFromExposure``. TARTS outputs use the
+        same CCS convention as Danish, so this method writes CCS coefficients
+        directly to the standard ``zernikes`` columns. Downstream donut_viz
+        aggregation is responsible for creating OCS products.
 
         Parameters
         ----------
@@ -1457,7 +1457,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             Table produced by ``createZkTable``, with row 0 the aggregate
             label and subsequent rows per donut.
         exposure : lsst.afw.image.Exposure
-            Exposure used for CCS-to-OCS rotation metadata.
+            Exposure retained for API compatibility with the previous neural
+            table population path; OCS rotation is intentionally not applied.
 
         Returns
         -------
@@ -1467,61 +1468,46 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         Notes
         -----
         The aggregate (``label == "average"``) row is updated with the
-        nanmedian across donuts for total, intrinsic, and deviation in OCS
-        (or CCS if rotation is unavailable). OPD columns store
-        ``intrinsic + deviation`` in nanometers. ``zkTable.meta`` receives
-        ``average_row_aggregation`` set to ``AVERAGE_ROW_AGGREGATION_METHOD``
-        so consumers know the row label ``average`` refers to this statistic,
-        not a mean (see also ``run`` for nanmedian on ``ood_score``).
+        nanmedian across donuts for total, intrinsic, and deviation in CCS.
+        OPD columns store ``intrinsic + deviation`` in nanometers.
+        ``zkTable.meta`` receives ``average_row_aggregation`` set to
+        ``AVERAGE_ROW_AGGREGATION_METHOD`` so consumers know the row label
+        ``average`` refers to this statistic, not a mean (see also ``run`` for
+        nanmedian on ``ood_score``).
         """
         if len(zkTable) == 0:
             return
-
-        try:
-            rtp = self._getCcsToOcsRotationAngle(exposure)
-        except (AttributeError, RuntimeError) as e:
-            self.log.warning(
-                "Missing visitInfo boresight angles for CCS->OCS Zernike conversion (%s); "
-                "writing CCS values to output table.",
-                e,
-            )
-            rtp = None
 
         numRowsDonut = max(0, len(zkTable) - 1)
         numCached = min(numRowsDonut, len(self._lastZkDeviationsCcs), len(self._lastZkIntrinsicsCcs))
         if numCached == 0:
             return
 
-        allTotalOcs: list[np.ndarray] = []
-        allIntrOcs: list[np.ndarray] = []
-        allDevOcs: list[np.ndarray] = []
+        allTotalCcs: list[np.ndarray] = []
+        allIntrCcs: list[np.ndarray] = []
+        allDevCcs: list[np.ndarray] = []
 
         for i in range(numCached):
             devCcs = self._lastZkDeviationsCcs[i]
             intrCcs = self._lastZkIntrinsicsCcs[i]
-            if rtp is None:
-                devOcs = devCcs
-                intrOcs = intrCcs
-            else:
-                devOcs = self._rotateZernikeVectorCcsToOcs(devCcs, rtp)
-                intrOcs = self._rotateZernikeVectorCcsToOcs(intrCcs, rtp)
-            totalOcs = devOcs + intrOcs
+            totalCcs = devCcs + intrCcs
 
-            allDevOcs.append(devOcs)
-            allIntrOcs.append(intrOcs)
-            allTotalOcs.append(totalOcs)
+            allDevCcs.append(devCcs)
+            allIntrCcs.append(intrCcs)
+            allTotalCcs.append(totalCcs)
 
             rowIdx = i + 1  # index 0 is average row
             for modeIdx, noll in enumerate(self.nollIndices):
-                zkTable[f"Z{noll}"][rowIdx] = (totalOcs[modeIdx] * u.micron).to(u.nm)
-                zkTable[f"Z{noll}_intrinsic"][rowIdx] = (intrOcs[modeIdx] * u.micron).to(u.nm)
-                zkTable[f"Z{noll}_deviation"][rowIdx] = (devOcs[modeIdx] * u.micron).to(u.nm)
+                zkTable[f"Z{noll}"][rowIdx] = (totalCcs[modeIdx] * u.micron).to(u.nm)
+                zkTable[f"Z{noll}_intrinsic"][rowIdx] = (intrCcs[modeIdx] * u.micron).to(u.nm)
+                zkTable[f"Z{noll}_deviation"][rowIdx] = (devCcs[modeIdx] * u.micron).to(u.nm)
 
-        # Aggregate row from donut rows in OCS (nanmedian; on-sky validation)
+        # Aggregate row from donut rows in CCS to match the Danish table
+        # contract; donut_viz handles CCS-to-OCS rotation downstream.
         avgIdx = np.where(zkTable["label"] == "average")[0][0]
-        avgTotal = np.nanmedian(np.stack(allTotalOcs, axis=0), axis=0)
-        avgIntr = np.nanmedian(np.stack(allIntrOcs, axis=0), axis=0)
-        avgDev = np.nanmedian(np.stack(allDevOcs, axis=0), axis=0)
+        avgTotal = np.nanmedian(np.stack(allTotalCcs, axis=0), axis=0)
+        avgIntr = np.nanmedian(np.stack(allIntrCcs, axis=0), axis=0)
+        avgDev = np.nanmedian(np.stack(allDevCcs, axis=0), axis=0)
         for modeIdx, noll in enumerate(self.nollIndices):
             zkTable[f"Z{noll}"][avgIdx] = (avgTotal[modeIdx] * u.micron).to(u.nm)
             zkTable[f"Z{noll}_intrinsic"][avgIdx] = (avgIntr[modeIdx] * u.micron).to(u.nm)
