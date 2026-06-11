@@ -27,7 +27,7 @@ __all__ = [
 
 import os
 from copy import deepcopy
-from typing import Any
+from typing import Any, Sequence
 
 import astropy.units as u
 import galsim
@@ -40,12 +40,9 @@ import lsst.geom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.daf.base import PropertyList
-from lsst.pipe.base import (
-    InputQuantizedConnection,
-    OutputQuantizedConnection,
-    QuantumContext,
-    connectionTypes,
-)
+from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
+from lsst.ip.isr import IntrinsicZernikes
+from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -94,15 +91,37 @@ DONUT_QUALITY_TABLE_COLUMNS = [
 ]
 
 
+def lookupIntrinsicZernikesSingleDetector(
+    datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
+) -> list[DatasetRef | None]:
+    """Look up the intrinsic Zernike calibration for the current detector.
+
+    The neural task processes one CWFS detector per quantum, including
+    intra-focal detectors. Unlike the paired base task, it should not request a
+    neighboring detector calibration from the lookup function.
+    """
+    return [registry.findDataset(datasetType, dataId, collections=collections, timespan=dataId.timespan)]
+
+
 class CalcZernikesNeuralTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("exposure", "detector", "instrument"),  # type: ignore
+    dimensions=("exposure", "detector", "instrument", "physical_filter"),  # type: ignore
 ):
     exposure = connectionTypes.Input(
         doc="Input post_isr exposure to run wavefront estimation on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
         name="post_isr_image",
+    )
+    intrinsicZernikes = connectionTypes.PrerequisiteInput(
+        doc="Intrinsic Zernike calibration for the instrument",
+        dimensions=("detector", "instrument", "physical_filter"),
+        storageClass="IsrCalib",
+        name="intrinsicZernikes",
+        multiple=True,
+        isCalibration=True,
+        lookupFunction=lookupIntrinsicZernikesSingleDetector,  # type: ignore
+        minimum=0,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -335,6 +354,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             ood_model_path=(
                 os.path.expandvars(self.config.oodModelPath) if self.config.oodModelPath is not None else None
             ),
+            enable_lsstcam_intrinsics=False,
         )
         if self.config.oodModelPath is not None:
             self.log.info(
@@ -1120,13 +1140,22 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         else:
             donutQualityTable = qualityTable
 
-        # Set stamp attributes to None for empty case
-        self.stampsIntra = None
-        self.stampsExtra = None
+        # Keep empty stamp containers so zernike-table metadata can still be
+        # constructed consistently.
+        self.stampsIntra = DonutStamps([])
+        self.stampsExtra = DonutStamps([])
 
         # Create empty Zernike table with metadata
         emptyZkTable = self.initZkTable()
-        emptyZkTable.meta = self.createZkTableMetadata()
+        emptyZkTable.meta = {
+            "intra": {},
+            "extra": {},
+            "cam_name": None,
+            "noll_indices": list(self.nollIndices),
+            "opd_columns": [f"Z{j}" for j in self.nollIndices],
+            "intrinsic_columns": [f"Z{j}_intrinsic" for j in self.nollIndices],
+            "deviation_columns": [f"Z{j}_deviation" for j in self.nollIndices],
+        }
         # Add empty OOD score column
         emptyZkTable["ood_score"] = []
 
@@ -1154,21 +1183,12 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         return struct
 
-    def runQuantum(
-        self,
-        butlerQC: QuantumContext,
-        inputRefs: InputQuantizedConnection,
-        outputRefs: OutputQuantizedConnection,
-    ) -> None:
-        """Override parent runQuantum (no Butler intrinsicZernikes input)."""
-        inputs = butlerQC.get(inputRefs)
-        outputs = self.run(**inputs, numCores=butlerQC.resources.num_cores)
-        butlerQC.put(outputs, outputRefs)
-
     @timeMethod
     def run(
         self,
         exposure: afwImage.Exposure,
+        intrinsicZernikesExtra: IntrinsicZernikes | None = None,
+        intrinsicZernikesIntra: IntrinsicZernikes | None = None,
         numCores: int = 1,
     ) -> pipeBase.Struct:
         """Run the neural network-based Zernike estimation task.
@@ -1183,6 +1203,12 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         exposure : lsst.afw.image.Exposure
             The LSST exposure data containing donut stamps. This should
             contain proper WCS information for the TARTS neural network.
+        intrinsicZernikesExtra : lsst.ip.isr.IntrinsicZernikes, optional
+            Intrinsic Zernike calibration for extra-focal donuts. Passed by the
+            base ``runQuantum`` from the pipeline input collections.
+        intrinsicZernikesIntra : lsst.ip.isr.IntrinsicZernikes, optional
+            Intrinsic Zernike calibration for intra-focal donuts. Passed by the
+            base ``runQuantum`` from the pipeline input collections.
         numCores : int, optional
             Reserved for API compatibility with the base class; not used by
             this neural implementation. Default is 1.
@@ -1220,6 +1246,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         --------
         calcZernikesFromExposure : Method that processes individual exposures.
         """
+        if exposure is None:
+            self.log.info("No exposure supplied; producing empty neural Zernike outputs.")
+            return self.empty()
+
         # Check if exposure is valid
         exposure_id = int(exposure.visitInfo.id)
         self.log.info("Starting Zernike estimation for exposure id=%s", exposure_id)
@@ -1245,7 +1275,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # as standard tasks
         # Both should be 2D arrays with shape (1, nZernikes) for single
         # exposure
-        zernikesRaw = np.atleast_2d(zk)  # Single prediction per donut
+        zernikesRaw = np.atleast_2d(self._toNumpy(zk))  # Single prediction per donut
         zernikesAvg = np.atleast_2d(aggregatedZernikes)  # Aggregated prediction per exposure
 
         # Create zernikes table
@@ -1261,6 +1291,24 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.stampsIntra = intraStamps
         self.stampsExtra = extraStamps
 
+        intrinsicZernikes = intrinsicZernikesExtra if defocalType == "extra" else intrinsicZernikesIntra
+        if intrinsicZernikes is None:
+            cameraName = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
+            if cameraName == "LATISS":
+                self.log.warning(
+                    "No intrinsic Zernike calibration found for %s; proceeding "
+                    "without it. Intrinsic and deviation columns will be NaN.",
+                    cameraName,
+                )
+            else:
+                raise RuntimeError(
+                    f"No intrinsic Zernike calibration found for instrument "
+                    f"{cameraName!r}, which requires one. Provide an input "
+                    f"collection containing the 'intrinsicZernikes' calibration."
+                )
+        self.intrinsicZernikesExtra = intrinsicZernikesExtra
+        self.intrinsicZernikesIntra = intrinsicZernikesIntra
+
         self.log.debug(
             "Using defocalType='%s' -> intra stamps: %d, extra stamps: %d",
             defocalType,
@@ -1274,7 +1322,6 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         zernikesTable = self.createZkTable(zkCoeffRaw=zkCoeffRaw)
         self._updateAverageRowWithAggregatedZernikes(zernikesTable, aggregatedZernikes)
-        self._populateNeuralZernikeTableColumns(zernikesTable, exposure)
         # Add OOD scores to zernikes table as a per-donut column
         # OOD scores are extracted in the same order as donuts from TARTS
         # internal data, and both come from the same TARTS run, so they
@@ -1516,62 +1563,32 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         zkTable.meta["average_row_aggregation"] = self.AVERAGE_ROW_AGGREGATION_METHOD
 
     def _unpackStampData(self, stamp: DonutStamp | None) -> tuple:
-        """Override parent method to handle missing intrinsic calibrations.
-
-        The neural task does not use intrinsic Zernike calibrations, so this
-        method returns NaN for intrinsic values instead of trying to access
-        ``intrinsicZernikesIntra`` or ``intrinsicZernikesExtra`` attributes.
-
-        Parameters
-        ----------
-        stamp : DonutStamp or None
-            The DonutStamp object to unpack data from.
-
-        Returns
-        -------
-        fieldAngle : `astropy.units.Quantity`
-            The field angle of the stamp in degrees.
-        centroid : `astropy.units.Quantity`
-            The centroid position of the stamp in pixels.
-        intrinsics : `astropy.units.Quantity`
-            The intrinsic Zernike coefficients (always NaN for neural task).
-        """
-        if stamp is None:
-            fieldAngle = np.array(np.nan, dtype=POS2F_DTYPE) * u.deg
-            centroid = np.array((np.nan, np.nan), dtype=POS2F_DTYPE) * u.pixel
-            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
-        else:
-            fieldAngle = np.array(stamp.calcFieldXY(), dtype=POS2F_DTYPE) * u.deg
-            centroid = (
-                np.array(
-                    (stamp.centroid_position.x, stamp.centroid_position.y),
-                    dtype=POS2F_DTYPE,
-                )
-                * u.pixel
-            )
-            # Neural task doesn't use intrinsic maps, so return NaN intrinsics
-            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
-
-        return fieldAngle, centroid, intrinsics
+        """Unpack stamp data using Butler-provided intrinsic calibrations."""
+        return super()._unpackStampData(stamp)
 
     def _updateAverageRowWithAggregatedZernikes(
         self, zkTable: QTable, aggregatedZernikes: np.ndarray
     ) -> None:
-        """Populate the average row of `zkTable` with neural aggregated data.
+        """Populate the average row of `zkTable` from per-donut table rows.
 
         Parameters
         ----------
         zkTable : `astropy.table.QTable`
-            Table returned by ``createZkTable`` containing placeholder values.
-            The first row corresponds to the aggregate (average) entry.
+            Table returned by ``createZkTable``. The first row corresponds to
+            the aggregate (average) entry.
         aggregatedZernikes : `numpy.ndarray`
             Two-dimensional array of aggregated Zernike coefficients produced
-            by TARTS (in microns) with shape (1, nZernikes).
+            by TARTS (in microns) with shape (1, nZernikes). This is validated
+            for shape compatibility, but the table's ``average`` row is
+            computed from the table rows to preserve historical table
+            semantics.
 
         Notes
         -----
-        This method sets intrinsic and deviation columns to NaN for all rows
-        since the neural task does not use intrinsic Zernike tables.
+        Per-donut intrinsic and deviation columns are populated by the base
+        ``createZkTable`` implementation from Butler ``IntrinsicZernikes``.
+        This method keeps those rows intact and fills the aggregate row with
+        the median total, intrinsic, and deviation values across donuts.
         """
         if len(zkTable) == 0:
             return
@@ -1593,12 +1610,27 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # Get index of average row (always present)
         avg_idx = np.where(zkTable["label"] == "average")[0][0]
 
-        # Convert to Quantity in nanometers and update OPD columns
-        agg_quant = (agg * u.micron).to(u.nm)
-        for value, column in zip(agg_quant, opd_columns):
-            zkTable[column][avg_idx] = value
+        for opd_col, intrinsic_col, deviation_col in zip(opd_columns, intrinsic_columns, deviation_columns):
+            if len(zkTable) > 1:
+                total_values = np.asarray(zkTable[opd_col][1:].to_value(u.nm), dtype=float)
+                intrinsic_values = np.asarray(zkTable[intrinsic_col][1:].to_value(u.nm), dtype=float)
+                deviation_values = np.asarray(zkTable[deviation_col][1:].to_value(u.nm), dtype=float)
+            else:
+                total_values = np.array([], dtype=float)
+                intrinsic_values = np.array([], dtype=float)
+                deviation_values = np.array([], dtype=float)
 
-        # Set intrinsic and deviation columns to NaN for all rows
-        # (neural task doesn't use intrinsic maps)
-        for column in intrinsic_columns + deviation_columns:
-            zkTable[column] = np.nan * u.nm
+            zkTable[opd_col][avg_idx] = (
+                np.nanmedian(total_values) * u.nm if np.any(np.isfinite(total_values)) else np.nan * u.nm
+            )
+            zkTable[intrinsic_col][avg_idx] = (
+                np.nanmedian(intrinsic_values) * u.nm
+                if np.any(np.isfinite(intrinsic_values))
+                else np.nan * u.nm
+            )
+            zkTable[deviation_col][avg_idx] = (
+                np.nanmedian(deviation_values) * u.nm
+                if np.any(np.isfinite(deviation_values))
+                else np.nan * u.nm
+            )
+        zkTable.meta["average_row_aggregation"] = self.AVERAGE_ROW_AGGREGATION_METHOD
