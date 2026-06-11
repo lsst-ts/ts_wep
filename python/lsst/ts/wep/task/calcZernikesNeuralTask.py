@@ -40,7 +40,12 @@ import lsst.geom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.daf.base import PropertyList
-from lsst.pipe.base import connectionTypes
+from lsst.pipe.base import (
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
+    QuantumContext,
+    connectionTypes,
+)
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
@@ -1148,6 +1153,17 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             len(self.nollIndices),
         )
         return struct
+
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ) -> None:
+        """Override parent runQuantum (no Butler intrinsicZernikes input)."""
+        inputs = butlerQC.get(inputRefs)
+        outputs = self.run(**inputs, numCores=butlerQC.resources.num_cores)
+        butlerQC.put(outputs, outputRefs)
 
     @timeMethod
     def run(
