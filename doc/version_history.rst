@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.5.0 (2026-06-11)
+====================
+
+Bug Fixes
+---------
+
+- Guard donutCorrelator when entire image is masked. (`DM-54890 <https://rubinobs.atlassian.net//browse/DM-54890>`_)
+
+
 v17.4.0 (2026-06-04)
 ====================
 
