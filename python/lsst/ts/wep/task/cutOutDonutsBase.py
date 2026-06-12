@@ -861,6 +861,9 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
         maxPowerGradKLess10 = np.array(maxPowerGradKLess10).astype(float)
         stampsMetadata["MAX_POWER_GRAD"] = maxPowerGradKLess10
 
+        # Save the recenter flags
+        stampsMetadata["RECENTER_FLAGS"] = recenterFlags
+
         finalDonutStamps = DonutStamps(finalStamps, metadata=stampsMetadata, use_archive=True)
         # Refresh to pull original metadata into stamps
         # Necessary when running full pipeline interactively.
