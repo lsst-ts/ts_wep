@@ -307,16 +307,18 @@ class DonutStampSelectorTask(pipeBase.Task):
 
         # Select with recenter flags if requested
         recenterFlagsSelect = np.ones(len(donutStamps), dtype="bool")
-        if self.config.selectWithRecenterFlags:
-            if "RECENTER_FLAGS" in list(donutStamps.metadata):
-                recenterFlags = np.asarray(donutStamps.metadata.getArray("RECENTER_FLAGS"))
+        recenterFlags = np.full(len(donutStamps), np.nan)
+        if "RECENTER_FLAGS" in list(donutStamps.metadata):
+            fillVals = np.asarray(donutStamps.metadata.getArray("RECENTER_FLAGS"))
+            recenterFlags[: len(fillVals)] = fillVals
+            if self.config.selectWithRecenterFlags:
                 recenterFlagsSelect = recenterFlags == 0
                 self.log.info(
                     f"{sum(recenterFlagsSelect)} of {len(recenterFlagsSelect)} donuts passed "
                     + "recenter flag selection."
                 )
-            else:
-                self.log.warning("selectWithRecenterFlags==True but RECENTER_FLAGS not in stamp metadata.")
+        elif self.config.selectWithRecenterFlags:
+            self.log.warning("selectWithRecenterFlags==True but RECENTER_FLAGS not in stamp metadata.")
 
         # choose only donuts that satisfy all selected conditions
         if self.config.doSelection:
