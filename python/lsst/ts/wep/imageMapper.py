@@ -831,7 +831,9 @@ class ImageMapper:
         """
         # Get the blend offsets. Note for extrafocal images, the orientation
         # is flipped with respect to the pupil
-        blendOffsets = image.blendOffsets.copy()
+        blendOffsets = image.blendOffsets
+        assert blendOffsets is not None
+        blendOffsets = blendOffsets.copy()
         if isPupilMask and (image.defocalType == DefocalType.Extra):
             blendOffsets *= -1
 
@@ -1459,7 +1461,9 @@ class ImageMapper:
                 isBinary=True,
                 **maskKwargs,
             )
-            template = stamp.mask.copy()
+            maskValue = stamp.mask
+            assert maskValue is not None
+            template = maskValue.copy()
         else:
             template = self.mapPupilToImage(stamp, zkCoeff, nollIndices, **maskKwargs).image
 
@@ -1554,7 +1558,9 @@ class ImageMapper:
         # Fill the image (this assumes that, except for vignetting,
         # the pupil is uniformly illuminated)
         stamp.image = np.zeros_like(stamp.image)
-        stamp.image[inside] = stamp.mask[inside] * jacDet
+        maskValue = stamp.mask
+        assert maskValue is not None
+        stamp.image[inside] = maskValue[inside] * jacDet
 
         return stamp
 

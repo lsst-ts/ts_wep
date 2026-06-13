@@ -143,7 +143,7 @@ class Instrument:
         defocalOffset: float | None = None,
         pixelSize: float | None = None,
         refBand: BandLabel | str | None = None,
-        wavelength: float | dict | None = None,
+        wavelength: float | dict | EnumDict | None = None,
         batoidModelName: str | None = None,
         batoidOffsetOptic: str | None = None,
         batoidOffsetValue: float | None = None,
@@ -524,7 +524,7 @@ class Instrument:
             return self._wavelength
 
     @wavelength.setter
-    def wavelength(self, value: float | dict | None) -> None:
+    def wavelength(self, value: float | dict | EnumDict | None) -> None:
         """Set the effective wavelength(s).
 
         Parameters

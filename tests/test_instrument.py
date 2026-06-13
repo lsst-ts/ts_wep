@@ -27,7 +27,7 @@ import numpy as np
 from batoid.optic import CompoundOptic
 
 from lsst.ts.wep.instrument import Instrument
-from lsst.ts.wep.utils import getConfigDir, readConfigYaml
+from lsst.ts.wep.utils import DefocalType, getConfigDir, readConfigYaml
 
 
 class TestInstrument(unittest.TestCase):
@@ -123,18 +123,18 @@ class TestInstrument(unittest.TestCase):
 
         # First check the shape
         self.assertEqual(
-            inst.getOffAxisCoeff(0, 0, "intra", nollIndicesModel=np.arange(4, 67)).shape,
+            inst.getOffAxisCoeff(0, 0, DefocalType.Intra, nollIndicesModel=np.arange(4, 67)).shape,
             (63,),
         )
         self.assertEqual(
-            inst.getOffAxisCoeff(1, 1.1, "extra", nollIndicesModel=np.arange(4, 23)).shape,
+            inst.getOffAxisCoeff(1, 1.1, DefocalType.Extra, nollIndicesModel=np.arange(4, 23)).shape,
             (19,),
         )
 
         # Now check that in-place changes don't impact the cache
-        coeff = inst.getOffAxisCoeff(0, 0, "intra")
+        coeff = inst.getOffAxisCoeff(0, 0, DefocalType.Intra)
         coeff *= 3.14159
-        close = np.isclose(inst.getOffAxisCoeff(0, 0, "intra"), coeff, atol=0)
+        close = np.isclose(inst.getOffAxisCoeff(0, 0, DefocalType.Intra), coeff, atol=0)
         self.assertTrue(np.all(~close))
 
     def testBadMaskParams(self) -> None:
@@ -245,15 +245,15 @@ class TestInstrument(unittest.TestCase):
 
     def test_intrinsicZernikesDefocused(self) -> None:
         inst = Instrument()
-        z4_intra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="intra", nollIndices=[4])
-        z4_extra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType="extra", nollIndices=[4])
+        z4_intra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType=DefocalType.Intra, nollIndices=[4])
+        z4_extra = inst.getIntrinsicZernikes(-0.3, 1.2, defocalType=DefocalType.Extra, nollIndices=[4])
         self.assertTrue(np.isclose(-z4_extra, z4_intra, rtol=1e-2))
 
     def test_offsetCamera(self) -> None:
         """Just test shifting camera vs detector gives different intrinsics."""
         inst1 = Instrument()
         inst2 = Instrument(batoidOffsetOptic="LSSTCamera")
-        for dftype in ["intra", "extra"]:
+        for dftype in [DefocalType.Intra, DefocalType.Extra]:
             zk_1 = inst1.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)
             zk_2 = inst2.getIntrinsicZernikes(0.3, 0.6, defocalType=dftype)
             self.assertFalse(np.allclose(zk_1, zk_2, rtol=1e-2))

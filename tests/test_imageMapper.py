@@ -115,7 +115,7 @@ class TestImageMapper(unittest.TestCase):
 
     def testBadOpticalModel(self) -> None:
         with self.assertRaises(TypeError):
-            ImageMapper(opticalModel=1)
+            ImageMapper(opticalModel=1)  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             ImageMapper(opticalModel="bad")
 
@@ -179,6 +179,8 @@ class TestImageMapper(unittest.TestCase):
         mapper.createPupilMasks(image, isBinary=True)
 
         # Get the difference in the masks
+        assert maskPupilBatoid is not None
+        assert image.mask is not None
         diff = maskPupilBatoid.astype(float) - image.mask.astype(float)
 
         # Apply binary opening once to remove small artifacts at edges of masks
@@ -213,6 +215,8 @@ class TestImageMapper(unittest.TestCase):
             maskImageBatoid = batoidImage > 0
 
             # Get the difference in the masks
+            assert maskImageBatoid is not None
+            assert image.mask is not None
             diff = maskImageBatoid.astype(float) - image.mask.astype(float)
 
             # Binary opening to remove small artifacts at edges of masks
@@ -326,7 +330,7 @@ class TestImageMapper(unittest.TestCase):
             # Calculate the difference between the pupil
             # and the reconstructed pupil
             diff = pupilRecon.image - pupil
-
+            assert pupil is not None
             self.assertLess(diff.sum() / pupil.sum(), 0.02)
             self.assertLess(diff.max(), 1)
 
@@ -360,12 +364,16 @@ class TestImageMapper(unittest.TestCase):
         mask0 = image.mask
         mapper.createImageMasks(image, doMaskBlends=True)
         mask1 = image.mask
+        assert mask0 is not None
+        assert mask1 is not None
         self.assertTrue(0 < mask1.sum() < mask0.sum())
 
         mapper.createPupilMasks(image, doMaskBlends=False, ignorePlane=True)
         mask0 = image.mask
         mapper.createPupilMasks(image, doMaskBlends=True, ignorePlane=True)
         mask1 = image.mask
+        assert mask0 is not None
+        assert mask1 is not None
         self.assertTrue(0 < mask1.sum() < mask0.sum())
 
         self.assertTrue(
@@ -403,6 +411,8 @@ class TestImageMapper(unittest.TestCase):
         mask0 = image.mask
         mapper.createImageMasks(image, isBinary=True, dilate=1)
         mask1 = image.mask
+        assert mask0 is not None
+        assert mask1 is not None
         self.assertGreater(
             mask1.sum(),
             mask0.sum(),
@@ -412,6 +422,8 @@ class TestImageMapper(unittest.TestCase):
         mask0 = image.mask
         mapper.createPupilMasks(image, isBinary=True, dilate=1, ignorePlane=True)
         mask1 = image.mask
+        assert mask0 is not None
+        assert mask1 is not None
         self.assertGreater(
             mask1.sum(),
             mask0.sum(),
@@ -451,6 +463,8 @@ class TestImageMapper(unittest.TestCase):
         mask0 = image.mask
         mapper.createImageMasks(image, doMaskBlends=True, dilateBlends=1)
         mask1 = image.mask
+        assert mask0 is not None
+        assert mask1 is not None
         self.assertLess(
             mask1.sum(),
             mask0.sum(),
@@ -465,6 +479,8 @@ class TestImageMapper(unittest.TestCase):
             ignorePlane=True,
         )
         mask1 = image.mask
+        assert mask0 is not None
+        assert mask1 is not None
         self.assertLess(
             mask1.sum(),
             mask0.sum(),
@@ -521,6 +537,7 @@ class TestImageMapper(unittest.TestCase):
                     dilateBlends=1,
                     isPupilMask=isPupilMask,
                 )
+                assert mask0 is not None
                 self.assertGreater(blendMask.sum(), mask0.sum())
             except AssertionError:
                 raise AssertionError(f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}")
