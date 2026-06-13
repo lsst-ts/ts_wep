@@ -23,6 +23,7 @@ __all__ = ["CombineZernikesSigmaClipTaskConfig", "CombineZernikesSigmaClipTask"]
 
 from typing import Any
 
+import astropy.units as u
 import numpy as np
 from astropy.table import Table
 
@@ -44,7 +45,7 @@ class CombineZernikesSigmaClipTaskConfig(CombineZernikesBaseConfig):
     )
     stdMin: pexConfig.Field = pexConfig.Field(
         dtype=float,
-        default=0.005,
+        default=0.1,
         doc="Minimum threshold for clipping the standard deviation in um.",
     )
     maxZernClip: pexConfig.Field = pexConfig.Field(
@@ -94,7 +95,7 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         else:
             raise ValueError(f"Unknown zkClipType: {self.zkClipType}")
         subTable = zkTable[zkTable["label"] != "average"][columns]
-        zernikeArray = np.array([subTable[col] for col in columns]).T
+        zernikeArray = np.array([subTable[col].to(u.um) for col in columns]).T
 
         # Perform conditional sigma clipping
         sigArray = conditionalSigmaClip(
@@ -112,6 +113,12 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             binaryFlagArray = np.any(np.isnan(sigArray[:, :effMaxZernClip]), axis=1).astype(int)
             numRejected = np.sum(binaryFlagArray)
 
+        # Identify which Zernikes were rejected for each donut
+        whereRejected = np.where(np.isnan(sigArray[:, :effMaxZernClip]))
+        nollIdxRejected: list[list[int]] = [[] for _ in range(len(sigArray))]
+        for donut_idx, zern_idx in zip(whereRejected[0], whereRejected[1]):
+            nollIdxRejected[donut_idx].append(int(zkTable.meta["noll_indices"][zern_idx]))
+
         # Identify which rows to use when calculating final mean
         keepIdx = ~np.array(binaryFlagArray, dtype=bool)
         used = zkTable["used"][zkTable["label"] != "average"]
@@ -125,6 +132,13 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             )
         self.metadata["maxZernClip"] = self.maxZernClip
         self.metadata["effMaxZernClip"] = effMaxZernClip
+
+        # Add table metadata about which Zernikes were rejected for each donut
+        zkTable.meta["estimatorInfo"]["zern_clipped"] = binaryFlagArray.astype(bool).tolist()
+        # Store effMaxZernClip in list to be able to concatenate
+        # metadata from multiple detectors in donut_viz
+        zkTable.meta["estimatorInfo"]["zern_clipped_max_noll_index"] = [effMaxZernClip]
+        zkTable.meta["estimatorInfo"]["zern_clipped_rejected_noll_indices"] = nollIdxRejected
 
         # Calculate means
         for j in zkTable.meta["noll_indices"]:
