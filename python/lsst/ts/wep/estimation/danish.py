@@ -84,6 +84,7 @@ class DanishAlgorithm(WfAlgorithm):
         bkgOrder: int = 0,
         doAoiThroughput: bool = False,
         systematicLossAlpha: float = 0.0,
+        triangleMode: bool = False,
     ) -> None:
         self.binning = binning
         self.lstsqKwargs = lstsqKwargs if lstsqKwargs is not None else {}
@@ -92,6 +93,7 @@ class DanishAlgorithm(WfAlgorithm):
         self.bkgOrder = bkgOrder
         self.doAoiThroughput = doAoiThroughput
         self.systematicLossAlpha = systematicLossAlpha
+        self.triangleMode = triangleMode
         self.log = logging.getLogger(__name__)
 
         galsim.errors.raise_fft_size_error = True
@@ -171,6 +173,24 @@ class DanishAlgorithm(WfAlgorithm):
         if not isinstance(value, bool):
             raise TypeError("jointFitPair must be a bool.")
         self._jointFitPair = value
+
+    @property
+    def triangleMode(self) -> bool:
+        """Whether to use the triangle mode in the danish forward model."""
+        return self._triangleMode
+
+    @triangleMode.setter
+    def triangleMode(self, value: bool) -> None:
+        """Whether to use the triangle mode in the danish forward model.
+
+        Parameters
+        ----------
+        value : bool
+            Whether to use the triangle mode in the danish forward model.
+        """
+        if not isinstance(value, bool):
+            raise TypeError("triangleMode must be a bool.")
+        self._triangleMode = value
 
     @property
     def history(self) -> dict:
@@ -862,7 +882,11 @@ class DanishAlgorithm(WfAlgorithm):
         if self.doAoiThroughput:
             factory_kwargs["bandpass_filter"] = bandpass_filter
             factory_kwargs["airmass"] = airmass
-        factory = danish.DonutFactory(
+        if self.triangleMode:
+            factory_class = danish.DonutTriangleFactory
+        else:
+            factory_class = danish.DonutFactory
+        factory = factory_class(
             R_outer=instrument.radius,
             R_inner=instrument.radius * instrument.obscuration,
             mask_params=instrument.maskParams,
