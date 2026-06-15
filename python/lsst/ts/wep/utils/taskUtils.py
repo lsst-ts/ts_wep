@@ -196,7 +196,7 @@ def getCameraFromButlerName(camName: str) -> Camera:
     ----------
     camName : str
         Name of instrument using butler convention. Available instruments
-        are LSSTCam, LSSTComCam, LSSTComCamSim, and LATISS.
+        are LSSTCam, LSSTCamSim, LSSTComCam, LSSTComCamSim, and LATISS.
 
     Returns
     -------
@@ -209,7 +209,7 @@ def getCameraFromButlerName(camName: str) -> Camera:
         The camera is not supported.
     """
 
-    if camName == "LSSTCam":
+    if camName in ("LSSTCam", "LSSTCamSim"):
         return obs_lsst.LsstCam().getCamera()
     elif camName == "LSSTComCam":
         return obs_lsst.LsstComCam().getCamera()
@@ -253,7 +253,7 @@ def getTaskInstrument(
     """
     # Load the starting instrument
     if instConfigFile is None:
-        if camName == "LSSTCam":
+        if camName in ("LSSTCam", "LSSTCamSim"):
             camera = LsstCam().getCamera()
             if camera[detectorName].getType() == DetectorType.WAVEFRONT:
                 instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")

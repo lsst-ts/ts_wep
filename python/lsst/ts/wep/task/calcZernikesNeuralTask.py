@@ -824,7 +824,16 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             emptyTable.meta["detector"] = UNKNOWN_STRING
             emptyTable.meta["camera"] = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
             emptyTable.meta["band"] = UNKNOWN_STRING
-            emptyTable.meta["visit_info"] = self._getDefaultVisitInfoDict()
+            try:
+                emptyTable = addVisitInfoToCatTable(exposure, emptyTable)
+            except (AttributeError, RuntimeError) as e:
+                self.log.warning(
+                    "Could not extract visitInfo metadata for empty donut table: %s. "
+                    "Using minimal visitInfo structure.",
+                    e,
+                )
+                visitId = int(exposure.visitInfo.id) if exposure.visitInfo else UNKNOWN_INT
+                emptyTable.meta["visit_info"] = self._getDefaultVisitInfoDict(visitId)
             return emptyTable
 
         numDonuts = len(donutStamps)
@@ -1078,7 +1087,29 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         return aggregatedZernikes, donutStamps, deepcopy(self.tarts.total_zernikes)
 
-    def empty(self, qualityTable: QTable | None = None) -> pipeBase.Struct:
+    @staticmethod
+    def _hasUsableZernikeValues(*arrays: np.ndarray) -> bool:
+        """Return True when at least one Zernike array contains signal.
+
+        TARTS can return all-zero Zernike arrays as a sentinel for cases with
+        no usable recovered donuts. Treat those like Danish no-donut outputs so
+        downstream table payloads are empty rather than populated with zeros.
+        """
+        for array in arrays:
+            values = np.asarray(array, dtype=float)
+            if values.size == 0:
+                continue
+            finiteValues = values[np.isfinite(values)]
+            if finiteValues.size > 0 and np.any(finiteValues != 0.0):
+                return True
+        return False
+
+    def empty(
+        self,
+        qualityTable: QTable | None = None,
+        exposure: afwImage.Exposure | None = None,
+        defocalType: str | None = None,
+    ) -> pipeBase.Struct:
         """Return empty results when no donuts are available for processing.
 
         This method creates empty output structures when the task cannot
@@ -1116,20 +1147,42 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         debugging.
         """
         self.log.info("Producing empty results; quality table provided: %s", qualityTable is not None)
-        if qualityTable is None:
-            self.log.warning(
-                "No donut quality table supplied to empty(); constructing an empty table. "
-                "If a previous step computed quality metrics (e.g., donuts existed but all failed), "
-                "pass that table here to preserve failure diagnostics."
+        if qualityTable is not None and len(qualityTable) > 0:
+            self.log.info(
+                "Dropping %d quality row(s) so empty donut products stay aligned.", len(qualityTable)
             )
-            donutQualityTable = QTable({name: [] for name in DONUT_QUALITY_TABLE_COLUMNS})
-        else:
-            donutQualityTable = qualityTable
+        donutQualityTable = QTable({name: [] for name in DONUT_QUALITY_TABLE_COLUMNS})
 
-        # Keep empty stamp containers so zernike-table metadata can still be
-        # constructed consistently.
-        self.stampsIntra = DonutStamps([])
-        self.stampsExtra = DonutStamps([])
+        stampsMetadata = PropertyList()
+        if exposure is not None:
+            emptyTable = addVisitInfoToCatTable(exposure, QTable())
+            visitInfo = emptyTable.meta.get("visit_info", {})
+            stampsMetadata["VISIT"] = visitInfo.get("visit_id", UNKNOWN_INT)
+            stampsMetadata["BORESIGHT_ROT_ANGLE_RAD"] = visitInfo.get(
+                "boresight_rot_angle", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_PAR_ANGLE_RAD"] = visitInfo.get(
+                "boresight_par_angle", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_ALT_RAD"] = visitInfo.get(
+                "boresight_alt", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_AZ_RAD"] = visitInfo.get(
+                "boresight_az", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_RA_RAD"] = visitInfo.get(
+                "boresight_ra", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_DEC_RAD"] = visitInfo.get(
+                "boresight_dec", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["MJD"] = visitInfo.get("mjd", UNKNOWN_FLOAT)
+            stampsMetadata["BANDPASS"] = getattr(exposure.filter, "bandLabel", UNKNOWN_STRING)
+
+        # Keep empty stamp containers with visit-level metadata so downstream
+        # visit aggregators can still combine zero-donut outputs.
+        self.stampsIntra = DonutStamps([], metadata=stampsMetadata if defocalType == "intra" else None)
+        self.stampsExtra = DonutStamps([], metadata=stampsMetadata if defocalType == "extra" else None)
 
         # Create empty Zernike table with metadata
         emptyZkTable = self.initZkTable()
@@ -1145,11 +1198,11 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # Add empty OOD score column
         emptyZkTable["ood_score"] = []
 
-        # Create empty donut table matching standard format
-        emptyDonutTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
-
-        # Add default visitInfo metadata for empty table
-        emptyDonutTable.meta["visit_info"] = self._getDefaultVisitInfoDict()
+        if exposure is None:
+            emptyDonutTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
+            emptyDonutTable.meta["visit_info"] = self._getDefaultVisitInfoDict()
+        else:
+            emptyDonutTable = self.createDonutTable(DonutStamps([]), exposure, defocalType or "intra")
 
         # Create properly structured arrays for empty case
         # Ensure arrays have shape (1, nZernikes) to match expected structure
@@ -1158,7 +1211,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         struct = pipeBase.Struct(
             outputZernikesRaw=emptyZernikes,
             outputZernikesAvg=emptyZernikes,
-            donutStampsNeural=DonutStamps([]),
+            donutStampsNeural=self.stampsIntra if defocalType == "intra" else self.stampsExtra,
             zernikes=emptyZkTable,
             donutTable=emptyDonutTable,
             donutQualityTable=donutQualityTable,
@@ -1243,6 +1296,20 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # Determine defocal type using helper function
         defocalType = self._determineDefocalType(exposure)
         aggregatedZernikes, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
+        if len(donutStamps) == 0:
+            self.log.info("No TARTS donut stamps were detected.")
+            return self.empty(exposure=exposure, defocalType=defocalType)
+        if not self._hasUsableZernikeValues(zk):
+            self.log.info(
+                "TARTS returned no usable raw Zernike coefficients for %d detected donut(s); "
+                "producing empty outputs.",
+                len(donutStamps),
+            )
+            return self.empty(
+                self.createDonutQualityTable(donutStamps),
+                exposure=exposure,
+                defocalType=defocalType,
+            )
 
         # Log final donut count and processing summary
         self.log.info(
