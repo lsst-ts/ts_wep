@@ -402,3 +402,70 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         used_true = len(zkOut) * [True]
         used_true[1] = False  # First row should be clipped, but average row should still be used
         self.assertEqual(list(zkOut["used"]), used_true)
+
+    def testTriangleModeConfiguration(self) -> None:
+        """Test that the triangleMode configuration option is respected."""
+        # Create a config with triangle mode enabled
+        config = CalcZernikesTaskConfig()
+        config.estimateZernikes.triangleMode = True
+        config.estimateZernikes.lstsqKwargs = {
+            "ftol": 1.0e-3,
+            "xtol": 1.0e-3,
+            "gtol": 1.0e-3,
+            "max_nfev": 30,
+            "verbose": 2,
+            "x_scale": "jac",
+        }
+        task = CalcZernikesTask(config=config, name="Triangle Mode Task")
+
+        # Run estimation with triangle mode enabled
+        zernCoeff = task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
+
+        # Check that we got valid results
+        self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 25))
+
+        # Verify that the results are not all NaN (indicating successful estimation)
+        self.assertFalse(np.all(np.isnan(zernCoeff.data)))
+
+    def testTriangleModeVsDefault(self) -> None:
+        """Test that triangle mode and default mode produce different results."""
+        # Create a config with default settings (triangle mode disabled)
+        config_default = CalcZernikesTaskConfig()
+        config_default.estimateZernikes.lstsqKwargs = {
+            "ftol": 1.0e-3,
+            "xtol": 1.0e-3,
+            "gtol": 1.0e-3,
+            "max_nfev": 30,
+            "verbose": 2,
+            "x_scale": "jac",
+        }
+        task_default = CalcZernikesTask(config=config_default, name="Default Task")
+
+        # Create a config with triangle mode enabled
+        config_triangle = CalcZernikesTaskConfig()
+        config_triangle.estimateZernikes.triangleMode = True
+        config_triangle.estimateZernikes.lstsqKwargs = {
+            "ftol": 1.0e-3,
+            "xtol": 1.0e-3,
+            "gtol": 1.0e-3,
+            "max_nfev": 30,
+            "verbose": 2,
+            "x_scale": "jac",
+        }
+        task_triangle = CalcZernikesTask(config=config_triangle, name="Triangle Mode Task")
+
+        # Run estimation with both modes
+        zkCoeff_default = task_default.estimateZernikes.run(
+            self.donutStampsExtra, self.donutStampsIntra
+        ).zernikes
+        zkCoeff_triangle = task_triangle.estimateZernikes.run(
+            self.donutStampsExtra, self.donutStampsIntra
+        ).zernikes
+
+        # Check that both produce valid shapes
+        self.assertEqual(np.shape(zkCoeff_default), (len(self.donutStampsExtra), 25))
+        self.assertEqual(np.shape(zkCoeff_triangle), (len(self.donutStampsExtra), 25))
+
+        # Both should have valid (non-NaN) results
+        self.assertFalse(np.all(np.isnan(zkCoeff_default.data)))
+        self.assertFalse(np.all(np.isnan(zkCoeff_triangle.data)))

@@ -383,3 +383,53 @@ class TestDanishAlgorithm(unittest.TestCase):
         call_kwargs = mock_factory.call_args.kwargs
         self.assertEqual(call_kwargs["bandpass_filter"], "r")
         self.assertAlmostEqual(call_kwargs["airmass"], 1.2)
+
+    def testTriangleMode(self) -> None:
+        """
+        Test that triangleMode uses DonutTriangleFactory
+        instead of DonutFactory.
+        """
+        _, intra, extra = forwardModelPair()
+
+        # Test with triangle mode disabled (default)
+        dan_default = DanishAlgorithm(lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutFactory",
+            wraps=danish_pkg.DonutFactory,
+        ) as mock_default_factory:
+            dan_default.estimateZk(intra, extra)
+        # Verify DonutFactory was called
+        self.assertTrue(mock_default_factory.called)
+
+        # Test with triangle mode enabled
+        dan_triangle = DanishAlgorithm(triangleMode=True, lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutTriangleFactory",
+            wraps=danish_pkg.DonutTriangleFactory,
+        ) as mock_triangle_factory:
+            dan_triangle.estimateZk(intra, extra)
+        # Verify DonutTriangleFactory was called
+        self.assertTrue(mock_triangle_factory.called)
+
+    def testTriangleModeOutput(self) -> None:
+        """Test that triangle mode produces valid results without crashing."""
+        zkTrue, intra, extra = forwardModelPair(seed=12345)
+
+        dan_triangle = DanishAlgorithm(
+            triangleMode=True,
+            lstsqKwargs={
+                "ftol": 1e-3,
+                "xtol": 1e-3,
+                "gtol": 1e-3,
+                "max_nfev": 10,
+                "verbose": 2,
+                "x_scale": "jac",
+            },
+        )
+
+        # Test estimation with pairs
+        zkEst, meta = dan_triangle.estimateZk(intra, extra)
+
+        # Check that we got valid results
+        self.assertFalse(np.all(np.isnan(zkEst)))
+        self.assertTrue(meta["fit_success"])
