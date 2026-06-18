@@ -29,6 +29,7 @@ import danish
 import galsim
 import numpy as np
 from galsim import GalSimFFTSizeError
+from packaging import version as pkg_version
 from scipy.ndimage import binary_erosion
 from scipy.optimize import OptimizeResult, least_squares
 from scipy.stats import median_abs_deviation
@@ -95,6 +96,25 @@ class DanishAlgorithm(WfAlgorithm):
         self.systematicLossAlpha = systematicLossAlpha
         self.triangleMode = triangleMode
         self.log = logging.getLogger(__name__)
+
+        # Verify danish version for required features
+        if self.triangleMode:
+            danish_version = pkg_version.parse(danish.__version__)
+            required_version = pkg_version.parse("1.2")
+            if danish_version < required_version:
+                raise RuntimeError(
+                    f"Danish version 1.2 or above is required for the triangleMode feature. "
+                    f"Current danish version: {danish.__version__}"
+                )
+        elif self.doAoiThroughput or self.systematicLossAlpha != 0.0:
+            danish_version = pkg_version.parse(danish.__version__)
+            required_version = pkg_version.parse("1.1")
+            if danish_version < required_version:
+                raise RuntimeError(
+                    f"Danish version 1.1 or above is required for the "
+                    f"doAoiThroughput and systematicLossAlpha features. "
+                    f"Current danish version: {danish.__version__}"
+                )
 
         galsim.errors.raise_fft_size_error = True
 
