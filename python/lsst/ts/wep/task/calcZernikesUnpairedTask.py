@@ -33,7 +33,12 @@ from astropy.table import QTable
 import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
 from lsst.ip.isr import IntrinsicZernikes
-from lsst.pipe.base import connectionTypes
+from lsst.pipe.base import (
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
+    QuantumContext,
+    connectionTypes,
+)
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
