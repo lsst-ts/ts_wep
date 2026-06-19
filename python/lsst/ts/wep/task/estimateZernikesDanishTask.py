@@ -82,6 +82,11 @@ class EstimateZernikesDanishConfig(EstimateZernikesBaseConfig):
             "chi-squared loss."
         ),
     )
+    triangleMode: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Whether to use the triangle mode in the danish forward model.",
+    )
 
 
 class EstimateZernikesDanishTask(EstimateZernikesBaseTask):

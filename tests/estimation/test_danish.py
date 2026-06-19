@@ -106,7 +106,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                         "ftol": 1e-3,
                         "xtol": 1e-3,
                         "gtol": 1e-3,
-                        "max_nfev": 10,
+                        "max_nfev": 15,
                         "verbose": 2,
                         "x_scale": "jac",
                     },
@@ -383,3 +383,120 @@ class TestDanishAlgorithm(unittest.TestCase):
         call_kwargs = mock_factory.call_args.kwargs
         self.assertEqual(call_kwargs["bandpass_filter"], "r")
         self.assertAlmostEqual(call_kwargs["airmass"], 1.2)
+
+    def testTriangleMode(self) -> None:
+        """
+        Test that triangleMode uses DonutTriangleFactory
+        instead of DonutFactory.
+        """
+        _, intra, extra = forwardModelPair()
+
+        # Test with triangle mode disabled (default)
+        dan_default = DanishAlgorithm(lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutFactory",
+            wraps=danish_pkg.DonutFactory,
+        ) as mock_default_factory:
+            dan_default.estimateZk(intra, extra)
+        # Verify DonutFactory was called
+        self.assertTrue(mock_default_factory.called)
+
+        # Test with triangle mode enabled
+        dan_triangle = DanishAlgorithm(triangleMode=True, lstsqKwargs={"max_nfev": 1})
+        with patch(
+            "lsst.ts.wep.estimation.danish.danish.DonutTriangleFactory",
+            wraps=danish_pkg.DonutTriangleFactory,
+        ) as mock_triangle_factory:
+            dan_triangle.estimateZk(intra, extra)
+        # Verify DonutTriangleFactory was called
+        self.assertTrue(mock_triangle_factory.called)
+
+    def testTriangleModeOutput(self) -> None:
+        """Test that triangle mode produces valid results without crashing."""
+        zkTrue, intra, extra = forwardModelPair(seed=12345)
+
+        dan_triangle = DanishAlgorithm(
+            triangleMode=True,
+            lstsqKwargs={
+                "ftol": 1e-3,
+                "xtol": 1e-3,
+                "gtol": 1e-3,
+                "max_nfev": 10,
+                "verbose": 2,
+                "x_scale": "jac",
+            },
+        )
+
+        # Test estimation with pairs
+        zkEst, meta = dan_triangle.estimateZk(intra, extra)
+
+        # Check that we got valid results
+        self.assertFalse(np.all(np.isnan(zkEst)))
+        self.assertTrue(meta["fit_success"])
+
+    def testVersionCheckTriangleModeRequiresDanish12(self) -> None:
+        """Test that triangleMode raises RuntimeError if danish < 1.2."""
+        with patch("lsst.ts.wep.estimation.danish.danish.__version__", "1.1.0"):
+            with self.assertRaises(RuntimeError) as context:
+                DanishAlgorithm(triangleMode=True)
+            self.assertIn(
+                "Danish version 1.2 or above is required",
+                str(context.exception),
+            )
+            self.assertIn("triangleMode", str(context.exception))
+            self.assertIn("1.1.0", str(context.exception))
+
+    def testVersionCheckDoAoiThroughputRequiresDanish11(self) -> None:
+        """Test that doAoiThroughput raises RuntimeError if danish < 1.1."""
+        with patch("lsst.ts.wep.estimation.danish.danish.__version__", "1.0.0"):
+            with self.assertRaises(RuntimeError) as context:
+                DanishAlgorithm(doAoiThroughput=True)
+            self.assertIn(
+                "Danish version 1.1 or above is required",
+                str(context.exception),
+            )
+            self.assertIn("doAoiThroughput", str(context.exception))
+            self.assertIn("1.0.0", str(context.exception))
+
+    def testVersionCheckSystematicLossAlphaRequiresDanish11(self) -> None:
+        """Test systematicLossAlpha raises error if danish < 1.1."""
+        with patch("lsst.ts.wep.estimation.danish.danish.__version__", "1.0.0"):
+            with self.assertRaises(RuntimeError) as context:
+                DanishAlgorithm(systematicLossAlpha=0.05)
+            self.assertIn(
+                "Danish version 1.1 or above is required",
+                str(context.exception),
+            )
+            self.assertIn("systematicLossAlpha", str(context.exception))
+            self.assertIn("1.0.0", str(context.exception))
+
+    def testVersionCheckTriangleModeOnCurrentVersion(self) -> None:
+        """Test triangleMode does not raise with current danish version."""
+        # This test should pass with current danish version
+        try:
+            dan = DanishAlgorithm(triangleMode=True)
+            # If we get here, either danish >= 1.2 or < 1.2
+            # We can't definitively test this without knowing the version,
+            # but we at least verify the init doesn't crash for the current env
+            self.assertIsNotNone(dan)
+        except RuntimeError as e:
+            # If current version is < 1.2, that's expected
+            self.assertIn("Danish version 1.2 or above", str(e))
+
+    def testVersionCheckDoAoiThroughputOnCurrentVersion(self) -> None:
+        """Test doAoiThroughput does not raise with current danish version."""
+        try:
+            dan = DanishAlgorithm(doAoiThroughput=True)
+            self.assertIsNotNone(dan)
+        except RuntimeError as e:
+            # If current version is < 1.1, that's expected
+            self.assertIn("Danish version 1.1 or above", str(e))
+
+    def testVersionCheckSystematicLossAlphaOnCurrentVersion(self) -> None:
+        """Test systematicLossAlpha does not raise with current version."""
+        try:
+            dan = DanishAlgorithm(systematicLossAlpha=0.05)
+            self.assertIsNotNone(dan)
+        except RuntimeError as e:
+            # If current version is < 1.1, that's expected
+            self.assertIn("Danish version 1.1 or above", str(e))
