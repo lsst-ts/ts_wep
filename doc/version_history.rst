@@ -17,6 +17,23 @@ Version History
 
 .. towncrier release notes start
 
+v17.6.0 (2026-06-19)
+====================
+
+New Features
+------------
+
+- Added cut on recenter distance flags in donutStampSelectorTask. (`RSO-611 <https://rubinobs.atlassian.net//browse/RSO-611>`_)
+- Added configuration settings for triangle mode in danish enabled by update to danish v1.2. (`RSO-655 <https://rubinobs.atlassian.net//browse/RSO-655>`_)
+
+
+Bug Fixes
+---------
+
+- Keep calcZernikesNeuralTask zernikes table in CCS to match Danish and avoid double rotation in donut_viz. (`DM-55218 <https://rubinobs.atlassian.net//browse/DM-55218>`_)
+- Fixed issues with calibration intrinsics when running the unpaired danish pipeline. (`RSO-660 <https://rubinobs.atlassian.net//browse/RSO-660>`_)
+
+
 v17.5.0 (2026-06-11)
 ====================
 
