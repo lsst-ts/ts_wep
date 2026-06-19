@@ -33,7 +33,12 @@ from astropy.table import QTable
 import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
 from lsst.ip.isr import IntrinsicZernikes
-from lsst.pipe.base import connectionTypes
+from lsst.pipe.base import (
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
+    QuantumContext,
+    connectionTypes,
+)
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
@@ -42,7 +47,7 @@ from lsst.utils.timer import timeMethod
 def lookupIntrinsicZernikes(
     datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
 ) -> list[DatasetRef | None]:
-    refs = [registry.findDataset(datasetType, dataId, collections=collections)]
+    refs = [registry.findDataset(datasetType, dataId, collections=collections, timespan=dataId.timespan)]
     return refs
 
 
@@ -102,6 +107,20 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
 
     ConfigClass = CalcZernikesUnpairedTaskConfig
     _DefaultName = "calcZernikesUnpairedTask"
+
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ) -> None:
+        """
+        Need to override the runQuantum method to handle
+        the unpaired nature of the inputs.
+        """
+        inputs = butlerQC.get(inputRefs)
+        outputs = self.run(**inputs)
+        butlerQC.put(outputs, outputRefs)
 
     @timeMethod
     def run(

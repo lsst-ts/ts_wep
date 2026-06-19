@@ -319,10 +319,16 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             )
             self.assertEqual(logMsg, errMsg)
         self.assertEqual(self.task.metadata.arrays["recenterFlagsExtra"], [0, 1, 1])
+        # Test that donut stamps metadata contains
+        # recenter flags with correct values
+        self.assertEqual(donutStamps.metadata.getArray("RECENTER_FLAGS"), [0, 1, 1])
 
         # Test that recenterFlags gets Intra focal label correct
-        self.task.cutOutStamps(exp, catalog, DefocalType.Intra, self.cameraName)
+        donutStampsIntra = self.task.cutOutStamps(exp, catalog, DefocalType.Intra, self.cameraName)
         self.assertEqual(self.task.metadata.arrays["recenterFlagsIntra"], [0, 1, 1])
+        # Test that donut stamps metadata contains
+        # recenter flags with correct values
+        self.assertEqual(donutStampsIntra.metadata.getArray("RECENTER_FLAGS"), [0, 1, 1])
 
     def _getExpAndCatalog(self, defocalType: DefocalType) -> tuple[afwImage.ExposureF, QTable]:
         """
@@ -431,6 +437,7 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
             "MAX_POWER_GRAD",
+            "RECENTER_FLAGS",
             "MJD",
             "BORESIGHT_ROT_ANGLE_RAD",
             "BORESIGHT_PAR_ANGLE_RAD",
@@ -457,6 +464,8 @@ class TestCutOutDonutsBase(lsst.utils.tests.TestCase):
             "ENTROPY",
             "PEAK_HEIGHT",
             "FRAC_BAD_PIX",
+            "MAX_POWER_GRAD",
+            "RECENTER_FLAGS",
         ]:
             self.assertEqual(len(donutStamps), len(donutStamps.metadata.getArray(measure)))
 

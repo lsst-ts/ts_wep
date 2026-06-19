@@ -163,6 +163,10 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         # power spectrum (at k < 10). All should be selected
         self.assertEqual(np.sum(donutsQuality["MAX_POWER_GRAD_SELECT"]), 3)
 
+        # by default, recentering flags are used for selection
+        # None are flagged as bad, so all should be selected
+        self.assertEqual(np.sum(donutsQuality["RECENTER_FLAGS_SELECT"]), 3)
+
         # Test that overall selection also shows only one donut
         self.assertEqual(np.sum(donutsQuality["FINAL_SELECT"]), 1)
         self.assertEqual(np.sum(selection.selected), 1)
@@ -210,6 +214,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.config.selectWithSignalToNoise = False
         self.config.selectWithFracBadPixels = False
         self.config.selectWithMaxPowerGrad = False
+        self.config.selectWithRecenterFlags = False
         task = DonutStampSelectorTask(config=self.config, name="All off")
         selection = task.selectStamps(donutStampsIntra)
         self.assertEqual(np.sum(selection.donutsQuality["ENTROPY_SELECT"]), 3)
@@ -217,6 +222,15 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(np.sum(selection.donutsQuality["FRAC_BAD_PIX_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["MAX_POWER_GRAD_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 3)
+
+        # Set RecenterFlags selection on
+        self.config.selectWithRecenterFlags = True
+        # Set one of the donuts to have a bad recenter flag
+        # and make sure it gets filtered out
+        donutStampsIntra.metadata["RECENTER_FLAGS"] = [0, 1, 0]
+        selection = task.selectStamps(donutStampsIntra)
+        self.assertEqual(np.sum(selection.donutsQuality["RECENTER_FLAGS_SELECT"]), 2)
+        self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 2)
 
         # set maxSelect = 1 and make sure the final selection is only 1
         self.config.maxSelect = 1

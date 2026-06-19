@@ -171,6 +171,7 @@ class TestTaskUtils(unittest.TestCase):
     def testGetCameraFromButlerName(self) -> None:
         # Test camera loading
         self.assertEqual(obs_lsst.LsstCam().getCamera(), getCameraFromButlerName("LSSTCam"))
+        self.assertEqual(obs_lsst.LsstCam().getCamera(), getCameraFromButlerName("LSSTCamSim"))
         self.assertEqual(obs_lsst.LsstComCam().getCamera(), getCameraFromButlerName("LSSTComCam"))
         self.assertEqual(obs_lsst.Latiss().getCamera(), getCameraFromButlerName("LATISS"))
         # Test error
@@ -196,6 +197,7 @@ class TestTaskUtils(unittest.TestCase):
 
         # Test the defaults
         assertInstEqual(getTaskInstrument("LSSTCam", "R00_SW0"), Instrument())
+        assertInstEqual(getTaskInstrument("LSSTCamSim", "R00_SW0"), Instrument())
         assertInstEqual(
             getTaskInstrument("LSSTComCam", "R22_S11"),
             Instrument(configFile="policy:instruments/ComCam.yaml"),

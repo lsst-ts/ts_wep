@@ -253,6 +253,7 @@ class TestCalcZernikesTieTaskScienceSensor(lsst.utils.tests.TestCase):
             "FRAC_BAD_PIX_SELECT",
             "MAX_POWER_GRAD",
             "MAX_POWER_GRAD_SELECT",
+            "RECENTER_FLAGS_SELECT",
             "FINAL_SELECT",
             "DEFOCAL_TYPE",
             "DONUT_ID",
