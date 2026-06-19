@@ -26,10 +26,14 @@ import tempfile
 import numpy as np
 import pytest
 import yaml
+from astropy.table import QTable
 
 import lsst.utils.tests
+from lsst.afw.image import Exposure
 from lsst.daf.butler import Butler
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import CalcZernikesNeuralTask, CalcZernikesNeuralTaskConfig
+from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
     getModulePath,
     runProgram,
@@ -189,11 +193,24 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         # Define data ID for single exposure
         # Using detector 191 from the same visit
         self.visitNum = 2031063000001
+        self.detector: int = 191
         self.dataId = {
             "instrument": "LSSTCam",
-            "detector": 191,
+            "detector": self.detector,
             "exposure": self.visitNum,
         }
+
+    def _getIntrinsicZernikes(self, exposure: Exposure, detector: int) -> IntrinsicZernikes:
+        physicalFilter = getattr(exposure.filter, "physicalLabel", None) or exposure.filter.bandLabel
+        return self.butler.get(
+            "intrinsicZernikes",
+            dataId={
+                "instrument": "LSSTCam",
+                "detector": detector,
+                "physical_filter": physicalFilter,
+            },
+            collections=["LSSTCam/aos/intrinsic"],
+        )
 
     def testConfigurableNollIndices(self) -> None:
         """
@@ -234,9 +251,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify that we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.detector)
 
         # Run the task with single exposure
-        values = self.task.run(exposure)
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
 
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results")
@@ -265,9 +287,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.detector)
 
         # Run with valid exposure
-        values = self.task.run(exposure)
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
 
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results with valid exposure")
@@ -299,9 +326,10 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         This tests the robustness with different data sources.
         """
         # Use a different detector (192 instead of 191)
+        detector2: int = 192
         dataId2 = {
             "instrument": "LSSTCam",
-            "detector": 192,
+            "detector": detector2,
             "exposure": self.visitNum,
         }
 
@@ -309,9 +337,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify we have valid data
         self.assertIsNotNone(exposure, "Exposure should not be None")
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, detector2)
 
         # Run with different detector exposure
-        values = self.task.run(exposure)
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
 
         # Verify the output structure
         self.assertIsNotNone(values, "Task run should return results with different detector")
@@ -375,3 +408,104 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         # Verify that zernikes table is empty
         self.assertEqual(len(values.zernikes), 0, "Zernikes table should be empty when no exposure available")
+
+    def testRunWithNoDetectedDonuts(self) -> None:
+        """TARTS zero-donut detections should emit empty tables like Danish."""
+
+        exposure = self.butler.get("raw", dataId=self.dataId, collections=["LSSTCam/raw/all"])
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.detector)
+
+        def no_donut_result(
+            _exposure: Exposure, _defocalType: str
+        ) -> tuple[np.ndarray, DonutStamps, np.ndarray]:
+            zernikes = np.zeros((1, len(self.task.nollIndices)))
+            return zernikes, DonutStamps([]), zernikes
+
+        self.task.calcZernikesFromExposure = no_donut_result
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
+
+        self.assertEqual(
+            len(values.zernikes), 0, "Zernikes table should be empty when TARTS detects no donuts"
+        )
+        self.assertEqual(len(values.donutStampsNeural), 0, "Neural donut stamps should be empty")
+        self.assertEqual(len(values.donutTable), 0, "Donut table should be empty")
+        self.assertTrue(np.all(np.isnan(values.outputZernikesAvg)))
+        self.assertTrue(np.all(np.isnan(values.outputZernikesRaw)))
+
+    def testRunWithNoUsableZernikes(self) -> None:
+        """All-zero TARTS predictions should emit empty tables like Danish."""
+
+        exposure = self.butler.get("raw", dataId=self.dataId, collections=["LSSTCam/raw/all"])
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.detector)
+
+        class FakeDonutStamps:
+            def __len__(self) -> int:
+                return 1
+
+        def zero_zernike_result(
+            _exposure: Exposure, _defocalType: str
+        ) -> tuple[np.ndarray, FakeDonutStamps, np.ndarray]:
+            zernikes = np.zeros((1, len(self.task.nollIndices)))
+            return zernikes, FakeDonutStamps(), zernikes
+
+        self.task.calcZernikesFromExposure = zero_zernike_result
+        self.task.createDonutQualityTable = lambda _donuts: QTable({"SN": [np.nan]})
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
+
+        self.assertEqual(len(values.zernikes), 0, "Zernikes table should be empty for all-zero TARTS output")
+        self.assertEqual(len(values.donutStampsNeural), 0, "Neural donut stamps should be empty")
+        self.assertEqual(len(values.donutTable), 0, "Donut table should be empty")
+        self.assertEqual(
+            len(values.donutQualityTable), 0, "Quality table should stay aligned with empty donut table"
+        )
+        self.assertTrue(np.all(np.isnan(values.outputZernikesAvg)))
+        self.assertTrue(np.all(np.isnan(values.outputZernikesRaw)))
+
+    def testRunWithNoUsableRawZernikesAndOffsetAggregate(self) -> None:
+        """
+        Zero raw TARTS output should stay empty after offset aggregation.
+        """
+
+        exposure = self.butler.get("raw", dataId=self.dataId, collections=["LSSTCam/raw/all"])
+        intrinsicZernikes = self._getIntrinsicZernikes(exposure, self.detector)
+
+        class FakeDonutStamps:
+            def __len__(self) -> int:
+                return 1
+
+        def zero_raw_offset_aggregate_result(
+            _exposure: Exposure, _defocalType: str
+        ) -> tuple[np.ndarray, FakeDonutStamps, np.ndarray]:
+            raw_zernikes = np.zeros((1, len(self.task.nollIndices)))
+            aggregate_zernikes = raw_zernikes.copy()
+            aggregate_zernikes[0, 0] = 1.23
+            return aggregate_zernikes, FakeDonutStamps(), raw_zernikes
+
+        self.task.calcZernikesFromExposure = zero_raw_offset_aggregate_result
+        self.task.createDonutQualityTable = lambda _donuts: QTable({"SN": [np.nan]})
+        values = self.task.run(
+            exposure,
+            intrinsicZernikesExtra=intrinsicZernikes,
+            intrinsicZernikesIntra=intrinsicZernikes,
+        )
+
+        self.assertEqual(
+            len(values.zernikes),
+            0,
+            "Zernikes table should be empty when raw TARTS output is the all-zero sentinel",
+        )
+        self.assertEqual(len(values.donutStampsNeural), 0, "Neural donut stamps should be empty")
+        self.assertEqual(len(values.donutTable), 0, "Donut table should be empty")
+        self.assertEqual(
+            len(values.donutQualityTable), 0, "Quality table should stay aligned with empty donut table"
+        )
+        self.assertTrue(np.all(np.isnan(values.outputZernikesAvg)))
+        self.assertTrue(np.all(np.isnan(values.outputZernikesRaw)))

@@ -27,10 +27,9 @@ __all__ = [
 
 import os
 from copy import deepcopy
-from typing import Any
+from typing import Any, Sequence
 
 import astropy.units as u
-import galsim
 import numpy as np
 import torch
 from astropy.table import QTable
@@ -40,12 +39,14 @@ import lsst.geom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.daf.base import PropertyList
+from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
+from lsst.ip.isr import IntrinsicZernikes
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
-from lsst.ts.wep.utils.zernikeUtils import checkNollIndices, makeSparse
+from lsst.ts.wep.utils.zernikeUtils import checkNollIndices
 from lsst.utils.timer import timeMethod
 
 # Define the position 2D float dtype for the zernikes table
@@ -89,15 +90,37 @@ DONUT_QUALITY_TABLE_COLUMNS = [
 ]
 
 
+def lookupIntrinsicZernikesSingleDetector(
+    datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
+) -> list[DatasetRef | None]:
+    """Look up the intrinsic Zernike calibration for the current detector.
+
+    The neural task processes one CWFS detector per quantum, including
+    intra-focal detectors. Unlike the paired base task, it should not request a
+    neighboring detector calibration from the lookup function.
+    """
+    return [registry.findDataset(datasetType, dataId, collections=collections, timespan=dataId.timespan)]
+
+
 class CalcZernikesNeuralTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("exposure", "detector", "instrument"),  # type: ignore
+    dimensions=("exposure", "detector", "instrument", "physical_filter"),  # type: ignore
 ):
     exposure = connectionTypes.Input(
         doc="Input post_isr exposure to run wavefront estimation on",
         dimensions=("exposure", "detector", "instrument"),
         storageClass="Exposure",
         name="post_isr_image",
+    )
+    intrinsicZernikes = connectionTypes.PrerequisiteInput(
+        doc="Intrinsic Zernike calibration for the instrument",
+        dimensions=("detector", "instrument", "physical_filter"),
+        storageClass="IsrCalib",
+        name="intrinsicZernikes",
+        multiple=True,
+        isCalibration=True,
+        lookupFunction=lookupIntrinsicZernikesSingleDetector,  # type: ignore
+        minimum=0,
     )
     outputZernikesRaw = connectionTypes.Output(
         doc="Zernike Coefficients from all donuts",
@@ -272,8 +295,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
     EXPECTED_IMAGE_DIMENSIONS = 3  # Expected dimensions for TARTS output
     LOG_PRECISION = 3  # Decimal precision for logging Zernike values
     # Statistic for the neural OPD/intrinsic/deviation aggregate row labeled
-    # "average"; see _populateNeuralZernikeTableColumns. Copied to
-    # zkTable.meta["average_row_aggregation"] on output tables.
+    # "average"; copied to zkTable.meta["average_row_aggregation"] on output
+    # tables.
     AVERAGE_ROW_AGGREGATION_METHOD = "nanmedian"
 
     ConfigClass = CalcZernikesNeuralTaskConfig
@@ -380,10 +403,6 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
 
         # Initialize cache for per-donut OOD scores
         self._lastOodScores: list[float] = []
-        # Cache per-donut Zernike components from TARTS internal data
-        # (CCS, microns)
-        self._lastZkDeviationsCcs: list[np.ndarray] = []
-        self._lastZkIntrinsicsCcs: list[np.ndarray] = []
 
     def validate(self) -> None:
         """Validate configuration parameters for the neural Zernike task.
@@ -393,8 +412,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         ValueError
             If ``nollIndices`` is empty or fails ``checkNollIndices`` (each
             index must be >= 4, unique, ascending, and azimuthal pairs must
-            be complete), matching ``makeSparse`` / ``makeDense`` requirements
-            in ``zernikeUtils``.
+            be complete).
         """
         if len(self.nollIndices) == 0:
             raise ValueError("nollIndices cannot be empty")
@@ -806,7 +824,16 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             emptyTable.meta["detector"] = UNKNOWN_STRING
             emptyTable.meta["camera"] = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
             emptyTable.meta["band"] = UNKNOWN_STRING
-            emptyTable.meta["visit_info"] = self._getDefaultVisitInfoDict()
+            try:
+                emptyTable = addVisitInfoToCatTable(exposure, emptyTable)
+            except (AttributeError, RuntimeError) as e:
+                self.log.warning(
+                    "Could not extract visitInfo metadata for empty donut table: %s. "
+                    "Using minimal visitInfo structure.",
+                    e,
+                )
+                visitId = int(exposure.visitInfo.id) if exposure.visitInfo else UNKNOWN_INT
+                emptyTable.meta["visit_info"] = self._getDefaultVisitInfoDict(visitId)
             return emptyTable
 
         numDonuts = len(donutStamps)
@@ -1039,13 +1066,6 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         oodScores = [float(d.get("ood_score", np.nan)) for d in tartsInternalData]
         # Cache for later use when creating the zernikes table
         self._lastOodScores = oodScores
-        self._lastZkDeviationsCcs = [
-            self._extractTartsZkVector(donut, "zk_deviations_CCS", fallback_key="zernikes")
-            for donut in tartsInternalData
-        ]
-        self._lastZkIntrinsicsCcs = [
-            self._extractTartsZkVector(donut, "zk_intrinsics_CCS") for donut in tartsInternalData
-        ]
 
         # Count valid OOD scores for logging
         validCount = int(np.sum(np.isfinite(oodScores)))
@@ -1067,7 +1087,29 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         return aggregatedZernikes, donutStamps, deepcopy(self.tarts.total_zernikes)
 
-    def empty(self, qualityTable: QTable | None = None) -> pipeBase.Struct:
+    @staticmethod
+    def _hasUsableZernikeValues(*arrays: np.ndarray) -> bool:
+        """Return True when at least one Zernike array contains signal.
+
+        TARTS can return all-zero Zernike arrays as a sentinel for cases with
+        no usable recovered donuts. Treat those like Danish no-donut outputs so
+        downstream table payloads are empty rather than populated with zeros.
+        """
+        for array in arrays:
+            values = np.asarray(array, dtype=float)
+            if values.size == 0:
+                continue
+            finiteValues = values[np.isfinite(values)]
+            if finiteValues.size > 0 and np.any(finiteValues != 0.0):
+                return True
+        return False
+
+    def empty(
+        self,
+        qualityTable: QTable | None = None,
+        exposure: afwImage.Exposure | None = None,
+        defocalType: str | None = None,
+    ) -> pipeBase.Struct:
         """Return empty results when no donuts are available for processing.
 
         This method creates empty output structures when the task cannot
@@ -1105,31 +1147,62 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         debugging.
         """
         self.log.info("Producing empty results; quality table provided: %s", qualityTable is not None)
-        if qualityTable is None:
-            self.log.warning(
-                "No donut quality table supplied to empty(); constructing an empty table. "
-                "If a previous step computed quality metrics (e.g., donuts existed but all failed), "
-                "pass that table here to preserve failure diagnostics."
+        if qualityTable is not None and len(qualityTable) > 0:
+            self.log.info(
+                "Dropping %d quality row(s) so empty donut products stay aligned.", len(qualityTable)
             )
-            donutQualityTable = QTable({name: [] for name in DONUT_QUALITY_TABLE_COLUMNS})
-        else:
-            donutQualityTable = qualityTable
+        donutQualityTable = QTable({name: [] for name in DONUT_QUALITY_TABLE_COLUMNS})
 
-        # Set stamp attributes to None for empty case
-        self.stampsIntra = None
-        self.stampsExtra = None
+        stampsMetadata = PropertyList()
+        if exposure is not None:
+            emptyTable = addVisitInfoToCatTable(exposure, QTable())
+            visitInfo = emptyTable.meta.get("visit_info", {})
+            stampsMetadata["VISIT"] = visitInfo.get("visit_id", UNKNOWN_INT)
+            stampsMetadata["BORESIGHT_ROT_ANGLE_RAD"] = visitInfo.get(
+                "boresight_rot_angle", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_PAR_ANGLE_RAD"] = visitInfo.get(
+                "boresight_par_angle", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_ALT_RAD"] = visitInfo.get(
+                "boresight_alt", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_AZ_RAD"] = visitInfo.get(
+                "boresight_az", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_RA_RAD"] = visitInfo.get(
+                "boresight_ra", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["BORESIGHT_DEC_RAD"] = visitInfo.get(
+                "boresight_dec", UNKNOWN_FLOAT * u.deg
+            ).to_value(u.rad)
+            stampsMetadata["MJD"] = visitInfo.get("mjd", UNKNOWN_FLOAT)
+            stampsMetadata["BANDPASS"] = getattr(exposure.filter, "bandLabel", UNKNOWN_STRING)
+
+        # Keep empty stamp containers with visit-level metadata so downstream
+        # visit aggregators can still combine zero-donut outputs.
+        self.stampsIntra = DonutStamps([], metadata=stampsMetadata if defocalType == "intra" else None)
+        self.stampsExtra = DonutStamps([], metadata=stampsMetadata if defocalType == "extra" else None)
 
         # Create empty Zernike table with metadata
         emptyZkTable = self.initZkTable()
-        emptyZkTable.meta = self.createZkTableMetadata()
+        emptyZkTable.meta = {
+            "intra": {},
+            "extra": {},
+            "cam_name": None,
+            "noll_indices": list(self.nollIndices),
+            "opd_columns": [f"Z{j}" for j in self.nollIndices],
+            "intrinsic_columns": [f"Z{j}_intrinsic" for j in self.nollIndices],
+            "deviation_columns": [f"Z{j}_deviation" for j in self.nollIndices],
+        }
         # Add empty OOD score column
         emptyZkTable["ood_score"] = []
 
-        # Create empty donut table matching standard format
-        emptyDonutTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
-
-        # Add default visitInfo metadata for empty table
-        emptyDonutTable.meta["visit_info"] = self._getDefaultVisitInfoDict()
+        if exposure is None:
+            emptyDonutTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
+            emptyDonutTable.meta["visit_info"] = self._getDefaultVisitInfoDict()
+        else:
+            emptyDonutTable = self.createDonutTable(DonutStamps([]), exposure, defocalType or "intra")
 
         # Create properly structured arrays for empty case
         # Ensure arrays have shape (1, nZernikes) to match expected structure
@@ -1138,7 +1211,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         struct = pipeBase.Struct(
             outputZernikesRaw=emptyZernikes,
             outputZernikesAvg=emptyZernikes,
-            donutStampsNeural=DonutStamps([]),
+            donutStampsNeural=self.stampsIntra if defocalType == "intra" else self.stampsExtra,
             zernikes=emptyZkTable,
             donutTable=emptyDonutTable,
             donutQualityTable=donutQualityTable,
@@ -1153,6 +1226,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
     def run(
         self,
         exposure: afwImage.Exposure,
+        intrinsicZernikesExtra: IntrinsicZernikes | None = None,
+        intrinsicZernikesIntra: IntrinsicZernikes | None = None,
         numCores: int = 1,
     ) -> pipeBase.Struct:
         """Run the neural network-based Zernike estimation task.
@@ -1167,6 +1242,12 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         exposure : lsst.afw.image.Exposure
             The LSST exposure data containing donut stamps. This should
             contain proper WCS information for the TARTS neural network.
+        intrinsicZernikesExtra : lsst.ip.isr.IntrinsicZernikes, optional
+            Intrinsic Zernike calibration for extra-focal donuts. Passed by the
+            base ``runQuantum`` from the pipeline input collections.
+        intrinsicZernikesIntra : lsst.ip.isr.IntrinsicZernikes, optional
+            Intrinsic Zernike calibration for intra-focal donuts. Passed by the
+            base ``runQuantum`` from the pipeline input collections.
         numCores : int, optional
             Reserved for API compatibility with the base class; not used by
             this neural implementation. Default is 1.
@@ -1204,6 +1285,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         --------
         calcZernikesFromExposure : Method that processes individual exposures.
         """
+        if exposure is None:
+            self.log.info("No exposure supplied; producing empty neural Zernike outputs.")
+            return self.empty()
+
         # Check if exposure is valid
         exposure_id = int(exposure.visitInfo.id)
         self.log.info("Starting Zernike estimation for exposure id=%s", exposure_id)
@@ -1211,6 +1296,20 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # Determine defocal type using helper function
         defocalType = self._determineDefocalType(exposure)
         aggregatedZernikes, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
+        if len(donutStamps) == 0:
+            self.log.info("No TARTS donut stamps were detected.")
+            return self.empty(exposure=exposure, defocalType=defocalType)
+        if not self._hasUsableZernikeValues(zk):
+            self.log.info(
+                "TARTS returned no usable raw Zernike coefficients for %d detected donut(s); "
+                "producing empty outputs.",
+                len(donutStamps),
+            )
+            return self.empty(
+                self.createDonutQualityTable(donutStamps),
+                exposure=exposure,
+                defocalType=defocalType,
+            )
 
         # Log final donut count and processing summary
         self.log.info(
@@ -1229,7 +1328,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # as standard tasks
         # Both should be 2D arrays with shape (1, nZernikes) for single
         # exposure
-        zernikesRaw = np.atleast_2d(zk)  # Single prediction per donut
+        zernikesRaw = np.atleast_2d(self._toNumpy(zk))  # Single prediction per donut
         zernikesAvg = np.atleast_2d(aggregatedZernikes)  # Aggregated prediction per exposure
 
         # Create zernikes table
@@ -1245,6 +1344,24 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.stampsIntra = intraStamps
         self.stampsExtra = extraStamps
 
+        intrinsicZernikes = intrinsicZernikesExtra if defocalType == "extra" else intrinsicZernikesIntra
+        if intrinsicZernikes is None:
+            cameraName = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
+            if cameraName == "LATISS":
+                self.log.warning(
+                    "No intrinsic Zernike calibration found for %s; proceeding "
+                    "without it. Intrinsic and deviation columns will be NaN.",
+                    cameraName,
+                )
+            else:
+                raise RuntimeError(
+                    f"No intrinsic Zernike calibration found for instrument "
+                    f"{cameraName!r}, which requires one. Provide an input "
+                    f"collection containing the 'intrinsicZernikes' calibration."
+                )
+        self.intrinsicZernikesExtra = intrinsicZernikesExtra
+        self.intrinsicZernikesIntra = intrinsicZernikesIntra
+
         self.log.debug(
             "Using defocalType='%s' -> intra stamps: %d, extra stamps: %d",
             defocalType,
@@ -1258,7 +1375,6 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         )
         zernikesTable = self.createZkTable(zkCoeffRaw=zkCoeffRaw)
         self._updateAverageRowWithAggregatedZernikes(zernikesTable, aggregatedZernikes)
-        self._populateNeuralZernikeTableColumns(zernikesTable, exposure)
         # Add OOD scores to zernikes table as a per-donut column
         # OOD scores are extracted in the same order as donuts from TARTS
         # internal data, and both come from the same TARTS run, so they
@@ -1310,266 +1426,33 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             donutQualityTable=donutQualityTable,
         )
 
-    def _extractTartsZkVector(
-        self, donutData: dict[str, Any], key: str, fallback_key: str | None = None
-    ) -> np.ndarray:
-        """Extract configured Noll modes from one TARTS internal-data dict.
-
-        ``donutData`` is one element from ``get_internal_data()``. TARTS may
-        expose per-donut Zernike content under different keys
-        (for example ``zk_deviations_CCS`` vs. a legacy ``zernikes`` key).
-        This helper selects the vector stored under ``key``, optionally
-        falling back to ``fallback_key``, then picks the entries that align
-        with ``self.nollIndices``.
-
-        Parameters
-        ----------
-        donutData : dict[str, Any]
-            Single-donut dictionary from TARTS
-            ``NeuralActiveOpticsSys.get_internal_data()``.
-        key : str
-            Primary dictionary key for the full Zernike vector in camera
-            coordinates (CCS), in microns.
-        fallback_key : str, optional
-            Secondary key to try if ``key`` is missing or maps to ``None``.
-            If both are missing, the returned vector is all-NaN.
-
-        Returns
-        -------
-        numpy.ndarray
-            1-D float array of length ``len(self.nollIndices)``, in microns,
-            ordered consistently with ``self.nollIndices``. Missing keys or
-            out-of-range indices are filled with ``numpy.nan``.
-
-        Notes
-        -----
-        Indexing matches ``makeSparse`` in ``zernikeUtils``: offset ``k`` in
-        the TARTS vector is Noll ``k + 4``. ``self.nollIndices`` is validated
-        at task init (all indices >= 4). If the TARTS vector is shorter than
-        needed for the configured maximum Noll index, it is right-padded with
-        NaNs before calling ``makeSparse``, so missing high-order modes are
-        NaN rather than raising.
-        """
-        source = donutData.get(key, None)
-        if source is None and fallback_key is not None:
-            source = donutData.get(fallback_key, None)
-        if source is None:
-            return np.full(len(self.nollIndices), np.nan, dtype=float)
-
-        fullVec = np.ravel(self._toNumpy(source)).astype(float)
-        nolls = np.asarray(self.nollIndices, dtype=int)
-        requiredLen = int(nolls.max()) - 3
-        if len(fullVec) < requiredLen:
-            padded = np.full(requiredLen, np.nan, dtype=float)
-            padded[: len(fullVec)] = fullVec
-            fullVec = padded
-        return np.asarray(makeSparse(fullVec, nolls), dtype=float)
-
-    def _getCcsToOcsRotationAngle(self, exposure: afwImage.Exposure) -> float:
-        """Compute the rotation angle from CCS to OCS for Zernike vectors.
-
-        Uses the same convention as ``createDonutTable`` for the parallactic
-        and boresight rotation angles.
-
-        Parameters
-        ----------
-        exposure : lsst.afw.image.Exposure
-            Exposure whose ``visitInfo`` supplies ``boresightParAngle`` and
-            ``boresightRotAngle``.
-
-        Returns
-        -------
-        float
-            Rotation angle ``rtp`` in radians,
-            ``parallactic - rotation - pi/2``.
-
-        Raises
-        ------
-        AttributeError
-            If required ``visitInfo`` fields are missing.
-        RuntimeError
-            If angle access fails at runtime.
-        """
-        q_parAngle_rad = exposure.visitInfo.boresightParAngle.asRadians()
-        rot_angle_rad = exposure.visitInfo.boresightRotAngle.asRadians()
-        return q_parAngle_rad - rot_angle_rad - np.pi / 2.0
-
-    def _rotateZernikeVectorCcsToOcs(self, zkCcs: np.ndarray, rtp: float) -> np.ndarray:
-        """Rotate a sparse Zernike coefficient vector from CCS to OCS.
-
-        The input ``zkCcs`` holds only the modes in ``self.nollIndices``.
-        Coefficients are embedded into a dense Noll-indexed vector, rotated
-        with GalSim's ``zernikeRotMatrix``, and the configured modes are
-        extracted again.
-
-        Parameters
-        ----------
-        zkCcs : numpy.ndarray
-            1-D array of Zernike coefficients in microns, same length and
-            order as ``self.nollIndices``.
-        rtp : float
-            Rotation angle in radians, typically from
-            `_getCcsToOcsRotationAngle`.
-
-        Returns
-        -------
-        numpy.ndarray
-            1-D float array of rotated coefficients in microns, ordered like
-            ``self.nollIndices``.
-        """
-        jmax = int(max(self.nollIndices))
-        dense = np.zeros(jmax + 1, dtype=float)
-        for value, noll in zip(zkCcs, self.nollIndices):
-            dense[int(noll)] = value
-
-        rot = galsim.zernike.zernikeRotMatrix(jmax, rtp)
-        denseOcs = rot @ dense
-        return np.array([denseOcs[int(n)] for n in self.nollIndices], dtype=float)
-
-    def _populateNeuralZernikeTableColumns(self, zkTable: QTable, exposure: afwImage.Exposure) -> None:
-        """Fill OPD, intrinsic, and deviation columns using cached TARTS data.
-
-        Uses ``self._lastZkDeviationsCcs`` and ``self._lastZkIntrinsicsCcs``
-        populated during ``calcZernikesFromExposure``. When boresight angles
-        are available, deviations and intrinsics are rotated from CCS to OCS
-        before writing; otherwise CCS values are written and a warning is
-        logged.
-
-        Parameters
-        ----------
-        zkTable : astropy.table.QTable
-            Table produced by ``createZkTable``, with row 0 the aggregate
-            label and subsequent rows per donut.
-        exposure : lsst.afw.image.Exposure
-            Exposure used for CCS-to-OCS rotation metadata.
-
-        Returns
-        -------
-        None
-            Updates ``zkTable`` in place.
-
-        Notes
-        -----
-        The aggregate (``label == "average"``) row is updated with the
-        nanmedian across donuts for total, intrinsic, and deviation in OCS
-        (or CCS if rotation is unavailable). OPD columns store
-        ``intrinsic + deviation`` in nanometers. ``zkTable.meta`` receives
-        ``average_row_aggregation`` set to ``AVERAGE_ROW_AGGREGATION_METHOD``
-        so consumers know the row label ``average`` refers to this statistic,
-        not a mean (see also ``run`` for nanmedian on ``ood_score``).
-        """
-        if len(zkTable) == 0:
-            return
-
-        try:
-            rtp = self._getCcsToOcsRotationAngle(exposure)
-        except (AttributeError, RuntimeError) as e:
-            self.log.warning(
-                "Missing visitInfo boresight angles for CCS->OCS Zernike conversion (%s); "
-                "writing CCS values to output table.",
-                e,
-            )
-            rtp = None
-
-        numRowsDonut = max(0, len(zkTable) - 1)
-        numCached = min(numRowsDonut, len(self._lastZkDeviationsCcs), len(self._lastZkIntrinsicsCcs))
-        if numCached == 0:
-            return
-
-        allTotalOcs: list[np.ndarray] = []
-        allIntrOcs: list[np.ndarray] = []
-        allDevOcs: list[np.ndarray] = []
-
-        for i in range(numCached):
-            devCcs = self._lastZkDeviationsCcs[i]
-            intrCcs = self._lastZkIntrinsicsCcs[i]
-            if rtp is None:
-                devOcs = devCcs
-                intrOcs = intrCcs
-            else:
-                devOcs = self._rotateZernikeVectorCcsToOcs(devCcs, rtp)
-                intrOcs = self._rotateZernikeVectorCcsToOcs(intrCcs, rtp)
-            totalOcs = devOcs + intrOcs
-
-            allDevOcs.append(devOcs)
-            allIntrOcs.append(intrOcs)
-            allTotalOcs.append(totalOcs)
-
-            rowIdx = i + 1  # index 0 is average row
-            for modeIdx, noll in enumerate(self.nollIndices):
-                zkTable[f"Z{noll}"][rowIdx] = (totalOcs[modeIdx] * u.micron).to(u.nm)
-                zkTable[f"Z{noll}_intrinsic"][rowIdx] = (intrOcs[modeIdx] * u.micron).to(u.nm)
-                zkTable[f"Z{noll}_deviation"][rowIdx] = (devOcs[modeIdx] * u.micron).to(u.nm)
-
-        # Aggregate row from donut rows in OCS (nanmedian; on-sky validation)
-        avgIdx = np.where(zkTable["label"] == "average")[0][0]
-        avgTotal = np.nanmedian(np.stack(allTotalOcs, axis=0), axis=0)
-        avgIntr = np.nanmedian(np.stack(allIntrOcs, axis=0), axis=0)
-        avgDev = np.nanmedian(np.stack(allDevOcs, axis=0), axis=0)
-        for modeIdx, noll in enumerate(self.nollIndices):
-            zkTable[f"Z{noll}"][avgIdx] = (avgTotal[modeIdx] * u.micron).to(u.nm)
-            zkTable[f"Z{noll}_intrinsic"][avgIdx] = (avgIntr[modeIdx] * u.micron).to(u.nm)
-            zkTable[f"Z{noll}_deviation"][avgIdx] = (avgDev[modeIdx] * u.micron).to(u.nm)
-
-        zkTable.meta["average_row_aggregation"] = self.AVERAGE_ROW_AGGREGATION_METHOD
-
     def _unpackStampData(self, stamp: DonutStamp | None) -> tuple:
-        """Override parent method to handle missing intrinsic calibrations.
-
-        The neural task does not use intrinsic Zernike calibrations, so this
-        method returns NaN for intrinsic values instead of trying to access
-        ``intrinsicZernikesIntra`` or ``intrinsicZernikesExtra`` attributes.
-
-        Parameters
-        ----------
-        stamp : DonutStamp or None
-            The DonutStamp object to unpack data from.
-
-        Returns
-        -------
-        fieldAngle : `astropy.units.Quantity`
-            The field angle of the stamp in degrees.
-        centroid : `astropy.units.Quantity`
-            The centroid position of the stamp in pixels.
-        intrinsics : `astropy.units.Quantity`
-            The intrinsic Zernike coefficients (always NaN for neural task).
-        """
-        if stamp is None:
-            fieldAngle = np.array(np.nan, dtype=POS2F_DTYPE) * u.deg
-            centroid = np.array((np.nan, np.nan), dtype=POS2F_DTYPE) * u.pixel
-            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
-        else:
-            fieldAngle = np.array(stamp.calcFieldXY(), dtype=POS2F_DTYPE) * u.deg
-            centroid = (
-                np.array(
-                    (stamp.centroid_position.x, stamp.centroid_position.y),
-                    dtype=POS2F_DTYPE,
-                )
-                * u.pixel
-            )
-            # Neural task doesn't use intrinsic maps, so return NaN intrinsics
-            intrinsics = np.full_like(self.nollIndices, np.nan) * u.micron
-
-        return fieldAngle, centroid, intrinsics
+        """Unpack stamp data using Butler-provided intrinsic calibrations."""
+        return super()._unpackStampData(stamp)
 
     def _updateAverageRowWithAggregatedZernikes(
         self, zkTable: QTable, aggregatedZernikes: np.ndarray
     ) -> None:
-        """Populate the average row of `zkTable` with neural aggregated data.
+        """Populate the average row of `zkTable` from per-donut table rows.
 
         Parameters
         ----------
         zkTable : `astropy.table.QTable`
-            Table returned by ``createZkTable`` containing placeholder values.
-            The first row corresponds to the aggregate (average) entry.
+            Table returned by ``createZkTable``. The first row corresponds to
+            the aggregate (average) entry.
         aggregatedZernikes : `numpy.ndarray`
             Two-dimensional array of aggregated Zernike coefficients produced
-            by TARTS (in microns) with shape (1, nZernikes).
+            by TARTS (in microns) with shape (1, nZernikes). This is validated
+            for shape compatibility, but the table's ``average`` row is
+            computed from the table rows to preserve historical table
+            semantics.
 
         Notes
         -----
-        This method sets intrinsic and deviation columns to NaN for all rows
-        since the neural task does not use intrinsic Zernike tables.
+        Per-donut intrinsic and deviation columns are populated by the base
+        ``createZkTable`` implementation from Butler ``IntrinsicZernikes``.
+        This method keeps those rows intact and fills the aggregate row with
+        the median total, intrinsic, and deviation values across donuts.
         """
         if len(zkTable) == 0:
             return
@@ -1591,12 +1474,27 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # Get index of average row (always present)
         avg_idx = np.where(zkTable["label"] == "average")[0][0]
 
-        # Convert to Quantity in nanometers and update OPD columns
-        agg_quant = (agg * u.micron).to(u.nm)
-        for value, column in zip(agg_quant, opd_columns):
-            zkTable[column][avg_idx] = value
+        for opd_col, intrinsic_col, deviation_col in zip(opd_columns, intrinsic_columns, deviation_columns):
+            if len(zkTable) > 1:
+                total_values = np.asarray(zkTable[opd_col][1:].to_value(u.nm), dtype=float)
+                intrinsic_values = np.asarray(zkTable[intrinsic_col][1:].to_value(u.nm), dtype=float)
+                deviation_values = np.asarray(zkTable[deviation_col][1:].to_value(u.nm), dtype=float)
+            else:
+                total_values = np.array([], dtype=float)
+                intrinsic_values = np.array([], dtype=float)
+                deviation_values = np.array([], dtype=float)
 
-        # Set intrinsic and deviation columns to NaN for all rows
-        # (neural task doesn't use intrinsic maps)
-        for column in intrinsic_columns + deviation_columns:
-            zkTable[column] = np.nan * u.nm
+            zkTable[opd_col][avg_idx] = (
+                np.nanmedian(total_values) * u.nm if np.any(np.isfinite(total_values)) else np.nan * u.nm
+            )
+            zkTable[intrinsic_col][avg_idx] = (
+                np.nanmedian(intrinsic_values) * u.nm
+                if np.any(np.isfinite(intrinsic_values))
+                else np.nan * u.nm
+            )
+            zkTable[deviation_col][avg_idx] = (
+                np.nanmedian(deviation_values) * u.nm
+                if np.any(np.isfinite(deviation_values))
+                else np.nan * u.nm
+            )
+        zkTable.meta["average_row_aggregation"] = self.AVERAGE_ROW_AGGREGATION_METHOD
