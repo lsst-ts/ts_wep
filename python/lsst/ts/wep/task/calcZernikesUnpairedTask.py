@@ -47,7 +47,7 @@ from lsst.utils.timer import timeMethod
 def lookupIntrinsicZernikes(
     datasetType: DatasetType, registry: Registry, dataId: DataCoordinate, collections: Sequence[str]
 ) -> list[DatasetRef | None]:
-    refs = [registry.findDataset(datasetType, dataId, collections=collections)]
+    refs = [registry.findDataset(datasetType, dataId, collections=collections, timespan=dataId.timespan)]
     return refs
 
 
