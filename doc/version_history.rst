@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.6.1 (2026-06-23)
+====================
+
+Bug Fixes
+---------
+
+- Changed calcZernikesTask so that empty zernike tables still have an average row with nans. (`RSO-663 <https://rubinobs.atlassian.net//browse/RSO-663>`_)
+
+
 v17.6.0 (2026-06-19)
 ====================
 
