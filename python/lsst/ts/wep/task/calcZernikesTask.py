@@ -313,27 +313,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         for j in self.nollIndices:
             table[f"Z{j}_deviation"].unit = u.nm
 
-        return table
-
-    def createZkTable(self, zkCoeffRaw: pipeBase.Struct) -> QTable:
-        """Create the Zernike table to store Zernike Coefficients.
-
-        Note this is written with the assumption that either extraStamps or
-        intraStamps MIGHT be empty. This is because calcZernikesUnpairedTask
-        also uses this method.
-
-        Parameters
-        ----------
-        zkCoeffRaw: pipeBase.Struct
-            All zernikes returned by self.estimateZernikes.run(...)
-
-        Returns
-        -------
-        table : `astropy.table.QTable`
-            Table with the Zernike coefficients
-        """
-        zkTable = self.initZkTable()
-        zkTable.add_row(
+        table.add_row(
             {
                 "label": "average",
                 "used": True,
@@ -358,6 +338,27 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 "extra_donut_id": "",
             }
         )
+
+        return table
+
+    def createZkTable(self, zkCoeffRaw: pipeBase.Struct) -> QTable:
+        """Create the Zernike table to store Zernike Coefficients.
+
+        Note this is written with the assumption that either extraStamps or
+        intraStamps MIGHT be empty. This is because calcZernikesUnpairedTask
+        also uses this method.
+
+        Parameters
+        ----------
+        zkCoeffRaw: pipeBase.Struct
+            All zernikes returned by self.estimateZernikes.run(...)
+
+        Returns
+        -------
+        table : `astropy.table.QTable`
+            Table with the Zernike coefficients
+        """
+        zkTable = self.initZkTable()
         for i, (intra, extra, zk) in enumerate(
             zip_longest(
                 self.stampsIntra,
@@ -497,6 +498,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if zernikeTable is None:
             zkTable = self.initZkTable()
             zkTable.meta = self.createZkTableMetadata()
+            zkTable[zkTable["label"] == "average"]["used"] = False  # Mark average row as not used
         else:
             zkTable = zernikeTable
 

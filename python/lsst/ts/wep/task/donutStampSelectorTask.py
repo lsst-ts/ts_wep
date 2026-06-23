@@ -160,7 +160,7 @@ class DonutStampSelectorTask(pipeBase.Task):
         selectedStamps = DonutStamps([donutStamps[i] for i in range(len(donutStamps)) if result.selected[i]])
         selectedStamps._refresh_metadata()
         # Need to copy a few other fields by hand
-        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+        for k in ["SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD", "RECENTER_FLAGS"]:
             if k in donutStamps.metadata:
                 selectedStamps.metadata[k] = np.array(
                     [
