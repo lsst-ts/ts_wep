@@ -469,3 +469,50 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         # Both should have valid (non-NaN) results
         self.assertFalse(np.all(np.isnan(zkCoeff_default.data)))
         self.assertFalse(np.all(np.isnan(zkCoeff_triangle.data)))
+
+    def testNoDonutsPassFinalSelectCriteria(self) -> None:
+        """Test that the run method fails gracefully when no donuts pass FINAL_SELECT criteria.
+
+        This test verifies that when the donut quality table has no donuts with
+        FINAL_SELECT=True, the run method:
+        - Returns without raising an exception
+        - Returns an empty Zernikes table (only average row with NaN values)
+        - Returns a donutQualityTable with all FINAL_SELECT=False
+        """
+        # Create a config with maxSelect=0 to reject all donuts
+        config = CalcZernikesTaskConfig()
+        config.estimateZernikes.lstsqKwargs = {
+            "ftol": 1.0e-3,
+            "xtol": 1.0e-3,
+            "gtol": 1.0e-3,
+            "max_nfev": 30,
+            "verbose": 2,
+            "x_scale": "jac",
+        }
+        config.donutStampSelector.maxSelect = 0  # Reject all donuts
+        task = CalcZernikesTask(config=config, name="No Donut Select Task")
+
+        # Run the task with no donuts selected
+        result = task.run(self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes)
+
+        # Verify the result structure
+        self.assertIn("zernikes", result.__dict__)
+        self.assertIn("donutQualityTable", result.__dict__)
+
+        zkTable = result.zernikes
+        qualityTable = result.donutQualityTable
+
+        # Verify the Zernikes table only has the average row with NaN values
+        self.assertEqual(len(zkTable), 1)
+        self.assertEqual(zkTable["label"][0], "average")
+
+        # Check that all Zernike coefficients in the average row are NaN
+        for j in task.nollIndices:
+            self.assertTrue(np.isnan(zkTable[f"Z{j}"][0]))
+            self.assertTrue(np.isnan(zkTable[f"Z{j}_deviation"][0]))
+
+        # Verify the quality table shows no donuts were selected
+        self.assertGreater(len(qualityTable), 0)  # Should have entries for attempted donuts
+        if "FINAL_SELECT" in qualityTable.colnames:
+            # All donuts should have FINAL_SELECT=False
+            self.assertTrue(np.all(~qualityTable["FINAL_SELECT"]))
