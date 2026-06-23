@@ -222,6 +222,7 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(np.sum(selection.donutsQuality["FRAC_BAD_PIX_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["MAX_POWER_GRAD_SELECT"]), 3)
         self.assertEqual(np.sum(selection.donutsQuality["FINAL_SELECT"]), 3)
+        self.assertEqual(np.sum(selection.donutsQuality["RECENTER_FLAGS_SELECT"]), 3)
 
         # Set RecenterFlags selection on
         self.config.selectWithRecenterFlags = True
