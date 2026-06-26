@@ -58,12 +58,13 @@ class CutOutDonutsScienceSensorTaskConnections(
         multiple=True,
         minimum=2,
     )
-    flat = ct.PrerequisiteInput(
+    flats = ct.PrerequisiteInput(
         doc="Flat field image to un-flatten background-subtracted image.",
         storageClass="ExposureF",
         name="flat",
         dimensions=["instrument", "detector", "physical_filter"],
         isCalibration=True,
+        multiple=True,
     )
     donutCatalog = ct.Input(
         doc="Donut Locations",
@@ -144,7 +145,7 @@ class CutOutDonutsScienceSensorTaskConnections(
                 del self.donutStampsIntra
 
             if not config.doUnflattenBackgroundSubtractedImage:
-                del self.flat
+                del self.flats
 
 
 class CutOutDonutsScienceSensorTaskConfig(
@@ -203,10 +204,14 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
         }
         exposureHandleDict = {v.dataId["exposure"]: v for v in inputRefs.exposures}
         donutCatalogHandleDict = {v.dataId["visit"]: v for v in inputRefs.donutCatalog}
+        flat = None
         if self.config.doUnflattenBackgroundSubtractedImage:
-            flat = butlerQC.get(inputRefs.flat)
-        else:
-            flat = None
+            flatDict = {v.dataId["physical_filter"]: v for v in inputRefs.flats}
+            flatRef = flatDict.get(inputRefs.exposures[0].dataId["physical_filter"], None)
+            if flatRef is None:
+                self.log.warning("Could not find appropriate flat to unflatten exposure")
+            else:
+                flat = butlerQC.get(flatRef)
         if self.runPaired:
             donutStampsIntraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsIntra}
             donutStampsExtraHandleDict = {v.dataId["visit"]: v for v in outputRefs.donutStampsExtra}

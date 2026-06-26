@@ -122,7 +122,7 @@ class CutOutDonutsBaseTaskConfig(
     doUnflattenBackgroundSubtractedImage: pexConfig.Field = pexConfig.Field(
         doc="Unflatten after background subtraction?",
         dtype=bool,
-        default=False,
+        default=True,
     )
     maxRecenterDistance: pexConfig.Field = pexConfig.Field(
         doc="Maximum distance (in pixels) to shift donut stamp centroid when "
