@@ -423,9 +423,8 @@ class DanishAlgorithm(WfAlgorithm):
             # Flag that we didn't hit GalSimFFTSizeError
             galSimFFTSizeError = False
 
-            # If we're saving the history, compute the model image
-            if saveHistory:
-                modelImage = model.model(**params)
+            # Compute the model image
+            modelImage = model.model(**params)
 
             # Calculate chi-square
             # For more info, see comment in _estimatePairZk.
@@ -460,8 +459,7 @@ class DanishAlgorithm(WfAlgorithm):
             flux = np.nan
             chi_sq = np.nan
             bkg = ()
-            if saveHistory:
-                modelImage = np.full_like(img, np.nan)
+            modelImage = np.full_like(img, np.nan)
 
             # Flag the error
             galSimFFTSizeError = True
@@ -492,6 +490,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_flux": flux,
             "model_bkg": bkg,
             "exception_status": exception_status,
+            "model_img": modelImage,
         }
 
         # Save scalar metadata from least_squares
@@ -725,9 +724,8 @@ class DanishAlgorithm(WfAlgorithm):
             # Flag that we didn't hit GalSimFFTSizeError
             galSimFFTSizeError = False
 
-            # If we're saving the history, compute the model image
-            if saveHistory:
-                modelImages = model.model(**params)
+            # Compute the model images
+            modelImages = model.model(**params)
 
             # Calculate chi-square
             # This reduced chi-square is usually much higher
@@ -768,8 +766,7 @@ class DanishAlgorithm(WfAlgorithm):
             bkgs = ((), ())
             zkFit = np.full_like(zkStartI1, np.nan)
             zkSum = np.full_like(zkStartI1, np.nan)
-            if saveHistory:
-                modelImages = np.full_like(imgs, np.nan)
+            modelImages = np.full_like(imgs, np.nan)
 
             # Flag the error
             galSimFFTSizeError = True
@@ -813,6 +810,7 @@ class DanishAlgorithm(WfAlgorithm):
             "model_flux": fluxes,
             "model_bkg": bkgs,
             "exception_status": exception_status,
+            "model_img": modelImages,
         }
 
         # Save scalar metadata from least_squares
