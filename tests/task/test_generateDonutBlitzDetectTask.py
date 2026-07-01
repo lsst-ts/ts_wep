@@ -120,7 +120,7 @@ class TestGenerateDonutBlitzDetectTask(lsst.utils.tests.TestCase):
         self.config.innerFracThreshold = 0.01
         self.config.outerFracThreshold = 0.01
         self.config.snrThreshold = 50.0
-        self.config.donutSelector.useCustomMagLimit = True
+        self.config.maxFieldDist = 1.5
         task = GenerateDonutBlitzDetectTask(config=self.config)
 
         self.assertEqual(task.config.edgeMargin, 100)
@@ -128,7 +128,7 @@ class TestGenerateDonutBlitzDetectTask(lsst.utils.tests.TestCase):
         self.assertAlmostEqual(task.config.innerFracThreshold, 0.01)
         self.assertAlmostEqual(task.config.outerFracThreshold, 0.01)
         self.assertAlmostEqual(task.config.snrThreshold, 50.0)
-        self.assertEqual(task.config.donutSelector.useCustomMagLimit, True)
+        self.assertAlmostEqual(task.config.maxFieldDist, 1.5)
 
     def testEmptyTable(self) -> None:
         exposure_S11 = self.butler.get(
@@ -282,15 +282,8 @@ class TestGenerateDonutBlitzDetectTask(lsst.utils.tests.TestCase):
                     np.argsort(cat["source_flux"].value)[::-1],
                 )
 
-        # Verify behavior when source selection is turned off
-        self.task.config.doDonutSelection = False
-        taskOut_noSel = self.task.run(exposure_S11, self.camera)
-        self.assertCountEqual(taskOut_noSel.donutCatalog.columns, expected_columns)
-        self.assertGreater(len(taskOut_noSel.donutCatalog), 0)
-
-        # With maxFieldDist=0, the selector should reject all sources
-        self.task.config.doDonutSelection = True
-        self.task.config.donutSelector.maxFieldDist = 0
+        # With maxFieldDist=0, the field angle cut should reject all sources
+        self.task.config.maxFieldDist = 0
         taskOut_noField = self.task.run(exposure_S10, self.camera)
         self.assertEqual(len(taskOut_noField.donutCatalog), 0)
         self.assertCountEqual(taskOut_noField.donutCatalog.meta.keys(), expected_metakeys)
