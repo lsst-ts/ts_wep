@@ -160,6 +160,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         return pipeBase.Struct(
             sourceCat=sourceCat[result.selected],
             selected=result.selected,
+            rejectionReasons=result.rejectionReasons,
             blendCentersX=result.blendCentersX,
             blendCentersY=result.blendCentersY,
         )
@@ -202,9 +203,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
         bbox = detector.getBBox()
 
         selected = np.zeros(len(sourceCat), dtype=bool)
+        rejectionReasons = np.full(len(sourceCat), "", dtype=object)
         if len(selected) == 0:
             return pipeBase.Struct(
                 selected=selected,
+                rejectionReasons=rejectionReasons,
                 blendCentersX=None,
                 blendCentersY=None,
             )
@@ -229,10 +232,12 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
         magSelected = np.ones(len(sourceCat), dtype=bool)
         magSelected &= mag < (magMax + minMagDiff)
+        rejectionReasons[~magSelected] = "faint"
         mag = mag[magSelected]
         if len(mag) == 0:
             return pipeBase.Struct(
                 selected=selected,
+                rejectionReasons=rejectionReasons,
                 blendCentersX=None,
                 blendCentersY=None,
             )
@@ -270,26 +275,33 @@ class DonutSourceSelectorTask(pipeBase.Task):
         blendCentersX: list = [list() for _ in range(len(magSortedDf))]
         blendCentersY: list = [list() for _ in range(len(magSortedDf))]
         sourcesKept = 0
+        magIndex = magSelected.nonzero()[0]  # maps mag-subset index -> sourceCat index
+
         # Go through catalog with nearest neighbor information
         # and keep sources that match our configuration settings
         srcOn = -1
         for nbrDist, idxList in zip(radDist, radIdx):
             srcOn += 1
+            catIdx = magIndex[groupIndices[srcOn]]  # index into sourceCat / rejectionReasons
+
             # Move on if source is within unblendedSeparation
             # of the edge of a given exposure
             srcX = magSortedDf["x"].iloc[srcOn]
             srcY = magSortedDf["y"].iloc[srcOn]
             if trimmedBBox.contains(srcX, srcY) is False:
+                rejectionReasons[catIdx] = "edge"
                 continue
 
             # If distance from field center is greater than
             # maxFieldDist discard the source and move on
             if magSortedDf["fieldDist"].iloc[srcOn] > self.config.maxFieldDist:
+                rejectionReasons[catIdx] = "field_dist"
                 continue
 
             # If this source's magnitude is outside our bounds then discard
             srcMag = magSortedDf["mag"].iloc[srcOn]
             if (srcMag > magMax) | (srcMag < magMin):
+                rejectionReasons[catIdx] = "mag"
                 continue
 
             # If there is no overlapping source keep
@@ -309,6 +321,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
                 # If this is the fainter source of the overlaps move on
                 if np.min(magDiff) < 0.0:
+                    rejectionReasons[catIdx] = "faint_neighbor"
                     continue
                 # If this source overlaps but is brighter than all its
                 # overlapping sources by minMagDiff then keep it
@@ -319,6 +332,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # within minMagDiff of the source magnitude
                 # are closer than minBlendedSeparation move on
                 elif np.sum(blendTooClose & magTooClose) > 0:
+                    rejectionReasons[catIdx] = "blend"
                     continue
                 # If the number of overlapping sources with magnitudes close
                 # enough to count as blended is less than or equal to
@@ -350,14 +364,17 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     blendCentersY[groupIndices[srcOn]] = magSortedDf["y"].iloc[idxList[blendMagIdx]].values
                     sourcesKept += 1
                 else:
+                    rejectionReasons[catIdx] = "too_many_blends"
                     continue
 
             if (self.config.sourceLimit > 0) and (sourcesKept == self.config.sourceLimit):
+                # Mark remaining unvisited sources that would have been considered
+                for remaining in range(srcOn + 1, len(magSortedDf)):
+                    remIdx = magIndex[groupIndices[remaining]]
+                    if rejectionReasons[remIdx] == "":
+                        rejectionReasons[remIdx] = "source_limit"
                 break
 
-        # magSelected is a boolean array so we can
-        # find indices with True by finding nonzero elements
-        magIndex = magSelected.nonzero()[0]
         finalIndex = magIndex[index]
         selected[finalIndex] = True
         sortedIndex = np.sort(index)
@@ -368,6 +385,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
         return pipeBase.Struct(
             selected=selected,
+            rejectionReasons=rejectionReasons,
             blendCentersX=selectedBlendCentersX,
             blendCentersY=selectedBlendCentersY,
         )

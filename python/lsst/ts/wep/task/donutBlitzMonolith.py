@@ -357,6 +357,7 @@ def _refitWcsAndSelect(
     catalog_centroids = None  # (centroid_x, centroid_y, source_flux) arrays
     cat_select_error = None
     sel_rejected_refcat = None
+    sel_rejection_reasons = np.array([], dtype=object)
     if photo_load_result is not None:
         try:
             filterName = astrom_cfg["resolvedPhotoFilterName"]
@@ -386,6 +387,7 @@ def _refitWcsAndSelect(
                 blendCentersX = donutSelection.blendCentersX
                 blendCentersY = donutSelection.blendCentersY
                 sel_rejected_refcat = refCat[~sel_mask]
+                sel_rejection_reasons = np.array(donutSelection.rejectionReasons)[~sel_mask]
 
             filterList = list(astrom_cfg["catalogFilterList"])
             if filterName not in filterList:
@@ -459,18 +461,20 @@ def _refitWcsAndSelect(
     # Selector-rejected photo-refcat sources: cut stamps for up to 2 brightest for display.
     # Only needed when the diagnostic plot is enabled.
     REJECTED_DISP = 2
-    sel_rejected_centroids = None  # (centroid_x, centroid_y, flux_arr, source_ids)
+    REJECTED_CANDIDATES = 20  # oversample before stamp cutting to fill REJECTED_DISP slots
+    sel_rejected_centroids = None  # (centroid_x, centroid_y, flux_arr, source_ids, reasons)
     if astrom_cfg.get("saveDiagnosticPlot", True) and sel_rejected_refcat is not None:
         try:
             _rrej = sel_rejected_refcat
             if len(_rrej) > 0:
                 _rrej_flux = np.array(_rrej[f"{filterName}_flux"])
-                _rrej_order = np.argsort(_rrej_flux)[::-1][:REJECTED_DISP]
+                _rrej_order = np.argsort(_rrej_flux)[::-1][:REJECTED_CANDIDATES]
                 sel_rejected_centroids = (
                     np.array(_rrej["centroid_x"])[_rrej_order],
                     np.array(_rrej["centroid_y"])[_rrej_order],
                     _rrej_flux[_rrej_order],
                     np.array(_rrej["id"])[_rrej_order],
+                    sel_rejection_reasons[_rrej_order],
                 )
         except Exception:
             pass
@@ -483,7 +487,6 @@ def _refitWcsAndSelect(
         centroid_y = centroid_y[order]
         flux_arr = flux_arr[order]
         source_ids = source_ids[order]
-        use_catalog = True
     else:
         # Fall back to blind detections; apply donut-quality cuts now.
         if len(blindDetections) == 0:
@@ -500,14 +503,6 @@ def _refitWcsAndSelect(
         centroid_y = np.array(blindDetections["centroid_y"])[order]
         flux_arr = fluxArr[order]
         source_ids = np.zeros(len(order), dtype=np.int64)
-        use_catalog = False
-
-    # Convert catalog pixel coords through refitted WCS to get field angles
-    fieldXY = detector.transform(
-        [lsst.geom.Point2D(x, y) for x, y in zip(centroid_x, centroid_y)],
-        PIXELS,
-        FIELD_ANGLE,
-    )
 
     # Precompute annular masks for inner/outer flux measurement on postISR stamps.
     # These are the same geometry as _measureFlux but applied to the postISR image.
@@ -517,6 +512,7 @@ def _refitWcsAndSelect(
     _main_mask = (_r < donutRadius * 1.05) & (_r > donutRadius * obscuration)
     _inner_mask = _r < donutRadius * obscuration * 0.67
     _outer_mask = (_r > donutRadius * 1.25) & (_r < donutRadius * 1.4)
+    _sector_angle = np.arctan2(_gy, _gx)  # used for 8-sector outer-flux statistic
 
     # Stamp-sized annular masks for SNR (constant per sensor, hoisted out of loop).
     _sgy, _sgx = np.mgrid[-half:half, -half:half]
@@ -548,8 +544,19 @@ def _refitWcsAndSelect(
                 mflux = float(np.sum(mpatch_sub[_main_mask]))
                 inner_frac = float(np.sum(mpatch_sub[_inner_mask]) / mflux) if mflux != 0 else float("nan")
                 outer_frac = float(np.sum(mpatch_sub[_outer_mask]) / mflux) if mflux != 0 else float("nan")
+                if mflux != 0:
+                    _sector_fluxes = [
+                        float(np.sum(mpatch_sub[
+                            _outer_mask & (_sector_angle >= -np.pi + k * np.pi / 4)
+                            & (_sector_angle < -np.pi + (k + 1) * np.pi / 4)
+                        ])) / mflux
+                        for k in range(8)
+                    ]
+                    outer_sector_max = float(max(abs(f) for f in _sector_fluxes))
+                else:
+                    outer_sector_max = float("nan")
             else:
-                inner_frac = outer_frac = float("nan")
+                inner_frac = outer_frac = outer_sector_max = float("nan")
 
         with np.errstate(invalid="ignore", divide="ignore"):
             _s_bkg_pix = stamp[_s_bkg]
@@ -583,11 +590,14 @@ def _refitWcsAndSelect(
             source_id=int(source_id_val),
             inner_frac=inner_frac,
             outer_frac=outer_frac,
+            outer_sector_max=outer_sector_max,
+            donut_radius=donutRadius,
+            obscuration=obscuration,
             snr=stamp_snr,
             n_quarter=n_quarter,
             nearby_photo=_nearby(all_photo),
             nearby_astrom=_nearby(all_astrom),
-            reject_reason=reject_reason,
+            reject_reasons=[reject_reason] if reject_reason else [],
             saturated=saturated,
         )
 
@@ -609,9 +619,11 @@ def _refitWcsAndSelect(
         d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i])
         if d is None:
             continue
-        if (np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr) or \
-                (np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr):
-            d["reject_reason"] = "flux_frac"
+        if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
+            d["reject_reasons"].append("inner_frac")
+        if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
+            d["reject_reasons"].append("outer_frac")
+        if d["reject_reasons"]:
             flux_frac_rejected += 1
             rejected_donuts_pre.append(d)
             continue
@@ -629,12 +641,24 @@ def _refitWcsAndSelect(
         if np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit):
             d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i], reject_reason="SAT")
             if d is not None:
+                if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
+                    d["reject_reasons"].append("inner_frac")
+                if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
+                    d["reject_reasons"].append("outer_frac")
                 rejected_donuts.append(d)
     if sel_rejected_centroids is not None:
-        rrej_x, rrej_y, rrej_flux, rrej_ids = sel_rejected_centroids
-        for cx_f, cy_f, flux_val, sid in zip(rrej_x, rrej_y, rrej_flux, rrej_ids):
-            d = _cut_stamp_dict(cx_f, cy_f, flux_val, sid, reject_reason="selector")
+        rrej_x, rrej_y, rrej_flux, rrej_ids, rrej_reasons = sel_rejected_centroids
+        for cx_f, cy_f, flux_val, sid, sel_reason in zip(
+            rrej_x, rrej_y, rrej_flux, rrej_ids, rrej_reasons
+        ):
+            d = _cut_stamp_dict(cx_f, cy_f, flux_val, sid, reject_reason=sel_reason or "selector")
             if d is not None:
+                if d["saturated"]:
+                    d["reject_reasons"].append("SAT")
+                if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
+                    d["reject_reasons"].append("inner_frac")
+                if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
+                    d["reject_reasons"].append("outer_frac")
                 rejected_donuts.append(d)
     # Sort all rejected bright-to-faint, keep top REJECTED_DISP.
     rejected_donuts.sort(key=lambda d: d["flux"], reverse=True)
@@ -695,8 +719,6 @@ def _getStamps(sensor_name: str, t_dispatch: float) -> dict:
         donutRadius,
         instrument.obscuration,
     )
-    t4 = time.perf_counter()
-
     return {
         "sensor": sensor_name,
         "catalog": donuts,
@@ -1198,6 +1220,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             len(photo_fetched), len(photo_handles),
             time.perf_counter() - t_refcat0,
         )
+        t_refcat_elapsed = time.perf_counter() - t_refcat0
 
         # Stub loader: AstrometryTask.solve() calls refObjLoader.getMetadataBox()
         # unconditionally even when load_result is pre-supplied. That method is
@@ -1267,7 +1290,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             self.log.info(
                 "  %s: dispatch_to_arrival=%.3fs  task_init=%.3fs  isr=%.3fs"
                 "  blind_detect=%.3fs  wcs_refit=%.3fs (scatter=%s)"
-                "  cat_select=%.3fs  stamp_cut=%.3fs  donuts=%d  sat_rej=%d  frac_rej=%d",
+                "  cat_select=%.3fs  stamp_cut=%.3fs  donuts=%d",
                 r["sensor"],
                 r["dispatch_to_arrival"],
                 r["task_init"],
@@ -1278,8 +1301,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 r["catalog_select_run"],
                 r.get("stamp_cut_run", 0.0),
                 len(r["catalog"]),
-                r.get("sat_rejected", 0),
-                r.get("flux_frac_rejected", 0),
             )
             if r["wcs_refit_error"]:
                 self.log.warning("  %s: WCS refit failed: %s", r["sensor"], r["wcs_refit_error"])
@@ -1293,6 +1314,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             self._saveDiagnosticPlots(
                 results,
                 run_elapsed=t_plot0 - t_run0,
+                refcat_elapsed=t_refcat_elapsed,
                 photo_filter_name=photo_filter_name,
                 astrom_filter_name=self.config.astromRefFilter,
             )
@@ -1300,6 +1322,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         return pipeBase.Struct(donuts=donuts)
 
     def _saveDiagnosticPlots(self, results: list, run_elapsed: float = 0.0,
+                             refcat_elapsed: float = 0.0,
                              photo_filter_name: str = "photo", astrom_filter_name: str = "astrom") -> None:
         """Save a single diagnostic PNG with one section per sensor.
 
@@ -1317,7 +1340,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         REJECTED_PER_ROW = 2 # rejected stamp columns (right side, separated by spacer)
         STAMP_COL_W = 1.8    # inches per stamp column
         STATS_COL_W = 2.8    # inches for the stats text column
-        ROW_H = 2.2          # inches per sensor row
+        ROW_H = 1.7          # inches per sensor row
 
         active = [r for r in results if r["catalog"] or r.get("rejected_catalog")]
         n_sensors = len(active)
@@ -1326,11 +1349,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         LEGEND_H = 0.35      # inches for the legend strip at the bottom
         SPACER_W = 0.15      # narrow spacer column between accepted and rejected
+        SUPTITLE_H = 0.55    # inches reserved above rows for the suptitle
 
         # Total columns: stats | accepted(8) | spacer | rejected(2)
         N_COLS = 1 + STAMPS_PER_ROW + 1 + REJECTED_PER_ROW
         fig_w = STATS_COL_W + (STAMPS_PER_ROW + REJECTED_PER_ROW) * STAMP_COL_W + SPACER_W
-        fig_h = n_sensors * ROW_H + LEGEND_H + 0.25
+        fig_h = n_sensors * ROW_H + LEGEND_H + SUPTITLE_H
 
         visit_ids = {d["visit_id"] for r in active for d in r["catalog"]}
         visit_str = ", ".join(str(v) for v in sorted(visit_ids))
@@ -1339,8 +1363,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         astrom_filter_label = astrom_filter_name
 
         fig = plt.figure(figsize=(fig_w, fig_h), layout="constrained")
+        fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
         fig.suptitle(
-            f"DonutBlitz diagnostics  visit={visit_str}  run={run_elapsed:.1f}s",
+            f"DonutBlitz diagnostics  visit={visit_str}  refcat={refcat_elapsed:.1f}s  run={run_elapsed:.1f}s",
             fontsize=9,
         )
 
@@ -1352,8 +1377,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             figure=fig,
             height_ratios=[ROW_H] * n_sensors + [LEGEND_H],
             width_ratios=[w_stats] + [1] * STAMPS_PER_ROW + [w_spacer] + [1] * REJECTED_PER_ROW,
-            hspace=0.05,
-            wspace=0.05,
         )
         # Column index helpers
         COL_ACCEPTED_START = 1
@@ -1370,7 +1393,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             ax_stats.axis("off")
             lines = [
                 f"{sensor}",
-                f"donuts: {len(catalog)}  sat_rej: {r.get('sat_rejected', 0)}  frac_rej: {r.get('flux_frac_rejected', 0)}",
+                f"donuts: {len(catalog)}",
                 f"isr:    {r['isr_run']:.2f}s",
                 f"detect: {r['blind_detect_run']:.2f}s",
                 f"wcs:    {r['wcs_refit_run']:.2f}s  ({scatter_str})",
@@ -1387,12 +1410,29 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             )
 
             def _draw_stamp(ax, donut, rejected=False):
+                import matplotlib.patches as mpatches
                 stamp = donut["stamp"]
                 h_px = stamp.shape[0] // 2
                 vmin, vmax = np.nanpercentile(stamp, [1, 99])
                 ax.imshow(stamp, origin="lower", vmin=vmin, vmax=vmax,
                           cmap="gray", aspect="equal",
                           extent=[-h_px, h_px, -h_px, h_px])
+
+                dr = donut.get("donut_radius", None)
+                ob = donut.get("obscuration", None)
+                if dr is not None and ob is not None:
+                    _circ_specs = [
+                        (dr * ob * 0.67, "lime",   "--"),   # outer edge of inner region
+                        (dr * ob,        "lime",   "-"),    # inner edge of main annulus
+                        (dr * 1.05,      "lime",   "-"),    # outer edge of main annulus
+                        (dr * 1.25,      "orange", "-"),    # inner edge of outer annulus
+                        (dr * 1.4,       "orange", "-"),    # outer edge of outer annulus
+                    ]
+                    for _rad, _col, _ls in _circ_specs:
+                        ax.add_patch(mpatches.Circle(
+                            (0, 0), _rad, fill=False, edgecolor=_col,
+                            linewidth=0.5, linestyle=_ls, alpha=0.45, zorder=4,
+                        ))
 
                 if rejected:
                     ax.plot([-h_px, h_px], [-h_px, h_px], color="red", lw=1.5,
@@ -1411,31 +1451,36 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                     tx, ty = _xform(dx, dy)
                     ax.plot(tx, ty, "o", ms=6, mfc="none", mec="cyan", mew=0.8, zorder=3)
                     if np.isfinite(mag):
-                        ax.text(tx + 2, ty + 2, f"{mag:.1f}", color="cyan",
+                        ax.text(tx + 3, ty + 3, f"{mag:.1f}", color="cyan",
                                 fontsize=3.5, zorder=4)
                 for dx, dy, mag in donut.get("nearby_astrom", []):
                     tx, ty = _xform(dx, dy)
                     ax.plot(tx, ty, "+", ms=6, mec="red", mew=0.8, zorder=3)
                     if np.isfinite(mag):
-                        ax.text(tx + 2, ty - 4, f"{mag:.1f}", color="red",
+                        ax.text(tx + 3, ty - 5, f"{mag:.1f}", color="red",
                                 fontsize=3.5, zorder=4)
 
                 inner_frac = donut.get("inner_frac", float("nan"))
                 outer_frac = donut.get("outer_frac", float("nan"))
+                outer_sector_max = donut.get("outer_sector_max", float("nan"))
                 snr = donut.get("snr", float("nan"))
                 if_str = f"if={inner_frac:.3f}" if np.isfinite(inner_frac) else "if=?"
                 of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
+                osm_str = f"osm={outer_sector_max:.3f}" if np.isfinite(outer_sector_max) else "osm=?"
                 snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
                 sid = donut.get("source_id", 0)
                 sid_str = f"id={sid}" if sid != 0 else ""
-                rej_str = f"[{donut['reject_reason']}]" if donut.get("reject_reason") else ""
-                ax.set_title(
-                    f"{donut['flux']:.0f}  {snr_str}  {rej_str}\n"
-                    f"({donut['fa_x_ccs']:.3f},{donut['fa_y_ccs']:.3f})\n"
-                    f"{if_str}  {of_str}\n"
-                    f"{sid_str}",
-                    fontsize=4,
-                    color="orangered" if rejected else "black",
+                _rej_reasons = donut.get("reject_reasons", [])
+                rej_str = f"[{','.join(_rej_reasons)}]" if _rej_reasons else ""
+                _text_color = "orangered" if rejected else "black"
+                ax.text(
+                    0.05, 1.00,
+                    f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
+                    transform=ax.transAxes,
+                    fontsize=3.5, va="top", ha="left",
+                    color=_text_color,
+                    bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
+                    zorder=6,
                 )
 
             # Accepted stamp panels
