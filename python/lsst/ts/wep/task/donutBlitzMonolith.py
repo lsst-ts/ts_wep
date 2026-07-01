@@ -294,8 +294,8 @@ def _refitWcsAndSelect(
     donutRadius: float,
     obscuration: float,
 ) -> list[dict]:
-    """Refit WCS using pre-loaded Gaia load_result, then select donuts from
-    pre-loaded PS1 refCat and cut stamps.
+    """Refit WCS using the pre-loaded astrometry refcat, then select donuts
+    from the pre-loaded photometry refcat and cut stamps.
 
     The refcat spatial filtering is done in the parent before forking, so no
     ReferenceObjectLoader is constructed here. The parent stores per-sensor
@@ -352,7 +352,7 @@ def _refitWcsAndSelect(
             refitted_wcs = wcs
     t1 = time.perf_counter()
 
-    # --- Catalog-based selection from PS1 ---
+    # --- Catalog-based selection from photo refcat ---
     t2 = time.perf_counter()
     catalog_centroids = None  # (centroid_x, centroid_y, source_flux) arrays
     cat_select_error = None
@@ -409,43 +409,44 @@ def _refitWcsAndSelect(
                     sorted_ids,
                 )
 
-            # Build full-refcat lookup arrays for overplotting (all PS1 in bbox,
-            # including sources rejected by the donut selector).
+            # Build full-refcat lookup arrays for overplotting (all photo-refcat sources
+            # in bbox, including sources rejected by the donut selector).
             if astrom_cfg.get("saveDiagnosticPlot", True):
                 with np.errstate(invalid="ignore", divide="ignore"):
                     _ps1_flux = np.array(refCat[f"{filterName}_flux"])
                     _ps1_mag = -2.5 * np.log10(_ps1_flux) + 31.4
-                all_ps1 = (
+                all_photo = (
                     np.array(refCat["centroid_x"]),
                     np.array(refCat["centroid_y"]),
                     _ps1_mag,
                 )
             else:
-                all_ps1 = None
+                all_photo = None
         except Exception as e:
             cat_select_error = str(e)
             catalog_centroids = None
-            all_ps1 = None
+            all_photo = None
     else:
-        all_ps1 = None
+        all_photo = None
 
-    # Build Gaia lookup arrays for overplotting (centroids via refitted WCS).
+    # Build astrom-refcat lookup arrays for overplotting (centroids via refitted WCS).
     if astrom_load_result is not None and astrom_cfg.get("saveDiagnosticPlot", True):
         try:
-            _gaia_cat = astrom_load_result.refCat.copy(deep=True)
-            afwTable.updateRefCentroids(refitted_wcs, _gaia_cat)
+            _astrom_cat = astrom_load_result.refCat.copy(deep=True)
+            afwTable.updateRefCentroids(refitted_wcs, _astrom_cat)
+            _astrom_flux_field = f"{astrom_cfg['astromRefFilter']}_flux"
             with np.errstate(invalid="ignore", divide="ignore"):
-                _gaia_flux = np.array(_gaia_cat["phot_g_mean_flux"])
-                _gaia_mag = -2.5 * np.log10(_gaia_flux) + 31.4
-            all_gaia = (
-                np.array(_gaia_cat["centroid_x"]),
-                np.array(_gaia_cat["centroid_y"]),
-                _gaia_mag,
+                _astrom_flux = np.array(_astrom_cat[_astrom_flux_field])
+                _astrom_mag = -2.5 * np.log10(_astrom_flux) + 31.4
+            all_astrom = (
+                np.array(_astrom_cat["centroid_x"]),
+                np.array(_astrom_cat["centroid_y"]),
+                _astrom_mag,
             )
         except Exception:
-            all_gaia = None
+            all_astrom = None
     else:
-        all_gaia = None
+        all_astrom = None
     t3 = time.perf_counter()
 
     t_stamp0 = time.perf_counter()
@@ -455,7 +456,7 @@ def _refitWcsAndSelect(
     sat_bit = postIsr.mask.getPlaneBitMask("SAT")
     half = stampSize // 2
 
-    # Selector-rejected PS1 sources: cut stamps for up to 2 brightest for display.
+    # Selector-rejected photo-refcat sources: cut stamps for up to 2 brightest for display.
     # Only needed when the diagnostic plot is enabled.
     REJECTED_DISP = 2
     sel_rejected_centroids = None  # (centroid_x, centroid_y, flux_arr, source_ids)
@@ -584,8 +585,8 @@ def _refitWcsAndSelect(
             outer_frac=outer_frac,
             snr=stamp_snr,
             n_quarter=n_quarter,
-            nearby_ps1=_nearby(all_ps1),
-            nearby_gaia=_nearby(all_gaia),
+            nearby_photo=_nearby(all_photo),
+            nearby_astrom=_nearby(all_astrom),
             reject_reason=reject_reason,
             saturated=saturated,
         )
@@ -778,16 +779,16 @@ class DonutBlitzMonolithTaskConnections(
         lookupFunction=lookupStaticCalibrations,
     )
     astromRefCat = connectionTypes.PrerequisiteInput(
-        doc="Reference catalog for WCS fitting (Gaia).",
-        name="gaia_dr2_20200414",
+        doc="Reference catalog for WCS fitting.",
+        name="the_monster_20250219",
         storageClass="SimpleCatalog",
         dimensions=("htm7",),
         deferLoad=True,
         multiple=True,
     )
     photoRefCat = connectionTypes.PrerequisiteInput(
-        doc="Reference catalog for donut selection (PS1).",
-        name="ps1_pv3_3pi_20170110",
+        doc="Reference catalog for donut selection.",
+        name="the_monster_20250219",
         storageClass="SimpleCatalog",
         dimensions=("htm7",),
         deferLoad=True,
@@ -906,26 +907,30 @@ class DonutBlitzMonolithTaskConfig(
     )
     photoRefFilter: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Filter name to use in photometry reference catalog. "
-            "Cannot be set together with photoRefFilterPrefix. "
-            "If neither is set, the exposure band label is used."
+            "Explicit filter name to use in photometry reference catalog "
+            "(e.g. 'phot_g_mean'). Overrides photoRefFilterPrefix when set."
         ),
         dtype=str,
         optional=True,
     )
     photoRefFilterPrefix: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Filter prefix to use in photometry reference catalog. "
-            "Combined with the exposure band label as '{prefix}_{band}'. "
-            "Cannot be set together with photoRefFilter."
+            "Filter prefix for the photometry reference catalog. "
+            "Combined with the exposure band label as '{prefix}_{band}' "
+            "(e.g. 'monster_ComCam' → 'monster_ComCam_g'). "
+            "Used when photoRefFilter is not set."
         ),
         dtype=str,
-        optional=True,
+        default="monster_ComCam",
     )
     catalogFilterList: pexConfig.ListField = pexConfig.ListField(
         dtype=str,
         doc="Filters from the photometry reference catalog to include in the donut catalog.",
-        default=["g", "r", "i", "z", "y"],
+        default=[
+            "phot_g_mean", "phot_bp_mean", "phot_rp_mean",
+            "monster_ComCam_u", "monster_ComCam_g", "monster_ComCam_r",
+            "monster_ComCam_i", "monster_ComCam_z", "monster_ComCam_y",
+        ],
     )
     saveDiagnosticPlot: pexConfig.Field = pexConfig.Field(
         doc=(
@@ -965,20 +970,28 @@ class DonutBlitzMonolithTaskConfig(
         self.astromTask.referenceSelector.doMagLimit = True
         magLimit = MagnitudeLimit()
         magLimit.minimum = 1
-        magLimit.maximum = 15
+        magLimit.maximum = 18
         self.astromTask.referenceSelector.magLimit = magLimit
         self.astromTask.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
         self.astromTask.sourceSelector["science"].doRequirePrimary = False
         self.astromTask.sourceSelector["science"].doIsolated = False
         self.astromTask.sourceSelector["science"].doSignalToNoise = False
         self.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
+        self.astromTask.maxIter = 5
+        self.astromTask.matcher.maxOffsetPix = 1000
+        # Monster refcat uses full filter names (e.g. phot_g_mean), not band
+        # labels, so the default mag-limit policy lookup by band would fail.
+        # Use custom mag limits instead.
+        self.donutSelector.useCustomMagLimit = True
+        self.donutSelector.maxFieldDist = 1.725
+        self.donutSelector.sourceLimit = 40
 
 
 class DonutBlitzMonolithTask(pipeBase.PipelineTask):
     """Monolithic WEP task for corner wavefront sensors.
 
-    Runs ISR, blind donut detection, WCS refit (Gaia), catalog-based donut
-    selection (PS1), and stamp cutting on all 8 corner sensor raws in parallel
+    Runs ISR, blind donut detection, WCS refit, catalog-based donut
+    selection, and stamp cutting on all 8 corner sensor raws in parallel
     using a multiprocessing pool.  Reference catalogs are loaded in the parent
     process before forking and inherited by workers via copy-on-write.
     """
@@ -1081,9 +1094,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         linearizer : list of lsst.ip.isr.Linearizer
         crosstalk : list of lsst.ip.isr.CrosstalkCalib
         astromRefCat : list of DeferredDatasetHandle or SimpleCatalog
-            Gaia shards for WCS fitting.
+            Shards for WCS fitting.
         photoRefCat : list of DeferredDatasetHandle or SimpleCatalog
-            PS1 shards for donut selection.
+            Shards for donut selection.
         numCores : int
         """
         t_run0 = time.perf_counter()
@@ -1111,15 +1124,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             maxDonuts=self.config.maxDonuts,
         )
 
-        # PS1 has no u-band; fall back to g for selection and sorting.
-        _PS1_BAND_FALLBACK = {"u": "g"}
         example_band = next(iter(rawByName.values())).filter.bandLabel
         photo_filter_name = example_band
         if self.config.photoRefFilter is not None:
             photo_filter_name = self.config.photoRefFilter
         elif self.config.photoRefFilterPrefix is not None:
             photo_filter_name = f"{self.config.photoRefFilterPrefix}_{example_band}"
-        photo_filter_name = _PS1_BAND_FALLBACK.get(photo_filter_name, photo_filter_name)
 
         astrom_handles = list(astromRefCat)
         photo_handles = list(photoRefCat)
@@ -1171,7 +1181,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                         filterName=self.config.astromRefFilter, epoch=raw_epoch,
                     )
                 except Exception as exc:
-                    self.log.warning("Failed to load Gaia refcat for %s: %s", name, exc)
+                    self.log.warning("Failed to load astrom refcat for %s: %s", name, exc)
             photo_load = None
             if photo_loader is not None:
                 try:
@@ -1180,10 +1190,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                         filterName=photo_filter_name, epoch=raw_epoch,
                     )
                 except Exception as exc:
-                    self.log.warning("Failed to load PS1 refcat for %s: %s", name, exc)
+                    self.log.warning("Failed to load photo refcat for %s: %s", name, exc)
             sensor_refcats[name] = dict(astrom=astrom_load, photo=photo_load)
         self.log.info(
-            "Refcat load (loadPixelBox): gaia=%d/%d shards  ps1=%d/%d shards  (%.3fs)",
+            "Refcat load (loadPixelBox): astrom=%d/%d shards  photo=%d/%d shards  (%.3fs)",
             len(astrom_fetched), len(astrom_handles),
             len(photo_fetched), len(photo_handles),
             time.perf_counter() - t_refcat0,
@@ -1277,13 +1287,20 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 self.log.warning("  %s: catalog selection failed: %s", r["sensor"], r["cat_select_error"])
             donuts.extend(r["catalog"])
 
+        t_plot0 = time.perf_counter()
+        self.log.info("run() pre-plot elapsed: %.1fs", t_plot0 - t_run0)
         if self.config.saveDiagnosticPlot:
-            t_plot0 = time.perf_counter()
-            self._saveDiagnosticPlots(results, run_elapsed=t_plot0 - t_run0)
+            self._saveDiagnosticPlots(
+                results,
+                run_elapsed=t_plot0 - t_run0,
+                photo_filter_name=photo_filter_name,
+                astrom_filter_name=self.config.astromRefFilter,
+            )
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
         return pipeBase.Struct(donuts=donuts)
 
-    def _saveDiagnosticPlots(self, results: list, run_elapsed: float = 0.0) -> None:
+    def _saveDiagnosticPlots(self, results: list, run_elapsed: float = 0.0,
+                             photo_filter_name: str = "photo", astrom_filter_name: str = "astrom") -> None:
         """Save a single diagnostic PNG with one section per sensor.
 
         Layout per sensor:
@@ -1318,14 +1335,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         visit_ids = {d["visit_id"] for r in active for d in r["catalog"]}
         visit_str = ", ".join(str(v) for v in sorted(visit_ids))
 
-        # Infer the PS1 band used from the first donut (observation band + u→g fallback).
-        _PS1_BAND_FALLBACK = {"u": "g"}
-        ps1_band = "?"
-        for r in active:
-            if r["catalog"]:
-                obs_band = r["catalog"][0].get("band", "?")
-                ps1_band = _PS1_BAND_FALLBACK.get(obs_band, obs_band)
-                break
+        photo_filter_label = photo_filter_name  # resolved name, passed in
+        astrom_filter_label = astrom_filter_name
 
         fig = plt.figure(figsize=(fig_w, fig_h), layout="constrained")
         fig.suptitle(
@@ -1396,13 +1407,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                         r, c = -c, r
                     return c, r
 
-                for dx, dy, mag in donut.get("nearby_ps1", []):
+                for dx, dy, mag in donut.get("nearby_photo", []):
                     tx, ty = _xform(dx, dy)
                     ax.plot(tx, ty, "o", ms=6, mfc="none", mec="cyan", mew=0.8, zorder=3)
                     if np.isfinite(mag):
                         ax.text(tx + 2, ty + 2, f"{mag:.1f}", color="cyan",
                                 fontsize=3.5, zorder=4)
-                for dx, dy, mag in donut.get("nearby_gaia", []):
+                for dx, dy, mag in donut.get("nearby_astrom", []):
                     tx, ty = _xform(dx, dy)
                     ax.plot(tx, ty, "+", ms=6, mec="red", mew=0.8, zorder=3)
                     if np.isfinite(mag):
@@ -1454,9 +1465,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         from matplotlib.lines import Line2D
         legend_handles = [
             Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
-                   markeredgecolor="cyan", markersize=6, label=f"PS1 ({ps1_band}-band mag)"),
+                   markeredgecolor="cyan", markersize=6, label=f"photo refcat ({photo_filter_label})"),
             Line2D([0], [0], marker="+", color="red", markersize=6, linestyle="none",
-                   label="Gaia DR2 (G-band mag)"),
+                   label=f"astrom refcat ({astrom_filter_label})"),
         ]
         ax_legend.legend(
             handles=legend_handles, loc="center", ncol=2,
