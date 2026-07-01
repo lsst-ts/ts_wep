@@ -130,7 +130,13 @@ class TestGenerateDonutCatalogOnlineTask(unittest.TestCase):
         )
         self.assertCountEqual(
             donutCatalog.meta.keys(),
-            ["blend_centroid_x", "blend_centroid_y"],
+            [
+                "blend_centroid_x",
+                "blend_centroid_y",
+                "blend_mag",
+                "blend_separation",
+                "blend_mag_diff",
+            ],
         )
         self.assertEqual(np.unique(donutCatalog["detector"]), detectorName)
         self.assertCountEqual(
