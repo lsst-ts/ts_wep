@@ -34,14 +34,14 @@ from scipy.signal import correlate
 from skimage.feature import peak_local_max
 
 import lsst.afw.math as afwMath
+import lsst.geom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-from lsst.afw.cameraGeom import Camera
+from lsst.afw.cameraGeom import Camera, FIELD_ANGLE, PIXELS
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.meas.algorithms import SubtractBackgroundTask
-from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
 from lsst.ts.wep.utils import getTaskInstrument
 from lsst.utils.timer import timeMethod
@@ -162,17 +162,11 @@ class GenerateDonutBlitzDetectTaskConfig(
         dtype=float,
         default=100.0,
     )
-    donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=DonutSourceSelectorTask,
-        doc=(
-            "Subtask to filter candidates by magnitude, field angle, and blending. "
-            "Applied after the blitz quality cuts when doDonutSelection is True."
-        ),
-    )
-    doDonutSelection: pexConfig.Field = pexConfig.Field(
-        doc="Whether to run the donutSelector subtask after blitz quality cuts.",
-        dtype=bool,
-        default=True,
+    maxFieldDist: pexConfig.Field = pexConfig.Field(
+        doc="Maximum distance from the center of the focal plane in degrees. "
+            "Sources farther than this are rejected.",
+        dtype=float,
+        default=1.808,
     )
 
 
@@ -190,14 +184,11 @@ class GenerateDonutBlitzDetectTask(pipeBase.PipelineTask):
     ConfigClass = GenerateDonutBlitzDetectTaskConfig
     _DefaultName = "generateDonutBlitzDetectTask"
     config: GenerateDonutBlitzDetectTaskConfig
-    donutSelector: DonutSourceSelectorTask
     subtractBackground: SubtractBackgroundTask
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.makeSubtask("subtractBackground")
-        if self.config.doDonutSelection:
-            self.makeSubtask("donutSelector")
 
     def _buildAnnularTemplate(
         self,
@@ -408,8 +399,8 @@ class GenerateDonutBlitzDetectTask(pipeBase.PipelineTask):
             "source_flux",
         ]
         donutTable = QTable(names=donutColumns)
-        donutTable.meta["blend_centroid_x"] = ""
-        donutTable.meta["blend_centroid_y"] = ""
+        donutTable.meta["blend_centroid_x"] = []
+        donutTable.meta["blend_centroid_y"] = []
         return addVisitInfoToCatTable(exposure, donutTable)
 
     @timeMethod
@@ -492,43 +483,42 @@ class GenerateDonutBlitzDetectTask(pipeBase.PipelineTask):
             degrees=False,
         )
 
-        # Step 6: Build the pre-selection catalog
+        # Step 6: Build catalog
         donutTable = QTable()
         donutTable["centroid_x"] = centroid_x
         donutTable["centroid_y"] = centroid_y
         donutTable["coord_ra"] = ra_arr * u.rad
         donutTable["coord_dec"] = dec_arr * u.rad
         donutTable[f"{bandLabel}_flux"] = np.array(measTable["flux"]) * u.nJy
-        donutTable.meta["blend_centroid_x"] = ""
-        donutTable.meta["blend_centroid_y"] = ""
 
-        # Step 7: Optionally run DonutSourceSelectorTask
-        if self.config.doDonutSelection:
-            self.log.info("Running DonutSourceSelectorTask")
-            donutSelection = self.donutSelector.run(donutTable, exposure.detector, bandLabel)
-            donutCatSelected = donutTable[donutSelection.selected]
-            donutCatSelected.meta["blend_centroid_x"] = donutSelection.blendCentersX
-            donutCatSelected.meta["blend_centroid_y"] = donutSelection.blendCentersY
-        else:
-            donutCatSelected = donutTable
+        # Step 7: Field angle cut
+        detector = exposure.getDetector()
+        fieldXY = detector.transform(
+            [lsst.geom.Point2D(x, y) for x, y in zip(centroid_x, centroid_y)],
+            PIXELS,
+            FIELD_ANGLE,
+        )
+        fieldDist = np.array([np.degrees(np.hypot(p[0], p[1])) for p in fieldXY])
+        fieldOk = fieldDist <= self.config.maxFieldDist
+        donutTable = donutTable[fieldOk]
+        self.log.info(
+            "%d of %d sources pass field angle cut (maxFieldDist=%.3f deg)",
+            len(donutTable),
+            len(fieldOk),
+            self.config.maxFieldDist,
+        )
 
-        if len(donutCatSelected) == 0:
-            self.log.warning("No sources after selection. Returning empty catalog.")
+        if len(donutTable) == 0:
+            self.log.warning("No sources after field angle cut. Returning empty catalog.")
             return pipeBase.Struct(donutCatalog=self.emptyTable(exposure))
 
         # Step 8: Sort by flux, rename flux column, add detector column
-        donutCatSelected.rename_column(f"{bandLabel}_flux", "source_flux")
-        fluxSort = np.argsort(np.array(donutCatSelected["source_flux"]))[::-1]
-        donutCatUpd = donutCatSelected[fluxSort]
+        donutTable.rename_column(f"{bandLabel}_flux", "source_flux")
+        fluxSort = np.argsort(np.array(donutTable["source_flux"]))[::-1]
+        donutCatUpd = donutTable[fluxSort]
         donutCatUpd["detector"] = np.array([detectorName] * len(donutCatUpd), dtype=str)
-
-        if self.config.doDonutSelection:
-            donutCatUpd.meta["blend_centroid_x"] = [
-                donutCatSelected.meta["blend_centroid_x"][i] for i in fluxSort
-            ]
-            donutCatUpd.meta["blend_centroid_y"] = [
-                donutCatSelected.meta["blend_centroid_y"][i] for i in fluxSort
-            ]
+        donutCatUpd.meta["blend_centroid_x"] = []
+        donutCatUpd.meta["blend_centroid_y"] = []
 
         # Final column subset to match the required catalog schema
         finalCat = donutCatUpd[
