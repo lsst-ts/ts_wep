@@ -159,6 +159,7 @@ class TestDanishAlgorithm(unittest.TestCase):
                     "model_flux",
                     "model_bkg",
                     "exception_status",
+                    "model_img",
                     "lstsq_cost",
                     "lstsq_optimality",
                     "lstsq_nfev",
