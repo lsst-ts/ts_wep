@@ -148,8 +148,8 @@ class Instrument:
         refBand: BandLabel | str | None = None,
         wavelength: float | dict | None = None,
         batoidModelName: str | None = None,
-        batoidOffsetOptic: str | None = None,
-        batoidOffsetValue: float | None = None,
+        batoidOffsetOptic: str | Sequence[str] | None = None,
+        batoidOffsetValue: float | Sequence[float] | None = None,
         maskParams: dict | None = None,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
@@ -206,9 +206,11 @@ class Instrument:
                 getattr(self, item)
 
         # Validate that batoidOffsetOptic and batoidOffsetValue are consistent
-        if self._batoidOffsetValue is not None:
-            nOptics = len(self.batoidOffsetOptic)
-            nValues = len(self.batoidOffsetValue)
+        optics = self.batoidOffsetOptic
+        values = self.batoidOffsetValue
+        if values is not None and optics is not None:
+            nOptics = len(optics)
+            nValues = len(values)
             if nOptics != nValues:
                 raise ValueError(
                     "batoidOffsetOptic and batoidOffsetValue must have the same "
@@ -469,6 +471,8 @@ class Instrument:
             The Batoid model with all offsets applied.
         """
         optics = self.batoidOffsetOptic
+        if optics is None:
+            return batoidModel
         values = self.batoidOffsetValue
         if values is None:
             # Fall back to shifting each optic by the scalar defocalOffset
@@ -761,7 +765,7 @@ class Instrument:
             if self.batoidModelName is None:
                 raise RuntimeError("There is no Batoid model set.")
             # Normalize a single value to a one-element list
-            if np.ndim(value) == 0:
+            if isinstance(value, (int, float)):
                 value = [float(value)]
             else:
                 value = [float(v) for v in value]
