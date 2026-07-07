@@ -218,7 +218,7 @@ class TestTaskUtils(unittest.TestCase):
 
         # Test LsstFamCam
         famcam = getTaskInstrument("LSSTCam", "R22_S01")
-        self.assertEqual(famcam.batoidOffsetOptic, "LSSTCamera")
+        self.assertEqual(famcam.batoidOffsetOptic, ["LSSTCamera"])
 
     def testCreateTemplateForDetector(self) -> None:
         # Get the LSST camera

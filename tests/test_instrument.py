@@ -98,12 +98,49 @@ class TestInstrument(unittest.TestCase):
             Instrument(batoidOffsetOptic=1)
         with self.assertRaises(ValueError):
             Instrument(batoidOffsetOptic="fake")
+        # A bad element inside a list is also rejected
+        with self.assertRaises(ValueError):
+            Instrument(batoidOffsetOptic=["Detector", "fake"])
+        with self.assertRaises(TypeError):
+            Instrument(batoidOffsetOptic=["Detector", 1])
 
     def testBadBatoidOffsetValue(self) -> None:
         with self.assertRaises(RuntimeError):
             inst = Instrument()
             inst.batoidModelName = None
             inst.batoidOffsetValue = 1
+        # Mismatched lengths between optics and values are rejected
+        with self.assertRaises(ValueError):
+            Instrument(
+                batoidOffsetOptic=["LSSTCamera", "Detector"],
+                batoidOffsetValue=[1.5e-3],
+            )
+
+    def testScalarBatoidOffsetReturnedAsList(self) -> None:
+        # A scalar offset is normalized to a one-element list
+        inst = Instrument(batoidOffsetOptic="LSSTCamera", batoidOffsetValue=1.5e-3)
+        self.assertEqual(inst.batoidOffsetOptic, ["LSSTCamera"])
+        self.assertEqual(inst.batoidOffsetValue, [1.5e-3])
+
+    def testMultiOffset(self) -> None:
+        # Full-array-mode wavefront geometry: camera + detector pistons
+        famWf = Instrument("policy:instruments/LsstFamCamWavefront.yaml")
+        self.assertEqual(famWf.batoidOffsetOptic, ["LSSTCamera", "Detector"])
+        self.assertEqual(famWf.batoidOffsetValue, [1.5e-3, 1.5e-3])
+
+        # defocalOffset is derived from the combined shift
+        self.assertTrue(np.isfinite(famWf.defocalOffset))
+        self.assertGreater(famWf.defocalOffset, 0)
+
+        # Intrinsic Zernikes differ from a single 3 mm Detector offset
+        # and from the single LSSTCamera offset of LsstFamCam
+        detOnly = Instrument(batoidOffsetOptic="Detector", batoidOffsetValue=3.0e-3)
+        famCam = Instrument("policy:instruments/LsstFamCam.yaml")
+        zkMulti = famWf.getIntrinsicZernikes(0.3, 0.6, defocalType="extra")
+        zkDet = detOnly.getIntrinsicZernikes(0.3, 0.6, defocalType="extra")
+        zkFam = famCam.getIntrinsicZernikes(0.3, 0.6, defocalType="extra")
+        self.assertFalse(np.allclose(zkMulti, zkDet, rtol=1e-2))
+        self.assertFalse(np.allclose(zkMulti, zkFam, rtol=1e-2))
 
     def testGetIntrinsicZernikes(self) -> None:
         inst = Instrument()

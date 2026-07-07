@@ -95,16 +95,19 @@ class Instrument:
         and the names of these bands will be filled in at runtime using the
         strings specified in the BandLabel enum in jf_wep.utils.enums.
         (the default is None)
-    batoidOffsetOptic : str or None, optional
-        The optic to offset in the Batoid model in order to calculate
-        the equivalent detector offset for the model.
-        (the default is None)
-    batoidOffsetValue : float or None, optional
-        The value in meters to offset the optic in the Batoid model to
+    batoidOffsetOptic : str, list of str, or None, optional
+        The optic(s) to offset in the Batoid model in order to calculate
+        the equivalent detector offset for the model. A single string is
+        accepted, or a list of strings to offset multiple optics
+        simultaneously (e.g. to model both a camera and detector piston for
+        Full Array Mode). (the default is None)
+    batoidOffsetValue : float, list of float, or None, optional
+        The value(s) in meters to offset the optic(s) in the Batoid model to
         calculate the equivalent detector offset for the model. The
-        detector offset is then used for everything else. Note that
-        depending on the model, the sign of this value might matter.
-        (the default is None)
+        detector offset is then used for everything else. If a list is
+        provided, its length must match batoidOffsetOptic, and each optic is
+        offset by its corresponding value. Note that depending on the model,
+        the sign of this value might matter. (the default is None)
     maskParams : dict, optional
         Dictionary of mask parameters. Each key in this dictionary corresponds
         to a different mask element. The corresponding values are dictionaries
@@ -201,6 +204,16 @@ class Instrument:
         for item in dir(self):
             if item[0] != "_":
                 getattr(self, item)
+
+        # Validate that batoidOffsetOptic and batoidOffsetValue are consistent
+        if self._batoidOffsetValue is not None:
+            nOptics = len(self.batoidOffsetOptic)
+            nValues = len(self.batoidOffsetValue)
+            if nOptics != nValues:
+                raise ValueError(
+                    "batoidOffsetOptic and batoidOffsetValue must have the same "
+                    f"length, but got {nOptics} optic(s) and {nValues} value(s)."
+                )
 
     def clearCaches(self) -> None:
         """Clear the Batoid caches."""
@@ -361,15 +374,12 @@ class Instrument:
         elif self.batoidModelName is not None and self._batoidOffsetValue is not None:
             # Load the model and wavelength info
             batoidModel = self.getBatoidModel()
-            offsetOptic = self.batoidOffsetOptic
             eps = batoidModel.pupilObscuration
             wavelength = self.wavelength[BandLabel.REF]
-            batoidOffsetValue = self.batoidOffsetValue
 
-            # Calculate dZ4 for the optic
-            shift = np.array([0, 0, batoidOffsetValue])
+            # Calculate dZ4 for the combined shift of all offset optics
             dZ4optic = batoid.zernike(
-                batoidModel.withLocallyShiftedOptic(offsetOptic, +shift),
+                self._applyBatoidOffsets(batoidModel, +1),
                 *np.zeros(2),
                 wavelength,
                 eps=eps,
@@ -436,6 +446,36 @@ class Instrument:
             jmax=4,
             nx=128,
         )[4]
+
+    def _applyBatoidOffsets(self, batoidModel: batoid.Optic, sign: int) -> batoid.Optic:
+        """Return a Batoid model with all configured optic offsets applied.
+
+        Each optic in ``batoidOffsetOptic`` is shifted along the optical axis
+        by ``sign * batoidOffsetValue[i]``. If ``batoidOffsetValue`` is not set
+        (i.e. the instrument specifies ``defocalOffset`` directly), each optic
+        is shifted by ``sign * defocalOffset`` instead, preserving the
+        single-offset behavior.
+
+        Parameters
+        ----------
+        batoidModel : batoid.Optic
+            The Batoid model to shift.
+        sign : int
+            The sign of the shift (+1 for extra-focal, -1 for intra-focal).
+
+        Returns
+        -------
+        batoid.Optic
+            The Batoid model with all offsets applied.
+        """
+        optics = self.batoidOffsetOptic
+        values = self.batoidOffsetValue
+        if values is None:
+            # Fall back to shifting each optic by the scalar defocalOffset
+            values = [self.defocalOffset] * len(optics)
+        for optic, value in zip(optics, values):
+            batoidModel = batoidModel.withLocallyShiftedOptic(optic, [0, 0, sign * value])
+        return batoidModel
 
     @property
     def pupilOffset(self) -> float:
@@ -631,42 +671,57 @@ class Instrument:
         self._defocalOffsetBatoid = None
 
     @property
-    def batoidOffsetOptic(self) -> str | None:
-        """The optic that is offset in the Batoid model."""
+    def batoidOffsetOptic(self) -> list[str] | None:
+        """The optic(s) that are offset in the Batoid model.
+
+        Always returned as a list, even when a single optic is set. When no
+        optic is explicitly set but a Batoid model exists, this defaults to
+        ``["Detector"]``.
+        """
         # Default to the detector if value not explicitly set
         if self._batoidOffsetOptic is None and self.batoidModelName is not None:
-            return "Detector"
+            return ["Detector"]
         else:
             return self._batoidOffsetOptic
 
     @batoidOffsetOptic.setter
-    def batoidOffsetOptic(self, value: str | None) -> None:
-        """Set the optic that is offset in the Batoid model.
+    def batoidOffsetOptic(self, value: str | Sequence[str] | None) -> None:
+        """Set the optic(s) that are offset in the Batoid model.
 
-        This optic is offset in order to calculate the equivalent
-        detector offset for the model.
+        These optics are offset in order to calculate the equivalent
+        detector offset for the model. Multiple optics can be provided as a
+        list, e.g. to model both a camera and detector piston independently.
 
         Parameters
         ----------
-        value : str or None
-            The name of the optic to be offset in the Batoid model.
+        value : str, list of str, or None
+            The name(s) of the optic(s) to be offset in the Batoid model.
+            A single string is accepted and stored internally as a
+            one-element list.
 
         Raises
         ------
         RuntimeError
             If no Batoid model is set
         TypeError
-            If value is not a string or None
+            If value is not a string, a list of strings, or None
         ValueError
-            If the optic is not found in the Batoid model
+            If any optic is not found in the Batoid model
         """
         if value is not None:
+            # Normalize a single optic to a one-element list
+            if isinstance(value, str):
+                value = [value]
+            else:
+                value = list(value)
+
             if self.batoidModelName is None:
                 raise RuntimeError("There is no Batoid model set.")
-            elif not isinstance(value, str):
-                raise TypeError("batoidOffsetOptic must be a string or None.")
-            elif value not in self.getBatoidModel()._names:
-                raise ValueError(f"Optic {value} not found in the Batoid model.")
+            for optic in value:
+                if not isinstance(optic, str):
+                    raise TypeError("batoidOffsetOptic must be a string, a list of strings, or None.")
+                elif optic not in self.getBatoidModel()._names:
+                    raise ValueError(f"Optic {optic} not found in the Batoid model.")
 
         self._batoidOffsetOptic = value
 
@@ -675,22 +730,27 @@ class Instrument:
         self._defocalOffsetBatoid = None
 
     @property
-    def batoidOffsetValue(self) -> float | None:
-        """Amount in meters the optic is offset in the Batoid model."""
+    def batoidOffsetValue(self) -> list[float] | None:
+        """Amount(s) in meters the optic(s) are offset in the Batoid model.
+
+        Always returned as a list (or None), even when a single value is set.
+        """
         return self._batoidOffsetValue
 
     @batoidOffsetValue.setter
-    def batoidOffsetValue(self, value: float | None) -> None:
-        """Set amount in meters the optic is offset in the batoid model.
+    def batoidOffsetValue(self, value: float | Sequence[float] | None) -> None:
+        """Set amount(s) in meters the optic(s) are offset in the batoid model.
 
-        This is the amount that batoidOffsetOptic is offset in the Batoid
+        This is the amount that each batoidOffsetOptic is offset in the Batoid
         model to calculate the equivalent detector offset for the model.
         Note depending on the model, the sign of this value might matter.
 
         Parameters
         ----------
-        value : float or None
-            The offset value
+        value : float, list of float, or None
+            The offset value(s). A single float is accepted and stored
+            internally as a one-element list. When a list is provided, its
+            length must match the number of optics in batoidOffsetOptic.
 
         Raises
         ------
@@ -700,7 +760,11 @@ class Instrument:
         if value is not None:
             if self.batoidModelName is None:
                 raise RuntimeError("There is no Batoid model set.")
-            value = float(value)
+            # Normalize a single value to a one-element list
+            if np.ndim(value) == 0:
+                value = [float(value)]
+            else:
+                value = [float(v) for v in value]
         self._batoidOffsetValue = value
 
         # Clear relevant caches
@@ -781,8 +845,7 @@ class Instrument:
         if defocalType is not None:
             defocalType = DefocalType(defocalType)
             defocalSign = +1 if defocalType == DefocalType.Extra else -1
-            offset = [0, 0, defocalSign * self.defocalOffset]
-            batoidModel = batoidModel.withLocallyShiftedOptic(self.batoidOffsetOptic, offset)
+            batoidModel = self._applyBatoidOffsets(batoidModel, defocalSign)
 
         # Get the wavelength
         if len(self.wavelength) > 1:
@@ -905,8 +968,7 @@ class Instrument:
         if defocalType is not None:
             defocalType = DefocalType(defocalType)
             defocalSign = +1 if defocalType == DefocalType.Extra else -1
-            offset = [0, 0, defocalSign * self.defocalOffset]
-            batoidModel = batoidModel.withLocallyShiftedOptic(self.batoidOffsetOptic, offset)
+            batoidModel = self._applyBatoidOffsets(batoidModel, defocalSign)
 
         # Get the wavelength
         if len(self.wavelength) > 1:
