@@ -37,6 +37,7 @@ from astropy.table import QTable, vstack
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
+from lsst.geom import radians
 from lsst.ip.isr import IntrinsicZernikes
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -233,8 +234,12 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             )
             if stamp.defocal_type == "extra":
                 intrinsicCalib = self.intrinsicZernikesExtra
+                rotAngle = self.stampsExtra.metadata["BORESIGHT_ROT_ANGLE_RAD"]
+                parallacticAngle = self.stampsExtra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
             else:
                 intrinsicCalib = self.intrinsicZernikesIntra
+                rotAngle = self.stampsIntra.metadata["BORESIGHT_ROT_ANGLE_RAD"]
+                parallacticAngle = self.stampsIntra.metadata["BORESIGHT_PAR_ANGLE_RAD"]
 
             if intrinsicCalib is None:
                 # No intrinsic Zernike calibration available (allowed for
@@ -246,6 +251,12 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 # of fieldAngle is the CCS y-coordinate and the second is the
                 # CCS x-coordinate, which is what IntrinsicZernikes expects.
                 ccs_y, ccs_x = fieldAngle.value.tolist()
+                # Calculate the rotTelPos from the boresight rotation angle
+                # in the stamp metadata. This is
+                # needed for the intrinsic Zernike calculation.
+                # getIntrinsicZernikes expects rotTelPos in degrees, so
+                # convert from radians with asDegrees().
+                rtp = (parallacticAngle * radians - rotAngle * radians - (np.pi / 2 * radians)).asDegrees()
                 # getIntrinsicZernikes returns shape (1, nNoll) for a single
                 # field point; squeeze to 1-D so it lines up with the
                 # per-Zernike row assignment in createZkTable.
@@ -255,6 +266,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                             intrinsicCalib.getIntrinsicZernikes(
                                 field_x=ccs_x,
                                 field_y=ccs_y,
+                                rotTelPos=rtp,
                                 noll_indices=self.nollIndices,
                             )
                         )
