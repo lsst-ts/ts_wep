@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v17.7.0 (2026-07-07)
+===================
+
+New Features
+------------
+
+- Added rotTelPos information into call for getIntrinsicZernikes in CalcZernikesTask. (`DM-53391 <https://rubinobs.atlassian.net//browse/DM-53391>`_)
+- Added model images to always be included in zernikes table metadata for danish estimates. (`RSO-800 <https://rubinobs.atlassian.net//browse/RSO-800>`_)
+
+
 v17.6.1 (2026-06-23)
 ====================
 
