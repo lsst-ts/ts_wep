@@ -25,13 +25,20 @@ __all__ = [
     "DonutBlitzMonolithTask",
 ]
 
+import ast
+import contextlib
 import multiprocessing as mp
+import signal
 import time
 from typing import Any
 
+import batoid
+import danish
 import numpy as np
 from astropy.table import QTable
+from scipy.optimize import least_squares
 from scipy.signal import correlate
+from scipy.stats import median_abs_deviation
 from skimage.feature import peak_local_max
 
 import lsst.afw.image as afwImage
@@ -45,7 +52,7 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.afw.cameraGeom import Camera, FIELD_ANGLE, PIXELS
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
-from lsst.ip.isr import IsrTaskLSST
+from lsst.ip.isr import IntrinsicZernikes, IsrTaskLSST
 from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader, SubtractBackgroundTask
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base import InputQuantizedConnection, OutputQuantizedConnection, QuantumContext
@@ -68,6 +75,17 @@ CORNER_SENSOR_NAMES = frozenset(
         "R44_SW1",
     ]
 )
+
+_EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
+_INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
+
+# SW0 = extra-focal, SW1 = intra-focal
+CORNER_PAIRS = {
+    "R00": ("R00_SW0", "R00_SW1"),
+    "R04": ("R04_SW0", "R04_SW1"),
+    "R40": ("R40_SW0", "R40_SW1"),
+    "R44": ("R44_SW0", "R44_SW1"),
+}
 
 
 def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
@@ -346,10 +364,11 @@ def _refitWcsAndSelect(
             if scatter_arcsec < maxFitScatter:
                 refitted_wcs = fakeExp.getWcs()
             else:
-                refitted_wcs = wcs
+                wcs_refit_error = f"scatter {scatter_arcsec:.2f}\" >= {maxFitScatter}\""
+                refitted_wcs = None  # signal: fall back to blind detections
         except Exception as e:
             wcs_refit_error = str(e)
-            refitted_wcs = wcs
+            refitted_wcs = None  # signal: fall back to blind detections
     t1 = time.perf_counter()
 
     # --- Catalog-based selection from photo refcat ---
@@ -358,7 +377,7 @@ def _refitWcsAndSelect(
     cat_select_error = None
     sel_rejected_refcat = None
     sel_rejection_reasons = np.array([], dtype=object)
-    if photo_load_result is not None:
+    if photo_load_result is not None and refitted_wcs is not None:
         try:
             filterName = astrom_cfg["resolvedPhotoFilterName"]
 
@@ -502,7 +521,7 @@ def _refitWcsAndSelect(
         centroid_x = np.array(blindDetections["centroid_x"])[order]
         centroid_y = np.array(blindDetections["centroid_y"])[order]
         flux_arr = fluxArr[order]
-        source_ids = np.zeros(len(order), dtype=np.int64)
+        source_ids = np.arange(len(order), dtype=np.int64)
 
     # Precompute annular masks for inner/outer flux measurement on postISR stamps.
     # These are the same geometry as _measureFlux but applied to the postISR image.
@@ -521,7 +540,7 @@ def _refitWcsAndSelect(
     _s_bkg = (_sr < donutRadius * obscuration * 0.67) | ((_sr > donutRadius * 1.25) & (_sr < donutRadius * 1.4))
     _s_n_main = int(np.sum(_s_main))
 
-    def _cut_stamp_dict(cx_f, cy_f, flux_val, source_id_val, reject_reason=None):
+    def _cut_stamp_dict(cx_f, cy_f, flux_val, source_id_val, reject_reason=None, blind_cx=None, blind_cy=None):
         """Cut one stamp and compute metrics. Returns dict or None on failure."""
         cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
         rmin, rmax = cy - half, cy + half
@@ -532,7 +551,7 @@ def _refitWcsAndSelect(
         if saturated and reject_reason is None:
             return None  # accepted path skips; caller handles counting
         stamp = np.array(arr[rmin:rmax, cmin:cmax])
-        stamp_ccs = np.rot90(stamp, k=n_quarter).T
+        stamp_ccs = np.rot90(stamp, k=-n_quarter).T
 
         mmin_r, mmax_r = cy - _mhalf, cy + _mhalf + 1
         mmin_c, mmax_c = cx - _mhalf, cx + _mhalf + 1
@@ -577,7 +596,20 @@ def _refitWcsAndSelect(
         _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
         if reject_reason is None and _field_dist_deg > detect_cfg["maxFieldDist"]:
             return None
+
+        _nearby_photo_list = _nearby(all_photo)
+        _neighbor_dists = [np.hypot(dx, dy) for dx, dy, _ in _nearby_photo_list]
+        _nearest_neighbor_dist_px = float(min(_neighbor_dists)) if _neighbor_dists else float("nan")
+        _n_neighbors_in_stamp = len(_neighbor_dists)
+
+        _catalog_centroid_offset_px = (
+            float(np.hypot(cx_f - blind_cx, cy_f - blind_cy))
+            if blind_cx is not None and blind_cy is not None
+            else float("nan")
+        )
+
         return dict(
+            sensor=sensor_name,
             stamp=stamp_ccs,
             fa_x_ccs=float(_fa[1]),
             fa_y_ccs=float(_fa[0]),
@@ -594,8 +626,13 @@ def _refitWcsAndSelect(
             donut_radius=donutRadius,
             obscuration=obscuration,
             snr=stamp_snr,
+            bkg_level=_s_bkg_med,
+            bkg_std=_s_bkg_std,
+            nearest_neighbor_dist_px=_nearest_neighbor_dist_px,
+            n_neighbors_in_stamp=_n_neighbors_in_stamp,
+            catalog_centroid_offset_px=_catalog_centroid_offset_px,
             n_quarter=n_quarter,
-            nearby_photo=_nearby(all_photo),
+            nearby_photo=_nearby_photo_list,
             nearby_astrom=_nearby(all_astrom),
             reject_reasons=[reject_reason] if reject_reason else [],
             saturated=saturated,
@@ -603,6 +640,22 @@ def _refitWcsAndSelect(
 
     inner_thr = detect_cfg["innerFracThreshold"]
     outer_thr = detect_cfg["outerFracThreshold"]
+
+    # Match each catalog centroid to the closest blind detection within half a donut radius.
+    # Used to compute catalog_centroid_offset_px per stamp.
+    _blind_match_cx = np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
+    _blind_match_cy = np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
+    _match_tol = donutRadius * 0.5
+
+    def _blind_centroid_for(cx_f, cy_f):
+        if len(_blind_match_cx) == 0:
+            return None, None
+        dists = np.hypot(_blind_match_cx - cx_f, _blind_match_cy - cy_f)
+        idx = int(np.argmin(dists))
+        if dists[idx] <= _match_tol:
+            return float(_blind_match_cx[idx]), float(_blind_match_cy[idx])
+        return None, None
+
     donuts = []
     rejected_donuts_pre = []  # flux_frac rejects collected during accepted-stamp loop
     sat_rejected = 0
@@ -616,13 +669,16 @@ def _refitWcsAndSelect(
         if np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit):
             sat_rejected += 1
             continue
-        d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i])
+        _b_cx, _b_cy = _blind_centroid_for(cx_f, cy_f)
+        d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i], blind_cx=_b_cx, blind_cy=_b_cy)
         if d is None:
             continue
         if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
             d["reject_reasons"].append("inner_frac")
         if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
             d["reject_reasons"].append("outer_frac")
+        if np.isfinite(d["snr"]) and d["snr"] < detect_cfg["minStampSnr"]:
+            d["reject_reasons"].append("snr")
         if d["reject_reasons"]:
             flux_frac_rejected += 1
             rejected_donuts_pre.append(d)
@@ -668,8 +724,8 @@ def _refitWcsAndSelect(
     return donuts, rejected_donuts, scatter_arcsec, t1 - t0, t3 - t2, t_stamp1 - t_stamp0, wcs_refit_error, cat_select_error, sat_rejected, flux_frac_rejected
 
 
-def _getStamps(sensor_name: str, t_dispatch: float) -> dict:
-    """Run ISR, blind detection, WCS refit, catalog selection, stamp cutting."""
+def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
+    """Run ISR, blind detection, WCS refit, catalog selection, and stamp cutting."""
     t_arrival = time.time()
     entry = _CALIB_STORE[sensor_name]
 
@@ -738,9 +794,840 @@ def _getStamps(sensor_name: str, t_dispatch: float) -> dict:
     }
 
 
-def _run_stamp_worker(args: tuple) -> dict:
+def _run_cutout_worker(args: tuple) -> dict:
     sensor_name, t_dispatch = args
-    return _getStamps(sensor_name, t_dispatch)
+    return _getCutouts(sensor_name, t_dispatch)
+
+
+class _WfFitTimeoutError(Exception):
+    pass
+
+
+@contextlib.contextmanager
+def _fit_timeout(seconds):
+    """SIGALRM-based timeout context manager (Unix only)."""
+    def _handler(signum, frame):
+        raise _WfFitTimeoutError(f"WF fit exceeded {seconds:.0f}s timeout")
+    old = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(max(1, int(seconds)))
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+
+
+_ZK_LEN = 79  # Noll-indexed array length; index j holds Zernike j; indices 0-3 always 0.
+
+
+def _bkg_free_model(model_img: np.ndarray, danish_model, fit_params, donut_idx: int, bkg_order: int) -> np.ndarray:
+    """Return model_img with the fitted background subtracted.
+
+    fit_params is the dict returned by model.unpack_params(), or None on fit
+    failure.  For bkgOrder <= 0 (constant or no background) this is a cheap
+    scalar subtraction.  For bkgOrder > 0 we re-evaluate the model with zeroed
+    backgrounds, relying on Danish's cached optics component.
+    """
+    if model_img is None:
+        return None
+    if fit_params is None or bkg_order < 0:
+        return model_img
+    if bkg_order == 0:
+        bkgs = fit_params.get("bkgs") or fit_params.get("bkg")
+        if bkgs is None:
+            return model_img
+        if isinstance(bkgs[0], (list, np.ndarray)):
+            bkg_val = float(bkgs[donut_idx][0])
+        else:
+            bkg_val = float(bkgs[0])
+        return model_img - bkg_val
+    # bkgOrder > 0: re-evaluate with zeroed backgrounds
+    try:
+        is_multi = "fluxes" in fit_params
+        nbkg = danish_model.nbkg
+        zero_bkgs = [[0.0] * nbkg] * len(fit_params["fluxes"]) if is_multi else [0.0] * nbkg
+        bkg_key = "bkgs" if is_multi else "bkg"
+        kw = {k: v for k, v in fit_params.items() if k not in ("bkgs", "bkg")}
+        kw[bkg_key] = zero_bkgs
+        result = danish_model.model(**kw)
+        if isinstance(result, list):
+            return result[donut_idx]
+        return result
+    except Exception:
+        return model_img
+
+
+def _fit_bkg_val(fit_params, donut_idx: int) -> float:
+    """Extract the fitted background constant for one donut (ADU/pixel)."""
+    if fit_params is None:
+        return float("nan")
+    bkgs = fit_params.get("bkgs") or fit_params.get("bkg")
+    if bkgs is None:
+        return float("nan")
+    if isinstance(bkgs[0], (list, np.ndarray)):
+        return float(bkgs[donut_idx][0])
+    return float(bkgs[0])
+
+
+def _blend_frac(img: np.ndarray, model_img_bkg_free: np.ndarray, bkg_std: float, faint_frac: float = 0.05, sig_thresh: float = 2.0) -> float:
+    """Fraction of model flux found as significant residual in model-faint pixels.
+
+    A blending out-of-focus source produces a donut-shaped imprint in the residual
+    at locations where the forward model predicts near-zero flux. This metric
+    integrates that signal and normalises by the total model flux, so it is
+    comparable across SNR levels.
+
+    model_img_bkg_free should be the forward-model image with the fitted
+    background removed, so that faint_mask correctly identifies pixels where
+    the donut optics model predicts near-zero signal.
+    """
+    if img is None or model_img_bkg_free is None or not np.isfinite(bkg_std) or bkg_std <= 0:
+        return float("nan")
+    model_peak = float(np.nanmax(model_img_bkg_free))
+    total_model_flux = float(np.sum(model_img_bkg_free[model_img_bkg_free > 0]))
+    if model_peak <= 0 or total_model_flux <= 0:
+        return float("nan")
+    resid = img - model_img_bkg_free
+    faint_mask = model_img_bkg_free < faint_frac * model_peak
+    sig_mask = np.abs(resid) > sig_thresh * bkg_std
+    return float(np.sum(np.abs(resid[faint_mask & sig_mask]))) / total_model_flux
+
+
+def _residual_rms(img: np.ndarray, model_img: np.ndarray, donut_radius: float, obscuration: float) -> float:
+    """RMS of (data - model) over the main donut annulus."""
+    if img is None or model_img is None:
+        return float("nan")
+    half = img.shape[0] // 2
+    gy, gx = np.mgrid[-half:half + 1, -half:half + 1] if img.shape[0] % 2 == 1 else np.mgrid[-half:half, -half:half]
+    r = np.hypot(gx, gy)
+    main_mask = (r < donut_radius * 1.05) & (r > donut_radius * obscuration)
+    if main_mask.shape != img.shape:
+        sz = min(main_mask.shape[0], img.shape[0])
+        main_mask = main_mask[:sz, :sz]
+        img = img[:sz, :sz]
+        model_img = model_img[:sz, :sz]
+    resid = img - model_img
+    n = int(np.sum(main_mask))
+    if n == 0:
+        return float("nan")
+    return float(np.sqrt(np.mean(resid[main_mask] ** 2)))
+
+
+def _dense_intrinsic(donut: dict) -> np.ndarray:
+    """Return length-79 intrinsic Zernike array in metres (0.0 where unavailable)."""
+    out = np.zeros(_ZK_LEN)
+    raw = donut.get("intrinsic_zk")  # µm, Noll 4-78
+    if raw is not None:
+        for idx in range(min(len(raw), _ZK_LEN - 4)):
+            out[idx + 4] = float(raw[idx]) * 1e-6
+    return out
+
+
+def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
+    """Return length-79 deviation array in metres (np.nan where not fitted)."""
+    out = np.full(_ZK_LEN, np.nan)
+    out[0:4] = 0.0
+    for k, j in enumerate(nollIndices):
+        if k < len(zk_dev):
+            out[int(j)] = float(zk_dev[k])
+    return out
+
+
+def _build_wf_factory(instrument):
+    """Build a Danish donut factory from _CALIB_STORE["wf_cfg"] and instrument."""
+    wf_cfg = _CALIB_STORE["wf_cfg"]
+    factory_class = danish.DonutTriangleFactory if wf_cfg["triangleMode"] else danish.DonutFactory
+    factory_kwargs = {}
+    if wf_cfg["doAoiThroughput"]:
+        factory_kwargs["bandpass_filter"] = wf_cfg["band"]
+        alt_rad = wf_cfg["boresight_alt_rad"]
+        if np.isfinite(alt_rad) and alt_rad > 0:
+            factory_kwargs["airmass"] = float(np.clip(round(1.0 / np.sin(alt_rad), 1), 1.0, 2.5))
+        else:
+            factory_kwargs["airmass"] = 1.2
+    return factory_class(
+        R_outer=instrument.radius,
+        R_inner=instrument.radius * instrument.obscuration,
+        mask_params=instrument.maskParams,
+        focal_length=instrument.focalLength,
+        pixel_scale=instrument.pixelSize * wf_cfg["binning"],
+        spider_angle=wf_cfg["rtp_deg"],
+        **factory_kwargs,
+    )
+
+
+def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
+    """Prepare a donut dict for Danish fitting.
+
+    Returns (img, angle_rad, zk_ref, bkg_var) where:
+    - img: (npix, npix) float array (background-subtracted by ISR pipeline), npix odd
+    - angle_rad: [fa_x_ccs, fa_y_ccs] in radians
+    - zk_ref: reference Zernikes in meters, shape (79,), Noll 0-78:
+              zk_ref = W_TA_defoc + (W_meas - zk_opd_foc)  for calibrated indices
+              zk_ref = W_TA_defoc                           for uncalibrated indices
+    - bkg_var: background variance estimate (bkg_std**2) from pixel-difference MAD
+    """
+    wf_cfg = _CALIB_STORE["wf_cfg"]
+    binning = wf_cfg["binning"]
+    det_id = donut["det_id"]
+    defocalSign = +1 if det_id in _EXTRA_FOCAL_DET_IDS else -1
+
+    img = donut["stamp"].astype(float)
+    if binning > 1:
+        from lsst.ts.wep.utils import binArray
+        img = binArray(img, binning)
+    if img.shape[0] % 2 == 0:
+        img = img[:-1, :-1]
+    diff = (img[1:] - img[:-1]).ravel()
+    bkg_std = float(median_abs_deviation(diff, scale="normal") / np.sqrt(2.0))
+
+    band = donut["band"]
+    wavelength = wf_cfg["wavelength_by_band"].get(band, 619.4e-9)
+    telescope = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
+    eps = telescope.pupilObscuration
+    nrad = 10
+    zernikeTA_kwargs = dict(
+        jmax=78,
+        eps=eps,
+        focal_length=instrument.focalLength,
+        nrad=nrad,
+        naz=int(2 * np.pi * nrad / (1 - eps)),
+    )
+    telescope_dz = telescope.withLocallyShiftedOptic(
+        "Detector", [0, 0, defocalSign * instrument.defocalOffset]
+    )
+    # W_TA_defoc: off-axis + nominal intrinsics + defocus in one call
+    zk_ref = batoid.zernikeTA(
+        telescope_dz, donut["fa_x_ccs"], donut["fa_y_ccs"], wavelength, **zernikeTA_kwargs
+    ) * wavelength  # meters, shape (79,)
+
+    # Replace nominal on-axis model (zk_opd_foc) with measured intrinsics (W_meas)
+    # for calibrated indices.
+    intrinsic_zk = donut.get("intrinsic_zk")
+    if intrinsic_zk is not None:
+        zk_opd_foc = batoid.zernikeTA(
+            telescope, donut["fa_x_ccs"], donut["fa_y_ccs"], wavelength, **zernikeTA_kwargs
+        ) * wavelength  # meters
+        calib_noll = wf_cfg["calib_noll_indices"]
+        for i, j in enumerate(calib_noll):
+            if i < len(intrinsic_zk) and int(j) < 79:
+                zk_ref[int(j)] += float(intrinsic_zk[i]) * 1e-6 - zk_opd_foc[int(j)]
+
+    import logging
+    _log = logging.getLogger(__name__)
+
+
+    angle_rad = np.array([donut["fa_x_ccs"], donut["fa_y_ccs"]])
+    return img, angle_rad, zk_ref, bkg_std**2, bkg_std
+
+
+def _wf_paired_worker(args: tuple) -> dict:
+    """Fit a jointly-modeled intra/extra donut pair with DZMultiDonutModel."""
+    import logging
+    _log = logging.getLogger(__name__)
+    donut_extra, donut_intra = args
+    wf_cfg = _CALIB_STORE["wf_cfg"]
+    nollIndices = wf_cfg["nollIndices"]
+    detect_cfg = _CALIB_STORE["detect_cfg"]
+    camera = _CALIB_STORE["camera"]
+    instrument = getTaskInstrument(
+        camera.getName(), donut_extra["sensor"], detect_cfg["instConfigFile"]
+    )
+    factory = _build_wf_factory(instrument)
+
+    img_e, angle_e, zk_ref_e, var_e, bkg_std_e = _prep_donut_for_danish(donut_extra, instrument)
+    img_i, angle_i, zk_ref_i, var_i, bkg_std_i = _prep_donut_for_danish(donut_intra, instrument)
+    imgs = [img_e, img_i]
+    dz_terms = [(1, int(j)) for j in nollIndices]
+
+    model = danish.DZMultiDonutModel(
+        factory,
+        z_refs=[zk_ref_e, zk_ref_i],
+        dz_terms=dz_terms,
+        field_radius=np.deg2rad(1.85),
+        thxs=[angle_e[0], angle_i[0]],
+        thys=[angle_e[1], angle_i[1]],
+        npix=imgs[0].shape[0],
+        bkg_order=wf_cfg["bkgOrder"],
+    )
+    fluxes_init = [float(np.clip(np.sum(img), 1e3, 1e9)) for img in imgs]
+    x0 = model.pack_params(
+        fluxes=fluxes_init, dxs=[0., 0.], dys=[0., 0.], fwhm=1.,
+        bkgs=[[0.] * model.nbkg] * 2, wavefront_params=[0.] * len(dz_terms),
+    )
+    bounds = model.pack_params(
+        fluxes=[[0., np.inf]] * 2, dxs=[[-np.inf, np.inf]] * 2,
+        dys=[[-np.inf, np.inf]] * 2, fwhm=[0.1, 5.],
+        bkgs=[[[-np.inf, np.inf]] * model.nbkg] * 2,
+        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
+    )
+    bounds = [list(b) for b in zip(*bounds)]
+    x0 = np.clip(x0, bounds[0], bounds[1])
+    timeout = wf_cfg["wfFitTimeoutPerDonut"] * 2
+    t0 = time.perf_counter()
+    params = None
+    if wf_cfg["wfInitialGuessOnly"]:
+        try:
+            params = model.unpack_params(x0)
+            zk_dev = np.zeros(len(nollIndices))
+            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
+            elapsed = time.perf_counter() - t0
+            success = True
+            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
+                            optimality=float("nan"), njev=0, status=0, message="x0 only",
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info("WF paired (x0 only) extra=%s intra=%s", donut_extra["source_id"], donut_intra["source_id"])
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF paired extra=%s intra=%s FAILED in %.1fs: %s",
+                donut_extra["source_id"], donut_intra["source_id"], elapsed, exc,
+            )
+    else:
+        import galsim
+        galsim.errors.raise_fft_size_error = True
+        try:
+            with _fit_timeout(timeout):
+                result = least_squares(
+                    model.chi, jac=model.jac, x0=x0,
+                    args=(imgs, [var_e, var_i]), bounds=bounds,
+                    **wf_cfg["lstsqKwargs"],
+                )
+            elapsed = time.perf_counter() - t0
+            params = model.unpack_params(result.x)
+            zk_dev = np.array(params["wavefront_params"])
+            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
+            success = bool(result.success)
+            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
+                            optimality=float(result.optimality), njev=int(result.njev),
+                            status=int(result.status), message=str(result.message),
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info(
+                "WF paired extra=%s intra=%s success=%s nfev=%d elapsed=%.1fs",
+                donut_extra["source_id"], donut_intra["source_id"],
+                success, result.nfev, elapsed,
+            )
+        except _WfFitTimeoutError:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
+            _log.warning(
+                "WF paired extra=%s intra=%s TIMED OUT after %.1fs",
+                donut_extra["source_id"], donut_intra["source_id"], elapsed,
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF paired extra=%s intra=%s FAILED in %.1fs: %s",
+                donut_extra["source_id"], donut_intra["source_id"], elapsed, exc,
+            )
+    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
+    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
+    fit_mode = wf_cfg.get("wfEstimationMode", "paired")
+    group_id = f"{donut_extra['source_id']}_{donut_intra['source_id']}"
+    me = model_imgs[0] if model_imgs is not None else None
+    mi = model_imgs[1] if model_imgs is not None else None
+    _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
+    _fit_nfev = int(fit_info.get("nfev", 0))
+    _fit_cost = float(fit_info.get("cost", float("nan")))
+    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
+    _dxs = fit_info.get("dxs", [float("nan"), float("nan")])
+    _dys = fit_info.get("dys", [float("nan"), float("nan")])
+    _fluxes = fit_info.get("fluxes", [float("nan"), float("nan")])
+    donuts_out = [
+        {"donut_id": int(donut_extra["source_id"]), "sensor": donut_extra["sensor"],
+         "defocal": "extra", "zk_dev": zk_dev_dense,
+         "zk_intrinsic": _dense_intrinsic(donut_extra), "img": img_e, "model_img": me,
+         "fit_success": success, "fit_elapsed": _fit_elapsed, "fit_nfev": _fit_nfev,
+         "fit_cost": _fit_cost, "fit_dx": float(_dxs[0]), "fit_dy": float(_dys[0]),
+         "fit_flux": float(_fluxes[0]), "fit_fwhm": _fit_fwhm,
+         "fit_residual_rms": _residual_rms(img_e, me, instrument.donutRadius, instrument.obscuration),
+         "blend_frac": _blend_frac(img_e, _bkg_free_model(me, model, params, 0, wf_cfg["bkgOrder"]) if me is not None else None, bkg_std_e),
+         "fit_bkg": _fit_bkg_val(params, 0),
+         "zk_norm_um": zk_norm_um, "group_id": group_id, "group_size": 2, "fit_mode": fit_mode},
+        {"donut_id": int(donut_intra["source_id"]), "sensor": donut_intra["sensor"],
+         "defocal": "intra", "zk_dev": zk_dev_dense,
+         "zk_intrinsic": _dense_intrinsic(donut_intra), "img": img_i, "model_img": mi,
+         "fit_success": success, "fit_elapsed": _fit_elapsed, "fit_nfev": _fit_nfev,
+         "fit_cost": _fit_cost, "fit_dx": float(_dxs[1]), "fit_dy": float(_dys[1]),
+         "fit_flux": float(_fluxes[1]), "fit_fwhm": _fit_fwhm,
+         "fit_residual_rms": _residual_rms(img_i, mi, instrument.donutRadius, instrument.obscuration),
+         "blend_frac": _blend_frac(img_i, _bkg_free_model(mi, model, params, 1, wf_cfg["bkgOrder"]) if mi is not None else None, bkg_std_i),
+         "fit_bkg": _fit_bkg_val(params, 1),
+         "zk_norm_um": zk_norm_um, "group_id": group_id, "group_size": 2, "fit_mode": fit_mode},
+    ]
+    return {
+        "mode": "paired", "fit_mode": fit_mode, "group_id": group_id, "group_size": 2,
+        "zk_dev": zk_dev, "success": success, "fit_info": fit_info,
+        "donuts": donuts_out,
+        "model_imgs": model_imgs, "imgs": [img_e, img_i],
+        "sensors": [donut_extra["sensor"], donut_intra["sensor"]],
+    }
+
+
+def _wf_unpaired_worker(donut: dict) -> dict:
+    """Fit a single donut with SingleDonutModel."""
+    import logging
+    _log = logging.getLogger(__name__)
+    wf_cfg = _CALIB_STORE["wf_cfg"]
+    nollIndices = wf_cfg["nollIndices"]
+    detect_cfg = _CALIB_STORE["detect_cfg"]
+    camera = _CALIB_STORE["camera"]
+    instrument = getTaskInstrument(
+        camera.getName(), donut["sensor"], detect_cfg["instConfigFile"]
+    )
+    factory = _build_wf_factory(instrument)
+    img, angle, zk_ref, bkg_var, bkg_std = _prep_donut_for_danish(donut, instrument)
+
+    model = danish.SingleDonutModel(
+        factory, z_ref=zk_ref, z_terms=nollIndices,
+        thx=angle[0], thy=angle[1], npix=img.shape[0],
+        bkg_order=wf_cfg["bkgOrder"],
+    )
+    x0 = model.pack_params(
+        flux=float(np.clip(np.sum(img), 1e3, 1e9)),
+        dx=0., dy=0., fwhm=1.,
+        bkg=[0.] * model.nbkg, z_fit=[0.] * len(nollIndices),
+    )
+    bounds = model.pack_params(
+        flux=[0., np.inf], dx=[-np.inf, np.inf], dy=[-np.inf, np.inf],
+        fwhm=[0.1, 5.], bkg=[[-np.inf, np.inf]] * model.nbkg,
+        z_fit=[[-np.inf, np.inf]] * len(nollIndices),
+    )
+    bounds = [list(b) for b in zip(*bounds)]
+    timeout = wf_cfg["wfFitTimeoutPerDonut"]
+    t0 = time.perf_counter()
+    params = None
+    if wf_cfg["wfInitialGuessOnly"]:
+        try:
+            params = model.unpack_params(x0)
+            zk_dev = np.zeros(len(nollIndices))
+            model_img = model.model(**{k: params[k] for k in ("flux", "dx", "dy", "fwhm", "z_fit", "bkg")})
+            elapsed = time.perf_counter() - t0
+            success = True
+            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
+                            optimality=float("nan"), njev=0, status=0, message="x0 only",
+                            flux=float(params["flux"]), dx=float(params["dx"]),
+                            dy=float(params["dy"]), fwhm=float(params["fwhm"]))
+            _log.info("WF unpaired (x0 only) donut=%s", donut["source_id"])
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_img = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF unpaired donut=%s FAILED in %.1fs: %s",
+                donut["source_id"], elapsed, exc,
+            )
+    else:
+        import galsim
+        galsim.errors.raise_fft_size_error = True
+        try:
+            with _fit_timeout(timeout):
+                result = least_squares(
+                    model.chi, jac=model.jac, x0=x0,
+                    args=(img, bkg_var), bounds=bounds,
+                    **wf_cfg["lstsqKwargs"],
+                )
+            elapsed = time.perf_counter() - t0
+            params = model.unpack_params(result.x)
+            zk_dev = np.array(params["z_fit"])
+            model_img = model.model(**{k: params[k] for k in ("flux", "dx", "dy", "fwhm", "z_fit", "bkg")})
+            success = bool(result.success)
+            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
+                            optimality=float(result.optimality), njev=int(result.njev),
+                            status=int(result.status), message=str(result.message),
+                            flux=float(params["flux"]), dx=float(params["dx"]),
+                            dy=float(params["dy"]), fwhm=float(params["fwhm"]))
+            _log.info(
+                "WF unpaired donut=%s success=%s nfev=%d elapsed=%.1fs",
+                donut["source_id"], success, result.nfev, elapsed,
+            )
+        except _WfFitTimeoutError:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_img = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
+            _log.warning(
+                "WF unpaired donut=%s TIMED OUT after %.1fs",
+                donut["source_id"], elapsed,
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_img = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF unpaired donut=%s FAILED in %.1fs: %s",
+                donut["source_id"], elapsed, exc,
+            )
+    defocal = "intra" if "SW1" in str(donut.get("sensor", "")) else "extra"
+    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
+    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
+    fit_mode = wf_cfg.get("wfEstimationMode", "unpaired")
+    group_id = str(donut["source_id"])
+    _fit_residual_rms = _residual_rms(img, model_img, instrument.donutRadius, instrument.obscuration)
+    _model_bkg_free = _bkg_free_model(model_img, model, params, 0, wf_cfg["bkgOrder"]) if model_img is not None else None
+    _blend_frac_val = _blend_frac(img, _model_bkg_free, bkg_std)
+    _fit_dx = float(fit_info.get("dx", float("nan")))
+    _fit_dy = float(fit_info.get("dy", float("nan")))
+    _fit_flux = float(fit_info.get("flux", float("nan")))
+    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
+    donuts_out = [
+        {"donut_id": int(donut["source_id"]), "sensor": donut["sensor"],
+         "defocal": defocal, "zk_dev": zk_dev_dense,
+         "zk_intrinsic": _dense_intrinsic(donut), "img": img, "model_img": model_img,
+         "fit_success": success, "fit_elapsed": float(fit_info.get("elapsed", float("nan"))),
+         "fit_nfev": int(fit_info.get("nfev", 0)), "fit_cost": float(fit_info.get("cost", float("nan"))),
+         "fit_dx": _fit_dx, "fit_dy": _fit_dy, "fit_flux": _fit_flux, "fit_fwhm": _fit_fwhm,
+         "fit_residual_rms": _fit_residual_rms, "blend_frac": _blend_frac_val,
+         "fit_bkg": _fit_bkg_val(params, 0),
+         "zk_norm_um": zk_norm_um,
+         "group_id": group_id, "group_size": 1, "fit_mode": fit_mode},
+    ]
+    return {
+        "mode": "unpaired", "fit_mode": fit_mode, "group_id": group_id, "group_size": 1,
+        "zk_dev": zk_dev, "success": success, "fit_info": fit_info,
+        "donuts": donuts_out,
+        "model_imgs": [model_img] if model_img is not None else None,
+        "imgs": [img], "sensors": [donut["sensor"]],
+    }
+
+
+def _wf_full_corner_worker(args: tuple) -> dict:
+    """Fit all donuts in a corner jointly with DZMultiDonutModel."""
+    import logging
+    _log = logging.getLogger(__name__)
+    corner_name, donuts_extra, donuts_intra = args
+    wf_cfg = _CALIB_STORE["wf_cfg"]
+    nollIndices = wf_cfg["nollIndices"]
+    all_donuts = donuts_extra + donuts_intra
+    if not all_donuts:
+        return {
+            "mode": "full_corner", "corner": corner_name,
+            "zk_dev": np.full(len(nollIndices), np.nan), "success": False, "fit_info": {},
+            "donuts": [],
+        }
+    detect_cfg = _CALIB_STORE["detect_cfg"]
+    camera = _CALIB_STORE["camera"]
+    instrument = getTaskInstrument(
+        camera.getName(), f"{corner_name}_SW0", detect_cfg["instConfigFile"]
+    )
+    factory = _build_wf_factory(instrument)
+    preps = [_prep_donut_for_danish(d, instrument) for d in all_donuts]
+    imgs     = [p[0] for p in preps]
+    thxs     = [p[1][0] for p in preps]
+    thys     = [p[1][1] for p in preps]
+    zk_refs  = [p[2] for p in preps]
+    sky_lvl  = [p[3] for p in preps]
+    bkg_stds = [p[4] for p in preps]
+    dz_terms = [(1, int(j)) for j in nollIndices]
+    n = len(imgs)
+    npix = min(img.shape[0] for img in imgs)
+    imgs = [img[:npix, :npix] for img in imgs]
+
+    model = danish.DZMultiDonutModel(
+        factory, z_refs=zk_refs, dz_terms=dz_terms,
+        field_radius=np.deg2rad(1.85),
+        thxs=thxs, thys=thys, npix=npix,
+        bkg_order=wf_cfg["bkgOrder"],
+    )
+    fluxes_init = [float(np.clip(np.sum(img), 1e3, 1e9)) for img in imgs]
+    x0 = model.pack_params(
+        fluxes=fluxes_init, dxs=[0.] * n, dys=[0.] * n, fwhm=1.,
+        bkgs=[[0.] * model.nbkg] * n, wavefront_params=[0.] * len(dz_terms),
+    )
+    bounds = model.pack_params(
+        fluxes=[[0., np.inf]] * n, dxs=[[-np.inf, np.inf]] * n,
+        dys=[[-np.inf, np.inf]] * n, fwhm=[0.1, 5.],
+        bkgs=[[[-np.inf, np.inf]] * model.nbkg] * n,
+        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
+    )
+    bounds = [list(b) for b in zip(*bounds)]
+    x0 = np.clip(x0, bounds[0], bounds[1])
+    timeout = wf_cfg["wfFitTimeoutPerDonut"] * n * 2
+    t0 = time.perf_counter()
+    params = None
+    if wf_cfg["wfInitialGuessOnly"]:
+        try:
+            params = model.unpack_params(x0)
+            zk_dev = np.zeros(len(nollIndices))
+            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
+            elapsed = time.perf_counter() - t0
+            success = True
+            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
+                            optimality=float("nan"), njev=0, status=0, message="x0 only",
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info("WF full_corner (x0 only) corner=%s n=%d", corner_name, n)
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF full_corner corner=%s n=%d FAILED in %.1fs: %s",
+                corner_name, n, elapsed, exc,
+            )
+    else:
+        import galsim
+        galsim.errors.raise_fft_size_error = True
+        try:
+            with _fit_timeout(timeout):
+                result = least_squares(
+                    model.chi, jac=model.jac, x0=x0,
+                    args=(imgs, sky_lvl), bounds=bounds,
+                    **wf_cfg["lstsqKwargs"],
+                )
+            elapsed = time.perf_counter() - t0
+            params = model.unpack_params(result.x)
+            zk_dev = np.array(params["wavefront_params"])
+            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
+            success = bool(result.success)
+            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
+                            optimality=float(result.optimality), njev=int(result.njev),
+                            status=int(result.status), message=str(result.message),
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info(
+                "WF full_corner corner=%s n=%d success=%s nfev=%d elapsed=%.1fs",
+                corner_name, n, success, result.nfev, elapsed,
+            )
+        except _WfFitTimeoutError:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
+            _log.warning(
+                "WF full_corner corner=%s n=%d TIMED OUT after %.1fs",
+                corner_name, n, elapsed,
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF full_corner corner=%s n=%d FAILED in %.1fs: %s",
+                corner_name, n, elapsed, exc,
+            )
+    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
+    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
+    fit_mode = wf_cfg.get("wfEstimationMode", "full_corner")
+    group_id = corner_name
+    _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
+    _fit_nfev = int(fit_info.get("nfev", 0))
+    _fit_cost = float(fit_info.get("cost", float("nan")))
+    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
+    _dxs = fit_info.get("dxs", [float("nan")] * n)
+    _dys = fit_info.get("dys", [float("nan")] * n)
+    _fluxes = fit_info.get("fluxes", [float("nan")] * n)
+    donuts_out = []
+    for i, d in enumerate(all_donuts):
+        defocal = "intra" if "SW1" in str(d.get("sensor", "")) else "extra"
+        _img = imgs[i] if i < len(imgs) else None
+        _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
+        donuts_out.append({
+            "donut_id": int(d["source_id"]), "sensor": d["sensor"],
+            "defocal": defocal, "zk_dev": zk_dev_dense,
+            "zk_intrinsic": _dense_intrinsic(d),
+            "img": _img, "model_img": _mimg,
+            "fit_success": success, "fit_elapsed": _fit_elapsed, "fit_nfev": _fit_nfev,
+            "fit_cost": _fit_cost, "fit_dx": float(_dxs[i]) if i < len(_dxs) else float("nan"),
+            "fit_dy": float(_dys[i]) if i < len(_dys) else float("nan"),
+            "fit_flux": float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
+            "fit_fwhm": _fit_fwhm,
+            "fit_residual_rms": _residual_rms(_img, _mimg, instrument.donutRadius, instrument.obscuration),
+            "blend_frac": _blend_frac(_img, _bkg_free_model(_mimg, model, params, i, wf_cfg["bkgOrder"]) if _mimg is not None else None, bkg_stds[i] if i < len(bkg_stds) else float("nan")),
+            "fit_bkg": _fit_bkg_val(params, i),
+            "zk_norm_um": zk_norm_um, "group_id": group_id, "group_size": n, "fit_mode": fit_mode,
+        })
+    return {
+        "mode": "full_corner", "fit_mode": fit_mode, "group_id": group_id, "group_size": n,
+        "corner": corner_name,
+        "zk_dev": zk_dev, "success": success, "fit_info": fit_info,
+        "donuts": donuts_out,
+        "model_imgs": model_imgs, "imgs": imgs,
+        "sensors": [d["sensor"] for d in all_donuts],
+    }
+
+
+def _wf_full_detector_worker(args: tuple) -> dict:
+    """Fit all donuts on a single CWFS sensor jointly with DZMultiDonutModel."""
+    import logging
+    _log = logging.getLogger(__name__)
+    sensor_name, all_donuts = args
+    wf_cfg = _CALIB_STORE["wf_cfg"]
+    nollIndices = wf_cfg["nollIndices"]
+    if not all_donuts:
+        return {
+            "mode": "full_detector", "sensor": sensor_name,
+            "zk_dev": np.full(len(nollIndices), np.nan), "success": False, "fit_info": {},
+            "donuts": [],
+        }
+    detect_cfg = _CALIB_STORE["detect_cfg"]
+    camera = _CALIB_STORE["camera"]
+    instrument = getTaskInstrument(
+        camera.getName(), sensor_name, detect_cfg["instConfigFile"]
+    )
+    factory = _build_wf_factory(instrument)
+    preps = [_prep_donut_for_danish(d, instrument) for d in all_donuts]
+    imgs     = [p[0] for p in preps]
+    thxs     = [p[1][0] for p in preps]
+    thys     = [p[1][1] for p in preps]
+    zk_refs  = [p[2] for p in preps]
+    sky_lvl  = [p[3] for p in preps]
+    bkg_stds = [p[4] for p in preps]
+    dz_terms = [(1, int(j)) for j in nollIndices]
+    n = len(imgs)
+    npix = min(img.shape[0] for img in imgs)
+    imgs = [img[:npix, :npix] for img in imgs]
+
+    model = danish.DZMultiDonutModel(
+        factory, z_refs=zk_refs, dz_terms=dz_terms,
+        field_radius=np.deg2rad(1.85),
+        thxs=thxs, thys=thys, npix=npix,
+        bkg_order=wf_cfg["bkgOrder"],
+    )
+    fluxes_init = [float(np.clip(np.sum(img), 1e3, 1e9)) for img in imgs]
+    x0 = model.pack_params(
+        fluxes=fluxes_init, dxs=[0.] * n, dys=[0.] * n, fwhm=1.,
+        bkgs=[[0.] * model.nbkg] * n, wavefront_params=[0.] * len(dz_terms),
+    )
+    bounds = model.pack_params(
+        fluxes=[[0., np.inf]] * n, dxs=[[-np.inf, np.inf]] * n,
+        dys=[[-np.inf, np.inf]] * n, fwhm=[0.1, 5.],
+        bkgs=[[[-np.inf, np.inf]] * model.nbkg] * n,
+        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
+    )
+    bounds = [list(b) for b in zip(*bounds)]
+    x0 = np.clip(x0, bounds[0], bounds[1])
+    timeout = wf_cfg["wfFitTimeoutPerDonut"] * n
+    t0 = time.perf_counter()
+    params = None
+    if wf_cfg["wfInitialGuessOnly"]:
+        try:
+            params = model.unpack_params(x0)
+            zk_dev = np.zeros(len(nollIndices))
+            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
+            elapsed = time.perf_counter() - t0
+            success = True
+            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
+                            optimality=float("nan"), njev=0, status=0, message="x0 only",
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info("WF full_detector (x0 only) sensor=%s n=%d", sensor_name, n)
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF full_detector sensor=%s n=%d FAILED in %.1fs: %s",
+                sensor_name, n, elapsed, exc,
+            )
+    else:
+        import galsim
+        galsim.errors.raise_fft_size_error = True
+        try:
+            with _fit_timeout(timeout):
+                result = least_squares(
+                    model.chi, jac=model.jac, x0=x0,
+                    args=(imgs, sky_lvl), bounds=bounds,
+                    **wf_cfg["lstsqKwargs"],
+                )
+            elapsed = time.perf_counter() - t0
+            params = model.unpack_params(result.x)
+            zk_dev = np.array(params["wavefront_params"])
+            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
+            success = bool(result.success)
+            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
+                            optimality=float(result.optimality), njev=int(result.njev),
+                            status=int(result.status), message=str(result.message),
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info(
+                "WF full_detector sensor=%s n=%d success=%s nfev=%d elapsed=%.1fs",
+                sensor_name, n, success, result.nfev, elapsed,
+            )
+        except _WfFitTimeoutError:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
+            _log.warning(
+                "WF full_detector sensor=%s n=%d TIMED OUT after %.1fs",
+                sensor_name, n, elapsed,
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning(
+                "WF full_detector sensor=%s n=%d FAILED in %.1fs: %s",
+                sensor_name, n, elapsed, exc,
+            )
+    defocal = "intra" if "SW1" in sensor_name else "extra"
+    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
+    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
+    fit_mode = wf_cfg.get("wfEstimationMode", "full_detector")
+    group_id = sensor_name
+    _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
+    _fit_nfev = int(fit_info.get("nfev", 0))
+    _fit_cost = float(fit_info.get("cost", float("nan")))
+    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
+    _dxs = fit_info.get("dxs", [float("nan")] * n)
+    _dys = fit_info.get("dys", [float("nan")] * n)
+    _fluxes = fit_info.get("fluxes", [float("nan")] * n)
+    donuts_out = []
+    for i, d in enumerate(all_donuts):
+        _img = imgs[i] if i < len(imgs) else None
+        _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
+        donuts_out.append({
+            "donut_id": int(d["source_id"]), "sensor": d["sensor"],
+            "defocal": defocal, "zk_dev": zk_dev_dense,
+            "zk_intrinsic": _dense_intrinsic(d),
+            "img": _img, "model_img": _mimg,
+            "fit_success": success, "fit_elapsed": _fit_elapsed, "fit_nfev": _fit_nfev,
+            "fit_cost": _fit_cost, "fit_dx": float(_dxs[i]) if i < len(_dxs) else float("nan"),
+            "fit_dy": float(_dys[i]) if i < len(_dys) else float("nan"),
+            "fit_flux": float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
+            "fit_fwhm": _fit_fwhm,
+            "fit_residual_rms": _residual_rms(_img, _mimg, instrument.donutRadius, instrument.obscuration),
+            "blend_frac": _blend_frac(_img, _bkg_free_model(_mimg, model, params, i, wf_cfg["bkgOrder"]) if _mimg is not None else None, bkg_stds[i] if i < len(bkg_stds) else float("nan")),
+            "fit_bkg": _fit_bkg_val(params, i),
+            "zk_norm_um": zk_norm_um, "group_id": group_id, "group_size": n, "fit_mode": fit_mode,
+        })
+    return {
+        "mode": "full_detector", "fit_mode": fit_mode, "group_id": group_id, "group_size": n,
+        "sensor": sensor_name,
+        "zk_dev": zk_dev, "success": success, "fit_info": fit_info,
+        "donuts": donuts_out,
+        "model_imgs": model_imgs, "imgs": imgs,
+        "sensors": [d["sensor"] for d in all_donuts],
+    }
 
 
 class DonutBlitzMonolithTaskConnections(
@@ -815,6 +1702,16 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=("htm7",),
         deferLoad=True,
         multiple=True,
+    )
+    intrinsicZernikes = connectionTypes.PrerequisiteInput(
+        doc="Intrinsic Zernike calibration, one per corner detector.",
+        dimensions=("detector", "instrument", "physical_filter"),
+        storageClass="IsrCalib",
+        name="intrinsicZernikes",
+        multiple=True,
+        isCalibration=True,
+        lookupFunction=lookupStaticCalibrations,  # type: ignore
+        minimum=0,
     )
 
     def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
@@ -897,6 +1794,11 @@ class DonutBlitzMonolithTaskConfig(
         dtype=float,
         default=1.725,
     )
+    minStampSnr: pexConfig.Field = pexConfig.Field(
+        doc="Minimum per-stamp SNR for a donut to be accepted for WF estimation.",
+        dtype=float,
+        default=500.0,
+    )
     stampSize: pexConfig.Field = pexConfig.Field(
         doc="Side length in pixels of the square stamp cut around each donut centroid.",
         dtype=int,
@@ -962,6 +1864,91 @@ class DonutBlitzMonolithTaskConfig(
         ),
         dtype=bool,
         default=True,
+    )
+    saveCatalog: pexConfig.Field = pexConfig.Field(
+        doc="Write per-quantum ASDF donut catalog alongside diagnostic plots.",
+        dtype=bool,
+        default=True,
+    )
+    wfEstimationMode: pexConfig.ChoiceField = pexConfig.ChoiceField(
+        doc="Wavefront estimation dispatch mode.",
+        dtype=str,
+        allowed={
+            "paired": "Pair donuts from SW0/SW1 by SNR rank and dispatch as intra/extra pairs.",
+            "unpaired": "Dispatch individual donuts independently.",
+            "full_corner": "Dispatch all donuts from a corner (SW0+SW1) as one work unit.",
+            "full_detector": "Dispatch all donuts on each sensor as one work unit (8 fits per visit).",
+        },
+        default="paired",
+    )
+    nollIndices: pexConfig.ListField = pexConfig.ListField(
+        dtype=int,
+        doc="Noll indices to fit with Danish.",
+        default=list(range(4, 20)) + list(range(22, 27)),
+    )
+    lstsqKwargs: pexConfig.DictField = pexConfig.DictField(
+        keytype=str,
+        itemtype=str,
+        doc=(
+            "Keyword arguments for scipy.optimize.least_squares passed to the Danish "
+            "WF workers. Values are strings that will be eval()'d, e.g. "
+            "{'method': 'trf', 'max_nfev': '200'}."
+        ),
+        default={
+            "xtol": "1e-3",
+            "ftol": "1e-3",
+            "gtol": "1e-3",
+            "x_scale": "'jac'",
+        },
+    )
+    binning: pexConfig.Field = pexConfig.Field(
+        dtype=int,
+        default=1,
+        doc="Binning factor applied to donut stamps before Danish fitting.",
+    )
+    modelSpiderShadows: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Include spider shadow modeling in Danish forward model.",
+    )
+    bkgOrder: pexConfig.Field = pexConfig.Field(
+        dtype=int,
+        default=0,
+        doc="Background polynomial order for Danish (-1=none, 0=constant).",
+    )
+    doAoiThroughput: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Apply angle-of-incidence throughput correction in Danish forward model.",
+    )
+    systematicLossAlpha: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        default=0.0,
+        doc="Fractional systematic uncertainty for Danish loss function (0=chi2).",
+    )
+    triangleMode: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Use DonutTriangleFactory instead of DonutFactory.",
+    )
+    wfFitTimeoutPerDonut: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        default=10.0,
+        doc=(
+            "Timeout in seconds per donut for a single WF fit. "
+            "The total timeout for a work unit is this value times the number of donuts "
+            "(1 for unpaired, 2 for paired, N for full_corner). "
+            "Fits exceeding the limit are killed and return NaN Zernikes."
+        ),
+    )
+    wfInitialGuessOnly: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc=(
+            "Skip the least-squares fit and return the initial-guess (x0) model only. "
+            "Useful for diagnosing stamp orientation and model setup without "
+            "waiting for convergence."
+        ),
     )
 
     def setDefaults(self) -> None:
@@ -1029,21 +2016,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         self.makeSubtask("astromTask")
         if self.config.doDonutSelection:
             self.makeSubtask("donutSelector")
-        self._pool: mp.Pool | None = None
-        self._pool_size: int = 0
-
-    def __del__(self) -> None:
-        if self._pool is not None:
-            self._pool.terminate()
-            self._pool = None
-
-    def _get_pool(self, numCores: int) -> mp.Pool:
-        if self._pool is None or self._pool_size != numCores:
-            if self._pool is not None:
-                self._pool.terminate()
-            self._pool = mp.Pool(processes=numCores)
-            self._pool_size = numCores
-        return self._pool
 
     def runQuantum(
         self,
@@ -1056,6 +2028,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         inputRefs.flat = [r for r in inputRefs.flat if r.dataId["detector"] in raw_det_ids]
         inputRefs.linearizer = [r for r in inputRefs.linearizer if r.dataId["detector"] in raw_det_ids]
         inputRefs.crosstalk = [r for r in inputRefs.crosstalk if r.dataId["detector"] in raw_det_ids]
+        inputRefs.intrinsicZernikes = [
+            r for r in inputRefs.intrinsicZernikes if r.dataId["detector"] in raw_det_ids
+        ]
 
         # Time each input type separately to find I/O bottleneck.
         t0 = time.perf_counter()
@@ -1075,20 +2050,32 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         t7 = time.perf_counter()
         photoRefCat = butlerQC.get(inputRefs.photoRefCat)
         t8 = time.perf_counter()
+        intrinsicZernikes = butlerQC.get(inputRefs.intrinsicZernikes)
+        t9 = time.perf_counter()
         self.log.info(
             "butlerQC.get timing: raws=%.3fs camera=%.3fs ptc=%.3fs flat=%.3fs"
             " linearizer=%.3fs crosstalk=%.3fs astromRefCat=%.3fs photoRefCat=%.3fs"
-            " total=%.3fs",
-            t1-t0, t2-t1, t3-t2, t4-t3, t5-t4, t6-t5, t7-t6, t8-t7, t8-t0,
+            " intrinsicZernikes=%.3fs total=%.3fs",
+            t1-t0, t2-t1, t3-t2, t4-t3, t5-t4, t6-t5, t7-t6, t8-t7, t9-t8, t9-t0,
+        )
+        butler_elapsed = t9 - t0
+        butler_times = dict(
+            raws=t1-t0, camera=t2-t1, ptc=t3-t2, flat=t4-t3,
+            linearizer=t5-t4, crosstalk=t6-t5,
+            astromRefCat=t7-t6, photoRefCat=t8-t7,
+            intrinsicZernikes=t9-t8,
         )
         outputs = self.run(
             raws=raws, camera=camera, ptc=ptc, flat=flat,
             linearizer=linearizer, crosstalk=crosstalk,
             astromRefCat=astromRefCat, photoRefCat=photoRefCat,
+            intrinsicZernikes=intrinsicZernikes,
+            butler_elapsed=butler_elapsed,
+            butler_times=butler_times,
             numCores=butlerQC.resources.num_cores,
         )
-        t9 = time.perf_counter()
-        self.log.info("run() execution: %.3fs", t9 - t8)
+        t10 = time.perf_counter()
+        self.log.info("run() execution: %.3fs", t10 - t9)
         butlerQC.put(outputs, outputRefs)
 
     @timeMethod
@@ -1102,6 +2089,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         crosstalk: list,
         astromRefCat: list,
         photoRefCat: list,
+        intrinsicZernikes: list | None = None,
+        butler_elapsed: float = 0.0,
+        butler_times: dict | None = None,
         numCores: int = 1,
     ) -> pipeBase.Struct:
         """Run ISR, WCS refit, catalog selection, and stamp cutting on all 8
@@ -1119,9 +2109,16 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             Shards for WCS fitting.
         photoRefCat : list of DeferredDatasetHandle or SimpleCatalog
             Shards for donut selection.
+        intrinsicZernikes : list of IntrinsicZernikes, optional
+            One calibration per corner detector.  None or empty when absent.
+        butler_elapsed : float, optional
+            Total butlerQC.get() wall time in seconds, for logging and plot.
+        butler_times : dict, optional
+            Per-dataset butlerQC.get() times keyed by dataset type name.
         numCores : int
         """
         t_run0 = time.perf_counter()
+        self.log.info("run() called on task instance id=%d", id(self))
         rawByName = {exp.getDetector().getName(): exp for exp in raws}
         ptcByName = {p._detectorName: p for p in ptc}
         flatByName = {f.getDetector().getName(): f for f in flat}
@@ -1132,6 +2129,16 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         if missing:
             raise RuntimeError(f"Missing corner sensor raws: {sorted(missing)}")
 
+        if intrinsicZernikes:
+            self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsicZernikes))
+        else:
+            self.log.warning("No intrinsic Zernike calibrations provided.")
+        self.intrinsicZernikes = list(intrinsicZernikes) if intrinsicZernikes else []
+        intrinsicZernikesByName = {
+            camera[iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]].getName(): iz
+            for iz in self.intrinsicZernikes
+        }
+
         detect_cfg = dict(
             instConfigFile=self.config.instConfigFile,
             edgeMargin=self.config.edgeMargin,
@@ -1141,6 +2148,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             innerFracThreshold=self.config.innerFracThreshold,
             outerFracThreshold=self.config.outerFracThreshold,
             snrThreshold=self.config.snrThreshold,
+            minStampSnr=self.config.minStampSnr,
             maxFieldDist=self.config.maxFieldDist,
             stampSize=self.config.stampSize,
             maxDonuts=self.config.maxDonuts,
@@ -1261,36 +2269,75 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 linearizer=linearizerByName[name],
                 crosstalk=crosstalkByName[name],
             )
+
+        # WF estimation config — read by WF worker functions after fork.
+        example_visitInfo = next(iter(rawByName.values())).getInfo().getVisitInfo()
+        boresight_rot_rad = example_visitInfo.boresightRotAngle.asRadians()
+        boresight_par_rad = example_visitInfo.boresightParAngle.asRadians()
+        boresight_alt_rad = example_visitInfo.boresightAzAlt.getLatitude().asRadians()
+        rtp_deg = (
+            np.degrees(boresight_par_rad - boresight_rot_rad - np.pi / 2)
+            if self.config.modelSpiderShadows
+            else None
+        )
+        example_instrument = getTaskInstrument(
+            camera.getName(),
+            next(iter(rawByName.keys())),
+            self.config.instConfigFile,
+        )
+        wavelength_by_band = {bl.value: wl for bl, wl in example_instrument.wavelength.items()}
+        lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in self.config.lstsqKwargs.items()}
+        _CALIB_STORE["wf_cfg"] = dict(
+            nollIndices=np.array(list(self.config.nollIndices)),
+            lstsqKwargs=lstsq_kwargs_parsed,
+            binning=self.config.binning,
+            bkgOrder=self.config.bkgOrder,
+            modelSpiderShadows=self.config.modelSpiderShadows,
+            doAoiThroughput=self.config.doAoiThroughput,
+            systematicLossAlpha=self.config.systematicLossAlpha,
+            triangleMode=self.config.triangleMode,
+            rtp_deg=rtp_deg,
+            boresight_alt_rad=boresight_alt_rad,
+            band=example_band,
+            calib_noll_indices=np.arange(4, 79),
+            wavelength_by_band=wavelength_by_band,
+            wfFitTimeoutPerDonut=self.config.wfFitTimeoutPerDonut,
+            wfInitialGuessOnly=self.config.wfInitialGuessOnly,
+            wfEstimationMode=self.config.wfEstimationMode,
+        )
+
         t_calib_store1 = time.perf_counter()
         self.log.info("_CALIB_STORE population: %.3fs", t_calib_store1 - t_calib_store0)
 
-        isr_args = sorted(CORNER_SENSOR_NAMES)
+        cutout_args = sorted(CORNER_SENSOR_NAMES)
 
         self.log.info(
-            "Running ISR+WCS+selection on %d corner sensors with %d core(s)",
-            len(isr_args), numCores,
+            "Running cutout workers on %d corner sensors with %d core(s)",
+            len(cutout_args), numCores,
         )
+        t_cutout0 = time.perf_counter()
         if numCores == 1:
             t_dispatch = time.time()
-            results = [_run_stamp_worker((arg, t_dispatch)) for arg in isr_args]
+            results = [_run_cutout_worker((arg, t_dispatch)) for arg in cutout_args]
         else:
             t_pool0 = time.perf_counter()
-            pool = self._get_pool(numCores)
-            t_pool1 = time.perf_counter()
-            t_dispatch = time.time()
-            results = pool.map(_run_stamp_worker, [(arg, t_dispatch) for arg in isr_args])
+            with mp.Pool(processes=numCores) as pool:
+                t_pool1 = time.perf_counter()
+                t_dispatch = time.time()
+                results = pool.map(_run_cutout_worker, [(arg, t_dispatch) for arg in cutout_args])
             t_pool2 = time.perf_counter()
             self.log.info(
-                "Pool get: %.3fs, pool.map: %.3fs", t_pool1 - t_pool0, t_pool2 - t_pool1
+                "Pool create: %.3fs, pool.map: %.3fs", t_pool1 - t_pool0, t_pool2 - t_pool1
             )
+        t_cutout1 = time.perf_counter()
 
         donuts = []
         for r in results:
             scatter_str = f"{r['scatter_arcsec']:.3f}\"" if r["scatter_arcsec"] is not None else "N/A"
             self.log.info(
-                "  %s: dispatch_to_arrival=%.3fs  task_init=%.3fs  isr=%.3fs"
-                "  blind_detect=%.3fs  wcs_refit=%.3fs (scatter=%s)"
-                "  cat_select=%.3fs  stamp_cut=%.3fs  donuts=%d",
+                "  %s: dispatch=%.3fs  init=%.3fs  isr=%.3fs"
+                "  detect=%.3fs  wcs=%.3fs (scatter=%s)"
+                "  select=%.3fs  cut=%.3fs  donuts=%d",
                 r["sensor"],
                 r["dispatch_to_arrival"],
                 r["task_init"],
@@ -1308,21 +2355,106 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 self.log.warning("  %s: catalog selection failed: %s", r["sensor"], r["cat_select_error"])
             donuts.extend(r["catalog"])
 
+        # Annotate each accepted donut with realized intrinsic Zernikes.
+        for r in results:
+            calib = intrinsicZernikesByName.get(r["sensor"])
+            for d in r["catalog"]:
+                if calib is not None:
+                    d["intrinsic_zk"] = np.squeeze(
+                        calib.getIntrinsicZernikes(
+                            np.degrees(d["fa_x_ccs"]),
+                            np.degrees(d["fa_y_ccs"]),
+                        )
+                    )
+                else:
+                    d["intrinsic_zk"] = None
+
+        # WF dispatch
+        mode = self.config.wfEstimationMode
+        results_by_sensor = {r["sensor"]: r["catalog"] for r in results}
+        if mode == "paired":
+            wf_args = []
+            for corner, (sw0, sw1) in CORNER_PAIRS.items():
+                extra_donuts = sorted(
+                    results_by_sensor.get(sw0, []), key=lambda d: d["snr"], reverse=True
+                )
+                intra_donuts = sorted(
+                    results_by_sensor.get(sw1, []), key=lambda d: d["snr"], reverse=True
+                )
+                for extra, intra in zip(extra_donuts, intra_donuts):
+                    wf_args.append((extra, intra))
+            wf_worker = _wf_paired_worker
+        elif mode == "unpaired":
+            wf_args = [d for r in results for d in r["catalog"]]
+            wf_worker = _wf_unpaired_worker
+        elif mode == "full_detector":
+            wf_args = [(r["sensor"], r["catalog"]) for r in results]
+            wf_worker = _wf_full_detector_worker
+        else:  # full_corner
+            wf_args = [
+                (corner, results_by_sensor.get(sw0, []), results_by_sensor.get(sw1, []))
+                for corner, (sw0, sw1) in CORNER_PAIRS.items()
+            ]
+            wf_worker = _wf_full_corner_worker
+
+        self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(wf_args))
+        t_wf0 = time.perf_counter()
+        if not wf_args:
+            wf_results = []
+        elif numCores == 1 or len(wf_args) == 1:
+            wf_results = [wf_worker(a) for a in wf_args]
+        else:
+            n_workers = min(numCores, len(wf_args))
+            with mp.Pool(processes=n_workers) as wf_pool:
+                wf_results = wf_pool.map(wf_worker, wf_args)
+        t_wf1 = time.perf_counter()
+        n_ok = sum(r.get("success") for r in wf_results)
+        elapsed_fits = [r["fit_info"].get("elapsed", float("nan")) for r in wf_results]
+        self.log.info(
+            "WF results (%s): %d/%d succeeded  wall=%.1fs  fit_total=%.1fs  fit_mean=%.1fs",
+            mode, n_ok, len(wf_results),
+            t_wf1 - t_wf0,
+            sum(e for e in elapsed_fits if not np.isnan(e)),
+            np.nanmean(elapsed_fits) if elapsed_fits else float("nan"),
+        )
+
         t_plot0 = time.perf_counter()
-        self.log.info("run() pre-plot elapsed: %.1fs", t_plot0 - t_run0)
+        self.log.info(
+            "Timing summary: butler=%.1fs  refcat=%.1fs  cutout=%.1fs  danish=%.1fs  total=%.1fs",
+            butler_elapsed, t_refcat_elapsed,
+            t_cutout1 - t_cutout0,
+            t_wf1 - t_wf0,
+            t_plot0 - t_run0,
+        )
+        visit_ids = {d["visit_id"] for d in donuts if "visit_id" in d}
+        visit_str = "_".join(str(v) for v in sorted(visit_ids))
+
         if self.config.saveDiagnosticPlot:
             self._saveDiagnosticPlots(
                 results,
                 run_elapsed=t_plot0 - t_run0,
                 refcat_elapsed=t_refcat_elapsed,
+                butler_elapsed=butler_elapsed,
                 photo_filter_name=photo_filter_name,
                 astrom_filter_name=self.config.astromRefFilter,
             )
+            if wf_results:
+                self._saveWfDiagnosticPlot(
+                    wf_results, donuts=donuts,
+                    butler_elapsed=butler_elapsed,
+                    butler_times=butler_times or {},
+                    refcat_elapsed=t_refcat_elapsed,
+                    cutout_elapsed=t_cutout1 - t_cutout0,
+                    danish_elapsed=t_wf1 - t_wf0,
+                    visit_str=visit_str,
+                )
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
-        return pipeBase.Struct(donuts=donuts)
+        if self.config.saveCatalog:
+            self._writeCatalog(donuts, wf_results, visit_str)
+        return pipeBase.Struct(donuts=donuts, wf_results=wf_results)
 
     def _saveDiagnosticPlots(self, results: list, run_elapsed: float = 0.0,
-                             refcat_elapsed: float = 0.0,
+                             refcat_elapsed: float = 0.0, butler_elapsed: float = 0.0,
                              photo_filter_name: str = "photo", astrom_filter_name: str = "astrom") -> None:
         """Save a single diagnostic PNG with one section per sensor.
 
@@ -1364,8 +2496,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         fig = plt.figure(figsize=(fig_w, fig_h), layout="constrained")
         fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
+        butler_str = f"  butler={butler_elapsed:.1f}s" if butler_elapsed > 0 else ""
         fig.suptitle(
-            f"DonutBlitz diagnostics  visit={visit_str}  refcat={refcat_elapsed:.1f}s  run={run_elapsed:.1f}s",
+            f"DonutBlitz diagnostics  visit={visit_str}"
+            f"  refcat={refcat_elapsed:.1f}s{butler_str}  run={run_elapsed:.1f}s",
             fontsize=9,
         )
 
@@ -1444,7 +2578,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 def _xform(dx, dy):
                     r, c = dy, dx
                     for _ in range(nq % 4):
-                        r, c = -c, r
+                        r, c = c, -r
                     return c, r
 
                 for dx, dy, mag in donut.get("nearby_photo", []):
@@ -1519,7 +2653,395 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             fontsize=7, frameon=False, handletextpad=0.5, columnspacing=2.0,
         )
 
-        fname = "donut_diag.png"
+        fname = f"donut_diag_{visit_str}.png"
         fig.savefig(fname, dpi=200, bbox_inches="tight")
         plt.close(fig)
         self.log.info("Saved diagnostic plot: %s", fname)
+
+    def _saveWfDiagnosticPlot(
+        self,
+        wf_results: list,
+        donuts: list,
+        butler_elapsed: float = 0.0,
+        butler_times: dict | None = None,
+        refcat_elapsed: float = 0.0,
+        cutout_elapsed: float = 0.0,
+        danish_elapsed: float = 0.0,
+        visit_str: str = "",
+    ) -> None:
+        """Save a WF diagnostic PNG modelled on the AOS donut-fits layout.
+
+        Layout: 2×2 grid of corners (R00, R04, R40, R44).
+        Within each corner: one row per fit result.
+        Each row: intra data|model|resid|zk_bar  extra data|model|resid|zk_bar.
+        Zernike bars are vertical, ±1 µm, no tick labels.
+        """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+        from matplotlib.colors import LinearSegmentedColormap
+
+        noll_cfg = _CALIB_STORE["wf_cfg"]["nollIndices"]
+        ZK_MIN, ZK_MAX = 4, 28
+
+        if not visit_str:
+            visit_ids = {d["visit_id"] for d in donuts if "visit_id" in d}
+            visit_str = "_".join(str(v) for v in sorted(visit_ids))
+
+        # Include x0-only results (success=True, model_imgs present) and real fits
+        plottable = [r for r in wf_results if r.get("model_imgs") is not None]
+        if not plottable:
+            self.log.info("No WF results with model images; skipping WF diagnostic plot.")
+            return
+
+        _CORNERS = ["R00", "R04", "R40", "R44"]
+
+        def _short(s):
+            return s.removeprefix("LSSTCam_").removeprefix("LSSTComCam_") if s else ""
+
+        def _corner_of(r):
+            for s in r.get("sensors", []):
+                sh = _short(s)
+                for c in _CORNERS:
+                    if sh.startswith(c):
+                        return c
+            corner = r.get("corner", "")
+            for c in _CORNERS:
+                if c in corner:
+                    return c
+            return "R00"
+
+        # Colormap matching donut_viz (blue-white-red, asymmetric white point)
+        _cmap_bwr = LinearSegmentedColormap.from_list(
+            "bwr_donut",
+            list(zip([0.0, 1/11, 1.0], [(0, 0, 1), (1, 1, 1), (1, 0, 0)])),
+        )
+
+        def _draw_stamp(ax, img, cmap, vmin, vmax, label=""):
+            ax.imshow(img, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax,
+                      interpolation="nearest", aspect="equal")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if label:
+                ax.set_title(label, fontsize=5, pad=1)
+
+        def _draw_bar(ax, zk_dev, inset_label=""):
+            """Vertical bar chart of zk_dev (metres → µm), ±1 µm, no tick labels."""
+            noll_to_idx = {int(j): i for i, j in enumerate(noll_cfg)}
+            bar_noll = [j for j in noll_cfg if ZK_MIN <= j <= ZK_MAX]
+            vals = []
+            for j in bar_noll:
+                i = noll_to_idx.get(j, -1)
+                vals.append(float(zk_dev[i]) * 1e6 if 0 <= i < len(zk_dev) else 0.0)
+            # x-axis = Noll indices so axvspan coordinates match donut_viz convention
+            ax.bar(bar_noll, vals, color="k", width=0.8)
+            ax.axhline(0, color="k", linewidth=0.4)
+            ax.set_ylim(-1.0, 1.0)
+            ax.set_xlim(ZK_MIN - 0.5, ZK_MAX + 0.5)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            # Azimuthal-order background spans (matches donut_viz)
+            for j in [4, 11, 22]:
+                ax.axvspan(j - 0.5, j + 0.5, color="red", alpha=0.2, ec="none")
+            for j in [5, 12, 23]:
+                ax.axvspan(j - 0.5, j + 1.5, color="orange", alpha=0.2, ec="none")
+            for j in [7, 16]:
+                ax.axvspan(j - 0.5, j + 1.5, color="yellow", alpha=0.2, ec="none")
+            for j in [9, 18]:
+                ax.axvspan(j - 0.5, j + 1.5, color="green", alpha=0.2, ec="none")
+            for j in [14, 25]:
+                ax.axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
+            ax.axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
+            ax.axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
+            if inset_label:
+                ax.text(0.03, 0.97, inset_label, transform=ax.transAxes,
+                        fontsize=4, va="top", ha="left",
+                        bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6))
+
+        # Group by corner, then into (intra_result_or_None, extra_result_or_None) row-pairs.
+        # For paired/full_corner each result already has both sides; one result → one row.
+        # For unpaired each result has one side; zip intra and extra lists to share rows.
+        by_corner: dict[str, list[tuple]] = {c: [] for c in _CORNERS}
+        for r in plottable:
+            by_corner[_corner_of(r)].append(r)
+
+        def _explode(r):
+            """Return one synthetic single-donut result per donut in r."""
+            return [{**r, "donuts": [d]} for d in r.get("donuts", [])]
+
+        row_pairs: dict[str, list[tuple]] = {}
+        for corner, results in by_corner.items():
+            mode = results[0].get("mode") if results else None
+            if mode == "unpaired":
+                intras = [r for r in results if r.get("donuts", [{}])[0].get("defocal") == "intra"]
+                extras = [r for r in results if r.get("donuts", [{}])[0].get("defocal") == "extra"]
+                n = max(len(intras), len(extras))
+                row_pairs[corner] = [
+                    (intras[i] if i < len(intras) else None,
+                     extras[i] if i < len(extras) else None)
+                    for i in range(n)
+                ]
+            elif mode == "full_detector":
+                intra_results = [r for r in results if r.get("donuts", [{}])[0].get("defocal") == "intra"]
+                extra_results = [r for r in results if r.get("donuts", [{}])[0].get("defocal") == "extra"]
+                intras = [s for r in intra_results for s in _explode(r)]
+                extras = [s for r in extra_results for s in _explode(r)]
+                n = max(len(intras), len(extras))
+                row_pairs[corner] = [
+                    (intras[i] if i < len(intras) else None,
+                     extras[i] if i < len(extras) else None)
+                    for i in range(n)
+                ]
+            else:
+                row_pairs[corner] = [(r, r) for r in results]
+
+        # Layout: each row = 8 cols [1,1,1,2, 1,1,1,2] = 10 units wide per corner.
+        # Bar charts are width=2 so each corner block is exactly 10×max_rows stamp units.
+        CELL = 1.0        # inches per stamp cell
+        ROW_H = 1.0       # inches per row
+        HPAD = 0.08       # fractional hspace between corners
+        max_rows = max((len(v) for v in row_pairs.values()), default=1)
+
+        corner_w = 10 * CELL  # 3+2+3+2 = 10 units per corner
+        fig_w = 2 * corner_w + 0.3
+        fig_h = 2 * max_rows * ROW_H + 0.4
+
+        fig = plt.figure(figsize=(fig_w, fig_h))
+
+        outer = GridSpec(
+            2, 2, figure=fig,
+            hspace=HPAD, wspace=0.06,
+            left=0.01, right=0.99,
+            top=0.94, bottom=0.01,
+        )
+
+        # corner grid positions: R00 top-left, R40 top-right, R04 bottom-left, R44 bottom-right
+        corner_pos = {"R00": (0, 0), "R40": (0, 1), "R04": (1, 0), "R44": (1, 1)}
+
+        for corner in _CORNERS:
+            pairs = row_pairs[corner]
+            grow, gcol = corner_pos[corner]
+            inner = GridSpecFromSubplotSpec(
+                max_rows, 8,
+                subplot_spec=outer[grow, gcol],
+                hspace=0.0, wspace=0.0,
+                width_ratios=[1, 1, 1, 2, 1, 1, 1, 2],
+            )
+
+            sw1 = f"{corner}_SW1"
+            sw0 = f"{corner}_SW0"
+
+            def _rec_info(r):
+                """Return (fi, elapsed, nfev, success, fwhm) from a result or defaults."""
+                if r is None:
+                    return {}, float("nan"), 0, False, float("nan")
+                fi = r.get("fit_info", {})
+                return fi, fi.get("elapsed", float("nan")), fi.get("nfev", 0), r.get("success", False), fi.get("fwhm", float("nan"))
+
+            for row_idx, (r_intra, r_extra) in enumerate(pairs):
+                # Gather intra side
+                if r_intra is not None:
+                    intra_rec = next((d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"), None)
+                    fi_i, elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(r_intra)
+                    zk_dev_i = np.array(r_intra["zk_dev"])
+                else:
+                    intra_rec = None
+                    fi_i, elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(None)
+                    zk_dev_i = np.full(len(noll_cfg), np.nan)
+
+                # Gather extra side
+                if r_extra is not None:
+                    extra_rec = next((d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"), None)
+                    fi_e, elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(r_extra)
+                    zk_dev_e = np.array(r_extra["zk_dev"])
+                else:
+                    extra_rec = None
+                    fi_e, elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(None)
+                    zk_dev_e = np.full(len(noll_cfg), np.nan)
+
+                intra_img = intra_rec["img"]       if intra_rec else None
+                intra_mod = intra_rec["model_img"] if intra_rec else None
+                intra_sid = intra_rec["donut_id"]  if intra_rec else None
+
+                extra_img = extra_rec["img"]       if extra_rec else None
+                extra_mod = extra_rec["model_img"] if extra_rec else None
+                extra_sid = extra_rec["donut_id"]  if extra_rec else None
+
+                def _bar_label(elapsed, nfev, success):
+                    status = "x0" if nfev == 0 else ("ok" if success else "fail")
+                    return f"t={elapsed:.1f}s {status}"
+
+                intra_label = _bar_label(elapsed_i, nfev_i, success_i)
+                extra_label = _bar_label(elapsed_e, nfev_e, success_e)
+
+                # Column header labels (first row only)
+                intra_hdr = f"intra {sw1}" if row_idx == 0 else ""
+                extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
+
+                intra_blend = intra_rec.get("blend_frac", float("nan")) if intra_rec else float("nan")
+                extra_blend = extra_rec.get("blend_frac", float("nan")) if extra_rec else float("nan")
+
+                def _triplet_and_bar(col_start, data, model, sensor_hdr, label, sid, fwhm, zk_dev, blend_frac_val=float("nan")):
+                    if data is not None:
+                        vmax = float(np.nanpercentile(np.abs(data), 99)) or 1.0
+                        resid = data - model
+                        vmax_r = float(np.nanpercentile(np.abs(resid), 99)) or 1.0
+                        for ci, (img, cmap, vmin, vmx) in enumerate([
+                            (data,  _cmap_bwr, -vmax/10, vmax),
+                            (model, _cmap_bwr, -vmax/10, vmax),
+                            (resid, "bwr",    -vmax_r,  vmax_r),
+                        ]):
+                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
+                            lbl = sensor_hdr if ci == 0 else ""
+                            _draw_stamp(ax, img, cmap, vmin, vmx, label=lbl)
+                            if ci == 0 and sid is not None:
+                                ax.text(0.02, 0.98, f"id={sid}",
+                                        transform=ax.transAxes,
+                                        fontsize=4, color="k", va="top", ha="left",
+                                        bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6))
+                            if ci == 1 and not np.isnan(fwhm):
+                                ax.text(0.02, 0.98, f"blur={fwhm:.2f}arcsec",
+                                        transform=ax.transAxes,
+                                        fontsize=4, color="k", va="top", ha="left",
+                                        bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6))
+                            if ci == 2 and np.isfinite(blend_frac_val):
+                                ax.text(0.02, 0.98, f"blend={blend_frac_val:.3f}",
+                                        transform=ax.transAxes,
+                                        fontsize=4, color="k", va="top", ha="left",
+                                        bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6))
+                        ax_bar = fig.add_subplot(inner[row_idx, col_start + 3])
+                        _draw_bar(ax_bar, zk_dev, inset_label=label)
+                    else:
+                        for ci in range(4):
+                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
+                            ax.axis("off")
+                            if ci == 0 and sensor_hdr:
+                                ax.set_title(sensor_hdr, fontsize=5, pad=1)
+
+                _triplet_and_bar(0, intra_img, intra_mod, intra_hdr, intra_label, intra_sid, fwhm_i, zk_dev_i, intra_blend)
+                _triplet_and_bar(4, extra_img, extra_mod, extra_hdr, extra_label, extra_sid, fwhm_e, zk_dev_e, extra_blend)
+
+        proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
+        bt = butler_times or {}
+        butler_line = "  ".join(
+            f"{k}={v:.1f}s" for k, v in bt.items() if v > 0.0
+        ) or f"total={butler_elapsed:.1f}s"
+        fig.suptitle(
+            f"WF fits  visit={visit_str}  mode={wf_results[0]['mode']}\n"
+            f"butler.get:  {butler_line}\n"
+            f"refcat={refcat_elapsed:.1f}s  cutout={cutout_elapsed:.1f}s  "
+            f"danish={danish_elapsed:.1f}s  proc_total={proc_total:.1f}s",
+            fontsize=7,
+        )
+        fname = f"wf_diag_{visit_str}.png"
+        fig.savefig(fname, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        self.log.info("Saved WF diagnostic plot: %s", fname)
+
+    def _writeCatalog(self, donuts: list, wf_results: list, visit_str: str) -> None:
+        """Write a per-quantum ASDF catalog with one QTable row per donut.
+
+        Columns cover selection metrics, fit results, per-Noll Zernikes (µm),
+        and embedded stamp / model_img arrays. The ``group`` integer records
+        which donuts were fit together (shared value == same work-unit).
+        """
+        import asdf
+        import asdf_astropy  # noqa: F401 — registers astropy table serialisation
+        from astropy.table import QTable
+        import numpy as np
+
+        # Build lookup: source_id -> (donuts_out entry, group integer counter)
+        wf_by_id: dict = {}
+        for group_idx, r in enumerate(wf_results):
+            for wd in r.get("donuts", []):
+                wf_by_id[int(wd["donut_id"])] = (wd, group_idx)
+
+        _KNOWN_REASONS = ("snr", "inner_frac", "outer_frac", "SAT", "field_dist")
+
+        rows = []
+        for d in donuts:
+            sid = int(d["source_id"])
+            wd, grp = wf_by_id.get(sid, (None, -1))
+
+            zk_dev = wd["zk_dev"] if wd is not None else np.full(79, np.nan)
+            zk_int = wd["zk_intrinsic"] if wd is not None else None
+
+            reject_reasons = d.get("reject_reasons", [])
+            stamp = d["stamp"]
+
+            row = {
+                # --- identity ---
+                "visit_id": int(d["visit_id"]),
+                "det_id": int(d["det_id"]),
+                "sensor": str(d["sensor"]),
+                "source_id": sid,
+                "defocal": str(wd["defocal"]) if wd is not None else "",
+                "band": str(d["band"]),
+                # --- geometry ---
+                "centroid_x_raw": float(d["centroid_x_raw"]),
+                "centroid_y_raw": float(d["centroid_y_raw"]),
+                "fa_x_ccs": float(d["fa_x_ccs"]),
+                "fa_y_ccs": float(d["fa_y_ccs"]),
+                "field_dist_deg": float(np.degrees(np.hypot(d["fa_x_ccs"], d["fa_y_ccs"]))),
+                # --- selection metrics ---
+                "flux": float(d["flux"]),
+                "snr": float(d["snr"]),
+                "inner_frac": float(d["inner_frac"]),
+                "outer_frac": float(d["outer_frac"]),
+                "outer_sector_max": float(d["outer_sector_max"]),
+                "bkg_level": float(d["bkg_level"]),
+                "bkg_std": float(d["bkg_std"]),
+                "nearest_neighbor_dist_px": float(d["nearest_neighbor_dist_px"]),
+                "n_neighbors_in_stamp": int(d["n_neighbors_in_stamp"]),
+                "catalog_centroid_offset_px": float(d["catalog_centroid_offset_px"]),
+                "rejected_snr": bool("snr" in reject_reasons),
+                "rejected_inner_frac": bool("inner_frac" in reject_reasons),
+                "rejected_outer_frac": bool("outer_frac" in reject_reasons),
+                "rejected_sat": bool("SAT" in reject_reasons or d["saturated"]),
+                "rejected_field_dist": bool("field_dist" in reject_reasons),
+                "rejected_selector": bool(
+                    any(r not in _KNOWN_REASONS for r in reject_reasons)
+                ),
+                # --- fit results ---
+                "fit_mode": str(wd["fit_mode"]) if wd is not None else "",
+                "group": int(grp),
+                "group_size": int(wd["group_size"]) if wd is not None else 0,
+                "fit_success": bool(wd["fit_success"]) if wd is not None else False,
+                "fit_elapsed": float(wd["fit_elapsed"]) if wd is not None else float("nan"),
+                "fit_nfev": int(wd["fit_nfev"]) if wd is not None else 0,
+                "fit_cost": float(wd["fit_cost"]) if wd is not None else float("nan"),
+                "fit_dx": float(wd["fit_dx"]) if wd is not None else float("nan"),
+                "fit_dy": float(wd["fit_dy"]) if wd is not None else float("nan"),
+                "fit_flux": float(wd["fit_flux"]) if wd is not None else float("nan"),
+                "fit_fwhm": float(wd["fit_fwhm"]) if wd is not None else float("nan"),
+                "fit_bkg": float(wd["fit_bkg"]) if wd is not None else float("nan"),
+                "fit_residual_rms": float(wd["fit_residual_rms"]) if wd is not None else float("nan"),
+                "blend_frac": float(wd["blend_frac"]) if wd is not None else float("nan"),
+                "zk_norm_um": float(wd["zk_norm_um"]) if wd is not None else float("nan"),
+                # --- per-Noll Zernikes (µm), Noll 4–78 ---
+                **{f"Z{j}_dev": float(zk_dev[j]) * 1e6 if not np.isnan(zk_dev[j]) else float("nan")
+                   for j in range(4, 79)},
+                **{f"Z{j}_intrinsic": (
+                        float(zk_int[j]) * 1e6 if (zk_int is not None and not np.isnan(zk_int[j]))
+                        else float("nan")
+                   )
+                   for j in range(4, 79)},
+                # --- embedded arrays ---
+                "stamp": stamp,
+                "model_img": (
+                    wd["model_img"] if (wd is not None and wd.get("model_img") is not None)
+                    else np.full_like(stamp, np.nan)
+                ),
+            }
+            rows.append(row)
+
+        if not rows:
+            self.log.info("No donuts to catalog; skipping ASDF write.")
+            return
+
+        table = QTable(rows)
+        fname = f"donut_catalog_{visit_str}.asdf"
+        af = asdf.AsdfFile({"catalog": table})
+        af.write_to(fname)
+        self.log.info("Saved donut catalog: %s (%d rows)", fname, len(table))
