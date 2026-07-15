@@ -57,7 +57,7 @@ from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader, Subtract
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base import InputQuantizedConnection, OutputQuantizedConnection, QuantumContext
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
-from lsst.ts.wep.task.generateDonutCatalogUtils import donutCatalogToAstropy
+
 from lsst.ts.wep.utils import getTaskInstrument
 from lsst.utils.timer import timeMethod
 
@@ -191,8 +191,8 @@ def _measureFlux(
     flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
 
     for row, col in zip(peaks[:, 0], peaks[:, 1]):
-        rmin, rmax = row - half, row + half + 1
-        cmin, cmax = col - half, col + half + 1
+        rmin, rmax = int(round(row)) - half, int(round(row)) + half + 1
+        cmin, cmax = int(round(col)) - half, int(round(col)) + half + 1
 
         if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
             flux_list.append(np.nan)
@@ -385,7 +385,7 @@ def _refitWcsAndSelect(
 
     # --- Catalog-based selection from photo refcat ---
     t2 = time.perf_counter()
-    catalog_centroids = None  # (centroid_x, centroid_y, source_flux) arrays
+    catalog_centroids = None  # (centroid_x, centroid_y, source_ids) arrays or None
     cat_select_error = None
     sel_rejected_refcat = None
     sel_rejection_reasons = np.array([], dtype=object)
@@ -420,26 +420,11 @@ def _refitWcsAndSelect(
                 sel_rejected_refcat = refCat[~sel_mask]
                 sel_rejection_reasons = np.array(donutSelection.rejectionReasons)[~sel_mask]
 
-            filterList = list(astrom_cfg["catalogFilterList"])
-            if filterName not in filterList:
-                filterList.append(filterName)
-            sortFilterIdx = filterList.index(filterName)
-
-            catalog = donutCatalogToAstropy(
-                refSelection, filterList, blendCentersX, blendCentersY,
-                sortFilterIdx=sortFilterIdx,
-            )
-            if len(catalog) > 0:
-                # Mirror the flux sort donutCatalogToAstropy applies so source
-                # IDs stay aligned with the sorted centroid/flux arrays.
-                ref_flux = np.array(refSelection[f"{filterName}_flux"])
-                flux_sort = np.argsort(ref_flux)[::-1]
-                sorted_ids = np.array(refSelection["id"])[flux_sort]
+            if len(refSelection) > 0:
                 catalog_centroids = (
-                    np.array(catalog["centroid_x"]),
-                    np.array(catalog["centroid_y"]),
-                    np.array(catalog[f"{filterName}_flux"]),
-                    sorted_ids,
+                    np.array(refSelection["centroid_x"]),
+                    np.array(refSelection["centroid_y"]),
+                    np.array(refSelection["id"]),
                 )
 
             # Build full-refcat lookup arrays for overplotting (all photo-refcat sources
@@ -510,42 +495,41 @@ def _refitWcsAndSelect(
         except Exception:
             pass
 
+    # --- Resolve centroid list ---
     if catalog_centroids is not None:
-        centroid_x, centroid_y, flux_arr, source_ids = catalog_centroids
-        # Sort by flux descending, cap at maxDonuts
-        order = np.argsort(flux_arr)[::-1][:maxDonuts]
-        centroid_x = centroid_x[order]
-        centroid_y = centroid_y[order]
-        flux_arr = flux_arr[order]
-        source_ids = source_ids[order]
+        cat_cx, cat_cy, source_ids = catalog_centroids
     else:
-        # Fall back to blind detections; measure flux and apply quality cuts now.
         if len(blindDetections) == 0:
             return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
-        trimmedBBox = postIsr.getBBox().erodedBy(detect_cfg["edgeMargin"])
-        peaks = np.column_stack([
-            np.array(blindDetections["centroid_y"]) - trimmedBBox.getMinY(),
-            np.array(blindDetections["centroid_x"]) - trimmedBBox.getMinX(),
-        ])
-        measTable = _measureFlux(peaks, postIsr[trimmedBBox], donutRadius, obscuration)
-        validFlux = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
-        measTable = measTable[validFlux]
-        if len(measTable) == 0:
-            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
-        with np.errstate(invalid="ignore", divide="ignore"):
-            innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < detect_cfg["innerFracThreshold"]
-            outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < detect_cfg["outerFracThreshold"]
-        snrOk = measTable["snr"] > detect_cfg["snrThreshold"]
-        measTable = measTable[innerOk & outerOk & snrOk]
-        if len(measTable) == 0:
-            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
-        fluxArr = np.array(measTable["flux"])
-        order = np.argsort(fluxArr)[::-1][:maxDonuts]
-        # Translate centroids back to full-exposure coordinates.
-        centroid_x = measTable["centroid_x"][order] + trimmedBBox.getMinX()
-        centroid_y = measTable["centroid_y"][order] + trimmedBBox.getMinY()
-        flux_arr = fluxArr[order]
-        source_ids = np.arange(len(order), dtype=np.int64)
+        cat_cx = np.array(blindDetections["centroid_x"])
+        cat_cy = np.array(blindDetections["centroid_y"])
+        source_ids = np.arange(len(cat_cx), dtype=np.int64)
+
+    # --- Unified flux measurement and quality selection ---
+    # postIsr is already background-subtracted by _blindDetect; centroids are in
+    # full-exposure coordinates for both the catalog and fallback paths.
+    peaks = np.column_stack([cat_cy, cat_cx])
+    measTable = _measureFlux(peaks, postIsr, donutRadius, obscuration)
+    valid_mask = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
+    measTable = measTable[valid_mask]
+    source_ids = source_ids[valid_mask]
+    if len(measTable) == 0:
+        return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < detect_cfg["innerFracThreshold"]
+        outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < detect_cfg["outerFracThreshold"]
+    snrOk = measTable["snr"] > detect_cfg["snrThreshold"]
+    qual_mask = innerOk & outerOk & snrOk
+    measTable = measTable[qual_mask]
+    source_ids = source_ids[qual_mask]
+    if len(measTable) == 0:
+        return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
+    fluxArr = np.array(measTable["flux"])
+    order = np.argsort(fluxArr)[::-1][:maxDonuts]
+    centroid_x = np.array(measTable["centroid_x"])[order]
+    centroid_y = np.array(measTable["centroid_y"])[order]
+    flux_arr = fluxArr[order]
+    source_ids = source_ids[order]
 
     # Precompute annular masks for inner/outer flux measurement on postISR stamps.
     # These are the same geometry as _measureFlux but applied to the postISR image.
