@@ -235,14 +235,11 @@ def _blindDetect(
     """Subtract background and detect donuts via annular template cross-correlation.
 
     Runs `SubtractBackgroundTask` in-place on ``exposure``, erodes the border
-    by ``edgeMargin`` pixels, then calls `_detectPeaks` and `_measureFlux`.
-    Only non-finite/non-positive flux is rejected here; the SNR cut and
-    inner/outer fraction cuts are deferred to `_refitWcsAndSelect` so that
-    fainter sources are available for WCS fitting.
+    by ``edgeMargin`` pixels, then calls `_detectPeaks`.
 
-    Returns a QTable with columns ``centroid_x``, ``centroid_y``, ``flux``,
-    ``inner_flux``, ``outer_flux``, ``std``, ``snr`` in full-exposure pixel
-    coordinates, or an empty table if no sources survive.
+    Returns a QTable with columns ``centroid_x``, ``centroid_y`` in
+    full-exposure pixel coordinates, or an empty table if no peaks are found.
+    Flux measurement is deferred to `_refitWcsAndSelect`.
     """
     SubtractBackgroundTask(config=bkg_config).run(exposure=exposure)
 
@@ -258,28 +255,17 @@ def _blindDetect(
         detect_cfg["peakExcludeBorderFactor"],
     )
 
-    empty = QTable(
-        names=["centroid_x", "centroid_y", "flux", "inner_flux", "outer_flux", "std", "snr"],
-        dtype=[float] * 7,
-    )
+    empty = QTable(names=["centroid_x", "centroid_y"], dtype=[float, float])
 
     if len(peaks) == 0:
         return empty
 
-    measTable = _measureFlux(peaks, exposureTrim, donutRadius, obscuration)
-
-    validFlux = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
-    measTable = measTable[validFlux]
-
-    if len(measTable) == 0:
-        return empty
-
     xOffset = trimmedBBox.getMinX()
     yOffset = trimmedBBox.getMinY()
-    measTable["centroid_x"] = np.array(measTable["centroid_x"]) + xOffset
-    measTable["centroid_y"] = np.array(measTable["centroid_y"]) + yOffset
-
-    return measTable
+    return QTable({
+        "centroid_x": peaks[:, 1] + xOffset,
+        "centroid_y": peaks[:, 0] + yOffset,
+    })
 
 
 def _buildAfwSourceCat(blindDetections: QTable, wcs) -> afwTable.SourceCatalog:
@@ -533,20 +519,31 @@ def _refitWcsAndSelect(
         flux_arr = flux_arr[order]
         source_ids = source_ids[order]
     else:
-        # Fall back to blind detections; apply donut-quality cuts now.
+        # Fall back to blind detections; measure flux and apply quality cuts now.
         if len(blindDetections) == 0:
-            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0
+            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
+        trimmedBBox = postIsr.getBBox().erodedBy(detect_cfg["edgeMargin"])
+        peaks = np.column_stack([
+            np.array(blindDetections["centroid_y"]) - trimmedBBox.getMinY(),
+            np.array(blindDetections["centroid_x"]) - trimmedBBox.getMinX(),
+        ])
+        measTable = _measureFlux(peaks, postIsr[trimmedBBox], donutRadius, obscuration)
+        validFlux = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
+        measTable = measTable[validFlux]
+        if len(measTable) == 0:
+            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
         with np.errstate(invalid="ignore", divide="ignore"):
-            innerOk = np.abs(blindDetections["inner_flux"] / blindDetections["flux"]) < detect_cfg["innerFracThreshold"]
-            outerOk = np.abs(blindDetections["outer_flux"] / blindDetections["flux"]) < detect_cfg["outerFracThreshold"]
-        snrOk = blindDetections["snr"] > detect_cfg["snrThreshold"]
-        blindDetections = blindDetections[innerOk & outerOk & snrOk]
-        if len(blindDetections) == 0:
-            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0
-        fluxArr = np.array(blindDetections["flux"])
+            innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < detect_cfg["innerFracThreshold"]
+            outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < detect_cfg["outerFracThreshold"]
+        snrOk = measTable["snr"] > detect_cfg["snrThreshold"]
+        measTable = measTable[innerOk & outerOk & snrOk]
+        if len(measTable) == 0:
+            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
+        fluxArr = np.array(measTable["flux"])
         order = np.argsort(fluxArr)[::-1][:maxDonuts]
-        centroid_x = np.array(blindDetections["centroid_x"])[order]
-        centroid_y = np.array(blindDetections["centroid_y"])[order]
+        # Translate centroids back to full-exposure coordinates.
+        centroid_x = measTable["centroid_x"][order] + trimmedBBox.getMinX()
+        centroid_y = measTable["centroid_y"][order] + trimmedBBox.getMinY()
         flux_arr = fluxArr[order]
         source_ids = np.arange(len(order), dtype=np.int64)
 
