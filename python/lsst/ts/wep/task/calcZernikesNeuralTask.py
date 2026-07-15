@@ -344,15 +344,17 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         from tarts import NeuralActiveOpticsSys
 
         # TARTS system handles None paths by creating new models with random
-        # weights
+        # weights. Optional model paths must stay None (not expandvars) so
+        # tests can use random weights without PathLike errors.
+        def _expandOptionalPath(path: str | None) -> str | None:
+            return os.path.expandvars(path) if path is not None else None
+
         self.tarts = NeuralActiveOpticsSys(
             os.path.expandvars(self.config.datasetParamPath),
-            os.path.expandvars(self.config.wavenetPath),
-            os.path.expandvars(self.config.alignetPath),
-            os.path.expandvars(self.config.aggregatornetPath),
-            ood_model_path=(
-                os.path.expandvars(self.config.oodModelPath) if self.config.oodModelPath is not None else None
-            ),
+            _expandOptionalPath(self.config.wavenetPath),
+            _expandOptionalPath(self.config.alignetPath),
+            _expandOptionalPath(self.config.aggregatornetPath),
+            ood_model_path=_expandOptionalPath(self.config.oodModelPath),
         )
         if self.config.oodModelPath is not None:
             self.log.info(
@@ -822,7 +824,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             emptyTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
             # Add required metadata for empty table
             emptyTable.meta["detector"] = UNKNOWN_STRING
-            emptyTable.meta["camera"] = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
+            if exposure.metadata.exists("LSST BUTLER DATAID INSTRUMENT"):
+                emptyTable.meta["camera"] = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
+            else:
+                emptyTable.meta["camera"] = UNKNOWN_STRING
             emptyTable.meta["band"] = UNKNOWN_STRING
             try:
                 emptyTable = addVisitInfoToCatTable(exposure, emptyTable)
@@ -1135,7 +1140,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             - donutStampsNeural : astropy.table.QTable
                 Empty neural network-generated donut stamps collection.
             - zernikes : astropy.table.QTable
-                Empty Zernike coefficient table.
+                Zernike coefficient table with only the average row (NaNs),
+                matching the empty-table convention from CalcZernikesTask.
             - donutQualityTable : astropy.table.QTable
                 Either the provided quality table or an empty one.
 
@@ -1145,6 +1151,9 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         coefficients could be calculated. The quality table preserves
         information about why donuts failed, which can be useful for
         debugging.
+
+        After RSO-663, ``initZkTable()`` always includes an average row, so
+        the OOD column must have length 1 (a NaN sentinel) rather than ``[]``.
         """
         self.log.info("Producing empty results; quality table provided: %s", qualityTable is not None)
         if qualityTable is not None and len(qualityTable) > 0:
@@ -1184,7 +1193,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.stampsIntra = DonutStamps([], metadata=stampsMetadata if defocalType == "intra" else None)
         self.stampsExtra = DonutStamps([], metadata=stampsMetadata if defocalType == "extra" else None)
 
-        # Create empty Zernike table with metadata
+        # Create empty Zernike table with metadata. initZkTable() includes the
+        # average row (RSO-663), so OOD must be length-1 to match.
         emptyZkTable = self.initZkTable()
         emptyZkTable.meta = {
             "intra": {},
@@ -1195,8 +1205,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             "intrinsic_columns": [f"Z{j}_intrinsic" for j in self.nollIndices],
             "deviation_columns": [f"Z{j}_deviation" for j in self.nollIndices],
         }
-        # Add empty OOD score column
-        emptyZkTable["ood_score"] = []
+        emptyZkTable["used"][0] = False
+        emptyZkTable["ood_score"] = [np.nan]
 
         if exposure is None:
             emptyDonutTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
