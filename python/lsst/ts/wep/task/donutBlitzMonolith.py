@@ -27,6 +27,7 @@ __all__ = [
 
 import ast
 import contextlib
+import logging
 import multiprocessing as mp
 import signal
 import time
@@ -34,6 +35,7 @@ from typing import Any
 
 import batoid
 import danish
+import galsim
 import numpy as np
 from astropy.table import QTable
 from scipy.optimize import least_squares
@@ -52,13 +54,13 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.afw.cameraGeom import Camera, FIELD_ANGLE, PIXELS
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
-from lsst.ip.isr import IntrinsicZernikes, IsrTaskLSST
+from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import MagnitudeLimit, ReferenceObjectLoader, SubtractBackgroundTask
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base import InputQuantizedConnection, OutputQuantizedConnection, QuantumContext
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
-from lsst.ts.wep.utils import getTaskInstrument
+from lsst.ts.wep.utils import binArray, getTaskInstrument
 from lsst.utils.timer import timeMethod
 
 _CALIB_STORE: dict = {}  # populated in parent before fork; workers inherit via COW
@@ -235,11 +237,28 @@ def _blindDetect(
     """Subtract background and detect donuts via annular template cross-correlation.
 
     Runs `SubtractBackgroundTask` in-place on ``exposure``, erodes the border
-    by ``edgeMargin`` pixels, then calls `_detectPeaks`.
+    by ``edgeMargin`` pixels, then calls `_detectPeaks`.  Flux measurement is
+    deferred to `_cutStamps`.
 
-    Returns a QTable with columns ``centroid_x``, ``centroid_y`` in
-    full-exposure pixel coordinates, or an empty table if no peaks are found.
-    Flux measurement is deferred to `_refitWcsAndSelect`.
+    Parameters
+    ----------
+    exposure : Exposure
+        Science exposure; background is subtracted in-place.
+    detect_cfg : dict
+        Detection config keys: ``edgeMargin``, ``detectionBinning``,
+        ``peakMinDistanceFactor``, ``peakExcludeBorderFactor``.
+    bkg_config : Any
+        Config object for `SubtractBackgroundTask`.
+    donutRadius : float
+        Expected outer donut radius in pixels.
+    obscuration : float
+        Central obscuration fraction (inner radius / outer radius).
+
+    Returns
+    -------
+    QTable
+        Columns ``centroid_x``, ``centroid_y`` in full-exposure pixel
+        coordinates.  Empty table if no peaks are found.
     """
     SubtractBackgroundTask(config=bkg_config).run(exposure=exposure)
 
@@ -316,83 +335,131 @@ def _buildFakeExposure(
     return fake
 
 
-def _refitWcsAndSelect(
-    postIsr: Exposure,
+
+def _refitWcs(
     blindDetections: QTable,
+    postIsr: Exposure,
     astrom_cfg: dict,
-    sensor_name: str,
-    donutRadius: float,
-    obscuration: float,
-) -> list[dict]:
-    """Refit WCS using the pre-loaded astrometry refcat, then select donuts
-    from the pre-loaded photometry refcat and cut stamps.
+) -> tuple:
+    """Attempt to refit the WCS using the pre-loaded astrometry refcat.
 
-    The refcat spatial filtering is done in the parent before forking, so no
-    ReferenceObjectLoader is constructed here. The parent stores per-sensor
-    pipeBase.Struct(refCat, fluxField) objects in _CALIB_STORE["sensor_refcats"].
+    Parameters
+    ----------
+    blindDetections : QTable
+        Centroid table from `_blindDetect` (columns ``centroid_x``,
+        ``centroid_y``).
+    postIsr : Exposure
+        Post-ISR science exposure supplying the detector, WCS, and visit info.
+    astrom_cfg : dict
+        Astrometry config keys: ``minSourcesForWcsFit``, ``maxFitScatter``,
+        ``astrom_task_config``, ``astrom_ref_obj_loader``.
 
-    Falls back to blind-detect stamp cutting on any error.
+    Returns
+    -------
+    refitted_wcs : `lsst.afw.geom.SkyWcs` or None
+        Refitted WCS, or ``None`` if the fit was skipped, failed, or scatter
+        exceeded the threshold.  ``None`` signals callers to fall back to
+        blind detections and skip the photometry refcat.
+    scatter_arcsec : float or None
+        RMS on-sky scatter of the fit in arcseconds, or ``None`` when no fit
+        was attempted or an exception was raised.
+    error_str : str or None
+        Human-readable reason for failure, or ``None`` on success.
     """
-    detector = postIsr.getDetector()
     wcs = postIsr.getWcs()
+    detector = postIsr.getDetector()
+    sensor_name = detector.getName()
+    astrom_load_result = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name, {}).get("astrom")
+
+    if len(blindDetections) < astrom_cfg["minSourcesForWcsFit"] or astrom_load_result is None:
+        return None, None, None
+
     visitInfo = postIsr.getInfo().getVisitInfo()
     filterLabel = postIsr.getFilter()
-    band = postIsr.filter.bandLabel
-    visit_id = visitInfo.id
-    det_id = detector.getId()
-    n_quarter = detector.getOrientation().getNQuarter()
+    try:
+        astromTask = AstrometryTask(config=astrom_cfg["astrom_task_config"])
+        # Need a refObjLoader set even when passing load_result, for getMetadataBox later.
+        # Since load_result is passed, loadPixelBox is never called.
+        astromTask.setRefObjLoader(astrom_cfg["astrom_ref_obj_loader"])
+        afwCat = _buildAfwSourceCat(blindDetections, wcs)
+        fakeExp = _buildFakeExposure(detector, wcs, visitInfo, filterLabel)
+        astromResult = astromTask.solve(
+            exposure=fakeExp,
+            sourceCat=afwCat,
+            load_result=astrom_load_result,
+        )
+        scatter_arcsec = astromResult.scatterOnSky.asArcseconds()
+        if scatter_arcsec < astrom_cfg["maxFitScatter"]:
+            return fakeExp.getWcs(), scatter_arcsec, None
+        else:
+            return None, scatter_arcsec, f"scatter {scatter_arcsec:.2f}\" >= {astrom_cfg['maxFitScatter']}\""
+    except Exception as e:
+        return None, None, str(e)
 
-    detect_cfg = astrom_cfg["detect_cfg"]
-    stampSize = detect_cfg["stampSize"]
-    maxDonuts = detect_cfg["maxDonuts"]
-    maxFitScatter = astrom_cfg["maxFitScatter"]
 
+def _selectFromPhotoCat(
+    refitted_wcs,
+    postIsr: Exposure,
+    sensor_name: str,
+    astrom_cfg: dict,
+) -> tuple:
+    """Select donut positions from the pre-loaded photometry refcat.
+
+    Reprojects the refcat through ``refitted_wcs``, runs
+    `DonutSourceSelectorTask`, and builds diagnostic overlay arrays.  Only
+    executes the catalog path when ``refitted_wcs`` is not ``None``; otherwise
+    all outputs are ``None`` and the caller falls back to blind detections.
+
+    Parameters
+    ----------
+    refitted_wcs : `lsst.afw.geom.SkyWcs` or None
+        Refitted WCS from `_refitWcs`.  If ``None`` the function returns
+        immediately with all ``None`` outputs.
+    postIsr : Exposure
+        Post-ISR science exposure supplying the detector geometry.
+    sensor_name : str
+        Detector name used to look up the pre-loaded refcats in
+        ``_CALIB_STORE``.
+    astrom_cfg : dict
+        Config keys used here: ``doDonutSelection``, ``donut_selector_config``,
+        ``resolvedPhotoFilterName``, ``astromRefFilter``,
+        ``saveDiagnosticPlot``.
+
+    Returns
+    -------
+    catalog_centroids : tuple or None
+        ``(centroid_x, centroid_y, source_ids)`` arrays for selected sources,
+        or ``None`` if the catalog path was skipped or failed.
+    sel_rejected_centroids : tuple or None
+        ``(centroid_x, centroid_y, flux, source_ids, rejection_reasons)`` for
+        the brightest selector-rejected sources (for diagnostic display), or
+        ``None``.
+    all_photo_cat : tuple or None
+        ``(x, y, mag)`` arrays for the full photometry refcat projected through
+        ``refitted_wcs`` (for diagnostic overplotting), or ``None``.
+    all_astrom_cat : tuple or None
+        ``(x, y, mag)`` arrays for the full astrometry refcat projected through
+        ``refitted_wcs`` (for diagnostic overplotting), or ``None``.
+    error_str : str or None
+        Human-readable error from the catalog selection step, or ``None``.
+    """
     sensor_refcats = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name, {})
-    astrom_load_result = sensor_refcats.get("astrom")   # pipeBase.Struct(refCat, fluxField)
-    photo_load_result = sensor_refcats.get("photo")     # pipeBase.Struct(refCat, fluxField)
+    photo_load_result = sensor_refcats.get("photo")
+    astrom_load_result = sensor_refcats.get("astrom")
+    detector = postIsr.getDetector()
+    save_diag = astrom_cfg.get("saveDiagnosticPlot", True)
 
-    # --- WCS refit ---
-    t0 = time.perf_counter()
-    refitted_wcs = wcs
-    scatter_arcsec = None
-    wcs_refit_error = None
-    if len(blindDetections) >= astrom_cfg["minSourcesForWcsFit"] and astrom_load_result is not None:
-        try:
-            astromTask = AstrometryTask(config=astrom_cfg["astrom_task_config"])
-            # Need a refObjLoader set even when passing load_result, for getMetadataBox later.
-            # Use a no-op loader stub by setting a loader with the pre-loaded catalog;
-            # since load_result is passed, loadPixelBox is never called.
-            astromTask.setRefObjLoader(astrom_cfg["astrom_ref_obj_loader"])
-
-            afwCat = _buildAfwSourceCat(blindDetections, wcs)
-            fakeExp = _buildFakeExposure(detector, wcs, visitInfo, filterLabel)
-
-            astromResult = astromTask.solve(
-                exposure=fakeExp,
-                sourceCat=afwCat,
-                load_result=astrom_load_result,
-            )
-            scatter_arcsec = astromResult.scatterOnSky.asArcseconds()
-            if scatter_arcsec < maxFitScatter:
-                refitted_wcs = fakeExp.getWcs()
-            else:
-                wcs_refit_error = f"scatter {scatter_arcsec:.2f}\" >= {maxFitScatter}\""
-                refitted_wcs = None  # signal: fall back to blind detections
-        except Exception as e:
-            wcs_refit_error = str(e)
-            refitted_wcs = None  # signal: fall back to blind detections
-    t1 = time.perf_counter()
-
-    # --- Catalog-based selection from photo refcat ---
-    t2 = time.perf_counter()
-    catalog_centroids = None  # (centroid_x, centroid_y, source_ids) arrays or None
+    catalog_centroids = None
+    sel_rejected_centroids = None
+    all_photo_cat = None
+    all_astrom_cat = None
     cat_select_error = None
     sel_rejected_refcat = None
     sel_rejection_reasons = np.array([], dtype=object)
+    filterName = astrom_cfg.get("resolvedPhotoFilterName", "")
+
     if photo_load_result is not None and refitted_wcs is not None:
         try:
-            filterName = astrom_cfg["resolvedPhotoFilterName"]
-
             # Reproject catalog sky coords through the refitted WCS so stamp
             # centroids are consistent with the corrected pointing.
             refCat = photo_load_result.refCat.copy(deep=True)
@@ -408,15 +475,11 @@ def _refitWcsAndSelect(
 
             if donutSelectorTask is None:
                 refSelection = refCat
-                blendCentersX = [[]] * len(refCat)
-                blendCentersY = [[]] * len(refCat)
-                sel_rejected_refcat = refCat[np.zeros(len(refCat), dtype=bool)]  # empty
+                sel_rejected_refcat = refCat[np.zeros(len(refCat), dtype=bool)]
             else:
                 donutSelection = donutSelectorTask.run(refCat, detector, filterName)
                 sel_mask = np.array(donutSelection.selected, dtype=bool)
                 refSelection = refCat[sel_mask]
-                blendCentersX = donutSelection.blendCentersX
-                blendCentersY = donutSelection.blendCentersY
                 sel_rejected_refcat = refCat[~sel_mask]
                 sel_rejection_reasons = np.array(donutSelection.rejectionReasons)[~sel_mask]
 
@@ -427,94 +490,139 @@ def _refitWcsAndSelect(
                     np.array(refSelection["id"]),
                 )
 
-            # Build full-refcat lookup arrays for overplotting (all photo-refcat sources
-            # in bbox, including sources rejected by the donut selector).
-            if astrom_cfg.get("saveDiagnosticPlot", True):
+            if save_diag:
                 with np.errstate(invalid="ignore", divide="ignore"):
-                    _ps1_flux = np.array(refCat[f"{filterName}_flux"])
-                    _ps1_mag = -2.5 * np.log10(_ps1_flux) + 31.4
-                all_photo = (
+                    _flux = np.array(refCat[f"{filterName}_flux"])
+                    _mag = -2.5 * np.log10(_flux) + 31.4
+                all_photo_cat = (
                     np.array(refCat["centroid_x"]),
                     np.array(refCat["centroid_y"]),
-                    _ps1_mag,
+                    _mag,
                 )
-            else:
-                all_photo = None
         except Exception as e:
             cat_select_error = str(e)
             catalog_centroids = None
-            all_photo = None
-    else:
-        all_photo = None
+            all_photo_cat = None
 
-    # Build astrom-refcat lookup arrays for overplotting (centroids via refitted WCS).
-    if astrom_load_result is not None and astrom_cfg.get("saveDiagnosticPlot", True):
+    # Selector-rejected sources: top REJECTED_CANDIDATES by flux for display.
+    REJECTED_CANDIDATES = 20
+    if save_diag and sel_rejected_refcat is not None and len(sel_rejected_refcat) > 0:
+        try:
+            _rrej_flux = np.array(sel_rejected_refcat[f"{filterName}_flux"])
+            _rrej_order = np.argsort(_rrej_flux)[::-1][:REJECTED_CANDIDATES]
+            sel_rejected_centroids = (
+                np.array(sel_rejected_refcat["centroid_x"])[_rrej_order],
+                np.array(sel_rejected_refcat["centroid_y"])[_rrej_order],
+                _rrej_flux[_rrej_order],
+                np.array(sel_rejected_refcat["id"])[_rrej_order],
+                sel_rejection_reasons[_rrej_order],
+            )
+        except Exception:
+            pass
+
+    # Astrometry refcat overlay (centroids via refitted WCS).
+    if astrom_load_result is not None and save_diag and refitted_wcs is not None:
         try:
             _astrom_cat = astrom_load_result.refCat.copy(deep=True)
             afwTable.updateRefCentroids(refitted_wcs, _astrom_cat)
-            _astrom_flux_field = f"{astrom_cfg['astromRefFilter']}_flux"
+            _flux_field = f"{astrom_cfg['astromRefFilter']}_flux"
             with np.errstate(invalid="ignore", divide="ignore"):
-                _astrom_flux = np.array(_astrom_cat[_astrom_flux_field])
-                _astrom_mag = -2.5 * np.log10(_astrom_flux) + 31.4
-            all_astrom = (
+                _astrom_mag = -2.5 * np.log10(np.array(_astrom_cat[_flux_field])) + 31.4
+            all_astrom_cat = (
                 np.array(_astrom_cat["centroid_x"]),
                 np.array(_astrom_cat["centroid_y"]),
                 _astrom_mag,
             )
         except Exception:
-            all_astrom = None
-    else:
-        all_astrom = None
-    t3 = time.perf_counter()
-
-    t_stamp0 = time.perf_counter()
-    # --- Stamp cutting ---
-    arr = postIsr.image.array
-    mask_arr = postIsr.mask.array
-    sat_bit = postIsr.mask.getPlaneBitMask("SAT")
-    half = stampSize // 2
-
-    # Selector-rejected photo-refcat sources: cut stamps for up to 2 brightest for display.
-    # Only needed when the diagnostic plot is enabled.
-    REJECTED_DISP = 2
-    REJECTED_CANDIDATES = 20  # oversample before stamp cutting to fill REJECTED_DISP slots
-    sel_rejected_centroids = None  # (centroid_x, centroid_y, flux_arr, source_ids, reasons)
-    if astrom_cfg.get("saveDiagnosticPlot", True) and sel_rejected_refcat is not None:
-        try:
-            _rrej = sel_rejected_refcat
-            if len(_rrej) > 0:
-                _rrej_flux = np.array(_rrej[f"{filterName}_flux"])
-                _rrej_order = np.argsort(_rrej_flux)[::-1][:REJECTED_CANDIDATES]
-                sel_rejected_centroids = (
-                    np.array(_rrej["centroid_x"])[_rrej_order],
-                    np.array(_rrej["centroid_y"])[_rrej_order],
-                    _rrej_flux[_rrej_order],
-                    np.array(_rrej["id"])[_rrej_order],
-                    sel_rejection_reasons[_rrej_order],
-                )
-        except Exception:
             pass
+
+    return catalog_centroids, sel_rejected_centroids, all_photo_cat, all_astrom_cat, cat_select_error
+
+
+def _cutStamps(
+    postIsr: Exposure,
+    sensor_name: str,
+    blindDetections: QTable,
+    catalog_centroids: tuple | None,
+    sel_rejected_centroids: tuple | None,
+    all_photo_cat: tuple | None,
+    all_astrom_cat: tuple | None,
+    astrom_cfg: dict,
+    donutRadius: float,
+    obscuration: float,
+) -> tuple:
+    """Measure image fluxes, apply quality cuts, and cut postISR stamps.
+
+    Uses ``catalog_centroids`` (refcat path) when available; falls back to
+    ``blindDetections`` otherwise.  Calls `_measureFlux` once on the full
+    ``postIsr`` image, then filters on SAT mask, inner/outer flux fraction,
+    and SNR before cutting stamps.
+
+    Parameters
+    ----------
+    postIsr : Exposure
+        Background-subtracted post-ISR science exposure.
+    sensor_name : str
+        Detector name, stored in each output donut dict.
+    blindDetections : QTable
+        Centroid table from `_blindDetect`.  Used as fallback when
+        ``catalog_centroids`` is ``None``.
+    catalog_centroids : tuple or None
+        ``(centroid_x, centroid_y, source_ids)`` from `_selectFromPhotoCat`,
+        or ``None`` to trigger the blind-detection fallback.
+    sel_rejected_centroids : tuple or None
+        Selector-rejected sources from `_selectFromPhotoCat`, passed through
+        to the rejected-stamp diagnostic display.
+    all_photo_cat : tuple or None
+        ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
+    all_astrom_cat : tuple or None
+        ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
+    astrom_cfg : dict
+        Config dict supplying ``detect_cfg`` (``maxDonuts``, ``stampSize``,
+        ``minStampSnr``, ``innerFluxFractionCut``, ``outerFluxFractionCut``,
+        ``edgeMargin``) and SAT-mask lookup.
+    donutRadius : float
+        Expected outer donut radius in pixels.
+    obscuration : float
+        Central obscuration fraction (inner radius / outer radius).
+
+    Returns
+    -------
+    donuts : list of dict
+        Accepted donut stamp dicts, sorted brightest-first and capped at
+        ``maxDonuts``.
+    rejected_donuts : list of dict
+        Rejected donut stamp dicts for diagnostic display (SAT, flux-fraction,
+        SNR, and selector-rejected sources), capped at a small fixed limit.
+    """
+    detect_cfg = astrom_cfg["detect_cfg"]
+    maxDonuts = detect_cfg["maxDonuts"]
+    detector = postIsr.getDetector()
+    band = postIsr.filter.bandLabel
+    visit_id = postIsr.getInfo().getVisitInfo().id
+    det_id = detector.getId()
+    n_quarter = detector.getOrientation().getNQuarter()
+    stampSize = detect_cfg["stampSize"]
+    half = stampSize // 2
 
     # --- Resolve centroid list ---
     if catalog_centroids is not None:
         cat_cx, cat_cy, source_ids = catalog_centroids
     else:
         if len(blindDetections) == 0:
-            return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
+            return [], []
         cat_cx = np.array(blindDetections["centroid_x"])
         cat_cy = np.array(blindDetections["centroid_y"])
         source_ids = np.arange(len(cat_cx), dtype=np.int64)
 
-    # --- Unified flux measurement and quality selection ---
-    # postIsr is already background-subtracted by _blindDetect; centroids are in
-    # full-exposure coordinates for both the catalog and fallback paths.
+    # --- Flux measurement and quality selection ---
     peaks = np.column_stack([cat_cy, cat_cx])
     measTable = _measureFlux(peaks, postIsr, donutRadius, obscuration)
     valid_mask = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
     measTable = measTable[valid_mask]
     source_ids = source_ids[valid_mask]
     if len(measTable) == 0:
-        return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
+        return [], []
     with np.errstate(invalid="ignore", divide="ignore"):
         innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < detect_cfg["innerFracThreshold"]
         outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < detect_cfg["outerFracThreshold"]
@@ -523,7 +631,7 @@ def _refitWcsAndSelect(
     measTable = measTable[qual_mask]
     source_ids = source_ids[qual_mask]
     if len(measTable) == 0:
-        return [], [], scatter_arcsec, t1 - t0, t3 - t2, 0.0, wcs_refit_error, cat_select_error, 0, 0
+        return [], []
     fluxArr = np.array(measTable["flux"])
     order = np.argsort(fluxArr)[::-1][:maxDonuts]
     centroid_x = np.array(measTable["centroid_x"])[order]
@@ -531,17 +639,19 @@ def _refitWcsAndSelect(
     flux_arr = fluxArr[order]
     source_ids = source_ids[order]
 
-    # Precompute annular masks for inner/outer flux measurement on postISR stamps.
-    # These are the same geometry as _measureFlux but applied to the postISR image.
+    # --- Precompute annular masks ---
+    arr = postIsr.image.array
+    mask_arr = postIsr.mask.array
+    sat_bit = postIsr.mask.getPlaneBitMask("SAT")
+
     _mhalf = int(donutRadius * 1.4)
     _gy, _gx = np.mgrid[-_mhalf:_mhalf + 1, -_mhalf:_mhalf + 1]
     _r = np.hypot(_gx, _gy)
     _main_mask = (_r < donutRadius * 1.05) & (_r > donutRadius * obscuration)
     _inner_mask = _r < donutRadius * obscuration * 0.67
     _outer_mask = (_r > donutRadius * 1.25) & (_r < donutRadius * 1.4)
-    _sector_angle = np.arctan2(_gy, _gx)  # used for 8-sector outer-flux statistic
+    _sector_angle = np.arctan2(_gy, _gx)
 
-    # Stamp-sized annular masks for SNR (constant per sensor, hoisted out of loop).
     _sgy, _sgx = np.mgrid[-half:half, -half:half]
     _sr = np.hypot(_sgx, _sgy)
     _s_main = (_sr < donutRadius * 1.05) & (_sr > donutRadius * obscuration)
@@ -605,10 +715,8 @@ def _refitWcsAndSelect(
         if reject_reason is None and _field_dist_deg > detect_cfg["maxFieldDist"]:
             return None
 
-        _nearby_photo_list = _nearby(all_photo)
+        _nearby_photo_list = _nearby(all_photo_cat)
         _neighbor_dists = [np.hypot(dx, dy) for dx, dy, _ in _nearby_photo_list]
-        _nearest_neighbor_dist_px = float(min(_neighbor_dists)) if _neighbor_dists else float("nan")
-        _n_neighbors_in_stamp = len(_neighbor_dists)
 
         _catalog_centroid_offset_px = (
             float(np.hypot(cx_f - blind_cx, cy_f - blind_cy))
@@ -636,12 +744,12 @@ def _refitWcsAndSelect(
             snr=stamp_snr,
             bkg_level=_s_bkg_med,
             bkg_std=_s_bkg_std,
-            nearest_neighbor_dist_px=_nearest_neighbor_dist_px,
-            n_neighbors_in_stamp=_n_neighbors_in_stamp,
+            nearest_neighbor_dist_px=float(min(_neighbor_dists)) if _neighbor_dists else float("nan"),
+            n_neighbors_in_stamp=len(_neighbor_dists),
             catalog_centroid_offset_px=_catalog_centroid_offset_px,
             n_quarter=n_quarter,
             nearby_photo=_nearby_photo_list,
-            nearby_astrom=_nearby(all_astrom),
+            nearby_astrom=_nearby(all_astrom_cat),
             reject_reasons=[reject_reason] if reject_reason else [],
             saturated=saturated,
         )
@@ -649,25 +757,21 @@ def _refitWcsAndSelect(
     inner_thr = detect_cfg["innerFracThreshold"]
     outer_thr = detect_cfg["outerFracThreshold"]
 
-    # Match each catalog centroid to the closest blind detection within half a donut radius.
-    # Used to compute catalog_centroid_offset_px per stamp.
-    _blind_match_cx = np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
-    _blind_match_cy = np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
+    # Match each centroid to the nearest blind detection for catalog_centroid_offset_px.
+    _blind_cx = np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
+    _blind_cy = np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
     _match_tol = donutRadius * 0.5
 
-    def _blind_centroid_for(cx_f, cy_f):
-        if len(_blind_match_cx) == 0:
+    def _nearest_blind(cx_f, cy_f):
+        if len(_blind_cx) == 0:
             return None, None
-        dists = np.hypot(_blind_match_cx - cx_f, _blind_match_cy - cy_f)
+        dists = np.hypot(_blind_cx - cx_f, _blind_cy - cy_f)
         idx = int(np.argmin(dists))
-        if dists[idx] <= _match_tol:
-            return float(_blind_match_cx[idx]), float(_blind_match_cy[idx])
-        return None, None
+        return (float(_blind_cx[idx]), float(_blind_cy[idx])) if dists[idx] <= _match_tol else (None, None)
 
+    # --- Accepted-stamp loop ---
     donuts = []
-    rejected_donuts_pre = []  # flux_frac rejects collected during accepted-stamp loop
-    sat_rejected = 0
-    flux_frac_rejected = 0
+    rejected_donuts_pre = []
     for i, (cx_f, cy_f) in enumerate(zip(centroid_x, centroid_y)):
         cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
         rmin, rmax = cy - half, cy + half
@@ -675,9 +779,8 @@ def _refitWcsAndSelect(
         if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
             continue
         if np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit):
-            sat_rejected += 1
             continue
-        _b_cx, _b_cy = _blind_centroid_for(cx_f, cy_f)
+        _b_cx, _b_cy = _nearest_blind(cx_f, cy_f)
         d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i], blind_cx=_b_cx, blind_cy=_b_cy)
         if d is None:
             continue
@@ -688,13 +791,12 @@ def _refitWcsAndSelect(
         if np.isfinite(d["snr"]) and d["snr"] < detect_cfg["minStampSnr"]:
             d["reject_reasons"].append("snr")
         if d["reject_reasons"]:
-            flux_frac_rejected += 1
             rejected_donuts_pre.append(d)
             continue
         donuts.append(d)
 
-    # Rejected donuts for display: flux_frac-rejected + SAT-rejected +
-    # selector-rejected PS1 sources, all sorted bright-to-faint, capped at REJECTED_DISP.
+    # --- Rejected-stamp loop (SAT + selector-rejected, for display only) ---
+    REJECTED_DISP = 2
     rejected_donuts = list(rejected_donuts_pre)
     for i, (cx_f, cy_f) in enumerate(zip(centroid_x, centroid_y)):
         cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
@@ -724,13 +826,10 @@ def _refitWcsAndSelect(
                 if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
                     d["reject_reasons"].append("outer_frac")
                 rejected_donuts.append(d)
-    # Sort all rejected bright-to-faint, keep top REJECTED_DISP.
     rejected_donuts.sort(key=lambda d: d["flux"], reverse=True)
     rejected_donuts = rejected_donuts[:REJECTED_DISP]
 
-    t_stamp1 = time.perf_counter()
-    return donuts, rejected_donuts, scatter_arcsec, t1 - t0, t3 - t2, t_stamp1 - t_stamp0, wcs_refit_error, cat_select_error, sat_rejected, flux_frac_rejected
-
+    return donuts, rejected_donuts
 
 def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     """Run ISR, blind detection, WCS refit, catalog selection, and stamp cutting."""
@@ -767,22 +866,31 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
             "catalog_select_run": 0.0, "stamp_cut_run": 0.0,
             "rejected_catalog": [], "scatter_arcsec": None,
             "wcs_refit_error": None, "cat_select_error": None,
-            "sat_rejected": 0, "flux_frac_rejected": 0,
         }
 
+    astrom_cfg = _CALIB_STORE["astrom_cfg"]
+    obscuration = instrument.obscuration
+
     blindDetections = _blindDetect(
-        postIsr, detect_cfg, bkg_config, donutRadius, instrument.obscuration,
+        postIsr, detect_cfg, bkg_config, donutRadius, obscuration,
     )
     t3 = time.perf_counter()
 
-    donuts, rejected_donuts, scatter_arcsec, t_wcs, t_select, t_stamp_cut, wcs_err, cat_err, sat_rejected, flux_frac_rejected = _refitWcsAndSelect(
-        postIsr,
-        blindDetections,
-        _CALIB_STORE["astrom_cfg"],
-        sensor_name,
-        donutRadius,
-        instrument.obscuration,
+    refitted_wcs, scatter_arcsec, wcs_err = _refitWcs(blindDetections, postIsr, astrom_cfg)
+    t4 = time.perf_counter()
+
+    catalog_centroids, sel_rejected_centroids, all_photo_cat, all_astrom_cat, cat_err = _selectFromPhotoCat(
+        refitted_wcs, postIsr, sensor_name, astrom_cfg,
     )
+    t5 = time.perf_counter()
+
+    donuts, rejected_donuts = _cutStamps(
+        postIsr, sensor_name, blindDetections,
+        catalog_centroids, sel_rejected_centroids, all_photo_cat, all_astrom_cat,
+        astrom_cfg, donutRadius, obscuration,
+    )
+    t6 = time.perf_counter()
+
     return {
         "sensor": sensor_name,
         "catalog": donuts,
@@ -790,15 +898,13 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         "task_init": t1 - t0,
         "isr_run": t2 - t1,
         "blind_detect_run": t3 - t2,
-        "wcs_refit_run": t_wcs,
-        "catalog_select_run": t_select,
-        "stamp_cut_run": t_stamp_cut,
+        "wcs_refit_run": t4 - t3,
+        "catalog_select_run": t5 - t4,
+        "stamp_cut_run": t6 - t5,
         "rejected_catalog": rejected_donuts,
         "scatter_arcsec": scatter_arcsec,
         "wcs_refit_error": wcs_err,
         "cat_select_error": cat_err,
-        "sat_rejected": sat_rejected,
-        "flux_frac_rejected": flux_frac_rejected,
     }
 
 
@@ -988,7 +1094,6 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
 
     img = donut["stamp"].astype(float)
     if binning > 1:
-        from lsst.ts.wep.utils import binArray
         img = binArray(img, binning)
     if img.shape[0] % 2 == 0:
         img = img[:-1, :-1]
@@ -1031,10 +1136,11 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
     return img, angle_rad, zk_ref, bkg_std**2, bkg_std
 
 
+_log = logging.getLogger(__name__)
+
+
 def _wf_paired_worker(args: tuple) -> dict:
     """Fit a jointly-modeled intra/extra donut pair with DZMultiDonutModel."""
-    import logging
-    _log = logging.getLogger(__name__)
     donut_extra, donut_intra = args
     wf_cfg = _CALIB_STORE["wf_cfg"]
     nollIndices = wf_cfg["nollIndices"]
@@ -1100,7 +1206,6 @@ def _wf_paired_worker(args: tuple) -> dict:
                 donut_extra["source_id"], donut_intra["source_id"], elapsed, exc,
             )
     else:
-        import galsim
         galsim.errors.raise_fft_size_error = True
         try:
             with _fit_timeout(timeout):
@@ -1190,8 +1295,6 @@ def _wf_paired_worker(args: tuple) -> dict:
 
 def _wf_unpaired_worker(donut: dict) -> dict:
     """Fit a single donut with SingleDonutModel."""
-    import logging
-    _log = logging.getLogger(__name__)
     wf_cfg = _CALIB_STORE["wf_cfg"]
     nollIndices = wf_cfg["nollIndices"]
     detect_cfg = _CALIB_STORE["detect_cfg"]
@@ -1245,7 +1348,6 @@ def _wf_unpaired_worker(donut: dict) -> dict:
                 donut["source_id"], elapsed, exc,
             )
     else:
-        import galsim
         galsim.errors.raise_fft_size_error = True
         try:
             with _fit_timeout(timeout):
@@ -1323,8 +1425,6 @@ def _wf_unpaired_worker(donut: dict) -> dict:
 
 def _wf_full_corner_worker(args: tuple) -> dict:
     """Fit all donuts in a corner jointly with DZMultiDonutModel."""
-    import logging
-    _log = logging.getLogger(__name__)
     corner_name, donuts_extra, donuts_intra = args
     wf_cfg = _CALIB_STORE["wf_cfg"]
     nollIndices = wf_cfg["nollIndices"]
@@ -1402,7 +1502,6 @@ def _wf_full_corner_worker(args: tuple) -> dict:
                 corner_name, n, elapsed, exc,
             )
     else:
-        import galsim
         galsim.errors.raise_fft_size_error = True
         try:
             with _fit_timeout(timeout):
@@ -1488,8 +1587,6 @@ def _wf_full_corner_worker(args: tuple) -> dict:
 
 def _wf_full_detector_worker(args: tuple) -> dict:
     """Fit all donuts on a single CWFS sensor jointly with DZMultiDonutModel."""
-    import logging
-    _log = logging.getLogger(__name__)
     sensor_name, all_donuts = args
     wf_cfg = _CALIB_STORE["wf_cfg"]
     nollIndices = wf_cfg["nollIndices"]
@@ -1566,7 +1663,6 @@ def _wf_full_detector_worker(args: tuple) -> dict:
                 sensor_name, n, elapsed, exc,
             )
     else:
-        import galsim
         galsim.errors.raise_fft_size_error = True
         try:
             with _fit_timeout(timeout):
@@ -2443,7 +2539,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         visit_str = "_".join(str(v) for v in sorted(visit_ids))
 
         if self.config.saveDiagnosticPlot:
-            self._saveDiagnosticPlots(
+            self._saveDonutDiagnosticPlot(
                 results,
                 run_elapsed=t_plot0 - t_run0,
                 refcat_elapsed=t_refcat_elapsed,
@@ -2467,7 +2563,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             self._writeCatalog(donuts, wf_results, visit_str)
         return pipeBase.Struct(donuts=donuts, wf_results=wf_results)
 
-    def _saveDiagnosticPlots(self, results: list, run_elapsed: float = 0.0,
+    def _saveDonutDiagnosticPlot(self, results: list, run_elapsed: float = 0.0,
                              refcat_elapsed: float = 0.0, butler_elapsed: float = 0.0,
                              photo_filter_name: str = "photo", astrom_filter_name: str = "astrom") -> None:
         """Save a single diagnostic PNG with one section per sensor.
@@ -2992,8 +3088,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         """
         import asdf
         import asdf_astropy  # noqa: F401 — registers astropy table serialisation
-        from astropy.table import QTable
-        import numpy as np
 
         # Build lookup: (source_id, sensor) -> (donuts_out entry, group integer counter).
         # Keying on source_id alone would collide when the same refcat star appears on
