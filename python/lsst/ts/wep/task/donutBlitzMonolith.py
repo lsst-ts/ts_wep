@@ -832,7 +832,30 @@ def _cutStamps(
     return donuts, rejected_donuts
 
 def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
-    """Run ISR, blind detection, WCS refit, catalog selection, and stamp cutting."""
+    """Run ISR, blind detection, WCS refit, catalog selection, and stamp cutting.
+
+    Orchestrates the full per-sensor cutout pipeline in a worker process.
+    All inputs are read from the module-level ``_CALIB_STORE`` dict, which is
+    populated by the parent process before forking.
+
+    Parameters
+    ----------
+    sensor_name : str
+        Detector name; used to look up per-sensor calibrations in
+        ``_CALIB_STORE``.
+    t_dispatch : float
+        ``time.time()`` timestamp at which the task was dispatched from the
+        parent, used to measure dispatch-to-arrival latency.
+
+    Returns
+    -------
+    dict
+        Keys: ``sensor``, ``catalog`` (accepted donut dicts),
+        ``rejected_catalog``, ``scatter_arcsec``, ``wcs_refit_error``,
+        ``cat_select_error``, and timing floats ``dispatch_to_arrival``,
+        ``task_init``, ``isr_run``, ``blind_detect_run``, ``wcs_refit_run``,
+        ``catalog_select_run``, ``stamp_cut_run``.
+    """
     t_arrival = time.time()
     entry = _CALIB_STORE[sensor_name]
 
@@ -1079,13 +1102,36 @@ def _build_wf_factory(instrument):
 def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
     """Prepare a donut dict for Danish fitting.
 
-    Returns (img, angle_rad, zk_ref, bkg_var) where:
-    - img: (npix, npix) float array (background-subtracted by ISR pipeline), npix odd
-    - angle_rad: [fa_x_ccs, fa_y_ccs] in radians
-    - zk_ref: reference Zernikes in meters, shape (79,), Noll 0-78:
-              zk_ref = W_TA_defoc + (W_meas - zk_opd_foc)  for calibrated indices
-              zk_ref = W_TA_defoc                           for uncalibrated indices
-    - bkg_var: background variance estimate (bkg_std**2) from pixel-difference MAD
+    Bins and crops the stamp to an odd pixel size, estimates background noise,
+    computes the reference Zernike array ``zk_ref`` from ``batoid.zernikeTA``
+    (with optional measured-intrinsics correction), and extracts the field
+    angle.
+
+    Parameters
+    ----------
+    donut : dict
+        Donut record with keys: ``stamp`` (2-D array), ``det_id``, ``band``,
+        ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and optionally
+        ``intrinsic_zk`` (µm, Noll 4–78).
+    instrument : object
+        Instrument config object providing ``focalLength``, ``defocalOffset``,
+        ``donutRadius``, and ``obscuration``.
+
+    Returns
+    -------
+    img : np.ndarray
+        ``(npix, npix)`` float stamp, binned and cropped to odd size.
+    angle_rad : np.ndarray
+        ``[fa_x_ccs, fa_y_ccs]`` field angle in radians.
+    zk_ref : np.ndarray
+        Reference Zernike array in metres, shape ``(79,)``, Noll-indexed.
+        Equals ``W_TA_defoc`` at uncalibrated indices and
+        ``W_TA_defoc + (W_meas - zk_opd_foc)`` at calibrated indices.
+    bkg_var : float
+        Background variance estimate (``bkg_std ** 2``) from pixel-difference
+        MAD of the stamp.
+    bkg_std : float
+        Background standard deviation estimate.
     """
     wf_cfg = _CALIB_STORE["wf_cfg"]
     binning = wf_cfg["binning"]
