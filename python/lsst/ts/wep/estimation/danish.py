@@ -260,6 +260,45 @@ class DanishAlgorithm(WfAlgorithm):
         zkRef = offAxisCoeff.copy()
         zkRef[nollIndices] += zkStart
 
+        # Prepare the image array and background noise estimate
+        img, backgroundStd = self.prepImage(image, zkStart, instrument)
+
+        # Convert field angle from degrees to radians
+        angle = np.deg2rad(image.fieldAngle)
+
+        return img, angle, zkRef, backgroundStd
+
+    def prepImage(
+        self,
+        image: Image,
+        zkStart: np.ndarray,
+        instrument: Instrument,
+    ) -> tuple[np.ndarray, float]:
+        """Prepare a donut stamp image for danish.
+
+        This creates the background mask if needed, estimates the background
+        noise, subtracts the median background, applies binning, and trims the
+        image to an odd size. It is useful both for fitting and for preparing
+        donut stamps for plotting.
+
+        Parameters
+        ----------
+        image : Image
+            The ts_wep image of the donut stamp. Note the image array is
+            modified in place by subtracting the median background.
+        zkStart : np.ndarray
+            The starting point for the Zernikes, used to create the background
+            mask if one does not already exist.
+        instrument : Instrument
+            The ts_wep Instrument.
+
+        Returns
+        -------
+        np.ndarray
+            The prepared image array.
+        float
+            The robust estimate of the background noise standard deviation.
+        """
         # Create the background mask if it does not exist
         if image.maskBackground is None:
             mapper = ImageMapper(instrument, "offAxis")
@@ -293,10 +332,7 @@ class DanishAlgorithm(WfAlgorithm):
         if img.shape[0] % 2 == 0:
             img = img[:-1, :-1]
 
-        # Convert field angle from degrees to radians
-        angle = np.deg2rad(image.fieldAngle)
-
-        return img, angle, zkRef, backgroundStd
+        return img, backgroundStd
 
     def _estimateSingleZk(
         self,
