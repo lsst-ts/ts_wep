@@ -1184,6 +1184,106 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
 
 _log = logging.getLogger(__name__)
 
+_DZ_MODEL_KEYS = ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")
+
+
+def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_cfg, label):
+    """Run a DZMultiDonutModel least-squares fit and return results uniformly.
+
+    Handles the ``wfInitialGuessOnly`` path, SIGALRM timeout, and all exception
+    cases so each worker only needs to build the model and call this helper.
+
+    Parameters
+    ----------
+    model : danish.DZMultiDonutModel
+        Fully-constructed model ready to call ``.chi``, ``.jac``, ``.model``.
+    x0 : np.ndarray
+        Initial parameter vector from ``model.pack_params``.
+    bounds : list
+        Two-element ``[lower, upper]`` bound lists from ``model.pack_params``.
+    imgs : list of np.ndarray
+        Donut image stamps, one per model donut.
+    variances : list of np.ndarray
+        Per-pixel variance arrays aligned with ``imgs``.
+    timeout : float
+        SIGALRM timeout in seconds.
+    wf_cfg : dict
+        WF config dict supplying ``wfInitialGuessOnly``, ``lstsqKwargs``,
+        ``nollIndices``.
+    label : str
+        Short description used in log messages (e.g. ``"paired extra=3 intra=7"``).
+
+    Returns
+    -------
+    zk_dev : np.ndarray
+        Fitted deviation Zernikes aligned to ``nollIndices`` (NaN on failure).
+    params : dict or None
+        Unpacked model parameters, or ``None`` on failure.
+    model_imgs : list or None
+        Model images from ``model.model(...)``, or ``None`` on failure.
+    success : bool
+        ``True`` if the fit converged without error or timeout.
+    fit_info : dict
+        Timing, convergence, and parameter summary.
+    """
+    nollIndices = wf_cfg["nollIndices"]
+    t0 = time.perf_counter()
+    params = None
+    if wf_cfg["wfInitialGuessOnly"]:
+        try:
+            params = model.unpack_params(x0)
+            zk_dev = np.zeros(len(nollIndices))
+            model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
+            elapsed = time.perf_counter() - t0
+            success = True
+            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
+                            optimality=float("nan"), njev=0, status=0, message="x0 only",
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info("WF %s (x0 only)", label)
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
+    else:
+        galsim.errors.raise_fft_size_error = True
+        try:
+            with _fit_timeout(timeout):
+                result = least_squares(
+                    model.chi, jac=model.jac, x0=x0,
+                    args=(imgs, variances), bounds=bounds,
+                    **wf_cfg["lstsqKwargs"],
+                )
+            elapsed = time.perf_counter() - t0
+            params = model.unpack_params(result.x)
+            zk_dev = np.array(params["wavefront_params"])
+            model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
+            success = bool(result.success)
+            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
+                            optimality=float(result.optimality), njev=int(result.njev),
+                            status=int(result.status), message=str(result.message),
+                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
+                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
+            _log.info("WF %s success=%s nfev=%d elapsed=%.1fs", label, success, result.nfev, elapsed)
+        except _WfFitTimeoutError:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
+            _log.warning("WF %s TIMED OUT after %.1fs", label, elapsed)
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            zk_dev = np.full(len(nollIndices), np.nan)
+            model_imgs = None
+            success = False
+            fit_info = dict(elapsed=elapsed, error=str(exc))
+            _log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
+    return zk_dev, params, model_imgs, success, fit_info
+
 
 def _wf_paired_worker(args: tuple) -> dict:
     """Fit a jointly-modeled intra/extra donut pair with DZMultiDonutModel."""
@@ -1227,74 +1327,10 @@ def _wf_paired_worker(args: tuple) -> dict:
     bounds = [list(b) for b in zip(*bounds)]
     x0 = np.clip(x0, bounds[0], bounds[1])
     timeout = wf_cfg["wfFitTimeoutPerDonut"] * 2
-    t0 = time.perf_counter()
-    params = None
-    if wf_cfg["wfInitialGuessOnly"]:
-        try:
-            params = model.unpack_params(x0)
-            zk_dev = np.zeros(len(nollIndices))
-            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
-            elapsed = time.perf_counter() - t0
-            success = True
-            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
-                            optimality=float("nan"), njev=0, status=0, message="x0 only",
-                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
-                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
-            _log.info("WF paired (x0 only) extra=%s intra=%s", donut_extra["source_id"], donut_intra["source_id"])
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF paired extra=%s intra=%s FAILED in %.1fs: %s",
-                donut_extra["source_id"], donut_intra["source_id"], elapsed, exc,
-            )
-    else:
-        galsim.errors.raise_fft_size_error = True
-        try:
-            with _fit_timeout(timeout):
-                result = least_squares(
-                    model.chi, jac=model.jac, x0=x0,
-                    args=(imgs, [var_e, var_i]), bounds=bounds,
-                    **wf_cfg["lstsqKwargs"],
-                )
-            elapsed = time.perf_counter() - t0
-            params = model.unpack_params(result.x)
-            zk_dev = np.array(params["wavefront_params"])
-            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
-            success = bool(result.success)
-            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
-                            optimality=float(result.optimality), njev=int(result.njev),
-                            status=int(result.status), message=str(result.message),
-                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
-                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
-            _log.info(
-                "WF paired extra=%s intra=%s success=%s nfev=%d elapsed=%.1fs",
-                donut_extra["source_id"], donut_intra["source_id"],
-                success, result.nfev, elapsed,
-            )
-        except _WfFitTimeoutError:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
-            _log.warning(
-                "WF paired extra=%s intra=%s TIMED OUT after %.1fs",
-                donut_extra["source_id"], donut_intra["source_id"], elapsed,
-            )
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF paired extra=%s intra=%s FAILED in %.1fs: %s",
-                donut_extra["source_id"], donut_intra["source_id"], elapsed, exc,
-            )
+    label = f"paired extra={donut_extra['source_id']} intra={donut_intra['source_id']}"
+    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
+        model, x0, bounds, imgs, [var_e, var_i], timeout, wf_cfg, label,
+    )
     zk_dev_dense = _dense_dev(zk_dev, nollIndices)
     zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
     fit_mode = wf_cfg.get("wfEstimationMode", "paired")
@@ -1340,7 +1376,7 @@ def _wf_paired_worker(args: tuple) -> dict:
 
 
 def _wf_unpaired_worker(donut: dict) -> dict:
-    """Fit a single donut with SingleDonutModel."""
+    """Fit a single donut with DZMultiDonutModel (N=1)."""
     wf_cfg = _CALIB_STORE["wf_cfg"]
     nollIndices = wf_cfg["nollIndices"]
     detect_cfg = _CALIB_STORE["detect_cfg"]
@@ -1350,115 +1386,53 @@ def _wf_unpaired_worker(donut: dict) -> dict:
     )
     factory = _build_wf_factory(instrument)
     img, angle, zk_ref, bkg_var, bkg_std = _prep_donut_for_danish(donut, instrument)
+    dz_terms = [(1, int(j)) for j in nollIndices]
 
-    model = danish.SingleDonutModel(
-        factory, z_ref=zk_ref, z_terms=nollIndices,
-        thx=angle[0], thy=angle[1], npix=img.shape[0],
+    model = danish.DZMultiDonutModel(
+        factory, z_refs=[zk_ref], dz_terms=dz_terms,
+        field_radius=np.deg2rad(1.85),
+        thxs=[angle[0]], thys=[angle[1]], npix=img.shape[0],
         bkg_order=wf_cfg["bkgOrder"],
         loss_fn=_build_loss_fn(),
     )
     x0 = model.pack_params(
-        flux=float(np.clip(np.sum(img), 1e3, 1e9)),
-        dx=0., dy=0., fwhm=1.,
-        bkg=[0.] * model.nbkg, z_fit=[0.] * len(nollIndices),
+        fluxes=[float(np.clip(np.sum(img), 1e3, 1e9))],
+        dxs=[0.], dys=[0.], fwhm=1.,
+        bkgs=[[0.] * model.nbkg], wavefront_params=[0.] * len(dz_terms),
     )
     bounds = model.pack_params(
-        flux=[0., np.inf], dx=[-np.inf, np.inf], dy=[-np.inf, np.inf],
-        fwhm=[0.1, 5.], bkg=[[-np.inf, np.inf]] * model.nbkg,
-        z_fit=[[-np.inf, np.inf]] * len(nollIndices),
+        fluxes=[[0., np.inf]], dxs=[[-np.inf, np.inf]], dys=[[-np.inf, np.inf]],
+        fwhm=[0.1, 5.], bkgs=[[[-np.inf, np.inf]] * model.nbkg],
+        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
     )
     bounds = [list(b) for b in zip(*bounds)]
+    x0 = np.clip(x0, bounds[0], bounds[1])
     timeout = wf_cfg["wfFitTimeoutPerDonut"]
-    t0 = time.perf_counter()
-    params = None
-    if wf_cfg["wfInitialGuessOnly"]:
-        try:
-            params = model.unpack_params(x0)
-            zk_dev = np.zeros(len(nollIndices))
-            model_img = model.model(**{k: params[k] for k in ("flux", "dx", "dy", "fwhm", "z_fit", "bkg")})
-            elapsed = time.perf_counter() - t0
-            success = True
-            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
-                            optimality=float("nan"), njev=0, status=0, message="x0 only",
-                            flux=float(params["flux"]), dx=float(params["dx"]),
-                            dy=float(params["dy"]), fwhm=float(params["fwhm"]))
-            _log.info("WF unpaired (x0 only) donut=%s", donut["source_id"])
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_img = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF unpaired donut=%s FAILED in %.1fs: %s",
-                donut["source_id"], elapsed, exc,
-            )
-    else:
-        galsim.errors.raise_fft_size_error = True
-        try:
-            with _fit_timeout(timeout):
-                result = least_squares(
-                    model.chi, jac=model.jac, x0=x0,
-                    args=(img, bkg_var), bounds=bounds,
-                    **wf_cfg["lstsqKwargs"],
-                )
-            elapsed = time.perf_counter() - t0
-            params = model.unpack_params(result.x)
-            zk_dev = np.array(params["z_fit"])
-            model_img = model.model(**{k: params[k] for k in ("flux", "dx", "dy", "fwhm", "z_fit", "bkg")})
-            success = bool(result.success)
-            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
-                            optimality=float(result.optimality), njev=int(result.njev),
-                            status=int(result.status), message=str(result.message),
-                            flux=float(params["flux"]), dx=float(params["dx"]),
-                            dy=float(params["dy"]), fwhm=float(params["fwhm"]))
-            _log.info(
-                "WF unpaired donut=%s success=%s nfev=%d elapsed=%.1fs",
-                donut["source_id"], success, result.nfev, elapsed,
-            )
-        except _WfFitTimeoutError:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_img = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
-            _log.warning(
-                "WF unpaired donut=%s TIMED OUT after %.1fs",
-                donut["source_id"], elapsed,
-            )
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_img = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF unpaired donut=%s FAILED in %.1fs: %s",
-                donut["source_id"], elapsed, exc,
-            )
+    label = f"unpaired donut={donut['source_id']}"
+    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
+        model, x0, bounds, [img], [bkg_var], timeout, wf_cfg, label,
+    )
+    model_img = model_imgs[0] if model_imgs is not None else None
     defocal = "intra" if "SW1" in str(donut.get("sensor", "")) else "extra"
     zk_dev_dense = _dense_dev(zk_dev, nollIndices)
     zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
     fit_mode = wf_cfg.get("wfEstimationMode", "unpaired")
     group_id = str(donut["source_id"])
-    _fit_residual_rms = _residual_rms(img, model_img, instrument.donutRadius, instrument.obscuration)
-    _model_bkg_free = _bkg_free_model(model_img, model, params, 0, wf_cfg["bkgOrder"]) if model_img is not None else None
-    _blend_frac_val = _blend_frac(img, _model_bkg_free, bkg_std)
-    _fit_dx = float(fit_info.get("dx", float("nan")))
-    _fit_dy = float(fit_info.get("dy", float("nan")))
-    _fit_flux = float(fit_info.get("flux", float("nan")))
-    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
+    _dxs = fit_info.get("dxs", [float("nan")])
+    _dys = fit_info.get("dys", [float("nan")])
+    _fluxes = fit_info.get("fluxes", [float("nan")])
     donuts_out = [
         {"donut_id": int(donut["source_id"]), "sensor": donut["sensor"],
          "defocal": defocal, "zk_dev": zk_dev_dense,
          "zk_intrinsic": _dense_intrinsic(donut), "img": img, "model_img": model_img,
          "fit_success": success, "fit_elapsed": float(fit_info.get("elapsed", float("nan"))),
          "fit_nfev": int(fit_info.get("nfev", 0)), "fit_cost": float(fit_info.get("cost", float("nan"))),
-         "fit_dx": _fit_dx, "fit_dy": _fit_dy, "fit_flux": _fit_flux, "fit_fwhm": _fit_fwhm,
-         "fit_residual_rms": _fit_residual_rms, "blend_frac": _blend_frac_val,
+         "fit_dx": float(_dxs[0]), "fit_dy": float(_dys[0]), "fit_flux": float(_fluxes[0]),
+         "fit_fwhm": float(fit_info.get("fwhm", float("nan"))),
+         "fit_residual_rms": _residual_rms(img, model_img, instrument.donutRadius, instrument.obscuration),
+         "blend_frac": _blend_frac(img, _bkg_free_model(model_img, model, params, 0, wf_cfg["bkgOrder"]) if model_img is not None else None, bkg_std),
          "fit_bkg": _fit_bkg_val(params, 0),
-         "zk_norm_um": zk_norm_um,
-         "group_id": group_id, "group_size": 1, "fit_mode": fit_mode},
+         "zk_norm_um": zk_norm_um, "group_id": group_id, "group_size": 1, "fit_mode": fit_mode},
     ]
     return {
         "mode": "unpaired", "fit_mode": fit_mode, "group_id": group_id, "group_size": 1,
@@ -1523,73 +1497,10 @@ def _wf_full_corner_worker(args: tuple) -> dict:
     timeout = wf_cfg["wfFitTimeoutPerDonut"] * n * 2
     _log.info("WF full_corner corner=%s n=%d npix=%d setup=%.2fs",
               corner_name, n, npix, time.perf_counter() - t_setup0)
-    t0 = time.perf_counter()
-    params = None
-    if wf_cfg["wfInitialGuessOnly"]:
-        try:
-            params = model.unpack_params(x0)
-            zk_dev = np.zeros(len(nollIndices))
-            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
-            elapsed = time.perf_counter() - t0
-            success = True
-            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
-                            optimality=float("nan"), njev=0, status=0, message="x0 only",
-                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
-                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
-            _log.info("WF full_corner (x0 only) corner=%s n=%d", corner_name, n)
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF full_corner corner=%s n=%d FAILED in %.1fs: %s",
-                corner_name, n, elapsed, exc,
-            )
-    else:
-        galsim.errors.raise_fft_size_error = True
-        try:
-            with _fit_timeout(timeout):
-                result = least_squares(
-                    model.chi, jac=model.jac, x0=x0,
-                    args=(imgs, sky_lvl), bounds=bounds,
-                    **wf_cfg["lstsqKwargs"],
-                )
-            elapsed = time.perf_counter() - t0
-            params = model.unpack_params(result.x)
-            zk_dev = np.array(params["wavefront_params"])
-            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
-            success = bool(result.success)
-            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
-                            optimality=float(result.optimality), njev=int(result.njev),
-                            status=int(result.status), message=str(result.message),
-                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
-                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
-            _log.info(
-                "WF full_corner corner=%s n=%d success=%s nfev=%d elapsed=%.1fs",
-                corner_name, n, success, result.nfev, elapsed,
-            )
-        except _WfFitTimeoutError:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
-            _log.warning(
-                "WF full_corner corner=%s n=%d TIMED OUT after %.1fs",
-                corner_name, n, elapsed,
-            )
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF full_corner corner=%s n=%d FAILED in %.1fs: %s",
-                corner_name, n, elapsed, exc,
-            )
+    label = f"full_corner corner={corner_name} n={n}"
+    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
+        model, x0, bounds, imgs, sky_lvl, timeout, wf_cfg, label,
+    )
     zk_dev_dense = _dense_dev(zk_dev, nollIndices)
     zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
     fit_mode = wf_cfg.get("wfEstimationMode", "full_corner")
@@ -1684,73 +1595,10 @@ def _wf_full_detector_worker(args: tuple) -> dict:
     timeout = wf_cfg["wfFitTimeoutPerDonut"] * n
     _log.info("WF full_detector sensor=%s n=%d npix=%d setup=%.2fs",
               sensor_name, n, npix, time.perf_counter() - t_setup0)
-    t0 = time.perf_counter()
-    params = None
-    if wf_cfg["wfInitialGuessOnly"]:
-        try:
-            params = model.unpack_params(x0)
-            zk_dev = np.zeros(len(nollIndices))
-            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
-            elapsed = time.perf_counter() - t0
-            success = True
-            fit_info = dict(elapsed=elapsed, nfev=0, cost=float("nan"),
-                            optimality=float("nan"), njev=0, status=0, message="x0 only",
-                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
-                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
-            _log.info("WF full_detector (x0 only) sensor=%s n=%d", sensor_name, n)
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF full_detector sensor=%s n=%d FAILED in %.1fs: %s",
-                sensor_name, n, elapsed, exc,
-            )
-    else:
-        galsim.errors.raise_fft_size_error = True
-        try:
-            with _fit_timeout(timeout):
-                result = least_squares(
-                    model.chi, jac=model.jac, x0=x0,
-                    args=(imgs, sky_lvl), bounds=bounds,
-                    **wf_cfg["lstsqKwargs"],
-                )
-            elapsed = time.perf_counter() - t0
-            params = model.unpack_params(result.x)
-            zk_dev = np.array(params["wavefront_params"])
-            model_imgs = model.model(**{k: params[k] for k in ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")})
-            success = bool(result.success)
-            fit_info = dict(elapsed=elapsed, nfev=int(result.nfev), cost=float(result.cost),
-                            optimality=float(result.optimality), njev=int(result.njev),
-                            status=int(result.status), message=str(result.message),
-                            fluxes=list(params["fluxes"]), dxs=list(params["dxs"]),
-                            dys=list(params["dys"]), fwhm=float(params["fwhm"]))
-            _log.info(
-                "WF full_detector sensor=%s n=%d success=%s nfev=%d elapsed=%.1fs",
-                sensor_name, n, success, result.nfev, elapsed,
-            )
-        except _WfFitTimeoutError:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
-            _log.warning(
-                "WF full_detector sensor=%s n=%d TIMED OUT after %.1fs",
-                sensor_name, n, elapsed,
-            )
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning(
-                "WF full_detector sensor=%s n=%d FAILED in %.1fs: %s",
-                sensor_name, n, elapsed, exc,
-            )
+    label = f"full_detector sensor={sensor_name} n={n}"
+    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
+        model, x0, bounds, imgs, sky_lvl, timeout, wf_cfg, label,
+    )
     defocal = "intra" if "SW1" in sensor_name else "extra"
     zk_dev_dense = _dense_dev(zk_dev, nollIndices)
     zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
@@ -2061,7 +1909,7 @@ class DonutBlitzMonolithTaskConfig(
     )
     binning: pexConfig.Field = pexConfig.Field(
         dtype=int,
-        default=1,
+        default=2,
         doc="Binning factor applied to donut stamps before Danish fitting.",
     )
     modelSpiderShadows: pexConfig.Field = pexConfig.Field(
