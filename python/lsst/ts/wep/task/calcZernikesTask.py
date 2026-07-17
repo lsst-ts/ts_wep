@@ -670,6 +670,8 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Save the outputs in the table
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
+        if "binning" in self.estimateZernikes.config.keys():
+            zkTable.meta["estimatorInfo"]["binning"] = self.estimateZernikes.config.binning
 
         # If we have a fit failure recorded then replace Zernikes
         # with NaNs for those donuts so we don't use them in combining.
@@ -684,9 +686,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             for j in self.nollIndices:
                 zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
                 zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
-
-        if "binning" in self.estimateZernikes.config.keys():
-            zkTable.meta["estimatorInfo"]["binning"] = self.estimateZernikes.config.binning
 
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable

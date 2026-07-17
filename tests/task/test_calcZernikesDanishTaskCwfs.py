@@ -341,6 +341,8 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("chi_square", zkCalcPairs.meta["estimatorInfo"])
         self.assertIn("blur_clipped", zkCalcPairs.meta["estimatorInfo"])
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["fwhm"]))
+        self.assertIn("binning", zkCalcPairs.meta["estimatorInfo"])
+        self.assertEqual(1, zkCalcPairs.meta["estimatorInfo"]["binning"])
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:
@@ -387,6 +389,8 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("fit_success", zkCalc.meta["estimatorInfo"])
         self.assertIn("chi_square", zkCalc.meta["estimatorInfo"])
         self.assertIn("blur_clipped", zkCalc.meta["estimatorInfo"])
+        self.assertIn("binning", zkCalc.meta["estimatorInfo"])
+        self.assertEqual(1, zkCalc.meta["estimatorInfo"]["binning"])
 
     def testBlurClip(self) -> None:
         # Get sample zernike table
