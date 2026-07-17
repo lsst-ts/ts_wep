@@ -685,6 +685,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
                 zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
 
+        if "binning" in self.estimateZernikes.config.keys():
+            zkTable.meta["estimatorInfo"]["binning"] = self.estimateZernikes.config.binning
+
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
 
