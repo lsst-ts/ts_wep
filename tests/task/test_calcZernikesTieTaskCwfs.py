@@ -36,6 +36,7 @@ from lsst.ts.wep.task import (
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
+    WfAlgorithmName,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
@@ -361,6 +362,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         )
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["caustic"]))
         self.assertEqual(1, zkCalcPairs.meta["estimatorInfo"]["binning"])
+        self.assertEqual(WfAlgorithmName.TIE, zkCalcPairs.meta["estimatorInfo"]["algo"])
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:
