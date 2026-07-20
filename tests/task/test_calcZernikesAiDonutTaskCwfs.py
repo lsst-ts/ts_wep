@@ -197,7 +197,7 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         # Check metadata keys exist for pairs case
         self.assertIn("cam_name", zkCalcPairs.meta)
         self.assertIn("estimatorInfo", zkCalcPairs.meta)
-        self.assertEqual(WfAlgorithmName.AiDonut, zkCalcPairs.meta["estimatorInfo"]["algo"])
+        self.assertEqual(WfAlgorithmName.AiDonut.value, zkCalcPairs.meta["estimatorInfo"]["algo"])
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:

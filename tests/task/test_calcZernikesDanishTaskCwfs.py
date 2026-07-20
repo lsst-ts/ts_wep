@@ -344,7 +344,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["fwhm"]))
         self.assertIn("binning", zkCalcPairs.meta["estimatorInfo"])
         self.assertEqual(1, zkCalcPairs.meta["estimatorInfo"]["binning"])
-        self.assertEqual(WfAlgorithmName.Danish, zkCalcPairs.meta["estimatorInfo"]["algo"])
+        self.assertEqual(WfAlgorithmName.Danish.value, zkCalcPairs.meta["estimatorInfo"]["algo"])
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:
@@ -393,7 +393,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("blur_clipped", zkCalc.meta["estimatorInfo"])
         self.assertIn("binning", zkCalc.meta["estimatorInfo"])
         self.assertEqual(1, zkCalc.meta["estimatorInfo"]["binning"])
-        self.assertEqual(WfAlgorithmName.Danish, zkCalc.meta["estimatorInfo"]["algo"])
+        self.assertEqual(WfAlgorithmName.Danish.value, zkCalc.meta["estimatorInfo"]["algo"])
 
     def testBlurClip(self) -> None:
         # Get sample zernike table

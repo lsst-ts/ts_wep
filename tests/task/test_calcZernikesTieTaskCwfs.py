@@ -358,11 +358,11 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("cam_name", zkCalcPairs.meta)
         self.assertIn("estimatorInfo", zkCalcPairs.meta)
         self.assertCountEqual(
-            ["caustic", "converged", "binning"], list(zkCalcPairs.meta["estimatorInfo"].keys())
+            ["caustic", "converged", "binning", "algo"], list(zkCalcPairs.meta["estimatorInfo"].keys())
         )
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["caustic"]))
         self.assertEqual(1, zkCalcPairs.meta["estimatorInfo"]["binning"])
-        self.assertEqual(WfAlgorithmName.TIE, zkCalcPairs.meta["estimatorInfo"]["algo"])
+        self.assertEqual(WfAlgorithmName.TIE.value, zkCalcPairs.meta["estimatorInfo"]["algo"])
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:

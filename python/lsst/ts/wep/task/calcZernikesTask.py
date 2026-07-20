@@ -670,7 +670,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # Save the outputs in the table
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
-        zkTable.meta["estimatorInfo"]["algo"] = self.estimateZernikes.wfAlgoName
+        zkTable.meta["estimatorInfo"]["algo"] = self.estimateZernikes.wfAlgoName.value
         if "binning" in self.estimateZernikes.config.keys():
             zkTable.meta["estimatorInfo"]["binning"] = self.estimateZernikes.config.binning
 
