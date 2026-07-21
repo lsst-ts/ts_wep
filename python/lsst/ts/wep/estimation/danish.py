@@ -37,7 +37,7 @@ from scipy.stats import median_abs_deviation
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
-from lsst.ts.wep.utils import binArray
+from lsst.ts.wep.utils import WfAlgorithmName, binArray
 
 
 class DanishAlgorithm(WfAlgorithm):
@@ -527,6 +527,8 @@ class DanishAlgorithm(WfAlgorithm):
             "model_bkg": bkg,
             "exception_status": exception_status,
             "model_img": modelImage,
+            "binning": self.binning,
+            "algo": "danish",
         }
 
         # Save scalar metadata from least_squares
@@ -847,6 +849,8 @@ class DanishAlgorithm(WfAlgorithm):
             "model_bkg": bkgs,
             "exception_status": exception_status,
             "model_img": modelImages,
+            "binning": self.binning,
+            "algo": WfAlgorithmName.Danish.value,
         }
 
         # Save scalar metadata from least_squares

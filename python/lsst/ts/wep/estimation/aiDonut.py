@@ -27,7 +27,7 @@ import torch
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
-from lsst.ts.wep.utils import getModulePath, makeDense, makeSparse
+from lsst.ts.wep.utils import WfAlgorithmName, getModulePath, makeDense, makeSparse
 
 __all__ = ["AiDonutAlgorithm"]
 
@@ -300,7 +300,7 @@ class AiDonutAlgorithm(WfAlgorithm):
             pairWeight = 1.0
             zk = outZk.mean(axis=0)
 
-        zkMeta = {"fwhm": outFwhm.mean(axis=0), "weight": pairWeight}
+        zkMeta = {"fwhm": outFwhm.mean(axis=0), "weight": pairWeight, "algo": WfAlgorithmName.AiDonut.value}
 
         # Sparsify zk to the requested Noll indices.
         zk = makeDense(zk, self.model.nollIndices)
