@@ -332,6 +332,7 @@ class AiDonutAlgorithm(WfAlgorithm):
                 "zk": zk,
                 "fwhm": zkMeta["fwhm"],
                 "weight": zkMeta["weight"],
+                "algo": zkMeta["algo"],
             }
 
         return zk, zkMeta

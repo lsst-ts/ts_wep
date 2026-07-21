@@ -161,6 +161,8 @@ class TestDanishAlgorithm(unittest.TestCase):
                     "model_bkg",
                     "exception_status",
                     "model_img",
+                    "binning",
+                    "algo",
                     "lstsq_cost",
                     "lstsq_optimality",
                     "lstsq_nfev",
@@ -184,6 +186,8 @@ class TestDanishAlgorithm(unittest.TestCase):
         np.testing.assert_allclose(
             pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
+        np.testing.assert_array_equal(pairMeta["binning"], [intraMeta["binning"], extraMeta["binning"]])
+        np.testing.assert_array_equal(pairMeta["algo"], [intraMeta["algo"], extraMeta["algo"]])
 
     def testPrepImage(self) -> None:
         """Test the public prepImage method used for fitting and plotting."""
