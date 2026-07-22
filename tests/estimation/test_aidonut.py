@@ -67,6 +67,7 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         self.assertEqual(zk.shape[0], len(nollIndices))
         self.assertIn("fwhm", zkMeta)
         self.assertIn("weight", zkMeta)
+        self.assertIn("algo", zkMeta)
 
     def testHistory(self) -> None:
         """Test that history is populated correctly."""
@@ -77,6 +78,7 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         self.assertIn("modelPath", algo.history)
         self.assertIn("device", algo.history)
         self.assertIn("modelNollIndices", algo.history)
+        self.assertIn("algo", algo.history)
         for defocalType in [intra.defocalType.value, extra.defocalType.value]:
             self.assertIn(defocalType, algo.history)
             self.assertIn("zk", algo.history[defocalType])

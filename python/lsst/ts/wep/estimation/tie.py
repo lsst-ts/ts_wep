@@ -30,7 +30,7 @@ from scipy.ndimage import gaussian_filter
 from lsst.ts.wep import Image, ImageMapper, Instrument
 from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
-from lsst.ts.wep.utils import DefocalType, binArray, makeSparse
+from lsst.ts.wep.utils import DefocalType, WfAlgorithmName, binArray, makeSparse
 
 
 class TieAlgorithm(WfAlgorithm):
@@ -929,6 +929,11 @@ class TieAlgorithm(WfAlgorithm):
         if self.requireConverge and not converged:
             zkSum *= np.nan
 
-        zkMeta = {"caustic": bool(caustic), "converged": bool(converged)}
+        zkMeta = {
+            "caustic": bool(caustic),
+            "converged": bool(converged),
+            "binning": self.binning,
+            "algo": WfAlgorithmName.TIE.value,
+        }
 
         return zkSum, zkMeta

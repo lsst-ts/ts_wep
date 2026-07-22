@@ -36,6 +36,7 @@ from lsst.ts.wep.task import (
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
+    WfAlgorithmName,
     getModulePath,
     runProgram,
     writeCleanUpRepoCmd,
@@ -356,8 +357,15 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
         # Check metadata keys exist for pairs case
         self.assertIn("cam_name", zkCalcPairs.meta)
         self.assertIn("estimatorInfo", zkCalcPairs.meta)
-        self.assertCountEqual(["caustic", "converged"], list(zkCalcPairs.meta["estimatorInfo"].keys()))
+        self.assertCountEqual(
+            ["caustic", "converged", "binning", "algo"], list(zkCalcPairs.meta["estimatorInfo"].keys())
+        )
         self.assertEqual(2, len(zkCalcPairs.meta["estimatorInfo"]["caustic"]))
+        self.assertEqual([1] * len(self.donutStampsExtra), zkCalcPairs.meta["estimatorInfo"]["binning"])
+        self.assertEqual(
+            [WfAlgorithmName.TIE.value] * len(self.donutStampsExtra),
+            zkCalcPairs.meta["estimatorInfo"]["algo"],
+        )
         for stamps, k in zip([self.donutStampsIntra, self.donutStampsExtra], ["intra", "extra"]):
             dict_ = zkCalcPairs.meta[k]
             if k == stamps.metadata["DFC_TYPE"]:

@@ -35,6 +35,7 @@ _requires_danish_v1_1 = unittest.skipUnless(_DANISH_V1_1, "requires danish >= 1.
 import numpy as np  # noqa: E402
 from astropy.coordinates import Angle  # noqa: E402
 
+from lsst.ts.wep import Instrument  # noqa: E402
 from lsst.ts.wep.estimation import DanishAlgorithm, ObservingConditions  # noqa: E402
 from lsst.ts.wep.utils.modelUtils import forwardModelPair  # noqa: E402
 
@@ -160,6 +161,8 @@ class TestDanishAlgorithm(unittest.TestCase):
                     "model_bkg",
                     "exception_status",
                     "model_img",
+                    "binning",
+                    "algo",
                     "lstsq_cost",
                     "lstsq_optimality",
                     "lstsq_nfev",
@@ -183,6 +186,60 @@ class TestDanishAlgorithm(unittest.TestCase):
         np.testing.assert_allclose(
             pairMeta["model_bkg"], [intraMeta["model_bkg"], extraMeta["model_bkg"]], atol=10.0
         )
+        np.testing.assert_array_equal(pairMeta["binning"], [intraMeta["binning"], extraMeta["binning"]])
+        np.testing.assert_array_equal(pairMeta["algo"], [intraMeta["algo"], extraMeta["algo"]])
+
+    def testPrepImage(self) -> None:
+        """Test the public prepImage method used for fitting and plotting."""
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+        instrument = Instrument()
+        zkStart = np.zeros(len(zkTrue))
+
+        dan = DanishAlgorithm()
+
+        # Keep a reference to the original median so we can verify the
+        # in-place background subtraction below.
+        origImage = intra.image.copy()
+
+        img, backgroundStd = dan.prepImage(intra, zkStart, instrument)
+
+        # Background noise estimate is a positive scalar
+        self.assertTrue(np.isscalar(backgroundStd) or backgroundStd.ndim == 0)
+        self.assertGreater(backgroundStd, 0)
+
+        # The returned image is 2D and odd-sized in both dimensions
+        self.assertEqual(img.ndim, 2)
+        self.assertEqual(img.shape[0] % 2, 1)
+        self.assertEqual(img.shape[1] % 2, 1)
+
+        # prepImage creates the background mask when it does not exist
+        self.assertIsNotNone(intra.maskBackground)
+
+        # The median background is subtracted from the image in place
+        self.assertFalse(np.allclose(intra.image, origImage))
+
+    def testPrepImageBinning(self) -> None:
+        """Test that prepImage bins the image and rescales backgroundStd."""
+        zkTrue, intra, extra = forwardModelPair(seed=42)
+        instrument = Instrument()
+        zkStart = np.zeros(len(zkTrue))
+
+        # Prep once with no binning, once with binning=2, using separate
+        # copies since prepImage modifies the image in place.
+        intraBin = intra.copy()
+
+        danNoBin = DanishAlgorithm(binning=1)
+        imgNoBin, stdNoBin = danNoBin.prepImage(intra, zkStart, instrument)
+
+        danBin = DanishAlgorithm(binning=2)
+        imgBin, stdBin = danBin.prepImage(intraBin, zkStart, instrument)
+
+        # Binning halves each dimension (then trims to odd)
+        self.assertLess(imgBin.shape[0], imgNoBin.shape[0])
+        self.assertEqual(imgBin.shape[0] % 2, 1)
+
+        # backgroundStd is divided by the binning factor
+        np.testing.assert_allclose(stdBin, stdNoBin / 2)
 
     def testNegativeFluxSingleDonut(self) -> None:
         """Test that a single donut with negative flux returns NaN Zernikes

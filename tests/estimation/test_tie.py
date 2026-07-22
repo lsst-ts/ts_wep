@@ -264,9 +264,11 @@ class TestTieAlgorithm(unittest.TestCase):
 
         # Check metadata
         for metaDict in pairMeta, intraMeta, extraMeta:
-            self.assertEqual(["caustic", "converged"], list(metaDict.keys()))
+            self.assertEqual(["caustic", "converged", "binning", "algo"], list(metaDict.keys()))
             self.assertEqual(metaDict["caustic"], False)
             self.assertEqual(metaDict["converged"], False)
+            self.assertEqual(metaDict["binning"], 1)
+            self.assertEqual(metaDict["algo"], "tie")
 
 
 if __name__ == "__main__":
