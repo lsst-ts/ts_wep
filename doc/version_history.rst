@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v17.8.0 (2026-07-22)
+===================
+
+New Features
+------------
+
+- Add binning into zernikes table metadata.
+  Add wavefront algorithm name into zernikes table metadata. (`RSO-826 <https://rubinobs.atlassian.net//browse/RSO-826>`_)
+
+
 v17.7.0 (2026-07-07)
 ===================
 
