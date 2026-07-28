@@ -730,8 +730,10 @@ class Instrument:
         """Set the optic(s) that are offset in the Batoid model.
 
         These optics are offset in order to calculate the equivalent
-        detector offset for the model. Multiple optics can be provided as a
-        list, e.g. to model both a camera and detector piston independently.
+        detector offset for the model. For example, in LsstFamCam the camera
+        (LSSTCamera) is pistoned by 1.5 mm, which is equivalent to a Detector
+        offset of ~1.507 mm. Multiple optics can be provided as a list, e.g.
+        to model both a camera and detector piston independently.
 
         Parameters
         ----------
