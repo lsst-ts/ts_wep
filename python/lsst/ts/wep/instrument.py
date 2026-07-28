@@ -517,9 +517,9 @@ class Instrument:
             The Batoid model with all offsets applied.
         """
         optics = self.batoidOffsetOptic
-        if optics is None:
-            return batoidModel
         values = self.batoidOffsetValue
+        if optics is None or values is None:
+            return batoidModel
         for optic, value in zip(optics, values):
             batoidModel = batoidModel.withLocallyShiftedOptic(optic, [0, 0, sign * value])
         return batoidModel
