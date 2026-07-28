@@ -115,6 +115,58 @@ class TestInstrument(unittest.TestCase):
                 batoidOffsetOptic=["LSSTCamera", "Detector"],
                 batoidOffsetValue=[1.5e-3],
             )
+        # One is set but the other is not. Use configFile=None so the missing
+        # parameter is not filled in from a default config file.
+        with self.assertRaises(ValueError):
+            Instrument(
+                configFile=None,
+                diameter=8.36,
+                obscuration=0.612,
+                focalLength=10.312,
+                pixelSize=10.0e-6,
+                batoidModelName="LSST_r",
+                batoidOffsetOptic="LSSTCamera",
+            )
+        # And vice versa
+        with self.assertRaises(ValueError):
+            Instrument(
+                configFile=None,
+                diameter=8.36,
+                obscuration=0.612,
+                focalLength=10.312,
+                pixelSize=10.0e-6,
+                batoidModelName="LSST_r",
+                batoidOffsetValue=1.5e-3,
+            )
+
+    def testDefocalOffsetExclusiveWithBatoidOffsets(self) -> None:
+        # defocalOffset and the batoid offset parameters are mutually
+        # exclusive: setting both at once is an error.
+        with self.assertRaises(ValueError):
+            Instrument(
+                configFile=None,
+                diameter=8.36,
+                obscuration=0.612,
+                focalLength=10.312,
+                pixelSize=10.0e-6,
+                batoidModelName="LSST_r",
+                defocalOffset=1.5e-3,
+                batoidOffsetOptic="Detector",
+                batoidOffsetValue=1.5e-3,
+            )
+        # An explicit defocalOffset may still coexist with a batoidModelName
+        # (used only for the intrinsic Zernikes) as long as no batoid offsets
+        # are set.
+        inst = Instrument(
+            configFile=None,
+            diameter=8.36,
+            obscuration=0.612,
+            focalLength=10.312,
+            pixelSize=10.0e-6,
+            batoidModelName="LSST_r",
+            defocalOffset=1.5e-3,
+        )
+        self.assertEqual(inst.defocalOffset, 1.5e-3)
 
     def testScalarBatoidOffsetReturnedAsList(self) -> None:
         # A scalar offset is normalized to a one-element list
@@ -275,6 +327,10 @@ class TestInstrument(unittest.TestCase):
         for key in readConfigYaml("policy:instruments/ComCam.yaml"):
             if key in keys:
                 keys.remove(key)
+
+        # defocalOffset is derived from batoidOffsetOptic, which ComCam
+        # overrides, so it is transitively overridden and will not match.
+        keys.remove("defocalOffset")
 
         # Iterate through the keys and make sure values are the same
         for key in keys:

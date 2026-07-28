@@ -5,7 +5,6 @@ name: LsstCam
 diameter: 8.36 # aperture diameter in meters
 obscuration: 0.612 # fractional obscuration
 focalLength: 10.312 # effective focal length in meters
-defocalOffset: 1.5e-3 # defocal offset in meters
 pixelSize: 10.0e-6 # pixel size in meters
 refBand: r # band to use for BandLabel.REF
 # Effective wavelength per band, in meters.
@@ -21,6 +20,7 @@ wavelength:
   y: 973.9e-9
 batoidModelName: LSST_{band} # name used to load the Batoid model
 batoidOffsetOptic: Detector
+batoidOffsetValue: 1.5e-3 # amount Detector is offset in the Batoid model, in meters
 
 maskParams: # center and radius are in meters, theta in degrees
   M1:

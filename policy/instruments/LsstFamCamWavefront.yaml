@@ -13,7 +13,3 @@ name: LsstFamCamWavefront
 # both pistons independently rather than as a single 3 mm detector offset.
 batoidOffsetOptic: [LSSTCamera, Detector]
 batoidOffsetValue: [1.5e-3, 1.5e-3]
-
-# Derive defocalOffset from the combined shift above rather than using the
-# explicit value inherited from LsstCam.yaml.
-defocalOffset: null
