@@ -116,6 +116,7 @@ class Instrument:
             to determine the center of the circle
             - radius: list of polynomial coeffs (in meters) for np.polyval()
             to determine the radius of the circle
+        If this is not None, it overrides any values set by maskParamsFile.
         None defaults to an empty dictionary.
     maskParamsFile : str, optional
         Name of a mask parameter file shipped in the danish package's data
