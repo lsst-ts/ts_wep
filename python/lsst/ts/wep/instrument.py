@@ -1086,6 +1086,7 @@ class Instrument:
             If value is not a dictionary or None
 
         """
+        self._maskParams: dict | None
         if isinstance(value, dict):
             self._maskParams = value
         elif value is None:
