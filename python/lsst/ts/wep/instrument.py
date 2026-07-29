@@ -117,6 +117,11 @@ class Instrument:
             - radius: list of polynomial coeffs (in meters) for np.polyval()
             to determine the radius of the circle
         None defaults to an empty dictionary.
+    maskParamsFile : str, optional
+        Name of a mask parameter file shipped in the danish package's data
+        directory (e.g. "RubinObsc.yaml"). When set, and maskParams is not
+        explicitly provided, the mask parameters are loaded from this file
+        via danish. (the default is None)
 
     Notes
     -----
@@ -148,6 +153,7 @@ class Instrument:
         batoidOffsetOptic: str | None = None,
         batoidOffsetValue: float | None = None,
         maskParams: dict | None = None,
+        maskParamsFile: str | None = None,
     ) -> None:
         # Merge keyword arguments with defaults from configFile
         params = mergeConfigWithFile(
@@ -164,6 +170,7 @@ class Instrument:
             batoidOffsetOptic=batoidOffsetOptic,
             batoidOffsetValue=batoidOffsetValue,
             maskParams=maskParams,
+            maskParamsFile=maskParamsFile,
         )
 
         # Set each parameter
@@ -194,6 +201,7 @@ class Instrument:
             batoidOffsetOptic=self.batoidOffsetOptic,
             batoidOffsetValue=self.batoidOffsetValue,
             maskParams=self.maskParams,
+            maskParamsFile=self.maskParamsFile,
         )
 
     def checkConfig(self) -> None:
@@ -1003,32 +1011,54 @@ class Instrument:
 
     @property
     def maskParams(self) -> dict:
-        """The mask parameter dictionary."""
-        # Get the parameters if they exist
+        """The mask parameter dictionary.
+
+        Explicitly-set mask parameters take precedence. Otherwise, if a
+        maskParamsFile is set, the parameters are loaded from that file in
+        the danish package's data directory. If neither is set, the primary
+        inner and outer radii are used to define a simple pupil mask.
+        """
+        # Explicitly-set mask parameters take precedence
         params = getattr(self, "_maskParams", None)
+        if params is not None:
+            return params
 
-        # If they don't exist, use the primary inner and outer radii
-        if params is None:
-            params = {
-                "Pupil": {
-                    "outer": {
-                        "clear": True,
-                        "thetaMin": 0,
-                        "thetaMax": np.inf,
-                        "center": [0],
-                        "radius": [self.radius],
-                    },
-                    "inner": {
-                        "clear": False,
-                        "thetaMin": 0,
-                        "thetaMax": np.inf,
-                        "center": [0],
-                        "radius": [self.obscuration * self.radius],
-                    },
-                }
+        # Otherwise, load from a danish mask parameter file if one is set
+        maskParamsFile = getattr(self, "_maskParamsFile", None)
+        if maskParamsFile is not None:
+            cached = getattr(self, "_maskParamsFromFile", None)
+            if cached is None:
+                try:
+                    import danish
+                except ImportError as e:
+                    raise ImportError(
+                        "The danish package is required to load "
+                        f"maskParamsFile '{maskParamsFile}', but it could "
+                        "not be imported."
+                    ) from e
+                cached = danish.load_mask_params(maskParamsFile)
+                self._maskParamsFromFile = cached
+            return cached
+
+        # If neither is set, use the primary inner and outer radii
+        return {
+            "Pupil": {
+                "outer": {
+                    "clear": True,
+                    "thetaMin": 0,
+                    "thetaMax": np.inf,
+                    "center": [0],
+                    "radius": [self.radius],
+                },
+                "inner": {
+                    "clear": False,
+                    "thetaMin": 0,
+                    "thetaMax": np.inf,
+                    "center": [0],
+                    "radius": [self.obscuration * self.radius],
+                },
             }
-
-        return params
+        }
 
     @maskParams.setter
     def maskParams(self, value: dict | None) -> None:
@@ -1047,7 +1077,8 @@ class Instrument:
                 np.polyval() to determine the center of the circle
                 - radius: list of polynomial coefficients (in meters) for
                 np.polyval() to determine the radius of the circle
-            None defaults to an empty dictionary.
+            None resets the explicit parameters so that maskParamsFile (or
+            the default pupil mask) is used instead.
 
         Raises
         ------
@@ -1058,9 +1089,36 @@ class Instrument:
         if isinstance(value, dict):
             self._maskParams = value
         elif value is None:
-            self._maskParams = dict()
+            self._maskParams = None
         else:
             raise TypeError("maskParams must be a dictionary or None.")
+
+    @property
+    def maskParamsFile(self) -> str | None:
+        """Name of the danish mask parameter file, if any."""
+        return getattr(self, "_maskParamsFile", None)
+
+    @maskParamsFile.setter
+    def maskParamsFile(self, value: str | None) -> None:
+        """Set the danish mask parameter file name.
+
+        Parameters
+        ----------
+        value : str or None
+            Name of a mask parameter file in the danish package's data
+            directory (e.g. "RubinObsc.yaml"). None means no file is used.
+
+        Raises
+        ------
+        TypeError
+            If value is not a string or None
+
+        """
+        if value is not None and not isinstance(value, str):
+            raise TypeError("maskParamsFile must be a string or None.")
+        self._maskParamsFile = value
+        # Invalidate any cached parameters loaded from a previous file
+        self._maskParamsFromFile = None
 
     @property
     def nPupilPixels(self) -> int:

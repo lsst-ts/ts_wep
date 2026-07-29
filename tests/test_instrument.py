@@ -141,10 +141,39 @@ class TestInstrument(unittest.TestCase):
         with self.assertRaises(TypeError):
             Instrument(maskParams="bad")
 
+    def testBadMaskParamsFile(self) -> None:
+        with self.assertRaises(TypeError):
+            Instrument(maskParamsFile=42)
+
     def testDefaultMaskParams(self) -> None:
+        # With no maskParams and no maskParamsFile, fall back to the simple
+        # pupil mask built from the primary inner and outer radii.
         inst = Instrument()
         inst.maskParams = None
-        self.assertEqual(inst.maskParams, dict())
+        inst.maskParamsFile = None
+        self.assertEqual(list(inst.maskParams.keys()), ["Pupil"])
+
+    def testMaskParamsFromFile(self) -> None:
+        # LsstCam loads the Rubin mask parameters from danish.
+        inst = Instrument()
+        self.assertEqual(inst.maskParamsFile, "RubinObsc.yaml")
+        self.assertIn("M1", inst.maskParams)
+        self.assertIn("Spider_3D", inst.maskParams)
+
+        # ComCam and AuxTel load their respective danish files.
+        comcam = Instrument(configFile="policy:instruments/ComCam.yaml")
+        self.assertEqual(comcam.maskParamsFile, "ComCamObsc.yaml")
+        self.assertIn("M1", comcam.maskParams)
+
+        auxtel = Instrument(configFile="policy:instruments/AuxTel.yaml")
+        self.assertEqual(auxtel.maskParamsFile, "AuxTelObsc.yaml")
+        self.assertIn("Baffle_M1", auxtel.maskParams)
+
+    def testExplicitMaskParamsOverridesFile(self) -> None:
+        # Explicitly-set maskParams take precedence over maskParamsFile.
+        override = {"Foo": {"outer": {"clear": True}}}
+        inst = Instrument(maskParams=override)
+        self.assertEqual(inst.maskParams, override)
 
     def testCreatePupilGrid(self) -> None:
         uImage, vImage = Instrument().createPupilGrid()
@@ -238,6 +267,11 @@ class TestInstrument(unittest.TestCase):
         for key in readConfigYaml("policy:instruments/ComCam.yaml"):
             if key in keys:
                 keys.remove(key)
+
+        # maskParams is derived from maskParamsFile, which ComCam overrides,
+        # so it should not be compared either
+        if "maskParams" in keys:
+            keys.remove("maskParams")
 
         # Iterate through the keys and make sure values are the same
         for key in keys:
