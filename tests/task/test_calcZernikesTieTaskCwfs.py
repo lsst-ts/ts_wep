@@ -96,8 +96,13 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
             runProgram(cleanUpCmd)
 
     def setUp(self) -> None:
+        # Pin the instrument to the frozen mask model so the Zernike truth
+        # comparisons below are agnostic to future danish mask updates.
+        self.instConfigFile = os.path.join(self.testDataDir, "testFrozenMaskInstrument.yaml")
+
         self.config = CalcZernikesTaskConfig()
         self.config.estimateZernikes.retarget(EstimateZernikesTieTask)
+        self.config.estimateZernikes.instConfigFile = self.instConfigFile
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.butler = Butler.from_config(self.repoDir)
@@ -284,6 +289,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
     def testRequireConverge(self) -> None:
         config = CalcZernikesTaskConfig()
         config.estimateZernikes.retarget(EstimateZernikesTieTask)
+        config.estimateZernikes.instConfigFile = self.instConfigFile
         config.estimateZernikes.requireConverge = True  # Require to converge
         config.estimateZernikes.convergeTol = 0  # But don't allow convergence
         task = CalcZernikesTask(config=config, name="Test requireConverge")
@@ -306,6 +312,7 @@ class TestCalcZernikesTieTaskCwfs(lsst.utils.tests.TestCase):
 
         # Estimate Zernikes 4, 5, 6
         config = CalcZernikesTaskConfig()
+        config.estimateZernikes.instConfigFile = self.instConfigFile
         config.estimateZernikes.nollIndices = [4, 5, 6]
         task = CalcZernikesTask(config=config, name="Test Noll Indices 1")
         zk0 = task.estimateZernikes.run(donutStampsExtra, donutStampsIntra).zernikes[0]

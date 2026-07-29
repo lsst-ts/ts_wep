@@ -103,7 +103,12 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             runProgram(cleanUpCmd)
 
     def setUp(self) -> None:
+        # Pin the instrument to the frozen mask model so the Zernike truth
+        # comparisons below are agnostic to future danish mask updates.
+        self.instConfigFile = os.path.join(self.testDataDir, "testFrozenMaskInstrument.yaml")
+
         self.config = CalcZernikesTaskConfig()
+        self.config.estimateZernikes.instConfigFile = self.instConfigFile
         self.config.estimateZernikes.lstsqKwargs = {
             "ftol": 1.0e-3,
             "xtol": 1.0e-3,
