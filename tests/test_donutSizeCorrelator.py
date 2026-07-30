@@ -135,7 +135,10 @@ class TestDonutSizeCorrelator(lsst.utils.tests.TestCase):
             detectorName,
         )
 
-        # change offset from 0.0015 to create large donut
+        # change offset to create large donut. defocalOffset is mutually
+        # exclusive with the batoid offset parameters, so clear those first.
+        instrument.batoidOffsetOptic = None
+        instrument.batoidOffsetValue = None
         instrument.defocalOffset = 0.0025
 
         template = createTemplateForDetector(

@@ -462,9 +462,25 @@ class Instrument:
         value : float or None
             The defocal offset in meters. If None, the offset will be derived
             from the Batoid model when the batoid offset parameters are set.
+
+        Raises
+        ------
+        ValueError
+            If a value is set while batoidOffsetOptic/batoidOffsetValue are
+            also set, since these are mutually exclusive.
         """
         if value is not None:
             value = np.abs(float(value))
+            if (
+                getattr(self, "_batoidOffsetOptic", None) is not None
+                or getattr(self, "_batoidOffsetValue", None) is not None
+            ):
+                raise ValueError(
+                    "Cannot set defocalOffset because batoidOffsetOptic/"
+                    "batoidOffsetValue are set, and these are mutually "
+                    "exclusive. To set defocalOffset directly, first clear the "
+                    "batoid offset parameters (set them to None)."
+                )
         self._defocalOffset = value
 
         # Clear relevant caches
@@ -499,10 +515,11 @@ class Instrument:
         """Return a Batoid model with all configured optic offsets applied.
 
         Each optic in ``batoidOffsetOptic`` is shifted along the optical axis
-        by ``sign * batoidOffsetValue[i]``. ``batoidOffsetValue`` must be
-        provided for each optic in ``batoidOffsetOptic``. If
-        ``batoidOffsetOptic`` is not set the Batoid model is returned
-        unchanged.
+        by ``sign * batoidOffsetValue[i]``. When ``batoidOffsetOptic`` is not
+        set (i.e. ``defocalOffset`` is specified directly), the Detector is
+        shifted by ``sign * defocalOffset`` instead, so the model is still
+        defocused. ``batoidOffsetValue`` must be provided for each optic in
+        ``batoidOffsetOptic``.
 
         Parameters
         ----------
@@ -519,7 +536,9 @@ class Instrument:
         optics = self.batoidOffsetOptic
         values = self.batoidOffsetValue
         if optics is None or values is None:
-            return batoidModel
+            # No batoid offsets set: fall back to shifting the Detector by the
+            # scalar defocalOffset (mutually exclusive with the offsets above).
+            return batoidModel.withLocallyShiftedOptic("Detector", [0, 0, sign * self.defocalOffset])
         for optic, value in zip(optics, values):
             batoidModel = batoidModel.withLocallyShiftedOptic(optic, [0, 0, sign * value])
         return batoidModel

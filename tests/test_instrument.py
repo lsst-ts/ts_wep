@@ -168,6 +168,17 @@ class TestInstrument(unittest.TestCase):
         )
         self.assertEqual(inst.defocalOffset, 1.5e-3)
 
+        # The setter also enforces the exclusivity on an existing instance:
+        # setting defocalOffset while batoid offsets are set is an error.
+        offsetInst = Instrument("policy:instruments/LsstFamCam.yaml")
+        with self.assertRaises(ValueError):
+            offsetInst.defocalOffset = 2.5e-3
+        # Clearing the batoid offsets first makes setting defocalOffset valid.
+        offsetInst.batoidOffsetOptic = None
+        offsetInst.batoidOffsetValue = None
+        offsetInst.defocalOffset = 2.5e-3
+        self.assertEqual(offsetInst.defocalOffset, 2.5e-3)
+
     def testScalarBatoidOffsetReturnedAsList(self) -> None:
         # A scalar offset is normalized to a one-element list
         inst = Instrument(batoidOffsetOptic="LSSTCamera", batoidOffsetValue=1.5e-3)
