@@ -97,7 +97,7 @@ def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
 
 def _detectPeaks(
     exposureTrim: Exposure,
-    donutRadius: float,
+    radius: float,
     obscuration: float,
     detectionBinning: int,
     peakMinDistanceFactor: float,
@@ -114,7 +114,7 @@ def _detectPeaks(
     ----------
     exposureTrim : Exposure
         Science exposure (already trimmed to the sensor region of interest).
-    donutRadius : float
+    radius : float
         Expected outer donut radius in pixels (un-binned).
     obscuration : float
         Central obscuration fraction (inner radius / outer radius).
@@ -132,7 +132,7 @@ def _detectPeaks(
         un-binned pixel coordinates.
     """
     binning = detectionBinning
-    radius_binned = donutRadius / binning
+    radius_binned = radius / binning
     template = _buildAnnularTemplate(radius_binned, innerFrac=obscuration)
 
     if binning > 1:
@@ -158,7 +158,7 @@ def _detectPeaks(
 def _measureFlux(
     peaks: np.ndarray,
     exposureTrim: Exposure,
-    donutRadius: float,
+    radius: float,
     obscuration: float,
 ) -> QTable:
     """Measure aperture flux and per-pixel noise for each detected donut.
@@ -174,7 +174,7 @@ def _measureFlux(
         ``(N, 2)`` array of ``(row, col)`` centroids from `_detectPeaks`.
     exposureTrim : Exposure
         Science exposure in un-binned pixel coordinates.
-    donutRadius : float
+    radius : float
         Expected outer donut radius in pixels.
     obscuration : float
         Central obscuration fraction (inner radius / outer radius).
@@ -187,7 +187,6 @@ def _measureFlux(
         Peaks that fall too close to the image border have ``nan`` values.
     """
     arr = exposureTrim.image.array
-    radius = donutRadius
     half = int(radius * 1.4)
 
     gy, gx = np.mgrid[-half : half + 1, -half : half + 1]
@@ -240,7 +239,7 @@ def _blindDetect(
     exposure: Exposure,
     detect_cfg: dict,
     bkg_config: Any,
-    donutRadius: float,
+    radius: float,
     obscuration: float,
 ) -> QTable:
     """Subtract background and detect donuts via annular template cross-correlation.
@@ -258,7 +257,7 @@ def _blindDetect(
         ``peakMinDistanceFactor``, ``peakExcludeBorderFactor``.
     bkg_config : Any
         Config object for `SubtractBackgroundTask`.
-    donutRadius : float
+    radius : float
         Expected outer donut radius in pixels.
     obscuration : float
         Central obscuration fraction (inner radius / outer radius).
@@ -276,7 +275,7 @@ def _blindDetect(
 
     peaks = _detectPeaks(
         exposureTrim,
-        donutRadius,
+        radius,
         obscuration,
         detect_cfg["detectionBinning"],
         detect_cfg["peakMinDistanceFactor"],
@@ -510,7 +509,7 @@ def _selectFromPhotoCat(
             all_photo_cat = None
 
     # Selector-rejected sources: top REJECTED_CANDIDATES by flux for display.
-    REJECTED_CANDIDATES = 20
+    REJECTED_CANDIDATES = 10
     if save_diag and sel_rejected_refcat is not None and len(sel_rejected_refcat) > 0:
         try:
             _rrej_flux = np.array(sel_rejected_refcat[f"{filterName}_flux"])
@@ -559,7 +558,7 @@ def _cutStamps(
     all_photo_cat: tuple | None,
     all_astrom_cat: tuple | None,
     astrom_cfg: dict,
-    donutRadius: float,
+    radius: float,
     obscuration: float,
 ) -> tuple:
     """Measure image fluxes, apply quality cuts, and cut postISR stamps.
@@ -592,7 +591,7 @@ def _cutStamps(
         Config dict supplying ``detect_cfg`` (``maxDonuts``, ``stampSize``,
         ``minStampSnr``, ``innerFluxFractionCut``, ``outerFluxFractionCut``,
         ``edgeMargin``) and SAT-mask lookup.
-    donutRadius : float
+    radius : float
         Expected outer donut radius in pixels.
     obscuration : float
         Central obscuration fraction (inner radius / outer radius).
@@ -603,8 +602,10 @@ def _cutStamps(
         Accepted donut stamp dicts, sorted brightest-first and capped at
         ``maxDonuts``.
     rejected_donuts : list of dict
-        Rejected donut stamp dicts for diagnostic display (SAT, flux-fraction,
-        SNR, and selector-rejected sources), capped at a small fixed limit.
+        Rejected donut stamp dicts (SAT, field-distance, flux-fraction, SNR,
+        and selector-rejected sources), sorted brightest-first.  Uncapped;
+        callers that render a fixed number of columns (e.g. the diagnostic
+        plot) are responsible for slicing.
     """
     detect_cfg = astrom_cfg["detect_cfg"]
     maxDonuts = detect_cfg["maxDonuts"]
@@ -628,7 +629,7 @@ def _cutStamps(
 
     # --- Flux measurement and quality selection ---
     peaks = np.column_stack([cat_cy, cat_cx])
-    measTable = _measureFlux(peaks, postIsr, donutRadius, obscuration)
+    measTable = _measureFlux(peaks, postIsr, radius, obscuration)
     valid_mask = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
     measTable = measTable[valid_mask]
     source_ids = source_ids[valid_mask]
@@ -643,11 +644,11 @@ def _cutStamps(
     source_ids = source_ids[qual_mask]
     if len(measTable) == 0:
         return [], []
-    fluxArr = np.array(measTable["flux"])
-    order = np.argsort(fluxArr)[::-1][:maxDonuts]
+    flux_arr = np.array(measTable["flux"])
+    order = np.argsort(flux_arr)[::-1][:maxDonuts]
     centroid_x = np.array(measTable["centroid_x"])[order]
     centroid_y = np.array(measTable["centroid_y"])[order]
-    flux_arr = fluxArr[order]
+    flux_arr = flux_arr[order]
     source_ids = source_ids[order]
 
     # --- Precompute annular masks ---
@@ -655,19 +656,19 @@ def _cutStamps(
     mask_arr = postIsr.mask.array
     sat_bit = postIsr.mask.getPlaneBitMask("SAT")
 
-    _mhalf = int(donutRadius * 1.4)
+    _mhalf = int(radius * 1.4)
     _gy, _gx = np.mgrid[-_mhalf : _mhalf + 1, -_mhalf : _mhalf + 1]
     _r = np.hypot(_gx, _gy)
-    _main_mask = (_r < donutRadius * 1.05) & (_r > donutRadius * obscuration)
-    _inner_mask = _r < donutRadius * obscuration * 0.67
-    _outer_mask = (_r > donutRadius * 1.25) & (_r < donutRadius * 1.4)
+    _main_mask = (_r < radius * 1.05) & (_r > radius * obscuration)
+    _inner_mask = _r < radius * obscuration * 0.67
+    _outer_mask = (_r > radius * 1.25) & (_r < radius * 1.4)
     _sector_angle = np.arctan2(_gy, _gx)
 
     _sgy, _sgx = np.mgrid[-half:half, -half:half]
     _sr = np.hypot(_sgx, _sgy)
-    _s_main = (_sr < donutRadius * 1.05) & (_sr > donutRadius * obscuration)
-    _s_bkg = (_sr < donutRadius * obscuration * 0.67) | (
-        (_sr > donutRadius * 1.25) & (_sr < donutRadius * 1.4)
+    _s_main = (_sr < radius * 1.05) & (_sr > radius * obscuration)
+    _s_bkg = (_sr < radius * obscuration * 0.67) | (
+        (_sr > radius * 1.25) & (_sr < radius * 1.4)
     )
     _s_n_main = int(np.sum(_s_main))
 
@@ -687,8 +688,6 @@ def _cutStamps(
         if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
             return None
         saturated = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
-        if saturated and reject_reason is None:
-            return None  # accepted path skips; caller handles counting
         stamp = np.array(arr[rmin:rmax, cmin:cmax])
         stamp_ccs = np.rot90(stamp, k=-n_quarter).T
 
@@ -745,8 +744,6 @@ def _cutStamps(
 
         _fa = detector.transform([lsst.geom.Point2D(float(cx_f), float(cy_f))], PIXELS, FIELD_ANGLE)[0]
         _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
-        if reject_reason is None and _field_dist_deg > detect_cfg["maxFieldDist"]:
-            return None
 
         _nearby_photo_list = _nearby(all_photo_cat)
         _neighbor_dists = [np.hypot(dx, dy) for dx, dy, _ in _nearby_photo_list if np.hypot(dx, dy) >= 1.0]
@@ -772,7 +769,8 @@ def _cutStamps(
             inner_frac=inner_frac,
             outer_frac=outer_frac,
             outer_sector_max=outer_sector_max,
-            donut_radius=donutRadius,
+            field_dist_deg=_field_dist_deg,
+            donut_radius=radius,
             obscuration=obscuration,
             snr=stamp_snr,
             bkg_level=_s_bkg_med,
@@ -789,11 +787,25 @@ def _cutStamps(
 
     inner_thr = detect_cfg["innerFracThreshold"]
     outer_thr = detect_cfg["outerFracThreshold"]
+    max_field_dist = detect_cfg["maxFieldDist"]
+    min_stamp_snr = detect_cfg["minStampSnr"]
+
+    def _append_reject_reasons(d):
+        if d["saturated"]:
+            d["reject_reasons"].append("SAT")
+        if d["field_dist_deg"] > max_field_dist:
+            d["reject_reasons"].append("field_dist")
+        if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
+            d["reject_reasons"].append("inner_frac")
+        if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
+            d["reject_reasons"].append("outer_frac")
+        if np.isfinite(d["snr"]) and d["snr"] < min_stamp_snr:
+            d["reject_reasons"].append("snr")
 
     # Match each centroid to the nearest blind detection for catalog_centroid_offset_px.
     _blind_cx = np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
     _blind_cy = np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
-    _match_tol = donutRadius * 0.5
+    _match_tol = radius * 0.5
 
     def _nearest_blind(cx_f, cy_f):
         if len(_blind_cx) == 0:
@@ -802,63 +814,30 @@ def _cutStamps(
         idx = int(np.argmin(dists))
         return (float(_blind_cx[idx]), float(_blind_cy[idx])) if dists[idx] <= _match_tol else (None, None)
 
-    # --- Accepted-stamp loop ---
+    # --- Single pass over centroids: accept or quality-reject ---
     donuts = []
     rejected_donuts_pre = []
     for i, (cx_f, cy_f) in enumerate(zip(centroid_x, centroid_y)):
-        cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
-        rmin, rmax = cy - half, cy + half
-        cmin, cmax = cx - half, cx + half
-        if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
-            continue
-        if np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit):
-            continue
         _b_cx, _b_cy = _nearest_blind(cx_f, cy_f)
         d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i], blind_cx=_b_cx, blind_cy=_b_cy)
         if d is None:
             continue
-        if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
-            d["reject_reasons"].append("inner_frac")
-        if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
-            d["reject_reasons"].append("outer_frac")
-        if np.isfinite(d["snr"]) and d["snr"] < detect_cfg["minStampSnr"]:
-            d["reject_reasons"].append("snr")
+        _append_reject_reasons(d)
         if d["reject_reasons"]:
             rejected_donuts_pre.append(d)
             continue
         donuts.append(d)
 
-    # --- Rejected-stamp loop (SAT + selector-rejected, for display only) ---
-    REJECTED_DISP = 2
+    # --- Rejected-stamp collection (selector-rejected sources added in) ---
     rejected_donuts = list(rejected_donuts_pre)
-    for i, (cx_f, cy_f) in enumerate(zip(centroid_x, centroid_y)):
-        cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
-        rmin, rmax = cy - half, cy + half
-        cmin, cmax = cx - half, cx + half
-        if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
-            continue
-        if np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit):
-            d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i], reject_reason="SAT")
-            if d is not None:
-                if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
-                    d["reject_reasons"].append("inner_frac")
-                if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
-                    d["reject_reasons"].append("outer_frac")
-                rejected_donuts.append(d)
     if sel_rejected_centroids is not None:
         rrej_x, rrej_y, rrej_flux, rrej_ids, rrej_reasons = sel_rejected_centroids
         for cx_f, cy_f, flux_val, sid, sel_reason in zip(rrej_x, rrej_y, rrej_flux, rrej_ids, rrej_reasons):
             d = _cut_stamp_dict(cx_f, cy_f, flux_val, sid, reject_reason=sel_reason or "selector")
             if d is not None:
-                if d["saturated"]:
-                    d["reject_reasons"].append("SAT")
-                if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
-                    d["reject_reasons"].append("inner_frac")
-                if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
-                    d["reject_reasons"].append("outer_frac")
+                _append_reject_reasons(d)
                 rejected_donuts.append(d)
     rejected_donuts.sort(key=lambda d: d["flux"], reverse=True)
-    rejected_donuts = rejected_donuts[:REJECTED_DISP]
 
     return donuts, rejected_donuts
 
@@ -910,9 +889,9 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     camName = camera.getName()
     detectorName = postIsr.getDetector().getName()
     instrument = getTaskInstrument(camName, detectorName, detect_cfg["instConfigFile"])
-    donutRadius = instrument.donutRadius
+    radius = instrument.donutRadius
 
-    if donutRadius < 5:
+    if radius < 5:
         return {
             "sensor": sensor_name,
             "catalog": [],
@@ -936,7 +915,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         postIsr,
         detect_cfg,
         bkg_config,
-        donutRadius,
+        radius,
         obscuration,
     )
     t3 = time.perf_counter()
@@ -967,7 +946,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         all_photo_cat,
         all_astrom_cat,
         astrom_cfg,
-        donutRadius,
+        radius,
         obscuration,
     )
     t6 = time.perf_counter()
@@ -1099,7 +1078,7 @@ def _blend_frac(
     return float(np.sum(np.abs(resid[faint_mask & sig_mask]))) / total_model_flux
 
 
-def _residual_rms(img: np.ndarray, model_img: np.ndarray, donut_radius: float, obscuration: float) -> float:
+def _residual_rms(img: np.ndarray, model_img: np.ndarray, radius: float, obscuration: float) -> float:
     """RMS of (data - model) over the main donut annulus."""
     if img is None or model_img is None:
         return float("nan")
@@ -1110,7 +1089,7 @@ def _residual_rms(img: np.ndarray, model_img: np.ndarray, donut_radius: float, o
         else np.mgrid[-half:half, -half:half]
     )
     r = np.hypot(gx, gy)
-    main_mask = (r < donut_radius * 1.05) & (r > donut_radius * obscuration)
+    main_mask = (r < radius * 1.05) & (r > radius * obscuration)
     if main_mask.shape != img.shape:
         sz = min(main_mask.shape[0], img.shape[0])
         main_mask = main_mask[:sz, :sz]
@@ -1963,13 +1942,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         outputRefs: OutputQuantizedConnection,
     ) -> None:
         raw_det_ids = {ref.dataId["detector"] for ref in inputRefs.raws}
-        inputRefs.ptc = [r for r in inputRefs.ptc if r.dataId["detector"] in raw_det_ids]
-        inputRefs.flat = [r for r in inputRefs.flat if r.dataId["detector"] in raw_det_ids]
-        inputRefs.linearizer = [r for r in inputRefs.linearizer if r.dataId["detector"] in raw_det_ids]
-        inputRefs.crosstalk = [r for r in inputRefs.crosstalk if r.dataId["detector"] in raw_det_ids]
-        inputRefs.intrinsicZernikes = [
-            r for r in inputRefs.intrinsicZernikes if r.dataId["detector"] in raw_det_ids
-        ]
+        for attr in ("ptc", "flat", "linearizer", "crosstalk", "intrinsicZernikes"):
+            refs = getattr(inputRefs, attr)
+            setattr(inputRefs, attr, [r for r in refs if r.dataId["detector"] in raw_det_ids])
 
         # Time each input type separately to find I/O bottleneck.
         t0 = time.perf_counter()
@@ -2503,6 +2478,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             out[: arr.shape[0], : arr.shape[1]] = arr
             return out
 
+        def _wd_field(wd, key, caster, default):
+            return caster(wd[key]) if wd is not None else default
+
         rows = []
         for d, accepted in all_donuts:
             sid = int(d["source_id"])
@@ -2527,7 +2505,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "det_id": int(d["det_id"]),
                 "sensor": str(d["sensor"]),
                 "source_id": sid,
-                "defocal": str(wd["defocal"]) if wd is not None else "",
+                "defocal": _wd_field(wd, "defocal", str, ""),
                 "band": str(d["band"]),
                 "accepted": bool(accepted),
                 # --- geometry ---
@@ -2558,22 +2536,22 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "rejected_field_dist": bool("field_dist" in reject_reasons),
                 "rejected_selector": bool(any(rr not in _KNOWN_REASONS for rr in reject_reasons)),
                 # --- fit results ---
-                "fit_mode": str(wd["fit_mode"]) if wd is not None else "",
+                "fit_mode": _wd_field(wd, "fit_mode", str, ""),
                 "group": int(grp),
-                "group_size": int(wd["group_size"]) if wd is not None else 0,
-                "fit_success": bool(wd["fit_success"]) if wd is not None else False,
-                "fit_elapsed": (float(wd["fit_elapsed"]) if wd is not None else float("nan")),
-                "setup_elapsed": (float(wd["setup_elapsed"]) if wd is not None else float("nan")),
-                "fit_nfev": int(wd["fit_nfev"]) if wd is not None else 0,
-                "fit_cost": float(wd["fit_cost"]) if wd is not None else float("nan"),
-                "fit_dx": float(wd["fit_dx"]) if wd is not None else float("nan"),
-                "fit_dy": float(wd["fit_dy"]) if wd is not None else float("nan"),
-                "fit_flux": float(wd["fit_flux"]) if wd is not None else float("nan"),
-                "fit_fwhm": float(wd["fit_fwhm"]) if wd is not None else float("nan"),
-                "fit_bkg": float(wd["fit_bkg"]) if wd is not None else float("nan"),
-                "fit_residual_rms": (float(wd["fit_residual_rms"]) if wd is not None else float("nan")),
-                "blend_frac": (float(wd["blend_frac"]) if wd is not None else float("nan")),
-                "zk_norm_um": (float(wd["zk_norm_um"]) if wd is not None else float("nan")),
+                "group_size": _wd_field(wd, "group_size", int, 0),
+                "fit_success": _wd_field(wd, "fit_success", bool, False),
+                "fit_elapsed": _wd_field(wd, "fit_elapsed", float, float("nan")),
+                "setup_elapsed": _wd_field(wd, "setup_elapsed", float, float("nan")),
+                "fit_nfev": _wd_field(wd, "fit_nfev", int, 0),
+                "fit_cost": _wd_field(wd, "fit_cost", float, float("nan")),
+                "fit_dx": _wd_field(wd, "fit_dx", float, float("nan")),
+                "fit_dy": _wd_field(wd, "fit_dy", float, float("nan")),
+                "fit_flux": _wd_field(wd, "fit_flux", float, float("nan")),
+                "fit_fwhm": _wd_field(wd, "fit_fwhm", float, float("nan")),
+                "fit_bkg": _wd_field(wd, "fit_bkg", float, float("nan")),
+                "fit_residual_rms": _wd_field(wd, "fit_residual_rms", float, float("nan")),
+                "blend_frac": _wd_field(wd, "blend_frac", float, float("nan")),
+                "zk_norm_um": _wd_field(wd, "zk_norm_um", float, float("nan")),
                 # --- per-Noll Zernikes (µm), Noll 4–78 ---
                 **{
                     f"Z{j}_dev": (float(zk_dev[j]) * 1e6 if not np.isnan(zk_dev[j]) else float("nan"))
