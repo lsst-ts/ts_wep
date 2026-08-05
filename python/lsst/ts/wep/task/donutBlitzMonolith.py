@@ -77,6 +77,11 @@ _CALIB_STORE: dict = {}  # populated in parent before fork; workers inherit via 
 _EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
 _INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
 
+# DZMultiDonutModel's field_radius has no effect on our fit (we don't model any
+# field-dependent optics term), so any value works; set to roughly the Rubin
+# field of view for a physically sensible default.
+_DANISH_FIELD_RADIUS_RAD = np.deg2rad(1.85)
+
 # SW0 = extra-focal, SW1 = intra-focal
 CORNER_PAIRS = {
     "R00": ("R00_SW0", "R00_SW1"),
@@ -160,6 +165,10 @@ def _measureFlux(
     exposureTrim: Exposure,
     radius: float,
     obscuration: float,
+    apertureOuterMarginFrac: float,
+    apertureInnerBufferFrac: float,
+    bkgAnnulusInnerFrac: float,
+    bkgAnnulusOuterFrac: float,
 ) -> QTable:
     """Measure aperture flux and per-pixel noise for each detected donut.
 
@@ -178,27 +187,46 @@ def _measureFlux(
         Expected outer donut radius in pixels.
     obscuration : float
         Central obscuration fraction (inner radius / outer radius).
+    apertureOuterMarginFrac : float
+        Outer edge of the main photometric aperture, as a multiple of
+        ``radius``.
+    apertureInnerBufferFrac : float
+        Inner edge of the background/blend-check region inside the
+        obscuration, as a multiple of ``radius * obscuration``.
+    bkgAnnulusInnerFrac : float
+        Inner edge of the outer background/blend-check annulus, as a
+        multiple of ``radius``.
+    bkgAnnulusOuterFrac : float
+        Outer edge of the outer background/blend-check annulus, as a
+        multiple of ``radius``; also sets the cutout half-width.
 
     Returns
     -------
     QTable
         One row per peak with columns ``centroid_x``, ``centroid_y``,
-        ``flux``, ``inner_flux``, ``outer_flux``, ``std``, and ``snr``.
-        Peaks that fall too close to the image border have ``nan`` values.
+        ``flux``, ``inner_flux``, ``outer_flux``, ``outer_sector_max_frac``,
+        ``std``, and ``snr``.  Peaks that fall too close to the image border
+        have ``nan`` values.
     """
     arr = exposureTrim.image.array
-    half = int(radius * 1.4)
+    half = int(radius * bkgAnnulusOuterFrac)
 
     gy, gx = np.mgrid[-half : half + 1, -half : half + 1]
     r = np.hypot(gx, gy)
+    sector_angle = np.arctan2(gy, gx)
 
-    main_mask = (r < radius * 1.05) & (r > radius * obscuration)
-    inner_mask = r < radius * obscuration * 0.67
-    outer_mask = (r > radius * 1.25) & (r < radius * 1.4)
+    main_mask = (r < radius * apertureOuterMarginFrac) & (r > radius * obscuration)
+    inner_mask = r < radius * obscuration * apertureInnerBufferFrac
+    outer_mask = (r > radius * bkgAnnulusInnerFrac) & (r < radius * bkgAnnulusOuterFrac)
     bkg_mask = inner_mask | outer_mask
     n_main = np.sum(main_mask)
+    outer_sector_masks = [
+        outer_mask & (sector_angle >= -np.pi + k * np.pi / 4) & (sector_angle < -np.pi + (k + 1) * np.pi / 4)
+        for k in range(8)
+    ]
 
     flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
+    outer_sector_max_list = []
 
     for row, col in zip(peaks[:, 0], peaks[:, 1]):
         rmin, rmax = int(round(row)) - half, int(round(row)) + half + 1
@@ -208,6 +236,7 @@ def _measureFlux(
             flux_list.append(np.nan)
             inner_flux_list.append(np.nan)
             outer_flux_list.append(np.nan)
+            outer_sector_max_list.append(np.nan)
             std_list.append(np.nan)
             continue
 
@@ -215,9 +244,15 @@ def _measureFlux(
         bkg = np.nanmedian(stamp[bkg_mask])
         stamp_sub = stamp - bkg
 
-        flux_list.append(float(np.sum(stamp_sub[main_mask])))
+        flux = float(np.sum(stamp_sub[main_mask]))
+        flux_list.append(flux)
         inner_flux_list.append(float(np.sum(stamp_sub[inner_mask])))
         outer_flux_list.append(float(np.sum(stamp_sub[outer_mask])))
+        if flux != 0:
+            sector_fluxes = [float(np.sum(stamp_sub[m])) / flux for m in outer_sector_masks]
+            outer_sector_max_list.append(float(max(abs(f) for f in sector_fluxes)))
+        else:
+            outer_sector_max_list.append(np.nan)
 
         diff = (stamp_sub - np.roll(stamp_sub, 1, axis=0))[bkg_mask]
         q75, q25 = np.nanpercentile(diff, [75, 25])
@@ -229,6 +264,7 @@ def _measureFlux(
     table["flux"] = np.array(flux_list, dtype=float)
     table["inner_flux"] = np.array(inner_flux_list, dtype=float)
     table["outer_flux"] = np.array(outer_flux_list, dtype=float)
+    table["outer_sector_max_frac"] = np.array(outer_sector_max_list, dtype=float)
     table["std"] = np.array(std_list, dtype=float)
     with np.errstate(invalid="ignore", divide="ignore"):
         table["snr"] = (table["flux"] / table["std"]) / np.sqrt(n_main)
@@ -616,6 +652,10 @@ def _cutStamps(
     n_quarter = detector.getOrientation().getNQuarter()
     stampSize = detect_cfg["stampSize"]
     half = stampSize // 2
+    apertureOuterMarginFrac = detect_cfg["apertureOuterMarginFrac"]
+    apertureInnerBufferFrac = detect_cfg["apertureInnerBufferFrac"]
+    bkgAnnulusInnerFrac = detect_cfg["bkgAnnulusInnerFrac"]
+    bkgAnnulusOuterFrac = detect_cfg["bkgAnnulusOuterFrac"]
 
     # --- Resolve centroid list ---
     if catalog_centroids is not None:
@@ -629,7 +669,16 @@ def _cutStamps(
 
     # --- Flux measurement and quality selection ---
     peaks = np.column_stack([cat_cy, cat_cx])
-    measTable = _measureFlux(peaks, postIsr, radius, obscuration)
+    measTable = _measureFlux(
+        peaks,
+        postIsr,
+        radius,
+        obscuration,
+        apertureOuterMarginFrac,
+        apertureInnerBufferFrac,
+        bkgAnnulusInnerFrac,
+        bkgAnnulusOuterFrac,
+    )
     valid_mask = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
     measTable = measTable[valid_mask]
     source_ids = source_ids[valid_mask]
@@ -645,10 +694,16 @@ def _cutStamps(
     if len(measTable) == 0:
         return [], []
     flux_arr = np.array(measTable["flux"])
+    inner_frac_arr = np.array(measTable["inner_flux"]) / flux_arr
+    outer_frac_arr = np.array(measTable["outer_flux"]) / flux_arr
+    outer_sector_max_arr = np.array(measTable["outer_sector_max_frac"])
     order = np.argsort(flux_arr)[::-1][:maxDonuts]
     centroid_x = np.array(measTable["centroid_x"])[order]
     centroid_y = np.array(measTable["centroid_y"])[order]
     flux_arr = flux_arr[order]
+    inner_frac_arr = inner_frac_arr[order]
+    outer_frac_arr = outer_frac_arr[order]
+    outer_sector_max_arr = outer_sector_max_arr[order]
     source_ids = source_ids[order]
 
     # --- Precompute annular masks ---
@@ -656,32 +711,44 @@ def _cutStamps(
     mask_arr = postIsr.mask.array
     sat_bit = postIsr.mask.getPlaneBitMask("SAT")
 
-    _mhalf = int(radius * 1.4)
-    _gy, _gx = np.mgrid[-_mhalf : _mhalf + 1, -_mhalf : _mhalf + 1]
-    _r = np.hypot(_gx, _gy)
-    _main_mask = (_r < radius * 1.05) & (_r > radius * obscuration)
-    _inner_mask = _r < radius * obscuration * 0.67
-    _outer_mask = (_r > radius * 1.25) & (_r < radius * 1.4)
-    _sector_angle = np.arctan2(_gy, _gx)
-
     _sgy, _sgx = np.mgrid[-half:half, -half:half]
     _sr = np.hypot(_sgx, _sgy)
-    _s_main = (_sr < radius * 1.05) & (_sr > radius * obscuration)
-    _s_bkg = (_sr < radius * obscuration * 0.67) | (
-        (_sr > radius * 1.25) & (_sr < radius * 1.4)
+    _s_main = (_sr < radius * apertureOuterMarginFrac) & (_sr > radius * obscuration)
+    _s_bkg = (_sr < radius * obscuration * apertureInnerBufferFrac) | (
+        (_sr > radius * bkgAnnulusInnerFrac) & (_sr < radius * bkgAnnulusOuterFrac)
     )
     _s_n_main = int(np.sum(_s_main))
+
+    # Fallback annular masks: only needed for selector-rejected centroids,
+    # which never pass through _measureFlux and so have no precomputed
+    # inner_frac/outer_frac/outer_sector_max to reuse.
+    _mhalf = int(radius * bkgAnnulusOuterFrac)
+    _gy, _gx = np.mgrid[-_mhalf : _mhalf + 1, -_mhalf : _mhalf + 1]
+    _r = np.hypot(_gx, _gy)
+    _main_mask = (_r < radius * apertureOuterMarginFrac) & (_r > radius * obscuration)
+    _inner_mask = _r < radius * obscuration * apertureInnerBufferFrac
+    _outer_mask = (_r > radius * bkgAnnulusInnerFrac) & (_r < radius * bkgAnnulusOuterFrac)
+    _sector_angle = np.arctan2(_gy, _gx)
 
     def _cut_stamp_dict(
         cx_f,
         cy_f,
         flux_val,
         source_id_val,
+        inner_frac=None,
+        outer_frac=None,
+        outer_sector_max=None,
         reject_reason=None,
         blind_cx=None,
         blind_cy=None,
     ):
-        """Cut one stamp and compute metrics. Returns dict or None on failure."""
+        """Cut one stamp and compute metrics. Returns dict or None on failure.
+
+        ``inner_frac``/``outer_frac``/``outer_sector_max`` should be passed
+        in (already computed by `_measureFlux`) whenever available; they are
+        only recomputed here as a fallback for selector-rejected centroids,
+        which bypass `_measureFlux` entirely.
+        """
         cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
         rmin, rmax = cy - half, cy + half
         cmin, cmax = cx - half, cx + half
@@ -691,35 +758,40 @@ def _cutStamps(
         stamp = np.array(arr[rmin:rmax, cmin:cmax])
         stamp_ccs = np.rot90(stamp, k=-n_quarter).T
 
-        mmin_r, mmax_r = cy - _mhalf, cy + _mhalf + 1
-        mmin_c, mmax_c = cx - _mhalf, cx + _mhalf + 1
-        with np.errstate(invalid="ignore", divide="ignore"):
-            if mmin_r >= 0 and mmax_r <= arr.shape[0] and mmin_c >= 0 and mmax_c <= arr.shape[1]:
-                mpatch = arr[mmin_r:mmax_r, mmin_c:mmax_c]
-                bkg = float(np.nanmedian(mpatch[_inner_mask | _outer_mask]))
-                mpatch_sub = mpatch - bkg
-                mflux = float(np.sum(mpatch_sub[_main_mask]))
-                inner_frac = float(np.sum(mpatch_sub[_inner_mask]) / mflux) if mflux != 0 else float("nan")
-                outer_frac = float(np.sum(mpatch_sub[_outer_mask]) / mflux) if mflux != 0 else float("nan")
-                if mflux != 0:
-                    _sector_fluxes = [
-                        float(
-                            np.sum(
-                                mpatch_sub[
-                                    _outer_mask
-                                    & (_sector_angle >= -np.pi + k * np.pi / 4)
-                                    & (_sector_angle < -np.pi + (k + 1) * np.pi / 4)
-                                ]
+        if inner_frac is None or outer_frac is None or outer_sector_max is None:
+            mmin_r, mmax_r = cy - _mhalf, cy + _mhalf + 1
+            mmin_c, mmax_c = cx - _mhalf, cx + _mhalf + 1
+            with np.errstate(invalid="ignore", divide="ignore"):
+                if mmin_r >= 0 and mmax_r <= arr.shape[0] and mmin_c >= 0 and mmax_c <= arr.shape[1]:
+                    mpatch = arr[mmin_r:mmax_r, mmin_c:mmax_c]
+                    bkg = float(np.nanmedian(mpatch[_inner_mask | _outer_mask]))
+                    mpatch_sub = mpatch - bkg
+                    mflux = float(np.sum(mpatch_sub[_main_mask]))
+                    inner_frac = (
+                        float(np.sum(mpatch_sub[_inner_mask]) / mflux) if mflux != 0 else float("nan")
+                    )
+                    outer_frac = (
+                        float(np.sum(mpatch_sub[_outer_mask]) / mflux) if mflux != 0 else float("nan")
+                    )
+                    if mflux != 0:
+                        _sector_fluxes = [
+                            float(
+                                np.sum(
+                                    mpatch_sub[
+                                        _outer_mask
+                                        & (_sector_angle >= -np.pi + k * np.pi / 4)
+                                        & (_sector_angle < -np.pi + (k + 1) * np.pi / 4)
+                                    ]
+                                )
                             )
-                        )
-                        / mflux
-                        for k in range(8)
-                    ]
-                    outer_sector_max = float(max(abs(f) for f in _sector_fluxes))
+                            / mflux
+                            for k in range(8)
+                        ]
+                        outer_sector_max = float(max(abs(f) for f in _sector_fluxes))
+                    else:
+                        outer_sector_max = float("nan")
                 else:
-                    outer_sector_max = float("nan")
-            else:
-                inner_frac = outer_frac = outer_sector_max = float("nan")
+                    inner_frac = outer_frac = outer_sector_max = float("nan")
 
         with np.errstate(invalid="ignore", divide="ignore"):
             _s_bkg_pix = stamp[_s_bkg]
@@ -819,7 +891,17 @@ def _cutStamps(
     rejected_donuts_pre = []
     for i, (cx_f, cy_f) in enumerate(zip(centroid_x, centroid_y)):
         _b_cx, _b_cy = _nearest_blind(cx_f, cy_f)
-        d = _cut_stamp_dict(cx_f, cy_f, flux_arr[i], source_ids[i], blind_cx=_b_cx, blind_cy=_b_cy)
+        d = _cut_stamp_dict(
+            cx_f,
+            cy_f,
+            flux_arr[i],
+            source_ids[i],
+            inner_frac=float(inner_frac_arr[i]),
+            outer_frac=float(outer_frac_arr[i]),
+            outer_sector_max=float(outer_sector_max_arr[i]),
+            blind_cx=_b_cx,
+            blind_cy=_b_cy,
+        )
         if d is None:
             continue
         _append_reject_reasons(d)
@@ -1078,7 +1160,13 @@ def _blend_frac(
     return float(np.sum(np.abs(resid[faint_mask & sig_mask]))) / total_model_flux
 
 
-def _residual_rms(img: np.ndarray, model_img: np.ndarray, radius: float, obscuration: float) -> float:
+def _residual_rms(
+    img: np.ndarray,
+    model_img: np.ndarray,
+    radius: float,
+    obscuration: float,
+    apertureOuterMarginFrac: float,
+) -> float:
     """RMS of (data - model) over the main donut annulus."""
     if img is None or model_img is None:
         return float("nan")
@@ -1089,7 +1177,7 @@ def _residual_rms(img: np.ndarray, model_img: np.ndarray, radius: float, obscura
         else np.mgrid[-half:half, -half:half]
     )
     r = np.hypot(gx, gy)
-    main_mask = (r < radius * 1.05) & (r > radius * obscuration)
+    main_mask = (r < radius * apertureOuterMarginFrac) & (r > radius * obscuration)
     if main_mask.shape != img.shape:
         sz = min(main_mask.shape[0], img.shape[0])
         main_mask = main_mask[:sz, :sz]
@@ -1238,7 +1326,10 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
 
     band = donut["band"]
     wavelength = wf_cfg["wavelength_by_band"].get(band, 619.4e-9)
-    telescope = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
+    telescope = _CALIB_STORE["telescope"]
+    telescope_dz = (
+        _CALIB_STORE["telescope_extra"] if defocalSign > 0 else _CALIB_STORE["telescope_intra"]
+    )
     eps = telescope.pupilObscuration
     nrad = 10
     zernikeTA_kwargs = dict(
@@ -1247,9 +1338,6 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
         focal_length=instrument.focalLength,
         nrad=nrad,
         naz=int(2 * np.pi * nrad / (1 - eps)),
-    )
-    telescope_dz = telescope.withLocallyShiftedOptic(
-        "Detector", [0, 0, defocalSign * instrument.defocalOffset]
     )
     # W_TA_defoc: off-axis + nominal intrinsics + defocus in one call
     zk_ref = (
@@ -1460,7 +1548,7 @@ def _wf_worker(group: _WfGroup) -> dict:
         factory,
         z_refs=zk_refs,
         dz_terms=dz_terms,
-        field_radius=np.deg2rad(1.85),
+        field_radius=_DANISH_FIELD_RADIUS_RAD,
         thxs=thxs,
         thys=thys,
         npix=npix,
@@ -1507,7 +1595,7 @@ def _wf_worker(group: _WfGroup) -> dict:
 
     donuts_out = []
     for i, d in enumerate(all_donuts):
-        defocal = "intra" if "SW1" in str(d.get("sensor", "")) else "extra"
+        defocal = "intra" if int(d["det_id"]) in _INTRA_FOCAL_DET_IDS else "extra"
         _img = imgs[i] if i < len(imgs) else None
         _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
         donuts_out.append(
@@ -1529,7 +1617,11 @@ def _wf_worker(group: _WfGroup) -> dict:
                 "fit_flux": float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
                 "fit_fwhm": _fit_fwhm,
                 "fit_residual_rms": _residual_rms(
-                    _img, _mimg, instrument.donutRadius, instrument.obscuration
+                    _img,
+                    _mimg,
+                    instrument.donutRadius,
+                    instrument.obscuration,
+                    _CALIB_STORE["detect_cfg"]["apertureOuterMarginFrac"],
                 ),
                 "blend_frac": _blend_frac(
                     _img,
@@ -1708,6 +1800,40 @@ class DonutBlitzMonolithTaskConfig(
         doc="Multiplier applied to the binned donut radius to set exclude_border in peak_local_max.",
         dtype=float,
         default=1.15,
+    )
+    apertureOuterMarginFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Outer edge of the main photometric aperture, as a multiple of "
+            "the nominal donut radius. Adds margin beyond the nominal edge to "
+            "tolerate PSF blur and centroiding error."
+        ),
+        dtype=float,
+        default=1.05,
+    )
+    apertureInnerBufferFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Inner edge of the background/blend-check region inside the "
+            "obscuration, as a multiple of ``radius * obscuration``."
+        ),
+        dtype=float,
+        default=0.67,
+    )
+    bkgAnnulusInnerFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Inner edge of the outer background/blend-check annulus, as a "
+            "multiple of the nominal donut radius."
+        ),
+        dtype=float,
+        default=1.25,
+    )
+    bkgAnnulusOuterFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Outer edge of the outer background/blend-check annulus, as a "
+            "multiple of the nominal donut radius. Also sets the half-width "
+            "of the photometry/quality-metric cutout window."
+        ),
+        dtype=float,
+        default=1.4,
     )
     innerFracThreshold: pexConfig.Field = pexConfig.Field(
         doc="Maximum allowed |inner_flux / flux| for a candidate to be kept.",
@@ -2078,6 +2204,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             detectionBinning=self.config.detectionBinning,
             peakMinDistanceFactor=self.config.peakMinDistanceFactor,
             peakExcludeBorderFactor=self.config.peakExcludeBorderFactor,
+            apertureOuterMarginFrac=self.config.apertureOuterMarginFrac,
+            apertureInnerBufferFrac=self.config.apertureInnerBufferFrac,
+            bkgAnnulusInnerFrac=self.config.bkgAnnulusInnerFrac,
+            bkgAnnulusOuterFrac=self.config.bkgAnnulusOuterFrac,
             innerFracThreshold=self.config.innerFracThreshold,
             outerFracThreshold=self.config.outerFracThreshold,
             snrThreshold=self.config.snrThreshold,
@@ -2249,6 +2379,16 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             wfFitTimeoutPerDonut=self.config.wfFitTimeoutPerDonut,
             wfInitialGuessOnly=self.config.wfInitialGuessOnly,
             wfEstimationMode=self.config.wfEstimationMode,
+        )
+        # Telescope is band- and quantum-fixed; build once here and share via
+        # COW instead of reloading "LSST_{band}.yaml" per donut in workers.
+        _telescope = batoid.Optic.fromYaml(f"LSST_{example_band}.yaml")
+        _CALIB_STORE["telescope"] = _telescope
+        _CALIB_STORE["telescope_extra"] = _telescope.withLocallyShiftedOptic(
+            "Detector", [0, 0, example_instrument.defocalOffset]
+        )
+        _CALIB_STORE["telescope_intra"] = _telescope.withLocallyShiftedOptic(
+            "Detector", [0, 0, -example_instrument.defocalOffset]
         )
 
         cutout_args = sorted(CORNER_SENSOR_NAMES)
@@ -2589,8 +2729,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["noll_indices"] = list(_CALIB_STORE.get("wf_cfg", {}).get("nollIndices", []))
         table.meta["sensor_meta"] = sensor_meta
         _first_d = all_donuts[0][0]
-        table.meta["donut_radius"] = float(_first_d.get("donut_radius", float("nan")))
-        table.meta["obscuration"] = float(_first_d.get("obscuration", float("nan")))
+        table.meta["donut_radius"] = _first_d["donut_radius"]
+        table.meta["obscuration"] = _first_d["obscuration"]
+        _detect_cfg = _CALIB_STORE["detect_cfg"]
+        table.meta["aperture_outer_margin_frac"] = _detect_cfg["apertureOuterMarginFrac"]
+        table.meta["aperture_inner_buffer_frac"] = _detect_cfg["apertureInnerBufferFrac"]
+        table.meta["bkg_annulus_inner_frac"] = _detect_cfg["bkgAnnulusInnerFrac"]
+        table.meta["bkg_annulus_outer_frac"] = _detect_cfg["bkgAnnulusOuterFrac"]
         return table
 
 class DonutBlitzPlotTaskConnections(
@@ -2677,13 +2822,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return
 
         meta = catalog.meta
-        run_elapsed = float(meta.get("run_elapsed", 0.0))
-        refcat_elapsed = float(meta.get("refcat_elapsed", 0.0))
-        butler_elapsed = float(meta.get("butler_elapsed", 0.0))
-        photo_filter_label = str(meta.get("photo_filter_name", "photo"))
-        astrom_filter_label = str(meta.get("astrom_filter_name", "astrom"))
-        visit_str = str(meta.get("visit_str", ""))
-        sensor_meta = meta.get("sensor_meta", {})
+        run_elapsed = meta["run_elapsed"]
+        refcat_elapsed = meta["refcat_elapsed"]
+        butler_elapsed = meta["butler_elapsed"]
+        photo_filter_label = meta["photo_filter_name"]
+        astrom_filter_label = meta["astrom_filter_name"]
+        visit_str = meta["visit_str"]
+        sensor_meta = meta["sensor_meta"]
 
         # Group rows by sensor; split into accepted and rejected.
         sensors_with_data = []
@@ -2734,6 +2879,15 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         COL_SPACER = 1 + STAMPS_PER_ROW
         COL_REJECTED_START = COL_SPACER + 1
 
+        _dr = catalog.meta["donut_radius"]
+        _ob = catalog.meta["obscuration"]
+        _stamp_dr = _dr if np.isfinite(_dr) else None
+        _stamp_ob = _ob if np.isfinite(_ob) else None
+        _stamp_outer_margin_frac = catalog.meta["aperture_outer_margin_frac"]
+        _stamp_inner_buffer_frac = catalog.meta["aperture_inner_buffer_frac"]
+        _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
+        _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
+
         def _draw_stamp(ax, row, rejected=False):
             import matplotlib.patches as mpatches
 
@@ -2750,17 +2904,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 extent=[-h_px, h_px, -h_px, h_px],
             )
 
-            _dr = catalog.meta.get("donut_radius", float("nan"))
-            _ob = catalog.meta.get("obscuration", float("nan"))
-            dr = float(_dr) if np.isfinite(float(_dr)) else None
-            ob = float(_ob) if np.isfinite(float(_ob)) else None
+            dr, ob = _stamp_dr, _stamp_ob
             if dr is not None and ob is not None:
                 _circ_specs = [
-                    (dr * ob * 0.67, "#56B4E9", "--"),
+                    (dr * ob * _stamp_inner_buffer_frac, "#56B4E9", "--"),
                     (dr * ob, "#56B4E9", "-"),
-                    (dr * 1.05, "#56B4E9", "-"),
-                    (dr * 1.25, "#E69F00", "-"),
-                    (dr * 1.4, "#E69F00", "-"),
+                    (dr * _stamp_outer_margin_frac, "#56B4E9", "-"),
+                    (dr * _stamp_bkg_inner_frac, "#E69F00", "-"),
+                    (dr * _stamp_bkg_outer_frac, "#E69F00", "-"),
                 ]
                 for _rad, _col, _ls in _circ_specs:
                     ax.add_patch(
@@ -2913,15 +3064,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return
 
         meta = catalog.meta
-        visit_str = str(meta.get("visit_str", ""))
-        refcat_elapsed = float(meta.get("refcat_elapsed", 0.0))
-        butler_elapsed = float(meta.get("butler_elapsed", 0.0))
-        butler_times = dict(meta.get("butler_times", {}))
-        cutout_elapsed = float(meta.get("cutout_elapsed", 0.0))
-        danish_elapsed = float(meta.get("danish_elapsed", 0.0))
-        noll_cfg = list(meta.get("noll_indices", [])) or list(
-            _CALIB_STORE.get("wf_cfg", {}).get("nollIndices", [])
-        )
+        visit_str = meta["visit_str"]
+        refcat_elapsed = meta["refcat_elapsed"]
+        butler_elapsed = meta["butler_elapsed"]
+        butler_times = meta["butler_times"]
+        cutout_elapsed = meta["cutout_elapsed"]
+        danish_elapsed = meta["danish_elapsed"]
+        noll_cfg = meta["noll_indices"]
         ZK_MIN, ZK_MAX = 4, 28
 
         # Reconstruct wf_results-like list from QTable by grouping on "group" column.
