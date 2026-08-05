@@ -2778,11 +2778,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ob = float(_ob) if np.isfinite(float(_ob)) else None
             if dr is not None and ob is not None:
                 _circ_specs = [
-                    (dr * ob * 0.67, "lime", "--"),
-                    (dr * ob, "lime", "-"),
-                    (dr * 1.05, "lime", "-"),
-                    (dr * 1.25, "orange", "-"),
-                    (dr * 1.4, "orange", "-"),
+                    (dr * ob * 0.67, "#56B4E9", "--"),
+                    (dr * ob, "#56B4E9", "-"),
+                    (dr * 1.05, "#56B4E9", "-"),
+                    (dr * 1.25, "#E69F00", "-"),
+                    (dr * 1.4, "#E69F00", "-"),
                 ]
                 for _rad, _col, _ls in _circ_specs:
                     ax.add_patch(
@@ -2799,8 +2799,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     )
 
             if rejected:
-                ax.plot([-h_px, h_px], [-h_px, h_px], color="red", lw=1.5, zorder=5)
-                ax.plot([-h_px, h_px], [h_px, -h_px], color="red", lw=1.5, zorder=5)
+                ax.plot([-h_px, h_px], [-h_px, h_px], color="#D55E00", lw=1.5, zorder=5)
+                ax.plot([-h_px, h_px], [h_px, -h_px], color="#D55E00", lw=1.5, zorder=5)
 
             nq = int(row["n_quarter"]) % 4
 
@@ -2812,14 +2812,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
             for dx, dy, mag in json.loads(str(row["nearby_photo"])):
                 tx, ty = _xform(dx, dy)
-                ax.plot(tx, ty, "o", ms=6, mfc="none", mec="cyan", mew=0.8, zorder=3)
+                ax.plot(tx, ty, "o", ms=6, mfc="none", mec="#56B4E9", mew=0.8, zorder=3)
                 if np.isfinite(mag):
-                    ax.text(tx + 3, ty + 3, f"{mag:.1f}", color="cyan", fontsize=3.5, zorder=4)
+                    ax.text(tx + 3, ty + 3, f"{mag:.1f}", color="#56B4E9", fontsize=3.5, zorder=4)
             for dx, dy, mag in json.loads(str(row["nearby_astrom"])):
                 tx, ty = _xform(dx, dy)
-                ax.plot(tx, ty, "+", ms=6, mec="red", mew=0.8, zorder=3)
+                ax.plot(tx, ty, "+", ms=6, mec="#E69F00", mew=0.8, zorder=3)
                 if np.isfinite(mag):
-                    ax.text(tx + 3, ty - 5, f"{mag:.1f}", color="red", fontsize=3.5, zorder=4)
+                    ax.text(tx + 3, ty - 5, f"{mag:.1f}", color="#E69F00", fontsize=3.5, zorder=4)
 
             inner_frac = float(row["inner_frac"])
             outer_frac = float(row["outer_frac"])
@@ -2831,7 +2831,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
             sid = int(row["source_id"])
             sid_str = f"id={sid}" if sid != 0 else ""
-            _text_color = "orangered" if rejected else "black"
+            _text_color = "#D55E00" if rejected else "black"
             ax.text(
                 0.05,
                 1.00,
@@ -2893,11 +2893,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         legend_handles = [
             Line2D(
                 [0], [0], marker="o", color="w", markerfacecolor="none",
-                markeredgecolor="cyan", markersize=6,
+                markeredgecolor="#56B4E9", markersize=6,
                 label=f"photo refcat ({photo_filter_label})",
             ),
             Line2D(
-                [0], [0], marker="+", color="red", markersize=6, linestyle="none",
+                [0], [0], marker="+", color="#E69F00", markersize=6, linestyle="none",
                 label=f"astrom refcat ({astrom_filter_label})",
             ),
         ]
@@ -3017,12 +3017,25 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         return c
             return "R00"
 
-        # 4-stop colormap: purple (severe over-sub) → blue → white (zero) → red (signal).
-        # Anchors: -vmax=purple, -vmax/10=blue, 0=white, +vmax=red.
+        # 4-stop diverging colormap: Wong blue → white (zero) → vermilion.
+        # Anchors: -vmax=#0072B2, -vmax/10=#56B4E9, 0=white, +vmax=#D55E00.
         # Normalised positions over [-vmax, vmax]: 0.0, 0.45, 0.5, 1.0.
+        def _hex_to_rgb(h):
+            return tuple(int(h[i : i + 2], 16) / 255 for i in (1, 3, 5))
+
         _cmap_bwr = LinearSegmentedColormap.from_list(
             "bwr_donut",
-            list(zip([0.0, 0.45, 0.5, 1.0], [(0.5, 0, 0.5), (0, 0, 1), (1, 1, 1), (1, 0, 0)])),
+            list(zip(
+                [0.0, 0.45, 0.5, 1.0],
+                [_hex_to_rgb(h) for h in ("#0072B2", "#56B4E9", "#FFFFFF", "#D55E00")],
+            )),
+        )
+        _cmap_bwr_sym = LinearSegmentedColormap.from_list(
+            "bwr_donut_sym",
+            list(zip(
+                [0.0, 0.5, 1.0],
+                [_hex_to_rgb(h) for h in ("#0072B2", "#FFFFFF", "#D55E00")],
+            )),
         )
 
         def _draw_stamp(ax, img, cmap, vmin, vmax, label=""):
@@ -3043,18 +3056,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ax.set_xlim(ZK_MIN - 0.5, ZK_MAX + 0.5)
             ax.set_xticks([])
             ax.set_yticks([])
-            for j in [4, 11, 22]:
-                ax.axvspan(j - 0.5, j + 0.5, color="red", alpha=0.2, ec="none")
-            for j in [5, 12, 23]:
-                ax.axvspan(j - 0.5, j + 1.5, color="orange", alpha=0.2, ec="none")
-            for j in [7, 16]:
-                ax.axvspan(j - 0.5, j + 1.5, color="yellow", alpha=0.2, ec="none")
-            for j in [9, 18]:
-                ax.axvspan(j - 0.5, j + 1.5, color="green", alpha=0.2, ec="none")
-            for j in [14, 25]:
-                ax.axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
-            ax.axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
-            ax.axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
+            for j in [4, 11, 22]:   # defocus
+                ax.axvspan(j - 0.5, j + 0.5, color="#000000", alpha=0.15, ec="none")
+            for j in [5, 12, 23]:   # astigmatism
+                ax.axvspan(j - 0.5, j + 1.5, color="#E69F00", alpha=0.25, ec="none")
+            for j in [7, 16]:       # coma
+                ax.axvspan(j - 0.5, j + 1.5, color="#F0E442", alpha=0.35, ec="none")
+            for j in [9, 18]:       # trefoil
+                ax.axvspan(j - 0.5, j + 1.5, color="#009E73", alpha=0.25, ec="none")
+            for j in [14, 25]:      # secondary astigmatism
+                ax.axvspan(j - 0.5, j + 1.5, color="#56B4E9", alpha=0.25, ec="none")
+            ax.axvspan(19.5, 21.5, color="#0072B2", alpha=0.25, ec="none")   # secondary coma
+            ax.axvspan(26.5, 28.5, color="#CC79A7", alpha=0.25, ec="none")   # tertiary
             if inset_label:
                 ax.text(0.03, 0.97, inset_label, transform=ax.transAxes, fontsize=4,
                         va="top", ha="left",
@@ -3180,7 +3193,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         for ci, (img, cmap, vmin, vmx) in enumerate([
                             (data, _cmap_bwr, -vmax, vmax),
                             (model if has_model else None, _cmap_bwr, -vmax, vmax),
-                            (resid, "bwr", -vmax_r, vmax_r),
+                            (resid, _cmap_bwr_sym, -vmax_r, vmax_r),
                         ]):
                             ax = fig.add_subplot(inner[row_idx, col_start + ci])
                             lbl = sensor_hdr if ci == 0 else ""
