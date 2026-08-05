@@ -23,10 +23,13 @@ __all__ = [
     "DonutBlitzMonolithTaskConnections",
     "DonutBlitzMonolithTaskConfig",
     "DonutBlitzMonolithTask",
+    "DonutBlitzPlotTaskConfig",
+    "DonutBlitzPlotTask",
 ]
 
 import ast
 import contextlib
+import dataclasses
 import logging
 import multiprocessing as mp
 import signal
@@ -432,7 +435,7 @@ def _selectFromPhotoCat(
         Detector name used to look up the pre-loaded refcats in
         ``_CALIB_STORE``.
     astrom_cfg : dict
-        Config keys used here: ``doDonutSelection``, ``donut_selector_config``,
+        Config keys used here: ``donut_selector_config``,
         ``resolvedPhotoFilterName``, ``astromRefFilter``,
         ``saveDiagnosticPlot``.
 
@@ -478,21 +481,12 @@ def _selectFromPhotoCat(
             if not refCat.isContiguous():
                 refCat = refCat.copy(deep=True)
 
-            donutSelectorTask = (
-                DonutSourceSelectorTask(config=astrom_cfg["donut_selector_config"])
-                if astrom_cfg["doDonutSelection"]
-                else None
-            )
-
-            if donutSelectorTask is None:
-                refSelection = refCat
-                sel_rejected_refcat = refCat[np.zeros(len(refCat), dtype=bool)]
-            else:
-                donutSelection = donutSelectorTask.run(refCat, detector, filterName)
-                sel_mask = np.array(donutSelection.selected, dtype=bool)
-                refSelection = refCat[sel_mask]
-                sel_rejected_refcat = refCat[~sel_mask]
-                sel_rejection_reasons = np.array(donutSelection.rejectionReasons)[~sel_mask]
+            donutSelectorTask = DonutSourceSelectorTask(config=astrom_cfg["donut_selector_config"])
+            donutSelection = donutSelectorTask.run(refCat, detector, filterName)
+            sel_mask = np.array(donutSelection.selected, dtype=bool)
+            refSelection = refCat[sel_mask]
+            sel_rejected_refcat = refCat[~sel_mask]
+            sel_rejection_reasons = np.array(donutSelection.rejectionReasons)[~sel_mask]
 
             if len(refSelection) > 0:
                 catalog_centroids = (
@@ -755,7 +749,7 @@ def _cutStamps(
             return None
 
         _nearby_photo_list = _nearby(all_photo_cat)
-        _neighbor_dists = [np.hypot(dx, dy) for dx, dy, _ in _nearby_photo_list]
+        _neighbor_dists = [np.hypot(dx, dy) for dx, dy, _ in _nearby_photo_list if np.hypot(dx, dy) >= 1.0]
 
         _catalog_centroid_offset_px = (
             float(np.hypot(cx_f - blind_cx, cy_f - blind_cy))
@@ -1067,10 +1061,11 @@ def _fit_bkg_val(fit_params, donut_idx: int) -> float:
     if fit_params is None:
         return float("nan")
     bkgs = fit_params.get("bkgs") or fit_params.get("bkg")
-    if bkgs is None:
+    if bkgs is None or len(bkgs) == 0 or donut_idx >= len(bkgs):
         return float("nan")
     if np.ndim(bkgs[0]) > 0:
-        return float(np.ravel(bkgs[donut_idx])[0])
+        raveled = np.ravel(bkgs[donut_idx])
+        return float(raveled[0]) if len(raveled) > 0 else float("nan")
     return float(bkgs[0])
 
 
@@ -1152,6 +1147,44 @@ def _build_loss_fn():
     """Return a danish loss function from wf_cfg, or None for standard chi-squared."""
     alpha = _CALIB_STORE["wf_cfg"].get("systematicLossAlpha", 0.0)
     return danish.systematic_loss(alpha) if alpha != 0.0 else None
+
+
+@dataclasses.dataclass
+class _WfGroup:
+    donuts: list  # donut dicts, ordered; each carries its own "sensor" key
+    group_id: str
+    mode: str  # "paired" | "unpaired" | "full_detector" | "full_corner"
+
+
+def _build_wf_groups(mode, results_by_sensor, wf_cfg):
+    """Build _WfGroup list from per-sensor catalogs, matching the mode dispatch logic.
+
+    Returns (groups, unmatched_donuts).
+    """
+    groups = []
+    unmatched_donuts = []
+    if mode == "paired":
+        for _corner, (sw0, sw1) in CORNER_PAIRS.items():
+            extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d["snr"], reverse=True)
+            intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d["snr"], reverse=True)
+            for extra, intra in zip(extra_donuts, intra_donuts):
+                gid = f"{extra['source_id']}_{intra['source_id']}"
+                groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, mode="paired"))
+            n_pairs = min(len(extra_donuts), len(intra_donuts))
+            unmatched_donuts.extend(extra_donuts[n_pairs:])
+            unmatched_donuts.extend(intra_donuts[n_pairs:])
+    elif mode == "unpaired":
+        for sensor_donuts in results_by_sensor.values():
+            for d in sensor_donuts:
+                groups.append(_WfGroup(donuts=[d], group_id=str(d["source_id"]), mode="unpaired"))
+    elif mode == "full_detector":
+        for sensor_name, sensor_donuts in results_by_sensor.items():
+            groups.append(_WfGroup(donuts=sensor_donuts, group_id=sensor_name, mode="full_detector"))
+    else:  # full_corner
+        for corner, (sw0, sw1) in CORNER_PAIRS.items():
+            all_donuts = results_by_sensor.get(sw0, []) + results_by_sensor.get(sw1, [])
+            groups.append(_WfGroup(donuts=all_donuts, group_id=corner, mode="full_corner"))
+    return groups, unmatched_donuts
 
 
 def _build_wf_factory(instrument):
@@ -1403,269 +1436,24 @@ def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_cfg, label):
     return zk_dev, params, model_imgs, success, fit_info
 
 
-def _wf_paired_worker(args: tuple) -> dict:
-    """Fit a jointly-modeled intra/extra donut pair with DZMultiDonutModel."""
-    donut_extra, donut_intra = args
+def _wf_worker(group: _WfGroup) -> dict:
+    """Unified wavefront fitting worker for all modes.
+
+    Fits all donuts in ``group`` jointly with a single ``DZMultiDonutModel``,
+    sharing one wavefront solution across the group.  Replaces the four
+    mode-specific workers (_wf_paired_worker etc.).
+    """
     wf_cfg = _CALIB_STORE["wf_cfg"]
     nollIndices = wf_cfg["nollIndices"]
-    detect_cfg = _CALIB_STORE["detect_cfg"]
-    camera = _CALIB_STORE["camera"]
-    instrument = getTaskInstrument(camera.getName(), donut_extra["sensor"], detect_cfg["instConfigFile"])
-    factory = _build_wf_factory(instrument)
+    instrument = _CALIB_STORE["instrument"]
+    all_donuts = group.donuts
+    n = len(all_donuts)
 
-    img_e, angle_e, zk_ref_e, var_e, bkg_std_e = _prep_donut_for_danish(donut_extra, instrument)
-    img_i, angle_i, zk_ref_i, var_i, bkg_std_i = _prep_donut_for_danish(donut_intra, instrument)
-    imgs = [img_e, img_i]
-    dz_terms = [(1, int(j)) for j in nollIndices]
-
-    model = danish.DZMultiDonutModel(
-        factory,
-        z_refs=[zk_ref_e, zk_ref_i],
-        dz_terms=dz_terms,
-        field_radius=np.deg2rad(1.85),
-        thxs=[angle_e[0], angle_i[0]],
-        thys=[angle_e[1], angle_i[1]],
-        npix=imgs[0].shape[0],
-        bkg_order=wf_cfg["bkgOrder"],
-        loss_fn=_build_loss_fn(),
-    )
-    fluxes_init = [float(np.clip(np.sum(img), 1e3, 1e9)) for img in imgs]
-    x0 = model.pack_params(
-        fluxes=fluxes_init,
-        dxs=[0.0, 0.0],
-        dys=[0.0, 0.0],
-        fwhm=1.0,
-        bkgs=[[0.0] * model.nbkg] * 2,
-        wavefront_params=[0.0] * len(dz_terms),
-    )
-    bounds = model.pack_params(
-        fluxes=[[0.0, np.inf]] * 2,
-        dxs=[[-np.inf, np.inf]] * 2,
-        dys=[[-np.inf, np.inf]] * 2,
-        fwhm=[0.1, 5.0],
-        bkgs=[[[-np.inf, np.inf]] * model.nbkg] * 2,
-        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
-    )
-    bounds = [list(b) for b in zip(*bounds)]
-    x0 = np.clip(x0, bounds[0], bounds[1])
-    timeout = wf_cfg["wfFitTimeoutPerDonut"] * 2
-    label = f"paired extra={donut_extra['source_id']} intra={donut_intra['source_id']}"
-    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
-        model,
-        x0,
-        bounds,
-        imgs,
-        [var_e, var_i],
-        timeout,
-        wf_cfg,
-        label,
-    )
-    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
-    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
-    fit_mode = wf_cfg.get("wfEstimationMode", "paired")
-    group_id = f"{donut_extra['source_id']}_{donut_intra['source_id']}"
-    me = model_imgs[0] if model_imgs is not None else None
-    mi = model_imgs[1] if model_imgs is not None else None
-    _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
-    _fit_nfev = int(fit_info.get("nfev", 0))
-    _fit_cost = float(fit_info.get("cost", float("nan")))
-    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
-    _dxs = fit_info.get("dxs", [float("nan"), float("nan")])
-    _dys = fit_info.get("dys", [float("nan"), float("nan")])
-    _fluxes = fit_info.get("fluxes", [float("nan"), float("nan")])
-    donuts_out = [
-        {
-            "donut_id": int(donut_extra["source_id"]),
-            "sensor": donut_extra["sensor"],
-            "defocal": "extra",
-            "zk_dev": zk_dev_dense,
-            "zk_intrinsic": _dense_intrinsic(donut_extra),
-            "img": img_e,
-            "model_img": me,
-            "fit_success": success,
-            "fit_elapsed": _fit_elapsed,
-            "fit_nfev": _fit_nfev,
-            "fit_cost": _fit_cost,
-            "fit_dx": float(_dxs[0]),
-            "fit_dy": float(_dys[0]),
-            "fit_flux": float(_fluxes[0]),
-            "fit_fwhm": _fit_fwhm,
-            "fit_residual_rms": _residual_rms(img_e, me, instrument.donutRadius, instrument.obscuration),
-            "blend_frac": _blend_frac(
-                img_e,
-                (_bkg_free_model(me, model, params, 0, wf_cfg["bkgOrder"]) if me is not None else None),
-                bkg_std_e,
-            ),
-            "fit_bkg": _fit_bkg_val(params, 0),
-            "zk_norm_um": zk_norm_um,
-            "group_id": group_id,
-            "group_size": 2,
-            "fit_mode": fit_mode,
-        },
-        {
-            "donut_id": int(donut_intra["source_id"]),
-            "sensor": donut_intra["sensor"],
-            "defocal": "intra",
-            "zk_dev": zk_dev_dense,
-            "zk_intrinsic": _dense_intrinsic(donut_intra),
-            "img": img_i,
-            "model_img": mi,
-            "fit_success": success,
-            "fit_elapsed": _fit_elapsed,
-            "fit_nfev": _fit_nfev,
-            "fit_cost": _fit_cost,
-            "fit_dx": float(_dxs[1]),
-            "fit_dy": float(_dys[1]),
-            "fit_flux": float(_fluxes[1]),
-            "fit_fwhm": _fit_fwhm,
-            "fit_residual_rms": _residual_rms(img_i, mi, instrument.donutRadius, instrument.obscuration),
-            "blend_frac": _blend_frac(
-                img_i,
-                (_bkg_free_model(mi, model, params, 1, wf_cfg["bkgOrder"]) if mi is not None else None),
-                bkg_std_i,
-            ),
-            "fit_bkg": _fit_bkg_val(params, 1),
-            "zk_norm_um": zk_norm_um,
-            "group_id": group_id,
-            "group_size": 2,
-            "fit_mode": fit_mode,
-        },
-    ]
-    return {
-        "mode": "paired",
-        "fit_mode": fit_mode,
-        "group_id": group_id,
-        "group_size": 2,
-        "zk_dev": zk_dev,
-        "success": success,
-        "fit_info": fit_info,
-        "donuts": donuts_out,
-        "model_imgs": model_imgs,
-        "imgs": [img_e, img_i],
-        "sensors": [donut_extra["sensor"], donut_intra["sensor"]],
-    }
-
-
-def _wf_unpaired_worker(donut: dict) -> dict:
-    """Fit a single donut with DZMultiDonutModel (N=1)."""
-    wf_cfg = _CALIB_STORE["wf_cfg"]
-    nollIndices = wf_cfg["nollIndices"]
-    detect_cfg = _CALIB_STORE["detect_cfg"]
-    camera = _CALIB_STORE["camera"]
-    instrument = getTaskInstrument(camera.getName(), donut["sensor"], detect_cfg["instConfigFile"])
-    factory = _build_wf_factory(instrument)
-    img, angle, zk_ref, bkg_var, bkg_std = _prep_donut_for_danish(donut, instrument)
-    dz_terms = [(1, int(j)) for j in nollIndices]
-
-    model = danish.DZMultiDonutModel(
-        factory,
-        z_refs=[zk_ref],
-        dz_terms=dz_terms,
-        field_radius=np.deg2rad(1.85),
-        thxs=[angle[0]],
-        thys=[angle[1]],
-        npix=img.shape[0],
-        bkg_order=wf_cfg["bkgOrder"],
-        loss_fn=_build_loss_fn(),
-    )
-    x0 = model.pack_params(
-        fluxes=[float(np.clip(np.sum(img), 1e3, 1e9))],
-        dxs=[0.0],
-        dys=[0.0],
-        fwhm=1.0,
-        bkgs=[[0.0] * model.nbkg],
-        wavefront_params=[0.0] * len(dz_terms),
-    )
-    bounds = model.pack_params(
-        fluxes=[[0.0, np.inf]],
-        dxs=[[-np.inf, np.inf]],
-        dys=[[-np.inf, np.inf]],
-        fwhm=[0.1, 5.0],
-        bkgs=[[[-np.inf, np.inf]] * model.nbkg],
-        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
-    )
-    bounds = [list(b) for b in zip(*bounds)]
-    x0 = np.clip(x0, bounds[0], bounds[1])
-    timeout = wf_cfg["wfFitTimeoutPerDonut"]
-    label = f"unpaired donut={donut['source_id']}"
-    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
-        model,
-        x0,
-        bounds,
-        [img],
-        [bkg_var],
-        timeout,
-        wf_cfg,
-        label,
-    )
-    model_img = model_imgs[0] if model_imgs is not None else None
-    defocal = "intra" if "SW1" in str(donut.get("sensor", "")) else "extra"
-    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
-    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
-    fit_mode = wf_cfg.get("wfEstimationMode", "unpaired")
-    group_id = str(donut["source_id"])
-    _dxs = fit_info.get("dxs", [float("nan")])
-    _dys = fit_info.get("dys", [float("nan")])
-    _fluxes = fit_info.get("fluxes", [float("nan")])
-    donuts_out = [
-        {
-            "donut_id": int(donut["source_id"]),
-            "sensor": donut["sensor"],
-            "defocal": defocal,
-            "zk_dev": zk_dev_dense,
-            "zk_intrinsic": _dense_intrinsic(donut),
-            "img": img,
-            "model_img": model_img,
-            "fit_success": success,
-            "fit_elapsed": float(fit_info.get("elapsed", float("nan"))),
-            "fit_nfev": int(fit_info.get("nfev", 0)),
-            "fit_cost": float(fit_info.get("cost", float("nan"))),
-            "fit_dx": float(_dxs[0]),
-            "fit_dy": float(_dys[0]),
-            "fit_flux": float(_fluxes[0]),
-            "fit_fwhm": float(fit_info.get("fwhm", float("nan"))),
-            "fit_residual_rms": _residual_rms(img, model_img, instrument.donutRadius, instrument.obscuration),
-            "blend_frac": _blend_frac(
-                img,
-                (
-                    _bkg_free_model(model_img, model, params, 0, wf_cfg["bkgOrder"])
-                    if model_img is not None
-                    else None
-                ),
-                bkg_std,
-            ),
-            "fit_bkg": _fit_bkg_val(params, 0),
-            "zk_norm_um": zk_norm_um,
-            "group_id": group_id,
-            "group_size": 1,
-            "fit_mode": fit_mode,
-        },
-    ]
-    return {
-        "mode": "unpaired",
-        "fit_mode": fit_mode,
-        "group_id": group_id,
-        "group_size": 1,
-        "zk_dev": zk_dev,
-        "success": success,
-        "fit_info": fit_info,
-        "donuts": donuts_out,
-        "model_imgs": [model_img] if model_img is not None else None,
-        "imgs": [img],
-        "sensors": [donut["sensor"]],
-    }
-
-
-def _wf_full_corner_worker(args: tuple) -> dict:
-    """Fit all donuts in a corner jointly with DZMultiDonutModel."""
-    corner_name, donuts_extra, donuts_intra = args
-    wf_cfg = _CALIB_STORE["wf_cfg"]
-    nollIndices = wf_cfg["nollIndices"]
-    all_donuts = donuts_extra + donuts_intra
     if not all_donuts:
         return {
-            "mode": "full_corner",
-            "corner": corner_name,
+            "mode": group.mode,
+            "group_id": group.group_id,
+            "group_size": 0,
             "zk_dev": np.full(len(nollIndices), np.nan),
             "success": False,
             "fit_info": {},
@@ -1674,10 +1462,8 @@ def _wf_full_corner_worker(args: tuple) -> dict:
             "imgs": [],
             "sensors": [],
         }
+
     t_setup0 = time.perf_counter()
-    detect_cfg = _CALIB_STORE["detect_cfg"]
-    camera = _CALIB_STORE["camera"]
-    instrument = getTaskInstrument(camera.getName(), f"{corner_name}_SW0", detect_cfg["instConfigFile"])
     factory = _build_wf_factory(instrument)
     preps = [_prep_donut_for_danish(d, instrument) for d in all_donuts]
     imgs = [p[0] for p in preps]
@@ -1687,158 +1473,7 @@ def _wf_full_corner_worker(args: tuple) -> dict:
     sky_lvl = [p[3] for p in preps]
     bkg_stds = [p[4] for p in preps]
     dz_terms = [(1, int(j)) for j in nollIndices]
-    n = len(imgs)
-    npix = min(img.shape[0] for img in imgs)
-    imgs = [img[:npix, :npix] for img in imgs]
 
-    model = danish.DZMultiDonutModel(
-        factory,
-        z_refs=zk_refs,
-        dz_terms=dz_terms,
-        field_radius=np.deg2rad(1.85),
-        thxs=thxs,
-        thys=thys,
-        npix=npix,
-        bkg_order=wf_cfg["bkgOrder"],
-        loss_fn=_build_loss_fn(),
-    )
-    fluxes_init = [float(np.clip(np.sum(img), 1e3, 1e9)) for img in imgs]
-    x0 = model.pack_params(
-        fluxes=fluxes_init,
-        dxs=[0.0] * n,
-        dys=[0.0] * n,
-        fwhm=1.0,
-        bkgs=[[0.0] * model.nbkg] * n,
-        wavefront_params=[0.0] * len(dz_terms),
-    )
-    bounds = model.pack_params(
-        fluxes=[[0.0, np.inf]] * n,
-        dxs=[[-np.inf, np.inf]] * n,
-        dys=[[-np.inf, np.inf]] * n,
-        fwhm=[0.1, 5.0],
-        bkgs=[[[-np.inf, np.inf]] * model.nbkg] * n,
-        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
-    )
-    bounds = [list(b) for b in zip(*bounds)]
-    x0 = np.clip(x0, bounds[0], bounds[1])
-    timeout = wf_cfg["wfFitTimeoutPerDonut"] * n * 2
-    _log.info(
-        "WF full_corner corner=%s n=%d npix=%d setup=%.2fs",
-        corner_name,
-        n,
-        npix,
-        time.perf_counter() - t_setup0,
-    )
-    label = f"full_corner corner={corner_name} n={n}"
-    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
-        model,
-        x0,
-        bounds,
-        imgs,
-        sky_lvl,
-        timeout,
-        wf_cfg,
-        label,
-    )
-    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
-    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
-    fit_mode = wf_cfg.get("wfEstimationMode", "full_corner")
-    group_id = corner_name
-    _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
-    _fit_nfev = int(fit_info.get("nfev", 0))
-    _fit_cost = float(fit_info.get("cost", float("nan")))
-    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
-    _dxs = fit_info.get("dxs", [float("nan")] * n)
-    _dys = fit_info.get("dys", [float("nan")] * n)
-    _fluxes = fit_info.get("fluxes", [float("nan")] * n)
-    donuts_out = []
-    for i, d in enumerate(all_donuts):
-        defocal = "intra" if "SW1" in str(d.get("sensor", "")) else "extra"
-        _img = imgs[i] if i < len(imgs) else None
-        _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
-        donuts_out.append(
-            {
-                "donut_id": int(d["source_id"]),
-                "sensor": d["sensor"],
-                "defocal": defocal,
-                "zk_dev": zk_dev_dense,
-                "zk_intrinsic": _dense_intrinsic(d),
-                "img": _img,
-                "model_img": _mimg,
-                "fit_success": success,
-                "fit_elapsed": _fit_elapsed,
-                "fit_nfev": _fit_nfev,
-                "fit_cost": _fit_cost,
-                "fit_dx": float(_dxs[i]) if i < len(_dxs) else float("nan"),
-                "fit_dy": float(_dys[i]) if i < len(_dys) else float("nan"),
-                "fit_flux": float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
-                "fit_fwhm": _fit_fwhm,
-                "fit_residual_rms": _residual_rms(
-                    _img, _mimg, instrument.donutRadius, instrument.obscuration
-                ),
-                "blend_frac": _blend_frac(
-                    _img,
-                    (
-                        _bkg_free_model(_mimg, model, params, i, wf_cfg["bkgOrder"])
-                        if _mimg is not None
-                        else None
-                    ),
-                    bkg_stds[i] if i < len(bkg_stds) else float("nan"),
-                ),
-                "fit_bkg": _fit_bkg_val(params, i),
-                "zk_norm_um": zk_norm_um,
-                "group_id": group_id,
-                "group_size": n,
-                "fit_mode": fit_mode,
-            }
-        )
-    return {
-        "mode": "full_corner",
-        "fit_mode": fit_mode,
-        "group_id": group_id,
-        "group_size": n,
-        "corner": corner_name,
-        "zk_dev": zk_dev,
-        "success": success,
-        "fit_info": fit_info,
-        "donuts": donuts_out,
-        "model_imgs": model_imgs,
-        "imgs": imgs,
-        "sensors": [d["sensor"] for d in all_donuts],
-    }
-
-
-def _wf_full_detector_worker(args: tuple) -> dict:
-    """Fit all donuts on a single CWFS sensor jointly with DZMultiDonutModel."""
-    sensor_name, all_donuts = args
-    wf_cfg = _CALIB_STORE["wf_cfg"]
-    nollIndices = wf_cfg["nollIndices"]
-    if not all_donuts:
-        return {
-            "mode": "full_detector",
-            "sensor": sensor_name,
-            "zk_dev": np.full(len(nollIndices), np.nan),
-            "success": False,
-            "fit_info": {},
-            "donuts": [],
-            "model_imgs": None,
-            "imgs": [],
-            "sensors": [],
-        }
-    t_setup0 = time.perf_counter()
-    detect_cfg = _CALIB_STORE["detect_cfg"]
-    camera = _CALIB_STORE["camera"]
-    instrument = getTaskInstrument(camera.getName(), sensor_name, detect_cfg["instConfigFile"])
-    factory = _build_wf_factory(instrument)
-    preps = [_prep_donut_for_danish(d, instrument) for d in all_donuts]
-    imgs = [p[0] for p in preps]
-    thxs = [p[1][0] for p in preps]
-    thys = [p[1][1] for p in preps]
-    zk_refs = [p[2] for p in preps]
-    sky_lvl = [p[3] for p in preps]
-    bkg_stds = [p[4] for p in preps]
-    dz_terms = [(1, int(j)) for j in nollIndices]
-    n = len(imgs)
     npix = min(img.shape[0] for img in imgs)
     imgs = [img[:npix, :npix] for img in imgs]
 
@@ -1873,29 +1508,16 @@ def _wf_full_detector_worker(args: tuple) -> dict:
     bounds = [list(b) for b in zip(*bounds)]
     x0 = np.clip(x0, bounds[0], bounds[1])
     timeout = wf_cfg["wfFitTimeoutPerDonut"] * n
-    _log.info(
-        "WF full_detector sensor=%s n=%d npix=%d setup=%.2fs",
-        sensor_name,
-        n,
-        npix,
-        time.perf_counter() - t_setup0,
-    )
-    label = f"full_detector sensor={sensor_name} n={n}"
+    _setup_elapsed = float(time.perf_counter() - t_setup0)
+    label = f"{group.mode} group={group.group_id} n={n}"
+    _log.info("WF %s npix=%d setup=%.2fs", label, npix, _setup_elapsed)
+
     zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
-        model,
-        x0,
-        bounds,
-        imgs,
-        sky_lvl,
-        timeout,
-        wf_cfg,
-        label,
+        model, x0, bounds, imgs, sky_lvl, timeout, wf_cfg, label
     )
-    defocal = "intra" if "SW1" in sensor_name else "extra"
     zk_dev_dense = _dense_dev(zk_dev, nollIndices)
     zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
-    fit_mode = wf_cfg.get("wfEstimationMode", "full_detector")
-    group_id = sensor_name
+    fit_mode = wf_cfg.get("wfEstimationMode", group.mode)
     _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
     _fit_nfev = int(fit_info.get("nfev", 0))
     _fit_cost = float(fit_info.get("cost", float("nan")))
@@ -1903,8 +1525,10 @@ def _wf_full_detector_worker(args: tuple) -> dict:
     _dxs = fit_info.get("dxs", [float("nan")] * n)
     _dys = fit_info.get("dys", [float("nan")] * n)
     _fluxes = fit_info.get("fluxes", [float("nan")] * n)
+
     donuts_out = []
     for i, d in enumerate(all_donuts):
+        defocal = "intra" if "SW1" in str(d.get("sensor", "")) else "extra"
         _img = imgs[i] if i < len(imgs) else None
         _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
         donuts_out.append(
@@ -1918,6 +1542,7 @@ def _wf_full_detector_worker(args: tuple) -> dict:
                 "model_img": _mimg,
                 "fit_success": success,
                 "fit_elapsed": _fit_elapsed,
+                "setup_elapsed": _setup_elapsed,
                 "fit_nfev": _fit_nfev,
                 "fit_cost": _fit_cost,
                 "fit_dx": float(_dxs[i]) if i < len(_dxs) else float("nan"),
@@ -1938,17 +1563,16 @@ def _wf_full_detector_worker(args: tuple) -> dict:
                 ),
                 "fit_bkg": _fit_bkg_val(params, i),
                 "zk_norm_um": zk_norm_um,
-                "group_id": group_id,
+                "group_id": group.group_id,
                 "group_size": n,
                 "fit_mode": fit_mode,
             }
         )
     return {
-        "mode": "full_detector",
+        "mode": group.mode,
         "fit_mode": fit_mode,
-        "group_id": group_id,
+        "group_id": group.group_id,
         "group_size": n,
-        "sensor": sensor_name,
         "zk_dev": zk_dev,
         "success": success,
         "fit_info": fit_info,
@@ -1957,6 +1581,7 @@ def _wf_full_detector_worker(args: tuple) -> dict:
         "imgs": imgs,
         "sensors": [d["sensor"] for d in all_donuts],
     }
+
 
 
 class DonutBlitzMonolithTaskConnections(
@@ -2041,6 +1666,15 @@ class DonutBlitzMonolithTaskConnections(
         isCalibration=True,
         lookupFunction=lookupStaticCalibrations,  # type: ignore
         minimum=0,
+    )
+    blitzResults = connectionTypes.Output(
+        doc=(
+            "Per-donut catalog containing selection metrics, fit results, Zernikes, "
+            "stamp/model images, and all metadata needed to regenerate diagnostic plots."
+        ),
+        name="donutBlitzResults",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit"),
     )
 
 
@@ -2141,11 +1775,6 @@ class DonutBlitzMonolithTaskConfig(
         dtype=int,
         default=3,
     )
-    doDonutSelection: pexConfig.Field = pexConfig.Field(
-        doc="Whether to run DonutSourceSelectorTask after catalog selection.",
-        dtype=bool,
-        default=True,
-    )
     astromRefFilter: pexConfig.Field = pexConfig.Field(
         doc="Filter name to use when querying the astrometry reference catalog.",
         dtype=str,
@@ -2169,34 +1798,15 @@ class DonutBlitzMonolithTaskConfig(
         dtype=str,
         default="monster_ComCam",
     )
-    catalogFilterList: pexConfig.ListField = pexConfig.ListField(
-        dtype=str,
-        doc="Filters from the photometry reference catalog to include in the donut catalog.",
-        default=[
-            "phot_g_mean",
-            "phot_bp_mean",
-            "phot_rp_mean",
-            "monster_ComCam_u",
-            "monster_ComCam_g",
-            "monster_ComCam_r",
-            "monster_ComCam_i",
-            "monster_ComCam_z",
-            "monster_ComCam_y",
-        ],
-    )
-    saveDiagnosticPlot: pexConfig.Field = pexConfig.Field(
+    savePlots: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Save a diagnostic PNG summarising each visit. "
-            "Disable in production to skip plot-only computation "
-            "(refcat overplot lookups, rejected-stamp cutting)."
+            "Generate diagnostic PNGs for each visit. "
+            "Set False in production to skip plot generation and deliver "
+            "Zernikes faster; plots can be generated later by calling "
+            "plotTask.run() with the in-memory results."
         ),
         dtype=bool,
-        default=True,
-    )
-    saveCatalog: pexConfig.Field = pexConfig.Field(
-        doc="Write per-quantum ASDF donut catalog alongside diagnostic plots.",
-        dtype=bool,
-        default=True,
+        default=False,
     )
     wfEstimationMode: pexConfig.ChoiceField = pexConfig.ChoiceField(
         doc="Wavefront estimation dispatch mode.",
@@ -2227,6 +1837,7 @@ class DonutBlitzMonolithTaskConfig(
             "ftol": "1e-3",
             "gtol": "1e-3",
             "x_scale": "'jac'",
+            # "tr_solver": "'lsmr'",
         },
     )
     binning: pexConfig.Field = pexConfig.Field(
@@ -2339,11 +1950,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self.makeSubtask("plotTask")
         self.makeSubtask("isrTask")
         self.makeSubtask("subtractBackground")
         self.makeSubtask("astromTask")
-        if self.config.doDonutSelection:
-            self.makeSubtask("donutSelector")
+        self.makeSubtask("donutSelector")
 
     def runQuantum(
         self,
@@ -2423,7 +2034,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         )
         t10 = time.perf_counter()
         self.log.info("run() execution: %.3fs", t10 - t9)
-        butlerQC.put(outputs, outputRefs)
+        butlerQC.put(outputs.blitzResults, outputRefs.blitzResults)
 
     @timeMethod
     def run(
@@ -2595,14 +2206,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             detect_cfg=detect_cfg,
             maxFitScatter=self.config.maxFitScatter,
             minSourcesForWcsFit=self.config.minSourcesForWcsFit,
-            doDonutSelection=self.config.doDonutSelection,
-            donut_selector_config=(self.donutSelector.config if self.config.doDonutSelection else None),
+            donut_selector_config=self.donutSelector.config,
             astromRefFilter=self.config.astromRefFilter,
             photoRefFilter=self.config.photoRefFilter,
             photoRefFilterPrefix=self.config.photoRefFilterPrefix,
             resolvedPhotoFilterName=photo_filter_name,
-            catalogFilterList=list(self.config.catalogFilterList),
-            saveDiagnosticPlot=self.config.saveDiagnosticPlot,
+            saveDiagnosticPlot=self.config.savePlots,
         )
 
         _CALIB_STORE.clear()
@@ -2613,6 +2222,15 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["astrom_cfg"] = astrom_cfg
         _CALIB_STORE["sensor_refcats"] = sensor_refcats
         for name in CORNER_SENSOR_NAMES:
+            missing_calib = [
+                k for k, d in [("ptc", ptcByName), ("flat", flatByName),
+                                ("linearizer", linearizerByName), ("crosstalk", crosstalkByName)]
+                if name not in d
+            ]
+            if missing_calib:
+                raise RuntimeError(
+                    f"Missing calibration(s) for sensor {name}: {missing_calib}"
+                )
             _CALIB_STORE[name] = dict(
                 raw=rawByName[name],
                 ptc=ptcByName[name],
@@ -2638,6 +2256,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         )
         wavelength_by_band = {bl.value: wl for bl, wl in example_instrument.wavelength.items()}
         lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in self.config.lstsqKwargs.items()}
+        _CALIB_STORE["instrument"] = example_instrument
         _CALIB_STORE["wf_cfg"] = dict(
             nollIndices=np.array(list(self.config.nollIndices)),
             lstsqKwargs=lstsq_kwargs_parsed,
@@ -2670,7 +2289,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             results = [_run_cutout_worker((arg, t_dispatch)) for arg in cutout_args]
         else:
             t_pool0 = time.perf_counter()
-            with mp.Pool(processes=numCores) as pool:
+            with mp.get_context("fork").Pool(processes=numCores) as pool:
                 t_pool1 = time.perf_counter()
                 t_dispatch = time.time()
                 results = pool.map(_run_cutout_worker, [(arg, t_dispatch) for arg in cutout_args])
@@ -2727,41 +2346,18 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # WF dispatch
         mode = self.config.wfEstimationMode
         results_by_sensor = {r["sensor"]: r["catalog"] for r in results}
-        unmatched_donuts: list = []  # donuts with no pair in paired mode
-        if mode == "paired":
-            wf_args = []
-            for _corner, (sw0, sw1) in CORNER_PAIRS.items():
-                extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d["snr"], reverse=True)
-                intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d["snr"], reverse=True)
-                for extra, intra in zip(extra_donuts, intra_donuts):
-                    wf_args.append((extra, intra))
-                n_pairs = min(len(extra_donuts), len(intra_donuts))
-                unmatched_donuts.extend(extra_donuts[n_pairs:])
-                unmatched_donuts.extend(intra_donuts[n_pairs:])
-            wf_worker = _wf_paired_worker
-        elif mode == "unpaired":
-            wf_args = [d for r in results for d in r["catalog"]]
-            wf_worker = _wf_unpaired_worker
-        elif mode == "full_detector":
-            wf_args = [(r["sensor"], r["catalog"]) for r in results]
-            wf_worker = _wf_full_detector_worker
-        else:  # full_corner
-            wf_args = [
-                (corner, results_by_sensor.get(sw0, []), results_by_sensor.get(sw1, []))
-                for corner, (sw0, sw1) in CORNER_PAIRS.items()
-            ]
-            wf_worker = _wf_full_corner_worker
+        groups, unmatched_donuts = _build_wf_groups(mode, results_by_sensor, _CALIB_STORE["wf_cfg"])
 
-        self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(wf_args))
+        self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
         t_wf0 = time.perf_counter()
-        if not wf_args:
+        if not groups:
             wf_results = []
-        elif numCores == 1 or len(wf_args) == 1:
-            wf_results = [wf_worker(a) for a in wf_args]
+        elif numCores == 1 or len(groups) == 1:
+            wf_results = [_wf_worker(g) for g in groups]
         else:
-            n_workers = min(numCores, len(wf_args))
-            with mp.Pool(processes=n_workers) as wf_pool:
-                wf_results = wf_pool.map(wf_worker, wf_args)
+            n_workers = min(numCores, len(groups))
+            with mp.get_context("fork").Pool(processes=n_workers) as wf_pool:
+                wf_results = wf_pool.map(_wf_worker, groups)
         t_wf1 = time.perf_counter()
         n_ok = sum(r.get("success") for r in wf_results)
         elapsed_fits = [r["fit_info"].get("elapsed", float("nan")) for r in wf_results]
@@ -2784,766 +2380,123 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             t_wf1 - t_wf0,
             t_plot0 - t_run0,
         )
-        visit_ids = {d["visit_id"] for d in donuts if "visit_id" in d}
+        visit_ids = {raw.getInfo().getVisitInfo().id for raw in raws}
+        visit_ids.discard(0)
         visit_str = "_".join(str(v) for v in sorted(visit_ids))
 
-        if self.config.saveDiagnosticPlot:
-            self._saveDonutDiagnosticPlot(
-                results,
-                run_elapsed=t_plot0 - t_run0,
-                refcat_elapsed=t_refcat_elapsed,
-                butler_elapsed=butler_elapsed,
-                photo_filter_name=photo_filter_name,
-                astrom_filter_name=self.config.astromRefFilter,
-            )
-            if wf_results:
-                self._saveWfDiagnosticPlot(
-                    wf_results,
-                    donuts=donuts,
-                    unmatched_donuts=unmatched_donuts,
-                    butler_elapsed=butler_elapsed,
-                    butler_times=butler_times or {},
-                    refcat_elapsed=t_refcat_elapsed,
-                    cutout_elapsed=t_cutout1 - t_cutout0,
-                    danish_elapsed=t_wf1 - t_wf0,
-                    visit_str=visit_str,
-                )
-            self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
-        if self.config.saveCatalog:
-            self._writeCatalog(donuts, wf_results, visit_str)
-        return pipeBase.Struct(donuts=donuts, wf_results=wf_results)
+        catalog = self._buildCatalog(
+            results=results,
+            wf_results=wf_results,
+            donuts=donuts,
+            unmatched_donuts=unmatched_donuts,
+            visit_str=visit_str,
+            run_elapsed=t_plot0 - t_run0,
+            refcat_elapsed=t_refcat_elapsed,
+            butler_elapsed=butler_elapsed,
+            butler_times=butler_times or {},
+            cutout_elapsed=t_cutout1 - t_cutout0,
+            danish_elapsed=t_wf1 - t_wf0,
+            photo_filter_name=photo_filter_name,
+            astrom_filter_name=self.config.astromRefFilter,
+        )
 
-    def _saveDonutDiagnosticPlot(
+        if self.config.savePlots:
+            self.plotTask.run(catalog)
+            self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
+
+        return pipeBase.Struct(donuts=donuts, wf_results=wf_results, blitzResults=catalog)
+
+    def _buildCatalog(
         self,
         results: list,
+        wf_results: list,
+        donuts: list,
+        unmatched_donuts: list,
+        visit_str: str = "",
         run_elapsed: float = 0.0,
         refcat_elapsed: float = 0.0,
         butler_elapsed: float = 0.0,
-        photo_filter_name: str = "photo",
-        astrom_filter_name: str = "astrom",
-    ) -> None:
-        """Save a single diagnostic PNG with one section per sensor.
-
-        Layout per sensor:
-          - Left column: stats text (timing, WCS scatter, donut count, errors)
-          - Remaining columns: donut stamps (up to maxDonuts), each annotated
-            with flux and field angle
-        """
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.gridspec import GridSpec
-
-        STAMPS_PER_ROW = 8  # max accepted stamps per sensor row
-        REJECTED_PER_ROW = 2  # rejected stamp columns (right side, separated by spacer)
-        STAMP_COL_W = 1.8  # inches per stamp column
-        STATS_COL_W = 2.8  # inches for the stats text column
-        ROW_H = 1.7  # inches per sensor row
-
-        active = [r for r in results if r["catalog"] or r.get("rejected_catalog")]
-        n_sensors = len(active)
-        if n_sensors == 0:
-            return
-
-        LEGEND_H = 0.35  # inches for the legend strip at the bottom
-        SPACER_W = 0.15  # narrow spacer column between accepted and rejected
-        SUPTITLE_H = 0.55  # inches reserved above rows for the suptitle
-
-        # Total columns: stats | accepted(8) | spacer | rejected(2)
-        N_COLS = 1 + STAMPS_PER_ROW + 1 + REJECTED_PER_ROW
-        fig_w = STATS_COL_W + (STAMPS_PER_ROW + REJECTED_PER_ROW) * STAMP_COL_W + SPACER_W
-        fig_h = n_sensors * ROW_H + LEGEND_H + SUPTITLE_H
-
-        visit_ids = {d["visit_id"] for r in active for d in r["catalog"]}
-        visit_str = ", ".join(str(v) for v in sorted(visit_ids))
-
-        photo_filter_label = photo_filter_name  # resolved name, passed in
-        astrom_filter_label = astrom_filter_name
-
-        fig = plt.figure(figsize=(fig_w, fig_h), layout="constrained")
-        fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
-        butler_str = f"  butler={butler_elapsed:.1f}s" if butler_elapsed > 0 else ""
-        fig.suptitle(
-            f"DonutBlitz diagnostics  visit={visit_str}"
-            f"  refcat={refcat_elapsed:.1f}s{butler_str}  run={run_elapsed:.1f}s",
-            fontsize=9,
-        )
-
-        # width_ratios: stats | accepted(8×1) | spacer | rejected(2×1)
-        w_stats = STATS_COL_W / STAMP_COL_W
-        w_spacer = SPACER_W / STAMP_COL_W
-        gs = GridSpec(
-            n_sensors + 1,
-            N_COLS,
-            figure=fig,
-            height_ratios=[ROW_H] * n_sensors + [LEGEND_H],
-            width_ratios=[w_stats] + [1] * STAMPS_PER_ROW + [w_spacer] + [1] * REJECTED_PER_ROW,
-        )
-        # Column index helpers
-        COL_ACCEPTED_START = 1
-        COL_SPACER = 1 + STAMPS_PER_ROW
-        COL_REJECTED_START = COL_SPACER + 1
-
-        for row_idx, r in enumerate(active):
-            sensor = r["sensor"]
-            catalog = r["catalog"]
-            scatter_str = f'{r["scatter_arcsec"]:.3f}"' if r["scatter_arcsec"] is not None else "N/A"
-
-            # Stats panel
-            ax_stats = fig.add_subplot(gs[row_idx, 0])
-            ax_stats.axis("off")
-            lines = [
-                f"{sensor}",
-                f"donuts: {len(catalog)}",
-                f"isr:    {r['isr_run']:.2f}s",
-                f"detect: {r['blind_detect_run']:.2f}s",
-                f"wcs:    {r['wcs_refit_run']:.2f}s  ({scatter_str})",
-                f"select: {r['catalog_select_run']:.2f}s",
-            ]
-            if r["wcs_refit_error"]:
-                lines.append(f"WCS ERR: {r['wcs_refit_error'][:40]}")
-            if r["cat_select_error"]:
-                lines.append(f"CAT ERR: {r['cat_select_error'][:40]}")
-            ax_stats.text(
-                0.05,
-                0.95,
-                "\n".join(lines),
-                transform=ax_stats.transAxes,
-                fontsize=6,
-                va="top",
-                family="monospace",
-            )
-
-            def _draw_stamp(ax, donut, rejected=False):
-                import matplotlib.patches as mpatches
-
-                stamp = donut["stamp"]
-                h_px = stamp.shape[0] // 2
-                vmin, vmax = np.nanpercentile(stamp, [1, 99])
-                ax.imshow(
-                    stamp,
-                    origin="lower",
-                    vmin=vmin,
-                    vmax=vmax,
-                    cmap="gray",
-                    aspect="equal",
-                    extent=[-h_px, h_px, -h_px, h_px],
-                )
-
-                dr = donut.get("donut_radius", None)
-                ob = donut.get("obscuration", None)
-                if dr is not None and ob is not None:
-                    _circ_specs = [
-                        (dr * ob * 0.67, "lime", "--"),  # outer edge of inner region
-                        (dr * ob, "lime", "-"),  # inner edge of main annulus
-                        (dr * 1.05, "lime", "-"),  # outer edge of main annulus
-                        (dr * 1.25, "orange", "-"),  # inner edge of outer annulus
-                        (dr * 1.4, "orange", "-"),  # outer edge of outer annulus
-                    ]
-                    for _rad, _col, _ls in _circ_specs:
-                        ax.add_patch(
-                            mpatches.Circle(
-                                (0, 0),
-                                _rad,
-                                fill=False,
-                                edgecolor=_col,
-                                linewidth=0.5,
-                                linestyle=_ls,
-                                alpha=0.45,
-                                zorder=4,
-                            )
-                        )
-
-                if rejected:
-                    ax.plot(
-                        [-h_px, h_px],
-                        [-h_px, h_px],
-                        color="red",
-                        lw=1.5,
-                        transform=ax.transData,
-                        zorder=5,
-                    )
-                    ax.plot(
-                        [-h_px, h_px],
-                        [h_px, -h_px],
-                        color="red",
-                        lw=1.5,
-                        transform=ax.transData,
-                        zorder=5,
-                    )
-
-                nq = donut.get("n_quarter", 0)
-
-                def _xform(dx, dy):
-                    r, c = dy, dx
-                    for _ in range(nq % 4):
-                        r, c = c, -r
-                    return c, r
-
-                for dx, dy, mag in donut.get("nearby_photo", []):
-                    tx, ty = _xform(dx, dy)
-                    ax.plot(tx, ty, "o", ms=6, mfc="none", mec="cyan", mew=0.8, zorder=3)
-                    if np.isfinite(mag):
-                        ax.text(
-                            tx + 3,
-                            ty + 3,
-                            f"{mag:.1f}",
-                            color="cyan",
-                            fontsize=3.5,
-                            zorder=4,
-                        )
-                for dx, dy, mag in donut.get("nearby_astrom", []):
-                    tx, ty = _xform(dx, dy)
-                    ax.plot(tx, ty, "+", ms=6, mec="red", mew=0.8, zorder=3)
-                    if np.isfinite(mag):
-                        ax.text(
-                            tx + 3,
-                            ty - 5,
-                            f"{mag:.1f}",
-                            color="red",
-                            fontsize=3.5,
-                            zorder=4,
-                        )
-
-                inner_frac = donut.get("inner_frac", float("nan"))
-                outer_frac = donut.get("outer_frac", float("nan"))
-                outer_sector_max = donut.get("outer_sector_max", float("nan"))
-                snr = donut.get("snr", float("nan"))
-                if_str = f"if={inner_frac:.3f}" if np.isfinite(inner_frac) else "if=?"
-                of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
-                osm_str = f"osm={outer_sector_max:.3f}" if np.isfinite(outer_sector_max) else "osm=?"
-                snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
-                sid = donut.get("source_id", 0)
-                sid_str = f"id={sid}" if sid != 0 else ""
-                _rej_reasons = donut.get("reject_reasons", [])
-                rej_str = f"[{','.join(_rej_reasons)}]" if _rej_reasons else ""
-                _text_color = "orangered" if rejected else "black"
-                ax.text(
-                    0.05,
-                    1.00,
-                    f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
-                    transform=ax.transAxes,
-                    fontsize=3.5,
-                    va="top",
-                    ha="left",
-                    color=_text_color,
-                    bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
-                    zorder=6,
-                )
-
-            # Accepted stamp panels
-            for col_idx in range(STAMPS_PER_ROW):
-                ax = fig.add_subplot(gs[row_idx, COL_ACCEPTED_START + col_idx])
-                ax.axis("off")
-                if col_idx >= len(catalog):
-                    continue
-                _draw_stamp(ax, catalog[col_idx])
-
-            # Spacer column header (label "rejected" above first rejected stamp)
-            ax_sp = fig.add_subplot(gs[row_idx, COL_SPACER])
-            ax_sp.axis("off")
-
-            # Rejected stamp panels
-            rejected = r.get("rejected_catalog", [])
-            for col_idx in range(REJECTED_PER_ROW):
-                ax = fig.add_subplot(gs[row_idx, COL_REJECTED_START + col_idx])
-                ax.axis("off")
-                if col_idx >= len(rejected):
-                    continue
-                _draw_stamp(ax, rejected[col_idx], rejected=True)
-
-        # Legend strip spanning the full figure width.
-        ax_legend = fig.add_subplot(gs[n_sensors, :])
-        ax_legend.axis("off")
-        from matplotlib.lines import Line2D
-
-        legend_handles = [
-            Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                markerfacecolor="none",
-                markeredgecolor="cyan",
-                markersize=6,
-                label=f"photo refcat ({photo_filter_label})",
-            ),
-            Line2D(
-                [0],
-                [0],
-                marker="+",
-                color="red",
-                markersize=6,
-                linestyle="none",
-                label=f"astrom refcat ({astrom_filter_label})",
-            ),
-        ]
-        ax_legend.legend(
-            handles=legend_handles,
-            loc="center",
-            ncol=2,
-            fontsize=7,
-            frameon=False,
-            handletextpad=0.5,
-            columnspacing=2.0,
-        )
-
-        fname = f"donut_diag_{visit_str}.png"
-        fig.savefig(fname, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-        self.log.info("Saved diagnostic plot: %s", fname)
-
-    def _saveWfDiagnosticPlot(
-        self,
-        wf_results: list,
-        donuts: list,
-        unmatched_donuts: list | None = None,
-        butler_elapsed: float = 0.0,
         butler_times: dict | None = None,
-        refcat_elapsed: float = 0.0,
         cutout_elapsed: float = 0.0,
         danish_elapsed: float = 0.0,
-        visit_str: str = "",
-    ) -> None:
-        """Save a WF diagnostic PNG modelled on the AOS donut-fits layout.
+        photo_filter_name: str = "",
+        astrom_filter_name: str = "",
+    ) -> QTable:
+        """Build a per-donut QTable covering accepted, rejected, and unmatched donuts.
 
-        Layout: 2×2 grid of corners (R00, R04, R40, R44).
-        Within each corner: one row per fit result.
-        Each row: intra data|model|resid|zk_bar  extra data|model|resid|zk_bar.
-        Zernike bars are vertical, ±1 µm, no tick labels.
+        Parameters
+        ----------
+        results : list
+            Per-sensor cutout dicts from ``_getCutouts`` (supplies rejected donuts
+            and per-sensor metadata).
+        wf_results : list
+            Per-fit WF result dicts from the WF worker pool.
+        donuts : list
+            Accepted donut dicts.
+        unmatched_donuts : list
+            Donut dicts with no intra/extra partner (paired mode only).
+        visit_str : str
+            Visit identifier string.
+
+        Returns
+        -------
+        QTable
+            One row per donut (accepted + rejected + unmatched).  Array columns
+            (``stamp``, ``model_img``, ``wf_img``) are zero-padded to a common
+            shape.  Visit-level and per-sensor scalars are stored in
+            ``table.meta``.
         """
-        import matplotlib
+        import json
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import LinearSegmentedColormap
-        from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-
-        noll_cfg = _CALIB_STORE["wf_cfg"]["nollIndices"]
-        ZK_MIN, ZK_MAX = 4, 28
-
-        if not visit_str:
-            visit_ids = {d["visit_id"] for d in donuts if "visit_id" in d}
-            visit_str = "_".join(str(v) for v in sorted(visit_ids))
-
-        # Include x0-only results (success=True, model_imgs present) and real fits
-        plottable = [r for r in wf_results if r.get("model_imgs") is not None]
-        if not plottable:
-            self.log.info("No WF results with model images; skipping WF diagnostic plot.")
-            return
-
-        _CORNERS = ["R00", "R04", "R40", "R44"]
-
-        def _short(s):
-            return s.removeprefix("LSSTCam_").removeprefix("LSSTComCam_") if s else ""
-
-        def _corner_of(r):
-            for s in r.get("sensors", []):
-                sh = _short(s)
-                for c in _CORNERS:
-                    if sh.startswith(c):
-                        return c
-            corner = r.get("corner", "")
-            for c in _CORNERS:
-                if c in corner:
-                    return c
-            return "R00"
-
-        # Colormap matching donut_viz (blue-white-red, asymmetric white point)
-        _cmap_bwr = LinearSegmentedColormap.from_list(
-            "bwr_donut",
-            list(zip([0.0, 1 / 11, 1.0], [(0, 0, 1), (1, 1, 1), (1, 0, 0)])),
-        )
-
-        def _draw_stamp(ax, img, cmap, vmin, vmax, label=""):
-            ax.imshow(
-                img,
-                origin="lower",
-                cmap=cmap,
-                vmin=vmin,
-                vmax=vmax,
-                interpolation="nearest",
-                aspect="equal",
-            )
-            ax.set_xticks([])
-            ax.set_yticks([])
-            if label:
-                ax.set_title(label, fontsize=5, pad=1)
-
-        def _draw_bar(ax, zk_dev, inset_label=""):
-            """Vertical bar chart of zk_dev (metres → µm), ±1 µm, no tick labels."""
-            noll_to_idx = {int(j): i for i, j in enumerate(noll_cfg)}
-            bar_noll = [j for j in noll_cfg if ZK_MIN <= j <= ZK_MAX]
-            vals = []
-            for j in bar_noll:
-                i = noll_to_idx.get(j, -1)
-                vals.append(float(zk_dev[i]) * 1e6 if 0 <= i < len(zk_dev) else 0.0)
-            # x-axis = Noll indices so axvspan coordinates match donut_viz convention
-            ax.bar(bar_noll, vals, color="k", width=0.8)
-            ax.axhline(0, color="k", linewidth=0.4)
-            ax.set_ylim(-1.0, 1.0)
-            ax.set_xlim(ZK_MIN - 0.5, ZK_MAX + 0.5)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            # Azimuthal-order background spans (matches donut_viz)
-            for j in [4, 11, 22]:
-                ax.axvspan(j - 0.5, j + 0.5, color="red", alpha=0.2, ec="none")
-            for j in [5, 12, 23]:
-                ax.axvspan(j - 0.5, j + 1.5, color="orange", alpha=0.2, ec="none")
-            for j in [7, 16]:
-                ax.axvspan(j - 0.5, j + 1.5, color="yellow", alpha=0.2, ec="none")
-            for j in [9, 18]:
-                ax.axvspan(j - 0.5, j + 1.5, color="green", alpha=0.2, ec="none")
-            for j in [14, 25]:
-                ax.axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
-            ax.axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
-            ax.axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
-            if inset_label:
-                ax.text(
-                    0.03,
-                    0.97,
-                    inset_label,
-                    transform=ax.transAxes,
-                    fontsize=4,
-                    va="top",
-                    ha="left",
-                    bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
-                )
-
-        # Group by corner, then into (intra_result_or_None, extra_result_or_None) row-pairs.
-        # For paired/full_corner each result already has both sides; one result → one row.
-        # For unpaired each result has one side; zip intra and extra lists to share rows.
-        by_corner: dict[str, list[tuple]] = {c: [] for c in _CORNERS}
-        for r in plottable:
-            by_corner[_corner_of(r)].append(r)
-
-        # Inject stub results for unmatched donuts (paired mode only).
-        # These have a data stamp but no fit — rendered as data-only rows.
-        for d in unmatched_donuts or []:
-            sensor = str(d.get("sensor", ""))
-            defocal = "intra" if "SW1" in sensor else "extra"
-            stub = {
-                "mode": "paired_unmatched",
-                "zk_dev": np.full(len(noll_cfg), np.nan),
-                "success": False,
-                "fit_info": {},
-                "model_imgs": None,
-                "imgs": [d["stamp"].astype(float)],
-                "sensors": [sensor],
-                "donuts": [
-                    {
-                        "donut_id": int(d["source_id"]),
-                        "sensor": sensor,
-                        "defocal": defocal,
-                        "zk_dev": np.full(_ZK_LEN, np.nan),
-                        "zk_intrinsic": np.zeros(_ZK_LEN),
-                        "img": d["stamp"].astype(float),
-                        "model_img": None,
-                    }
-                ],
-            }
-            by_corner[_corner_of(stub)].append(stub)
-
-        def _explode(r):
-            """Return one synthetic single-donut result per donut in r."""
-            return [{**r, "donuts": [d]} for d in r.get("donuts", [])]
-
-        row_pairs: dict[str, list[tuple]] = {}
-        for corner, results in by_corner.items():
-            mode = results[0].get("mode") if results else None
-            if mode == "unpaired":
-                intras = [r for r in results if (r.get("donuts") or [{}])[0].get("defocal") == "intra"]
-                extras = [r for r in results if (r.get("donuts") or [{}])[0].get("defocal") == "extra"]
-                n = max(len(intras), len(extras))
-                row_pairs[corner] = [
-                    (
-                        intras[i] if i < len(intras) else None,
-                        extras[i] if i < len(extras) else None,
-                    )
-                    for i in range(n)
-                ]
-            elif mode in ("full_detector", "full_corner"):
-                intras = [s for r in results for s in _explode(r) if s["donuts"][0].get("defocal") == "intra"]
-                extras = [s for r in results for s in _explode(r) if s["donuts"][0].get("defocal") == "extra"]
-                n = max(len(intras), len(extras))
-                row_pairs[corner] = [
-                    (
-                        intras[i] if i < len(intras) else None,
-                        extras[i] if i < len(extras) else None,
-                    )
-                    for i in range(n)
-                ]
-            else:
-                row_pairs[corner] = [(r, r) for r in results]
-
-        # Layout: each row = 8 cols [1,1,1,2, 1,1,1,2] = 10 units wide per corner.
-        # Bar charts are width=2 so each corner block is exactly 10×max_rows stamp units.
-        CELL = 1.0  # inches per stamp cell
-        ROW_H = 1.0  # inches per row
-        HPAD = 0.08  # fractional hspace between corners
-        max_rows = max((len(v) for v in row_pairs.values()), default=1)
-
-        corner_w = 10 * CELL  # 3+2+3+2 = 10 units per corner
-        fig_w = 2 * corner_w + 0.3
-        fig_h = 2 * max_rows * ROW_H + 0.4
-
-        fig = plt.figure(figsize=(fig_w, fig_h))
-
-        outer = GridSpec(
-            2,
-            2,
-            figure=fig,
-            hspace=HPAD,
-            wspace=0.06,
-            left=0.01,
-            right=0.99,
-            top=0.94,
-            bottom=0.01,
-        )
-
-        # corner grid positions: R00 top-left, R40 top-right, R04 bottom-left, R44 bottom-right
-        corner_pos = {"R00": (0, 0), "R40": (0, 1), "R04": (1, 0), "R44": (1, 1)}
-
-        for corner in _CORNERS:
-            pairs = row_pairs[corner]
-            grow, gcol = corner_pos[corner]
-            inner = GridSpecFromSubplotSpec(
-                max_rows,
-                8,
-                subplot_spec=outer[grow, gcol],
-                hspace=0.0,
-                wspace=0.0,
-                width_ratios=[1, 1, 1, 2, 1, 1, 1, 2],
-            )
-
-            sw1 = f"{corner}_SW1"
-            sw0 = f"{corner}_SW0"
-
-            def _rec_info(r):
-                """Return (fi, elapsed, nfev, success, fwhm) from a result or defaults."""
-                if r is None:
-                    return {}, float("nan"), 0, False, float("nan")
-                fi = r.get("fit_info", {})
-                return (
-                    fi,
-                    fi.get("elapsed", float("nan")),
-                    fi.get("nfev", 0),
-                    r.get("success", False),
-                    fi.get("fwhm", float("nan")),
-                )
-
-            for row_idx, (r_intra, r_extra) in enumerate(pairs):
-                # Gather intra side
-                if r_intra is not None:
-                    intra_rec = next(
-                        (d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"),
-                        None,
-                    )
-                    fi_i, elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(r_intra)
-                    zk_dev_i = np.array(r_intra["zk_dev"])
-                else:
-                    intra_rec = None
-                    fi_i, elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(None)
-                    zk_dev_i = np.full(len(noll_cfg), np.nan)
-
-                # Gather extra side
-                if r_extra is not None:
-                    extra_rec = next(
-                        (d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"),
-                        None,
-                    )
-                    fi_e, elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(r_extra)
-                    zk_dev_e = np.array(r_extra["zk_dev"])
-                else:
-                    extra_rec = None
-                    fi_e, elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(None)
-                    zk_dev_e = np.full(len(noll_cfg), np.nan)
-
-                intra_img = intra_rec["img"] if intra_rec else None
-                intra_mod = intra_rec["model_img"] if intra_rec else None
-                intra_sid = intra_rec["donut_id"] if intra_rec else None
-
-                extra_img = extra_rec["img"] if extra_rec else None
-                extra_mod = extra_rec["model_img"] if extra_rec else None
-                extra_sid = extra_rec["donut_id"] if extra_rec else None
-
-                def _bar_label(elapsed, nfev, success):
-                    status = "x0" if nfev == 0 else ("ok" if success else "fail")
-                    return f"t={elapsed:.1f}s {status} n={nfev}"
-
-                intra_label = _bar_label(elapsed_i, nfev_i, success_i)
-                extra_label = _bar_label(elapsed_e, nfev_e, success_e)
-
-                # Column header labels (first row only)
-                intra_hdr = f"intra {sw1}" if row_idx == 0 else ""
-                extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
-
-                intra_blend = intra_rec.get("blend_frac", float("nan")) if intra_rec else float("nan")
-                extra_blend = extra_rec.get("blend_frac", float("nan")) if extra_rec else float("nan")
-
-                def _triplet_and_bar(
-                    col_start,
-                    data,
-                    model,
-                    sensor_hdr,
-                    label,
-                    sid,
-                    fwhm,
-                    zk_dev,
-                    blend_frac_val=float("nan"),
-                ):
-                    if data is not None:
-                        vmax = float(np.nanpercentile(np.abs(data), 99)) or 1.0
-                        has_model = model is not None
-                        resid = (data - model) if has_model else None
-                        vmax_r = (float(np.nanpercentile(np.abs(resid), 99)) or 1.0) if has_model else 1.0
-                        for ci, (img, cmap, vmin, vmx) in enumerate(
-                            [
-                                (data, _cmap_bwr, -vmax / 10, vmax),
-                                (
-                                    model if has_model else None,
-                                    _cmap_bwr,
-                                    -vmax / 10,
-                                    vmax,
-                                ),
-                                (resid, "bwr", -vmax_r, vmax_r),
-                            ]
-                        ):
-                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
-                            lbl = sensor_hdr if ci == 0 else ""
-                            if img is None:
-                                ax.axis("off")
-                                if lbl:
-                                    ax.set_title(lbl, fontsize=5, pad=1)
-                                continue
-                            _draw_stamp(ax, img, cmap, vmin, vmx, label=lbl)
-                            if ci == 0 and sid is not None:
-                                ax.text(
-                                    0.02,
-                                    0.98,
-                                    f"id={sid}",
-                                    transform=ax.transAxes,
-                                    fontsize=4,
-                                    color="k",
-                                    va="top",
-                                    ha="left",
-                                    bbox=dict(
-                                        boxstyle="square,pad=0.1",
-                                        fc="white",
-                                        ec="none",
-                                        alpha=0.6,
-                                    ),
-                                )
-                            if ci == 1 and not np.isnan(fwhm):
-                                ax.text(
-                                    0.02,
-                                    0.98,
-                                    f"blur={fwhm:.2f}arcsec",
-                                    transform=ax.transAxes,
-                                    fontsize=4,
-                                    color="k",
-                                    va="top",
-                                    ha="left",
-                                    bbox=dict(
-                                        boxstyle="square,pad=0.1",
-                                        fc="white",
-                                        ec="none",
-                                        alpha=0.6,
-                                    ),
-                                )
-                            if ci == 2 and np.isfinite(blend_frac_val):
-                                ax.text(
-                                    0.02,
-                                    0.98,
-                                    f"blend={blend_frac_val:.3f}",
-                                    transform=ax.transAxes,
-                                    fontsize=4,
-                                    color="k",
-                                    va="top",
-                                    ha="left",
-                                    bbox=dict(
-                                        boxstyle="square,pad=0.1",
-                                        fc="white",
-                                        ec="none",
-                                        alpha=0.6,
-                                    ),
-                                )
-                        ax_bar = fig.add_subplot(inner[row_idx, col_start + 3])
-                        if has_model:
-                            _draw_bar(ax_bar, zk_dev, inset_label=label)
-                        else:
-                            ax_bar.axis("off")
-                    else:
-                        for ci in range(4):
-                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
-                            ax.axis("off")
-                            if ci == 0 and sensor_hdr:
-                                ax.set_title(sensor_hdr, fontsize=5, pad=1)
-
-                _triplet_and_bar(
-                    0,
-                    intra_img,
-                    intra_mod,
-                    intra_hdr,
-                    intra_label,
-                    intra_sid,
-                    fwhm_i,
-                    zk_dev_i,
-                    intra_blend,
-                )
-                _triplet_and_bar(
-                    4,
-                    extra_img,
-                    extra_mod,
-                    extra_hdr,
-                    extra_label,
-                    extra_sid,
-                    fwhm_e,
-                    zk_dev_e,
-                    extra_blend,
-                )
-
-        proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
-        bt = butler_times or {}
-        butler_line = (
-            "  ".join(f"{k}={v:.1f}s" for k, v in bt.items() if v > 0.0) or f"total={butler_elapsed:.1f}s"
-        )
-        fig.suptitle(
-            f"WF fits  visit={visit_str}  mode={wf_results[0]['mode']}\n"
-            f"butler.get:  {butler_line}\n"
-            f"refcat={refcat_elapsed:.1f}s  cutout={cutout_elapsed:.1f}s  "
-            f"danish={danish_elapsed:.1f}s  proc_total={proc_total:.1f}s",
-            fontsize=7,
-        )
-        fname = f"wf_diag_{visit_str}.png"
-        fig.savefig(fname, dpi=300, bbox_inches="tight")
-        plt.close(fig)
-        self.log.info("Saved WF diagnostic plot: %s", fname)
-
-    def _writeCatalog(self, donuts: list, wf_results: list, visit_str: str) -> None:
-        """Write a per-quantum ASDF catalog with one QTable row per donut.
-
-        Columns cover selection metrics, fit results, per-Noll Zernikes (µm),
-        and embedded stamp / model_img arrays. The ``group`` integer records
-        which donuts were fit together (shared value == same work-unit).
-        """
-        import asdf
-        import asdf_astropy  # noqa: F401 — registers astropy table serialisation
-
-        # Build lookup: (source_id, sensor) -> (donuts_out entry, group integer counter).
-        # Keying on source_id alone would collide when the same refcat star appears on
-        # both SW0 and SW1 sensors (paired/full_corner modes).
+        # Build lookup: (source_id, sensor) -> (wf donut entry, group index).
+        # Key on both fields to handle the same refcat star on SW0 and SW1.
         wf_by_id: dict = {}
         for group_idx, r in enumerate(wf_results):
             for wd in r.get("donuts", []):
                 wf_by_id[(int(wd["donut_id"]), str(wd["sensor"]))] = (wd, group_idx)
 
+        # Build lookup: sensor -> per-sensor metadata from cutout results.
+        sensor_meta: dict = {}
+        rejected_by_sensor: dict = {}
+        for r in results:
+            sname = str(r["sensor"])
+            sensor_meta[sname] = {
+                "scatter_arcsec": (
+                    float(r["scatter_arcsec"]) if r["scatter_arcsec"] is not None else float("nan")
+                ),
+                "wcs_refit_error": str(r.get("wcs_refit_error") or ""),
+                "cat_select_error": str(r.get("cat_select_error") or ""),
+                "isr_run": float(r.get("isr_run", float("nan"))),
+                "blind_detect_run": float(r.get("blind_detect_run", float("nan"))),
+                "wcs_refit_run": float(r.get("wcs_refit_run", float("nan"))),
+                "catalog_select_run": float(r.get("catalog_select_run", float("nan"))),
+            }
+            rejected_by_sensor[sname] = r.get("rejected_catalog", [])
+
         _KNOWN_REASONS = ("snr", "inner_frac", "outer_frac", "SAT", "field_dist")
 
-        # Pad all stamps/model_imgs to a common shape so QTable columns are uniform dtype.
-        max_ny = max((d["stamp"].shape[0] for d in donuts), default=0)
-        max_nx = max((d["stamp"].shape[1] for d in donuts), default=0)
+        def _encode_nearby(entries):
+            return json.dumps([[round(dx, 1), round(dy, 1), round(mag, 2)] for dx, dy, mag in entries])
+
+        # Collect all donuts: accepted, rejected (per-sensor), unmatched.
+        all_donuts = []
+        for d in donuts:
+            all_donuts.append((d, True))
+        for r in results:
+            for d in rejected_by_sensor.get(str(r["sensor"]), []):
+                all_donuts.append((d, False))
+        for d in unmatched_donuts:
+            all_donuts.append((d, False))
+
+        if not all_donuts:
+            return QTable()
+
+        # Determine common stamp shape for padding.
+        max_ny = max(d["stamp"].shape[0] for d, _ in all_donuts)
+        max_nx = max(d["stamp"].shape[1] for d, _ in all_donuts)
+        # wf/model images are binned and cropped to odd size (see _prep_donut_for_danish).
+        _binned = self.config.stampSize // self.config.binning
+        max_wf_ny = max_wf_nx = _binned if _binned % 2 == 1 else _binned - 1
 
         def _pad(arr, ny, nx):
             out = np.full((ny, nx), np.nan, dtype=float)
@@ -3551,7 +2504,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             return out
 
         rows = []
-        for d in donuts:
+        for d, accepted in all_donuts:
             sid = int(d["source_id"])
             wd, grp = wf_by_id.get((sid, str(d["sensor"])), (None, -1))
 
@@ -3561,6 +2514,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             reject_reasons = d.get("reject_reasons", [])
             stamp = _pad(d["stamp"].astype(float), max_ny, max_nx)
 
+            wf_img_raw = wd.get("img") if wd is not None else None
+            wf_img = (
+                _pad(wf_img_raw.astype(float), max_wf_ny, max_wf_nx)
+                if wf_img_raw is not None
+                else np.full((max_wf_ny, max_wf_nx), np.nan, dtype=float)
+            )
+
             row = {
                 # --- identity ---
                 "visit_id": int(d["visit_id"]),
@@ -3569,12 +2529,17 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "source_id": sid,
                 "defocal": str(wd["defocal"]) if wd is not None else "",
                 "band": str(d["band"]),
+                "accepted": bool(accepted),
                 # --- geometry ---
                 "centroid_x_raw": float(d["centroid_x_raw"]),
                 "centroid_y_raw": float(d["centroid_y_raw"]),
                 "fa_x_ccs": float(d["fa_x_ccs"]),
                 "fa_y_ccs": float(d["fa_y_ccs"]),
                 "field_dist_deg": float(np.degrees(np.hypot(d["fa_x_ccs"], d["fa_y_ccs"]))),
+                "n_quarter": int(d.get("n_quarter", 0)),
+                # --- nearby refcat sources (JSON-encoded, pixel offsets + magnitudes) ---
+                "nearby_photo": _encode_nearby(d.get("nearby_photo", [])),
+                "nearby_astrom": _encode_nearby(d.get("nearby_astrom", [])),
                 # --- selection metrics ---
                 "flux": float(d["flux"]),
                 "snr": float(d["snr"]),
@@ -3589,15 +2554,16 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "rejected_snr": bool("snr" in reject_reasons),
                 "rejected_inner_frac": bool("inner_frac" in reject_reasons),
                 "rejected_outer_frac": bool("outer_frac" in reject_reasons),
-                "rejected_sat": bool("SAT" in reject_reasons or d["saturated"]),
+                "rejected_sat": bool("SAT" in reject_reasons or d.get("saturated", False)),
                 "rejected_field_dist": bool("field_dist" in reject_reasons),
-                "rejected_selector": bool(any(r not in _KNOWN_REASONS for r in reject_reasons)),
+                "rejected_selector": bool(any(rr not in _KNOWN_REASONS for rr in reject_reasons)),
                 # --- fit results ---
                 "fit_mode": str(wd["fit_mode"]) if wd is not None else "",
                 "group": int(grp),
                 "group_size": int(wd["group_size"]) if wd is not None else 0,
                 "fit_success": bool(wd["fit_success"]) if wd is not None else False,
                 "fit_elapsed": (float(wd["fit_elapsed"]) if wd is not None else float("nan")),
+                "setup_elapsed": (float(wd["setup_elapsed"]) if wd is not None else float("nan")),
                 "fit_nfev": int(wd["fit_nfev"]) if wd is not None else 0,
                 "fit_cost": float(wd["fit_cost"]) if wd is not None else float("nan"),
                 "fit_dx": float(wd["fit_dx"]) if wd is not None else float("nan"),
@@ -3621,26 +2587,658 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                     )
                     for j in range(4, 79)
                 },
-                # --- embedded arrays ---
+                # --- embedded images ---
                 "stamp": stamp,
-                "model_img": _pad(
-                    (
-                        wd["model_img"].astype(float)
-                        if (wd is not None and wd.get("model_img") is not None)
-                        else np.full_like(d["stamp"], np.nan)
-                    ),
-                    max_ny,
-                    max_nx,
+                "wf_img": wf_img,
+                "model_img": (
+                    _pad(wd["model_img"].astype(float), max_wf_ny, max_wf_nx)
+                    if (wd is not None and wd.get("model_img") is not None)
+                    else np.full((max_wf_ny, max_wf_nx), np.nan, dtype=float)
                 ),
             }
             rows.append(row)
 
-        if not rows:
-            self.log.info("No donuts to catalog; skipping ASDF write.")
+        table = QTable(rows)
+        table.meta["visit_str"] = visit_str
+        table.meta["run_elapsed"] = float(run_elapsed)
+        table.meta["refcat_elapsed"] = float(refcat_elapsed)
+        table.meta["butler_elapsed"] = float(butler_elapsed)
+        table.meta["butler_times"] = dict(butler_times or {})
+        table.meta["cutout_elapsed"] = float(cutout_elapsed)
+        table.meta["danish_elapsed"] = float(danish_elapsed)
+        table.meta["photo_filter_name"] = str(photo_filter_name)
+        table.meta["astrom_filter_name"] = str(astrom_filter_name)
+        table.meta["noll_indices"] = list(_CALIB_STORE.get("wf_cfg", {}).get("nollIndices", []))
+        table.meta["sensor_meta"] = sensor_meta
+        _first_d = all_donuts[0][0]
+        table.meta["donut_radius"] = float(_first_d.get("donut_radius", float("nan")))
+        table.meta["obscuration"] = float(_first_d.get("obscuration", float("nan")))
+        return table
+
+class DonutBlitzPlotTaskConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "visit"),  # type: ignore
+):
+    """Pipeline connections for DonutBlitzPlotTask."""
+
+    blitzResults = connectionTypes.Input(
+        doc=(
+            "Per-donut catalog from DonutBlitzMonolithTask containing all data "
+            "needed to regenerate diagnostic plots."
+        ),
+        name="donutBlitzResults",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit"),
+        deferLoad=True,
+    )
+
+
+class DonutBlitzPlotTaskConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=DonutBlitzPlotTaskConnections,  # type: ignore
+):
+    """Configuration for DonutBlitzPlotTask."""
+
+
+class DonutBlitzPlotTask(pipeBase.PipelineTask):
+    """PipelineTask that regenerates diagnostic plots from ``donutBlitzResults``.
+
+    Can run standalone (reading from the butler) or be called as a subtask of
+    ``DonutBlitzMonolithTask`` when ``savePlots=True``.
+    """
+
+    ConfigClass = DonutBlitzPlotTaskConfig
+    _DefaultName = "donutBlitzPlotTask"
+
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ) -> None:
+        inputs = butlerQC.get(inputRefs)
+        catalog = inputs["blitzResults"].get(parameters={"strip_astropy_meta_yaml": False})
+        self.run(catalog)
+
+    def run(self, catalog: QTable) -> None:
+        """Generate donut and WF diagnostic plots from the blitzResults catalog.
+
+        Parameters
+        ----------
+        catalog : QTable
+            Per-donut table as produced by
+            ``DonutBlitzMonolithTask._buildCatalog``.  Visit-level and
+            per-sensor metadata are in ``catalog.meta``.
+        """
+        self._saveDonutDiagnosticPlot(catalog)
+        self._saveWfDiagnosticPlot(catalog)
+
+    def _saveDonutDiagnosticPlot(self, catalog: QTable) -> None:
+        """Save a single diagnostic PNG with one section per sensor.
+
+        Layout per sensor:
+          - Left column: stats text (timing, WCS scatter, donut count, errors)
+          - Remaining columns: donut stamps (up to maxDonuts), each annotated
+            with flux and field angle
+
+        Parameters
+        ----------
+        catalog : QTable
+            Per-donut table from ``_buildCatalog``.  Per-sensor metadata is in
+            ``catalog.meta["sensor_meta"]``; visit-level scalars are in
+            ``catalog.meta``.
+        """
+        import json
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.gridspec import GridSpec
+
+        if len(catalog) == 0:
             return
 
-        table = QTable(rows)
-        fname = f"donut_catalog_{visit_str}.asdf"
-        af = asdf.AsdfFile({"catalog": table})
-        af.write_to(fname)
-        self.log.info("Saved donut catalog: %s (%d rows)", fname, len(table))
+        meta = catalog.meta
+        run_elapsed = float(meta.get("run_elapsed", 0.0))
+        refcat_elapsed = float(meta.get("refcat_elapsed", 0.0))
+        butler_elapsed = float(meta.get("butler_elapsed", 0.0))
+        photo_filter_label = str(meta.get("photo_filter_name", "photo"))
+        astrom_filter_label = str(meta.get("astrom_filter_name", "astrom"))
+        visit_str = str(meta.get("visit_str", ""))
+        sensor_meta = meta.get("sensor_meta", {})
+
+        # Group rows by sensor; split into accepted and rejected.
+        sensors_with_data = []
+        for sensor in sorted(set(str(s) for s in catalog["sensor"])):
+            mask = np.array([str(s) == sensor for s in catalog["sensor"]])
+            sensor_rows = catalog[mask]
+            acc = sensor_rows[np.array([bool(a) for a in sensor_rows["accepted"]])]
+            rej = sensor_rows[np.array([not bool(a) for a in sensor_rows["accepted"]])]
+            if len(acc) > 0 or len(rej) > 0:
+                sensors_with_data.append((sensor, acc, rej))
+
+        n_sensors = len(sensors_with_data)
+        if n_sensors == 0:
+            return
+
+        STAMPS_PER_ROW = 8
+        REJECTED_PER_ROW = 2
+        STAMP_COL_W = 1.8
+        STATS_COL_W = 2.8
+        ROW_H = 1.7
+        LEGEND_H = 0.35
+        SPACER_W = 0.15
+        SUPTITLE_H = 0.55
+
+        N_COLS = 1 + STAMPS_PER_ROW + 1 + REJECTED_PER_ROW
+        fig_w = STATS_COL_W + (STAMPS_PER_ROW + REJECTED_PER_ROW) * STAMP_COL_W + SPACER_W
+        fig_h = n_sensors * ROW_H + LEGEND_H + SUPTITLE_H
+
+        fig = plt.figure(figsize=(fig_w, fig_h), layout="constrained")
+        fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
+        butler_str = f"  butler={butler_elapsed:.1f}s" if butler_elapsed > 0 else ""
+        fig.suptitle(
+            f"DonutBlitz diagnostics  visit={visit_str}"
+            f"  refcat={refcat_elapsed:.1f}s{butler_str}  run={run_elapsed:.1f}s",
+            fontsize=9,
+        )
+
+        w_stats = STATS_COL_W / STAMP_COL_W
+        w_spacer = SPACER_W / STAMP_COL_W
+        gs = GridSpec(
+            n_sensors + 1,
+            N_COLS,
+            figure=fig,
+            height_ratios=[ROW_H] * n_sensors + [LEGEND_H],
+            width_ratios=[w_stats] + [1] * STAMPS_PER_ROW + [w_spacer] + [1] * REJECTED_PER_ROW,
+        )
+        COL_ACCEPTED_START = 1
+        COL_SPACER = 1 + STAMPS_PER_ROW
+        COL_REJECTED_START = COL_SPACER + 1
+
+        def _draw_stamp(ax, row, rejected=False):
+            import matplotlib.patches as mpatches
+
+            stamp = np.array(row["stamp"])
+            h_px = stamp.shape[0] // 2
+            vmin, vmax = np.nanpercentile(stamp, [1, 99])
+            ax.imshow(
+                stamp,
+                origin="lower",
+                vmin=vmin,
+                vmax=vmax,
+                cmap="gray",
+                aspect="equal",
+                extent=[-h_px, h_px, -h_px, h_px],
+            )
+
+            _dr = catalog.meta.get("donut_radius", float("nan"))
+            _ob = catalog.meta.get("obscuration", float("nan"))
+            dr = float(_dr) if np.isfinite(float(_dr)) else None
+            ob = float(_ob) if np.isfinite(float(_ob)) else None
+            if dr is not None and ob is not None:
+                _circ_specs = [
+                    (dr * ob * 0.67, "lime", "--"),
+                    (dr * ob, "lime", "-"),
+                    (dr * 1.05, "lime", "-"),
+                    (dr * 1.25, "orange", "-"),
+                    (dr * 1.4, "orange", "-"),
+                ]
+                for _rad, _col, _ls in _circ_specs:
+                    ax.add_patch(
+                        mpatches.Circle(
+                            (0, 0),
+                            _rad,
+                            fill=False,
+                            edgecolor=_col,
+                            linewidth=0.5,
+                            linestyle=_ls,
+                            alpha=0.45,
+                            zorder=4,
+                        )
+                    )
+
+            if rejected:
+                ax.plot([-h_px, h_px], [-h_px, h_px], color="red", lw=1.5, zorder=5)
+                ax.plot([-h_px, h_px], [h_px, -h_px], color="red", lw=1.5, zorder=5)
+
+            nq = int(row["n_quarter"]) % 4
+
+            def _xform(dx, dy):
+                r, c = dy, dx
+                for _ in range(nq):
+                    r, c = c, -r
+                return c, r
+
+            for dx, dy, mag in json.loads(str(row["nearby_photo"])):
+                tx, ty = _xform(dx, dy)
+                ax.plot(tx, ty, "o", ms=6, mfc="none", mec="cyan", mew=0.8, zorder=3)
+                if np.isfinite(mag):
+                    ax.text(tx + 3, ty + 3, f"{mag:.1f}", color="cyan", fontsize=3.5, zorder=4)
+            for dx, dy, mag in json.loads(str(row["nearby_astrom"])):
+                tx, ty = _xform(dx, dy)
+                ax.plot(tx, ty, "+", ms=6, mec="red", mew=0.8, zorder=3)
+                if np.isfinite(mag):
+                    ax.text(tx + 3, ty - 5, f"{mag:.1f}", color="red", fontsize=3.5, zorder=4)
+
+            inner_frac = float(row["inner_frac"])
+            outer_frac = float(row["outer_frac"])
+            outer_sector_max = float(row["outer_sector_max"])
+            snr = float(row["snr"])
+            if_str = f"if={inner_frac:.3f}" if np.isfinite(inner_frac) else "if=?"
+            of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
+            osm_str = f"osm={outer_sector_max:.3f}" if np.isfinite(outer_sector_max) else "osm=?"
+            snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
+            sid = int(row["source_id"])
+            sid_str = f"id={sid}" if sid != 0 else ""
+            _text_color = "orangered" if rejected else "black"
+            ax.text(
+                0.05,
+                1.00,
+                f"{snr_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
+                transform=ax.transAxes,
+                fontsize=3.5,
+                va="top",
+                ha="left",
+                color=_text_color,
+                bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
+                zorder=6,
+            )
+
+        for row_idx, (sensor, acc_rows, rej_rows) in enumerate(sensors_with_data):
+            sm = sensor_meta.get(sensor, {})
+            scatter_val = sm.get("scatter_arcsec", float("nan"))
+            scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
+
+            ax_stats = fig.add_subplot(gs[row_idx, 0])
+            ax_stats.axis("off")
+            lines = [
+                f"{sensor}",
+                f"donuts: {len(acc_rows)}",
+                f"isr:    {sm.get('isr_run', float('nan')):.2f}s",
+                f"detect: {sm.get('blind_detect_run', float('nan')):.2f}s",
+                f"wcs:    {sm.get('wcs_refit_run', float('nan')):.2f}s  ({scatter_str})",
+                f"select: {sm.get('catalog_select_run', float('nan')):.2f}s",
+            ]
+            if sm.get("wcs_refit_error"):
+                lines.append(f"WCS ERR: {sm['wcs_refit_error'][:40]}")
+            if sm.get("cat_select_error"):
+                lines.append(f"CAT ERR: {sm['cat_select_error'][:40]}")
+            ax_stats.text(
+                0.05, 0.95, "\n".join(lines), transform=ax_stats.transAxes,
+                fontsize=6, va="top", family="monospace",
+            )
+
+            for col_idx in range(STAMPS_PER_ROW):
+                ax = fig.add_subplot(gs[row_idx, COL_ACCEPTED_START + col_idx])
+                ax.axis("off")
+                if col_idx >= len(acc_rows):
+                    continue
+                _draw_stamp(ax, acc_rows[col_idx])
+
+            ax_sp = fig.add_subplot(gs[row_idx, COL_SPACER])
+            ax_sp.axis("off")
+
+            for col_idx in range(REJECTED_PER_ROW):
+                ax = fig.add_subplot(gs[row_idx, COL_REJECTED_START + col_idx])
+                ax.axis("off")
+                if col_idx >= len(rej_rows):
+                    continue
+                _draw_stamp(ax, rej_rows[col_idx], rejected=True)
+
+        ax_legend = fig.add_subplot(gs[n_sensors, :])
+        ax_legend.axis("off")
+        from matplotlib.lines import Line2D
+
+        legend_handles = [
+            Line2D(
+                [0], [0], marker="o", color="w", markerfacecolor="none",
+                markeredgecolor="cyan", markersize=6,
+                label=f"photo refcat ({photo_filter_label})",
+            ),
+            Line2D(
+                [0], [0], marker="+", color="red", markersize=6, linestyle="none",
+                label=f"astrom refcat ({astrom_filter_label})",
+            ),
+        ]
+        ax_legend.legend(
+            handles=legend_handles, loc="center", ncol=2, fontsize=7,
+            frameon=False, handletextpad=0.5, columnspacing=2.0,
+        )
+
+        fname = f"donut_diag_{visit_str}.png"
+        fig.savefig(fname, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        self.log.info("Saved diagnostic plot: %s", fname)
+
+    def _saveWfDiagnosticPlot(self, catalog: QTable) -> None:
+        """Save a WF diagnostic PNG modelled on the AOS donut-fits layout.
+
+        Layout: 2×2 grid of corners (R00, R04, R40, R44).
+        Within each corner: one row per fit result.
+        Each row: intra data|model|resid|zk_bar  extra data|model|resid|zk_bar.
+        Zernike bars are vertical, ±1 µm, no tick labels.
+
+        Parameters
+        ----------
+        catalog : QTable
+            Per-donut table from ``_buildCatalog``.
+        """
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import LinearSegmentedColormap
+        from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+
+        if len(catalog) == 0:
+            return
+
+        meta = catalog.meta
+        visit_str = str(meta.get("visit_str", ""))
+        refcat_elapsed = float(meta.get("refcat_elapsed", 0.0))
+        butler_elapsed = float(meta.get("butler_elapsed", 0.0))
+        butler_times = dict(meta.get("butler_times", {}))
+        cutout_elapsed = float(meta.get("cutout_elapsed", 0.0))
+        danish_elapsed = float(meta.get("danish_elapsed", 0.0))
+        noll_cfg = list(meta.get("noll_indices", [])) or list(
+            _CALIB_STORE.get("wf_cfg", {}).get("nollIndices", [])
+        )
+        ZK_MIN, ZK_MAX = 4, 28
+
+        # Reconstruct wf_results-like list from QTable by grouping on "group" column.
+        # Include only rows with a valid fit (fit_mode != "" and group >= 0).
+        groups: dict[int, list] = {}
+        for row in catalog:
+            fm = str(row["fit_mode"])
+            grp = int(row["group"])
+            if grp < 0 or fm == "":
+                continue
+            if grp not in groups:
+                groups[grp] = []
+            groups[grp].append(row)
+
+        plottable = []
+        for grp_idx, rows in sorted(groups.items()):
+            first = rows[0]
+            # Determine if this group has a real model (any non-NaN model_img).
+            has_model = any(
+                not np.all(np.isnan(np.array(r["model_img"]))) for r in rows
+            )
+            if not has_model:
+                continue
+            sensors = list(dict.fromkeys(str(r["sensor"]) for r in rows))
+            mode = str(first["fit_mode"])
+            success = bool(first["fit_success"])
+            elapsed = float(first["fit_elapsed"])
+            nfev = int(first["fit_nfev"])
+            fwhm = float(first["fit_fwhm"])
+            zk_by_noll = {j: float(first[f"Z{j}_dev"]) for j in range(4, 79)}
+
+            donuts_out = []
+            for r in rows:
+                model_arr = np.array(r["model_img"])
+                donuts_out.append({
+                    "donut_id": int(r["source_id"]),
+                    "sensor": str(r["sensor"]),
+                    "defocal": str(r["defocal"]),
+                    "img": np.array(r["wf_img"]),
+                    "model_img": model_arr if not np.all(np.isnan(model_arr)) else None,
+                    "blend_frac": float(r["blend_frac"]),
+                    "elapsed": elapsed,
+                    "nfev": nfev,
+                    "fwhm": fwhm,
+                    "success": success,
+                    "zk_by_noll": {j: float(r[f"Z{j}_dev"]) for j in range(4, 79)},
+                })
+            plottable.append({
+                "mode": mode,
+                "sensors": sensors,
+                "success": success,
+                "fit_info": {"elapsed": elapsed, "nfev": nfev, "fwhm": fwhm},
+                "donuts": donuts_out,
+                "zk_by_noll": zk_by_noll,
+            })
+
+        if not plottable:
+            self.log.info("No WF results with model images; skipping WF diagnostic plot.")
+            return
+
+        _CORNERS = ["R00", "R04", "R40", "R44"]
+
+        def _short(s):
+            return s.removeprefix("LSSTCam_").removeprefix("LSSTComCam_") if s else ""
+
+        def _corner_of(r):
+            for s in r.get("sensors", []):
+                sh = _short(s)
+                for c in _CORNERS:
+                    if sh.startswith(c):
+                        return c
+            return "R00"
+
+        # 4-stop colormap: purple (severe over-sub) → blue → white (zero) → red (signal).
+        # Anchors: -vmax=purple, -vmax/10=blue, 0=white, +vmax=red.
+        # Normalised positions over [-vmax, vmax]: 0.0, 0.45, 0.5, 1.0.
+        _cmap_bwr = LinearSegmentedColormap.from_list(
+            "bwr_donut",
+            list(zip([0.0, 0.45, 0.5, 1.0], [(0.5, 0, 0.5), (0, 0, 1), (1, 1, 1), (1, 0, 0)])),
+        )
+
+        def _draw_stamp(ax, img, cmap, vmin, vmax, label=""):
+            ax.imshow(img, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax,
+                      interpolation="nearest", aspect="equal")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if label:
+                ax.set_title(label, fontsize=5, pad=1)
+
+        def _draw_bar(ax, zk_by_noll, inset_label=""):
+            """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels."""
+            bar_noll = [j for j in range(ZK_MIN, ZK_MAX + 1)]
+            vals = [zk_by_noll.get(j, 0.0) for j in bar_noll]
+            ax.bar(bar_noll, vals, color="k", width=0.8)
+            ax.axhline(0, color="k", linewidth=0.4)
+            ax.set_ylim(-1.0, 1.0)
+            ax.set_xlim(ZK_MIN - 0.5, ZK_MAX + 0.5)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for j in [4, 11, 22]:
+                ax.axvspan(j - 0.5, j + 0.5, color="red", alpha=0.2, ec="none")
+            for j in [5, 12, 23]:
+                ax.axvspan(j - 0.5, j + 1.5, color="orange", alpha=0.2, ec="none")
+            for j in [7, 16]:
+                ax.axvspan(j - 0.5, j + 1.5, color="yellow", alpha=0.2, ec="none")
+            for j in [9, 18]:
+                ax.axvspan(j - 0.5, j + 1.5, color="green", alpha=0.2, ec="none")
+            for j in [14, 25]:
+                ax.axvspan(j - 0.5, j + 1.5, color="blue", alpha=0.2, ec="none")
+            ax.axvspan(19.5, 21.5, color="indigo", alpha=0.2, ec="none")
+            ax.axvspan(26.5, 28.5, color="violet", alpha=0.2, ec="none")
+            if inset_label:
+                ax.text(0.03, 0.97, inset_label, transform=ax.transAxes, fontsize=4,
+                        va="top", ha="left",
+                        bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6))
+
+        by_corner: dict[str, list] = {c: [] for c in _CORNERS}
+        for r in plottable:
+            by_corner[_corner_of(r)].append(r)
+
+
+        def _explode(r):
+            return [{**r, "donuts": [d]} for d in r.get("donuts", [])]
+
+        row_pairs: dict[str, list[tuple]] = {}
+        for corner, corner_results in by_corner.items():
+            mode = corner_results[0].get("mode") if corner_results else None
+            if mode == "unpaired":
+                intras = [r for r in corner_results
+                          if (r.get("donuts") or [{}])[0].get("defocal") == "intra"]
+                extras = [r for r in corner_results
+                          if (r.get("donuts") or [{}])[0].get("defocal") == "extra"]
+                n = max(len(intras), len(extras))
+                row_pairs[corner] = [
+                    (intras[i] if i < len(intras) else None,
+                     extras[i] if i < len(extras) else None)
+                    for i in range(n)
+                ]
+            elif mode in ("full_detector", "full_corner"):
+                intras = [s for r in corner_results for s in _explode(r)
+                          if s["donuts"][0].get("defocal") == "intra"]
+                extras = [s for r in corner_results for s in _explode(r)
+                          if s["donuts"][0].get("defocal") == "extra"]
+                n = max(len(intras), len(extras))
+                row_pairs[corner] = [
+                    (intras[i] if i < len(intras) else None,
+                     extras[i] if i < len(extras) else None)
+                    for i in range(n)
+                ]
+            else:
+                row_pairs[corner] = [(r, r) for r in corner_results]
+
+        CELL = 1.0
+        ROW_H = 1.0
+        HPAD = 0.08
+        max_rows = max((len(v) for v in row_pairs.values()), default=1)
+
+        corner_w = 10 * CELL
+        fig_w = 2 * corner_w + 0.3
+        fig_h = 2 * max_rows * ROW_H + 0.4
+
+        fig = plt.figure(figsize=(fig_w, fig_h))
+        outer = GridSpec(2, 2, figure=fig, hspace=HPAD, wspace=0.06,
+                         left=0.01, right=0.99, top=0.94, bottom=0.01)
+        corner_pos = {"R00": (0, 0), "R40": (0, 1), "R04": (1, 0), "R44": (1, 1)}
+
+        for corner in _CORNERS:
+            pairs = row_pairs[corner]
+            grow, gcol = corner_pos[corner]
+            inner = GridSpecFromSubplotSpec(
+                max_rows, 8, subplot_spec=outer[grow, gcol],
+                hspace=0.0, wspace=0.0,
+                width_ratios=[1, 1, 1, 2, 1, 1, 1, 2],
+            )
+            sw1 = f"{corner}_SW1"
+            sw0 = f"{corner}_SW0"
+
+            def _rec_info(r):
+                if r is None:
+                    return float("nan"), 0, False, float("nan")
+                fi = r.get("fit_info", {})
+                return (fi.get("elapsed", float("nan")), fi.get("nfev", 0),
+                        r.get("success", False), fi.get("fwhm", float("nan")))
+
+            for row_idx, (r_intra, r_extra) in enumerate(pairs):
+                if r_intra is not None:
+                    intra_rec = next(
+                        (d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"), None
+                    )
+                    elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(r_intra)
+                    zk_by_noll_i = r_intra.get("zk_by_noll", {j: float("nan") for j in range(4, 79)})
+                else:
+                    intra_rec = None
+                    elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(None)
+                    zk_by_noll_i = {j: float("nan") for j in range(4, 79)}
+
+                if r_extra is not None:
+                    extra_rec = next(
+                        (d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"), None
+                    )
+                    elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(r_extra)
+                    zk_by_noll_e = r_extra.get("zk_by_noll", {j: float("nan") for j in range(4, 79)})
+                else:
+                    extra_rec = None
+                    elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(None)
+                    zk_by_noll_e = {j: float("nan") for j in range(4, 79)}
+
+                intra_img = intra_rec["img"] if intra_rec else None
+                intra_mod = intra_rec["model_img"] if intra_rec else None
+                intra_sid = intra_rec["donut_id"] if intra_rec else None
+                intra_blend = intra_rec.get("blend_frac", float("nan")) if intra_rec else float("nan")
+
+                extra_img = extra_rec["img"] if extra_rec else None
+                extra_mod = extra_rec["model_img"] if extra_rec else None
+                extra_sid = extra_rec["donut_id"] if extra_rec else None
+                extra_blend = extra_rec.get("blend_frac", float("nan")) if extra_rec else float("nan")
+
+                def _bar_label(elapsed, nfev, success):
+                    status = "x0" if nfev == 0 else ("ok" if success else "fail")
+                    return f"t={elapsed:.1f}s {status} n={nfev}"
+
+                intra_label = _bar_label(elapsed_i, nfev_i, success_i)
+                extra_label = _bar_label(elapsed_e, nfev_e, success_e)
+                intra_hdr = f"intra {sw1}" if row_idx == 0 else ""
+                extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
+
+                def _triplet_and_bar(col_start, data, model, sensor_hdr, label,
+                                     sid, fwhm, zk_by_noll, blend_frac_val=float("nan")):
+                    if data is not None:
+                        vmax = float(np.nanpercentile(np.abs(data), 99)) or 1.0
+                        has_model = model is not None
+                        resid = (data - model) if has_model else None
+                        vmax_r = (float(np.nanpercentile(np.abs(resid), 99)) or 1.0) if has_model else 1.0
+                        for ci, (img, cmap, vmin, vmx) in enumerate([
+                            (data, _cmap_bwr, -vmax, vmax),
+                            (model if has_model else None, _cmap_bwr, -vmax, vmax),
+                            (resid, "bwr", -vmax_r, vmax_r),
+                        ]):
+                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
+                            lbl = sensor_hdr if ci == 0 else ""
+                            if img is None:
+                                ax.axis("off")
+                                if lbl:
+                                    ax.set_title(lbl, fontsize=5, pad=1)
+                                continue
+                            _draw_stamp(ax, img, cmap, vmin, vmx, label=lbl)
+                            ann_kw = dict(transform=ax.transAxes, fontsize=4, color="k",
+                                         va="top", ha="left",
+                                         bbox=dict(boxstyle="square,pad=0.1",
+                                                   fc="white", ec="none", alpha=0.6))
+                            if ci == 0 and sid is not None:
+                                ax.text(0.02, 0.98, f"id={sid}", **ann_kw)
+                            if ci == 1 and np.isfinite(fwhm):
+                                ax.text(0.02, 0.98, f"blur={fwhm:.2f}arcsec", **ann_kw)
+                            if ci == 2 and np.isfinite(blend_frac_val):
+                                ax.text(0.02, 0.98, f"blend={blend_frac_val:.3f}", **ann_kw)
+                        ax_bar = fig.add_subplot(inner[row_idx, col_start + 3])
+                        if has_model:
+                            _draw_bar(ax_bar, zk_by_noll, inset_label=label)
+                        else:
+                            ax_bar.axis("off")
+                    else:
+                        for ci in range(4):
+                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
+                            ax.axis("off")
+                            if ci == 0 and sensor_hdr:
+                                ax.set_title(sensor_hdr, fontsize=5, pad=1)
+
+                _triplet_and_bar(0, intra_img, intra_mod, intra_hdr, intra_label,
+                                 intra_sid, fwhm_i, zk_by_noll_i, intra_blend)
+                _triplet_and_bar(4, extra_img, extra_mod, extra_hdr, extra_label,
+                                 extra_sid, fwhm_e, zk_by_noll_e, extra_blend)
+
+        proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
+        bt = butler_times or {}
+        butler_line = (
+            "  ".join(f"{k}={v:.1f}s" for k, v in bt.items() if v > 0.0)
+            or f"total={butler_elapsed:.1f}s"
+        )
+        first_mode = plottable[0]["mode"] if plottable else ""
+        fig.suptitle(
+            f"WF fits  visit={visit_str}  mode={first_mode}\n"
+            f"butler.get:  {butler_line}\n"
+            f"refcat={refcat_elapsed:.1f}s  cutout={cutout_elapsed:.1f}s  "
+            f"danish={danish_elapsed:.1f}s  proc_total={proc_total:.1f}s",
+            fontsize=7,
+        )
+        fname = f"wf_diag_{visit_str}.png"
+        fig.savefig(fname, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        self.log.info("Saved WF diagnostic plot: %s", fname)
+
+
+# Register plotTask after DonutBlitzPlotTask is defined
+DonutBlitzMonolithTaskConfig.plotTask = pexConfig.ConfigurableField(
+    target=DonutBlitzPlotTask,
+    doc='Subtask that generates diagnostic plots for a blitz visit.',
+)
