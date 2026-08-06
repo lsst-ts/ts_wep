@@ -25,6 +25,7 @@ import abc
 import itertools
 import logging
 import multiprocessing as mp
+import os
 from typing import Any, Callable, Iterable
 
 import numpy as np
@@ -33,6 +34,7 @@ from astropy.coordinates import Angle
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.ts.wep.estimation import ObservingConditions, WfAlgorithm, WfAlgorithmFactory, WfEstimator
+from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -328,6 +330,62 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return zkArray, zkMeta
 
+    def _logMaskVersions(self, instrument: Instrument) -> None:
+        """Log the mask model and Batoid optical model used by the instrument.
+
+        The pupil mask is defined by both the danish mask parameters and the
+        Batoid optical model they are compared against. Logging the danish
+        version, the resolved mask file (including the version encoded in the
+        file name, e.g. via the ``RubinObsc.yaml`` symlink), and the Batoid
+        version and model name allows a run to be traced back to a specific
+        mask + optics pair later.
+
+        Parameters
+        ----------
+        instrument : Instrument
+            The instrument whose mask model should be logged.
+        """
+        # Log the danish mask model. Explicitly-set maskParams take precedence
+        # over maskParamsFile (mirroring Instrument.maskParams), so report that
+        # case rather than the danish file that is being overridden.
+        maskParamsFile = instrument.maskParamsFile
+        if getattr(instrument, "_maskParams", None) is not None:
+            self.log.info("Mask model: instrument-provided maskParams (overrides any danish file)")
+        elif maskParamsFile is None:
+            self.log.info("Mask model: instrument-provided maskParams (no danish file)")
+        else:
+            try:
+                import danish
+
+                danishVersion = getattr(danish, "__version__", "unknown")
+                resolvedFile = os.path.basename(
+                    os.path.realpath(os.path.join(danish.datadir, maskParamsFile))
+                )
+            except Exception:
+                danishVersion = "unknown"
+                resolvedFile = maskParamsFile
+
+            self.log.info(
+                "Mask model: danish %s, maskParamsFile=%s (resolved to %s)",
+                danishVersion,
+                maskParamsFile,
+                resolvedFile,
+            )
+
+        # Log the Batoid optical model the mask is paired with.
+        try:
+            import batoid
+
+            batoidVersion = getattr(batoid, "__version__", "unknown")
+        except Exception:
+            batoidVersion = "unknown"
+
+        self.log.info(
+            "Batoid model: batoid %s, batoidModelName=%s",
+            batoidVersion,
+            instrument.batoidModelName,
+        )
+
     def run(
         self,
         donutStampsExtra: DonutStamps,
@@ -367,6 +425,10 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             detectorName,
             self.config.instConfigFile,
         )
+
+        # Log the mask and Batoid model versions so runs can be traced back
+        # to a specific mask + optics pair later.
+        self._logMaskVersions(instrument)
 
         # Create the wavefront estimator
         wfEst = WfEstimator(
