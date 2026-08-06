@@ -417,6 +417,36 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         used_true[1] = False  # First row should be clipped, but average row should still be used
         self.assertEqual(list(zkOut["used"]), used_true)
 
+    def testEmptyMarksAverageRowNotUsed(self) -> None:
+        """Test that the empty() method marks the average row as not used.
+
+        This guards against a chained-indexing bug where the assignment
+        operates on a copy of the table rather than propagating to the
+        returned table.
+        """
+        # Use maxSelect=0 so no donuts are selected and run() returns
+        # the empty() result.
+        config = CalcZernikesTaskConfig()
+        config.estimateZernikes.lstsqKwargs = {
+            "ftol": 1.0e-3,
+            "xtol": 1.0e-3,
+            "gtol": 1.0e-3,
+            "max_nfev": 30,
+            "verbose": 2,
+            "x_scale": "jac",
+        }
+        config.donutStampSelector.maxSelect = 0  # Reject all donuts
+        task = CalcZernikesTask(config=config, name="No Donut Select Task")
+
+        zkTable = task.run(self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes).zernikes
+
+        # The empty table should contain only the average row
+        self.assertEqual(len(zkTable), 1)
+        self.assertEqual(zkTable["label"][0], "average")
+
+        # The average row should be marked as not used
+        self.assertFalse(zkTable["used"][0])
+
     def testTriangleModeConfiguration(self) -> None:
         """Test that the triangleMode configuration option is respected."""
         # Create a config with triangle mode enabled
