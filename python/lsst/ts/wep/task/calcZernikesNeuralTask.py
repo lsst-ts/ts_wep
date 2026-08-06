@@ -1389,7 +1389,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             self.log.info("No exposure supplied; producing empty neural Zernike outputs.")
             totalSec = time.perf_counter() - runStart
             self.log.info(
-                "Timing TOTAL for calcZernikesNeuralTask.run: %.3f s (empty: no exposure)",
+                "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s (empty: no exposure)",
                 totalSec,
             )
             return self.empty()
@@ -1420,7 +1420,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             self.log.info("No TARTS donut stamps were detected.")
             totalSec = time.perf_counter() - runStart
             self.log.info(
-                "Timing TOTAL for calcZernikesNeuralTask.run: %.3f s "
+                "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s "
                 "(empty: no donuts; determine=%.3f, fromExposure=%.3f)",
                 totalSec,
                 determineSec,
@@ -1435,7 +1435,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             )
             totalSec = time.perf_counter() - runStart
             self.log.info(
-                "Timing TOTAL for calcZernikesNeuralTask.run: %.3f s "
+                "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s "
                 "(empty: unusable Zernikes; determine=%.3f, fromExposure=%.3f, donuts=%d)",
                 totalSec,
                 determineSec,
@@ -1575,7 +1575,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.log.info("Finished Zernike estimation; table rows: %d", len(zernikesTable))
         totalSec = time.perf_counter() - runStart
         self.log.info(
-            "Timing TOTAL for calcZernikesNeuralTask.run: %.3f s "
+            "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s "
             "(exposure=%s, defocal='%s', donuts=%d; "
             "determine=%.3f, fromExposure=%.3f, zkTable=%.3f, quality=%.3f, donutTable=%.3f)",
             totalSec,
