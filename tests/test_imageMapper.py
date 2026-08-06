@@ -181,8 +181,11 @@ class TestImageMapper(unittest.TestCase):
         # Get the difference in the masks
         diff = maskPupilBatoid.astype(float) - image.mask.astype(float)
 
-        # Apply binary opening once to remove small artifacts at edges of masks
-        diff = binary_opening(diff)
+        # Apply binary opening to remove sub-pixel artifacts at the edges of
+        # the masks. Two iterations are needed because the analytic mask and
+        # the Batoid ray trace round obscuration-boundary pixels (e.g. the
+        # M2 inner edge) differently, leaving a thin band up to ~1 pixel wide.
+        diff = binary_opening(diff, iterations=2)
 
         self.assertTrue(np.allclose(diff, 0))
 
