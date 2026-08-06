@@ -33,6 +33,7 @@ import dataclasses
 import logging
 import multiprocessing as mp
 import signal
+import sys
 import time
 from typing import Any
 
@@ -90,6 +91,65 @@ CORNER_PAIRS = {
     "R44": ("R44_SW0", "R44_SW1"),
 }
 CORNER_SENSOR_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (sw0, sw1))
+
+# Colors below are drawn from the colorblind-safe Okabe-Ito palette.
+_COLOR_APERTURE = "#56B4E9"
+_COLOR_BKG_ANNULUS = "#E69F00"
+_COLOR_REJECTED = "#D55E00"
+_COLOR_PHOTO_REFCAT = "#56B4E9"
+_COLOR_ASTROM_REFCAT = "#E69F00"
+_COLOR_CMAP_NEG = "#0072B2"
+_COLOR_CMAP_MID = "#56B4E9"
+_COLOR_CMAP_POS = "#D55E00"
+_COLOR_COMA = "#F0E442"
+_COLOR_ASTIGMATISM = "#E69F00"
+_COLOR_TREFOIL = "#009E73"
+_COLOR_QUADRAFOIL = "#0072B2"
+_COLOR_PENTAFOIL = "#CC79A7"
+_COLOR_HEXAFOIL = "#D55E00"
+
+# ANSI escape codes for colorizing log messages (see colorLog config field).
+_ANSI_RESET = "\033[0m"
+_ANSI_BOLD = "\033[1m"
+_ANSI_RED = "\033[31m"
+_ANSI_GREEN = "\033[32m"
+_ANSI_YELLOW = "\033[33m"
+_ANSI_BLUE = "\033[34m"
+_ANSI_MAGENTA = "\033[35m"
+_ANSI_CYAN = "\033[36m"
+
+
+def _resolveColorLogEnabled(colorLog: bool | None) -> bool:
+    """Resolve the colorLog config value to a concrete enabled/disabled bool.
+
+    If ``colorLog`` is None, color is enabled only when stdout is attached
+    to an interactive terminal.
+    """
+    if colorLog is None:
+        return sys.stdout.isatty()
+    return colorLog
+
+
+def _colorize(text: str, *codes: str, enabled: bool = True) -> str:
+    """Wrap ``text`` in the given ANSI escape code(s) if ``enabled``.
+
+    Parameters
+    ----------
+    text : str
+        The text to colorize.
+    *codes : str
+        One or more ANSI escape codes (e.g. ``_ANSI_RED``, ``_ANSI_BOLD``).
+    enabled : bool, optional
+        If False, ``text`` is returned unchanged. (the default is True)
+
+    Returns
+    -------
+    str
+        The colorized (or original) text.
+    """
+    if not enabled or not codes:
+        return text
+    return "".join(codes) + text + _ANSI_RESET
 
 
 def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
@@ -1913,6 +1973,16 @@ class DonutBlitzMonolithTaskConfig(
         dtype=bool,
         default=False,
     )
+    colorLog: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Colorize select log messages with ANSI escape codes. If None "
+            "(the default), color is enabled only when stdout is an "
+            "interactive terminal."
+        ),
+        dtype=bool,
+        default=None,
+        optional=True,
+    )
     wfEstimationMode: pexConfig.ChoiceField = pexConfig.ChoiceField(
         doc="Wavefront estimation dispatch mode.",
         dtype=str,
@@ -2060,6 +2130,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         self.makeSubtask("subtractBackground")
         self.makeSubtask("astromTask")
         self.makeSubtask("donutSelector")
+        self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
 
     def runQuantum(
         self,
@@ -2067,6 +2138,15 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ) -> None:
+        self.log.info(
+            _colorize(
+                "DonutBlitzMonolithTask.runQuantum() on exposure %d",
+                _ANSI_BOLD,
+                _ANSI_RED,
+                enabled=self._colorLogEnabled,
+            ),
+            inputRefs.raws[0].dataId["exposure"],
+        )
         raw_det_ids = {ref.dataId["detector"] for ref in inputRefs.raws}
         for attr in ("ptc", "flat", "linearizer", "crosstalk", "intrinsicZernikes"):
             refs = getattr(inputRefs, attr)
@@ -2093,9 +2173,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         intrinsicZernikes = butlerQC.get(inputRefs.intrinsicZernikes)
         t9 = time.perf_counter()
         self.log.info(
-            "butlerQC.get timing: raws=%.3fs camera=%.3fs ptc=%.3fs flat=%.3fs"
-            " linearizer=%.3fs crosstalk=%.3fs astromRefCat=%.3fs photoRefCat=%.3fs"
-            " intrinsicZernikes=%.3fs total=%.3fs",
+            _colorize(
+                "butlerQC.get timing: raws=%.3fs camera=%.3fs ptc=%.3fs flat=%.3fs"
+                " linearizer=%.3fs crosstalk=%.3fs astromRefCat=%.3fs photoRefCat=%.3fs"
+                " intrinsicZernikes=%.3fs total=%.3fs",
+                _ANSI_BOLD,
+                _ANSI_GREEN,
+                enabled=self._colorLogEnabled,
+            ),
             t1 - t0,
             t2 - t1,
             t3 - t2,
@@ -2176,6 +2261,16 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             Per-dataset butlerQC.get() times keyed by dataset type name.
         numCores : int
         """
+        self.log.info(
+            _colorize(
+                "DonutBlitzMonolithTask.run() with %d cores, butler elapsed=%.3fs",
+                _ANSI_BOLD,
+                _ANSI_MAGENTA,
+                enabled=self._colorLogEnabled,
+            ),
+            numCores,
+            butler_elapsed,
+        )
         t_run0 = time.perf_counter()
 
         rawByName = {exp.getDetector().getName(): exp for exp in raws}
@@ -2410,7 +2505,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 results = pool.map(_run_cutout_worker, [(arg, t_dispatch) for arg in cutout_args])
             t_pool2 = time.perf_counter()
             self.log.info(
-                "Pool create: %.3fs, pool.map: %.3fs",
+                _colorize(
+                    "Pool create: %.3fs, pool.map: %.3fs",
+                    _ANSI_BOLD,
+                    _ANSI_GREEN,
+                    enabled=self._colorLogEnabled,
+                ),
                 t_pool1 - t_pool0,
                 t_pool2 - t_pool1,
             )
@@ -2488,7 +2588,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         t_plot0 = time.perf_counter()
         self.log.info(
-            "Timing summary: butler=%.1fs  refcat=%.1fs  cutout=%.1fs  danish=%.1fs  total=%.1fs",
+            _colorize(
+                "Timing summary: butler=%.1fs  refcat=%.1fs  cutout=%.1fs  danish=%.1fs  total=%.1fs",
+                _ANSI_BOLD,
+                _ANSI_GREEN,
+                enabled=self._colorLogEnabled,
+            ),
             butler_elapsed,
             t_refcat_elapsed,
             t_cutout1 - t_cutout0,
@@ -2762,6 +2867,17 @@ class DonutBlitzPlotTaskConfig(
 ):
     """Configuration for DonutBlitzPlotTask."""
 
+    colorLog: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Colorize select log messages with ANSI escape codes. If None "
+            "(the default), color is enabled only when stdout is an "
+            "interactive terminal."
+        ),
+        dtype=bool,
+        default=None,
+        optional=True,
+    )
+
 
 class DonutBlitzPlotTask(pipeBase.PipelineTask):
     """PipelineTask that regenerates diagnostic plots from ``donutBlitzResults``.
@@ -2772,6 +2888,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
     ConfigClass = DonutBlitzPlotTaskConfig
     _DefaultName = "donutBlitzPlotTask"
+    config: DonutBlitzPlotTaskConfig
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
 
     def runQuantum(
         self,
@@ -2888,6 +3009,15 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
         _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
 
+        _REJECT_REASON_COLS = (
+            ("SAT", "rejected_sat"),
+            ("field_dist", "rejected_field_dist"),
+            ("inner_frac", "rejected_inner_frac"),
+            ("outer_frac", "rejected_outer_frac"),
+            ("snr", "rejected_snr"),
+            ("selector", "rejected_selector"),
+        )
+
         def _draw_stamp(ax, row, rejected=False):
             import matplotlib.patches as mpatches
 
@@ -2907,11 +3037,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             dr, ob = _stamp_dr, _stamp_ob
             if dr is not None and ob is not None:
                 _circ_specs = [
-                    (dr * ob * _stamp_inner_buffer_frac, "#56B4E9", "--"),
-                    (dr * ob, "#56B4E9", "-"),
-                    (dr * _stamp_outer_margin_frac, "#56B4E9", "-"),
-                    (dr * _stamp_bkg_inner_frac, "#E69F00", "-"),
-                    (dr * _stamp_bkg_outer_frac, "#E69F00", "-"),
+                    (dr * ob * _stamp_inner_buffer_frac, _COLOR_APERTURE, "--"),
+                    (dr * ob, _COLOR_APERTURE, "-"),
+                    (dr * _stamp_outer_margin_frac, _COLOR_APERTURE, "-"),
+                    (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "-"),
+                    (dr * _stamp_bkg_outer_frac, _COLOR_BKG_ANNULUS, "-"),
                 ]
                 for _rad, _col, _ls in _circ_specs:
                     ax.add_patch(
@@ -2928,8 +3058,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     )
 
             if rejected:
-                ax.plot([-h_px, h_px], [-h_px, h_px], color="#D55E00", lw=1.5, zorder=5)
-                ax.plot([-h_px, h_px], [h_px, -h_px], color="#D55E00", lw=1.5, zorder=5)
+                ax.plot([-h_px, h_px], [-h_px, h_px], color=_COLOR_REJECTED, lw=1.5, zorder=5)
+                ax.plot([-h_px, h_px], [h_px, -h_px], color=_COLOR_REJECTED, lw=1.5, zorder=5)
 
             nq = int(row["n_quarter"]) % 4
 
@@ -2941,14 +3071,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
             for dx, dy, mag in json.loads(str(row["nearby_photo"])):
                 tx, ty = _xform(dx, dy)
-                ax.plot(tx, ty, "o", ms=6, mfc="none", mec="#56B4E9", mew=0.8, zorder=3)
+                ax.plot(tx, ty, "o", ms=6, mfc="none", mec=_COLOR_PHOTO_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
-                    ax.text(tx + 3, ty + 3, f"{mag:.1f}", color="#56B4E9", fontsize=3.5, zorder=4)
+                    ax.text(tx + 3, ty + 3, f"{mag:.2f}", color=_COLOR_PHOTO_REFCAT, fontsize=3.5, zorder=4)
             for dx, dy, mag in json.loads(str(row["nearby_astrom"])):
                 tx, ty = _xform(dx, dy)
-                ax.plot(tx, ty, "+", ms=6, mec="#E69F00", mew=0.8, zorder=3)
+                ax.plot(tx, ty, "+", ms=6, mec=_COLOR_ASTROM_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
-                    ax.text(tx + 3, ty - 5, f"{mag:.1f}", color="#E69F00", fontsize=3.5, zorder=4)
+                    ax.text(tx + 3, ty - 5, f"{mag:.2f}", color=_COLOR_ASTROM_REFCAT, fontsize=3.5, zorder=4)
 
             inner_frac = float(row["inner_frac"])
             outer_frac = float(row["outer_frac"])
@@ -2960,11 +3090,20 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
             sid = int(row["source_id"])
             sid_str = f"id={sid}" if sid != 0 else ""
-            _text_color = "#D55E00" if rejected else "black"
+            _text_color = _COLOR_REJECTED if rejected else "black"
+            if rejected:
+                _rej_reasons = [
+                    name
+                    for name, col in _REJECT_REASON_COLS
+                    if bool(row[col])
+                ]
+                rej_str = f"[{','.join(_rej_reasons)}]" if _rej_reasons else ""
+            else:
+                rej_str = ""
             ax.text(
                 0.05,
                 1.00,
-                f"{snr_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
+                f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
                 transform=ax.transAxes,
                 fontsize=3.5,
                 va="top",
@@ -3022,11 +3161,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         legend_handles = [
             Line2D(
                 [0], [0], marker="o", color="w", markerfacecolor="none",
-                markeredgecolor="#56B4E9", markersize=6,
+                markeredgecolor=_COLOR_PHOTO_REFCAT, markersize=6,
                 label=f"photo refcat ({photo_filter_label})",
             ),
             Line2D(
-                [0], [0], marker="+", color="#E69F00", markersize=6, linestyle="none",
+                [0], [0], marker="+", color=_COLOR_ASTROM_REFCAT, markersize=6, linestyle="none",
                 label=f"astrom refcat ({astrom_filter_label})",
             ),
         ]
@@ -3144,8 +3283,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         return c
             return "R00"
 
-        # 4-stop diverging colormap: Wong blue → white (zero) → vermilion.
-        # Anchors: -vmax=#0072B2, -vmax/10=#56B4E9, 0=white, +vmax=#D55E00.
+        # 4-stop diverging colormap: blue → white (zero) → vermillion.
+        # Anchors: -vmax=blue, -vmax/10=sky blue, 0=white, +vmax=vermillion.
         # Normalised positions over [-vmax, vmax]: 0.0, 0.45, 0.5, 1.0.
         def _hex_to_rgb(h):
             return tuple(int(h[i : i + 2], 16) / 255 for i in (1, 3, 5))
@@ -3154,14 +3293,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             "bwr_donut",
             list(zip(
                 [0.0, 0.45, 0.5, 1.0],
-                [_hex_to_rgb(h) for h in ("#0072B2", "#56B4E9", "#FFFFFF", "#D55E00")],
+                [_hex_to_rgb(h) for h in (
+                    _COLOR_CMAP_NEG, _COLOR_CMAP_MID, "#FFFFFF", _COLOR_CMAP_POS,
+                )],
             )),
         )
         _cmap_bwr_sym = LinearSegmentedColormap.from_list(
             "bwr_donut_sym",
             list(zip(
                 [0.0, 0.5, 1.0],
-                [_hex_to_rgb(h) for h in ("#0072B2", "#FFFFFF", "#D55E00")],
+                [_hex_to_rgb(h) for h in (_COLOR_CMAP_NEG, "#FFFFFF", _COLOR_CMAP_POS)],
             )),
         )
 
@@ -3183,18 +3324,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ax.set_xlim(ZK_MIN - 0.5, ZK_MAX + 0.5)
             ax.set_xticks([])
             ax.set_yticks([])
-            for j in [4, 11, 22]:   # defocus
+            for j in [4, 11, 22]:   # spherical (m=0)
                 ax.axvspan(j - 0.5, j + 0.5, color="#000000", alpha=0.15, ec="none")
-            for j in [5, 12, 23]:   # astigmatism
-                ax.axvspan(j - 0.5, j + 1.5, color="#E69F00", alpha=0.25, ec="none")
-            for j in [7, 16]:       # coma
-                ax.axvspan(j - 0.5, j + 1.5, color="#F0E442", alpha=0.35, ec="none")
-            for j in [9, 18]:       # trefoil
-                ax.axvspan(j - 0.5, j + 1.5, color="#009E73", alpha=0.25, ec="none")
-            for j in [14, 25]:      # secondary astigmatism
-                ax.axvspan(j - 0.5, j + 1.5, color="#56B4E9", alpha=0.25, ec="none")
-            ax.axvspan(19.5, 21.5, color="#0072B2", alpha=0.25, ec="none")   # secondary coma
-            ax.axvspan(26.5, 28.5, color="#CC79A7", alpha=0.25, ec="none")   # tertiary
+            for j in [7, 16]:       # coma (m=1)
+                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_COMA, alpha=0.35, ec="none")
+            for j in [5, 12, 23]:   # astigmatism (m=2)
+                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_ASTIGMATISM, alpha=0.25, ec="none")
+            for j in [9, 18]:       # trefoil (m=3)
+                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_TREFOIL, alpha=0.25, ec="none")
+            for j in [14, 25]:      # quadrafoil (m=4)
+                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_QUADRAFOIL, alpha=0.25, ec="none")
+            ax.axvspan(19.5, 21.5, color=_COLOR_PENTAFOIL, alpha=0.25, ec="none")   # pentafoil (m=5)
+            ax.axvspan(26.5, 28.5, color=_COLOR_HEXAFOIL, alpha=0.25, ec="none")   # hexafoil (m=6)
             if inset_label:
                 ax.text(0.03, 0.97, inset_label, transform=ax.transAxes, fontsize=4,
                         va="top", ha="left",
