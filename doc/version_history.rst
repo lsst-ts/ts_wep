@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.8.1 (2026-08-07)
+====================
+
+Bug Fixes
+---------
+
+- Fixed zernike table behavior so the average row is now correctly marked as unused, with a regression test added to guard against the copy-versus-view assignment trap. (`RSO-864 <https://rubinobs.atlassian.net//browse/RSO-864>`_)
+
+
 v17.8.0 (2026-07-22)
 ===================
 
