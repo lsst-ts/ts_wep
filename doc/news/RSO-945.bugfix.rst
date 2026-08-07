@@ -1,0 +1,3 @@
+Handle per-donut Zernike estimation failures without crashing the whole task.
+When ``estimateZk`` raises for a single donut (or donut pair), e.g. a batoid "failed rays" error, the failure is now logged with a traceback and that donut returns NaN Zernikes flagged with ``fit_success=False`` so it is dropped downstream, rather than aborting estimation for every donut in the exposure.
+Per-donut metadata dicts are now collated by taking the union of their keys (filling missing values, defaulting ``fit_success`` to ``True``) so that successful and failed donuts, which report different keys, stay aligned in the output metadata.
