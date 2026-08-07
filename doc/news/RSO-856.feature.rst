@@ -1,0 +1,3 @@
+Load instrument ``maskParams`` from the danish package's ``{instName}Obsc.yaml`` data files.
+Added a new ``maskParamsFile`` field to ``Instrument`` (and the instrument policy YAMLs) which names a mask parameter file shipped in danish's data directory; when set, ``Instrument.maskParams`` is loaded from that file.
+The inline ``maskParams`` blocks in ``LsstCam.yaml``, ``ComCam.yaml``, and ``AuxTel.yaml`` were removed in favor of ``maskParamsFile: RubinObsc.yaml``, ``ComCamObsc.yaml``, and ``AuxTelObsc.yaml`` respectively, making danish the single source of truth for the pupil mask model.
