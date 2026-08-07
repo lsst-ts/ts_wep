@@ -510,7 +510,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if zernikeTable is None:
             zkTable = self.initZkTable()
             zkTable.meta = self.createZkTableMetadata()
-            zkTable[zkTable["label"] == "average"]["used"] = False  # Mark average row as not used
+            zkTable["used"][zkTable["label"] == "average"] = False  # Mark average row as not used
         else:
             zkTable = zernikeTable
 
