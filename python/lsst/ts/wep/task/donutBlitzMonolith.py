@@ -92,6 +92,17 @@ CORNER_PAIRS = {
 }
 CORNER_SENSOR_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (sw0, sw1))
 
+# Display names for DonutSourceSelectorTask rejection reasons. Reasons absent
+# here are shown verbatim. "faint_neighbor" folds into "blend" (both mean a
+# neighbor spoiled this donut), and the selector's "field_dist" deliberately
+# shares a label with the monolith's own field-distance check even though the
+# thresholds differ slightly (selector maxFieldDist vs. detect maxFieldDist).
+_SELECTOR_REASON_DISP = {
+    "faint_neighbor": "blend",
+    "too_many_blends": "many",
+    "source_limit": "limit",
+}
+
 # Colors below are drawn from the colorblind-safe Okabe-Ito palette.
 _COLOR_APERTURE = "#56B4E9"
 _COLOR_BKG_ANNULUS = "#E69F00"
@@ -2506,7 +2517,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             t_pool2 = time.perf_counter()
             self.log.info(
                 _colorize(
-                    "Pool create: %.3fs, pool.map: %.3fs",
+                    "Cutout pipeline: pool create: %.3fs, pool.map: %.3fs",
                     _ANSI_BOLD,
                     _ANSI_GREEN,
                     enabled=self._colorLogEnabled,
@@ -2695,6 +2706,20 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         _KNOWN_REASONS = ("snr", "inner_frac", "outer_frac", "SAT", "field_dist")
 
+        def _reject_reason_str(reasons):
+            """Comma-join reject reasons in their display form.
+
+            Order is preserved and duplicates are dropped, so a selector
+            "faint_neighbor" collapsing onto an existing "blend" (or the
+            selector's "field_dist" onto the monolith's) shows only once.
+            """
+            out: list[str] = []
+            for rr in reasons:
+                disp = _SELECTOR_REASON_DISP.get(rr, rr)
+                if disp not in out:
+                    out.append(disp)
+            return ",".join(out)
+
         def _encode_nearby(entries):
             return json.dumps([[round(dx, 1), round(dy, 1), round(mag, 2)] for dx, dy, mag in entries])
 
@@ -2780,6 +2805,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "rejected_sat": bool("SAT" in reject_reasons or d.get("saturated", False)),
                 "rejected_field_dist": bool("field_dist" in reject_reasons),
                 "rejected_selector": bool(any(rr not in _KNOWN_REASONS for rr in reject_reasons)),
+                "reject_reasons": _reject_reason_str(reject_reasons),
                 # --- fit results ---
                 "fit_mode": _wd_field(wd, "fit_mode", str, ""),
                 "group": int(grp),
@@ -2841,6 +2867,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["aperture_inner_buffer_frac"] = _detect_cfg["apertureInnerBufferFrac"]
         table.meta["bkg_annulus_inner_frac"] = _detect_cfg["bkgAnnulusInnerFrac"]
         table.meta["bkg_annulus_outer_frac"] = _detect_cfg["bkgAnnulusOuterFrac"]
+        table.meta["max_donuts"] = int(_detect_cfg["maxDonuts"])
         return table
 
 class DonutBlitzPlotTaskConnections(
@@ -2967,9 +2994,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         STAMPS_PER_ROW = 8
         REJECTED_PER_ROW = 2
-        STAMP_COL_W = 1.8
+        STAMP_COL_W = 1.8 * 1.05
         STATS_COL_W = 2.8
-        ROW_H = 1.7
+        ROW_H = 1.7 * 1.05
         LEGEND_H = 0.35
         SPACER_W = 0.15
         SUPTITLE_H = 0.55
@@ -3009,14 +3036,19 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
         _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
 
-        _REJECT_REASON_COLS = (
-            ("SAT", "rejected_sat"),
-            ("field_dist", "rejected_field_dist"),
-            ("inner_frac", "rejected_inner_frac"),
-            ("outer_frac", "rejected_outer_frac"),
-            ("snr", "rejected_snr"),
-            ("selector", "rejected_selector"),
-        )
+        # Uniform half-width for every stamp's axes. Without this, ax.plot
+        # of the refcat overlays triggers autoscale (add_patch alone does
+        # not), pulling in the annulus circles and shrinking the stamp only
+        # on rows that happen to have overlays.
+        _stamp_view_half = None
+        if _stamp_dr is not None and _stamp_ob is not None:
+            _stamp_view_half = _stamp_dr * _stamp_bkg_outer_frac
+
+        # The 3-line stat block is top-anchored at the axes edge, so it hangs
+        # down over the stamp. Lift it by one line height (fontsize * 1.2
+        # line spacing, in points) to clear the image.
+        _STAMP_TEXT_FONTSIZE = 3.5
+        _STAMP_TEXT_LINE_PTS = _STAMP_TEXT_FONTSIZE * 1.2
 
         def _draw_stamp(ax, row, rejected=False):
             import matplotlib.patches as mpatches
@@ -3037,11 +3069,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             dr, ob = _stamp_dr, _stamp_ob
             if dr is not None and ob is not None:
                 _circ_specs = [
-                    (dr * ob * _stamp_inner_buffer_frac, _COLOR_APERTURE, "--"),
+                    (dr * ob * _stamp_inner_buffer_frac, _COLOR_BKG_ANNULUS, "--"),
                     (dr * ob, _COLOR_APERTURE, "-"),
                     (dr * _stamp_outer_margin_frac, _COLOR_APERTURE, "-"),
-                    (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "-"),
-                    (dr * _stamp_bkg_outer_frac, _COLOR_BKG_ANNULUS, "-"),
+                    (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "--"),
+                    (dr * _stamp_bkg_outer_frac, _COLOR_BKG_ANNULUS, "--"),
                 ]
                 for _rad, _col, _ls in _circ_specs:
                     ax.add_patch(
@@ -3050,7 +3082,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                             _rad,
                             fill=False,
                             edgecolor=_col,
-                            linewidth=0.5,
+                            linewidth=1.0,
                             linestyle=_ls,
                             alpha=0.45,
                             zorder=4,
@@ -3080,6 +3112,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 if np.isfinite(mag):
                     ax.text(tx + 3, ty - 5, f"{mag:.2f}", color=_COLOR_ASTROM_REFCAT, fontsize=3.5, zorder=4)
 
+            _view_half = _stamp_view_half if _stamp_view_half is not None else h_px
+            ax.set_xlim(-_view_half, _view_half)
+            ax.set_ylim(-_view_half, _view_half)
+
             inner_frac = float(row["inner_frac"])
             outer_frac = float(row["outer_frac"])
             outer_sector_max = float(row["outer_sector_max"])
@@ -3091,26 +3127,21 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             sid = int(row["source_id"])
             sid_str = f"id={sid}" if sid != 0 else ""
             _text_color = _COLOR_REJECTED if rejected else "black"
-            if rejected:
-                _rej_reasons = [
-                    name
-                    for name, col in _REJECT_REASON_COLS
-                    if bool(row[col])
-                ]
-                rej_str = f"[{','.join(_rej_reasons)}]" if _rej_reasons else ""
-            else:
-                rej_str = ""
-            ax.text(
-                0.05,
-                1.00,
+            _reasons = str(row["reject_reasons"]) if rejected else ""
+            rej_str = f"[{_reasons}]" if _reasons else ""
+            ax.annotate(
                 f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
-                transform=ax.transAxes,
-                fontsize=3.5,
+                xy=(0.05, 1.00),
+                xycoords="axes fraction",
+                xytext=(0, _STAMP_TEXT_LINE_PTS),
+                textcoords="offset points",
+                fontsize=_STAMP_TEXT_FONTSIZE,
                 va="top",
                 ha="left",
                 color=_text_color,
                 bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
                 zorder=6,
+                annotation_clip=False,
             )
 
         for row_idx, (sensor, acc_rows, rej_rows) in enumerate(sensors_with_data):
@@ -3380,7 +3411,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         CELL = 1.0
         ROW_H = 1.0
         HPAD = 0.08
-        max_rows = max((len(v) for v in row_pairs.values()), default=1)
+        # Always lay out maxDonuts rows per corner, padding short corners with
+        # blank rows, so figure dimensions and axes positions depend only on
+        # config -- not on how many donuts a given mode happened to fit. This
+        # makes plots for the same exposure blinkable across fitting modes.
+        # Never fewer rows than any corner actually has, so a corner with more
+        # fits than maxDonuts grows the layout rather than losing rows.
+        max_rows = max(
+            [int(meta.get("max_donuts", 0) or 0), 1]
+            + [len(v) for v in row_pairs.values()]
+        )
+        for corner, pairs in row_pairs.items():
+            row_pairs[corner] = pairs + [(None, None)] * (max_rows - len(pairs))
 
         corner_w = 10 * CELL
         fig_w = 2 * corner_w + 0.3
@@ -3513,7 +3555,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             fontsize=7,
         )
         fname = f"wf_diag_{visit_str}.png"
-        fig.savefig(fname, dpi=300, bbox_inches="tight")
+        # No bbox_inches="tight" here: it crops to drawn content, so the output
+        # size would still shift with the number of populated rows even though
+        # the layout is padded to max_rows. A fixed canvas keeps every plot for
+        # a given config pixel-comparable.
+        fig.savefig(fname, dpi=300)
         plt.close(fig)
         self.log.info("Saved WF diagnostic plot: %s", fname)
 
