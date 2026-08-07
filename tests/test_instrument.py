@@ -179,6 +179,15 @@ class TestInstrument(unittest.TestCase):
         offsetInst.defocalOffset = 2.5e-3
         self.assertEqual(offsetInst.defocalOffset, 2.5e-3)
 
+    def testHalfClearedBatoidOffsetNoRecursion(self) -> None:
+        # Clearing only batoidOffsetOptic (leaving batoidOffsetValue set)
+        # leaves an inconsistent state. Reading defocalOffset should raise a
+        # clear error rather than recursing infinitely.
+        inst = Instrument("policy:instruments/LsstCam.yaml")
+        inst.batoidOffsetOptic = None
+        with self.assertRaises(ValueError):
+            inst.defocalOffset
+
     def testScalarBatoidOffsetReturnedAsList(self) -> None:
         # A scalar offset is normalized to a one-element list
         inst = Instrument(batoidOffsetOptic="LSSTCamera", batoidOffsetValue=1.5e-3)

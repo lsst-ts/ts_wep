@@ -408,7 +408,11 @@ class Instrument:
             return self._defocalOffset
         elif self._defocalOffsetBatoid is not None:
             return self._defocalOffsetBatoid
-        elif self.batoidModelName is not None and self._batoidOffsetValue is not None:
+        elif (
+            self.batoidModelName is not None
+            and self._batoidOffsetOptic is not None
+            and self._batoidOffsetValue is not None
+        ):
             # Load the model and wavelength info
             batoidModel = self.getBatoidModel()
             eps = batoidModel.pupilObscuration
