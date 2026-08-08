@@ -1,0 +1,15 @@
+# LSST Telescope parameters for Full-array Mode, modeling the wavefront
+# sensors as offset from the (already offset) camera.
+# lsst.obs.lsst.LsstCam
+
+# Use settings from LsstCam
+imports: policy:instruments/LsstCam.yaml
+
+# Apply these overrides
+name: LsstFamCamWavefront
+
+# In Full Array Mode the whole camera is pistoned by 1.5 mm, and the
+# wavefront-sensing detectors sit a further 1.5 mm from the camera. Model
+# both pistons independently rather than as a single 3 mm detector offset.
+batoidOffsetOptic: [LSSTCamera, Detector]
+batoidOffsetValue: [1.5e-3, 1.5e-3]

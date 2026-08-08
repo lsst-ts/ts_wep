@@ -643,14 +643,22 @@ class TestImageMapper(unittest.TestCase):
             mapper = ImageMapper(instConfig=instConfig, opticalModel=model)
             inst = mapper.instrument
 
-            # Determine the defocal offset
-            offset = -inst.defocalOffset if dfType == "intra" else inst.defocalOffset
+            # Determine per-optic shifts (batoidOffsetValue if set, else the
+            # scalar defocalOffset applied to each offset optic)
+            offsetOptics = inst.batoidOffsetOptic
+            defocalSign = -1 if dfType == "intra" else 1
+            if inst.batoidOffsetValue is None:
+                offsetValues = [defocalSign * inst.defocalOffset] * len(offsetOptics)
+            else:
+                offsetValues = [defocalSign * v for v in inst.batoidOffsetValue]
 
             # Loop over each band
             for band in inst.wavelength:
                 # Get the Batoid model
                 optic = inst.getBatoidModel(band)
-                shifted = optic.withLocallyShiftedOptic(inst.batoidOffsetOptic, [0, 0, offset])
+                shifted = optic
+                for offsetOptic, offsetValue in zip(offsetOptics, offsetValues):
+                    shifted = shifted.withLocallyShiftedOptic(offsetOptic, [0, 0, offsetValue])
 
                 # Create the RayVector
                 dirCos = batoid.utils.fieldToDirCos(*np.deg2rad(angle))
