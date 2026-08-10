@@ -1795,16 +1795,8 @@ class DonutBlitzMonolithTaskConnections(
         multiple=True,
         lookupFunction=lookupStaticCalibrations,
     )
-    astromRefCat = connectionTypes.PrerequisiteInput(
-        doc="Reference catalog for WCS fitting.",
-        name="the_monster_20250219",
-        storageClass="SimpleCatalog",
-        dimensions=("htm7",),
-        deferLoad=True,
-        multiple=True,
-    )
-    photoRefCat = connectionTypes.PrerequisiteInput(
-        doc="Reference catalog for donut selection.",
+    refCat = connectionTypes.PrerequisiteInput(
+        doc="Reference catalog for both WCS fitting and donut selection.",
         name="the_monster_20250219",
         storageClass="SimpleCatalog",
         dimensions=("htm7",),
@@ -1964,24 +1956,31 @@ class DonutBlitzMonolithTaskConfig(
         default=3,
     )
     astromRefFilter: pexConfig.Field = pexConfig.Field(
-        doc="Filter name to use when querying the astrometry reference catalog.",
+        doc=(
+            "Filter name to read from the reference catalog when fitting the "
+            "WCS. Aliased over every filter via anyFilterMapsToThis, so it is "
+            "what AstrometryTask resolves as its reference flux field."
+        ),
         dtype=str,
         default="phot_g_mean",
     )
     photoRefFilter: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Explicit filter name to use in photometry reference catalog "
-            "(e.g. 'phot_g_mean'). Overrides photoRefFilterPrefix when set."
+            "Explicit filter name to read from the reference catalog for donut "
+            "selection (e.g. 'phot_g_mean'). Overrides photoRefFilterPrefix "
+            "when set."
         ),
         dtype=str,
         optional=True,
     )
     photoRefFilterPrefix: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Filter prefix for the photometry reference catalog. "
-            "Combined with the exposure band label as '{prefix}_{band}' "
-            "(e.g. 'monster_ComCam' → 'monster_ComCam_g'). "
-            "Used when photoRefFilter is not set."
+            "Filter prefix used for donut selection, combined with the exposure "
+            "band label as '{prefix}_{band}'. Used when photoRefFilter is not "
+            "set. The default matches the only per-band LSST-like fluxes "
+            "present in the_monster_20250219 ('monster_ComCam_g' etc.); there "
+            "are no monster_LSSTCam_* columns in any released refcat version, "
+            "so override this once a matching set exists."
         ),
         dtype=str,
         default="monster_ComCam",
@@ -2189,16 +2188,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         t5 = time.perf_counter()
         crosstalk = butlerQC.get(inputRefs.crosstalk)
         t6 = time.perf_counter()
-        astromRefCat = butlerQC.get(inputRefs.astromRefCat)
+        refCat = butlerQC.get(inputRefs.refCat)
         t7 = time.perf_counter()
-        photoRefCat = butlerQC.get(inputRefs.photoRefCat)
-        t8 = time.perf_counter()
         intrinsicZernikes = butlerQC.get(inputRefs.intrinsicZernikes)
-        t9 = time.perf_counter()
+        t8 = time.perf_counter()
         self.log.info(
             _colorize(
                 "butlerQC.get timing: raws=%.3fs camera=%.3fs ptc=%.3fs flat=%.3fs"
-                " linearizer=%.3fs crosstalk=%.3fs astromRefCat=%.3fs photoRefCat=%.3fs"
+                " linearizer=%.3fs crosstalk=%.3fs refCat=%.3fs"
                 " intrinsicZernikes=%.3fs total=%.3fs",
                 _ANSI_BOLD,
                 _ANSI_GREEN,
@@ -2212,10 +2209,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             t6 - t5,
             t7 - t6,
             t8 - t7,
-            t9 - t8,
-            t9 - t0,
+            t8 - t0,
         )
-        butler_elapsed = t9 - t0
+        butler_elapsed = t8 - t0
         butler_times = dict(
             raws=t1 - t0,
             camera=t2 - t1,
@@ -2223,9 +2219,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             flat=t4 - t3,
             linearizer=t5 - t4,
             crosstalk=t6 - t5,
-            astromRefCat=t7 - t6,
-            photoRefCat=t8 - t7,
-            intrinsicZernikes=t9 - t8,
+            refCat=t7 - t6,
+            intrinsicZernikes=t8 - t7,
         )
         outputs = self.run(
             raws=raws,
@@ -2234,15 +2229,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             flat=flat,
             linearizer=linearizer,
             crosstalk=crosstalk,
-            astromRefCat=astromRefCat,
-            photoRefCat=photoRefCat,
+            refCat=refCat,
             intrinsicZernikes=intrinsicZernikes,
             butler_elapsed=butler_elapsed,
             butler_times=butler_times,
             numCores=butlerQC.resources.num_cores,
         )
-        t10 = time.perf_counter()
-        self.log.info("run() execution: %.3fs", t10 - t9)
+        t9 = time.perf_counter()
+        self.log.info("run() execution: %.3fs", t9 - t8)
         butlerQC.put(outputs.blitzResults, outputRefs.blitzResults)
 
     @timeMethod
@@ -2254,8 +2248,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         flat: list,
         linearizer: list,
         crosstalk: list,
-        astromRefCat: list,
-        photoRefCat: list,
+        refCat: list,
         intrinsicZernikes: list | None = None,
         butler_elapsed: float = 0.0,
         butler_times: dict | None = None,
@@ -2272,10 +2265,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         flat : list of lsst.afw.image.ExposureF
         linearizer : list of lsst.ip.isr.Linearizer
         crosstalk : list of lsst.ip.isr.CrosstalkCalib
-        astromRefCat : list of DeferredDatasetHandle or SimpleCatalog
-            Shards for WCS fitting.
-        photoRefCat : list of DeferredDatasetHandle or SimpleCatalog
-            Shards for donut selection.
+        refCat : list of DeferredDatasetHandle or SimpleCatalog
+            Shards used for both WCS fitting and donut selection.  Loaded
+            twice per sensor, once per set of filter/alias semantics: the
+            astrometry loader sets ``anyFilterMapsToThis`` so the WCS fit
+            reads ``astromRefFilter``, while the photometry loader leaves
+            the schema alone so donut selection reads the per-band flux.
         intrinsicZernikes : list of IntrinsicZernikes, optional
             One calibration per corner detector.  None or empty when absent.
         butler_elapsed : float, optional
@@ -2342,8 +2337,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         elif self.config.photoRefFilterPrefix is not None:
             photo_filter_name = f"{self.config.photoRefFilterPrefix}_{example_band}"
 
-        astrom_handles = list(astromRefCat)
-        photo_handles = list(photoRefCat)
+        refcat_handles = list(refCat)
 
         # Thin proxy to count how many shards loadPixelBox actually fetches.
         class _CountingHandle:
@@ -2374,8 +2368,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 loader.config.anyFilterMapsToThis = any_filter_maps_to
             return loader
 
-        astrom_loader = _make_loader(astrom_handles, self.config.astromRefFilter, astrom_fetched)
-        photo_loader = _make_loader(photo_handles, counter=photo_fetched)
+        # One dataset, two loaders over the same shards: the astrometry loader
+        # aliases every filter to astromRefFilter (AstrometryTask resolves its
+        # refFluxField through that alias), while the photometry loader must
+        # leave the schema untouched so donut selection reads the per-band flux.
+        astrom_loader = _make_loader(refcat_handles, self.config.astromRefFilter, astrom_fetched)
+        photo_loader = _make_loader(refcat_handles, counter=photo_fetched)
 
         t_refcat0 = time.perf_counter()
         sensor_refcats: dict = {}
@@ -2409,9 +2407,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         self.log.info(
             "Refcat load (loadPixelBox): astrom=%d/%d shards  photo=%d/%d shards  (%.3fs)",
             len(astrom_fetched),
-            len(astrom_handles),
+            len(refcat_handles),
             len(photo_fetched),
-            len(photo_handles),
+            len(refcat_handles),
             time.perf_counter() - t_refcat0,
         )
         t_refcat_elapsed = time.perf_counter() - t_refcat0
