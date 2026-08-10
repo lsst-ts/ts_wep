@@ -332,6 +332,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         The default excludes Z1-Z3 (piston, tip, tilt) as these are typically
         not measured in wavefront sensing.
         """
+        # Task construction happens before runQuantum, so it is invisible to
+        # the timers there; on TARTS it is dominated by the torch import and
+        # loading the model weights off disk, which is worth reporting.
+        initStart = time.perf_counter()
         super().__init__(**kwargs)
 
         # Type annotation for mypy to understand the config structure
@@ -341,8 +345,14 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.nollIndices = self.config.nollIndices
         self.log.debug("Configured Noll indices: %s", self.nollIndices)
 
-        # Deferred import of TARTS to handle cases where it's not in the build
+        # Deferred import of TARTS to handle cases where it's not in the build.
+        # This pulls in torch, so it is slow on the first quantum in a process
+        # and near-free afterwards once sys.modules has it cached.
+        importStart = time.perf_counter()
         from tarts import NeuralActiveOpticsSys
+
+        importSec = time.perf_counter() - importStart
+        self.log.info("Timing: tarts import took %.3f s", importSec)
 
         # TARTS system handles None paths by creating new models with random
         # weights. Optional model paths must stay None (not expandvars) so
@@ -350,6 +360,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         def _expandOptionalPath(path: str | None) -> str | None:
             return os.path.expandvars(path) if path is not None else None
 
+        # Reads the model weights off disk on every task construction, i.e.
+        # once per quantum -- this does not benefit from process warm-up the
+        # way the import above does.
+        modelStart = time.perf_counter()
         self.tarts = NeuralActiveOpticsSys(
             os.path.expandvars(self.config.datasetParamPath),
             _expandOptionalPath(self.config.wavenetPath),
@@ -357,6 +371,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             _expandOptionalPath(self.config.aggregatornetPath),
             ood_model_path=_expandOptionalPath(self.config.oodModelPath),
         )
+        modelSec = time.perf_counter() - modelStart
+        self.log.info("Timing: TARTS model loading took %.3f s", modelSec)
         if self.config.oodModelPath is not None:
             self.log.info(
                 "OOD model enabled; path: %s",
@@ -383,6 +399,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             self.config.extraDfcDist,
         )
 
+        deviceStart = time.perf_counter()
         if self.device == "cpu":
             self.tarts = self.tarts.cpu()
 
@@ -398,6 +415,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         else:
             self.tarts.to("cuda")
             self.log.debug("Moved models to CUDA")
+        deviceSec = time.perf_counter() - deviceStart
+        self.log.info("Timing: model device placement took %.3f s (device='%s')", deviceSec, self.device)
 
         self.log.debug("TARTS crop size: %s", self.cropSize)
 
@@ -406,6 +425,15 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
 
         # Initialize cache for per-donut OOD scores
         self._lastOodScores: list[float] = []
+
+        self.log.info(
+            "Timing TOTAL for calcZernikesNeuralTask.__init__ took %.3f s "
+            "(import=%.3f, models=%.3f, device=%.3f)",
+            time.perf_counter() - initStart,
+            importSec,
+            modelSec,
+            deviceSec,
+        )
 
     def validate(self) -> None:
         """Validate configuration parameters for the neural Zernike task.
