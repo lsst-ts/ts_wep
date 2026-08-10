@@ -1281,6 +1281,18 @@ def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
     return out
 
 
+def _zk_cols(suffix: str, zk: np.ndarray) -> dict:
+    """Return ``{f"Z{j}_{suffix}": value_um}`` catalog columns for Noll 4-78.
+
+    ``zk`` is a length-``_ZK_LEN`` Noll-indexed array in metres; values are
+    converted to µm, with NaN passed through as NaN.
+    """
+    return {
+        f"Z{j}_{suffix}": (float(zk[j]) * 1e6 if not np.isnan(zk[j]) else float("nan"))
+        for j in range(4, _ZK_LEN)
+    }
+
+
 def _build_loss_fn():
     """Return a danish loss function from wf_cfg, or None for standard chi-squared."""
     alpha = _CALIB_STORE["wf_cfg"].get("systematicLossAlpha", 0.0)
@@ -2756,8 +2768,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             sid = int(d["source_id"])
             wd, grp = wf_by_id.get((sid, str(d["sensor"])), (None, -1))
 
-            zk_dev = wd["zk_dev"] if wd is not None else np.full(79, np.nan)
-            zk_int = wd["zk_intrinsic"] if wd is not None else None
+            zk_dev = wd["zk_dev"] if wd is not None else np.full(_ZK_LEN, np.nan)
+            zk_int = wd["zk_intrinsic"] if wd is not None else np.full(_ZK_LEN, np.nan)
 
             reject_reasons = d.get("reject_reasons", [])
             stamp = _pad(d["stamp"].astype(float), max_ny, max_nx)
@@ -2824,18 +2836,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "blend_frac": _wd_field(wd, "blend_frac", float, float("nan")),
                 "zk_norm_um": _wd_field(wd, "zk_norm_um", float, float("nan")),
                 # --- per-Noll Zernikes (µm), Noll 4–78 ---
-                **{
-                    f"Z{j}_dev": (float(zk_dev[j]) * 1e6 if not np.isnan(zk_dev[j]) else float("nan"))
-                    for j in range(4, 79)
-                },
-                **{
-                    f"Z{j}_intrinsic": (
-                        float(zk_int[j]) * 1e6
-                        if (zk_int is not None and not np.isnan(zk_int[j]))
-                        else float("nan")
-                    )
-                    for j in range(4, 79)
-                },
+                **_zk_cols("dev", zk_dev),
+                **_zk_cols("intrinsic", zk_int),
                 # --- embedded images ---
                 "stamp": stamp,
                 "wf_img": wf_img,
@@ -3286,7 +3288,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     "nfev": nfev,
                     "fwhm": fwhm,
                     "success": success,
-                    "zk_by_noll": {j: float(r[f"Z{j}_dev"]) for j in range(4, 79)},
                 })
             plottable.append({
                 "mode": mode,
@@ -3378,35 +3379,38 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
 
         def _explode(r):
+            """Split a group record into one record per donut, sharing group fields."""
             return [{**r, "donuts": [d]} for d in r.get("donuts", [])]
+
+        def _pair_up(records):
+            """Lay single-donut records out as (intra, extra) plot rows.
+
+            Only for modes whose groups carry no intra/extra pairing of their
+            own: the pairing here is cosmetic, so rows are matched by position
+            and the shorter side padded with None to keep every donut visible.
+            """
+            intras = [r for r in records if r["donuts"][0].get("defocal") == "intra"]
+            extras = [r for r in records if r["donuts"][0].get("defocal") == "extra"]
+            return [
+                (intras[i] if i < len(intras) else None,
+                 extras[i] if i < len(extras) else None)
+                for i in range(max(len(intras), len(extras)))
+            ]
 
         row_pairs: dict[str, list[tuple]] = {}
         for corner, corner_results in by_corner.items():
             mode = corner_results[0].get("mode") if corner_results else None
-            if mode == "unpaired":
-                intras = [r for r in corner_results
-                          if (r.get("donuts") or [{}])[0].get("defocal") == "intra"]
-                extras = [r for r in corner_results
-                          if (r.get("donuts") or [{}])[0].get("defocal") == "extra"]
-                n = max(len(intras), len(extras))
-                row_pairs[corner] = [
-                    (intras[i] if i < len(intras) else None,
-                     extras[i] if i < len(extras) else None)
-                    for i in range(n)
-                ]
-            elif mode in ("full_detector", "full_corner"):
-                intras = [s for r in corner_results for s in _explode(r)
-                          if s["donuts"][0].get("defocal") == "intra"]
-                extras = [s for r in corner_results for s in _explode(r)
-                          if s["donuts"][0].get("defocal") == "extra"]
-                n = max(len(intras), len(extras))
-                row_pairs[corner] = [
-                    (intras[i] if i < len(intras) else None,
-                     extras[i] if i < len(extras) else None)
-                    for i in range(n)
-                ]
-            else:
+            if mode == "paired":
+                # The group *is* an intra/extra pair, so it supplies both halves
+                # of the row; the donut of each defocal type is picked out below.
                 row_pairs[corner] = [(r, r) for r in corner_results]
+            else:
+                # unpaired/full_detector/full_corner groups don't pair donuts, so
+                # flatten to one record per donut and pair for layout only.
+                # Exploding is a no-op for unpaired (one donut per group already).
+                row_pairs[corner] = _pair_up(
+                    [s for r in corner_results for s in _explode(r)]
+                )
 
         CELL = 1.0
         ROW_H = 1.0
