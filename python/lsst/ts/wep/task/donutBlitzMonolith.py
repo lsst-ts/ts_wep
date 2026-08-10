@@ -2165,7 +2165,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             _colorize(
                 "DonutBlitzMonolithTask.runQuantum() on exposure %d",
                 _ANSI_BOLD,
-                _ANSI_RED,
+                _ANSI_YELLOW,
                 enabled=self._colorLogEnabled,
             ),
             inputRefs.raws[0].dataId["exposure"],
@@ -2288,7 +2288,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             _colorize(
                 "DonutBlitzMonolithTask.run() with %d cores, butler elapsed=%.3fs",
                 _ANSI_BOLD,
-                _ANSI_MAGENTA,
+                _ANSI_YELLOW,
                 enabled=self._colorLogEnabled,
             ),
             numCores,
@@ -2962,10 +2962,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ``catalog.meta``.
         """
         import json
-        import matplotlib
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        from matplotlib.figure import Figure
         from matplotlib.gridspec import GridSpec
 
         if len(catalog) == 0:
@@ -2981,12 +2980,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         sensor_meta = meta["sensor_meta"]
 
         # Group rows by sensor; split into accepted and rejected.
+        sensor_col = np.asarray(catalog["sensor"], dtype=str)
         sensors_with_data = []
-        for sensor in sorted(set(str(s) for s in catalog["sensor"])):
-            mask = np.array([str(s) == sensor for s in catalog["sensor"]])
-            sensor_rows = catalog[mask]
-            acc = sensor_rows[np.array([bool(a) for a in sensor_rows["accepted"]])]
-            rej = sensor_rows[np.array([not bool(a) for a in sensor_rows["accepted"]])]
+        for sensor in sorted(set(sensor_col.tolist())):
+            sensor_rows = catalog[sensor_col == sensor]
+            acc = sensor_rows[sensor_rows["accepted"]]
+            rej = sensor_rows[~sensor_rows["accepted"]]
             if len(acc) > 0 or len(rej) > 0:
                 sensors_with_data.append((sensor, acc, rej))
 
@@ -3007,7 +3006,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         fig_w = STATS_COL_W + (STAMPS_PER_ROW + REJECTED_PER_ROW) * STAMP_COL_W + SPACER_W
         fig_h = n_sensors * ROW_H + LEGEND_H + SUPTITLE_H
 
-        fig = plt.figure(figsize=(fig_w, fig_h), layout="constrained")
+        fig = Figure(figsize=(fig_w, fig_h), layout="constrained")
         fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
         butler_str = f"  butler={butler_elapsed:.1f}s" if butler_elapsed > 0 else ""
         fig.suptitle(
@@ -3053,8 +3052,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         _STAMP_TEXT_LINE_PTS = _STAMP_TEXT_FONTSIZE * 1.2
 
         def _draw_stamp(ax, row, rejected=False):
-            import matplotlib.patches as mpatches
-
             stamp = np.array(row["stamp"])
             h_px = stamp.shape[0] // 2
             vmin, vmax = np.nanpercentile(stamp, [1, 99])
@@ -3209,7 +3206,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         fname = f"donut_diag_{visit_str}.png"
         fig.savefig(fname, dpi=200, bbox_inches="tight")
-        plt.close(fig)
         self.log.info("Saved diagnostic plot: %s", fname)
 
     def _saveWfDiagnosticPlot(self, catalog: QTable) -> None:
@@ -3225,11 +3221,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         catalog : QTable
             Per-donut table from ``_buildCatalog``.
         """
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
         from matplotlib.colors import LinearSegmentedColormap
+        from matplotlib.figure import Figure
         from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
         if len(catalog) == 0:
@@ -3432,7 +3425,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         fig_w = 2 * corner_w + 0.3
         fig_h = 2 * max_rows * ROW_H + 0.4
 
-        fig = plt.figure(figsize=(fig_w, fig_h))
+        fig = Figure(figsize=(fig_w, fig_h))
         outer = GridSpec(2, 2, figure=fig, hspace=HPAD, wspace=0.06,
                          left=0.01, right=0.99, top=0.94, bottom=0.01)
         corner_pos = {"R00": (0, 0), "R40": (0, 1), "R04": (1, 0), "R44": (1, 1)}
@@ -3564,7 +3557,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # the layout is padded to max_rows. A fixed canvas keeps every plot for
         # a given config pixel-comparable.
         fig.savefig(fname, dpi=300)
-        plt.close(fig)
         self.log.info("Saved WF diagnostic plot: %s", fname)
 
 
