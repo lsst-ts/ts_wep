@@ -91,6 +91,8 @@ CORNER_PAIRS = {
     "R44": ("R44_SW0", "R44_SW1"),
 }
 CORNER_SENSOR_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (sw0, sw1))
+# Sensor name -> corner, derived from CORNER_PAIRS rather than re-encoded.
+CORNER_BY_SENSOR = {s: corner for corner, pair in CORNER_PAIRS.items() for s in pair}
 
 # Display names for DonutSourceSelectorTask rejection reasons. Reasons absent
 # here are shown verbatim. "faint_neighbor" folds into "blend" (both mean a
@@ -485,7 +487,7 @@ def _refitWcs(
     wcs = postIsr.getWcs()
     detector = postIsr.getDetector()
     sensor_name = detector.getName()
-    astrom_load_result = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name, {}).get("astrom")
+    astrom_load_result = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name)
 
     if len(blindDetections) < astrom_cfg["minSourcesForWcsFit"] or astrom_load_result is None:
         return None, None, None
@@ -563,9 +565,11 @@ def _selectFromPhotoCat(
     error_str : str or None
         Human-readable error from the catalog selection step, or ``None``.
     """
-    sensor_refcats = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name, {})
-    photo_load_result = sensor_refcats.get("photo")
-    astrom_load_result = sensor_refcats.get("astrom")
+    # One shared load per sensor: astrometry reads its fluxField from it, donut
+    # selection reads the per-band flux column off the same catalog.
+    load_result = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name)
+    photo_load_result = load_result
+    astrom_load_result = load_result
     detector = postIsr.getDetector()
     save_diag = astrom_cfg.get("saveDiagnosticPlot", True)
 
@@ -1044,23 +1048,6 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     instrument = getTaskInstrument(camName, detectorName, detect_cfg["instConfigFile"])
     radius = instrument.donutRadius
 
-    if radius < 5:
-        return {
-            "sensor": sensor_name,
-            "catalog": [],
-            "dispatch_to_arrival": t_arrival - t_dispatch,
-            "task_init": t1 - t0,
-            "isr_run": t2 - t1,
-            "blind_detect_run": 0.0,
-            "wcs_refit_run": 0.0,
-            "catalog_select_run": 0.0,
-            "stamp_cut_run": 0.0,
-            "rejected_catalog": [],
-            "scatter_arcsec": None,
-            "wcs_refit_error": None,
-            "cat_select_error": None,
-        }
-
     astrom_cfg = _CALIB_STORE["astrom_cfg"]
     obscuration = instrument.obscuration
 
@@ -1306,14 +1293,33 @@ class _WfGroup:
     mode: str  # "paired" | "unpaired" | "full_detector" | "full_corner"
 
 
+def _mode_groups_are_pairs(mode) -> bool:
+    """Does one group of this mode hold an intra/extra pair of its own?
+
+    True only for ``"paired"``, whose groups are built as ``[extra, intra]``.
+    Every other mode groups donuts without regard to defocal type: one donut
+    per group for ``"unpaired"``, all of a sensor's or corner's donuts for
+    ``"full_detector"``/``"full_corner"``.
+
+    This is the single place that answer lives.  ``_build_wf_groups`` creates
+    that structure and the WF diagnostic plot consumes it, so both ask here
+    rather than each testing the mode string themselves.
+    """
+    return mode == "paired"
+
+
 def _build_wf_groups(mode, results_by_sensor, wf_cfg):
     """Build _WfGroup list from per-sensor catalogs, matching the mode dispatch logic.
+
+    Groups for ``"paired"`` hold one extra/intra pair; all other modes group
+    without regard to defocal type -- the invariant reported by
+    `_mode_groups_are_pairs`.
 
     Returns (groups, unmatched_donuts).
     """
     groups = []
     unmatched_donuts = []
-    if mode == "paired":
+    if _mode_groups_are_pairs(mode):
         for _corner, (sw0, sw1) in CORNER_PAIRS.items():
             extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d["snr"], reverse=True)
             intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d["snr"], reverse=True)
@@ -1408,7 +1414,14 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
     bkg_std = float(median_abs_deviation(diff, scale="normal") / np.sqrt(2.0))
 
     band = donut["band"]
-    wavelength = wf_cfg["wavelength_by_band"].get(band, 619.4e-9)
+    wavelength_by_band = wf_cfg["wavelength_by_band"]
+    if band not in wavelength_by_band:
+        raise RuntimeError(
+            f"No wavelength configured for band {band!r}; the instrument supplies "
+            f"{sorted(wavelength_by_band)}. Fitting with a wrong wavelength would "
+            "bias the whole wavefront, so this is fatal rather than defaulted."
+        )
+    wavelength = wavelength_by_band[band]
     telescope = _CALIB_STORE["telescope"]
     telescope_dz = (
         _CALIB_STORE["telescope_extra"] if defocalSign > 0 else _CALIB_STORE["telescope_intra"]
@@ -2266,11 +2279,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         linearizer : list of lsst.ip.isr.Linearizer
         crosstalk : list of lsst.ip.isr.CrosstalkCalib
         refCat : list of DeferredDatasetHandle or SimpleCatalog
-            Shards used for both WCS fitting and donut selection.  Loaded
-            twice per sensor, once per set of filter/alias semantics: the
-            astrometry loader sets ``anyFilterMapsToThis`` so the WCS fit
-            reads ``astromRefFilter``, while the photometry loader leaves
-            the schema alone so donut selection reads the per-band flux.
+            Shards used for both WCS fitting and donut selection, loaded once
+            per sensor.  The WCS fit reads ``astromRefFilter`` (resolved as the
+            load's ``fluxField``) and donut selection reads the per-band
+            ``photoRefFilter``/``photoRefFilterPrefix`` column off the same
+            catalog.
         intrinsicZernikes : list of IntrinsicZernikes, optional
             One calibration per corner detector.  None or empty when absent.
         butler_elapsed : float, optional
@@ -2352,10 +2365,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 self._cnt.append(1)
                 return self._h.get(*args, **kwargs)
 
-        astrom_fetched: list = []
-        photo_fetched: list = []
+        refcat_fetched: list = []
 
-        def _make_loader(handles, any_filter_maps_to=None, counter=None):
+        def _make_loader(handles, counter=None):
             if not handles:
                 return None
             wrapped = [_CountingHandle(h, counter) for h in handles] if counter is not None else handles
@@ -2364,16 +2376,19 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 refCats=wrapped,
             )
             loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
-            if any_filter_maps_to is not None:
-                loader.config.anyFilterMapsToThis = any_filter_maps_to
             return loader
 
-        # One dataset, two loaders over the same shards: the astrometry loader
-        # aliases every filter to astromRefFilter (AstrometryTask resolves its
-        # refFluxField through that alias), while the photometry loader must
-        # leave the schema untouched so donut selection reads the per-band flux.
-        astrom_loader = _make_loader(refcat_handles, self.config.astromRefFilter, astrom_fetched)
-        photo_loader = _make_loader(refcat_handles, counter=photo_fetched)
+        # One dataset, one loader, one load per sensor, shared by both consumers.
+        #
+        # No anyFilterMapsToThis: that alias exists to redirect *every* filter
+        # request to a single column, for refcats that lack the filter being
+        # asked for. the_monster does carry astromRefFilter, so the alias is
+        # unnecessary here -- and actively harmful to sharing, since it would
+        # also redirect the photometry lookup and silently feed astrometry
+        # fluxes to donut selection. Without it, loadPixelBox resolves
+        # fluxField from filterName for AstrometryTask, while the per-band
+        # {prefix}_{band}_flux columns stay readable for donut selection.
+        refcat_loader = _make_loader(refcat_handles, refcat_fetched)
 
         t_refcat0 = time.perf_counter()
         sensor_refcats: dict = {}
@@ -2381,34 +2396,21 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             raw_wcs = raw.getWcs()
             raw_bbox = raw.getBBox()
             raw_epoch = raw.getInfo().getVisitInfo().date.toAstropy()
-            astrom_load = None
-            if astrom_loader is not None:
+            load_result = None
+            if refcat_loader is not None:
                 try:
-                    astrom_load = astrom_loader.loadPixelBox(
+                    load_result = refcat_loader.loadPixelBox(
                         bbox=raw_bbox,
                         wcs=raw_wcs,
                         filterName=self.config.astromRefFilter,
                         epoch=raw_epoch,
                     )
                 except Exception as exc:
-                    self.log.warning("Failed to load astrom refcat for %s: %s", name, exc)
-            photo_load = None
-            if photo_loader is not None:
-                try:
-                    photo_load = photo_loader.loadPixelBox(
-                        bbox=raw_bbox,
-                        wcs=raw_wcs,
-                        filterName=photo_filter_name,
-                        epoch=raw_epoch,
-                    )
-                except Exception as exc:
-                    self.log.warning("Failed to load photo refcat for %s: %s", name, exc)
-            sensor_refcats[name] = dict(astrom=astrom_load, photo=photo_load)
+                    self.log.warning("Failed to load refcat for %s: %s", name, exc)
+            sensor_refcats[name] = load_result
         self.log.info(
-            "Refcat load (loadPixelBox): astrom=%d/%d shards  photo=%d/%d shards  (%.3fs)",
-            len(astrom_fetched),
-            len(refcat_handles),
-            len(photo_fetched),
+            "Refcat load (loadPixelBox): %d/%d shards  (%.3fs)",
+            len(refcat_fetched),
             len(refcat_handles),
             time.perf_counter() - t_refcat0,
         )
@@ -2416,9 +2418,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         # Stub loader: AstrometryTask.solve() calls refObjLoader.getMetadataBox()
         # unconditionally even when load_result is pre-supplied. That method is
-        # pure geometry and never accesses catalog data or dataId.region.
+        # pure geometry -- it never accesses catalog data, dataId.region, or the
+        # flux aliases -- so the stub needs no anyFilterMapsToThis.
         astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
-        astrom_stub_loader.config.anyFilterMapsToThis = self.config.astromRefFilter
         astrom_stub_loader.config.pixelMargin = 0
 
         astrom_cfg = dict(
@@ -3293,18 +3295,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             self.log.info("No WF results with model images; skipping WF diagnostic plot.")
             return
 
-        _CORNERS = ["R00", "R04", "R40", "R44"]
-
-        def _short(s):
-            return s.removeprefix("LSSTCam_").removeprefix("LSSTComCam_") if s else ""
+        _CORNERS = list(CORNER_PAIRS)
 
         def _corner_of(r):
+            # Sensor names are detector.getName() ("R00_SW0"), but tolerate an
+            # instrument prefix ("LSSTCam_R00_SW0") by matching on the suffix.
             for s in r.get("sensors", []):
-                sh = _short(s)
-                for c in _CORNERS:
-                    if sh.startswith(c):
-                        return c
-            return "R00"
+                for sensor, corner in CORNER_BY_SENSOR.items():
+                    if s and str(s).endswith(sensor):
+                        return corner
+            return _CORNERS[0]
 
         # 4-stop diverging colormap: blue → white (zero) → vermillion.
         # Anchors: -vmax=blue, -vmax/10=sky blue, 0=white, +vmax=vermillion.
@@ -3338,9 +3338,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ax.set_title(label, fontsize=5, pad=1)
 
         def _draw_bar(ax, zk_by_noll, inset_label=""):
-            """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels."""
+            """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels.
+
+            Always spans ZK_MIN..ZK_MAX regardless of the configured
+            ``nollIndices`` so plots stay comparable across configs; indices
+            that were not fitted plot as zero rather than dropping out.
+            """
             bar_noll = [j for j in range(ZK_MIN, ZK_MAX + 1)]
-            vals = [zk_by_noll.get(j, 0.0) for j in bar_noll]
+            vals = [
+                v if np.isfinite(v := zk_by_noll.get(j, 0.0)) else 0.0
+                for j in bar_noll
+            ]
             ax.bar(bar_noll, vals, color="k", width=0.8)
             ax.axhline(0, color="k", linewidth=0.4)
             ax.set_ylim(-1.0, 1.0)
@@ -3391,14 +3399,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         row_pairs: dict[str, list[tuple]] = {}
         for corner, corner_results in by_corner.items():
             mode = corner_results[0].get("mode") if corner_results else None
-            if mode == "paired":
+            if _mode_groups_are_pairs(mode):
                 # The group *is* an intra/extra pair, so it supplies both halves
                 # of the row; the donut of each defocal type is picked out below.
                 row_pairs[corner] = [(r, r) for r in corner_results]
             else:
-                # unpaired/full_detector/full_corner groups don't pair donuts, so
-                # flatten to one record per donut and pair for layout only.
-                # Exploding is a no-op for unpaired (one donut per group already).
+                # These groups don't pair donuts, so flatten to one record per
+                # donut and pair for layout only. Exploding is a no-op for
+                # "unpaired" (one donut per group already).
                 row_pairs[corner] = _pair_up(
                     [s for r in corner_results for s in _explode(r)]
                 )
