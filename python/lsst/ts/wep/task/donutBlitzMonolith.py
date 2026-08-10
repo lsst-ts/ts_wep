@@ -786,7 +786,8 @@ def _cutStamps(
     mask_arr = postIsr.mask.array
     sat_bit = postIsr.mask.getPlaneBitMask("SAT")
 
-    _sgy, _sgx = np.mgrid[-half:half, -half:half]
+    # Grid matches the cut stamp below: 2*half+1 px, centroid pixel exactly centered.
+    _sgy, _sgx = np.mgrid[-half : half + 1, -half : half + 1]
     _sr = np.hypot(_sgx, _sgy)
     _s_main = (_sr < radius * apertureOuterMarginFrac) & (_sr > radius * obscuration)
     _s_bkg = (_sr < radius * obscuration * apertureInnerBufferFrac) | (
@@ -824,9 +825,13 @@ def _cutStamps(
         only recomputed here as a fallback for selector-rejected centroids,
         which bypass `_measureFlux` entirely.
         """
+        # Odd-sized cut (2*half+1) so the centroid pixel sits exactly at the
+        # stamp center. An even cut would offset the donut half a pixel from the
+        # stamp's geometric center, and would force the crop-by-1 fallback in
+        # _prep_donut_for_danish (Danish requires an odd stamp).
         cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
-        rmin, rmax = cy - half, cy + half
-        cmin, cmax = cx - half, cx + half
+        rmin, rmax = cy - half, cy + half + 1
+        cmin, cmax = cx - half, cx + half + 1
         if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
             return None
         saturated = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
@@ -880,13 +885,17 @@ def _cutStamps(
             )
 
         def _nearby(cat_tuple):
+            # Offsets are relative to the *rounded* centroid (cx, cy), since
+            # that is the pixel the stamp is cut around and the one that lands
+            # at the stamp center. Using the float centroid would leave symbols
+            # up to half a pixel off the features they mark.
             if cat_tuple is None:
                 return []
             cat_x, cat_y, cat_mag = cat_tuple
             return [
-                (float(sx) - float(cx_f), float(sy) - float(cy_f), float(sm))
+                (float(sx) - cx, float(sy) - cy, float(sm))
                 for sx, sy, sm in zip(cat_x, cat_y, cat_mag)
-                if abs(float(sx) - float(cx_f)) <= half and abs(float(sy) - float(cy_f)) <= half
+                if abs(float(sx) - cx) <= half and abs(float(sy) - cy) <= half
             ]
 
         _fa = detector.transform([lsst.geom.Point2D(float(cx_f), float(cy_f))], PIXELS, FIELD_ANGLE)[0]
@@ -1949,9 +1958,23 @@ class DonutBlitzMonolithTaskConfig(
         default=500.0,
     )
     stampSize: pexConfig.Field = pexConfig.Field(
-        doc="Side length in pixels of the square stamp cut around each donut centroid.",
+        doc=(
+            "Side length in pixels of the square stamp cut around each donut "
+            "centroid. Stamps are cut odd (2*(stampSize//2)+1) so the centroid "
+            "pixel is exactly centered.\n\n"
+            "Danish requires an odd stamp after binning, and `binArray` "
+            "truncates before binning, so the fitted size is stampSize//binning. "
+            "That is odd for binning 1, 2 and 3 when stampSize = 3 or 11 (mod "
+            "12), and additionally for binning 4 when stampSize = 15 or 23 (mod "
+            "24). The default 167 (= 23 mod 24) satisfies all four, giving "
+            "167/83/55/41 px. Sizes failing this still work -- "
+            "_prep_donut_for_danish crops by one pixel -- but that shifts the "
+            "donut off center by half a pixel.\n\n"
+            "Must also be large enough to contain the main photometric annulus: "
+            "stampSize/2 >= donutRadius * apertureOuterMarginFrac."
+        ),
         dtype=int,
-        default=160,
+        default=167,
     )
     maxDonuts: pexConfig.Field = pexConfig.Field(
         doc="Maximum number of donuts to return per sensor, sorted by flux descending.",
@@ -2751,8 +2774,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # Determine common stamp shape for padding.
         max_ny = max(d["stamp"].shape[0] for d, _ in all_donuts)
         max_nx = max(d["stamp"].shape[1] for d, _ in all_donuts)
-        # wf/model images are binned and cropped to odd size (see _prep_donut_for_danish).
-        _binned = self.config.stampSize // self.config.binning
+        # wf/model images are binned and cropped to odd size (see
+        # _prep_donut_for_danish). Derive from the actual odd cut size,
+        # 2*(stampSize//2)+1, not from stampSize itself.
+        _cut = 2 * (self.config.stampSize // 2) + 1
+        _binned = _cut // self.config.binning
         max_wf_ny = max_wf_nx = _binned if _binned % 2 == 1 else _binned - 1
 
         def _pad(arr, ny, nx):
@@ -3037,24 +3063,29 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
         _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
 
-        # Uniform half-width for every stamp's axes. Without this, ax.plot
-        # of the refcat overlays triggers autoscale (add_patch alone does
-        # not), pulling in the annulus circles and shrinking the stamp only
-        # on rows that happen to have overlays.
-        _stamp_view_half = None
-        if _stamp_dr is not None and _stamp_ob is not None:
-            _stamp_view_half = _stamp_dr * _stamp_bkg_outer_frac
-
-        # The 3-line stat block is top-anchored at the axes edge, so it hangs
-        # down over the stamp. Lift it by one line height (fontsize * 1.2
-        # line spacing, in points) to clear the image.
+        # Every stamp's view is pinned to its own pixel extent, so a stamp fills
+        # its axes exactly and consumes the same figure area no matter how many
+        # pixels it contains. Setting the limits explicitly (rather than leaving
+        # them to autoscale) is also required because ax.plot of the refcat
+        # overlays triggers autoscale where add_patch alone does not, which would
+        # otherwise pull in the annulus circles and shrink the stamp only on rows
+        # that happen to have overlays.
+        #
+        # A config-derived view (e.g. donutRadius * bkgAnnulusOuterFrac) would
+        # instead couple the drawn size to stampSize: at stampSize=215 the image
+        # overflows its axes by ~15%.
         _STAMP_TEXT_FONTSIZE = 3.5
-        _STAMP_TEXT_LINE_PTS = _STAMP_TEXT_FONTSIZE * 1.2
 
         def _draw_stamp(ax, row, rejected=False):
             stamp = np.array(row["stamp"])
             h_px = stamp.shape[0] // 2
             vmin, vmax = np.nanpercentile(stamp, [1, 99])
+            # extent bounds the pixel *edges*, so the center pixel spans
+            # [-0.5, +0.5] and offset 0 lands on the centroid pixel's center --
+            # matching the annulus circles drawn at (0, 0) and the refcat
+            # symbols placed at raw pixel offsets. Correct because stamps are
+            # cut odd; an even stamp has no center pixel to align to.
+            _edge = h_px + 0.5
             ax.imshow(
                 stamp,
                 origin="lower",
@@ -3062,7 +3093,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 vmax=vmax,
                 cmap="gray",
                 aspect="equal",
-                extent=[-h_px, h_px, -h_px, h_px],
+                extent=[-_edge, _edge, -_edge, _edge],
             )
 
             dr, ob = _stamp_dr, _stamp_ob
@@ -3089,16 +3120,26 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     )
 
             if rejected:
-                ax.plot([-h_px, h_px], [-h_px, h_px], color=_COLOR_REJECTED, lw=1.5, zorder=5)
-                ax.plot([-h_px, h_px], [h_px, -h_px], color=_COLOR_REJECTED, lw=1.5, zorder=5)
+                ax.plot([-_edge, _edge], [-_edge, _edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
+                ax.plot([-_edge, _edge], [_edge, -_edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
 
             nq = int(row["n_quarter"]) % 4
 
             def _xform(dx, dy):
+                """Map a raw-pixel offset to stamp display coords.
+
+                Must mirror the stamp transform in `_cutStamps`,
+                ``np.rot90(stamp, k=-n_quarter).T`` -- including the transpose.
+                The loop applies the rot90 in (row, col) space; returning
+                ``(r, c)`` rather than ``(c, r)`` is what applies the ``.T``.
+                Under ``origin="lower"`` the displayed x axis is the column
+                index and y is the row index, so the returned pair is
+                ``(x, y)`` after transposition.
+                """
                 r, c = dy, dx
                 for _ in range(nq):
                     r, c = c, -r
-                return c, r
+                return r, c
 
             for dx, dy, mag in json.loads(str(row["nearby_photo"])):
                 tx, ty = _xform(dx, dy)
@@ -3111,9 +3152,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 if np.isfinite(mag):
                     ax.text(tx + 3, ty - 5, f"{mag:.2f}", color=_COLOR_ASTROM_REFCAT, fontsize=3.5, zorder=4)
 
-            _view_half = _stamp_view_half if _stamp_view_half is not None else h_px
-            ax.set_xlim(-_view_half, _view_half)
-            ax.set_ylim(-_view_half, _view_half)
+            # Pin the view to the stamp's own edges: constant figure footprint
+            # regardless of pixel count, and no autoscale from the overlays.
+            ax.set_xlim(-_edge, _edge)
+            ax.set_ylim(-_edge, _edge)
 
             inner_frac = float(row["inner_frac"])
             outer_frac = float(row["outer_frac"])
@@ -3128,14 +3170,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             _text_color = _COLOR_REJECTED if rejected else "black"
             _reasons = str(row["reject_reasons"]) if rejected else ""
             rej_str = f"[{_reasons}]" if _reasons else ""
+            # Bottom-anchored just above the axes, so the block grows upward and
+            # never overlaps the stamp -- clearance is independent of stamp size.
+            # (Top-anchoring inside the axes hung the text down over the image;
+            # at stampSize 167 it overlapped by ~1pt, and worse for larger stamps.)
             ax.annotate(
                 f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
                 xy=(0.05, 1.00),
                 xycoords="axes fraction",
-                xytext=(0, _STAMP_TEXT_LINE_PTS),
+                xytext=(0, 1.0),
                 textcoords="offset points",
                 fontsize=_STAMP_TEXT_FONTSIZE,
-                va="top",
+                va="bottom",
                 ha="left",
                 color=_text_color,
                 bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
