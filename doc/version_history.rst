@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v17.9.0 (2026-08-10)
+====================
+
+New Features
+------------
+
+- Added support for offsetting multiple optics in the Batoid model.
+  ``batoidOffsetOptic`` and ``batoidOffsetValue`` now accept lists, and a new ``LsstFamCamWavefront`` instrument models Full Array Mode with independent camera and detector pistons. (`RSO-810 <https://rubinobs.atlassian.net//browse/RSO-810>`_)
+
+
 v17.8.1 (2026-08-07)
 ====================
 
