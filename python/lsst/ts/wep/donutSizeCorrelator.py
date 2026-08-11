@@ -101,8 +101,8 @@ class DonutSizeCorrelator:
         length : int or None, optional
             Size length for crop. Default is None.
         pad : int, optional
-            The image is cropped around the brightest pixel, subject
-            to the condition that the pixel is not too close to the
+            The image is cropped around the most donut-like location,
+            subject to the condition that it is not too close to the
             edge of the image. This pad sets that distance.
             Default is 500 pixels.
         binning : int or None, optional
@@ -115,7 +115,12 @@ class DonutSizeCorrelator:
         """
         # Crop array
         if length is not None:
-            # We will crop around the brightest pixel
+            # We will crop around the most donut-like location rather
+            # than the brightest pixel. Selecting the brightest pixel
+            # is fooled by bright crescents (partial or mask-clipped
+            # donuts), whose flux is concentrated into an arc; those do
+            # not correlate well with a full annulus, so a donut-likeness
+            # map avoids centering the crop on them.
             # Cutout pads on side so we don't select for
             # bright donuts falling off the sensor
             padded = image[pad:-pad, pad:-pad]
@@ -124,14 +129,15 @@ class DonutSizeCorrelator:
             binningFactor = 8
             binned = binArray(padded, binningFactor)
 
-            # Find location of brightest pixel
-            y, x = np.where(binned == np.nanmax(binned))
+            # Find the most donut-like location
+            likeness = DonutSizeCorrelator.donutLikenessMap(binned, binningFactor)
+            y, x = np.unravel_index(np.nanargmax(likeness), likeness.shape)
 
             # Undo binning and pad
-            x = binningFactor * x[0] + pad
-            y = binningFactor * y[0] + pad
+            x = binningFactor * x + pad
+            y = binningFactor * y + pad
 
-            # Crop around brightest pixel
+            # Crop around selected location
             height, width = image.shape
             x0 = np.clip(x - length // 2, 0, width - length)
             y0 = np.clip(y - length // 2, 0, height - length)
@@ -140,6 +146,67 @@ class DonutSizeCorrelator:
         if binning is not None:
             image = binArray(image, binning, "median")
         return image
+
+    @staticmethod
+    def donutLikenessMap(
+        binned: np.ndarray,
+        binningFactor: int,
+        diameters: tuple[int, ...] = (40, 60, 90, 140, 210, 320, 480),
+    ) -> np.ndarray:
+        """Score each location by how well it matches a full donut.
+
+        The binned image is correlated with a set of annular templates
+        spanning the plausible donut-size range. Each correlation is
+        normalized by the template's own energy so that the score
+        reflects match quality (shape) rather than raw brightness.
+        Taking the maximum across templates yields a scale-invariant
+        donut-likeness map: bright crescents (partial or mask-clipped
+        donuts) score poorly because they do not fill a full annulus,
+        while intact donuts score highly.
+
+        The templates only *locate* the crop; the donut size itself is
+        measured downstream by ``getDonutDiameter``. Selection is robust
+        only when at least one template is within ~1.4x of the true
+        donut size, so the default set is spaced geometrically by ~1.5x
+        to cover the whole range a badly-defocused system may produce
+        (this code exists to catch exactly those cases, so the range
+        cannot be narrowed to a commanded defocus).
+
+        Parameters
+        ----------
+        binned : np.ndarray
+            Coarsely binned image (see ``cropAndBinImage``).
+        binningFactor : int
+            Binning factor used to produce ``binned``. Template
+            diameters are scaled down by this factor to match.
+        diameters : tuple[int], optional
+            Full-resolution donut diameters (pixels) to probe.
+            Default is (40, 60, 90, 140, 210, 320, 480), spanning the
+            plausible donut-size range with ~1.5x geometric spacing.
+
+        Returns
+        -------
+        np.ndarray
+            Map, same shape as ``binned``, of donut-likeness scores.
+        """
+        likeness = np.full(binned.shape, -np.inf)
+        for diameter in diameters:
+            # Scale template to the binned resolution
+            binnedDiameter = diameter / binningFactor
+            if binnedDiameter < 3:
+                continue
+            template = DonutSizeCorrelator.createDonutTemplate(binnedDiameter)
+            if template.shape[0] > binned.shape[0] or template.shape[1] > binned.shape[1]:
+                continue
+            # Normalize so score reflects match quality, not brightness
+            template = template - template.mean()
+            norm = np.sqrt((template**2).sum())
+            if norm == 0:
+                continue
+            template /= norm
+            corr = correlate(binned, template, mode="same")
+            likeness = np.maximum(likeness, corr)
+        return likeness
 
     @staticmethod
     def createDonutTemplate(diameter: float) -> np.ndarray:
