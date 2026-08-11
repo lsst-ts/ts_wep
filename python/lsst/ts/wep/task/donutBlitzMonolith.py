@@ -2688,7 +2688,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         photo_filter_name: str = "",
         astrom_filter_name: str = "",
     ) -> QTable:
-        """Build a per-donut QTable covering accepted, rejected, and unmatched donuts.
+        """Build a per-donut QTable covering every donut cut from this visit.
 
         Parameters
         ----------
@@ -2698,18 +2698,31 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         wf_results : list
             Per-fit WF result dicts from the WF worker pool.
         donuts : list
-            Accepted donut dicts.
+            Donut dicts that passed selection.
         unmatched_donuts : list
-            Donut dicts with no intra/extra partner (paired mode only).
+            Donut dicts with no intra/extra partner (paired mode only).  These
+            also appear in ``donuts``; the table carries one row per donut.
         visit_str : str
             Visit identifier string.
 
         Returns
         -------
         QTable
-            One row per donut (accepted + rejected + unmatched).  Array columns
-            (``stamp``, ``model_img``, ``wf_img``) are zero-padded to a common
-            shape.  Visit-level and per-sensor scalars are stored in
+            Exactly one row per donut, keyed by ``(sensor, source_id)``, with two
+            independent flags:
+
+            ``candidate``
+                The donut passed every selection and quality cut.  See
+                ``reject_reasons`` and the ``rejected_*`` booleans for why not.
+            ``used``
+                A wavefront fit consumed the donut and returned a result.  A
+                candidate can be unused either because no group claimed it
+                (paired mode, surplus donut with no partner: ``fit_mode`` empty,
+                ``group`` -1) or because its fit timed out or raised
+                (``fit_success`` False).  Unused rows have all-NaN Zernikes.
+
+            Array columns (``stamp``, ``model_img``, ``wf_img``) are zero-padded
+            to a common shape.  Visit-level and per-sensor scalars are stored in
             ``table.meta``.
         """
         import json
@@ -2758,15 +2771,33 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         def _encode_nearby(entries):
             return json.dumps([[round(dx, 1), round(dy, 1), round(mag, 2)] for dx, dy, mag in entries])
 
-        # Collect all donuts: accepted, rejected (per-sensor), unmatched.
+        # Collect every donut exactly once, tagged with whether it passed
+        # selection ("candidate"). Whether a fit actually consumed it ("used")
+        # is derived per row below from the wavefront result.
+        #
+        # `donuts` and `unmatched_donuts` overlap: in paired mode the surplus
+        # donuts on whichever sensor detected more pass selection but have no
+        # partner, so they appear in both lists. Keyed dedupe keeps one row per
+        # donut -- they stay candidates, they just never got fitted.
+        def _key(d):
+            return (str(d["sensor"]), int(d["source_id"]))
+
         all_donuts = []
-        for d in donuts:
-            all_donuts.append((d, True))
-        for r in results:
-            for d in rejected_by_sensor.get(str(r["sensor"]), []):
-                all_donuts.append((d, False))
-        for d in unmatched_donuts:
-            all_donuts.append((d, False))
+        _seen = set()
+        for d, candidate in (
+            [(d, True) for d in donuts]
+            + [
+                (d, False)
+                for r in results
+                for d in rejected_by_sensor.get(str(r["sensor"]), [])
+            ]
+            + [(d, True) for d in unmatched_donuts]
+        ):
+            k = _key(d)
+            if k in _seen:
+                continue
+            _seen.add(k)
+            all_donuts.append((d, candidate))
 
         if not all_donuts:
             return QTable()
@@ -2790,12 +2821,22 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             return caster(wd[key]) if wd is not None else default
 
         rows = []
-        for d, accepted in all_donuts:
+        for d, candidate in all_donuts:
             sid = int(d["source_id"])
             wd, grp = wf_by_id.get((sid, str(d["sensor"])), (None, -1))
 
             zk_dev = wd["zk_dev"] if wd is not None else np.full(_ZK_LEN, np.nan)
             zk_int = wd["zk_intrinsic"] if wd is not None else np.full(_ZK_LEN, np.nan)
+
+            # "used" means a fit consumed this donut and returned a wavefront.
+            # False for a candidate that no group claimed (paired-mode surplus
+            # with no partner) and for one whose fit timed out or raised, since
+            # those return an all-NaN zk_dev with fit_success False.
+            used = bool(
+                wd is not None
+                and wd.get("fit_success", False)
+                and np.any(np.isfinite(zk_dev[4:]))
+            )
 
             reject_reasons = d.get("reject_reasons", [])
             stamp = _pad(d["stamp"].astype(float), max_ny, max_nx)
@@ -2815,7 +2856,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "source_id": sid,
                 "defocal": _wd_field(wd, "defocal", str, ""),
                 "band": str(d["band"]),
-                "accepted": bool(accepted),
+                # candidate: passed every selection/quality cut.
+                # used: a fit consumed it and returned a wavefront.
+                # A candidate that is not used has no Zernikes (all NaN) -- see
+                # fit_mode/group/fit_success for which of the two reasons.
+                "candidate": bool(candidate),
+                "used": used,
                 # --- geometry ---
                 "centroid_x_raw": float(d["centroid_x_raw"]),
                 "centroid_y_raw": float(d["centroid_y_raw"]),
@@ -3005,13 +3051,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         visit_str = meta["visit_str"]
         sensor_meta = meta["sensor_meta"]
 
-        # Group rows by sensor; split into accepted and rejected.
+        # Group rows by sensor; split on selection outcome. This plot is about
+        # donut *selection*, so it splits on "candidate" -- a candidate that no
+        # fit consumed still shows in the accepted panel, since it passed every
+        # cut this plot reports on.
         sensor_col = np.asarray(catalog["sensor"], dtype=str)
         sensors_with_data = []
         for sensor in sorted(set(sensor_col.tolist())):
             sensor_rows = catalog[sensor_col == sensor]
-            acc = sensor_rows[sensor_rows["accepted"]]
-            rej = sensor_rows[~sensor_rows["accepted"]]
+            acc = sensor_rows[sensor_rows["candidate"]]
+            rej = sensor_rows[~sensor_rows["candidate"]]
             if len(acc) > 0 or len(rej) > 0:
                 sensors_with_data.append((sensor, acc, rej))
 
