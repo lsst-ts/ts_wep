@@ -1782,40 +1782,6 @@ def _wf_worker(group: _WfGroup) -> dict:
     }
 
 
-def lookupCornerRefCat(datasetType, registry, quantumDataId, collections):
-    """Find refcat shards overlapping only the corner wavefront sensors.
-
-    The ``refCat`` connection is dimensioned on ``htm7``, so the default
-    prerequisite lookup spatially joins the shards against the *whole* quantum,
-    i.e. every detector in the visit -- 205 of them on LSSTCam.  This task only
-    ever reads the 8 corner wavefront sensors, so the overwhelming majority of
-    that join is discarded work, and it is a significant part of why quantum
-    graph generation is slow for this task.
-
-    Restricting the join to the corner detectors cuts the shard count sharply
-    (64 -> 10 on a measured LSSTCam visit).  The detector list is hard-coded
-    because the user's data query string is not available in this context.
-
-    Notes
-    -----
-    The detector IDs are LSSTCam corner-sensor IDs, consistent with the
-    ``_EXTRA_FOCAL_DET_IDS``/``_INTRA_FOCAL_DET_IDS`` assumptions used
-    throughout this module.  On an instrument whose corner sensors have
-    different IDs this returns nothing rather than the wrong shards; `run` then
-    logs a refcat-load warning per sensor and produces no donuts.
-    """
-    det_list = ", ".join(str(d) for d in _CORNER_DET_IDS)
-    return list(
-        registry.queryDatasets(
-            datasetType,
-            findFirst=True,
-            collections=collections,
-            dataId=quantumDataId,
-            where=f"detector IN ({det_list})",
-        )
-    )
-
-
 class DonutBlitzMonolithTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),  # type: ignore
@@ -1880,9 +1846,6 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=("htm7",),
         deferLoad=True,
         multiple=True,
-        # Restrict the spatial join to the corner sensors; see the function's
-        # docstring for why the default whole-focal-plane join is so costly.
-        lookupFunction=lookupCornerRefCat,
     )
     intrinsicZernikes = connectionTypes.PrerequisiteInput(
         doc="Intrinsic Zernike calibration, one per corner detector.",
