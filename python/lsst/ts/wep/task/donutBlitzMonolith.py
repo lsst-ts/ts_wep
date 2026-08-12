@@ -1028,7 +1028,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         Keys: ``sensor``, ``catalog`` (accepted donut dicts),
         ``rejected_catalog``, ``scatter_arcsec``, ``wcs_refit_error``,
         ``cat_select_error``, and timing floats ``dispatch_to_arrival``,
-        ``task_init``, ``isr_run``, ``blind_detect_run``, ``wcs_refit_run``,
+        ``isr_run``, ``bkg_run``, ``blind_detect_run``, ``wcs_refit_run``,
         ``catalog_select_run``, ``stamp_cut_run``.
     """
     t_arrival = time.time()
@@ -1036,7 +1036,6 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
 
     t0 = time.perf_counter()
     isr_task = _CALIB_STORE["isr_task"]
-    t1 = time.perf_counter()
     postIsr = isr_task.run(
         entry["raw"],
         ptc=entry["ptc"],
@@ -1044,11 +1043,14 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         linearizer=entry["linearizer"],
         crosstalk=entry["crosstalk"],
     ).exposure
-    t2 = time.perf_counter()
 
+    t1 = time.perf_counter()
+    bkg_task = _CALIB_STORE["bkg_task"]
+    bkg_task.run(exposure=postIsr)
+
+    t2 = time.perf_counter()
     camera = _CALIB_STORE["camera"]
     detect_cfg = _CALIB_STORE["detect_cfg"]
-    bkg_task = _CALIB_STORE["bkg_task"]
 
     camName = camera.getName()
     detectorName = postIsr.getDetector().getName()
@@ -1058,19 +1060,17 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     astrom_cfg = _CALIB_STORE["astrom_cfg"]
     obscuration = instrument.obscuration
 
-    bkg_task.run(exposure=postIsr)
-
     blindDetections = _blindDetect(
         postIsr,
         detect_cfg,
         radius,
         obscuration,
     )
+
     t3 = time.perf_counter()
-
     wcs, scatter_arcsec, wcs_err = _refitWcs(blindDetections, postIsr, astrom_cfg)
-    t4 = time.perf_counter()
 
+    t4 = time.perf_counter()
     (
         catalog_centroids,
         sel_rejected_centroids,
@@ -1082,8 +1082,8 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         postIsr,
         astrom_cfg,
     )
-    t5 = time.perf_counter()
 
+    t5 = time.perf_counter()
     donuts, rejected_donuts = _cutStamps(
         postIsr,
         blindDetections,
@@ -1095,14 +1095,15 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         radius,
         obscuration,
     )
+
     t6 = time.perf_counter()
 
     return {
         "sensor": sensor_name,
         "catalog": donuts,
         "dispatch_to_arrival": t_arrival - t_dispatch,
-        "task_init": t1 - t0,
-        "isr_run": t2 - t1,
+        "isr_run": t1 - t0,
+        "bkg_run": t2 - t1,
         "blind_detect_run": t3 - t2,
         "wcs_refit_run": t4 - t3,
         "catalog_select_run": t5 - t4,
@@ -2588,13 +2589,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         for r in results:
             scatter_str = f'{r["scatter_arcsec"]:.3f}"' if r["scatter_arcsec"] is not None else "N/A"
             self.log.info(
-                "  %s: dispatch=%.3fs  init=%.3fs  isr=%.3fs"
+                "  %s: dispatch=%.3fs  isr=%.3fs  bkg=%.3fs"
                 "  detect=%.3fs  wcs=%.3fs (scatter=%s)"
                 "  select=%.3fs  cut=%.3fs  donuts=%d",
                 r["sensor"],
                 r["dispatch_to_arrival"],
-                r["task_init"],
                 r["isr_run"],
+                r["bkg_run"],
                 r["blind_detect_run"],
                 r["wcs_refit_run"],
                 scatter_str,
@@ -2768,6 +2769,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "wcs_refit_error": str(r.get("wcs_refit_error") or ""),
                 "cat_select_error": str(r.get("cat_select_error") or ""),
                 "isr_run": float(r.get("isr_run", float("nan"))),
+                "bkg_run": float(r.get("bkg_run", float("nan"))),
                 "blind_detect_run": float(r.get("blind_detect_run", float("nan"))),
                 "wcs_refit_run": float(r.get("wcs_refit_run", float("nan"))),
                 "catalog_select_run": float(r.get("catalog_select_run", float("nan"))),
@@ -3270,10 +3272,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             lines = [
                 f"{sensor}",
                 f"donuts: {len(acc_rows)}",
-                f"isr:    {sm.get('isr_run', float('nan')):.2f}s",
-                f"detect: {sm.get('blind_detect_run', float('nan')):.2f}s",
-                f"wcs:    {sm.get('wcs_refit_run', float('nan')):.2f}s  ({scatter_str})",
-                f"select: {sm.get('catalog_select_run', float('nan')):.2f}s",
+                f"isr:    {sm.get('isr_run', float('nan')):.3f}s",
+                f"bkg:    {sm.get('bkg_run', float('nan')):.3f}s",
+                f"detect: {sm.get('blind_detect_run', float('nan')):.3f}s",
+                f"wcs:    {sm.get('wcs_refit_run', float('nan')):.3f}s  ({scatter_str})",
+                f"select: {sm.get('catalog_select_run', float('nan')):.3f}s",
             ]
             if sm.get("wcs_refit_error"):
                 lines.append(f"WCS ERR: {sm['wcs_refit_error'][:40]}")
