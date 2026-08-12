@@ -50,8 +50,9 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 from astropy.table import QTable
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
-from lsst.afw.image import Exposure
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera, Detector
+from lsst.afw.geom import SkyWcs
+from lsst.afw.image import Exposure, FilterLabel, VisitInfo
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import (
@@ -59,6 +60,7 @@ from lsst.meas.algorithms import (
     ReferenceObjectLoader,
     SubtractBackgroundTask,
 )
+from lsst.meas.algorithms.subtractBackground import SubtractBackgroundConfig
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -77,6 +79,8 @@ _CALIB_STORE: dict = {}  # populated in parent before fork; workers inherit via 
 
 _EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
 _INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
+# Ascending, for the refCat prerequisite lookup's `detector IN (...)` clause.
+_CORNER_DET_IDS = tuple(sorted(_EXTRA_FOCAL_DET_IDS | _INTRA_FOCAL_DET_IDS))
 
 # DZMultiDonutModel's field_radius has no effect on our fit (we don't model any
 # field-dependent optics term), so any value works; set to roughly the Rubin
@@ -174,7 +178,7 @@ def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
 
 
 def _detectPeaks(
-    exposureTrim: Exposure,
+    exposure: Exposure,
     radius: float,
     obscuration: float,
     detectionBinning: int,
@@ -190,8 +194,8 @@ def _detectPeaks(
 
     Parameters
     ----------
-    exposureTrim : Exposure
-        Science exposure (already trimmed to the sensor region of interest).
+    exposure : Exposure
+        Science exposure.
     radius : float
         Expected outer donut radius in pixels (un-binned).
     obscuration : float
@@ -214,10 +218,10 @@ def _detectPeaks(
     template = _buildAnnularTemplate(radius_binned, innerFrac=obscuration)
 
     if binning > 1:
-        binnedImg = afwMath.binImage(exposureTrim.image, binning)
+        binnedImg = afwMath.binImage(exposure.image, binning)
         arr = binnedImg.array
     else:
-        arr = exposureTrim.image.array
+        arr = exposure.image.array
 
     heq = np.digitize(arr, np.nanquantile(arr, np.linspace(0, 1, 256)))
     det = correlate(heq.astype(float), template, mode="same")
@@ -235,7 +239,7 @@ def _detectPeaks(
 
 def _measureFlux(
     peaks: np.ndarray,
-    exposureTrim: Exposure,
+    exposure: Exposure,
     radius: float,
     obscuration: float,
     apertureOuterMarginFrac: float,
@@ -254,7 +258,7 @@ def _measureFlux(
     ----------
     peaks : np.ndarray
         ``(N, 2)`` array of ``(row, col)`` centroids from `_detectPeaks`.
-    exposureTrim : Exposure
+    exposure : Exposure
         Science exposure in un-binned pixel coordinates.
     radius : float
         Expected outer donut radius in pixels.
@@ -281,7 +285,7 @@ def _measureFlux(
         ``std``, and ``snr``.  Peaks that fall too close to the image border
         have ``nan`` values.
     """
-    arr = exposureTrim.image.array
+    arr = exposure.image.array
     half = int(radius * bkgAnnulusOuterFrac)
 
     gy, gx = np.mgrid[-half : half + 1, -half : half + 1]
@@ -347,7 +351,7 @@ def _measureFlux(
 def _blindDetect(
     exposure: Exposure,
     detect_cfg: dict,
-    bkg_config: Any,
+    bkg_config: SubtractBackgroundConfig,
     radius: float,
     obscuration: float,
 ) -> QTable:
@@ -364,8 +368,8 @@ def _blindDetect(
     detect_cfg : dict
         Detection config keys: ``edgeMargin``, ``detectionBinning``,
         ``peakMinDistanceFactor``, ``peakExcludeBorderFactor``.
-    bkg_config : Any
-        Config object for `SubtractBackgroundTask`.
+    bkg_config : SubtractBackgroundConfig
+        Config for `SubtractBackgroundTask`.
     radius : float
         Expected outer donut radius in pixels.
     obscuration : float
@@ -391,10 +395,8 @@ def _blindDetect(
         detect_cfg["peakExcludeBorderFactor"],
     )
 
-    empty = QTable(names=["centroid_x", "centroid_y"], dtype=[float, float])
-
     if len(peaks) == 0:
-        return empty
+        return QTable(names=["centroid_x", "centroid_y"], dtype=[float, float])
 
     xOffset = trimmedBBox.getMinX()
     yOffset = trimmedBBox.getMinY()
@@ -406,7 +408,7 @@ def _blindDetect(
     )
 
 
-def _buildAfwSourceCat(blindDetections: QTable, wcs) -> afwTable.SourceCatalog:
+def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
     """Convert blind-detect QTable into a minimal afwTable.SourceCatalog
     suitable for AstrometryTask.run().
     """
@@ -419,6 +421,10 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs) -> afwTable.SourceCatalog:
     sourceRAKey = sourceSchema["coord_ra"].asKey()
     sourceDecKey = sourceSchema["coord_dec"].asKey()
 
+    # reserve() allocates the records as one block, which is what makes the
+    # finished catalog contiguous -- AstrometryTask requires that. Without it,
+    # addNew() spills into further blocks past ~100 records and the catalog
+    # would need an explicit copy(deep=True) to compact it.
     sourceCat.reserve(len(blindDetections))
     for i, row in enumerate(blindDetections):
         x, y = float(row["centroid_x"]), float(row["centroid_y"])
@@ -429,16 +435,14 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs) -> afwTable.SourceCatalog:
         src.set(sourceDecKey, sky.getDec())
         src.set(sourceCentroidKey, lsst.geom.Point2D(x, y))
 
-    if not sourceCat.isContiguous():
-        sourceCat = sourceCat.copy(deep=True)
     return sourceCat
 
 
 def _buildFakeExposure(
-    detector,
-    wcs,
-    visitInfo,
-    filterLabel,
+    detector: Detector,
+    wcs: SkyWcs,
+    visitInfo: VisitInfo,
+    filterLabel: FilterLabel,
 ) -> afwImage.ExposureF:
     """Build a pixel-free ExposureF carrying only geometry and metadata.
 
@@ -474,7 +478,7 @@ def _refitWcs(
 
     Returns
     -------
-    refitted_wcs : `lsst.afw.geom.SkyWcs` or None
+    wcs : `lsst.afw.geom.SkyWcs` or None
         Refitted WCS, or ``None`` if the fit was skipped, failed, or scatter
         exceeded the threshold.  ``None`` signals callers to fall back to
         blind detections and skip the photometry refcat.
@@ -484,7 +488,9 @@ def _refitWcs(
     error_str : str or None
         Human-readable reason for failure, or ``None`` on success.
     """
-    wcs = postIsr.getWcs()
+    # The exposure's existing WCS, used to seed the fit. Distinct from the
+    # refitted WCS this function returns.
+    initial_wcs = postIsr.getWcs()
     detector = postIsr.getDetector()
     sensor_name = detector.getName()
     astrom_load_result = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name)
@@ -499,8 +505,8 @@ def _refitWcs(
         # Need a refObjLoader set even when passing load_result, for getMetadataBox later.
         # Since load_result is passed, loadPixelBox is never called.
         astromTask.setRefObjLoader(astrom_cfg["astrom_ref_obj_loader"])
-        afwCat = _buildAfwSourceCat(blindDetections, wcs)
-        fakeExp = _buildFakeExposure(detector, wcs, visitInfo, filterLabel)
+        afwCat = _buildAfwSourceCat(blindDetections, initial_wcs)
+        fakeExp = _buildFakeExposure(detector, initial_wcs, visitInfo, filterLabel)
         astromResult = astromTask.solve(
             exposure=fakeExp,
             sourceCat=afwCat,
@@ -520,27 +526,25 @@ def _refitWcs(
 
 
 def _selectFromPhotoCat(
-    refitted_wcs,
+    wcs: SkyWcs | None,
     postIsr: Exposure,
-    sensor_name: str,
     astrom_cfg: dict,
 ) -> tuple:
     """Select donut positions from the pre-loaded photometry refcat.
 
-    Reprojects the refcat through ``refitted_wcs``, runs
+    Reprojects the refcat through ``wcs``, runs
     `DonutSourceSelectorTask`, and builds diagnostic overlay arrays.  Only
-    executes the catalog path when ``refitted_wcs`` is not ``None``; otherwise
+    executes the catalog path when ``wcs`` is not ``None``; otherwise
     all outputs are ``None`` and the caller falls back to blind detections.
 
     Parameters
     ----------
-    refitted_wcs : `lsst.afw.geom.SkyWcs` or None
+    wcs : `lsst.afw.geom.SkyWcs` or None
         Refitted WCS from `_refitWcs`.  If ``None`` the function returns
         immediately with all ``None`` outputs.
     postIsr : Exposure
-        Post-ISR science exposure supplying the detector geometry.
-    sensor_name : str
-        Detector name used to look up the pre-loaded refcats in
+        Post-ISR science exposure supplying the detector geometry, and the
+        detector name used to look up the pre-loaded refcat in
         ``_CALIB_STORE``.
     astrom_cfg : dict
         Config keys used here: ``donut_selector_config``,
@@ -558,19 +562,19 @@ def _selectFromPhotoCat(
         ``None``.
     all_photo_cat : tuple or None
         ``(x, y, mag)`` arrays for the full photometry refcat projected through
-        ``refitted_wcs`` (for diagnostic overplotting), or ``None``.
+        ``wcs`` (for diagnostic overplotting), or ``None``.
     all_astrom_cat : tuple or None
         ``(x, y, mag)`` arrays for the full astrometry refcat projected through
-        ``refitted_wcs`` (for diagnostic overplotting), or ``None``.
+        ``wcs`` (for diagnostic overplotting), or ``None``.
     error_str : str or None
         Human-readable error from the catalog selection step, or ``None``.
     """
+    detector = postIsr.getDetector()
     # One shared load per sensor: astrometry reads its fluxField from it, donut
     # selection reads the per-band flux column off the same catalog.
-    load_result = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name)
+    load_result = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
     photo_load_result = load_result
     astrom_load_result = load_result
-    detector = postIsr.getDetector()
     save_diag = astrom_cfg.get("saveDiagnosticPlot", True)
 
     catalog_centroids = None
@@ -582,12 +586,12 @@ def _selectFromPhotoCat(
     sel_rejection_reasons = np.array([], dtype=object)
     filterName = astrom_cfg.get("resolvedPhotoFilterName", "")
 
-    if photo_load_result is not None and refitted_wcs is not None:
+    if photo_load_result is not None and wcs is not None:
         try:
             # Reproject catalog sky coords through the refitted WCS so stamp
             # centroids are consistent with the corrected pointing.
             refCat = photo_load_result.refCat.copy(deep=True)
-            afwTable.updateRefCentroids(refitted_wcs, refCat)
+            afwTable.updateRefCentroids(wcs, refCat)
             if not refCat.isContiguous():
                 refCat = refCat.copy(deep=True)
 
@@ -636,10 +640,10 @@ def _selectFromPhotoCat(
             pass
 
     # Astrometry refcat overlay (centroids via refitted WCS).
-    if astrom_load_result is not None and save_diag and refitted_wcs is not None:
+    if astrom_load_result is not None and save_diag and wcs is not None:
         try:
             _astrom_cat = astrom_load_result.refCat.copy(deep=True)
-            afwTable.updateRefCentroids(refitted_wcs, _astrom_cat)
+            afwTable.updateRefCentroids(wcs, _astrom_cat)
             _flux_field = f"{astrom_cfg['astromRefFilter']}_flux"
             with np.errstate(invalid="ignore", divide="ignore"):
                 _astrom_mag = -2.5 * np.log10(np.array(_astrom_cat[_flux_field])) + 31.4
@@ -662,7 +666,6 @@ def _selectFromPhotoCat(
 
 def _cutStamps(
     postIsr: Exposure,
-    sensor_name: str,
     blindDetections: QTable,
     catalog_centroids: tuple | None,
     sel_rejected_centroids: tuple | None,
@@ -682,9 +685,8 @@ def _cutStamps(
     Parameters
     ----------
     postIsr : Exposure
-        Background-subtracted post-ISR science exposure.
-    sensor_name : str
-        Detector name, stored in each output donut dict.
+        Background-subtracted post-ISR science exposure.  Its detector name is
+        stored in each output donut dict.
     blindDetections : QTable
         Centroid table from `_blindDetect`.  Used as fallback when
         ``catalog_centroids`` is ``None``.
@@ -911,7 +913,7 @@ def _cutStamps(
         )
 
         return dict(
-            sensor=sensor_name,
+            sensor=detector.getName(),
             stamp=stamp_ccs,
             fa_x_ccs=float(_fa[1]),
             fa_y_ccs=float(_fa[0]),
@@ -1069,7 +1071,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     )
     t3 = time.perf_counter()
 
-    refitted_wcs, scatter_arcsec, wcs_err = _refitWcs(blindDetections, postIsr, astrom_cfg)
+    wcs, scatter_arcsec, wcs_err = _refitWcs(blindDetections, postIsr, astrom_cfg)
     t4 = time.perf_counter()
 
     (
@@ -1079,16 +1081,14 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         all_astrom_cat,
         cat_err,
     ) = _selectFromPhotoCat(
-        refitted_wcs,
+        wcs,
         postIsr,
-        sensor_name,
         astrom_cfg,
     )
     t5 = time.perf_counter()
 
     donuts, rejected_donuts = _cutStamps(
         postIsr,
-        sensor_name,
         blindDetections,
         catalog_centroids,
         sel_rejected_centroids,
@@ -1128,7 +1128,14 @@ class _WfFitTimeoutError(Exception):
 
 @contextlib.contextmanager
 def _fit_timeout(seconds):
-    """SIGALRM-based timeout context manager (Unix only)."""
+    """SIGALRM-based timeout context manager.
+
+    Works on any POSIX platform, macOS included; it is Windows that has no
+    ``SIGALRM``.  The real constraint is threads: ``signal.signal`` raises
+    ``ValueError: signal only works in main thread of the main interpreter``,
+    so this is usable from the WF pool (each forked worker runs the fit on its
+    own main thread) but would break if fitting moved to a thread pool.
+    """
 
     def _handler(_signum, _frame):
         raise _WfFitTimeoutError(f"WF fit exceeded {seconds:.0f}s timeout")
@@ -1142,7 +1149,9 @@ def _fit_timeout(seconds):
         signal.signal(signal.SIGALRM, old)
 
 
-_ZK_LEN = 79  # Noll-indexed array length; index j holds Zernike j; indices 0-3 always 0.
+# Maximum Noll index fit/reported. Dense Noll-indexed arrays are length
+# _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
+_ZK_JMAX = 78
 
 
 def _bkg_free_model(
@@ -1258,18 +1267,25 @@ def _residual_rms(
 
 
 def _dense_intrinsic(donut: dict) -> np.ndarray:
-    """Return length-79 intrinsic Zernike array in metres (0.0 where unavailable)."""
-    out = np.zeros(_ZK_LEN)
-    raw = donut.get("intrinsic_zk")  # µm, Noll 4-78
+    """Return intrinsic Zernikes in metres, dense over Noll 0..``_ZK_JMAX``.
+
+    Indices with no supplied value are 0.0.
+    """
+    out = np.zeros(_ZK_JMAX + 1)
+    raw = donut.get("intrinsic_zk")  # µm, Noll 4.._ZK_JMAX
     if raw is not None:
-        for idx in range(min(len(raw), _ZK_LEN - 4)):
+        n_slots = _ZK_JMAX + 1 - 4  # Noll 4.._ZK_JMAX inclusive
+        for idx in range(min(len(raw), n_slots)):
             out[idx + 4] = float(raw[idx]) * 1e-6
     return out
 
 
 def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
-    """Return length-79 deviation array in metres (np.nan where not fitted)."""
-    out = np.full(_ZK_LEN, np.nan)
+    """Return deviations in metres, dense over Noll 0..``_ZK_JMAX``.
+
+    Indices that were not fitted are ``np.nan``.
+    """
+    out = np.full(_ZK_JMAX + 1, np.nan)
     out[0:4] = 0.0
     for k, j in enumerate(nollIndices):
         if k < len(zk_dev):
@@ -1278,14 +1294,14 @@ def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
 
 
 def _zk_cols(suffix: str, zk: np.ndarray) -> dict:
-    """Return ``{f"Z{j}_{suffix}": value_um}`` catalog columns for Noll 4-78.
+    """Return ``{f"Z{j}_{suffix}": um}`` columns for Noll 4..``_ZK_JMAX``.
 
-    ``zk`` is a length-``_ZK_LEN`` Noll-indexed array in metres; values are
-    converted to µm, with NaN passed through as NaN.
+    ``zk`` is a Noll-indexed array in metres of length ``_ZK_JMAX + 1``; values
+    are converted to µm, with NaN passed through as NaN.
     """
     return {
         f"Z{j}_{suffix}": (float(zk[j]) * 1e6 if not np.isnan(zk[j]) else float("nan"))
-        for j in range(4, _ZK_LEN)
+        for j in range(4, _ZK_JMAX + 1)
     }
 
 
@@ -1388,7 +1404,7 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
     donut : dict
         Donut record with keys: ``stamp`` (2-D array), ``det_id``, ``band``,
         ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and optionally
-        ``intrinsic_zk`` (µm, Noll 4–78).
+        ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``).
     instrument : object
         Instrument config object providing ``focalLength``, ``defocalOffset``,
         ``donutRadius``, and ``obscuration``.
@@ -1400,7 +1416,8 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
     angle_rad : np.ndarray
         ``[fa_x_ccs, fa_y_ccs]`` field angle in radians.
     zk_ref : np.ndarray
-        Reference Zernike array in metres, shape ``(79,)``, Noll-indexed.
+        Reference Zernike array in metres, Noll-indexed, shape
+        ``(_ZK_JMAX + 1,)``.
         Equals ``W_TA_defoc`` at uncalibrated indices and
         ``W_TA_defoc + (W_meas - zk_opd_foc)`` at calibrated indices.
     bkg_var : float
@@ -1438,7 +1455,7 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
     eps = telescope.pupilObscuration
     nrad = 10
     zernikeTA_kwargs = dict(
-        jmax=78,
+        jmax=_ZK_JMAX,
         eps=eps,
         focal_length=instrument.focalLength,
         nrad=nrad,
@@ -1454,7 +1471,7 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
             **zernikeTA_kwargs,
         )
         * wavelength
-    )  # meters, shape (79,)
+    )  # meters, shape (_ZK_JMAX + 1,)
 
     # Replace nominal on-axis model (zk_opd_foc) with measured intrinsics (W_meas)
     # for calibrated indices.
@@ -1472,13 +1489,19 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
         )  # meters
         calib_noll = wf_cfg["calib_noll_indices"]
         for i, j in enumerate(calib_noll):
-            if i < len(intrinsic_zk) and int(j) < 79:
+            if i < len(intrinsic_zk) and int(j) <= _ZK_JMAX:
                 zk_ref[int(j)] += float(intrinsic_zk[i]) * 1e-6 - zk_opd_foc[int(j)]
 
     angle_rad = np.array([donut["fa_x_ccs"], donut["fa_y_ccs"]])
     return img, angle_rad, zk_ref, bkg_std**2, bkg_std
 
 
+# Module-level logger for the worker functions below. They are module-level
+# (not methods) so the fork-based pools can pickle them by name, which means
+# there is no `self` and so no `Task.log`. Consequence: worker output goes to
+# the `lsst.ts.wep.task.donutBlitzMonolith` logger rather than the task's own
+# `donutBlitzMonolithTask` hierarchy, so it is not affected by that task's log
+# level. Parent-process code should keep using `self.log`.
 _log = logging.getLogger(__name__)
 
 _DZ_MODEL_KEYS = ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")
@@ -1759,6 +1782,39 @@ def _wf_worker(group: _WfGroup) -> dict:
     }
 
 
+def lookupCornerRefCat(datasetType, registry, quantumDataId, collections):
+    """Find refcat shards overlapping only the corner wavefront sensors.
+
+    The ``refCat`` connection is dimensioned on ``htm7``, so the default
+    prerequisite lookup spatially joins the shards against the *whole* quantum,
+    i.e. every detector in the visit -- 205 of them on LSSTCam.  This task only
+    ever reads the 8 corner wavefront sensors, so the overwhelming majority of
+    that join is discarded work, and it is a significant part of why quantum
+    graph generation is slow for this task.
+
+    Restricting the join to the corner detectors cuts the shard count sharply
+    (64 -> 10 on a measured LSSTCam visit).  The detector list is hard-coded
+    because the user's data query string is not available in this context.
+
+    Notes
+    -----
+    The detector IDs are LSSTCam corner-sensor IDs, consistent with the
+    ``_EXTRA_FOCAL_DET_IDS``/``_INTRA_FOCAL_DET_IDS`` assumptions used
+    throughout this module.  On an instrument whose corner sensors have
+    different IDs this returns nothing rather than the wrong shards; `run` then
+    logs a refcat-load warning per sensor and produces no donuts.
+    """
+    det_list = ", ".join(str(d) for d in _CORNER_DET_IDS)
+    return list(
+        registry.queryDatasets(
+            datasetType,
+            findFirst=True,
+            collections=collections,
+            dataId=quantumDataId,
+            where=f"detector IN ({det_list})",
+        )
+    )
+
 
 class DonutBlitzMonolithTaskConnections(
     pipeBase.PipelineTaskConnections,
@@ -1824,6 +1880,9 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=("htm7",),
         deferLoad=True,
         multiple=True,
+        # Restrict the spatial join to the corner sensors; see the function's
+        # docstring for why the default whole-focal-plane join is so costly.
+        lookupFunction=lookupCornerRefCat,
     )
     intrinsicZernikes = connectionTypes.PrerequisiteInput(
         doc="Intrinsic Zernike calibration, one per corner detector.",
@@ -2515,7 +2574,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             rtp_deg=rtp_deg,
             boresight_alt_rad=boresight_alt_rad,
             band=example_band,
-            calib_noll_indices=np.arange(4, 79),
+            calib_noll_indices=np.arange(4, _ZK_JMAX + 1),
             wavelength_by_band=wavelength_by_band,
             wfFitTimeoutPerDonut=self.config.wfFitTimeoutPerDonut,
             wfInitialGuessOnly=self.config.wfInitialGuessOnly,
@@ -2545,7 +2604,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             results = [_run_cutout_worker((arg, t_dispatch)) for arg in cutout_args]
         else:
             t_pool0 = time.perf_counter()
-            with mp.get_context("fork").Pool(processes=numCores) as pool:
+            # Never more workers than sensors to process, matching the WF pool
+            # below. cutout_args is CORNER_SENSOR_NAMES, so never empty.
+            n_cutout_workers = min(numCores, len(cutout_args))
+            with mp.get_context("fork").Pool(processes=n_cutout_workers) as pool:
                 t_pool1 = time.perf_counter()
                 t_dispatch = time.time()
                 results = pool.map(_run_cutout_worker, [(arg, t_dispatch) for arg in cutout_args])
@@ -2825,8 +2887,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             sid = int(d["source_id"])
             wd, grp = wf_by_id.get((sid, str(d["sensor"])), (None, -1))
 
-            zk_dev = wd["zk_dev"] if wd is not None else np.full(_ZK_LEN, np.nan)
-            zk_int = wd["zk_intrinsic"] if wd is not None else np.full(_ZK_LEN, np.nan)
+            zk_dev = wd["zk_dev"] if wd is not None else np.full(_ZK_JMAX + 1, np.nan)
+            zk_int = wd["zk_intrinsic"] if wd is not None else np.full(_ZK_JMAX + 1, np.nan)
 
             # "used" means a fit consumed this donut and returned a wavefront.
             # False for a candidate that no group claimed (paired-mode surplus
@@ -2907,7 +2969,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "fit_residual_rms": _wd_field(wd, "fit_residual_rms", float, float("nan")),
                 "blend_frac": _wd_field(wd, "blend_frac", float, float("nan")),
                 "zk_norm_um": _wd_field(wd, "zk_norm_um", float, float("nan")),
-                # --- per-Noll Zernikes (µm), Noll 4–78 ---
+                # --- per-Noll Zernikes (µm), Noll 4..``_ZK_JMAX`` ---
                 **_zk_cols("dev", zk_dev),
                 **_zk_cols("intrinsic", zk_int),
                 # --- embedded images ---
@@ -3360,7 +3422,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             elapsed = float(first["fit_elapsed"])
             nfev = int(first["fit_nfev"])
             fwhm = float(first["fit_fwhm"])
-            zk_by_noll = {j: float(first[f"Z{j}_dev"]) for j in range(4, 79)}
+            zk_by_noll = {j: float(first[f"Z{j}_dev"]) for j in range(4, _ZK_JMAX + 1)}
 
             donuts_out = []
             for r in rows:
@@ -3555,22 +3617,26 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         (d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"), None
                     )
                     elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(r_intra)
-                    zk_by_noll_i = r_intra.get("zk_by_noll", {j: float("nan") for j in range(4, 79)})
+                    zk_by_noll_i = r_intra.get(
+                        "zk_by_noll", {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
+                    )
                 else:
                     intra_rec = None
                     elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(None)
-                    zk_by_noll_i = {j: float("nan") for j in range(4, 79)}
+                    zk_by_noll_i = {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
 
                 if r_extra is not None:
                     extra_rec = next(
                         (d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"), None
                     )
                     elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(r_extra)
-                    zk_by_noll_e = r_extra.get("zk_by_noll", {j: float("nan") for j in range(4, 79)})
+                    zk_by_noll_e = r_extra.get(
+                        "zk_by_noll", {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
+                    )
                 else:
                     extra_rec = None
                     elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(None)
-                    zk_by_noll_e = {j: float("nan") for j in range(4, 79)}
+                    zk_by_noll_e = {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
 
                 intra_img = intra_rec["img"] if intra_rec else None
                 intra_mod = intra_rec["model_img"] if intra_rec else None
