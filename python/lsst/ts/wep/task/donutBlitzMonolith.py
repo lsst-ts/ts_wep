@@ -351,15 +351,14 @@ def _measureFlux(
 def _blindDetect(
     exposure: Exposure,
     detect_cfg: dict,
-    bkg_config: SubtractBackgroundConfig,
     radius: float,
     obscuration: float,
 ) -> QTable:
-    """Subtract background and detect donuts via annular template cross-correlation.
+    """Detect donuts via annular template cross-correlation.
 
-    Runs `SubtractBackgroundTask` in-place on ``exposure``, erodes the border
-    by ``edgeMargin`` pixels, then calls `_detectPeaks`.  Flux measurement is
-    deferred to `_cutStamps`.
+    Erodes the post-ISR exposure border by ``edgeMargin`` pixels,
+    then calls `_detectPeaks`.  Flux measurement is deferred to
+    `_cutStamps`.
 
     Parameters
     ----------
@@ -368,8 +367,6 @@ def _blindDetect(
     detect_cfg : dict
         Detection config keys: ``edgeMargin``, ``detectionBinning``,
         ``peakMinDistanceFactor``, ``peakExcludeBorderFactor``.
-    bkg_config : SubtractBackgroundConfig
-        Config for `SubtractBackgroundTask`.
     radius : float
         Expected outer donut radius in pixels.
     obscuration : float
@@ -381,8 +378,6 @@ def _blindDetect(
         Columns ``centroid_x``, ``centroid_y`` in full-exposure pixel
         coordinates.  Empty table if no peaks are found.
     """
-    SubtractBackgroundTask(config=bkg_config).run(exposure=exposure)
-
     trimmedBBox = exposure.getBBox().erodedBy(detect_cfg["edgeMargin"])
     exposureTrim = exposure[trimmedBBox].clone()
 
@@ -1011,7 +1006,8 @@ def _cutStamps(
 
 
 def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
-    """Run ISR, blind detection, WCS refit, catalog selection, and stamp cutting.
+    """Run ISR, background subtraction, blind detection, WCS refit, catalog
+    selection, and stamp cutting.
 
     Orchestrates the full per-sensor cutout pipeline in a worker process.
     All inputs are read from the module-level ``_CALIB_STORE`` dict, which is
@@ -1039,7 +1035,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     entry = _CALIB_STORE[sensor_name]
 
     t0 = time.perf_counter()
-    isr_task = IsrTaskLSST(config=_CALIB_STORE["isr_config"])
+    isr_task = _CALIB_STORE["isr_task"]
     t1 = time.perf_counter()
     postIsr = isr_task.run(
         entry["raw"],
@@ -1052,7 +1048,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
 
     camera = _CALIB_STORE["camera"]
     detect_cfg = _CALIB_STORE["detect_cfg"]
-    bkg_config = _CALIB_STORE["bkg_config"]
+    bkg_task = _CALIB_STORE["bkg_task"]
 
     camName = camera.getName()
     detectorName = postIsr.getDetector().getName()
@@ -1062,10 +1058,11 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     astrom_cfg = _CALIB_STORE["astrom_cfg"]
     obscuration = instrument.obscuration
 
+    bkg_task.run(exposure=postIsr)
+
     blindDetections = _blindDetect(
         postIsr,
         detect_cfg,
-        bkg_config,
         radius,
         obscuration,
     )
@@ -2483,8 +2480,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         )
 
         _CALIB_STORE.clear()
-        _CALIB_STORE["isr_config"] = self.isrTask.config
-        _CALIB_STORE["bkg_config"] = self.subtractBackground.config
+        _CALIB_STORE["isr_task"] = self.isrTask
+        _CALIB_STORE["bkg_task"] = self.subtractBackground
         _CALIB_STORE["camera"] = camera
         _CALIB_STORE["detect_cfg"] = detect_cfg
         _CALIB_STORE["astrom_cfg"] = astrom_cfg
