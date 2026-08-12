@@ -90,7 +90,7 @@ class DonutSizeCorrelator:
         image: np.ndarray,
         pad: int = 500,
         nCenters: int = 5,
-        minSeparation: int = 12,
+        minSeparation: int = 40,
     ) -> list[tuple[int, int]]:
         """Find the most donut-like locations to center crops on.
 
@@ -108,6 +108,15 @@ class DonutSizeCorrelator:
         correlate with an annulus, or a mask-clipped crescent -- which
         can outrank the real donuts but cannot outvote several of them.
 
+        The candidates are spatially declustered so that no single
+        feature contributes more than one of them. A large, bright
+        feature (e.g. a satellite trail or saturated spike) produces
+        several local maxima of the likeness map along its length; if
+        those all became candidates they would give that one feature a
+        majority of the votes and the median would follow it. Enforcing
+        a minimum separation guarantees each candidate is a distinct
+        object.
+
         Parameters
         ----------
         image : np.ndarray
@@ -119,8 +128,11 @@ class DonutSizeCorrelator:
             Maximum number of candidate centers to return. Default is 5.
         minSeparation : int, optional
             Minimum separation (in binned pixels) between candidates, so
-            we don't return several points on the same donut. Default
-            is 12.
+            no single feature contributes more than one candidate. In
+            full-image pixels this is ``8 * minSeparation``. Default is
+            40 (320 full pixels); large enough that an extended feature
+            (e.g. a satellite trail) yields at most one candidate,
+            while still resolving neighbouring donuts.
 
         Returns
         -------
@@ -136,18 +148,26 @@ class DonutSizeCorrelator:
         binningFactor = 8
         binned = binArray(padded, binningFactor)
 
-        # Donut-likeness map, then pick well-separated local maxima
+        # Donut-likeness map, then all local maxima ranked best first
         likeness = DonutSizeCorrelator.donutLikenessMap(binned, binningFactor)
-        localMax = maximum_filter(likeness, size=minSeparation)
+        localMax = maximum_filter(likeness, size=3)
         peaks = np.argwhere((likeness == localMax) & np.isfinite(likeness))
-
-        # Rank peaks by likeness, best first
         order = np.argsort(likeness[peaks[:, 0], peaks[:, 1]])[::-1]
-        peaks = peaks[order][:nCenters]
+        peaks = peaks[order]
+
+        # Greedily accept peaks, skipping any too close to one already
+        # accepted, so each candidate is a distinct feature
+        centers: list[tuple[int, int]] = []
+        minSepSq = minSeparation**2
+        for y, x in peaks:
+            if all((y - py) ** 2 + (x - px) ** 2 >= minSepSq for py, px in centers):
+                centers.append((int(y), int(x)))
+            if len(centers) >= nCenters:
+                break
 
         # Undo binning and pad
         return [
-            (binningFactor * y + pad, binningFactor * x + pad) for y, x in peaks
+            (binningFactor * y + pad, binningFactor * x + pad) for y, x in centers
         ]
 
     @staticmethod
@@ -553,18 +573,37 @@ class DonutSizeCorrelator:
         selectPad = min((dMax or 500) // 2, np.min(image.shape) // 4)
         centers = self.selectCropCenters(image, selectPad, nCenters=nCenters)
 
-        # Measure the diameter at each candidate
+        # Measure the diameter at each candidate, recording how prominent
+        # its correlation peak is. A real donut yields a prominent peak;
+        # crescents, mask-block edges and background texture yield a
+        # monotonic curve with no real peak. This is the same "realness"
+        # signal that _diameterAtCenter uses to pick its primary branch.
         results = []
         for center in centers:
             solution, diameters, correlations = self._diameterAtCenter(
                 image, center, dMin=dMin, dMax=dMax
             )
-            if np.isfinite(solution):
-                results.append((solution, diameters, correlations))
+            if not np.isfinite(solution):
+                continue
+            peaks, _ = find_peaks(correlations)
+            if len(peaks) > 0:
+                maxProm = peak_prominences(correlations, peaks)[0].max()
+            else:
+                maxProm = 0.0
+            results.append((solution, diameters, correlations, maxProm))
 
         # If every candidate failed, return the last attempt (NaN)
         if len(results) == 0:
             return solution, diameters, correlations
+
+        # Keep only candidates with a genuinely prominent peak. Without
+        # this, a sparse field (few real donuts, several junk features)
+        # lets the junk outvote the donuts in the median, since the real
+        # donuts can be a minority of the candidates. Fall back to all
+        # candidates if none clear the threshold.
+        prominent = [r for r in results if r[3] > 1e-2]
+        if len(prominent) > 0:
+            results = prominent
 
         # Take the median diameter, robust against a single bad location
         solutions = np.array([r[0] for r in results])
