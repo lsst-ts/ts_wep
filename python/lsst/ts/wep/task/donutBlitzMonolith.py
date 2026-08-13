@@ -912,20 +912,32 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
 
     t3 = time.perf_counter()
     astrom_task = _CALIB_STORE["astrom_task"]
-    astrom_result = astrom_task.solve(
-        exposure=postIsr,
-        sourceCat=_buildAfwSourceCat(blindDetections, postIsr.getWcs()),
-        load_result=_CALIB_STORE.get("sensor_refcats", {}).get(sensor_name),
-    )
-    scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
-    if scatter_arcsec < _CALIB_STORE["astrom_cfg"]["maxFitScatter"]:
-        wcs = postIsr.getWcs()
-        wcs_err = None
-    else:
-        wcs = None
-        wcs_err = f'scatter {scatter_arcsec:.2f}" >= {_CALIB_STORE["astrom_cfg"]["maxFitScatter"]}"'
-
     astrom_cfg = _CALIB_STORE["astrom_cfg"]
+    scatter_arcsec = None
+    wcs = None
+    wcs_err = None
+    try:
+        astrom_result = astrom_task.solve(
+            exposure=postIsr,
+            sourceCat=_buildAfwSourceCat(blindDetections, postIsr.getWcs()),
+            load_result=_CALIB_STORE.get("sensor_refcats", {}).get(sensor_name),
+        )
+        scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
+        if scatter_arcsec < astrom_cfg["maxFitScatter"]:
+            wcs = postIsr.getWcs()
+        else:
+            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {astrom_cfg["maxFitScatter"]}"'
+    except Exception as exc:
+        wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
+        logging.getLogger(__name__).warning(
+            _colorize(
+                "Astrometry solve failed for %s; falling back to blind detections: %s",
+                _ANSI_BOLD,
+                _ANSI_YELLOW
+            ),
+            sensor_name,
+            wcs_err,
+        )
 
     t4 = time.perf_counter()
     (
@@ -2158,7 +2170,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             _colorize(
                 "DonutBlitzMonolithTask.runQuantum() on exposure %d",
                 _ANSI_BOLD,
-                _ANSI_YELLOW,
+                _ANSI_GREEN,
                 enabled=self._colorLogEnabled,
             ),
             inputRefs.raws[0].dataId["exposure"],
@@ -2192,7 +2204,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 " linearizer=%.3fs crosstalk=%.3fs refCat=%.3fs"
                 " intrinsicZernikes=%.3fs total=%.3fs",
                 _ANSI_BOLD,
-                _ANSI_GREEN,
+                _ANSI_CYAN,
                 enabled=self._colorLogEnabled,
             ),
             t1 - t0,
@@ -2277,7 +2289,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             _colorize(
                 "DonutBlitzMonolithTask.run() with %d cores, butler elapsed=%.3fs",
                 _ANSI_BOLD,
-                _ANSI_YELLOW,
+                _ANSI_GREEN,
                 enabled=self._colorLogEnabled,
             ),
             numCores,
@@ -2502,7 +2514,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 _colorize(
                     "Cutout pipeline: pool create: %.3fs, pool.map: %.3fs",
                     _ANSI_BOLD,
-                    _ANSI_GREEN,
+                    _ANSI_CYAN,
                     enabled=self._colorLogEnabled,
                 ),
                 t_pool1 - t_pool0,
@@ -2585,7 +2597,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             _colorize(
                 "Timing summary: butler=%.1fs  refcat=%.1fs  cutout=%.1fs  danish=%.1fs  total=%.1fs",
                 _ANSI_BOLD,
-                _ANSI_GREEN,
+                _ANSI_CYAN,
                 enabled=self._colorLogEnabled,
             ),
             butler_elapsed,
