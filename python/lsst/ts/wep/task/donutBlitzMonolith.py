@@ -67,8 +67,9 @@ from lsst.pipe.base import (
     OutputQuantizedConnection,
     QuantumContext,
 )
+from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
-from lsst.ts.wep.utils import binArray, getTaskInstrument
+from lsst.ts.wep.utils import binArray
 from lsst.utils.timer import timeMethod
 from scipy.optimize import least_squares
 from scipy.signal import correlate
@@ -76,6 +77,9 @@ from scipy.stats import median_abs_deviation
 from skimage.feature import peak_local_max
 
 _CALIB_STORE: dict = {}  # populated in parent before fork; workers inherit via COW
+
+# Hard coding global wavefront sensor geometry for now
+_INSTRUMENT: Instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
 
 _EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
 _INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
@@ -346,61 +350,6 @@ def _measureFlux(
     with np.errstate(invalid="ignore", divide="ignore"):
         table["snr"] = (table["flux"] / table["std"]) / np.sqrt(n_main)
     return table
-
-
-def _blindDetect(
-    exposure: Exposure,
-    detect_cfg: dict,
-    radius: float,
-    obscuration: float,
-) -> QTable:
-    """Detect donuts via annular template cross-correlation.
-
-    Erodes the post-ISR exposure border by ``edgeMargin`` pixels,
-    then calls `_detectPeaks`.  Flux measurement is deferred to
-    `_cutStamps`.
-
-    Parameters
-    ----------
-    exposure : Exposure
-        Science exposure; background is subtracted in-place.
-    detect_cfg : dict
-        Detection config keys: ``edgeMargin``, ``detectionBinning``,
-        ``peakMinDistanceFactor``, ``peakExcludeBorderFactor``.
-    radius : float
-        Expected outer donut radius in pixels.
-    obscuration : float
-        Central obscuration fraction (inner radius / outer radius).
-
-    Returns
-    -------
-    QTable
-        Columns ``centroid_x``, ``centroid_y`` in full-exposure pixel
-        coordinates.  Empty table if no peaks are found.
-    """
-    trimmedBBox = exposure.getBBox().erodedBy(detect_cfg["edgeMargin"])
-    exposureTrim = exposure[trimmedBBox].clone()
-
-    peaks = _detectPeaks(
-        exposureTrim,
-        radius,
-        obscuration,
-        detect_cfg["detectionBinning"],
-        detect_cfg["peakMinDistanceFactor"],
-        detect_cfg["peakExcludeBorderFactor"],
-    )
-
-    if len(peaks) == 0:
-        return QTable(names=["centroid_x", "centroid_y"], dtype=[float, float])
-
-    xOffset = trimmedBBox.getMinX()
-    yOffset = trimmedBBox.getMinY()
-    return QTable(
-        {
-            "centroid_x": peaks[:, 1] + xOffset,
-            "centroid_y": peaks[:, 0] + yOffset,
-        }
-    )
 
 
 def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
@@ -1049,25 +998,11 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     bkg_task.run(exposure=postIsr)
 
     t2 = time.perf_counter()
-    camera = _CALIB_STORE["camera"]
-    detect_cfg = _CALIB_STORE["detect_cfg"]
-
-    camName = camera.getName()
-    detectorName = postIsr.getDetector().getName()
-    instrument = getTaskInstrument(camName, detectorName, detect_cfg["instConfigFile"])
-    radius = instrument.donutRadius
-
-    astrom_cfg = _CALIB_STORE["astrom_cfg"]
-    obscuration = instrument.obscuration
-
-    blindDetections = _blindDetect(
-        postIsr,
-        detect_cfg,
-        radius,
-        obscuration,
-    )
+    blind_detect_task = _CALIB_STORE["blind_detect_task"]
+    blindDetections = blind_detect_task.run(postIsr).detections
 
     t3 = time.perf_counter()
+    astrom_cfg = _CALIB_STORE["astrom_cfg"]
     wcs, scatter_arcsec, wcs_err = _refitWcs(blindDetections, postIsr, astrom_cfg)
 
     t4 = time.perf_counter()
@@ -1092,8 +1027,8 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         all_photo_cat,
         all_astrom_cat,
         astrom_cfg,
-        radius,
-        obscuration,
+        _INSTRUMENT.donutRadius,
+        _INSTRUMENT.obscuration,
     )
 
     t6 = time.perf_counter()
@@ -1366,8 +1301,8 @@ def _build_wf_groups(mode, results_by_sensor, wf_cfg):
     return groups, unmatched_donuts
 
 
-def _build_wf_factory(instrument):
-    """Build a Danish donut factory from _CALIB_STORE["wf_cfg"] and instrument."""
+def _build_wf_factory():
+    """Build a Danish donut factory from _CALIB_STORE["wf_cfg"]."""
     wf_cfg = _CALIB_STORE["wf_cfg"]
     factory_class = danish.DonutTriangleFactory if wf_cfg["triangleMode"] else danish.DonutFactory
     factory_kwargs = {}
@@ -1379,17 +1314,17 @@ def _build_wf_factory(instrument):
         else:
             factory_kwargs["airmass"] = 1.2
     return factory_class(
-        R_outer=instrument.radius,
-        R_inner=instrument.radius * instrument.obscuration,
-        mask_params=instrument.maskParams,
-        focal_length=instrument.focalLength,
-        pixel_scale=instrument.pixelSize * wf_cfg["binning"],
+        R_outer=_INSTRUMENT.radius,
+        R_inner=_INSTRUMENT.radius * _INSTRUMENT.obscuration,
+        mask_params=_INSTRUMENT.maskParams,
+        focal_length=_INSTRUMENT.focalLength,
+        pixel_scale=_INSTRUMENT.pixelSize * wf_cfg["binning"],
         spider_angle=wf_cfg["rtp_deg"],
         **factory_kwargs,
     )
 
 
-def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
+def _prep_donut_for_danish(donut: dict) -> tuple:
     """Prepare a donut dict for Danish fitting.
 
     Bins and crops the stamp to an odd pixel size, estimates background noise,
@@ -1403,9 +1338,6 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
         Donut record with keys: ``stamp`` (2-D array), ``det_id``, ``band``,
         ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and optionally
         ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``).
-    instrument : object
-        Instrument config object providing ``focalLength``, ``defocalOffset``,
-        ``donutRadius``, and ``obscuration``.
 
     Returns
     -------
@@ -1455,7 +1387,7 @@ def _prep_donut_for_danish(donut: dict, instrument) -> tuple:
     zernikeTA_kwargs = dict(
         jmax=_ZK_JMAX,
         eps=eps,
-        focal_length=instrument.focalLength,
+        focal_length=_INSTRUMENT.focalLength,
         nrad=nrad,
         naz=int(2 * np.pi * nrad / (1 - eps)),
     )
@@ -1638,7 +1570,6 @@ def _wf_worker(group: _WfGroup) -> dict:
     """
     wf_cfg = _CALIB_STORE["wf_cfg"]
     nollIndices = wf_cfg["nollIndices"]
-    instrument = _CALIB_STORE["instrument"]
     all_donuts = group.donuts
     n = len(all_donuts)
 
@@ -1657,8 +1588,8 @@ def _wf_worker(group: _WfGroup) -> dict:
         }
 
     t_setup0 = time.perf_counter()
-    factory = _build_wf_factory(instrument)
-    preps = [_prep_donut_for_danish(d, instrument) for d in all_donuts]
+    factory = _build_wf_factory()
+    preps = [_prep_donut_for_danish(d) for d in all_donuts]
     imgs = [p[0] for p in preps]
     thxs = [p[1][0] for p in preps]
     thys = [p[1][1] for p in preps]
@@ -1745,8 +1676,8 @@ def _wf_worker(group: _WfGroup) -> dict:
                 "fit_residual_rms": _residual_rms(
                     _img,
                     _mimg,
-                    instrument.donutRadius,
-                    instrument.obscuration,
+                    _INSTRUMENT.donutRadius,
+                    _INSTRUMENT.obscuration,
                     _CALIB_STORE["detect_cfg"]["apertureOuterMarginFrac"],
                 ),
                 "blend_frac": _blend_frac(
@@ -1778,6 +1709,88 @@ def _wf_worker(group: _WfGroup) -> dict:
         "imgs": imgs,
         "sensors": [d["sensor"] for d in all_donuts],
     }
+
+
+class BlindDetectConfig(pexConfig.Config):
+    edgeMargin: pexConfig.Field = pexConfig.Field(
+        doc="Width of detector edge region to exclude from detection, in pixels.",
+        dtype=int,
+        default=80,
+    )
+    detectionBinning: pexConfig.Field = pexConfig.Field(
+        doc=("Integer factor by which to bin the image before running the cross-correlation detection step."),
+        dtype=int,
+        default=8,
+    )
+    peakMinDistanceFactor: pexConfig.Field = pexConfig.Field(
+        doc="Multiplier applied to the binned donut radius to set min_distance in peak_local_max.",
+        dtype=float,
+        default=1.6,
+    )
+    peakExcludeBorderFactor: pexConfig.Field = pexConfig.Field(
+        doc="Multiplier applied to the binned donut radius to set exclude_border in peak_local_max.",
+        dtype=float,
+        default=1.15,
+    )
+
+
+class BlindDetect(pipeBase.Task):
+    ConfigClass = BlindDetectConfig
+    _DefaultName = "blindDetectTask"
+    config: BlindDetectConfig
+
+    """Detect donuts via annular template cross-correlation.
+
+    Erodes the post-ISR exposure border by ``edgeMargin`` pixels,
+    then calls `_detectPeaks`.  Flux measurement is deferred to
+    `_cutStamps`.
+
+    Parameters
+    ----------
+    exposure : Exposure
+        Science exposure; background is subtracted in-place.
+
+    Returns
+    -------
+    QTable
+        Columns ``centroid_x``, ``centroid_y`` in full-exposure pixel
+        coordinates.  Empty table if no peaks are found.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def run(
+        self,
+        exposure: Exposure,
+    ) -> pipeBase.Struct:
+        config = self.config
+
+        trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
+        exposureTrim = exposure[trimmedBBox].clone()
+
+        peaks = _detectPeaks(
+            exposureTrim,
+            _INSTRUMENT.donutRadius,
+            _INSTRUMENT.obscuration,
+            config.detectionBinning,
+            config.peakMinDistanceFactor,
+            config.peakExcludeBorderFactor,
+        )
+
+        if len(peaks) == 0:
+            detections = QTable(names=["centroid_x", "centroid_y"], dtype=[float, float])
+        else:
+            xOffset = trimmedBBox.getMinX()
+            yOffset = trimmedBBox.getMinY()
+            detections = QTable(
+                {
+                    "centroid_x": peaks[:, 1] + xOffset,
+                    "centroid_y": peaks[:, 0] + yOffset,
+                }
+            )
+
+        return pipeBase.Struct(detections=detections)
 
 
 class DonutBlitzMonolithTaskConnections(
@@ -1879,6 +1892,13 @@ class DonutBlitzMonolithTaskConfig(
     subtractBackground: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=SubtractBackgroundTask,
         doc="Background subtraction subtask run before donut detection.",
+    )
+    blindDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=BlindDetect,
+        doc=(
+            "Blind donut detection subtask run on each corner wavefront sensor "
+            "exposure."
+        ),
     )
     astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=AstrometryTask,
@@ -2206,6 +2226,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         self.makeSubtask("plotTask")
         self.makeSubtask("isrTask")
         self.makeSubtask("subtractBackground")
+        self.makeSubtask("blindDetect")
         self.makeSubtask("astromTask")
         self.makeSubtask("donutSelector")
         self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
@@ -2483,6 +2504,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE.clear()
         _CALIB_STORE["isr_task"] = self.isrTask
         _CALIB_STORE["bkg_task"] = self.subtractBackground
+        _CALIB_STORE["blind_detect_task"] = self.blindDetect
         _CALIB_STORE["camera"] = camera
         _CALIB_STORE["detect_cfg"] = detect_cfg
         _CALIB_STORE["astrom_cfg"] = astrom_cfg
@@ -2515,14 +2537,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             if self.config.modelSpiderShadows
             else None
         )
-        example_instrument = getTaskInstrument(
-            camera.getName(),
-            next(iter(rawByName.keys())),
-            self.config.instConfigFile,
-        )
-        wavelength_by_band = {bl.value: wl for bl, wl in example_instrument.wavelength.items()}
+        wavelength_by_band = {bl.value: wl for bl, wl in _INSTRUMENT.wavelength.items()}
         lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in self.config.lstsqKwargs.items()}
-        _CALIB_STORE["instrument"] = example_instrument
         _CALIB_STORE["wf_cfg"] = dict(
             nollIndices=np.array(list(self.config.nollIndices)),
             lstsqKwargs=lstsq_kwargs_parsed,
@@ -2546,10 +2562,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _telescope = batoid.Optic.fromYaml(f"LSST_{example_band}.yaml")
         _CALIB_STORE["telescope"] = _telescope
         _CALIB_STORE["telescope_extra"] = _telescope.withLocallyShiftedOptic(
-            "Detector", [0, 0, example_instrument.defocalOffset]
+            "Detector", [0, 0, _INSTRUMENT.defocalOffset]
         )
         _CALIB_STORE["telescope_intra"] = _telescope.withLocallyShiftedOptic(
-            "Detector", [0, 0, -example_instrument.defocalOffset]
+            "Detector", [0, 0, -_INSTRUMENT.defocalOffset]
         )
 
         cutout_args = sorted(CORNER_SENSOR_NAMES)
