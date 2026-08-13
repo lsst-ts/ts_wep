@@ -49,7 +49,7 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 from astropy.table import QTable
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera, Detector
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
@@ -81,8 +81,6 @@ _INSTRUMENT: Instrument = Instrument(configFile="policy:instruments/LsstCam.yaml
 
 _EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
 _INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
-# Ascending, for the refCat prerequisite lookup's `detector IN (...)` clause.
-_CORNER_DET_IDS = tuple(sorted(_EXTRA_FOCAL_DET_IDS | _INTRA_FOCAL_DET_IDS))
 
 # DZMultiDonutModel's field_radius has no effect on our fit (we don't model any
 # field-dependent optics term), so any value works; set to roughly the Rubin
@@ -1691,7 +1689,7 @@ class BlindDetect(pipeBase.Task):
         config = self.config
 
         trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
-        exposureTrim = exposure[trimmedBBox].clone()
+        exposureTrim = exposure[trimmedBBox]
 
         peaks = _detectPeaks(
             exposureTrim,
