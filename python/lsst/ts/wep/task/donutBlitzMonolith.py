@@ -40,7 +40,6 @@ from typing import Any
 import batoid
 import danish
 import galsim
-import lsst.afw.image as afwImage
 import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
 import lsst.geom
@@ -52,7 +51,7 @@ import numpy as np
 from astropy.table import QTable
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera, Detector
 from lsst.afw.geom import SkyWcs
-from lsst.afw.image import Exposure, FilterLabel, VisitInfo
+from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import (
@@ -60,7 +59,6 @@ from lsst.meas.algorithms import (
     ReferenceObjectLoader,
     SubtractBackgroundTask,
 )
-from lsst.meas.algorithms.subtractBackground import SubtractBackgroundConfig
 from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -380,93 +378,6 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
         src.set(sourceCentroidKey, lsst.geom.Point2D(x, y))
 
     return sourceCat
-
-
-def _buildFakeExposure(
-    detector: Detector,
-    wcs: SkyWcs,
-    visitInfo: VisitInfo,
-    filterLabel: FilterLabel,
-) -> afwImage.ExposureF:
-    """Build a pixel-free ExposureF carrying only geometry and metadata.
-
-    AstrometryTask reads bbox, wcs, filter.bandLabel, visitInfo.date, and
-    visitInfo.getExposureTime() from the exposure — no pixel data required.
-    """
-    bbox = detector.getBBox()
-    fake = afwImage.ExposureF(bbox)
-    fake.setWcs(wcs)
-    fake.setDetector(detector)
-    fake.getInfo().setVisitInfo(visitInfo)
-    fake.setFilter(filterLabel)
-    return fake
-
-
-def _refitWcs(
-    blindDetections: QTable,
-    postIsr: Exposure,
-    astrom_cfg: dict,
-) -> tuple:
-    """Attempt to refit the WCS using the pre-loaded astrometry refcat.
-
-    Parameters
-    ----------
-    blindDetections : QTable
-        Centroid table from `_blindDetect` (columns ``centroid_x``,
-        ``centroid_y``).
-    postIsr : Exposure
-        Post-ISR science exposure supplying the detector, WCS, and visit info.
-    astrom_cfg : dict
-        Astrometry config keys: ``minSourcesForWcsFit``, ``maxFitScatter``,
-        ``astrom_task_config``, ``astrom_ref_obj_loader``.
-
-    Returns
-    -------
-    wcs : `lsst.afw.geom.SkyWcs` or None
-        Refitted WCS, or ``None`` if the fit was skipped, failed, or scatter
-        exceeded the threshold.  ``None`` signals callers to fall back to
-        blind detections and skip the photometry refcat.
-    scatter_arcsec : float or None
-        RMS on-sky scatter of the fit in arcseconds, or ``None`` when no fit
-        was attempted or an exception was raised.
-    error_str : str or None
-        Human-readable reason for failure, or ``None`` on success.
-    """
-    # The exposure's existing WCS, used to seed the fit. Distinct from the
-    # refitted WCS this function returns.
-    initial_wcs = postIsr.getWcs()
-    detector = postIsr.getDetector()
-    sensor_name = detector.getName()
-    astrom_load_result = _CALIB_STORE.get("sensor_refcats", {}).get(sensor_name)
-
-    if len(blindDetections) < astrom_cfg["minSourcesForWcsFit"] or astrom_load_result is None:
-        return None, None, None
-
-    visitInfo = postIsr.getInfo().getVisitInfo()
-    filterLabel = postIsr.getFilter()
-    try:
-        astromTask = AstrometryTask(config=astrom_cfg["astrom_task_config"])
-        # Need a refObjLoader set even when passing load_result, for getMetadataBox later.
-        # Since load_result is passed, loadPixelBox is never called.
-        astromTask.setRefObjLoader(astrom_cfg["astrom_ref_obj_loader"])
-        afwCat = _buildAfwSourceCat(blindDetections, initial_wcs)
-        fakeExp = _buildFakeExposure(detector, initial_wcs, visitInfo, filterLabel)
-        astromResult = astromTask.solve(
-            exposure=fakeExp,
-            sourceCat=afwCat,
-            load_result=astrom_load_result,
-        )
-        scatter_arcsec = astromResult.scatterOnSky.asArcseconds()
-        if scatter_arcsec < astrom_cfg["maxFitScatter"]:
-            return fakeExp.getWcs(), scatter_arcsec, None
-        else:
-            return (
-                None,
-                scatter_arcsec,
-                f'scatter {scatter_arcsec:.2f}" >= {astrom_cfg["maxFitScatter"]}"',
-            )
-    except Exception as e:
-        return None, None, str(e)
 
 
 def _selectFromPhotoCat(
@@ -1002,8 +913,21 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     blindDetections = blind_detect_task.run(postIsr).detections
 
     t3 = time.perf_counter()
+    astrom_task = _CALIB_STORE["astrom_task"]
+    astrom_result = astrom_task.solve(
+        exposure=postIsr,
+        sourceCat=_buildAfwSourceCat(blindDetections, postIsr.getWcs()),
+        load_result=_CALIB_STORE.get("sensor_refcats", {}).get(sensor_name),
+    )
+    scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
+    if scatter_arcsec < _CALIB_STORE["astrom_cfg"]["maxFitScatter"]:
+        wcs = postIsr.getWcs()
+        wcs_err = None
+    else:
+        wcs = None
+        wcs_err = f'scatter {scatter_arcsec:.2f}" >= {_CALIB_STORE["astrom_cfg"]["maxFitScatter"]}"'
+
     astrom_cfg = _CALIB_STORE["astrom_cfg"]
-    wcs, scatter_arcsec, wcs_err = _refitWcs(blindDetections, postIsr, astrom_cfg)
 
     t4 = time.perf_counter()
     (
@@ -2026,11 +1950,6 @@ class DonutBlitzMonolithTaskConfig(
         dtype=float,
         default=1.0,
     )
-    minSourcesForWcsFit: pexConfig.Field = pexConfig.Field(
-        doc="Minimum number of blind detections required to attempt WCS refit.",
-        dtype=int,
-        default=3,
-    )
     astromRefFilter: pexConfig.Field = pexConfig.Field(
         doc=(
             "Filter name to read from the reference catalog when fitting the "
@@ -2389,11 +2308,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         }
 
         detect_cfg = dict(
-            instConfigFile=self.config.instConfigFile,
-            edgeMargin=self.config.edgeMargin,
-            detectionBinning=self.config.detectionBinning,
-            peakMinDistanceFactor=self.config.peakMinDistanceFactor,
-            peakExcludeBorderFactor=self.config.peakExcludeBorderFactor,
             apertureOuterMarginFrac=self.config.apertureOuterMarginFrac,
             apertureInnerBufferFrac=self.config.apertureInnerBufferFrac,
             bkgAnnulusInnerFrac=self.config.bkgAnnulusInnerFrac,
@@ -2486,17 +2400,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # flux aliases -- so the stub needs no anyFilterMapsToThis.
         astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
         astrom_stub_loader.config.pixelMargin = 0
+        self.astromTask.setRefObjLoader(astrom_stub_loader)
 
         astrom_cfg = dict(
-            astrom_task_config=self.astromTask.config,
-            astrom_ref_obj_loader=astrom_stub_loader,
             detect_cfg=detect_cfg,
             maxFitScatter=self.config.maxFitScatter,
-            minSourcesForWcsFit=self.config.minSourcesForWcsFit,
             donut_selector_config=self.donutSelector.config,
             astromRefFilter=self.config.astromRefFilter,
-            photoRefFilter=self.config.photoRefFilter,
-            photoRefFilterPrefix=self.config.photoRefFilterPrefix,
             resolvedPhotoFilterName=photo_filter_name,
             saveDiagnosticPlot=self.config.savePlots,
         )
@@ -2505,6 +2415,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["isr_task"] = self.isrTask
         _CALIB_STORE["bkg_task"] = self.subtractBackground
         _CALIB_STORE["blind_detect_task"] = self.blindDetect
+        _CALIB_STORE["astrom_task"] = self.astromTask
         _CALIB_STORE["camera"] = camera
         _CALIB_STORE["detect_cfg"] = detect_cfg
         _CALIB_STORE["astrom_cfg"] = astrom_cfg
