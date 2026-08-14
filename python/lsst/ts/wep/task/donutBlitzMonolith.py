@@ -474,8 +474,6 @@ def _select_candidate_donuts(
     blindDetections: QTable,
     catalog_centroids: tuple | None,
     cutout_cfg: dict,
-    radius: float,
-    obscuration: float,
 ) -> tuple | None:
     """Filter centroids by flux measurement and quality criteria.
 
@@ -495,10 +493,6 @@ def _select_candidate_donuts(
     cutout_cfg : dict
         Config dict with ``maxDonuts``, ``stampSize``, ``minStampSnr``,
         ``innerFluxFractionCut``, ``outerFluxFractionCut``.
-    radius : float
-        Expected outer donut radius in pixels.
-    obscuration : float
-        Central obscuration fraction.
 
     Returns
     -------
@@ -506,6 +500,8 @@ def _select_candidate_donuts(
         If candidates found: ``(centroid_x, centroid_y, source_ids, flux_arr,
         inner_frac_arr, outer_frac_arr, outer_sector_max_arr)``; else ``None``.
     """
+    donutRadius = _INSTRUMENT.donutRadius
+    obscuration = _INSTRUMENT.obscuration
     maxDonuts = cutout_cfg["maxDonuts"]
     apertureOuterMarginFrac = cutout_cfg["apertureOuterMarginFrac"]
     apertureInnerBufferFrac = cutout_cfg["apertureInnerBufferFrac"]
@@ -527,7 +523,7 @@ def _select_candidate_donuts(
     measTable = _measureFlux(
         peaks,
         postIsr,
-        radius,
+        donutRadius,
         obscuration,
         apertureOuterMarginFrac,
         apertureInnerBufferFrac,
@@ -571,8 +567,6 @@ def _cut_and_evaluate_stamps(
     all_photo_cat: tuple | None,
     all_astrom_cat: tuple | None,
     cutout_cfg: dict,
-    radius: float,
-    obscuration: float,
     blindDetections: QTable,
 ) -> tuple:
     """Cut stamps and evaluate rejection criteria for candidate donuts.
@@ -598,10 +592,6 @@ def _cut_and_evaluate_stamps(
     cutout_cfg : dict
         Config dict with ``stampSize``, ``minStampSnr``,
         ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
-    radius : float
-        Expected outer donut radius in pixels.
-    obscuration : float
-        Central obscuration fraction.
     blindDetections : QTable
         Centroid table from `_blindDetect`, used for catalog_centroid_offset_px.
 
@@ -612,6 +602,8 @@ def _cut_and_evaluate_stamps(
     rejected_donuts : list of dict
         Rejected donut stamp dicts, sorted brightest-first.
     """
+    donutRadius = _INSTRUMENT.donutRadius
+    obscuration = _INSTRUMENT.obscuration
     # Unpack selected centroids
     centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_max_arr = (
         selected_centroids
@@ -637,21 +629,21 @@ def _cut_and_evaluate_stamps(
     # Grid matches the cut stamp below: 2*half+1 px, centroid pixel exactly centered.
     _sgy, _sgx = np.mgrid[-half : half + 1, -half : half + 1]
     _sr = np.hypot(_sgx, _sgy)
-    _s_main = (_sr < radius * apertureOuterMarginFrac) & (_sr > radius * obscuration)
-    _s_bkg = (_sr < radius * obscuration * apertureInnerBufferFrac) | (
-        (_sr > radius * bkgAnnulusInnerFrac) & (_sr < radius * bkgAnnulusOuterFrac)
+    _s_main = (_sr < donutRadius * apertureOuterMarginFrac) & (_sr > donutRadius * obscuration)
+    _s_bkg = (_sr < donutRadius * obscuration * apertureInnerBufferFrac) | (
+        (_sr > donutRadius * bkgAnnulusInnerFrac) & (_sr < donutRadius * bkgAnnulusOuterFrac)
     )
     _s_n_main = int(np.sum(_s_main))
 
     # Fallback annular masks: only needed for selector-rejected centroids,
     # which never pass through _measureFlux and so have no precomputed
     # inner_frac/outer_frac/outer_sector_max to reuse.
-    _mhalf = int(radius * bkgAnnulusOuterFrac)
+    _mhalf = int(donutRadius * bkgAnnulusOuterFrac)
     _gy, _gx = np.mgrid[-_mhalf : _mhalf + 1, -_mhalf : _mhalf + 1]
     _r = np.hypot(_gx, _gy)
-    _main_mask = (_r < radius * apertureOuterMarginFrac) & (_r > radius * obscuration)
-    _inner_mask = _r < radius * obscuration * apertureInnerBufferFrac
-    _outer_mask = (_r > radius * bkgAnnulusInnerFrac) & (_r < radius * bkgAnnulusOuterFrac)
+    _main_mask = (_r < donutRadius * apertureOuterMarginFrac) & (_r > donutRadius * obscuration)
+    _inner_mask = _r < donutRadius * obscuration * apertureInnerBufferFrac
+    _outer_mask = (_r > donutRadius * bkgAnnulusInnerFrac) & (_r < donutRadius * bkgAnnulusOuterFrac)
     _sector_angle = np.arctan2(_gy, _gx)
 
     def _cut_stamp_dict(
@@ -774,7 +766,7 @@ def _cut_and_evaluate_stamps(
             outer_frac=outer_frac,
             outer_sector_max=outer_sector_max,
             field_dist_deg=_field_dist_deg,
-            donut_radius=radius,
+            donut_radius=donutRadius,
             obscuration=obscuration,
             snr=stamp_snr,
             bkg_level=_s_bkg_med,
@@ -809,7 +801,7 @@ def _cut_and_evaluate_stamps(
     # Match each centroid to the nearest blind detection for catalog_centroid_offset_px.
     _blind_cx = np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
     _blind_cy = np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
-    _match_tol = radius * 0.5
+    _match_tol = donutRadius * 0.5
 
     def _nearest_blind(cx_f, cy_f):
         if len(_blind_cx) == 0:
@@ -864,8 +856,6 @@ def _cutStamps(
     all_photo_cat: tuple | None,
     all_astrom_cat: tuple | None,
     cutout_cfg: dict,
-    radius: float,
-    obscuration: float,
 ) -> tuple:
     """Measure image fluxes, apply quality cuts, and cut postISR stamps.
 
@@ -892,10 +882,6 @@ def _cutStamps(
     cutout_cfg : dict
         Config dict with ``stampSize``, ``minStampSnr``,
         ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
-    radius : float
-        Expected outer donut radius in pixels.
-    obscuration : float
-        Central obscuration fraction.
 
     Returns
     -------
@@ -906,7 +892,10 @@ def _cutStamps(
     """
     # Phase 1: Filter centroids by flux and quality
     selected_centroids = _select_candidate_donuts(
-        postIsr, blindDetections, catalog_centroids, cutout_cfg, radius, obscuration
+        postIsr,
+        blindDetections,
+        catalog_centroids,
+        cutout_cfg,
     )
     if selected_centroids is None:
         return [], []
@@ -919,8 +908,6 @@ def _cutStamps(
         all_photo_cat,
         all_astrom_cat,
         cutout_cfg,
-        radius,
-        obscuration,
         blindDetections,
     )
 
@@ -1054,8 +1041,6 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         all_photo_cat,
         all_astrom_cat,
         cutout_cfg,
-        _INSTRUMENT.donutRadius,
-        _INSTRUMENT.obscuration,
     )
 
     t6 = time.perf_counter()
