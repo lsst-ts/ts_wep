@@ -318,31 +318,28 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
     return sourceCat
 
 
-def _selectFromPhotoCat(
+def _selectFromCatalog(
     wcs: SkyWcs | None,
     postIsr: Exposure,
     cutout_cfg: dict,
 ) -> tuple:
-    """Select donut positions from the pre-loaded photometry refcat.
+    """Select donut positions from the pre-loaded refcat.
 
-    Reprojects the refcat through ``wcs``, runs
-    `DonutSourceSelectorTask`, and builds diagnostic overlay arrays.  Only
-    executes the catalog path when ``wcs`` is not ``None``; otherwise
-    all outputs are ``None`` and the caller falls back to blind detections.
+    Reprojects the refcat through ``wcs``, runs `DonutSourceSelectorTask`,
+    and extracts selected and rejected sources.  Only executes when ``wcs``
+    is not ``None``; otherwise returns all ``None`` outputs.
 
     Parameters
     ----------
     wcs : `lsst.afw.geom.SkyWcs` or None
-        Refitted WCS from `_refitWcs`.  If ``None`` the function returns
+        Refitted WCS from astrometry.  If ``None`` the function returns
         immediately with all ``None`` outputs.
     postIsr : Exposure
         Post-ISR science exposure supplying the detector geometry, and the
         detector name used to look up the pre-loaded refcat in
         ``_CALIB_STORE``.
     cutout_cfg : dict
-        Config keys used here: ``donut_selector_config``,
-        ``resolvedPhotoFilterName``, ``astromRefFilter``,
-        ``saveDiagnosticPlot``.
+        Config dict with ``donut_selector_config`` and ``resolvedPhotoFilterName``.
 
     Returns
     -------
@@ -353,37 +350,22 @@ def _selectFromPhotoCat(
         ``(centroid_x, centroid_y, flux, source_ids, rejection_reasons)`` for
         the brightest selector-rejected sources (for diagnostic display), or
         ``None``.
-    all_photo_cat : tuple or None
-        ``(x, y, mag)`` arrays for the full photometry refcat projected through
-        ``wcs`` (for diagnostic overplotting), or ``None``.
-    all_astrom_cat : tuple or None
-        ``(x, y, mag)`` arrays for the full astrometry refcat projected through
-        ``wcs`` (for diagnostic overplotting), or ``None``.
     error_str : str or None
         Human-readable error from the catalog selection step, or ``None``.
     """
     detector = postIsr.getDetector()
-    # One shared load per sensor: astrometry reads its fluxField from it, donut
-    # selection reads the per-band flux column off the same catalog.
     load_result = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
-    photo_load_result = load_result
-    astrom_load_result = load_result
-    save_diag = cutout_cfg.get("saveDiagnosticPlot", True)
 
     catalog_centroids = None
     sel_rejected_centroids = None
-    all_photo_cat = None
-    all_astrom_cat = None
     cat_select_error = None
     sel_rejected_refcat = None
     sel_rejection_reasons = np.array([], dtype=object)
     filterName = cutout_cfg.get("resolvedPhotoFilterName", "")
 
-    if photo_load_result is not None and wcs is not None:
+    if load_result is not None and wcs is not None:
         try:
-            # Reproject catalog sky coords through the refitted WCS so stamp
-            # centroids are consistent with the corrected pointing.
-            refCat = photo_load_result.refCat.copy(deep=True)
+            refCat = load_result.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refCat)
             if not refCat.isContiguous():
                 refCat = refCat.copy(deep=True)
@@ -402,59 +384,90 @@ def _selectFromPhotoCat(
                     np.array(refSelection["id"]),
                 )
 
-            if save_diag:
-                with np.errstate(invalid="ignore", divide="ignore"):
-                    _flux = np.array(refCat[f"{filterName}_flux"])
-                    _mag = -2.5 * np.log10(_flux) + 31.4
-                all_photo_cat = (
-                    np.array(refCat["centroid_x"]),
-                    np.array(refCat["centroid_y"]),
-                    _mag,
+            # Extract top rejected sources for diagnostic display.
+            REJECTED_CANDIDATES = 10
+            if sel_rejected_refcat is not None and len(sel_rejected_refcat) > 0:
+                _rrej_flux = np.array(sel_rejected_refcat[f"{filterName}_flux"])
+                _rrej_order = np.argsort(_rrej_flux)[::-1][:REJECTED_CANDIDATES]
+                sel_rejected_centroids = (
+                    np.array(sel_rejected_refcat["centroid_x"])[_rrej_order],
+                    np.array(sel_rejected_refcat["centroid_y"])[_rrej_order],
+                    _rrej_flux[_rrej_order],
+                    np.array(sel_rejected_refcat["id"])[_rrej_order],
+                    sel_rejection_reasons[_rrej_order],
                 )
         except Exception as e:
             cat_select_error = str(e)
             catalog_centroids = None
-            all_photo_cat = None
+            sel_rejected_centroids = None
 
-    # Selector-rejected sources: top REJECTED_CANDIDATES by flux for display.
-    REJECTED_CANDIDATES = 10
-    if save_diag and sel_rejected_refcat is not None and len(sel_rejected_refcat) > 0:
-        try:
-            _rrej_flux = np.array(sel_rejected_refcat[f"{filterName}_flux"])
-            _rrej_order = np.argsort(_rrej_flux)[::-1][:REJECTED_CANDIDATES]
-            sel_rejected_centroids = (
-                np.array(sel_rejected_refcat["centroid_x"])[_rrej_order],
-                np.array(sel_rejected_refcat["centroid_y"])[_rrej_order],
-                _rrej_flux[_rrej_order],
-                np.array(sel_rejected_refcat["id"])[_rrej_order],
-                sel_rejection_reasons[_rrej_order],
-            )
-        except Exception:
-            pass
+    return catalog_centroids, sel_rejected_centroids, cat_select_error
 
-    # Astrometry refcat overlay (centroids via refitted WCS).
-    if astrom_load_result is not None and save_diag and wcs is not None:
+
+def _buildCatalogOverlay(
+    wcs: SkyWcs | None,
+    postIsr: Exposure,
+    cutout_cfg: dict,
+) -> tuple:
+    """Build diagnostic overlay from refcat with photo and astrom magnitudes.
+
+    Reprojects the refcat through ``wcs`` and computes both photometry and
+    astrometry filter magnitudes for diagnostic visualization.  Only executes
+    when ``wcs`` is not ``None``; otherwise returns ``None``.
+
+    Parameters
+    ----------
+    wcs : `lsst.afw.geom.SkyWcs` or None
+        Refitted WCS.  If ``None`` the function returns immediately with
+        ``None`` output.
+    postIsr : Exposure
+        Post-ISR science exposure supplying the detector geometry, and the
+        detector name used to look up the pre-loaded refcat in
+        ``_CALIB_STORE``.
+    cutout_cfg : dict
+        Config dict with ``resolvedPhotoFilterName`` and ``astromRefFilter``.
+
+    Returns
+    -------
+    refcat_overlay : tuple or None
+        ``(x, y, photo_mag, astrom_mag)`` arrays from the full refcat
+        projected through ``wcs``, or ``None`` if the path was skipped or failed.
+    error_str : str or None
+        Human-readable error, or ``None``.
+    """
+    detector = postIsr.getDetector()
+    load_result = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
+
+    refcat_overlay = None
+    overlay_error = None
+
+    if load_result is not None and wcs is not None:
         try:
-            _astrom_cat = astrom_load_result.refCat.copy(deep=True)
-            afwTable.updateRefCentroids(wcs, _astrom_cat)
-            _flux_field = f"{cutout_cfg['astromRefFilter']}_flux"
+            refCat = load_result.refCat.copy(deep=True)
+            afwTable.updateRefCentroids(wcs, refCat)
+
+            # Photometry magnitude
+            photo_filter = cutout_cfg.get("resolvedPhotoFilterName", "")
+            photo_flux = np.array(refCat[f"{photo_filter}_flux"])
             with np.errstate(invalid="ignore", divide="ignore"):
-                _astrom_mag = -2.5 * np.log10(np.array(_astrom_cat[_flux_field])) + 31.4
-            all_astrom_cat = (
-                np.array(_astrom_cat["centroid_x"]),
-                np.array(_astrom_cat["centroid_y"]),
-                _astrom_mag,
-            )
-        except Exception:
-            pass
+                photo_mag = -2.5 * np.log10(photo_flux) + 31.4
 
-    return (
-        catalog_centroids,
-        sel_rejected_centroids,
-        all_photo_cat,
-        all_astrom_cat,
-        cat_select_error,
-    )
+            # Astrometry magnitude (same catalog, different filter)
+            astrom_filter = cutout_cfg.get("astromRefFilter", "")
+            astrom_flux = np.array(refCat[f"{astrom_filter}_flux"])
+            with np.errstate(invalid="ignore", divide="ignore"):
+                astrom_mag = -2.5 * np.log10(astrom_flux) + 31.4
+
+            refcat_overlay = (
+                np.array(refCat["centroid_x"]),
+                np.array(refCat["centroid_y"]),
+                photo_mag,
+                astrom_mag,
+            )
+        except Exception as e:
+            overlay_error = str(e)
+
+    return refcat_overlay, overlay_error
 
 
 def _select_candidate_donuts(
@@ -1007,17 +1020,27 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         )
 
     t4 = time.perf_counter()
-    (
-        catalog_centroids,
-        sel_rejected_centroids,
-        all_photo_cat,
-        all_astrom_cat,
-        cat_err,
-    ) = _selectFromPhotoCat(
+    catalog_centroids, sel_rejected_centroids, cat_err = _selectFromCatalog(
         wcs,
         postIsr,
         cutout_cfg,
     )
+
+    # --- DIAGNOSTIC OVERLAY ---
+    refcat_overlay = None
+    if cutout_cfg.get("saveDiagnosticPlot", True):
+        refcat_overlay, overlay_err = _buildCatalogOverlay(wcs, postIsr, cutout_cfg)
+        if overlay_err and not cat_err:
+            cat_err = overlay_err
+
+    # Unpack overlay for backward compatibility with _cutStamps signature
+    # TODO: update _cutStamps to accept refcat_overlay directly
+    all_photo_cat = None
+    all_astrom_cat = None
+    if refcat_overlay is not None:
+        x, y, photo_mag, astrom_mag = refcat_overlay
+        all_photo_cat = (x, y, photo_mag)
+        all_astrom_cat = (x, y, astrom_mag)
 
     t5 = time.perf_counter()
     donuts, rejected_donuts = _cutStamps(
