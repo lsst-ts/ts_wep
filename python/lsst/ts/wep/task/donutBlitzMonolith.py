@@ -177,66 +177,6 @@ def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
     return np.where((r < radius) & (r >= radius * innerFrac), 1.0, 0.0)
 
 
-def _detectPeaks(
-    exposure: Exposure,
-    radius: float,
-    obscuration: float,
-    detectionBinning: int,
-    peakMinDistanceFactor: float,
-    peakExcludeBorderFactor: float,
-) -> np.ndarray:
-    """Detect donut centroids via annular template cross-correlation.
-
-    The image is optionally binned, histogram-equalised, then cross-correlated
-    with a binary annular template matched to the donut size.  Local maxima of
-    the correlation map are returned as pixel coordinates in the un-binned
-    frame.
-
-    Parameters
-    ----------
-    exposure : Exposure
-        Science exposure.
-    radius : float
-        Expected outer donut radius in pixels (un-binned).
-    obscuration : float
-        Central obscuration fraction (inner radius / outer radius).
-    detectionBinning : int
-        Pixel binning factor applied before correlation (1 = no binning).
-    peakMinDistanceFactor : float
-        Minimum peak separation as a multiple of the binned donut radius.
-    peakExcludeBorderFactor : float
-        Border exclusion width as a multiple of the binned donut radius.
-
-    Returns
-    -------
-    np.ndarray
-        Array of shape ``(N, 2)`` containing ``(row, col)`` centroids in
-        un-binned pixel coordinates.
-    """
-    binning = detectionBinning
-    radius_binned = radius / binning
-    template = _buildAnnularTemplate(radius_binned, innerFrac=obscuration)
-
-    if binning > 1:
-        binnedImg = afwMath.binImage(exposure.image, binning)
-        arr = binnedImg.array
-    else:
-        arr = exposure.image.array
-
-    heq = np.digitize(arr, np.nanquantile(arr, np.linspace(0, 1, 256)))
-    det = correlate(heq.astype(float), template, mode="same")
-    peaks = peak_local_max(
-        det,
-        min_distance=int(peakMinDistanceFactor * radius_binned),
-        exclude_border=int(peakExcludeBorderFactor * radius_binned),
-    )
-
-    if binning > 1:
-        peaks = peaks * binning
-
-    return peaks
-
-
 def _measureFlux(
     peaks: np.ndarray,
     exposure: Exposure,
@@ -1829,30 +1769,36 @@ class BlindDetect(pipeBase.Task):
         config = self.config
 
         trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
-        exposureTrim = exposure[trimmedBBox]
-
-        peaks = _detectPeaks(
-            exposureTrim,
-            _INSTRUMENT.donutRadius,
-            _INSTRUMENT.obscuration,
-            config.detectionBinning,
-            config.peakMinDistanceFactor,
-            config.peakExcludeBorderFactor,
+        binning = config.detectionBinning
+        binned_donut_radius = _INSTRUMENT.donutRadius / binning
+        template = _buildAnnularTemplate(
+            binned_donut_radius,
+            innerFrac=_INSTRUMENT.obscuration
         )
 
-        if len(peaks) == 0:
-            detections = QTable(names=["centroid_x", "centroid_y"], dtype=[float, float])
+        if binning > 1:
+            binnedImg = afwMath.binImage(exposure[trimmedBBox].image, binning)
+            arr = binnedImg.array
         else:
-            xOffset = trimmedBBox.getMinX()
-            yOffset = trimmedBBox.getMinY()
-            detections = QTable(
+            arr = exposure[trimmedBBox].image.array
+
+        # Detect on the histogram equalized image
+        heq = np.digitize(arr, np.nanquantile(arr, np.linspace(0, 1, 256)))
+        det = correlate(heq.astype(float), template, mode="same")
+        peaks = peak_local_max(
+            det,
+            min_distance=int(config.peakMinDistanceFactor * binned_donut_radius),
+            exclude_border=int(config.peakExcludeBorderFactor * binned_donut_radius),
+        )
+        peaks *= binning
+        return pipeBase.Struct(
+            detections=QTable(
                 {
-                    "centroid_x": peaks[:, 1] + xOffset,
-                    "centroid_y": peaks[:, 0] + yOffset,
+                    "centroid_x": peaks[:, 1] + trimmedBBox.getMinX(),
+                    "centroid_y": peaks[:, 0] + trimmedBBox.getMinY(),
                 }
             )
-
-        return pipeBase.Struct(detections=detections)
+        )
 
 
 class DonutBlitzMonolithTaskConnections(
