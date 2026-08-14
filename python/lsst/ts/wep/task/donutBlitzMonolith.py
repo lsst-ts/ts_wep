@@ -517,71 +517,45 @@ def _selectFromPhotoCat(
     )
 
 
-def _cutStamps(
+def _select_candidate_donuts(
     postIsr: Exposure,
     blindDetections: QTable,
     catalog_centroids: tuple | None,
-    sel_rejected_centroids: tuple | None,
-    all_photo_cat: tuple | None,
-    all_astrom_cat: tuple | None,
     astrom_cfg: dict,
     radius: float,
     obscuration: float,
-) -> tuple:
-    """Measure image fluxes, apply quality cuts, and cut postISR stamps.
+) -> tuple | None:
+    """Filter centroids by flux measurement and quality criteria.
 
-    Uses ``catalog_centroids`` (refcat path) when available; falls back to
-    ``blindDetections`` otherwise.  Calls `_measureFlux` once on the full
-    ``postIsr`` image, then filters on SAT mask, inner/outer flux fraction,
-    and SNR before cutting stamps.
+    Resolves the centroid list (catalog or blind), measures flux on the full
+    image, and applies quality cuts (SAT, inner/outer flux fraction, SNR).
 
     Parameters
     ----------
     postIsr : Exposure
-        Background-subtracted post-ISR science exposure.  Its detector name is
-        stored in each output donut dict.
+        Background-subtracted post-ISR science exposure.
     blindDetections : QTable
         Centroid table from `_blindDetect`.  Used as fallback when
         ``catalog_centroids`` is ``None``.
     catalog_centroids : tuple or None
         ``(centroid_x, centroid_y, source_ids)`` from `_selectFromPhotoCat`,
         or ``None`` to trigger the blind-detection fallback.
-    sel_rejected_centroids : tuple or None
-        Selector-rejected sources from `_selectFromPhotoCat`, passed through
-        to the rejected-stamp diagnostic display.
-    all_photo_cat : tuple or None
-        ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
-    all_astrom_cat : tuple or None
-        ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
     astrom_cfg : dict
-        Config dict supplying ``detect_cfg`` (``maxDonuts``, ``stampSize``,
-        ``minStampSnr``, ``innerFluxFractionCut``, ``outerFluxFractionCut``,
-        ``edgeMargin``) and SAT-mask lookup.
+        Config dict with ``detect_cfg`` (``maxDonuts``, ``stampSize``,
+        ``minStampSnr``, ``innerFluxFractionCut``, ``outerFluxFractionCut``).
     radius : float
         Expected outer donut radius in pixels.
     obscuration : float
-        Central obscuration fraction (inner radius / outer radius).
+        Central obscuration fraction.
 
     Returns
     -------
-    donuts : list of dict
-        Accepted donut stamp dicts, sorted brightest-first and capped at
-        ``maxDonuts``.
-    rejected_donuts : list of dict
-        Rejected donut stamp dicts (SAT, field-distance, flux-fraction, SNR,
-        and selector-rejected sources), sorted brightest-first.  Uncapped;
-        callers that render a fixed number of columns (e.g. the diagnostic
-        plot) are responsible for slicing.
+    tuple or None
+        If candidates found: ``(centroid_x, centroid_y, source_ids, flux_arr,
+        inner_frac_arr, outer_frac_arr, outer_sector_max_arr)``; else ``None``.
     """
     detect_cfg = astrom_cfg["detect_cfg"]
     maxDonuts = detect_cfg["maxDonuts"]
-    detector = postIsr.getDetector()
-    band = postIsr.filter.bandLabel
-    visit_id = postIsr.getInfo().getVisitInfo().id
-    det_id = detector.getId()
-    n_quarter = detector.getOrientation().getNQuarter()
-    stampSize = detect_cfg["stampSize"]
-    half = stampSize // 2
     apertureOuterMarginFrac = detect_cfg["apertureOuterMarginFrac"]
     apertureInnerBufferFrac = detect_cfg["apertureInnerBufferFrac"]
     bkgAnnulusInnerFrac = detect_cfg["bkgAnnulusInnerFrac"]
@@ -592,7 +566,7 @@ def _cutStamps(
         cat_cx, cat_cy, source_ids = catalog_centroids
     else:
         if len(blindDetections) == 0:
-            return [], []
+            return None
         cat_cx = np.array(blindDetections["centroid_x"])
         cat_cy = np.array(blindDetections["centroid_y"])
         source_ids = np.arange(len(cat_cx), dtype=np.int64)
@@ -613,7 +587,7 @@ def _cutStamps(
     measTable = measTable[valid_mask]
     source_ids = source_ids[valid_mask]
     if len(measTable) == 0:
-        return [], []
+        return None
     with np.errstate(invalid="ignore", divide="ignore"):
         innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < detect_cfg["innerFracThreshold"]
         outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < detect_cfg["outerFracThreshold"]
@@ -622,7 +596,7 @@ def _cutStamps(
     measTable = measTable[qual_mask]
     source_ids = source_ids[qual_mask]
     if len(measTable) == 0:
-        return [], []
+        return None
     flux_arr = np.array(measTable["flux"])
     inner_frac_arr = np.array(measTable["inner_flux"]) / flux_arr
     outer_frac_arr = np.array(measTable["outer_flux"]) / flux_arr
@@ -635,6 +609,75 @@ def _cutStamps(
     outer_frac_arr = outer_frac_arr[order]
     outer_sector_max_arr = outer_sector_max_arr[order]
     source_ids = source_ids[order]
+
+    return centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_max_arr
+
+
+def _cut_and_evaluate_stamps(
+    postIsr: Exposure,
+    selected_centroids: tuple,
+    sel_rejected_centroids: tuple | None,
+    all_photo_cat: tuple | None,
+    all_astrom_cat: tuple | None,
+    astrom_cfg: dict,
+    radius: float,
+    obscuration: float,
+    blindDetections: QTable,
+) -> tuple:
+    """Cut stamps and evaluate rejection criteria for candidate donuts.
+
+    Takes filtered centroids and flux measurements, precomputes annular masks,
+    cuts stamps, computes per-stamp metrics, and evaluates rejection criteria
+    (SAT, field distance, flux fractions, SNR).
+
+    Parameters
+    ----------
+    postIsr : Exposure
+        Background-subtracted post-ISR science exposure.
+    selected_centroids : tuple
+        ``(centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr,
+        outer_frac_arr, outer_sector_max_arr)`` from `_select_candidate_donuts`.
+    sel_rejected_centroids : tuple or None
+        Selector-rejected sources from `_selectFromPhotoCat`, passed through
+        to the rejected-stamp diagnostic display.
+    all_photo_cat : tuple or None
+        ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
+    all_astrom_cat : tuple or None
+        ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
+    astrom_cfg : dict
+        Config dict with ``detect_cfg`` (``stampSize``, ``minStampSnr``,
+        ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``).
+    radius : float
+        Expected outer donut radius in pixels.
+    obscuration : float
+        Central obscuration fraction.
+    blindDetections : QTable
+        Centroid table from `_blindDetect`, used for catalog_centroid_offset_px.
+
+    Returns
+    -------
+    donuts : list of dict
+        Accepted donut stamp dicts, sorted brightest-first.
+    rejected_donuts : list of dict
+        Rejected donut stamp dicts, sorted brightest-first.
+    """
+    # Unpack selected centroids
+    centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_max_arr = (
+        selected_centroids
+    )
+
+    detect_cfg = astrom_cfg["detect_cfg"]
+    detector = postIsr.getDetector()
+    band = postIsr.filter.bandLabel
+    visit_id = postIsr.getInfo().getVisitInfo().id
+    det_id = detector.getId()
+    n_quarter = detector.getOrientation().getNQuarter()
+    stampSize = detect_cfg["stampSize"]
+    half = stampSize // 2
+    apertureOuterMarginFrac = detect_cfg["apertureOuterMarginFrac"]
+    apertureInnerBufferFrac = detect_cfg["apertureInnerBufferFrac"]
+    bkgAnnulusInnerFrac = detect_cfg["bkgAnnulusInnerFrac"]
+    bkgAnnulusOuterFrac = detect_cfg["bkgAnnulusOuterFrac"]
 
     # --- Precompute annular masks ---
     arr = postIsr.image.array
@@ -863,6 +906,74 @@ def _cutStamps(
     return donuts, rejected_donuts
 
 
+def _cutStamps(
+    postIsr: Exposure,
+    blindDetections: QTable,
+    catalog_centroids: tuple | None,
+    sel_rejected_centroids: tuple | None,
+    all_photo_cat: tuple | None,
+    all_astrom_cat: tuple | None,
+    astrom_cfg: dict,
+    radius: float,
+    obscuration: float,
+) -> tuple:
+    """Measure image fluxes, apply quality cuts, and cut postISR stamps.
+
+    Orchestrates the two-phase stamp pipeline: candidate selection and stamp
+    cutting.  Uses ``catalog_centroids`` (refcat path) when available; falls
+    back to ``blindDetections`` otherwise.
+
+    Parameters
+    ----------
+    postIsr : Exposure
+        Background-subtracted post-ISR science exposure.
+    blindDetections : QTable
+        Centroid table from `_blindDetect`.  Used as fallback when
+        ``catalog_centroids`` is ``None``.
+    catalog_centroids : tuple or None
+        ``(centroid_x, centroid_y, source_ids)`` from `_selectFromPhotoCat`,
+        or ``None`` to trigger the blind-detection fallback.
+    sel_rejected_centroids : tuple or None
+        Selector-rejected sources from `_selectFromPhotoCat`.
+    all_photo_cat : tuple or None
+        ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
+    all_astrom_cat : tuple or None
+        ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
+    astrom_cfg : dict
+        Config dict with ``detect_cfg``.
+    radius : float
+        Expected outer donut radius in pixels.
+    obscuration : float
+        Central obscuration fraction.
+
+    Returns
+    -------
+    donuts : list of dict
+        Accepted donut stamp dicts, sorted brightest-first.
+    rejected_donuts : list of dict
+        Rejected donut stamp dicts, sorted brightest-first.
+    """
+    # Phase 1: Filter centroids by flux and quality
+    selected_centroids = _select_candidate_donuts(
+        postIsr, blindDetections, catalog_centroids, astrom_cfg, radius, obscuration
+    )
+    if selected_centroids is None:
+        return [], []
+
+    # Phase 2: Cut and evaluate stamps
+    return _cut_and_evaluate_stamps(
+        postIsr,
+        selected_centroids,
+        sel_rejected_centroids,
+        all_photo_cat,
+        all_astrom_cat,
+        astrom_cfg,
+        radius,
+        obscuration,
+        blindDetections,
+    )
+
+
 def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     """Run ISR, background subtraction, blind detection, WCS refit, catalog
     selection, and stamp cutting.
@@ -909,6 +1020,23 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     t2 = time.perf_counter()
     blind_detect_task = _CALIB_STORE["blind_detect_task"]
     blindDetections = blind_detect_task.run(postIsr).detections
+
+    if len(blindDetections) == 0:
+        return {
+            "sensor": sensor_name,
+            "catalog": [],
+            "dispatch_to_arrival": time.time() - t_dispatch,
+            "isr_run": t1 - t0,
+            "bkg_run": t2 - t1,
+            "blind_detect_run": time.perf_counter() - t2,
+            "wcs_refit_run": 0.0,
+            "catalog_select_run": 0.0,
+            "stamp_cut_run": 0.0,
+            "rejected_catalog": [],
+            "scatter_arcsec": None,
+            "wcs_refit_error": "No blind detections",
+            "cat_select_error": None,
+        }
 
     t3 = time.perf_counter()
     astrom_task = _CALIB_STORE["astrom_task"]
