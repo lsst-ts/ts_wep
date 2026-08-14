@@ -322,6 +322,7 @@ def _selectFromCatalog(
     wcs: SkyWcs | None,
     postIsr: Exposure,
     cutout_cfg: dict,
+    refcat_handle,
 ) -> tuple:
     """Select donut positions from the pre-loaded refcat.
 
@@ -335,11 +336,11 @@ def _selectFromCatalog(
         Refitted WCS from astrometry.  If ``None`` the function returns
         immediately with all ``None`` outputs.
     postIsr : Exposure
-        Post-ISR science exposure supplying the detector geometry, and the
-        detector name used to look up the pre-loaded refcat in
-        ``_CALIB_STORE``.
+        Post-ISR science exposure supplying the detector geometry.
     cutout_cfg : dict
         Config dict with ``donut_selector_config`` and ``resolvedPhotoFilterName``.
+    refcat_handle
+        Pre-loaded refcat result from ``_CALIB_STORE["sensor_refcats"]``, or ``None``.
 
     Returns
     -------
@@ -353,8 +354,6 @@ def _selectFromCatalog(
     error_str : str or None
         Human-readable error from the catalog selection step, or ``None``.
     """
-    detector = postIsr.getDetector()
-    load_result = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
 
     catalog_centroids = None
     sel_rejected_centroids = None
@@ -362,10 +361,11 @@ def _selectFromCatalog(
     sel_rejected_refcat = None
     sel_rejection_reasons = np.array([], dtype=object)
     filterName = cutout_cfg.get("resolvedPhotoFilterName", "")
+    detector = postIsr.getDetector()
 
-    if load_result is not None and wcs is not None:
+    if refcat_handle is not None and wcs is not None:
         try:
-            refCat = load_result.refCat.copy(deep=True)
+            refCat = refcat_handle.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refCat)
             if not refCat.isContiguous():
                 refCat = refCat.copy(deep=True)
@@ -408,6 +408,7 @@ def _buildCatalogOverlay(
     wcs: SkyWcs | None,
     postIsr: Exposure,
     cutout_cfg: dict,
+    refcat_handle,
 ) -> tuple:
     """Build diagnostic overlay from refcat with photo and astrom magnitudes.
 
@@ -421,11 +422,11 @@ def _buildCatalogOverlay(
         Refitted WCS.  If ``None`` the function returns immediately with
         ``None`` output.
     postIsr : Exposure
-        Post-ISR science exposure supplying the detector geometry, and the
-        detector name used to look up the pre-loaded refcat in
-        ``_CALIB_STORE``.
+        Post-ISR science exposure supplying the detector geometry.
     cutout_cfg : dict
         Config dict with ``resolvedPhotoFilterName`` and ``astromRefFilter``.
+    refcat_handle
+        Pre-loaded refcat result from ``_CALIB_STORE["sensor_refcats"]``, or ``None``.
 
     Returns
     -------
@@ -435,15 +436,13 @@ def _buildCatalogOverlay(
     error_str : str or None
         Human-readable error, or ``None``.
     """
-    detector = postIsr.getDetector()
-    load_result = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
 
     refcat_overlay = None
     overlay_error = None
 
-    if load_result is not None and wcs is not None:
+    if refcat_handle is not None and wcs is not None:
         try:
-            refCat = load_result.refCat.copy(deep=True)
+            refCat = refcat_handle.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refCat)
 
             # Photometry magnitude
@@ -1020,16 +1019,20 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         )
 
     t4 = time.perf_counter()
+    detector = postIsr.getDetector()
+    refcat_handle = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
+
     catalog_centroids, sel_rejected_centroids, cat_err = _selectFromCatalog(
         wcs,
         postIsr,
         cutout_cfg,
+        refcat_handle,
     )
 
     # --- DIAGNOSTIC OVERLAY ---
     refcat_overlay = None
     if cutout_cfg.get("saveDiagnosticPlot", True):
-        refcat_overlay, overlay_err = _buildCatalogOverlay(wcs, postIsr, cutout_cfg)
+        refcat_overlay, overlay_err = _buildCatalogOverlay(wcs, postIsr, cutout_cfg, refcat_handle)
         if overlay_err and not cat_err:
             cat_err = overlay_err
 
