@@ -321,7 +321,7 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
 def _selectFromPhotoCat(
     wcs: SkyWcs | None,
     postIsr: Exposure,
-    astrom_cfg: dict,
+    cutout_cfg: dict,
 ) -> tuple:
     """Select donut positions from the pre-loaded photometry refcat.
 
@@ -339,7 +339,7 @@ def _selectFromPhotoCat(
         Post-ISR science exposure supplying the detector geometry, and the
         detector name used to look up the pre-loaded refcat in
         ``_CALIB_STORE``.
-    astrom_cfg : dict
+    cutout_cfg : dict
         Config keys used here: ``donut_selector_config``,
         ``resolvedPhotoFilterName``, ``astromRefFilter``,
         ``saveDiagnosticPlot``.
@@ -368,7 +368,7 @@ def _selectFromPhotoCat(
     load_result = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
     photo_load_result = load_result
     astrom_load_result = load_result
-    save_diag = astrom_cfg.get("saveDiagnosticPlot", True)
+    save_diag = cutout_cfg.get("saveDiagnosticPlot", True)
 
     catalog_centroids = None
     sel_rejected_centroids = None
@@ -377,7 +377,7 @@ def _selectFromPhotoCat(
     cat_select_error = None
     sel_rejected_refcat = None
     sel_rejection_reasons = np.array([], dtype=object)
-    filterName = astrom_cfg.get("resolvedPhotoFilterName", "")
+    filterName = cutout_cfg.get("resolvedPhotoFilterName", "")
 
     if photo_load_result is not None and wcs is not None:
         try:
@@ -388,7 +388,7 @@ def _selectFromPhotoCat(
             if not refCat.isContiguous():
                 refCat = refCat.copy(deep=True)
 
-            donutSelectorTask = DonutSourceSelectorTask(config=astrom_cfg["donut_selector_config"])
+            donutSelectorTask = DonutSourceSelectorTask(config=cutout_cfg["donut_selector_config"])
             donutSelection = donutSelectorTask.run(refCat, detector, filterName)
             sel_mask = np.array(donutSelection.selected, dtype=bool)
             refSelection = refCat[sel_mask]
@@ -437,7 +437,7 @@ def _selectFromPhotoCat(
         try:
             _astrom_cat = astrom_load_result.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, _astrom_cat)
-            _flux_field = f"{astrom_cfg['astromRefFilter']}_flux"
+            _flux_field = f"{cutout_cfg['astromRefFilter']}_flux"
             with np.errstate(invalid="ignore", divide="ignore"):
                 _astrom_mag = -2.5 * np.log10(np.array(_astrom_cat[_flux_field])) + 31.4
             all_astrom_cat = (
@@ -461,7 +461,7 @@ def _select_candidate_donuts(
     postIsr: Exposure,
     blindDetections: QTable,
     catalog_centroids: tuple | None,
-    astrom_cfg: dict,
+    cutout_cfg: dict,
     radius: float,
     obscuration: float,
 ) -> tuple | None:
@@ -480,9 +480,9 @@ def _select_candidate_donuts(
     catalog_centroids : tuple or None
         ``(centroid_x, centroid_y, source_ids)`` from `_selectFromPhotoCat`,
         or ``None`` to trigger the blind-detection fallback.
-    astrom_cfg : dict
-        Config dict with ``detect_cfg`` (``maxDonuts``, ``stampSize``,
-        ``minStampSnr``, ``innerFluxFractionCut``, ``outerFluxFractionCut``).
+    cutout_cfg : dict
+        Config dict with ``maxDonuts``, ``stampSize``, ``minStampSnr``,
+        ``innerFluxFractionCut``, ``outerFluxFractionCut``.
     radius : float
         Expected outer donut radius in pixels.
     obscuration : float
@@ -494,12 +494,11 @@ def _select_candidate_donuts(
         If candidates found: ``(centroid_x, centroid_y, source_ids, flux_arr,
         inner_frac_arr, outer_frac_arr, outer_sector_max_arr)``; else ``None``.
     """
-    detect_cfg = astrom_cfg["detect_cfg"]
-    maxDonuts = detect_cfg["maxDonuts"]
-    apertureOuterMarginFrac = detect_cfg["apertureOuterMarginFrac"]
-    apertureInnerBufferFrac = detect_cfg["apertureInnerBufferFrac"]
-    bkgAnnulusInnerFrac = detect_cfg["bkgAnnulusInnerFrac"]
-    bkgAnnulusOuterFrac = detect_cfg["bkgAnnulusOuterFrac"]
+    maxDonuts = cutout_cfg["maxDonuts"]
+    apertureOuterMarginFrac = cutout_cfg["apertureOuterMarginFrac"]
+    apertureInnerBufferFrac = cutout_cfg["apertureInnerBufferFrac"]
+    bkgAnnulusInnerFrac = cutout_cfg["bkgAnnulusInnerFrac"]
+    bkgAnnulusOuterFrac = cutout_cfg["bkgAnnulusOuterFrac"]
 
     # --- Resolve centroid list ---
     if catalog_centroids is not None:
@@ -529,9 +528,9 @@ def _select_candidate_donuts(
     if len(measTable) == 0:
         return None
     with np.errstate(invalid="ignore", divide="ignore"):
-        innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < detect_cfg["innerFracThreshold"]
-        outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < detect_cfg["outerFracThreshold"]
-    snrOk = measTable["snr"] > detect_cfg["snrThreshold"]
+        innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < cutout_cfg["innerFracThreshold"]
+        outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < cutout_cfg["outerFracThreshold"]
+    snrOk = measTable["snr"] > cutout_cfg["minStampSnr"]
     qual_mask = innerOk & outerOk & snrOk
     measTable = measTable[qual_mask]
     source_ids = source_ids[qual_mask]
@@ -559,7 +558,7 @@ def _cut_and_evaluate_stamps(
     sel_rejected_centroids: tuple | None,
     all_photo_cat: tuple | None,
     all_astrom_cat: tuple | None,
-    astrom_cfg: dict,
+    cutout_cfg: dict,
     radius: float,
     obscuration: float,
     blindDetections: QTable,
@@ -584,9 +583,9 @@ def _cut_and_evaluate_stamps(
         ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
     all_astrom_cat : tuple or None
         ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
-    astrom_cfg : dict
-        Config dict with ``detect_cfg`` (``stampSize``, ``minStampSnr``,
-        ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``).
+    cutout_cfg : dict
+        Config dict with ``stampSize``, ``minStampSnr``,
+        ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
     radius : float
         Expected outer donut radius in pixels.
     obscuration : float
@@ -606,18 +605,17 @@ def _cut_and_evaluate_stamps(
         selected_centroids
     )
 
-    detect_cfg = astrom_cfg["detect_cfg"]
     detector = postIsr.getDetector()
     band = postIsr.filter.bandLabel
     visit_id = postIsr.getInfo().getVisitInfo().id
     det_id = detector.getId()
     n_quarter = detector.getOrientation().getNQuarter()
-    stampSize = detect_cfg["stampSize"]
+    stampSize = cutout_cfg["stampSize"]
     half = stampSize // 2
-    apertureOuterMarginFrac = detect_cfg["apertureOuterMarginFrac"]
-    apertureInnerBufferFrac = detect_cfg["apertureInnerBufferFrac"]
-    bkgAnnulusInnerFrac = detect_cfg["bkgAnnulusInnerFrac"]
-    bkgAnnulusOuterFrac = detect_cfg["bkgAnnulusOuterFrac"]
+    apertureOuterMarginFrac = cutout_cfg["apertureOuterMarginFrac"]
+    apertureInnerBufferFrac = cutout_cfg["apertureInnerBufferFrac"]
+    bkgAnnulusInnerFrac = cutout_cfg["bkgAnnulusInnerFrac"]
+    bkgAnnulusOuterFrac = cutout_cfg["bkgAnnulusOuterFrac"]
 
     # --- Precompute annular masks ---
     arr = postIsr.image.array
@@ -779,10 +777,10 @@ def _cut_and_evaluate_stamps(
             saturated=saturated,
         )
 
-    inner_thr = detect_cfg["innerFracThreshold"]
-    outer_thr = detect_cfg["outerFracThreshold"]
-    max_field_dist = detect_cfg["maxFieldDist"]
-    min_stamp_snr = detect_cfg["minStampSnr"]
+    inner_thr = cutout_cfg["innerFracThreshold"]
+    outer_thr = cutout_cfg["outerFracThreshold"]
+    max_field_dist = cutout_cfg["maxFieldDist"]
+    min_stamp_snr = cutout_cfg["minStampSnr"]
 
     def _append_reject_reasons(d):
         if d["saturated"]:
@@ -853,7 +851,7 @@ def _cutStamps(
     sel_rejected_centroids: tuple | None,
     all_photo_cat: tuple | None,
     all_astrom_cat: tuple | None,
-    astrom_cfg: dict,
+    cutout_cfg: dict,
     radius: float,
     obscuration: float,
 ) -> tuple:
@@ -879,8 +877,9 @@ def _cutStamps(
         ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
     all_astrom_cat : tuple or None
         ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
-    astrom_cfg : dict
-        Config dict with ``detect_cfg``.
+    cutout_cfg : dict
+        Config dict with ``stampSize``, ``minStampSnr``,
+        ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
     radius : float
         Expected outer donut radius in pixels.
     obscuration : float
@@ -895,7 +894,7 @@ def _cutStamps(
     """
     # Phase 1: Filter centroids by flux and quality
     selected_centroids = _select_candidate_donuts(
-        postIsr, blindDetections, catalog_centroids, astrom_cfg, radius, obscuration
+        postIsr, blindDetections, catalog_centroids, cutout_cfg, radius, obscuration
     )
     if selected_centroids is None:
         return [], []
@@ -907,14 +906,14 @@ def _cutStamps(
         sel_rejected_centroids,
         all_photo_cat,
         all_astrom_cat,
-        astrom_cfg,
+        cutout_cfg,
         radius,
         obscuration,
         blindDetections,
     )
 
 
-def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
+def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     """Run ISR, background subtraction, blind detection, WCS refit, catalog
     selection, and stamp cutting.
 
@@ -942,6 +941,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     """
     t_arrival = time.time()
     entry = _CALIB_STORE[sensor_name]
+    cutout_cfg = _CALIB_STORE["cutout_cfg"]
 
     t0 = time.perf_counter()
     isr_task = _CALIB_STORE["isr_task"]
@@ -980,7 +980,6 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
 
     t3 = time.perf_counter()
     astrom_task = _CALIB_STORE["astrom_task"]
-    astrom_cfg = _CALIB_STORE["astrom_cfg"]
     scatter_arcsec = None
     wcs = None
     wcs_err = None
@@ -991,10 +990,10 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
             load_result=_CALIB_STORE.get("sensor_refcats", {}).get(sensor_name),
         )
         scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
-        if scatter_arcsec < astrom_cfg["maxFitScatter"]:
+        if scatter_arcsec < cutout_cfg["maxFitScatter"]:
             wcs = postIsr.getWcs()
         else:
-            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {astrom_cfg["maxFitScatter"]}"'
+            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {cutout_cfg["maxFitScatter"]}"'
     except Exception as exc:
         wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
         logging.getLogger(__name__).warning(
@@ -1017,7 +1016,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
     ) = _selectFromPhotoCat(
         wcs,
         postIsr,
-        astrom_cfg,
+        cutout_cfg,
     )
 
     t5 = time.perf_counter()
@@ -1028,7 +1027,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
         sel_rejected_centroids,
         all_photo_cat,
         all_astrom_cat,
-        astrom_cfg,
+        cutout_cfg,
         _INSTRUMENT.donutRadius,
         _INSTRUMENT.obscuration,
     )
@@ -1054,7 +1053,7 @@ def _getCutouts(sensor_name: str, t_dispatch: float) -> dict:
 
 def _run_cutout_worker(args: tuple) -> dict:
     sensor_name, t_dispatch = args
-    return _getCutouts(sensor_name, t_dispatch)
+    return _cutoutPipeline(sensor_name, t_dispatch)
 
 
 class _WfFitTimeoutError(Exception):
@@ -1680,7 +1679,7 @@ def _wf_worker(group: _WfGroup) -> dict:
                     _mimg,
                     _INSTRUMENT.donutRadius,
                     _INSTRUMENT.obscuration,
-                    _CALIB_STORE["detect_cfg"]["apertureOuterMarginFrac"],
+                    _CALIB_STORE["cutout_cfg"]["apertureOuterMarginFrac"],
                 ),
                 "blend_frac": _blend_frac(
                     _img,
@@ -2391,20 +2390,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             for iz in self.intrinsicZernikes
         }
 
-        detect_cfg = dict(
-            apertureOuterMarginFrac=self.config.apertureOuterMarginFrac,
-            apertureInnerBufferFrac=self.config.apertureInnerBufferFrac,
-            bkgAnnulusInnerFrac=self.config.bkgAnnulusInnerFrac,
-            bkgAnnulusOuterFrac=self.config.bkgAnnulusOuterFrac,
-            innerFracThreshold=self.config.innerFracThreshold,
-            outerFracThreshold=self.config.outerFracThreshold,
-            snrThreshold=self.config.snrThreshold,
-            minStampSnr=self.config.minStampSnr,
-            maxFieldDist=self.config.maxFieldDist,
-            stampSize=self.config.stampSize,
-            maxDonuts=self.config.maxDonuts,
-        )
-
         example_band = next(iter(rawByName.values())).filter.bandLabel
         photo_filter_name = example_band
         if self.config.photoRefFilter is not None:
@@ -2486,8 +2471,18 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         astrom_stub_loader.config.pixelMargin = 0
         self.astromTask.setRefObjLoader(astrom_stub_loader)
 
-        astrom_cfg = dict(
-            detect_cfg=detect_cfg,
+        cutout_cfg = dict(
+            apertureOuterMarginFrac=self.config.apertureOuterMarginFrac,
+            apertureInnerBufferFrac=self.config.apertureInnerBufferFrac,
+            bkgAnnulusInnerFrac=self.config.bkgAnnulusInnerFrac,
+            bkgAnnulusOuterFrac=self.config.bkgAnnulusOuterFrac,
+            innerFracThreshold=self.config.innerFracThreshold,
+            outerFracThreshold=self.config.outerFracThreshold,
+            snrThreshold=self.config.snrThreshold,
+            minStampSnr=self.config.minStampSnr,
+            maxFieldDist=self.config.maxFieldDist,
+            stampSize=self.config.stampSize,
+            maxDonuts=self.config.maxDonuts,
             maxFitScatter=self.config.maxFitScatter,
             donut_selector_config=self.donutSelector.config,
             astromRefFilter=self.config.astromRefFilter,
@@ -2501,8 +2496,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["blind_detect_task"] = self.blindDetect
         _CALIB_STORE["astrom_task"] = self.astromTask
         _CALIB_STORE["camera"] = camera
-        _CALIB_STORE["detect_cfg"] = detect_cfg
-        _CALIB_STORE["astrom_cfg"] = astrom_cfg
+        _CALIB_STORE["cutout_cfg"] = cutout_cfg
         _CALIB_STORE["sensor_refcats"] = sensor_refcats
         for name in CORNER_SENSOR_NAMES:
             missing_calib = [
@@ -2727,8 +2721,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         Parameters
         ----------
         results : list
-            Per-sensor cutout dicts from ``_getCutouts`` (supplies rejected donuts
-            and per-sensor metadata).
+            Per-sensor cutout dicts from ``_cutoutPipeline`` (supplies rejected
+            donuts and per-sensor metadata).
         wf_results : list
             Per-fit WF result dicts from the WF worker pool.
         donuts : list
@@ -2971,12 +2965,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _first_d = all_donuts[0][0]
         table.meta["donut_radius"] = _first_d["donut_radius"]
         table.meta["obscuration"] = _first_d["obscuration"]
-        _detect_cfg = _CALIB_STORE["detect_cfg"]
-        table.meta["aperture_outer_margin_frac"] = _detect_cfg["apertureOuterMarginFrac"]
-        table.meta["aperture_inner_buffer_frac"] = _detect_cfg["apertureInnerBufferFrac"]
-        table.meta["bkg_annulus_inner_frac"] = _detect_cfg["bkgAnnulusInnerFrac"]
-        table.meta["bkg_annulus_outer_frac"] = _detect_cfg["bkgAnnulusOuterFrac"]
-        table.meta["max_donuts"] = int(_detect_cfg["maxDonuts"])
+        _cutout_cfg = _CALIB_STORE["cutout_cfg"]
+        table.meta["aperture_outer_margin_frac"] = _cutout_cfg["apertureOuterMarginFrac"]
+        table.meta["aperture_inner_buffer_frac"] = _cutout_cfg["apertureInnerBufferFrac"]
+        table.meta["bkg_annulus_inner_frac"] = _cutout_cfg["bkgAnnulusInnerFrac"]
+        table.meta["bkg_annulus_outer_frac"] = _cutout_cfg["bkgAnnulusOuterFrac"]
+        table.meta["max_donuts"] = int(_cutout_cfg["maxDonuts"])
         return table
 
 class DonutBlitzPlotTaskConnections(
