@@ -320,25 +320,21 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
 
 def _select_candidate_donuts(
     postIsr: Exposure,
-    blindDetections: QTable,
-    catalog_centroids: tuple | None,
+    selections: QTable,
     cutout_cfg: dict,
 ) -> tuple | None:
     """Filter centroids by flux measurement and quality criteria.
 
-    Resolves the centroid list (catalog or blind), measures flux on the full
-    image, and applies quality cuts (SAT, inner/outer flux fraction, SNR).
+    Measures flux on the full image and applies quality cuts (inner/outer flux
+    fraction, SNR).
 
     Parameters
     ----------
     postIsr : Exposure
         Background-subtracted post-ISR science exposure.
-    blindDetections : QTable
-        Centroid table from `_blindDetect`.  Used as fallback when
-        ``catalog_centroids`` is ``None``.
-    catalog_centroids : tuple or None
-        ``(centroid_x, centroid_y, source_ids)`` from `_selectFromPhotoCat`,
-        or ``None`` to trigger the blind-detection fallback.
+    selections : QTable
+        Catalog-selected (or blind-detection) centroids with columns
+        ``centroid_x``, ``centroid_y``, ``id``.
     cutout_cfg : dict
         Config dict with ``maxDonuts``, ``stampSize``, ``minStampSnr``,
         ``innerFluxFractionCut``, ``outerFluxFractionCut``.
@@ -357,15 +353,11 @@ def _select_candidate_donuts(
     bkgAnnulusInnerFrac = cutout_cfg["bkgAnnulusInnerFrac"]
     bkgAnnulusOuterFrac = cutout_cfg["bkgAnnulusOuterFrac"]
 
-    # --- Resolve centroid list ---
-    if catalog_centroids is not None:
-        cat_cx, cat_cy, source_ids = catalog_centroids
-    else:
-        if len(blindDetections) == 0:
-            return None
-        cat_cx = np.array(blindDetections["centroid_x"])
-        cat_cy = np.array(blindDetections["centroid_y"])
-        source_ids = np.arange(len(cat_cx), dtype=np.int64)
+    if len(selections) == 0:
+        return None
+    cat_cx = np.array(selections["centroid_x"])
+    cat_cy = np.array(selections["centroid_y"])
+    source_ids = np.array(selections["id"])
 
     # --- Flux measurement and quality selection ---
     peaks = np.column_stack([cat_cy, cat_cx])
@@ -412,9 +404,7 @@ def _select_candidate_donuts(
 def _cut_and_evaluate_stamps(
     postIsr: Exposure,
     selected_centroids: tuple,
-    sel_rejected_centroids: tuple | None,
-    all_photo_cat: tuple | None,
-    all_astrom_cat: tuple | None,
+    refcat: QTable | None,
     cutout_cfg: dict,
     blindDetections: QTable,
 ) -> tuple:
@@ -431,13 +421,9 @@ def _cut_and_evaluate_stamps(
     selected_centroids : tuple
         ``(centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr,
         outer_frac_arr, outer_sector_max_arr)`` from `_select_candidate_donuts`.
-    sel_rejected_centroids : tuple or None
-        Selector-rejected sources from `_selectFromPhotoCat`, passed through
-        to the rejected-stamp diagnostic display.
-    all_photo_cat : tuple or None
-        ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
-    all_astrom_cat : tuple or None
-        ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
+    refcat : QTable or None
+        Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
+        ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
     cutout_cfg : dict
         Config dict with ``stampSize``, ``minStampSnr``,
         ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
@@ -449,7 +435,7 @@ def _cut_and_evaluate_stamps(
     donuts : list of dict
         Accepted donut stamp dicts, sorted brightest-first.
     rejected_donuts : list of dict
-        Rejected donut stamp dicts, sorted brightest-first.
+        Quality-failed donut stamp dicts, sorted brightest-first.
     """
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
@@ -484,36 +470,18 @@ def _cut_and_evaluate_stamps(
     )
     _s_n_main = int(np.sum(_s_main))
 
-    # Fallback annular masks: only needed for selector-rejected centroids,
-    # which never pass through _measureFlux and so have no precomputed
-    # inner_frac/outer_frac/outer_sector_max to reuse.
-    _mhalf = int(donutRadius * bkgAnnulusOuterFrac)
-    _gy, _gx = np.mgrid[-_mhalf : _mhalf + 1, -_mhalf : _mhalf + 1]
-    _r = np.hypot(_gx, _gy)
-    _main_mask = (_r < donutRadius * apertureOuterMarginFrac) & (_r > donutRadius * obscuration)
-    _inner_mask = _r < donutRadius * obscuration * apertureInnerBufferFrac
-    _outer_mask = (_r > donutRadius * bkgAnnulusInnerFrac) & (_r < donutRadius * bkgAnnulusOuterFrac)
-    _sector_angle = np.arctan2(_gy, _gx)
-
     def _cut_stamp_dict(
         cx_f,
         cy_f,
         flux_val,
         source_id_val,
-        inner_frac=None,
-        outer_frac=None,
-        outer_sector_max=None,
-        reject_reason=None,
+        inner_frac,
+        outer_frac,
+        outer_sector_max,
         blind_cx=None,
         blind_cy=None,
     ):
-        """Cut one stamp and compute metrics. Returns dict or None on failure.
-
-        ``inner_frac``/``outer_frac``/``outer_sector_max`` should be passed
-        in (already computed by `_measureFlux`) whenever available; they are
-        only recomputed here as a fallback for selector-rejected centroids,
-        which bypass `_measureFlux` entirely.
-        """
+        """Cut one stamp and compute metrics. Returns dict or None on failure."""
         # Odd-sized cut (2*half+1) so the centroid pixel sits exactly at the
         # stamp center. An even cut would offset the donut half a pixel from the
         # stamp's geometric center, and would force the crop-by-1 fallback in
@@ -527,41 +495,6 @@ def _cut_and_evaluate_stamps(
         stamp = np.array(arr[rmin:rmax, cmin:cmax])
         stamp_ccs = np.rot90(stamp, k=-n_quarter).T
 
-        if inner_frac is None or outer_frac is None or outer_sector_max is None:
-            mmin_r, mmax_r = cy - _mhalf, cy + _mhalf + 1
-            mmin_c, mmax_c = cx - _mhalf, cx + _mhalf + 1
-            with np.errstate(invalid="ignore", divide="ignore"):
-                if mmin_r >= 0 and mmax_r <= arr.shape[0] and mmin_c >= 0 and mmax_c <= arr.shape[1]:
-                    mpatch = arr[mmin_r:mmax_r, mmin_c:mmax_c]
-                    bkg = float(np.nanmedian(mpatch[_inner_mask | _outer_mask]))
-                    mpatch_sub = mpatch - bkg
-                    mflux = float(np.sum(mpatch_sub[_main_mask]))
-                    inner_frac = (
-                        float(np.sum(mpatch_sub[_inner_mask]) / mflux) if mflux != 0 else float("nan")
-                    )
-                    outer_frac = (
-                        float(np.sum(mpatch_sub[_outer_mask]) / mflux) if mflux != 0 else float("nan")
-                    )
-                    if mflux != 0:
-                        _sector_fluxes = [
-                            float(
-                                np.sum(
-                                    mpatch_sub[
-                                        _outer_mask
-                                        & (_sector_angle >= -np.pi + k * np.pi / 4)
-                                        & (_sector_angle < -np.pi + (k + 1) * np.pi / 4)
-                                    ]
-                                )
-                            )
-                            / mflux
-                            for k in range(8)
-                        ]
-                        outer_sector_max = float(max(abs(f) for f in _sector_fluxes))
-                    else:
-                        outer_sector_max = float("nan")
-                else:
-                    inner_frac = outer_frac = outer_sector_max = float("nan")
-
         with np.errstate(invalid="ignore", divide="ignore"):
             _s_bkg_pix = stamp[_s_bkg]
             _s_bkg_std = float(np.nanstd(_s_bkg_pix)) if np.any(_s_bkg) else float("nan")
@@ -573,24 +506,23 @@ def _cut_and_evaluate_stamps(
                 else float("nan")
             )
 
-        def _nearby(cat_tuple):
+        def _nearby(mag_col):
             # Offsets are relative to the *rounded* centroid (cx, cy), since
             # that is the pixel the stamp is cut around and the one that lands
             # at the stamp center. Using the float centroid would leave symbols
             # up to half a pixel off the features they mark.
-            if cat_tuple is None:
+            if refcat is None:
                 return []
-            cat_x, cat_y, cat_mag = cat_tuple
             return [
                 (float(sx) - cx, float(sy) - cy, float(sm))
-                for sx, sy, sm in zip(cat_x, cat_y, cat_mag)
+                for sx, sy, sm in zip(refcat["centroid_x"], refcat["centroid_y"], refcat[mag_col])
                 if abs(float(sx) - cx) <= half and abs(float(sy) - cy) <= half
             ]
 
         _fa = detector.transform([lsst.geom.Point2D(float(cx_f), float(cy_f))], PIXELS, FIELD_ANGLE)[0]
         _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
 
-        _nearby_photo_list = _nearby(all_photo_cat)
+        _nearby_photo_list = _nearby("photo_mag")
         _neighbor_dists = [np.hypot(dx, dy) for dx, dy, _ in _nearby_photo_list if np.hypot(dx, dy) >= 1.0]
 
         _catalog_centroid_offset_px = (
@@ -625,8 +557,8 @@ def _cut_and_evaluate_stamps(
             catalog_centroid_offset_px=_catalog_centroid_offset_px,
             n_quarter=n_quarter,
             nearby_photo=_nearby_photo_list,
-            nearby_astrom=_nearby(all_astrom_cat),
-            reject_reasons=[reject_reason] if reject_reason else [],
+            nearby_astrom=_nearby("astrom_mag"),
+            reject_reasons=[],
             saturated=saturated,
         )
 
@@ -661,7 +593,7 @@ def _cut_and_evaluate_stamps(
 
     # --- Single pass over centroids: accept or quality-reject ---
     donuts = []
-    rejected_donuts_pre = []
+    rejected_donuts = []
     for i, (cx_f, cy_f) in enumerate(zip(centroid_x, centroid_y)):
         _b_cx, _b_cy = _nearest_blind(cx_f, cy_f)
         d = _cut_stamp_dict(
@@ -669,9 +601,9 @@ def _cut_and_evaluate_stamps(
             cy_f,
             flux_arr[i],
             source_ids[i],
-            inner_frac=float(inner_frac_arr[i]),
-            outer_frac=float(outer_frac_arr[i]),
-            outer_sector_max=float(outer_sector_max_arr[i]),
+            float(inner_frac_arr[i]),
+            float(outer_frac_arr[i]),
+            float(outer_sector_max_arr[i]),
             blind_cx=_b_cx,
             blind_cy=_b_cy,
         )
@@ -679,19 +611,9 @@ def _cut_and_evaluate_stamps(
             continue
         _append_reject_reasons(d)
         if d["reject_reasons"]:
-            rejected_donuts_pre.append(d)
+            rejected_donuts.append(d)
             continue
         donuts.append(d)
-
-    # --- Rejected-stamp collection (selector-rejected sources added in) ---
-    rejected_donuts = list(rejected_donuts_pre)
-    if sel_rejected_centroids is not None:
-        rrej_x, rrej_y, rrej_flux, rrej_ids, rrej_reasons = sel_rejected_centroids
-        for cx_f, cy_f, flux_val, sid, sel_reason in zip(rrej_x, rrej_y, rrej_flux, rrej_ids, rrej_reasons):
-            d = _cut_stamp_dict(cx_f, cy_f, flux_val, sid, reject_reason=sel_reason or "selector")
-            if d is not None:
-                _append_reject_reasons(d)
-                rejected_donuts.append(d)
     rejected_donuts.sort(key=lambda d: d["flux"], reverse=True)
 
     return donuts, rejected_donuts
@@ -700,34 +622,24 @@ def _cut_and_evaluate_stamps(
 def _cutStamps(
     postIsr: Exposure,
     blindDetections: QTable,
-    catalog_centroids: tuple | None,
-    sel_rejected_centroids: tuple | None,
-    all_photo_cat: tuple | None,
-    all_astrom_cat: tuple | None,
+    selections: QTable,
+    refcat: QTable | None,
     cutout_cfg: dict,
 ) -> tuple:
     """Measure image fluxes, apply quality cuts, and cut postISR stamps.
-
-    Orchestrates the two-phase stamp pipeline: candidate selection and stamp
-    cutting.  Uses ``catalog_centroids`` (refcat path) when available; falls
-    back to ``blindDetections`` otherwise.
 
     Parameters
     ----------
     postIsr : Exposure
         Background-subtracted post-ISR science exposure.
     blindDetections : QTable
-        Centroid table from `_blindDetect`.  Used as fallback when
-        ``catalog_centroids`` is ``None``.
-    catalog_centroids : tuple or None
-        ``(centroid_x, centroid_y, source_ids)`` from `_selectFromPhotoCat`,
-        or ``None`` to trigger the blind-detection fallback.
-    sel_rejected_centroids : tuple or None
-        Selector-rejected sources from `_selectFromPhotoCat`.
-    all_photo_cat : tuple or None
-        ``(x, y, mag)`` photometry refcat overlay for diagnostic stamps.
-    all_astrom_cat : tuple or None
-        ``(x, y, mag)`` astrometry refcat overlay for diagnostic stamps.
+        Centroid table from `_blindDetect`, used for catalog_centroid_offset_px.
+    selections : QTable
+        Catalog-selected (or blind-detection) centroids with columns
+        ``centroid_x``, ``centroid_y``, ``id``.
+    refcat : QTable or None
+        Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
+        ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
     cutout_cfg : dict
         Config dict with ``stampSize``, ``minStampSnr``,
         ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
@@ -737,13 +649,12 @@ def _cutStamps(
     donuts : list of dict
         Accepted donut stamp dicts, sorted brightest-first.
     rejected_donuts : list of dict
-        Rejected donut stamp dicts, sorted brightest-first.
+        Quality-failed donut stamp dicts, sorted brightest-first.
     """
     # Phase 1: Filter centroids by flux and quality
     selected_centroids = _select_candidate_donuts(
         postIsr,
-        blindDetections,
-        catalog_centroids,
+        selections,
         cutout_cfg,
     )
     if selected_centroids is None:
@@ -753,9 +664,7 @@ def _cutStamps(
     return _cut_and_evaluate_stamps(
         postIsr,
         selected_centroids,
-        sel_rejected_centroids,
-        all_photo_cat,
-        all_astrom_cat,
+        refcat,
         cutout_cfg,
         blindDetections,
     )
@@ -861,48 +770,43 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         )
 
     # --- catalog selection ---
+    t4 = time.perf_counter()
+    selections = blindDetections
+    refcat = None
+    cat_err = None
     if wcs is not None:
-        photo_filter = cutout_cfg["resolvedPhotoFilterName"]
-        astrom_filter = cutout_cfg["astromRefFilter"]
-        refcat = refcat_handle.refCat.copy(deep=True)
-        afwTable.updateRefCentroids(wcs, refcat)
-        # Much quicker to just copy the keys we need than convert the whole table to
-        # astropy
-        keys = [
-            "id",
-            "coord_ra", "coord_dec",
-            "centroid_x", "centroid_y",
-            f"{photo_filter}_flux", f"{astrom_filter}_flux"
-        ]
-        refcat = QTable({k: np.array(refcat[k]) for k in keys})
-        refcat["photo_flux"] = refcat[f"{photo_filter}_flux"]
-        refcat["astrom_flux"] = refcat[f"{astrom_filter}_flux"]
-        with np.errstate(invalid="ignore", divide="ignore"):
-            refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
-            refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
-        donut_selector = _CALIB_STORE["donut_selector_task"]
-        result = donut_selector.run(refcat, detector, photo_filter)
-        selections = result.sourceCat
-    else:
-        selections = blindDetections
+        try:
+            photo_filter = cutout_cfg["resolvedPhotoFilterName"]
+            astrom_filter = cutout_cfg["astromRefFilter"]
+            refcat = refcat_handle.refCat.copy(deep=True)
+            afwTable.updateRefCentroids(wcs, refcat)
+            # Much quicker to just copy the keys we need than convert the whole table to
+            # astropy
+            keys = [
+                "id",
+                "coord_ra", "coord_dec",
+                "centroid_x", "centroid_y",
+                f"{photo_filter}_flux", f"{astrom_filter}_flux"
+            ]
+            refcat = QTable({k: np.array(refcat[k]) for k in keys})
+            refcat["photo_flux"] = refcat[f"{photo_filter}_flux"]
+            refcat["astrom_flux"] = refcat[f"{astrom_filter}_flux"]
+            with np.errstate(invalid="ignore", divide="ignore"):
+                refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
+                refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
+            donut_selector = _CALIB_STORE["donut_selector_task"]
+            result = donut_selector.run(refcat, detector, photo_filter)
+            selections = result.sourceCat
+        except Exception as exc:
+            cat_err = str(exc)
 
-    # Unpack overlay for backward compatibility with _cutStamps signature
-    # TODO: update _cutStamps to accept refcat_overlay directly
-    all_photo_cat = None
-    all_astrom_cat = None
-    if refcat_overlay is not None:
-        x, y, photo_mag, astrom_mag = refcat_overlay
-        all_photo_cat = (x, y, photo_mag)
-        all_astrom_cat = (x, y, astrom_mag)
-
+    # --- stamp cutting ---
     t5 = time.perf_counter()
     donuts, rejected_donuts = _cutStamps(
         postIsr,
         blindDetections,
-        catalog_centroids,
-        sel_rejected_centroids,
-        all_photo_cat,
-        all_astrom_cat,
+        selections,
+        refcat,
         cutout_cfg,
     )
 
@@ -2655,8 +2559,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             }
             rejected_by_sensor[sname] = r.get("rejected_catalog", [])
 
-        _KNOWN_REASONS = ("snr", "inner_frac", "outer_frac", "SAT", "field_dist")
-
         def _reject_reason_str(reasons):
             """Comma-join reject reasons in their display form.
 
@@ -2791,7 +2693,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "rejected_outer_frac": bool("outer_frac" in reject_reasons),
                 "rejected_sat": bool("SAT" in reject_reasons or d.get("saturated", False)),
                 "rejected_field_dist": bool("field_dist" in reject_reasons),
-                "rejected_selector": bool(any(rr not in _KNOWN_REASONS for rr in reject_reasons)),
+                "rejected_selector": False,
                 "reject_reasons": _reject_reason_str(reject_reasons),
                 # --- fit results ---
                 "fit_mode": _wd_field(wd, "fit_mode", str, ""),
