@@ -592,12 +592,24 @@ class LatissMonolithTask(pipeBase.PipelineTask):
             extraHandles = {ref.dataId["visit"]: ref for ref in outputRefs.donutStampsExtra}
             intraHandles = {ref.dataId["visit"]: ref for ref in outputRefs.donutStampsIntra}
 
+        nDone = 0
         for pair in pairs:
             self.log.info("Fitting pair: extra=%d intra=%d", pair.extra, pair.intra)
             rawExtra = rawHandles[pair.extra].get()
             rawIntra = rawHandles[pair.intra].get()
 
-            outputs = self.run(rawExtra, rawIntra, camera)
+            # One quantum can cover many pairs, so a pair that cannot be
+            # processed at all -- no donut found, donut off the boresight,
+            # cutout empty -- must not lose the pairs that can. Nothing is
+            # written for it, which is what makes it visible afterwards as a
+            # missing dataset rather than a NaN row.
+            try:
+                outputs = self.run(rawExtra, rawIntra, camera)
+            except Exception as exc:  # noqa: BLE001
+                self.log.warning(
+                    "Skipping pair extra=%d intra=%d: %s", pair.extra, pair.intra, exc
+                )
+                continue
 
             butlerQC.put(outputs.zernikes, zernikeHandles[pair.extra])
             if self.config.doSaveStamps:
@@ -605,6 +617,11 @@ class LatissMonolithTask(pipeBase.PipelineTask):
                 # Intentionally the extra-focal id for the intra stamps, so a
                 # pair's products share one dataId.
                 butlerQC.put(outputs.donutStampsIntra, intraHandles[pair.extra])
+            nDone += 1
+
+        self.log.info("Wrote results for %d of %d pair(s).", nDone, len(pairs))
+        if nDone == 0:
+            raise pipeBase.NoWorkFound("No pair could be processed; see warnings above.")
 
     @timeMethod
     def run(
