@@ -221,7 +221,7 @@ def _measureFlux(
     -------
     QTable
         One row per peak with columns ``centroid_x``, ``centroid_y``,
-        ``flux``, ``inner_flux``, ``outer_flux``, ``outer_sector_max_frac``,
+        ``flux``, ``inner_flux``, ``outer_flux``, ``outer_sector_minmax_flux``,
         ``std``, and ``snr``.  Peaks that fall too close to the image border
         have ``nan`` values.
     """
@@ -243,7 +243,7 @@ def _measureFlux(
     ]
 
     flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
-    outer_sector_max_list = []
+    outer_sector_minmax_list = []
 
     for row, col in zip(peaks[:, 0], peaks[:, 1]):
         rmin, rmax = int(round(row)) - half, int(round(row)) + half + 1
@@ -253,7 +253,7 @@ def _measureFlux(
             flux_list.append(np.nan)
             inner_flux_list.append(np.nan)
             outer_flux_list.append(np.nan)
-            outer_sector_max_list.append(np.nan)
+            outer_sector_minmax_list.append(np.nan)
             std_list.append(np.nan)
             continue
 
@@ -265,11 +265,10 @@ def _measureFlux(
         flux_list.append(flux)
         inner_flux_list.append(float(np.sum(stamp_sub[inner_mask])))
         outer_flux_list.append(float(np.sum(stamp_sub[outer_mask])))
-        if flux != 0:
-            sector_fluxes = [float(np.sum(stamp_sub[m])) / flux for m in outer_sector_masks]
-            outer_sector_max_list.append(float(max(abs(f) for f in sector_fluxes)))
-        else:
-            outer_sector_max_list.append(np.nan)
+        sector_fluxes = [float(np.sum(stamp_sub[m])) for m in outer_sector_masks]
+        outer_sector_minmax_list.append(
+            float(max(sector_fluxes) - min(sector_fluxes))
+        )
 
         diff = (stamp_sub - np.roll(stamp_sub, 1, axis=0))[bkg_mask]
         q75, q25 = np.nanpercentile(diff, [75, 25])
@@ -281,7 +280,7 @@ def _measureFlux(
     table["flux"] = np.array(flux_list, dtype=float)
     table["inner_flux"] = np.array(inner_flux_list, dtype=float)
     table["outer_flux"] = np.array(outer_flux_list, dtype=float)
-    table["outer_sector_max_frac"] = np.array(outer_sector_max_list, dtype=float)
+    table["outer_sector_minmax_flux"] = np.array(outer_sector_minmax_list, dtype=float)
     table["std"] = np.array(std_list, dtype=float)
     with np.errstate(invalid="ignore", divide="ignore"):
         table["snr"] = (table["flux"] / table["std"]) / np.sqrt(n_main)
@@ -376,9 +375,8 @@ def _select_candidate_donuts(
     source_ids = source_ids[valid_mask]
     if len(measTable) == 0:
         return None
-    with np.errstate(invalid="ignore", divide="ignore"):
-        innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < cutout_cfg["innerFracThreshold"]
-        outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < cutout_cfg["outerFracThreshold"]
+    innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < cutout_cfg["innerFracThreshold"]
+    outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < cutout_cfg["outerFracThreshold"]
     snrOk = measTable["snr"] > cutout_cfg["minStampSnr"]
     qual_mask = innerOk & outerOk & snrOk
     measTable = measTable[qual_mask]
@@ -388,17 +386,17 @@ def _select_candidate_donuts(
     flux_arr = np.array(measTable["flux"])
     inner_frac_arr = np.array(measTable["inner_flux"]) / flux_arr
     outer_frac_arr = np.array(measTable["outer_flux"]) / flux_arr
-    outer_sector_max_arr = np.array(measTable["outer_sector_max_frac"])
+    outer_sector_minmax_arr = np.array(measTable["outer_sector_minmax_flux"])
     order = np.argsort(flux_arr)[::-1][:maxDonuts]
     centroid_x = np.array(measTable["centroid_x"])[order]
     centroid_y = np.array(measTable["centroid_y"])[order]
     flux_arr = flux_arr[order]
     inner_frac_arr = inner_frac_arr[order]
     outer_frac_arr = outer_frac_arr[order]
-    outer_sector_max_arr = outer_sector_max_arr[order]
+    outer_sector_minmax_arr = outer_sector_minmax_arr[order]
     source_ids = source_ids[order]
 
-    return centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_max_arr
+    return centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_minmax_arr
 
 
 def _cut_and_evaluate_stamps(
@@ -420,7 +418,7 @@ def _cut_and_evaluate_stamps(
         Background-subtracted post-ISR science exposure.
     selected_centroids : tuple
         ``(centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr,
-        outer_frac_arr, outer_sector_max_arr)`` from `_select_candidate_donuts`.
+        outer_frac_arr, outer_sector_minmax_arr)`` from `_select_candidate_donuts`.
     refcat : QTable or None
         Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
         ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
@@ -440,7 +438,7 @@ def _cut_and_evaluate_stamps(
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
     # Unpack selected centroids
-    centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_max_arr = (
+    centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_minmax_arr = (
         selected_centroids
     )
 
