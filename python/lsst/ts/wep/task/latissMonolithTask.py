@@ -43,9 +43,15 @@ pairs, stock 17.8.1 returns NaN on 11 ("Non-positive image flux"). With both
 fixes all 12 fit, and on identical stamps agree with ts_wep 15.1.0 at Z4/Z8
 correlation 0.953.
 
-The fitting core lives in ``latissMonolith``; this module is the butler
-plumbing around it. ``run`` is callable without a butler, so ``run_wep`` in
-ts_externalscripts can call it directly.
+Deliberately self-contained, like ``donutBlitzMonolith``: the fit lives in
+this file rather than being imported, so the task is one file to commit and
+review. ``latissMonolith.py`` holds the same fit plus notebook-only
+diagnostics (``cut_and_evaluate_stamp``, ``donut_mask``,
+``fit_latiss_danish_arrays``) and is what the RSO-873 notebook and scripts
+import; keep ``fit_latiss_danish`` here in sync with it.
+
+``run`` is callable without a butler, so ``run_wep`` in ts_externalscripts can
+call it directly.
 
 See DM ticket RSO-873.
 """
@@ -54,14 +60,19 @@ __all__ = [
     "LatissMonolithTaskConnections",
     "LatissMonolithTaskConfig",
     "LatissMonolithTask",
+    "fit_latiss_danish",
 ]
 
 import warnings
 from typing import Any, cast
 
 import astropy.units as u
+import batoid
+import danish
 import numpy as np
 from astropy.table import QTable
+from scipy.ndimage import binary_erosion
+from scipy.optimize import least_squares
 
 import lsst.afw.cameraGeom
 import lsst.afw.image as afwImage
@@ -75,13 +86,13 @@ from lsst.pipe.base import (
     QuantumContext,
 )
 from lsst.pipe.tasks.quickFrameMeasurement import QuickFrameMeasurementTask
+from lsst.ts.wep.imageMapper import ImageMapper
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
-from lsst.ts.wep.task.latissMonolith import fit_latiss_danish
 from lsst.ts.wep.task.pairTask import ExposurePairer
 from lsst.ts.wep.utils import getTaskInstrument
 from lsst.utils.timer import timeMethod
@@ -94,6 +105,239 @@ LATISS_BORESIGHT_XY = (2036.5, 2000.5)
 # Structured dtype for the paired (x, y) columns, matching calcZernikesTask so
 # that the output table stays readable by the same donut_viz code.
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
+
+# Noll index to fit the batoid reference wavefront out to. Well above the
+# fitted range so truncation does not bite.
+_ZK_REF_JMAX = 78
+
+
+def _opd_zk_ref(instrument, telescope, field_angle_deg, defocal_type, wavelength, jmax=_ZK_REF_JMAX):
+    """Wavefront-OPD reference Zernikes, in metres, Noll-indexed to jmax.
+
+    This is the fix for regression (1) in the module docstring. We shift the
+    *Detector* by ``instrument.defocalOffset`` rather than M2 by
+    ``batoidOffsetValue``: the two are wavefront-equivalent to 0.003% in Z4
+    (that equivalence is what ``Instrument.defocalOffset`` back-solves), and
+    the detector shift is what danish's forward model corresponds to. Shifting
+    M2 here would also be fine for OPD; what is *not* fine is using
+    transverse-aberration Zernikes.
+    """
+    sign = +1 if defocal_type == "extra" else -1
+    shifted = telescope.withLocallyShiftedOptic("Detector", [0, 0, sign * instrument.defocalOffset])
+    thx, thy = np.deg2rad(field_angle_deg)
+    zk_waves = batoid.zernike(
+        shifted,
+        thx,
+        thy,
+        wavelength=wavelength,
+        nx=255,
+        eps=instrument.obscuration,
+        jmax=jmax,
+    )
+    zk = np.zeros(jmax + 1)
+    zk[4:] = zk_waves[4:] * wavelength  # waves -> metres
+    return zk
+
+
+def _prep_stamp(wep_image, instrument, noll_indices, optical_model="onAxis"):
+    """Peak-normalize, background-subtract and trim one stamp.
+
+    Returns (image, background_variance, peak). Works on a copy, never the
+    input.
+    """
+    image = wep_image.copy()
+
+    if image.maskBackground is None:
+        ImageMapper(instrument, optical_model).createImageMasks(image, np.zeros(len(noll_indices)))
+    mask_bkg = binary_erosion(image.maskBackground, iterations=10)
+
+    arr = np.asarray(image.image, dtype=float)
+    # Regression (2): normalize to peak 1, matching what ts_wep 15.1.0's cutout
+    # task produced. Do it before estimating the noise so the variance scales
+    # consistently.
+    peak = float(np.nanmax(arr))
+    if not np.isfinite(peak) or peak == 0.0:
+        raise ValueError("stamp has no finite positive peak")
+    arr = arr / peak
+
+    bkg = arr[mask_bkg]
+    q75, q25 = np.percentile(bkg, [75, 25])
+    bkg_std = (q75 - q25) / 1.349
+    arr = arr - np.median(bkg)
+
+    if arr.shape[0] % 2 == 0:  # danish needs an odd stamp
+        arr = arr[:-1, :-1]
+
+    return arr, bkg_std**2, peak
+
+
+def fit_latiss_danish(
+    stamp_extra,
+    stamp_intra,
+    instrument,
+    noll_indices=tuple(range(4, 23)),
+    optical_model="onAxis",
+    start_with_intrinsic=True,
+    lstsq_kwargs=None,
+):
+    """Jointly fit an intra/extra LATISS donut pair with danish.
+
+    Parameters
+    ----------
+    stamp_extra, stamp_intra : `lsst.ts.wep.task.donutStamp.DonutStamp`
+        The pair, from ``CutOutDonutsScienceSensorTask``.
+    instrument : `lsst.ts.wep.Instrument`
+        From ``getTaskInstrument("LATISS", detectorName, None)``.
+    noll_indices : sequence of int
+        Noll indices to fit.
+    optical_model : str
+        Mask model; "onAxis" is required for AuxTel.
+    start_with_intrinsic : bool
+        Add the design intrinsic Zernikes to zkRef and to the reported sum, as
+        ts_wep does (``zkSum = zkFit + mean(zkStart)``).
+    lstsq_kwargs : dict, optional
+        Extra kwargs for ``scipy.optimize.least_squares``. Default is scipy's
+        own tolerances, matching ts_wep 15.1.0 (whose ``lstsqKwargs``
+        defaults to {}).
+
+    Returns
+    -------
+    dict
+        ``zk_sum``/``zk_fit`` (metres, ordered like ``noll_indices``),
+        ``zernikes_nm`` (dict Noll -> nm), ``fwhm``, ``dxs``, ``dys``,
+        ``cost``, ``nfev``, ``success``, ``model_images``, ``images``.
+    """
+    noll = np.asarray(noll_indices, dtype=int)
+    jmax = _ZK_REF_JMAX
+    band = stamp_extra.wep_im.bandLabel
+    telescope = instrument.getBatoidModel(band)
+    # AuxTel.yaml declares a single scalar `wavelength`, so instrument.wavelength
+    # is {BandLabel.REF: 632nm} only -- while LATISS exposures report real bands
+    # like BandLabel.LSST_R. Fall back to the reference band rather than KeyError.
+    try:
+        wavelength = instrument.wavelength[band]
+    except KeyError:
+        wavelength = instrument.wavelength[instrument.refBand]
+
+    factory = danish.DonutFactory(
+        R_outer=instrument.radius,
+        R_inner=instrument.radius * instrument.obscuration,
+        mask_params=instrument.maskParams,
+        focal_length=instrument.focalLength,
+        pixel_scale=instrument.pixelSize,
+    )
+
+    imgs, sky_levels, zk_refs, zk_starts, thxs, thys = [], [], [], [], [], []
+    for stamp in (stamp_extra, stamp_intra):
+        wim = stamp.wep_im
+        fa = np.asarray(wim.fieldAngle, dtype=float)
+        dtype = wim.defocalType.value
+
+        if start_with_intrinsic:
+            try:
+                zk_start = instrument.getIntrinsicZernikes(*fa, band=band, nollIndices=noll)
+            except KeyError:  # same AuxTel band gap as the wavelength lookup
+                zk_start = instrument.getIntrinsicZernikes(
+                    *fa, band=instrument.refBand, nollIndices=noll
+                )
+        else:
+            zk_start = np.zeros(len(noll))
+        zk_ref = _opd_zk_ref(instrument, telescope, fa, dtype, wavelength, jmax=jmax)
+        zk_ref[noll] += zk_start
+
+        img, var, _peak = _prep_stamp(wim, instrument, noll, optical_model)
+
+        imgs.append(img)
+        sky_levels.append(var)
+        zk_refs.append(zk_ref)
+        zk_starts.append(zk_start)
+        thx, thy = np.deg2rad(fa)
+        thxs.append(thx)
+        thys.append(thy)
+
+    # Field radius from the mask params, as ts_wep does.
+    field_radius = np.deg2rad(
+        np.max([edge["thetaMax"] for item in instrument.maskParams.values() for edge in item.values()])
+    )
+    dz_terms = [(1, int(j)) for j in noll]
+
+    Model = getattr(danish, "MultiDonutModel", None) or danish.DZMultiDonutModel
+    model = Model(
+        factory,
+        z_refs=zk_refs,
+        dz_terms=dz_terms,
+        field_radius=field_radius,
+        thxs=thxs,
+        thys=thys,
+        npix=imgs[0].shape[0],
+    )
+
+    # The parameter vector changed shape at the danish v1.0 rename: pre-1.0
+    # MultiDonutModel is [dx1,dx2,dy1,dy2,fwhm,*zk] with NO flux terms, whereas
+    # DZMultiDonutModel packs per-donut fluxes too. Always go through pack_params.
+    n = len(imgs)
+    try:
+        x0 = np.asarray(
+            model.pack_params(
+                fluxes=[float(np.sum(im)) for im in imgs],
+                dxs=[0.0] * n,
+                dys=[0.0] * n,
+                fwhm=0.7,
+                wavefront_params=[0.0] * len(dz_terms),
+            ),
+            dtype=float,
+        )
+        fwhm_idx = 3 * n  # fluxes, dxs, dys then fwhm
+        modern = True
+    except TypeError:
+        x0 = np.asarray([0.0] * n + [0.0] * n + [0.7] + [0.0] * len(dz_terms), dtype=float)
+        fwhm_idx = 2 * n
+        modern = False
+
+    lo = np.full(x0.size, -np.inf)
+    hi = np.full(x0.size, np.inf)
+    lo[fwhm_idx], hi[fwhm_idx] = 0.1, 5.0
+    lo = np.minimum(lo, x0)
+    hi = np.maximum(hi, x0)
+
+    kwargs = dict(lstsq_kwargs or {})
+    result = least_squares(
+        model.chi, jac=model.jac, x0=x0, args=(imgs, sky_levels), bounds=(lo, hi), **kwargs
+    )
+
+    unpacked = model.unpack_params(result.x)
+    if isinstance(unpacked, dict):
+        zk_fit = np.asarray(unpacked["wavefront_params"], dtype=float)
+        fwhm = unpacked.get("fwhm")
+        dxs, dys = unpacked.get("dxs"), unpacked.get("dys")
+    else:
+        dxs, dys, fwhm, zk_fit = unpacked
+        zk_fit = np.asarray(zk_fit, dtype=float)
+
+    zk_sum = zk_fit + np.nanmean(zk_starts, axis=0)
+
+    try:
+        model_images = model.model(**unpacked) if isinstance(unpacked, dict) else None
+    except Exception:
+        model_images = None
+
+    return {
+        "zk_fit": zk_fit,
+        "zk_sum": zk_sum,
+        "zernikes_nm": {int(j): zk_sum[i] * 1e9 for i, j in enumerate(noll)},
+        "noll_indices": noll,
+        "fwhm": fwhm,
+        "dxs": dxs,
+        "dys": dys,
+        "cost": float(result.cost),
+        "nfev": int(result.nfev),
+        "success": bool(result.success),
+        "status": int(result.status),
+        "images": imgs,
+        "model_images": model_images,
+        "sky_levels": sky_levels,
+        "modern_danish": modern,
+    }
 
 
 class LatissMonolithTaskConnections(
