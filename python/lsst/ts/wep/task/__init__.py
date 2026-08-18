@@ -19,6 +19,8 @@ from .estimateZernikesTieTask import *
 from .generateDonutCatalogOnlineTask import *
 from .generateDonutCatalogUtils import *
 from .generateDonutCatalogWcsTask import *
+from .donutBlitzMonolith import DonutBlitzMonolithTask, DonutBlitzPlotTask
+from .generateDonutBlitzDetectTask import *
 from .generateDonutDirectDetectTask import *
 from .generateDonutFromRefitWcsTask import *
 from .pairTask import *
