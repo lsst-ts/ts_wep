@@ -27,7 +27,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.table import Table
-from sklearn.neighbors import NearestNeighbors
+from scipy.spatial import KDTree
 
 import lsst.geom
 import lsst.pex.config as pexConfig
@@ -210,11 +210,14 @@ class DonutSourceSelectorTask(pipeBase.Task):
             )
 
         fluxField = f"{filterName}_flux"
-        flux = _getFieldFromCatalog(sourceCat, fluxField)
+        flux = np.asarray(_getFieldFromCatalog(sourceCat, fluxField))
         mag = (flux * u.nJy).to_value(u.ABmag)
         minMagDiff = self.config.isolatedMagDiff
         unblendedSeparation = self.config.unblendedSeparation
         minBlendedSeparation = self.config.minBlendedSeparation
+        maxBlended = self.config.maxBlended
+        maxFieldDist = self.config.maxFieldDist
+        sourceLimit = self.config.sourceLimit
 
         # Use user defined inputs or ts_wep defaults
         # depending on useCustomMagLimit.
@@ -227,6 +230,10 @@ class DonutSourceSelectorTask(pipeBase.Task):
             magMax = magPolicyDefaults[defaultFilterKey]["high"]
             magMin = magPolicyDefaults[defaultFilterKey]["low"]
 
+        errMsg = str("config.sourceLimit must be a positive integer " + "or turned off by setting it to '-1'")
+        if not ((sourceLimit == -1) or (sourceLimit > 0)):
+            raise ValueError(errMsg)
+
         magSelected = np.ones(len(sourceCat), dtype=bool)
         magSelected &= mag < (magMax + minMagDiff)
         mag = mag[magSelected]
@@ -236,59 +243,72 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 blendCentersX=None,
                 blendCentersY=None,
             )
-        xCoord = _getFieldFromCatalog(sourceCat[magSelected], self.config.xCoordField)
-        yCoord = _getFieldFromCatalog(sourceCat[magSelected], self.config.yCoordField)
+        xCoord = np.asarray(_getFieldFromCatalog(sourceCat[magSelected], self.config.xCoordField))
+        yCoord = np.asarray(_getFieldFromCatalog(sourceCat[magSelected], self.config.yCoordField))
 
-        df = pd.DataFrame({"x": xCoord, "y": yCoord, "mag": mag})
-        # Grab any donut centers within unblended distance.
-        xyNeigh = NearestNeighbors(radius=unblendedSeparation)
+        # Distance to center of field (degrees) for each mag-selected source.
+        # Vectorized transform: avoid per-point Point2D construction and the
+        # Python-level coordinate extraction that followed it.
+        xform = detector.getTransform(PIXELS, FIELD_ANGLE)
+        mapping = xform.getMapping()
+        xyField = mapping.applyForward(np.vstack([xCoord, yCoord]))  # shape (2, N)
+        fieldDist = np.degrees(np.hypot(xyField[0], xyField[1]))
 
-        # Get distance to center of field
-        fieldXY = detector.transform(
-            [lsst.geom.Point2D(xPix, yPix) for xPix, yPix in zip(xCoord, yCoord)],
-            PIXELS,
-            FIELD_ANGLE,
-        )
-        fieldDist = [np.degrees(np.sqrt(fieldLoc[0] ** 2 + fieldLoc[1] ** 2)) for fieldLoc in fieldXY]
-        df["fieldDist"] = fieldDist
+        # Sort by magnitude (brightest first).  This replaces the old pandas
+        # sort_values("mag").  With a stable sort, groupIndices[k] gives the
+        # original (mag-subset) position of the k-th brightest source, which is
+        # exactly what the old magSortedDf.index.values provided.
+        groupIndices = np.argsort(mag, kind="stable")
+
+        xSorted = xCoord[groupIndices]
+        ySorted = yCoord[groupIndices]
+        magSorted = mag[groupIndices]
+        fieldDistSorted = fieldDist[groupIndices]
 
         # Remove area too close to edge with new bounding box that allows
-        # only area at least distance for unblended separation from edges
+        # only area at least distance for unblended separation from edges.
         trimmedBBox = bbox.erodedBy(unblendedSeparation)
+        minX = trimmedBBox.getMinX()
+        minY = trimmedBBox.getMinY()
+        maxX = trimmedBBox.getMaxX()
+        maxY = trimmedBBox.getMaxY()
+        # NOTE: erodedBy on an integer bbox yields a Box2I, whose contains() is
+        # inclusive of the max corner.  Match that with <=.  If trimmedBBox is a
+        # Box2D in your build, change the upper comparisons to <.
+        inBox = (
+            (xSorted >= minX)
+            & (xSorted <= maxX)
+            & (ySorted >= minY)
+            & (ySorted <= maxY)
+        )
+
+        # Nearest-neighbor structure on the (sorted) positions.
+        xy = np.ascontiguousarray(np.column_stack([xSorted, ySorted]), dtype=np.float64)
+        tree = KDTree(xy)
+        radIdxList = tree.query_ball_point(xy, r=unblendedSeparation, return_sorted=True)
 
         index = list()
-        magSortedDf = df.sort_values("mag")
-        groupIndices = magSortedDf.index.values
-        xyNeigh.fit(magSortedDf[["x", "y"]])
-        radDist, radIdx = xyNeigh.radius_neighbors(magSortedDf[["x", "y"]], sort_results=True)
-
-        errMsg = str("config.sourceLimit must be a positive integer " + "or turned off by setting it to '-1'")
-        if not ((self.config.sourceLimit == -1) or (self.config.sourceLimit > 0)):
-            raise ValueError(errMsg)
-
-        maxBlended = self.config.maxBlended
-        blendCentersX: list = [list() for _ in range(len(magSortedDf))]
-        blendCentersY: list = [list() for _ in range(len(magSortedDf))]
+        # Sparse storage: most sources have no blend centers, so only populate
+        # the ones we actually keep-with-blends.  Keyed by sorted-order position.
+        blendCentersXMap: dict = {}
+        blendCentersYMap: dict = {}
         sourcesKept = 0
-        # Go through catalog with nearest neighbor information
-        # and keep sources that match our configuration settings
-        srcOn = -1
-        for nbrDist, idxList in zip(radDist, radIdx):
-            srcOn += 1
+
+        # Go through catalog (brightest first) with nearest neighbor information
+        # and keep sources that match our configuration settings.
+        for srcOn, idxList in enumerate(radIdxList):
             # Move on if source is within unblendedSeparation
             # of the edge of a given exposure
-            srcX = magSortedDf["x"].iloc[srcOn]
-            srcY = magSortedDf["y"].iloc[srcOn]
-            if trimmedBBox.contains(srcX, srcY) is False:
+            if not inBox[srcOn]:
                 continue
 
             # If distance from field center is greater than
             # maxFieldDist discard the source and move on
-            if magSortedDf["fieldDist"].iloc[srcOn] > self.config.maxFieldDist:
+            if fieldDistSorted[srcOn] > maxFieldDist:
                 continue
 
             # If this source's magnitude is outside our bounds then discard
-            srcMag = magSortedDf["mag"].iloc[srcOn]
+            srcMag = magSorted[srcOn]
             if (srcMag > magMax) | (srcMag < magMin):
                 continue
 
@@ -299,26 +319,41 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 sourcesKept += 1
             # In this case there is at least one overlapping source
             else:
+                # idxList is a plain Python list (distance-sorted, self first).
+                # Neighbors excluding the self-match at position 0.
+                neighbors = idxList[1:]
+
+                # Because the arrays are magnitude-sorted, any neighbor with a
+                # smaller sorted index is brighter than this source.  If one
+                # exists, this source is the fainter member of the overlap.
+                # Short-circuiting pure-Python test avoids building a numpy
+                # array for the common rejection path.
+                # (Equivalent to the old np.min(magDiff) < 0.0.)
+                if any(j < srcOn for j in neighbors):
+                    continue
+
+                # Only build arrays for the few sources that survive to here.
+                neighborIdx = np.asarray(neighbors)
                 # Measure magnitude differences with overlapping objects
-                magDiff = magSortedDf["mag"].iloc[idxList[1:]] - srcMag
-                magTooClose = magDiff.values < minMagDiff
+                magDiff = magSorted[neighborIdx] - srcMag
+                magTooClose = magDiff < minMagDiff
 
                 # Measure distances to overlapping objects
-                blendSeparations = nbrDist[1:]
+                dxy = xy[neighborIdx] - xy[srcOn]
+                blendSeparations = np.hypot(dxy[:, 0], dxy[:, 1])
                 blendTooClose = blendSeparations < minBlendedSeparation
 
-                # If this is the fainter source of the overlaps move on
-                if np.min(magDiff) < 0.0:
-                    continue
+                minMagDiffVal = magDiff.min()
+
                 # If this source overlaps but is brighter than all its
                 # overlapping sources by minMagDiff then keep it
-                elif np.min(magDiff) >= minMagDiff:
+                if minMagDiffVal >= minMagDiff:
                     index.append(groupIndices[srcOn])
                     sourcesKept += 1
                 # If the centers of any blended objects with a magnitude
                 # within minMagDiff of the source magnitude
                 # are closer than minBlendedSeparation move on
-                elif np.sum(blendTooClose & magTooClose) > 0:
+                elif np.any(blendTooClose & magTooClose):
                     continue
                 # If the number of overlapping sources with magnitudes close
                 # enough to count as blended is less than or equal to
@@ -330,10 +365,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # masks for deblending will include footprints of
                     # all the faint sources that we don't care about
                     # when deblending. Add one to index because
-                    # magDiff is all sources in magSortedDf after index=0.
+                    # magDiff is all sources after index=0.
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
-                    blendCentersX[groupIndices[srcOn]] = magSortedDf["x"].iloc[idxList[blendMagIdx]].values
-                    blendCentersY[groupIndices[srcOn]] = magSortedDf["y"].iloc[idxList[blendMagIdx]].values
+                    keepIdx = np.asarray(idxList)[blendMagIdx]
+                    blendCentersXMap[groupIndices[srcOn]] = xSorted[keepIdx]
+                    blendCentersYMap[groupIndices[srcOn]] = ySorted[keepIdx]
                     sourcesKept += 1
                 # Keep the source if it is blended with up to maxBlended
                 # number of sources. To check this we look at the maxBlended+1
@@ -346,13 +382,14 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # Same process as above to make sure we only get
                     # the blend centers we care about
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
-                    blendCentersX[groupIndices[srcOn]] = magSortedDf["x"].iloc[idxList[blendMagIdx]].values
-                    blendCentersY[groupIndices[srcOn]] = magSortedDf["y"].iloc[idxList[blendMagIdx]].values
+                    keepIdx = np.asarray(idxList)[blendMagIdx]
+                    blendCentersXMap[groupIndices[srcOn]] = xSorted[keepIdx]
+                    blendCentersYMap[groupIndices[srcOn]] = ySorted[keepIdx]
                     sourcesKept += 1
                 else:
                     continue
 
-            if (self.config.sourceLimit > 0) and (sourcesKept == self.config.sourceLimit):
+            if (sourceLimit > 0) and (sourcesKept == sourceLimit):
                 break
 
         # magSelected is a boolean array so we can
@@ -361,8 +398,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
         finalIndex = magIndex[index]
         selected[finalIndex] = True
         sortedIndex = np.sort(index)
-        selectedBlendCentersX = [blendCentersX[idx] for idx in sortedIndex]
-        selectedBlendCentersY = [blendCentersY[idx] for idx in sortedIndex]
+        selectedBlendCentersX = [blendCentersXMap.get(idx, np.array([])) for idx in sortedIndex]
+        selectedBlendCentersY = [blendCentersYMap.get(idx, np.array([])) for idx in sortedIndex]
 
         self.log.info("Selected %d/%d references", selected.sum(), len(sourceCat))
 
