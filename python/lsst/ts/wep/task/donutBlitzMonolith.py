@@ -49,7 +49,7 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 from astropy.table import QTable
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera, Detector
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
@@ -470,6 +470,17 @@ def _cut_and_evaluate_stamps(
     )
     _s_n_main = int(np.sum(_s_main))
 
+    if refcat is not None:
+        _rc_x = np.asarray(refcat["centroid_x"], dtype=float)
+        _rc_y = np.asarray(refcat["centroid_y"], dtype=float)
+        _rc_mag = {
+            "photo_mag": np.asarray(refcat["photo_mag"], dtype=float),
+            "astrom_mag": np.asarray(refcat["astrom_mag"], dtype=float),
+        }
+    else:
+        _rc_x = _rc_y = None
+        _rc_mag = {}
+
     def _cut_stamp_dict(
         cx_f,
         cy_f,
@@ -506,18 +517,22 @@ def _cut_and_evaluate_stamps(
                 else float("nan")
             )
 
+        # Vectorized box query over the precomputed refcat arrays.
+        # Offsets are relative to the *rounded* centroid (cx, cy), since that
+        # is the pixel the stamp is cut around and lands at the stamp center.
+        if _rc_x is None:
+            _box_mask = None
+            _dx_box = _dy_box = None
+        else:
+            _box_mask = (np.abs(_rc_x - cx) <= half) & (np.abs(_rc_y - cy) <= half)
+            _dx_box = _rc_x[_box_mask] - cx
+            _dy_box = _rc_y[_box_mask] - cy
+
         def _nearby(mag_col):
-            # Offsets are relative to the *rounded* centroid (cx, cy), since
-            # that is the pixel the stamp is cut around and the one that lands
-            # at the stamp center. Using the float centroid would leave symbols
-            # up to half a pixel off the features they mark.
-            if refcat is None:
+            if _box_mask is None:
                 return []
-            return [
-                (float(sx) - cx, float(sy) - cy, float(sm))
-                for sx, sy, sm in zip(refcat["centroid_x"], refcat["centroid_y"], refcat[mag_col])
-                if abs(float(sx) - cx) <= half and abs(float(sy) - cy) <= half
-            ]
+            _mag_box = _rc_mag[mag_col][_box_mask]
+            return list(zip(_dx_box.tolist(), _dy_box.tolist(), _mag_box.tolist()))
 
         _fa = detector.transform([lsst.geom.Point2D(float(cx_f), float(cy_f))], PIXELS, FIELD_ANGLE)[0]
         _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
