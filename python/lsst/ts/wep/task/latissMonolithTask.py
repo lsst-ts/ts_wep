@@ -102,6 +102,12 @@ from lsst.utils.timer import timeMethod
 # not gain a dependency on ts_observatory_control.
 LATISS_BORESIGHT_XY = (2036.5, 2000.5)
 
+# LATISS plate scale, arcsec/pixel, measured astrometrically on DM-24592. Also
+# from latiss_constants. Needed because ``run_wep`` compares its boresight
+# distance in ARCSECONDS (``calculate_xy_offsets`` multiplies by this), so a
+# threshold expressed in pixels would be ~10x too strict.
+LATISS_PIXEL_SCALE = 0.09569
+
 # Structured dtype for the paired (x, y) columns, matching calcZernikesTask so
 # that the output table stays readable by the same donut_viz code.
 pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
@@ -211,9 +217,10 @@ def fit_latiss_danish(
     jmax = _ZK_REF_JMAX
     band = stamp_extra.wep_im.bandLabel
     telescope = instrument.getBatoidModel(band)
-    # AuxTel.yaml declares a single scalar `wavelength`, so instrument.wavelength
-    # is {BandLabel.REF: 632nm} only -- while LATISS exposures report real bands
-    # like BandLabel.LSST_R. Fall back to the reference band rather than KeyError.
+    # AuxTel.yaml declares a single scalar `wavelength`, so
+    # instrument.wavelength is {BandLabel.REF: 632nm} only -- while LATISS
+    # exposures report real bands like BandLabel.LSST_R. Fall back to the
+    # reference band rather than KeyError.
     try:
         wavelength = instrument.wavelength[band]
     except KeyError:
@@ -237,9 +244,7 @@ def fit_latiss_danish(
             try:
                 zk_start = instrument.getIntrinsicZernikes(*fa, band=band, nollIndices=noll)
             except KeyError:  # same AuxTel band gap as the wavelength lookup
-                zk_start = instrument.getIntrinsicZernikes(
-                    *fa, band=instrument.refBand, nollIndices=noll
-                )
+                zk_start = instrument.getIntrinsicZernikes(*fa, band=instrument.refBand, nollIndices=noll)
         else:
             zk_start = np.zeros(len(noll))
         zk_ref = _opd_zk_ref(instrument, telescope, fa, dtype, wavelength, jmax=jmax)
@@ -273,8 +278,9 @@ def fit_latiss_danish(
     )
 
     # The parameter vector changed shape at the danish v1.0 rename: pre-1.0
-    # MultiDonutModel is [dx1,dx2,dy1,dy2,fwhm,*zk] with NO flux terms, whereas
-    # DZMultiDonutModel packs per-donut fluxes too. Always go through pack_params.
+    # MultiDonutModel is [dx1,dx2,dy1,dy2,fwhm,*zk] with NO flux terms,
+    # whereas DZMultiDonutModel packs per-donut fluxes too. Always go
+    # through pack_params.
     n = len(imgs)
     try:
         x0 = np.asarray(
@@ -435,8 +441,7 @@ class LatissMonolithTaskConfig(
     nollIndices: pexConfig.ListField = pexConfig.ListField(
         dtype=int,
         default=tuple(range(4, 23)),
-        doc="Noll indices to estimate. Must be ascending, >= 4, with complete "
-        "azimuthal pairs.",
+        doc="Noll indices to estimate. Must be ascending, >= 4, with complete azimuthal pairs.",
     )
     opticalModel: pexConfig.Field = pexConfig.Field(
         dtype=str,
@@ -467,9 +472,12 @@ class LatissMonolithTaskConfig(
     maxDistanceFromBoresight: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=500.0,
-        doc="Maximum distance in pixels from the boresight for a detected donut "
-        "to be accepted. When one side is out of bounds the other side's "
-        "centroid is substituted, as latiss_wep_align does.",
+        doc="Maximum distance in ARCSECONDS from the boresight for a detected "
+        "donut to be accepted. When one side is out of bounds the other side's "
+        "centroid is substituted, as latiss_wep_align does. The unit matters: "
+        "run_wep's default of 500 goes through calculate_xy_offsets, which "
+        "converts to arcsec, so 500 is ~5225 px -- most of the detector, i.e. "
+        "a sanity check rather than a tight cut.",
     )
     maxFitCost: pexConfig.Field = pexConfig.Field(
         dtype=float,
@@ -580,9 +588,7 @@ class LatissMonolithTask(pipeBase.PipelineTask):
 
         pairs = self.pairer.run(visitInfos)
         if len(pairs) == 0:
-            raise pipeBase.NoWorkFound(
-                f"No intra/extra pairs found among exposures {sorted(rawHandles)}."
-            )
+            raise pipeBase.NoWorkFound(f"No intra/extra pairs found among exposures {sorted(rawHandles)}.")
         self.log.info("Found %d intra/extra pair(s) among %d exposures.", len(pairs), len(rawHandles))
 
         # Outputs are keyed on the extra-focal visit, matching
@@ -606,9 +612,7 @@ class LatissMonolithTask(pipeBase.PipelineTask):
             try:
                 outputs = self.run(rawExtra, rawIntra, camera)
             except Exception as exc:  # noqa: BLE001
-                self.log.warning(
-                    "Skipping pair extra=%d intra=%d: %s", pair.extra, pair.intra, exc
-                )
+                self.log.warning("Skipping pair extra=%d intra=%d: %s", pair.extra, pair.intra, exc)
                 continue
 
             butlerQC.put(outputs.zernikes, zernikeHandles[pair.extra])
@@ -646,8 +650,9 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         Returns
         -------
         `lsst.pipe.base.Struct`
-            ``zernikes`` (`QTable`), ``donutStampsExtra``, ``donutStampsIntra``,
-            and the raw ``fitResults`` dicts from the danish fit.
+            ``zernikes`` (`QTable`), ``donutStampsExtra``,
+            ``donutStampsIntra``, and the raw ``fitResults`` dicts from the
+            danish fit.
         """
         if doIsr:
             expExtra = self.isrTask.run(rawExtra, camera=camera).outputExposure
@@ -685,18 +690,16 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         expExtra: afwImage.Exposure,
         expIntra: afwImage.Exposure,
     ) -> tuple[QTable, QTable]:
-        """Find the bright central donut on each side, via QuickFrameMeasurement.
+        """Find the bright central donut on each side.
+
+        Uses QuickFrameMeasurement.
 
         Follows ``latiss_wep_align.run_wep``: if exactly one side's donut is
         too far from the boresight, that side borrows the other side's
         centroid; if both are, it is an error.
         """
-        resExtra = self.quickFrameMeasurement.run(
-            expExtra.clone(), donutDiameter=self.config.donutDiameter
-        )
-        resIntra = self.quickFrameMeasurement.run(
-            expIntra.clone(), donutDiameter=self.config.donutDiameter
-        )
+        resExtra = self.quickFrameMeasurement.run(expExtra.clone(), donutDiameter=self.config.donutDiameter)
+        resIntra = self.quickFrameMeasurement.run(expIntra.clone(), donutDiameter=self.config.donutDiameter)
         if not resExtra.success or not resIntra.success:
             raise RuntimeError(
                 "QuickFrameMeasurement failed to find a centroid: "
@@ -708,20 +711,19 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         for side, res in (("extra", resExtra), ("intra", resIntra)):
             dx = res.brightestObjCentroid[0] - LATISS_BORESIGHT_XY[0]
             dy = res.brightestObjCentroid[1] - LATISS_BORESIGHT_XY[1]
-            dr = float(np.hypot(dx, dy))
+            # Arcseconds, matching run_wep: it measures this distance with
+            # calculate_xy_offsets, which applies the plate scale. Comparing
+            # pixels against run_wep's 500 would be ~10x too strict.
+            drPixels = float(np.hypot(dx, dy))
+            dr = drPixels * LATISS_PIXEL_SCALE
             outOfBounds[side] = dr > maxDist
-            self.log.info("%s-focal donut is %.1f px from the boresight.", side, dr)
+            self.log.info("%s-focal donut is %.1f arcsec (%.1f px) from the boresight.", side, dr, drPixels)
 
         if outOfBounds["extra"] and outOfBounds["intra"]:
-            raise RuntimeError(
-                "Both detected donuts are further than "
-                f"{maxDist} px from the boresight."
-            )
+            raise RuntimeError(f"Both detected donuts are further than {maxDist} arcsec from the boresight.")
         for side in ("extra", "intra"):
             if outOfBounds[side]:
-                self.log.warning(
-                    "%s-focal donut is out of bounds; using the other side's centroid.", side
-                )
+                self.log.warning("%s-focal donut is out of bounds; using the other side's centroid.", side)
 
         # Substitute the in-bounds side for whichever side is out of bounds.
         srcExtra = (resExtra, expExtra) if not outOfBounds["extra"] else (resIntra, expIntra)
@@ -872,9 +874,7 @@ class LatissMonolithTask(pipeBase.PipelineTask):
             cost = float(result["cost"])
             used = bool(result["success"]) and np.isfinite(cost)
             if used and maxCost is not None and cost > maxCost:
-                self.log.warning(
-                    "Pair %d rejected: cost %.1f exceeds maxFitCost %.1f.", i + 1, cost, maxCost
-                )
+                self.log.warning("Pair %d rejected: cost %.1f exceeds maxFitCost %.1f.", i + 1, cost, maxCost)
                 used = False
 
             fwhm = result["fwhm"]
@@ -929,7 +929,10 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         return table
 
     def _makeMetadata(self, stampsExtra: DonutStamps, stampsIntra: DonutStamps) -> dict:
-        """Build table metadata in ``CalcZernikesTask.createZkTableMetadata`` form."""
+        """Build table metadata.
+
+        Uses the ``CalcZernikesTask.createZkTableMetadata`` form.
+        """
         meta: dict = {"intra": {}, "extra": {}}
         camName = None
         for key, stamps in (("intra", stampsIntra), ("extra", stampsExtra)):
