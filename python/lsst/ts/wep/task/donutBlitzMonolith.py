@@ -428,6 +428,7 @@ class Donut:
     reject_reasons: list[str] = field(default_factory=list)
     intrinsic_zk: npt.NDArray[np.float64] | None = None
 
+
 def _cut_and_evaluate_stamps(
     postIsr: Exposure,
     selected_centroids: QTable,
@@ -824,6 +825,75 @@ def _run_cutout_worker(args: tuple) -> dict:
     return _cutoutPipeline(sensor_name, t_dispatch)
 
 
+# Maximum Noll index fit/reported. Dense Noll-indexed arrays are length
+# _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
+_ZK_JMAX = 78
+
+
+@dataclass
+class WfResult:
+    """One donut's wavefront-fit outputs, produced by `_wf_worker`.
+
+    Consumed by `_buildCatalog`, keyed by ``(donut_id, sensor)``. A fit that
+    timed out or raised still produces a WfResult with ``fit_success=False``
+    and all-NaN Zernikes. `_NULL_WF` is the sentinel for "no fit consumed this
+    donut" (paired-mode surplus with no partner).
+    """
+
+    donut_id: int
+    sensor: str
+    defocal: str
+    zk_dev: npt.NDArray[np.float64]        # dense Noll 0.._ZK_JMAX, metres, NaN where unfit
+    zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, metres
+    img: np.ndarray | None
+    model_img: np.ndarray | None
+    fit_success: bool
+    fit_elapsed: float
+    setup_elapsed: float
+    fit_nfev: int
+    fit_cost: float
+    fit_dx: float
+    fit_dy: float
+    fit_flux: float
+    fit_fwhm: float
+    fit_residual_rms: float
+    blend_frac: float
+    fit_bkg: float
+    zk_norm_um: float
+    group_id: str
+    group_size: int
+    fit_mode: str
+
+
+# Sentinel for "no fit consumed this donut". All-NaN Zernikes, empty strings,
+# fit_success=False -- so _buildCatalog's `used` derivation is naturally False.
+_NULL_WF = WfResult(
+    donut_id=-1,
+    sensor="",
+    defocal="",
+    zk_dev=np.full(_ZK_JMAX + 1, np.nan),
+    zk_intrinsic=np.full(_ZK_JMAX + 1, np.nan),
+    img=None,
+    model_img=None,
+    fit_success=False,
+    fit_elapsed=float("nan"),
+    setup_elapsed=float("nan"),
+    fit_nfev=0,
+    fit_cost=float("nan"),
+    fit_dx=float("nan"),
+    fit_dy=float("nan"),
+    fit_flux=float("nan"),
+    fit_fwhm=float("nan"),
+    fit_residual_rms=float("nan"),
+    blend_frac=float("nan"),
+    fit_bkg=float("nan"),
+    zk_norm_um=float("nan"),
+    group_id="",
+    group_size=0,
+    fit_mode="",
+)
+
+
 class _WfFitTimeoutError(Exception):
     pass
 
@@ -849,11 +919,6 @@ def _fit_timeout(seconds):
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, old)
-
-
-# Maximum Noll index fit/reported. Dense Noll-indexed arrays are length
-# _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
-_ZK_JMAX = 78
 
 
 def _bkg_free_model(
@@ -1425,31 +1490,31 @@ def _wf_worker(group: _WfGroup) -> dict:
         _img = imgs[i] if i < len(imgs) else None
         _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
         donuts_out.append(
-            {
-                "donut_id": int(d.id),
-                "sensor": d.sensor,
-                "defocal": defocal,
-                "zk_dev": zk_dev_dense,
-                "zk_intrinsic": _dense_intrinsic(d),
-                "img": _img,
-                "model_img": _mimg,
-                "fit_success": success,
-                "fit_elapsed": _fit_elapsed,
-                "setup_elapsed": _setup_elapsed,
-                "fit_nfev": _fit_nfev,
-                "fit_cost": _fit_cost,
-                "fit_dx": float(_dxs[i]) if i < len(_dxs) else float("nan"),
-                "fit_dy": float(_dys[i]) if i < len(_dys) else float("nan"),
-                "fit_flux": float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
-                "fit_fwhm": _fit_fwhm,
-                "fit_residual_rms": _residual_rms(
+            WfResult(
+                donut_id=int(d.id),
+                sensor=d.sensor,
+                defocal=defocal,
+                zk_dev=zk_dev_dense,
+                zk_intrinsic=_dense_intrinsic(d),
+                img=_img,
+                model_img=_mimg,
+                fit_success=success,
+                fit_elapsed=_fit_elapsed,
+                setup_elapsed=_setup_elapsed,
+                fit_nfev=_fit_nfev,
+                fit_cost=_fit_cost,
+                fit_dx=float(_dxs[i]) if i < len(_dxs) else float("nan"),
+                fit_dy=float(_dys[i]) if i < len(_dys) else float("nan"),
+                fit_flux=float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
+                fit_fwhm=_fit_fwhm,
+                fit_residual_rms=_residual_rms(
                     _img,
                     _mimg,
                     _INSTRUMENT.donutRadius,
                     _INSTRUMENT.obscuration,
                     _CALIB_STORE["cutout_cfg"]["apertureOuterMarginFrac"],
                 ),
-                "blend_frac": _blend_frac(
+                blend_frac=_blend_frac(
                     _img,
                     (
                         _bkg_free_model(_mimg, model, params, i, wf_cfg["bkgOrder"])
@@ -1458,12 +1523,12 @@ def _wf_worker(group: _WfGroup) -> dict:
                     ),
                     bkg_stds[i] if i < len(bkg_stds) else float("nan"),
                 ),
-                "fit_bkg": _fit_bkg_val(params, i),
-                "zk_norm_um": zk_norm_um,
-                "group_id": group.group_id,
-                "group_size": n,
-                "fit_mode": fit_mode,
-            }
+                fit_bkg=_fit_bkg_val(params, i),
+                zk_norm_um=zk_norm_um,
+                group_id=group.group_id,
+                group_size=n,
+                fit_mode=fit_mode,
+            )
         )
     return {
         "mode": group.mode,
@@ -2531,7 +2596,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         wf_by_id: dict = {}
         for group_idx, r in enumerate(wf_results):
             for wd in r.get("donuts", []):
-                wf_by_id[(int(wd["donut_id"]), str(wd["sensor"]))] = (wd, group_idx)
+                wf_by_id[(wd.donut_id, wd.sensor)] = (wd, group_idx)
 
         # Build lookup: sensor -> per-sensor metadata from cutout results.
         sensor_meta: dict = {}
@@ -2615,31 +2680,23 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             out[: arr.shape[0], : arr.shape[1]] = arr
             return out
 
-        def _wd_field(wd, key, caster, default):
-            return caster(wd[key]) if wd is not None else default
-
         rows = []
         for d, candidate in all_donuts:
             sid = int(d.id)
-            wd, grp = wf_by_id.get((sid, str(d.sensor)), (None, -1))
+            wd, grp = wf_by_id.get((sid, d.sensor), (_NULL_WF, -1))
 
-            zk_dev = wd["zk_dev"] if wd is not None else np.full(_ZK_JMAX + 1, np.nan)
-            zk_int = wd["zk_intrinsic"] if wd is not None else np.full(_ZK_JMAX + 1, np.nan)
+            zk_dev = wd.zk_dev
+            zk_int = wd.zk_intrinsic
 
-            # "used" means a fit consumed this donut and returned a wavefront.
-            # False for a candidate that no group claimed (paired-mode surplus
-            # with no partner) and for one whose fit timed out or raised, since
-            # those return an all-NaN zk_dev with fit_success False.
-            used = bool(
-                wd is not None
-                and wd.get("fit_success", False)
-                and np.any(np.isfinite(zk_dev[4:]))
-            )
+            # "used": a fit consumed this donut and returned a wavefront.
+            # _NULL_WF has fit_success=False and all-NaN zk_dev, so a donut no
+            # group claimed evaluates False here without a special-case.
+            used = bool(wd.fit_success and np.any(np.isfinite(zk_dev[4:])))
 
-            reject_reasons = getattr(d, "reject_reasons", [])
+            reject_reasons = d.reject_reasons
             stamp = _pad(d.stamp.astype(float), max_ny, max_nx)
 
-            wf_img_raw = wd.get("img") if wd is not None else None
+            wf_img_raw = wd.img
             wf_img = (
                 _pad(wf_img_raw.astype(float), max_wf_ny, max_wf_nx)
                 if wf_img_raw is not None
@@ -2652,7 +2709,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "det_id": int(d.det_id),
                 "sensor": str(d.sensor),
                 "id": sid,
-                "defocal": _wd_field(wd, "defocal", str, ""),
+                "defocal": wd.defocal,
                 "band": str(d.band),
                 # candidate: passed every selection/quality cut.
                 # used: a fit consumed it and returned a wavefront.
@@ -2689,22 +2746,22 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "rejected_selector": False,
                 "reject_reasons": _reject_reason_str(reject_reasons),
                 # --- fit results ---
-                "fit_mode": _wd_field(wd, "fit_mode", str, ""),
+                "fit_mode": wd.fit_mode,
                 "group": int(grp),
-                "group_size": _wd_field(wd, "group_size", int, 0),
-                "fit_success": _wd_field(wd, "fit_success", bool, False),
-                "fit_elapsed": _wd_field(wd, "fit_elapsed", float, float("nan")),
-                "setup_elapsed": _wd_field(wd, "setup_elapsed", float, float("nan")),
-                "fit_nfev": _wd_field(wd, "fit_nfev", int, 0),
-                "fit_cost": _wd_field(wd, "fit_cost", float, float("nan")),
-                "fit_dx": _wd_field(wd, "fit_dx", float, float("nan")),
-                "fit_dy": _wd_field(wd, "fit_dy", float, float("nan")),
-                "fit_flux": _wd_field(wd, "fit_flux", float, float("nan")),
-                "fit_fwhm": _wd_field(wd, "fit_fwhm", float, float("nan")),
-                "fit_bkg": _wd_field(wd, "fit_bkg", float, float("nan")),
-                "fit_residual_rms": _wd_field(wd, "fit_residual_rms", float, float("nan")),
-                "blend_frac": _wd_field(wd, "blend_frac", float, float("nan")),
-                "zk_norm_um": _wd_field(wd, "zk_norm_um", float, float("nan")),
+                "group_size": wd.group_size,
+                "fit_success": wd.fit_success,
+                "fit_elapsed": wd.fit_elapsed,
+                "setup_elapsed": wd.setup_elapsed,
+                "fit_nfev": wd.fit_nfev,
+                "fit_cost": wd.fit_cost,
+                "fit_dx": wd.fit_dx,
+                "fit_dy": wd.fit_dy,
+                "fit_flux": wd.fit_flux,
+                "fit_fwhm": wd.fit_fwhm,
+                "fit_bkg": wd.fit_bkg,
+                "fit_residual_rms": wd.fit_residual_rms,
+                "blend_frac": wd.blend_frac,
+                "zk_norm_um": wd.zk_norm_um,
                 # --- per-Noll Zernikes (µm), Noll 4..``_ZK_JMAX`` ---
                 **_zk_cols("dev", zk_dev),
                 **_zk_cols("intrinsic", zk_int),
@@ -2712,8 +2769,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "stamp": stamp,
                 "wf_img": wf_img,
                 "model_img": (
-                    _pad(wd["model_img"].astype(float), max_wf_ny, max_wf_nx)
-                    if (wd is not None and wd.get("model_img") is not None)
+                    _pad(wd.model_img.astype(float), max_wf_ny, max_wf_nx)
+                    if wd.model_img is not None
                     else np.full((max_wf_ny, max_wf_nx), np.nan, dtype=float)
                 ),
             }
@@ -2741,6 +2798,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["bkg_annulus_outer_frac"] = _cutout_cfg["bkgAnnulusOuterFrac"]
         table.meta["max_donuts"] = int(_cutout_cfg["maxDonuts"])
         return table
+
 
 class DonutBlitzPlotTaskConnections(
     pipeBase.PipelineTaskConnections,
