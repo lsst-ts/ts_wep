@@ -2723,7 +2723,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "fa_x_ccs": float(d.fa_x_ccs),
                 "fa_y_ccs": float(d.fa_y_ccs),
                 "field_dist_deg": float(np.degrees(np.hypot(d.fa_x_ccs, d.fa_y_ccs))),
-                "n_quarter": int(getattr(d, "n_quarter", 0)),
+                "n_quarter": d.n_quarter,
                 # --- nearby refcat sources (JSON-encoded, pixel offsets + magnitudes) ---
                 "nearby_photo": _encode_nearby(d.nearby_photo),
                 "nearby_astrom": _encode_nearby(d.nearby_astrom),
@@ -2741,7 +2741,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "rejected_snr": bool("snr" in reject_reasons),
                 "rejected_inner_frac": bool("inner_frac" in reject_reasons),
                 "rejected_outer_frac": bool("outer_frac" in reject_reasons),
-                "rejected_sat": bool("SAT" in reject_reasons or getattr(d, "saturated", False)),
+                "rejected_sat": bool("SAT" in reject_reasons or d.saturated),
                 "rejected_field_dist": bool("field_dist" in reject_reasons),
                 "rejected_selector": False,
                 "reject_reasons": _reject_reason_str(reject_reasons),
