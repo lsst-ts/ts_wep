@@ -178,7 +178,7 @@ def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
 
 
 def _measureFlux(
-    peaks: np.ndarray,
+    selections: QTable,
     exposure: Exposure,
     radius: float,
     obscuration: float,
@@ -196,8 +196,8 @@ def _measureFlux(
 
     Parameters
     ----------
-    peaks : np.ndarray
-        ``(N, 2)`` array of ``(row, col)`` centroids from `_detectPeaks`.
+    selections : QTable
+        Table of selected sources with columns ``centroid_x`` and ``centroid_y``.
     exposure : Exposure
         Science exposure in un-binned pixel coordinates.
     radius : float
@@ -220,10 +220,11 @@ def _measureFlux(
     Returns
     -------
     QTable
-        One row per peak with columns ``centroid_x``, ``centroid_y``,
-        ``flux``, ``inner_flux``, ``outer_flux``, ``outer_sector_minmax_flux``,
-        ``std``, and ``snr``.  Peaks that fall too close to the image border
-        have ``nan`` values.
+        A copy of ``selections`` with the measurement columns added: ``flux``,
+        ``inner_flux``, ``outer_flux``, ``outer_sector_minmax_flux``, ``std``,
+        ``snr``, ``inner_frac``, ``outer_frac``, and
+        ``outer_sector_minmax_frac``.  The input table is left unmodified.
+        Peaks that fall too close to the image border have ``nan`` values.
     """
     arr = exposure.image.array
     half = int(radius * bkgAnnulusOuterFrac)
@@ -245,7 +246,7 @@ def _measureFlux(
     flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
     outer_sector_minmax_list = []
 
-    for row, col in zip(peaks[:, 0], peaks[:, 1]):
+    for row, col in zip(selections["centroid_y"], selections["centroid_x"]):
         rmin, rmax = int(round(row)) - half, int(round(row)) + half + 1
         cmin, cmax = int(round(col)) - half, int(round(col)) + half + 1
 
@@ -274,18 +275,18 @@ def _measureFlux(
         q75, q25 = np.nanpercentile(diff, [75, 25])
         std_list.append(float((q75 - q25) / 1.349 / np.sqrt(2)))
 
-    table = QTable()
-    table["centroid_x"] = np.array(peaks[:, 1], dtype=float)
-    table["centroid_y"] = np.array(peaks[:, 0], dtype=float)
-    table["flux"] = np.array(flux_list, dtype=float)
-    table["inner_flux"] = np.array(inner_flux_list, dtype=float)
-    table["outer_flux"] = np.array(outer_flux_list, dtype=float)
-    table["outer_sector_minmax_flux"] = np.array(outer_sector_minmax_list, dtype=float)
-    table["std"] = np.array(std_list, dtype=float)
+    selections = selections.copy()  # avoid modifying the input table in place
+    selections["flux"] = flux_list
+    selections["inner_flux"] = inner_flux_list
+    selections["outer_flux"] = outer_flux_list
+    selections["outer_sector_minmax_flux"] = outer_sector_minmax_list
+    selections["std"] = std_list
     with np.errstate(invalid="ignore", divide="ignore"):
-        table["snr"] = (table["flux"] / table["std"]) / np.sqrt(n_main)
-    return table
-
+        selections["snr"] = (selections["flux"] / selections["std"]) / np.sqrt(n_main)
+        selections["inner_frac"] = selections["inner_flux"] / selections["flux"]
+        selections["outer_frac"] = selections["outer_flux"] / selections["flux"]
+        selections["outer_sector_minmax_frac"] = selections["outer_sector_minmax_flux"] / selections["flux"]
+    return selections
 
 def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
     """Convert blind-detect QTable into a minimal afwTable.SourceCatalog
@@ -321,7 +322,7 @@ def _select_candidate_donuts(
     postIsr: Exposure,
     selections: QTable,
     cutout_cfg: dict,
-) -> QTable | None:
+) -> QTable:
     """Filter centroids by flux measurement and quality criteria.
 
     Measures flux on the full image and applies quality cuts (inner/outer flux
@@ -335,15 +336,20 @@ def _select_candidate_donuts(
         Catalog-selected (or blind-detection) centroids with columns
         ``centroid_x``, ``centroid_y``, ``id``.
     cutout_cfg : dict
-        Config dict with ``maxDonuts``, ``stampSize``, ``minStampSnr``,
-        ``innerFluxFractionCut``, ``outerFluxFractionCut``.
+        Config dict with ``maxDonuts``, ``minStampSnr``, ``innerFracThreshold``,
+        ``outerFracThreshold``, ``apertureOuterMarginFrac``,
+        ``apertureInnerBufferFrac``, ``bkgAnnulusInnerFrac``,
+        ``bkgAnnulusOuterFrac``.
 
     Returns
     -------
-    QTable or None
-        If candidates found: QTable with columns ``centroid_x``, ``centroid_y``,
-        ``source_id``, ``flux``, ``inner_frac``, ``outer_frac``, ``outer_sector_minmax``;
-        else ``None``.
+    QTable
+        The surviving rows of ``selections``, brightest-first and truncated to
+        ``maxDonuts``, with the `_measureFlux` columns added: ``flux``,
+        ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``
+        (plus the raw ``*_flux`` and ``std`` columns).  Possibly empty if no
+        donuts pass cuts; an empty input is returned unmodified, i.e. without
+        the measurement columns.
     """
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
@@ -354,15 +360,11 @@ def _select_candidate_donuts(
     bkgAnnulusOuterFrac = cutout_cfg["bkgAnnulusOuterFrac"]
 
     if len(selections) == 0:
-        return None
-    cat_cx = np.array(selections["centroid_x"])
-    cat_cy = np.array(selections["centroid_y"])
-    source_ids = np.array(selections["id"])
+        return selections
 
     # --- Flux measurement and quality selection ---
-    peaks = np.column_stack([cat_cy, cat_cx])
     measTable = _measureFlux(
-        peaks,
+        selections,
         postIsr,
         donutRadius,
         obscuration,
@@ -371,48 +373,20 @@ def _select_candidate_donuts(
         bkgAnnulusInnerFrac,
         bkgAnnulusOuterFrac,
     )
-    valid_mask = np.isfinite(measTable["flux"]) & (measTable["flux"] > 0)
-    measTable = measTable[valid_mask]
-    source_ids = source_ids[valid_mask]
-    if len(measTable) == 0:
-        return None
+
+    fluxOk = measTable["flux"] > 0
     innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < cutout_cfg["innerFracThreshold"]
     outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < cutout_cfg["outerFracThreshold"]
     snrOk = measTable["snr"] > cutout_cfg["minStampSnr"]
-    qual_mask = innerOk & outerOk & snrOk
-    measTable = measTable[qual_mask]
-    source_ids = source_ids[qual_mask]
-    if len(measTable) == 0:
-        return None
-    flux_arr = np.array(measTable["flux"])
-    inner_frac_arr = np.array(measTable["inner_flux"]) / flux_arr
-    outer_frac_arr = np.array(measTable["outer_flux"]) / flux_arr
-    outer_sector_minmax_arr = np.array(measTable["outer_sector_minmax_flux"]) / flux_arr
-    order = np.argsort(flux_arr)[::-1][:maxDonuts]
-    centroid_x = np.array(measTable["centroid_x"])[order]
-    centroid_y = np.array(measTable["centroid_y"])[order]
-    flux_arr = flux_arr[order]
-    inner_frac_arr = inner_frac_arr[order]
-    outer_frac_arr = outer_frac_arr[order]
-    outer_sector_minmax_arr = outer_sector_minmax_arr[order]
-    source_ids = source_ids[order]
-
-    # Return as QTable instead of tuple
-    return QTable(
-        {
-            "source_id": source_ids,
-            "centroid_x": centroid_x,
-            "centroid_y": centroid_y,
-            "flux": flux_arr,
-            "inner_frac": inner_frac_arr,
-            "outer_frac": outer_frac_arr,
-            "outer_sector_minmax_frac": outer_sector_minmax_arr,
-        }
-    )
+    allOk = fluxOk & innerOk & outerOk & snrOk
+    measTable = measTable[allOk]
+    order = np.argsort(measTable["flux"])[::-1]
+    measTable = measTable[order[:maxDonuts]]
+    return measTable
 
 def _cut_and_evaluate_stamps(
     postIsr: Exposure,
-    selected_centroids: tuple,
+    selected_centroids: QTable,
     refcat: QTable | None,
     cutout_cfg: dict,
     blindDetections: QTable,
@@ -427,15 +401,18 @@ def _cut_and_evaluate_stamps(
     ----------
     postIsr : Exposure
         Background-subtracted post-ISR science exposure.
-    selected_centroids : tuple
-        ``(centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr,
-        outer_frac_arr, outer_sector_minmax_arr)`` from `_select_candidate_donuts`.
+    selected_centroids : QTable
+        Candidate donuts from `_select_candidate_donuts`, with columns ``id``,
+        ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
+        ``outer_frac``, ``outer_sector_minmax_frac``.
     refcat : QTable or None
         Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
         ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
     cutout_cfg : dict
-        Config dict with ``stampSize``, ``minStampSnr``,
-        ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
+        Config dict with ``stampSize``, ``minStampSnr``, ``innerFracThreshold``,
+        ``outerFracThreshold``, ``maxFieldDist``, ``apertureOuterMarginFrac``,
+        ``apertureInnerBufferFrac``, ``bkgAnnulusInnerFrac``,
+        ``bkgAnnulusOuterFrac``.
     blindDetections : QTable
         Centroid table from `_blindDetect`, used for catalog_centroid_offset_px.
 
@@ -448,9 +425,8 @@ def _cut_and_evaluate_stamps(
     """
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
-    # Unpack selected centroids
-
-    source_ids = selected_centroids["source_id"]
+    # Pull the candidate columns out as arrays for the per-donut loop below.
+    ids = selected_centroids["id"]
     centroid_x = selected_centroids["centroid_x"]
     centroid_y = selected_centroids["centroid_y"]
     flux_arr = selected_centroids["flux"]
@@ -499,7 +475,7 @@ def _cut_and_evaluate_stamps(
         cx_f,
         cy_f,
         flux_val,
-        source_id_val,
+        id_val,
         inner_frac,
         outer_frac,
         outer_sector_minmax_frac,
@@ -571,7 +547,7 @@ def _cut_and_evaluate_stamps(
             visit_id=visit_id,
             centroid_x_raw=float(cx_f),
             centroid_y_raw=float(cy_f),
-            source_id=int(source_id_val),
+            id=int(id_val),
             inner_frac=inner_frac,
             outer_frac=outer_frac,
             outer_sector_minmax_frac=outer_sector_minmax_frac,
@@ -629,7 +605,7 @@ def _cut_and_evaluate_stamps(
             cx_f,
             cy_f,
             flux_arr[i],
-            source_ids[i],
+            ids[i],
             float(inner_frac_arr[i]),
             float(outer_frac_arr[i]),
             float(outer_sector_minmax_arr[i]),
@@ -752,6 +728,9 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     selections = blindDetections
     refcat = None
     cat_err = None
+    selection_source = "blind_unfiltered"
+    donut_selector = _CALIB_STORE["donut_selector_task"]
+
     if wcs is not None:
         try:
             photo_filter = cutout_cfg["resolvedPhotoFilterName"]
@@ -772,11 +751,30 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
             with np.errstate(invalid="ignore", divide="ignore"):
                 refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
                 refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
-            donut_selector = _CALIB_STORE["donut_selector_task"]
             result = donut_selector.run(refcat, detector, photo_filter)
             selections = result.sourceCat
+            selection_source = "refcat"
         except Exception as exc:
             cat_err = str(exc)
+            refcat = None  # don't leave a partially-built refcat around
+
+    # If the refcat path didn't produce a selection, run the blind detections
+    # through the same selector.  With allowFluxless=True it auto-detects the
+    # missing flux and applies edge / field-radius / max cuts on geometry only.
+    # Fall back to the raw blind detections only if that also fails.
+    if selection_source != "refcat":
+        try:
+            result = donut_selector.run(blindDetections, detector, "")
+            selections = result.sourceCat
+            selection_source = "blind_selected"
+        except Exception as exc:
+            cat_err = cat_err or str(exc)
+            selections = blindDetections
+            selection_source = "blind_unfiltered"
+
+    _log.info(
+        "Donut selection path: %s (%d sources)", selection_source, len(selections)
+    )
 
     # --- stamp cutting ---
     t5 = time.perf_counter()
@@ -785,7 +783,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         selections,
         cutout_cfg,
     )
-    if candidates is None:
+    if len(candidates) == 0:
         donuts, rejected_donuts = [], []
     else:
         donuts, rejected_donuts = _cut_and_evaluate_stamps(
@@ -1047,7 +1045,7 @@ def _build_wf_groups(mode, results_by_sensor, wf_cfg):
             extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d["snr"], reverse=True)
             intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d["snr"], reverse=True)
             for extra, intra in zip(extra_donuts, intra_donuts):
-                gid = f"{extra['source_id']}_{intra['source_id']}"
+                gid = f"{extra['id']}_{intra['id']}"
                 groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, mode="paired"))
             n_pairs = min(len(extra_donuts), len(intra_donuts))
             unmatched_donuts.extend(extra_donuts[n_pairs:])
@@ -1055,7 +1053,7 @@ def _build_wf_groups(mode, results_by_sensor, wf_cfg):
     elif mode == "unpaired":
         for sensor_donuts in results_by_sensor.values():
             for d in sensor_donuts:
-                groups.append(_WfGroup(donuts=[d], group_id=str(d["source_id"]), mode="unpaired"))
+                groups.append(_WfGroup(donuts=[d], group_id=str(d["id"]), mode="unpaired"))
     elif mode == "full_detector":
         for sensor_name, sensor_donuts in results_by_sensor.items():
             groups.append(_WfGroup(donuts=sensor_donuts, group_id=sensor_name, mode="full_detector"))
@@ -1422,7 +1420,7 @@ def _wf_worker(group: _WfGroup) -> dict:
         _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
         donuts_out.append(
             {
-                "donut_id": int(d["source_id"]),
+                "donut_id": int(d["id"]),
                 "sensor": d["sensor"],
                 "defocal": defocal,
                 "zk_dev": zk_dev_dense,
@@ -1952,6 +1950,7 @@ class DonutBlitzMonolithTaskConfig(
         self.isrTask.crosstalk.doQuadraticCrosstalkCorrection = False
         self.isrTask.doITLEdgeBleedMask = False
         self.isrTask.qa.saveStats = False
+
         self.astromTask.wcsFitter.retarget(FitAffineWcsTask)
         self.astromTask.doMagnitudeOutlierRejection = False
         self.astromTask.referenceSelector.doMagLimit = True
@@ -1966,12 +1965,14 @@ class DonutBlitzMonolithTaskConfig(
         self.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
         self.astromTask.maxIter = 5
         self.astromTask.matcher.maxOffsetPix = 1000
+
         # Monster refcat uses full filter names (e.g. phot_g_mean), not band
         # labels, so the default mag-limit policy lookup by band would fail.
         # Use custom mag limits instead.
         self.donutSelector.useCustomMagLimit = True
         self.donutSelector.maxFieldDist = 1.725
         self.donutSelector.sourceLimit = 40
+        self.donutSelector.allowFluxless = True
 
 
 class DonutBlitzMonolithTask(pipeBase.PipelineTask):
@@ -2500,7 +2501,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         Returns
         -------
         QTable
-            Exactly one row per donut, keyed by ``(sensor, source_id)``, with two
+            Exactly one row per donut, keyed by ``(sensor, id)``, with two
             independent flags:
 
             ``candidate``
@@ -2519,7 +2520,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         """
         import json
 
-        # Build lookup: (source_id, sensor) -> (wf donut entry, group index).
+        # Build lookup: (id, sensor) -> (wf donut entry, group index).
         # Key on both fields to handle the same refcat star on SW0 and SW1.
         wf_by_id: dict = {}
         for group_idx, r in enumerate(wf_results):
@@ -2571,7 +2572,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # partner, so they appear in both lists. Keyed dedupe keeps one row per
         # donut -- they stay candidates, they just never got fitted.
         def _key(d):
-            return (str(d["sensor"]), int(d["source_id"]))
+            return (str(d["sensor"]), int(d["id"]))
 
         all_donuts = []
         _seen = set()
@@ -2613,7 +2614,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         rows = []
         for d, candidate in all_donuts:
-            sid = int(d["source_id"])
+            sid = int(d["id"])
             wd, grp = wf_by_id.get((sid, str(d["sensor"])), (None, -1))
 
             zk_dev = wd["zk_dev"] if wd is not None else np.full(_ZK_JMAX + 1, np.nan)
@@ -2644,7 +2645,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "visit_id": int(d["visit_id"]),
                 "det_id": int(d["det_id"]),
                 "sensor": str(d["sensor"]),
-                "source_id": sid,
+                "id": sid,
                 "defocal": _wd_field(wd, "defocal", str, ""),
                 "band": str(d["band"]),
                 # candidate: passed every selection/quality cut.
@@ -3005,7 +3006,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
             osm_str = f"osm={outer_sector_minmax:.3f}" if np.isfinite(outer_sector_minmax) else "osm=?"
             snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
-            sid = int(row["source_id"])
+            sid = int(row["id"])
             sid_str = f"id={sid}" if sid != 0 else ""
             _text_color = _COLOR_REJECTED if rejected else "black"
             _reasons = str(row["reject_reasons"]) if rejected else ""
@@ -3158,7 +3159,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             for r in rows:
                 model_arr = np.array(r["model_img"])
                 donuts_out.append({
-                    "donut_id": int(r["source_id"]),
+                    "donut_id": int(r["id"]),
                     "sensor": str(r["sensor"]),
                     "defocal": str(r["defocal"]),
                     "img": np.array(r["wf_img"]),
