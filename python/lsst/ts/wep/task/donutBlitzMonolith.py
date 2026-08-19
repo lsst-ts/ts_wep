@@ -222,7 +222,7 @@ def _measureFlux(
     QTable
         A copy of ``selections`` with the measurement columns added: ``flux``,
         ``inner_flux``, ``outer_flux``, ``outer_sector_minmax_flux``, ``std``,
-        ``snr``, ``inner_frac``, ``outer_frac``, and
+        ``bkg``, ``snr``, ``inner_frac``, ``outer_frac``, and
         ``outer_sector_minmax_frac``.  The input table is left unmodified.
         Peaks that fall too close to the image border have ``nan`` values.
     """
@@ -245,6 +245,7 @@ def _measureFlux(
 
     flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
     outer_sector_minmax_list = []
+    bkg_list = []
 
     for row, col in zip(selections["centroid_y"], selections["centroid_x"]):
         rmin, rmax = int(round(row)) - half, int(round(row)) + half + 1
@@ -256,10 +257,12 @@ def _measureFlux(
             outer_flux_list.append(np.nan)
             outer_sector_minmax_list.append(np.nan)
             std_list.append(np.nan)
+            bkg_list.append(np.nan)
             continue
 
         stamp = arr[rmin:rmax, cmin:cmax]
         bkg = np.nanmedian(stamp[bkg_mask])
+        bkg_list.append(float(bkg))
         stamp_sub = stamp - bkg
 
         flux = float(np.sum(stamp_sub[main_mask]))
@@ -281,6 +284,7 @@ def _measureFlux(
     selections["outer_flux"] = outer_flux_list
     selections["outer_sector_minmax_flux"] = outer_sector_minmax_list
     selections["std"] = std_list
+    selections["bkg"] = bkg_list
     with np.errstate(invalid="ignore", divide="ignore"):
         selections["snr"] = (selections["flux"] / selections["std"]) / np.sqrt(n_main)
         selections["inner_frac"] = selections["inner_flux"] / selections["flux"]
@@ -347,9 +351,11 @@ def _select_candidate_donuts(
         The surviving rows of ``selections``, brightest-first and truncated to
         ``maxDonuts``, with the `_measureFlux` columns added: ``flux``,
         ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``
-        (plus the raw ``*_flux`` and ``std`` columns).  Possibly empty if no
-        donuts pass cuts; an empty input is returned unmodified, i.e. without
-        the measurement columns.
+        (plus the raw ``*_flux``, ``std``, and ``bkg`` columns).  These are the
+        per-donut metrics `_cut_and_evaluate_stamps` carries through to the
+        stamp dicts, rather than recomputing.  Possibly empty if no donuts pass
+        cuts; an empty input is returned unmodified, i.e. without the
+        measurement columns.
     """
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
@@ -404,15 +410,15 @@ def _cut_and_evaluate_stamps(
     selected_centroids : QTable
         Candidate donuts from `_select_candidate_donuts`, with columns ``id``,
         ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
-        ``outer_frac``, ``outer_sector_minmax_frac``.
+        ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``, ``std``, and
+        ``bkg``.  The photometric metrics are carried through to the stamp
+        dicts as-is; only geometry and the SAT flag are computed here.
     refcat : QTable or None
         Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
         ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
     cutout_cfg : dict
         Config dict with ``stampSize``, ``minStampSnr``, ``innerFracThreshold``,
-        ``outerFracThreshold``, ``maxFieldDist``, ``apertureOuterMarginFrac``,
-        ``apertureInnerBufferFrac``, ``bkgAnnulusInnerFrac``,
-        ``bkgAnnulusOuterFrac``.
+        ``outerFracThreshold``, ``maxFieldDist``.
     blindDetections : QTable
         Centroid table from `_blindDetect`, used for catalog_centroid_offset_px.
 
@@ -433,6 +439,9 @@ def _cut_and_evaluate_stamps(
     inner_frac_arr = selected_centroids["inner_frac"]
     outer_frac_arr = selected_centroids["outer_frac"]
     outer_sector_minmax_arr = selected_centroids["outer_sector_minmax_frac"]
+    snr_arr = selected_centroids["snr"]
+    bkg_arr = selected_centroids["bkg"]
+    bkg_std_arr = selected_centroids["std"]
 
     detector = postIsr.getDetector()
     band = postIsr.filter.bandLabel
@@ -441,24 +450,10 @@ def _cut_and_evaluate_stamps(
     n_quarter = detector.getOrientation().getNQuarter()
     stampSize = cutout_cfg["stampSize"]
     half = stampSize // 2
-    apertureOuterMarginFrac = cutout_cfg["apertureOuterMarginFrac"]
-    apertureInnerBufferFrac = cutout_cfg["apertureInnerBufferFrac"]
-    bkgAnnulusInnerFrac = cutout_cfg["bkgAnnulusInnerFrac"]
-    bkgAnnulusOuterFrac = cutout_cfg["bkgAnnulusOuterFrac"]
 
-    # --- Precompute annular masks ---
     arr = postIsr.image.array
     mask_arr = postIsr.mask.array
     sat_bit = postIsr.mask.getPlaneBitMask("SAT")
-
-    # Grid matches the cut stamp below: 2*half+1 px, centroid pixel exactly centered.
-    _sgy, _sgx = np.mgrid[-half : half + 1, -half : half + 1]
-    _sr = np.hypot(_sgx, _sgy)
-    _s_main = (_sr < donutRadius * apertureOuterMarginFrac) & (_sr > donutRadius * obscuration)
-    _s_bkg = (_sr < donutRadius * obscuration * apertureInnerBufferFrac) | (
-        (_sr > donutRadius * bkgAnnulusInnerFrac) & (_sr < donutRadius * bkgAnnulusOuterFrac)
-    )
-    _s_n_main = int(np.sum(_s_main))
 
     if refcat is not None:
         _rc_x = np.asarray(refcat["centroid_x"], dtype=float)
@@ -479,6 +474,9 @@ def _cut_and_evaluate_stamps(
         inner_frac,
         outer_frac,
         outer_sector_minmax_frac,
+        snr_val,
+        bkg_val,
+        bkg_std_val,
         blind_cx=None,
         blind_cy=None,
     ):
@@ -495,17 +493,6 @@ def _cut_and_evaluate_stamps(
         saturated = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
         stamp = np.array(arr[rmin:rmax, cmin:cmax])
         stamp_ccs = np.rot90(stamp, k=-n_quarter).T
-
-        with np.errstate(invalid="ignore", divide="ignore"):
-            _s_bkg_pix = stamp[_s_bkg]
-            _s_bkg_std = float(np.nanstd(_s_bkg_pix)) if np.any(_s_bkg) else float("nan")
-            _s_bkg_med = float(np.nanmedian(_s_bkg_pix)) if np.any(_s_bkg) else 0.0
-            _s_signal = float(np.sum((stamp - _s_bkg_med)[_s_main]))
-            stamp_snr = (
-                _s_signal / (_s_bkg_std * np.sqrt(_s_n_main))
-                if _s_bkg_std > 0 and _s_n_main > 0
-                else float("nan")
-            )
 
         # Vectorized box query over the precomputed refcat arrays.
         # Offsets are relative to the *rounded* centroid (cx, cy), since that
@@ -554,9 +541,9 @@ def _cut_and_evaluate_stamps(
             field_dist_deg=_field_dist_deg,
             donut_radius=donutRadius,
             obscuration=obscuration,
-            snr=stamp_snr,
-            bkg_level=_s_bkg_med,
-            bkg_std=_s_bkg_std,
+            snr=float(snr_val),
+            bkg=float(bkg_val),
+            bkg_std=float(bkg_std_val),
             nearest_neighbor_dist_px=(float(min(_neighbor_dists)) if _neighbor_dists else float("nan")),
             n_neighbors_in_stamp=len(_neighbor_dists),
             catalog_centroid_offset_px=_catalog_centroid_offset_px,
@@ -609,6 +596,9 @@ def _cut_and_evaluate_stamps(
             float(inner_frac_arr[i]),
             float(outer_frac_arr[i]),
             float(outer_sector_minmax_arr[i]),
+            snr_arr[i],
+            bkg_arr[i],
+            bkg_std_arr[i],
             blind_cx=_b_cx,
             blind_cy=_b_cy,
         )
@@ -2670,7 +2660,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "inner_frac": float(d["inner_frac"]),
                 "outer_frac": float(d["outer_frac"]),
                 "outer_sector_minmax_frac": float(d["outer_sector_minmax_frac"]),
-                "bkg_level": float(d["bkg_level"]),
+                "bkg": float(d["bkg"]),
                 "bkg_std": float(d["bkg_std"]),
                 "nearest_neighbor_dist_px": float(d["nearest_neighbor_dist_px"]),
                 "n_neighbors_in_stamp": int(d["n_neighbors_in_stamp"]),
