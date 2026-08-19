@@ -27,14 +27,16 @@ __all__ = [
     "DonutBlitzPlotTask",
 ]
 
+
+
 import ast
 import contextlib
-import dataclasses
 import logging
 import multiprocessing as mp
 import signal
 import sys
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 import batoid
@@ -48,6 +50,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
+import numpy.typing as npt
 from astropy.table import QTable
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
 from lsst.afw.geom import SkyWcs
@@ -390,13 +393,48 @@ def _select_candidate_donuts(
     measTable = measTable[order[:maxDonuts]]
     return measTable
 
+
+@dataclass
+class Donut:
+    """One cut donut stamp with its selection/quality metrics."""
+
+    sensor: str
+    stamp: np.ndarray  #  CCS
+    fa_x_ccs: float
+    fa_y_ccs: float
+    flux: float
+    band: str
+    det_id: int
+    visit_id: int
+    centroid_x_raw: float
+    centroid_y_raw: float
+    id: int
+    inner_frac: float
+    outer_frac: float
+    outer_sector_minmax_frac: float
+    field_dist_deg: float
+    donut_radius: float
+    obscuration: float
+    snr: float
+    bkg: float
+    bkg_std: float
+    nearest_neighbor_dist_px: float
+    n_neighbors_in_stamp: int
+    catalog_centroid_offset_px: float
+    n_quarter: int
+    nearby_photo: list[tuple[float, float, float]]
+    nearby_astrom: list[tuple[float, float, float]]
+    saturated: bool
+    reject_reasons: list[str] = field(default_factory=list)
+    intrinsic_zk: npt.NDArray[np.float64] | None = None
+
 def _cut_and_evaluate_stamps(
     postIsr: Exposure,
     selected_centroids: QTable,
     refcat: QTable | None,
     cutout_cfg: dict,
     blindDetections: QTable,
-) -> tuple:
+) -> tuple[list[Donut], list[Donut]]:
     """Cut stamps and evaluate rejection criteria for candidate donuts.
 
     Takes filtered centroids and flux measurements, precomputes annular masks,
@@ -411,8 +449,8 @@ def _cut_and_evaluate_stamps(
         Candidate donuts from `_select_candidate_donuts`, with columns ``id``,
         ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
         ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``, ``std``, and
-        ``bkg``.  The photometric metrics are carried through to the stamp
-        dicts as-is; only geometry and the SAT flag are computed here.
+        ``bkg``.  The photometric metrics are carried through to the Donut
+        objects as-is; only geometry and the SAT flag are computed here.
     refcat : QTable or None
         Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
         ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
@@ -424,24 +462,13 @@ def _cut_and_evaluate_stamps(
 
     Returns
     -------
-    donuts : list of dict
-        Accepted donut stamp dicts, sorted brightest-first.
-    rejected_donuts : list of dict
-        Quality-failed donut stamp dicts, sorted brightest-first.
+    donuts : list of Donut
+        Accepted donuts, sorted brightest-first.
+    rejected_donuts : list of Donut
+        Quality-failed donuts, sorted brightest-first.
     """
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
-    # Pull the candidate columns out as arrays for the per-donut loop below.
-    ids = selected_centroids["id"]
-    centroid_x = selected_centroids["centroid_x"]
-    centroid_y = selected_centroids["centroid_y"]
-    flux_arr = selected_centroids["flux"]
-    inner_frac_arr = selected_centroids["inner_frac"]
-    outer_frac_arr = selected_centroids["outer_frac"]
-    outer_sector_minmax_arr = selected_centroids["outer_sector_minmax_frac"]
-    snr_arr = selected_centroids["snr"]
-    bkg_arr = selected_centroids["bkg"]
-    bkg_std_arr = selected_centroids["std"]
 
     detector = postIsr.getDetector()
     band = postIsr.filter.bandLabel
@@ -466,26 +493,15 @@ def _cut_and_evaluate_stamps(
         _rc_x = _rc_y = None
         _rc_mag = {}
 
-    def _cut_stamp_dict(
-        cx_f,
-        cy_f,
-        flux_val,
-        id_val,
-        inner_frac,
-        outer_frac,
-        outer_sector_minmax_frac,
-        snr_val,
-        bkg_val,
-        bkg_std_val,
-        blind_cx=None,
-        blind_cy=None,
-    ):
-        """Cut one stamp and compute metrics. Returns dict or None on failure."""
+    def _cut_stamp(row, blind_cx=None, blind_cy=None) -> Donut | None:
+        """Cut one stamp and compute metrics. Returns Donut or None on failure."""
         # Odd-sized cut (2*half+1) so the centroid pixel sits exactly at the
         # stamp center. An even cut would offset the donut half a pixel from the
         # stamp's geometric center, and would force the crop-by-1 fallback in
         # _prep_donut_for_danish (Danish requires an odd stamp).
-        cx, cy = int(round(float(cx_f))), int(round(float(cy_f)))
+        cx_f = float(row["centroid_x"])
+        cy_f = float(row["centroid_y"])
+        cx, cy = int(round(cx_f)), int(round(cy_f))
         rmin, rmax = cy - half, cy + half + 1
         cmin, cmax = cx - half, cx + half + 1
         if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
@@ -498,24 +514,30 @@ def _cut_and_evaluate_stamps(
         # Offsets are relative to the *rounded* centroid (cx, cy), since that
         # is the pixel the stamp is cut around and lands at the stamp center.
         if _rc_x is None:
-            _box_mask = None
-            _dx_box = _dy_box = None
+            box_mask = None
+            dx_box = dy_box = None
         else:
-            _box_mask = (np.abs(_rc_x - cx) <= half) & (np.abs(_rc_y - cy) <= half)
-            _dx_box = _rc_x[_box_mask] - cx
-            _dy_box = _rc_y[_box_mask] - cy
+            box_mask = (np.abs(_rc_x - cx) <= half) & (np.abs(_rc_y - cy) <= half)
+            dx_box = _rc_x[box_mask] - cx
+            dy_box = _rc_y[box_mask] - cy
 
         def _nearby(mag_col):
-            if _box_mask is None:
+            if box_mask is None:
                 return []
-            _mag_box = _rc_mag[mag_col][_box_mask]
-            return list(zip(_dx_box.tolist(), _dy_box.tolist(), _mag_box.tolist()))
+            mag_box = _rc_mag[mag_col][box_mask]
+            return list(zip(dx_box.tolist(), dy_box.tolist(), mag_box.tolist()))
 
-        _fa = detector.transform([lsst.geom.Point2D(float(cx_f), float(cy_f))], PIXELS, FIELD_ANGLE)[0]
+        _fa = detector.transform(
+            [lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE
+        )[0]
         _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
 
         _nearby_photo_list = _nearby("photo_mag")
-        _neighbor_dists = [np.hypot(dx, dy) for dx, dy, _ in _nearby_photo_list if np.hypot(dx, dy) >= 1.0]
+        _neighbor_dists = [
+            np.hypot(dx, dy)
+            for dx, dy, _ in _nearby_photo_list
+            if np.hypot(dx, dy) >= 1.0
+        ]
 
         _catalog_centroid_offset_px = (
             float(np.hypot(cx_f - blind_cx, cy_f - blind_cy))
@@ -523,34 +545,35 @@ def _cut_and_evaluate_stamps(
             else float("nan")
         )
 
-        return dict(
+        return Donut(
             sensor=detector.getName(),
             stamp=stamp_ccs,
             fa_x_ccs=float(_fa[1]),
             fa_y_ccs=float(_fa[0]),
-            flux=float(flux_val),
+            flux=float(row["flux"]),
             band=band,
             det_id=det_id,
             visit_id=visit_id,
-            centroid_x_raw=float(cx_f),
-            centroid_y_raw=float(cy_f),
-            id=int(id_val),
-            inner_frac=inner_frac,
-            outer_frac=outer_frac,
-            outer_sector_minmax_frac=outer_sector_minmax_frac,
+            centroid_x_raw=cx_f,
+            centroid_y_raw=cy_f,
+            id=int(row["id"]),
+            inner_frac=float(row["inner_frac"]),
+            outer_frac=float(row["outer_frac"]),
+            outer_sector_minmax_frac=float(row["outer_sector_minmax_frac"]),
             field_dist_deg=_field_dist_deg,
             donut_radius=donutRadius,
             obscuration=obscuration,
-            snr=float(snr_val),
-            bkg=float(bkg_val),
-            bkg_std=float(bkg_std_val),
-            nearest_neighbor_dist_px=(float(min(_neighbor_dists)) if _neighbor_dists else float("nan")),
+            snr=float(row["snr"]),
+            bkg=float(row["bkg"]),
+            bkg_std=float(row["std"]),
+            nearest_neighbor_dist_px=(
+                float(min(_neighbor_dists)) if _neighbor_dists else float("nan")
+            ),
             n_neighbors_in_stamp=len(_neighbor_dists),
             catalog_centroid_offset_px=_catalog_centroid_offset_px,
             n_quarter=n_quarter,
             nearby_photo=_nearby_photo_list,
             nearby_astrom=_nearby("astrom_mag"),
-            reject_reasons=[],
             saturated=saturated,
         )
 
@@ -559,17 +582,17 @@ def _cut_and_evaluate_stamps(
     max_field_dist = cutout_cfg["maxFieldDist"]
     min_stamp_snr = cutout_cfg["minStampSnr"]
 
-    def _append_reject_reasons(d):
-        if d["saturated"]:
-            d["reject_reasons"].append("SAT")
-        if d["field_dist_deg"] > max_field_dist:
-            d["reject_reasons"].append("field_dist")
-        if np.isfinite(d["inner_frac"]) and abs(d["inner_frac"]) > inner_thr:
-            d["reject_reasons"].append("inner_frac")
-        if np.isfinite(d["outer_frac"]) and abs(d["outer_frac"]) > outer_thr:
-            d["reject_reasons"].append("outer_frac")
-        if np.isfinite(d["snr"]) and d["snr"] < min_stamp_snr:
-            d["reject_reasons"].append("snr")
+    def _append_reject_reasons(d: Donut) -> None:
+        if d.saturated:
+            d.reject_reasons.append("SAT")
+        if d.field_dist_deg > max_field_dist:
+            d.reject_reasons.append("field_dist")
+        if np.isfinite(d.inner_frac) and abs(d.inner_frac) > inner_thr:
+            d.reject_reasons.append("inner_frac")
+        if np.isfinite(d.outer_frac) and abs(d.outer_frac) > outer_thr:
+            d.reject_reasons.append("outer_frac")
+        if np.isfinite(d.snr) and d.snr < min_stamp_snr:
+            d.reject_reasons.append("snr")
 
     # Match each centroid to the nearest blind detection for catalog_centroid_offset_px.
     _blind_cx = np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
@@ -581,35 +604,28 @@ def _cut_and_evaluate_stamps(
             return None, None
         dists = np.hypot(_blind_cx - cx_f, _blind_cy - cy_f)
         idx = int(np.argmin(dists))
-        return (float(_blind_cx[idx]), float(_blind_cy[idx])) if dists[idx] <= _match_tol else (None, None)
+        return (
+            (float(_blind_cx[idx]), float(_blind_cy[idx]))
+            if dists[idx] <= _match_tol
+            else (None, None)
+        )
 
     # --- Single pass over centroids: accept or quality-reject ---
-    donuts = []
-    rejected_donuts = []
-    for i, (cx_f, cy_f) in enumerate(zip(centroid_x, centroid_y)):
-        _b_cx, _b_cy = _nearest_blind(cx_f, cy_f)
-        d = _cut_stamp_dict(
-            cx_f,
-            cy_f,
-            flux_arr[i],
-            ids[i],
-            float(inner_frac_arr[i]),
-            float(outer_frac_arr[i]),
-            float(outer_sector_minmax_arr[i]),
-            snr_arr[i],
-            bkg_arr[i],
-            bkg_std_arr[i],
-            blind_cx=_b_cx,
-            blind_cy=_b_cy,
-        )
+    donuts: list[Donut] = []
+    rejected_donuts: list[Donut] = []
+    for row in selected_centroids:
+        _b_cx, _b_cy = _nearest_blind(float(row["centroid_x"]), float(row["centroid_y"]))
+        d = _cut_stamp(row, blind_cx=_b_cx, blind_cy=_b_cy)
         if d is None:
             continue
         _append_reject_reasons(d)
-        if d["reject_reasons"]:
+        if d.reject_reasons:
             rejected_donuts.append(d)
             continue
         donuts.append(d)
-    rejected_donuts.sort(key=lambda d: d["flux"], reverse=True)
+
+    donuts.sort(key=lambda d: d.flux, reverse=True)
+    rejected_donuts.sort(key=lambda d: d.flux, reverse=True)
 
     return donuts, rejected_donuts
 
@@ -958,7 +974,7 @@ def _dense_intrinsic(donut: dict) -> np.ndarray:
     Indices with no supplied value are 0.0.
     """
     out = np.zeros(_ZK_JMAX + 1)
-    raw = donut.get("intrinsic_zk")  # µm, Noll 4.._ZK_JMAX
+    raw = donut.intrinsic_zk  # µm, Noll 4.._ZK_JMAX
     if raw is not None:
         n_slots = _ZK_JMAX + 1 - 4  # Noll 4.._ZK_JMAX inclusive
         for idx in range(min(len(raw), n_slots)):
@@ -997,7 +1013,7 @@ def _build_loss_fn():
     return danish.systematic_loss(alpha) if alpha != 0.0 else None
 
 
-@dataclasses.dataclass
+@dataclass
 class _WfGroup:
     donuts: list  # donut dicts, ordered; each carries its own "sensor" key
     group_id: str
@@ -1032,10 +1048,10 @@ def _build_wf_groups(mode, results_by_sensor, wf_cfg):
     unmatched_donuts = []
     if _mode_groups_are_pairs(mode):
         for _corner, (sw0, sw1) in CORNER_PAIRS.items():
-            extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d["snr"], reverse=True)
-            intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d["snr"], reverse=True)
+            extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d.snr, reverse=True)
+            intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d.snr, reverse=True)
             for extra, intra in zip(extra_donuts, intra_donuts):
-                gid = f"{extra['id']}_{intra['id']}"
+                gid = f"{extra.id}_{intra.id}"
                 groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, mode="paired"))
             n_pairs = min(len(extra_donuts), len(intra_donuts))
             unmatched_donuts.extend(extra_donuts[n_pairs:])
@@ -1043,7 +1059,7 @@ def _build_wf_groups(mode, results_by_sensor, wf_cfg):
     elif mode == "unpaired":
         for sensor_donuts in results_by_sensor.values():
             for d in sensor_donuts:
-                groups.append(_WfGroup(donuts=[d], group_id=str(d["id"]), mode="unpaired"))
+                groups.append(_WfGroup(donuts=[d], group_id=str(d.id), mode="unpaired"))
     elif mode == "full_detector":
         for sensor_name, sensor_donuts in results_by_sensor.items():
             groups.append(_WfGroup(donuts=sensor_donuts, group_id=sensor_name, mode="full_detector"))
@@ -1077,8 +1093,8 @@ def _build_wf_factory():
     )
 
 
-def _prep_donut_for_danish(donut: dict) -> tuple:
-    """Prepare a donut dict for Danish fitting.
+def _prep_donut_for_danish(donut: Donut) -> tuple:
+    """Prepare a Donut for Danish fitting.
 
     Bins and crops the stamp to an odd pixel size, estimates background noise,
     computes the reference Zernike array ``zk_ref`` from ``batoid.zernikeTA``
@@ -1087,10 +1103,10 @@ def _prep_donut_for_danish(donut: dict) -> tuple:
 
     Parameters
     ----------
-    donut : dict
-        Donut record with keys: ``stamp`` (2-D array), ``det_id``, ``band``,
-        ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and optionally
-        ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``).
+    donut : Donut
+        Donut record. Uses ``stamp`` (2-D array), ``det_id``, ``band``,
+        ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and
+        ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``; ``None`` if uncalibrated).
 
     Returns
     -------
@@ -1111,10 +1127,10 @@ def _prep_donut_for_danish(donut: dict) -> tuple:
     """
     wf_cfg = _CALIB_STORE["wf_cfg"]
     binning = wf_cfg["binning"]
-    det_id = donut["det_id"]
+    det_id = donut.det_id
     defocalSign = +1 if det_id in _EXTRA_FOCAL_DET_IDS else -1
 
-    img = donut["stamp"].astype(float)
+    img = donut.stamp.astype(float)
     if binning > 1:
         img = binArray(img, binning)
     if img.shape[0] % 2 == 0:
@@ -1122,7 +1138,7 @@ def _prep_donut_for_danish(donut: dict) -> tuple:
     diff = (img[1:] - img[:-1]).ravel()
     bkg_std = float(median_abs_deviation(diff, scale="normal") / np.sqrt(2.0))
 
-    band = donut["band"]
+    band = donut.band
     wavelength_by_band = wf_cfg["wavelength_by_band"]
     if band not in wavelength_by_band:
         raise RuntimeError(
@@ -1148,8 +1164,8 @@ def _prep_donut_for_danish(donut: dict) -> tuple:
     zk_ref = (
         batoid.zernikeTA(
             telescope_dz,
-            donut["fa_x_ccs"],
-            donut["fa_y_ccs"],
+            donut.fa_x_ccs,
+            donut.fa_y_ccs,
             wavelength,
             **zernikeTA_kwargs,
         )
@@ -1158,13 +1174,13 @@ def _prep_donut_for_danish(donut: dict) -> tuple:
 
     # Replace nominal on-axis model (zk_opd_foc) with measured intrinsics (W_meas)
     # for calibrated indices.
-    intrinsic_zk = donut.get("intrinsic_zk")
+    intrinsic_zk = donut.intrinsic_zk
     if intrinsic_zk is not None:
         zk_opd_foc = (
             batoid.zernikeTA(
                 telescope,
-                donut["fa_x_ccs"],
-                donut["fa_y_ccs"],
+                donut.fa_x_ccs,
+                donut.fa_y_ccs,
                 wavelength,
                 **zernikeTA_kwargs,
             )
@@ -1175,7 +1191,7 @@ def _prep_donut_for_danish(donut: dict) -> tuple:
             if i < len(intrinsic_zk) and int(j) <= _ZK_JMAX:
                 zk_ref[int(j)] += float(intrinsic_zk[i]) * 1e-6 - zk_opd_foc[int(j)]
 
-    angle_rad = np.array([donut["fa_x_ccs"], donut["fa_y_ccs"]])
+    angle_rad = np.array([donut.fa_x_ccs, donut.fa_y_ccs])
     return img, angle_rad, zk_ref, bkg_std**2, bkg_std
 
 
@@ -1405,13 +1421,13 @@ def _wf_worker(group: _WfGroup) -> dict:
 
     donuts_out = []
     for i, d in enumerate(all_donuts):
-        defocal = "intra" if int(d["det_id"]) in _INTRA_FOCAL_DET_IDS else "extra"
+        defocal = "intra" if int(d.det_id) in _INTRA_FOCAL_DET_IDS else "extra"
         _img = imgs[i] if i < len(imgs) else None
         _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
         donuts_out.append(
             {
-                "donut_id": int(d["id"]),
-                "sensor": d["sensor"],
+                "donut_id": int(d.id),
+                "sensor": d.sensor,
                 "defocal": defocal,
                 "zk_dev": zk_dev_dense,
                 "zk_intrinsic": _dense_intrinsic(d),
@@ -1460,7 +1476,7 @@ def _wf_worker(group: _WfGroup) -> dict:
         "donuts": donuts_out,
         "model_imgs": model_imgs,
         "imgs": imgs,
-        "sensors": [d["sensor"] for d in all_donuts],
+        "sensors": [d.sensor for d in all_donuts],
     }
 
 
@@ -2378,14 +2394,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             calib = intrinsicZernikesByName.get(r["sensor"])
             for d in r["catalog"]:
                 if calib is not None:
-                    d["intrinsic_zk"] = np.squeeze(
+                    d.intrinsic_zk = np.squeeze(
                         calib.getIntrinsicZernikes(
-                            np.degrees(d["fa_x_ccs"]),
-                            np.degrees(d["fa_y_ccs"]),
+                            np.degrees(d.fa_x_ccs),
+                            np.degrees(d.fa_y_ccs),
                         )
                     )
                 else:
-                    d["intrinsic_zk"] = None
+                    d.intrinsic_zk = None
 
         # WF dispatch
         mode = self.config.wfEstimationMode
@@ -2562,7 +2578,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # partner, so they appear in both lists. Keyed dedupe keeps one row per
         # donut -- they stay candidates, they just never got fitted.
         def _key(d):
-            return (str(d["sensor"]), int(d["id"]))
+            return (str(d.sensor), int(d.id))
 
         all_donuts = []
         _seen = set()
@@ -2585,8 +2601,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             return QTable()
 
         # Determine common stamp shape for padding.
-        max_ny = max(d["stamp"].shape[0] for d, _ in all_donuts)
-        max_nx = max(d["stamp"].shape[1] for d, _ in all_donuts)
+        max_ny = max(d.stamp.shape[0] for d, _ in all_donuts)
+        max_nx = max(d.stamp.shape[1] for d, _ in all_donuts)
         # wf/model images are binned and cropped to odd size (see
         # _prep_donut_for_danish). Derive from the actual odd cut size,
         # 2*(stampSize//2)+1, not from stampSize itself.
@@ -2604,8 +2620,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         rows = []
         for d, candidate in all_donuts:
-            sid = int(d["id"])
-            wd, grp = wf_by_id.get((sid, str(d["sensor"])), (None, -1))
+            sid = int(d.id)
+            wd, grp = wf_by_id.get((sid, str(d.sensor)), (None, -1))
 
             zk_dev = wd["zk_dev"] if wd is not None else np.full(_ZK_JMAX + 1, np.nan)
             zk_int = wd["zk_intrinsic"] if wd is not None else np.full(_ZK_JMAX + 1, np.nan)
@@ -2620,8 +2636,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 and np.any(np.isfinite(zk_dev[4:]))
             )
 
-            reject_reasons = d.get("reject_reasons", [])
-            stamp = _pad(d["stamp"].astype(float), max_ny, max_nx)
+            reject_reasons = getattr(d, "reject_reasons", [])
+            stamp = _pad(d.stamp.astype(float), max_ny, max_nx)
 
             wf_img_raw = wd.get("img") if wd is not None else None
             wf_img = (
@@ -2632,12 +2648,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
             row = {
                 # --- identity ---
-                "visit_id": int(d["visit_id"]),
-                "det_id": int(d["det_id"]),
-                "sensor": str(d["sensor"]),
+                "visit_id": int(d.visit_id),
+                "det_id": int(d.det_id),
+                "sensor": str(d.sensor),
                 "id": sid,
                 "defocal": _wd_field(wd, "defocal", str, ""),
-                "band": str(d["band"]),
+                "band": str(d.band),
                 # candidate: passed every selection/quality cut.
                 # used: a fit consumed it and returned a wavefront.
                 # A candidate that is not used has no Zernikes (all NaN) -- see
@@ -2645,30 +2661,30 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "candidate": bool(candidate),
                 "used": used,
                 # --- geometry ---
-                "centroid_x_raw": float(d["centroid_x_raw"]),
-                "centroid_y_raw": float(d["centroid_y_raw"]),
-                "fa_x_ccs": float(d["fa_x_ccs"]),
-                "fa_y_ccs": float(d["fa_y_ccs"]),
-                "field_dist_deg": float(np.degrees(np.hypot(d["fa_x_ccs"], d["fa_y_ccs"]))),
-                "n_quarter": int(d.get("n_quarter", 0)),
+                "centroid_x_raw": float(d.centroid_x_raw),
+                "centroid_y_raw": float(d.centroid_y_raw),
+                "fa_x_ccs": float(d.fa_x_ccs),
+                "fa_y_ccs": float(d.fa_y_ccs),
+                "field_dist_deg": float(np.degrees(np.hypot(d.fa_x_ccs, d.fa_y_ccs))),
+                "n_quarter": int(getattr(d, "n_quarter", 0)),
                 # --- nearby refcat sources (JSON-encoded, pixel offsets + magnitudes) ---
-                "nearby_photo": _encode_nearby(d.get("nearby_photo", [])),
-                "nearby_astrom": _encode_nearby(d.get("nearby_astrom", [])),
+                "nearby_photo": _encode_nearby(d.nearby_photo),
+                "nearby_astrom": _encode_nearby(d.nearby_astrom),
                 # --- selection metrics ---
-                "flux": float(d["flux"]),
-                "snr": float(d["snr"]),
-                "inner_frac": float(d["inner_frac"]),
-                "outer_frac": float(d["outer_frac"]),
-                "outer_sector_minmax_frac": float(d["outer_sector_minmax_frac"]),
-                "bkg": float(d["bkg"]),
-                "bkg_std": float(d["bkg_std"]),
-                "nearest_neighbor_dist_px": float(d["nearest_neighbor_dist_px"]),
-                "n_neighbors_in_stamp": int(d["n_neighbors_in_stamp"]),
-                "catalog_centroid_offset_px": float(d["catalog_centroid_offset_px"]),
+                "flux": float(d.flux),
+                "snr": float(d.snr),
+                "inner_frac": float(d.inner_frac),
+                "outer_frac": float(d.outer_frac),
+                "outer_sector_minmax_frac": float(d.outer_sector_minmax_frac),
+                "bkg": float(d.bkg),
+                "bkg_std": float(d.bkg_std),
+                "nearest_neighbor_dist_px": float(d.nearest_neighbor_dist_px),
+                "n_neighbors_in_stamp": int(d.n_neighbors_in_stamp),
+                "catalog_centroid_offset_px": float(d.catalog_centroid_offset_px),
                 "rejected_snr": bool("snr" in reject_reasons),
                 "rejected_inner_frac": bool("inner_frac" in reject_reasons),
                 "rejected_outer_frac": bool("outer_frac" in reject_reasons),
-                "rejected_sat": bool("SAT" in reject_reasons or d.get("saturated", False)),
+                "rejected_sat": bool("SAT" in reject_reasons or getattr(d, "saturated", False)),
                 "rejected_field_dist": bool("field_dist" in reject_reasons),
                 "rejected_selector": False,
                 "reject_reasons": _reject_reason_str(reject_reasons),
@@ -2716,8 +2732,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["noll_indices"] = list(_CALIB_STORE.get("wf_cfg", {}).get("nollIndices", []))
         table.meta["sensor_meta"] = sensor_meta
         _first_d = all_donuts[0][0]
-        table.meta["donut_radius"] = _first_d["donut_radius"]
-        table.meta["obscuration"] = _first_d["obscuration"]
+        table.meta["donut_radius"] = _first_d.donut_radius
+        table.meta["obscuration"] = _first_d.obscuration
         _cutout_cfg = _CALIB_STORE["cutout_cfg"]
         table.meta["aperture_outer_margin_frac"] = _cutout_cfg["apertureOuterMarginFrac"]
         table.meta["aperture_inner_buffer_frac"] = _cutout_cfg["apertureInnerBufferFrac"]
