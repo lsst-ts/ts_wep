@@ -103,9 +103,7 @@ CORNER_BY_SENSOR = {s: corner for corner, pair in CORNER_PAIRS.items() for s in 
 
 # Display names for DonutSourceSelectorTask rejection reasons. Reasons absent
 # here are shown verbatim. "faint_neighbor" folds into "blend" (both mean a
-# neighbor spoiled this donut), and the selector's "field_dist" deliberately
-# shares a label with the monolith's own field-distance check even though the
-# thresholds differ slightly (selector maxFieldDist vs. detect maxFieldDist).
+# neighbor spoiled this donut).
 _SELECTOR_REASON_DISP = {
     "faint_neighbor": "blend",
     "too_many_blends": "many",
@@ -180,121 +178,6 @@ def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
     return np.where((r < radius) & (r >= radius * innerFrac), 1.0, 0.0)
 
 
-def _measureFlux(
-    selections: QTable,
-    exposure: Exposure,
-    radius: float,
-    obscuration: float,
-    apertureOuterMarginFrac: float,
-    apertureInnerBufferFrac: float,
-    bkgAnnulusInnerFrac: float,
-    bkgAnnulusOuterFrac: float,
-) -> QTable:
-    """Measure aperture flux and per-pixel noise for each detected donut.
-
-    For each peak a local background is estimated from an annular region
-    (inner pupil + outer sky), subtracted, then flux is summed over the
-    main annular aperture.  Per-pixel noise is estimated from the IQR of
-    first-differences in the background region.
-
-    Parameters
-    ----------
-    selections : QTable
-        Table of selected sources with columns ``centroid_x`` and ``centroid_y``.
-    exposure : Exposure
-        Science exposure in un-binned pixel coordinates.
-    radius : float
-        Expected outer donut radius in pixels.
-    obscuration : float
-        Central obscuration fraction (inner radius / outer radius).
-    apertureOuterMarginFrac : float
-        Outer edge of the main photometric aperture, as a multiple of
-        ``radius``.
-    apertureInnerBufferFrac : float
-        Inner edge of the background/blend-check region inside the
-        obscuration, as a multiple of ``radius * obscuration``.
-    bkgAnnulusInnerFrac : float
-        Inner edge of the outer background/blend-check annulus, as a
-        multiple of ``radius``.
-    bkgAnnulusOuterFrac : float
-        Outer edge of the outer background/blend-check annulus, as a
-        multiple of ``radius``; also sets the cutout half-width.
-
-    Returns
-    -------
-    QTable
-        A copy of ``selections`` with the measurement columns added: ``flux``,
-        ``inner_flux``, ``outer_flux``, ``outer_sector_minmax_flux``, ``std``,
-        ``bkg``, ``snr``, ``inner_frac``, ``outer_frac``, and
-        ``outer_sector_minmax_frac``.  The input table is left unmodified.
-        Peaks that fall too close to the image border have ``nan`` values.
-    """
-    arr = exposure.image.array
-    half = int(radius * bkgAnnulusOuterFrac)
-
-    gy, gx = np.mgrid[-half : half + 1, -half : half + 1]
-    r = np.hypot(gx, gy)
-    sector_angle = np.arctan2(gy, gx)
-
-    main_mask = (r < radius * apertureOuterMarginFrac) & (r > radius * obscuration)
-    inner_mask = r < radius * obscuration * apertureInnerBufferFrac
-    outer_mask = (r > radius * bkgAnnulusInnerFrac) & (r < radius * bkgAnnulusOuterFrac)
-    bkg_mask = inner_mask | outer_mask
-    n_main = np.sum(main_mask)
-    outer_sector_masks = [
-        outer_mask & (sector_angle >= -np.pi + k * np.pi / 4) & (sector_angle < -np.pi + (k + 1) * np.pi / 4)
-        for k in range(8)
-    ]
-
-    flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
-    outer_sector_minmax_list = []
-    bkg_list = []
-
-    for row, col in zip(selections["centroid_y"], selections["centroid_x"]):
-        rmin, rmax = int(round(row)) - half, int(round(row)) + half + 1
-        cmin, cmax = int(round(col)) - half, int(round(col)) + half + 1
-
-        if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
-            flux_list.append(np.nan)
-            inner_flux_list.append(np.nan)
-            outer_flux_list.append(np.nan)
-            outer_sector_minmax_list.append(np.nan)
-            std_list.append(np.nan)
-            bkg_list.append(np.nan)
-            continue
-
-        stamp = arr[rmin:rmax, cmin:cmax]
-        bkg = np.nanmedian(stamp[bkg_mask])
-        bkg_list.append(float(bkg))
-        stamp_sub = stamp - bkg
-
-        flux = float(np.sum(stamp_sub[main_mask]))
-        flux_list.append(flux)
-        inner_flux_list.append(float(np.sum(stamp_sub[inner_mask])))
-        outer_flux_list.append(float(np.sum(stamp_sub[outer_mask])))
-        sector_fluxes = [float(np.sum(stamp_sub[m])) for m in outer_sector_masks]
-        outer_sector_minmax_list.append(
-            float(max(sector_fluxes) - min(sector_fluxes))
-        )
-
-        diff = (stamp_sub - np.roll(stamp_sub, 1, axis=0))[bkg_mask]
-        q75, q25 = np.nanpercentile(diff, [75, 25])
-        std_list.append(float((q75 - q25) / 1.349 / np.sqrt(2)))
-
-    selections = selections.copy()  # avoid modifying the input table in place
-    selections["flux"] = flux_list
-    selections["inner_flux"] = inner_flux_list
-    selections["outer_flux"] = outer_flux_list
-    selections["outer_sector_minmax_flux"] = outer_sector_minmax_list
-    selections["std"] = std_list
-    selections["bkg"] = bkg_list
-    with np.errstate(invalid="ignore", divide="ignore"):
-        selections["snr"] = (selections["flux"] / selections["std"]) / np.sqrt(n_main)
-        selections["inner_frac"] = selections["inner_flux"] / selections["flux"]
-        selections["outer_frac"] = selections["outer_flux"] / selections["flux"]
-        selections["outer_sector_minmax_frac"] = selections["outer_sector_minmax_flux"] / selections["flux"]
-    return selections
-
 def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
     """Convert blind-detect QTable into a minimal afwTable.SourceCatalog
     suitable for AstrometryTask.run().
@@ -325,73 +208,170 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
     return sourceCat
 
 
-def _select_candidate_donuts(
-    postIsr: Exposure,
-    selections: QTable,
-    cutout_cfg: dict,
-) -> QTable:
-    """Filter centroids by flux measurement and quality criteria.
+class MeasureDonutCandidatesConfig(pexConfig.Config):
+    """Config for donut candidate flux measurement and quality selection."""
 
-    Measures flux on the full image and applies quality cuts (inner/outer flux
-    fraction, SNR).
-
-    Parameters
-    ----------
-    postIsr : Exposure
-        Background-subtracted post-ISR science exposure.
-    selections : QTable
-        Catalog-selected (or blind-detection) centroids with columns
-        ``centroid_x``, ``centroid_y``, ``id``.
-    cutout_cfg : dict
-        Config dict with ``maxDonuts``, ``minStampSnr``, ``innerFracThreshold``,
-        ``outerFracThreshold``, ``apertureOuterMarginFrac``,
-        ``apertureInnerBufferFrac``, ``bkgAnnulusInnerFrac``,
-        ``bkgAnnulusOuterFrac``.
-
-    Returns
-    -------
-    QTable
-        The surviving rows of ``selections``, brightest-first and truncated to
-        ``maxDonuts``, with the `_measureFlux` columns added: ``flux``,
-        ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``
-        (plus the raw ``*_flux``, ``std``, and ``bkg`` columns).  These are the
-        per-donut metrics `_cut_and_evaluate_stamps` carries through to the
-        stamp dicts, rather than recomputing.  Possibly empty if no donuts pass
-        cuts; an empty input is returned unmodified, i.e. without the
-        measurement columns.
-    """
-    donutRadius = _INSTRUMENT.donutRadius
-    obscuration = _INSTRUMENT.obscuration
-    maxDonuts = cutout_cfg["maxDonuts"]
-    apertureOuterMarginFrac = cutout_cfg["apertureOuterMarginFrac"]
-    apertureInnerBufferFrac = cutout_cfg["apertureInnerBufferFrac"]
-    bkgAnnulusInnerFrac = cutout_cfg["bkgAnnulusInnerFrac"]
-    bkgAnnulusOuterFrac = cutout_cfg["bkgAnnulusOuterFrac"]
-
-    if len(selections) == 0:
-        return selections
-
-    # --- Flux measurement and quality selection ---
-    measTable = _measureFlux(
-        selections,
-        postIsr,
-        donutRadius,
-        obscuration,
-        apertureOuterMarginFrac,
-        apertureInnerBufferFrac,
-        bkgAnnulusInnerFrac,
-        bkgAnnulusOuterFrac,
+    apertureOuterMarginFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Outer edge of the main photometric aperture, as a multiple of "
+            "the nominal donut radius. Adds margin beyond the nominal edge to "
+            "tolerate PSF blur and centroiding error."
+        ),
+        dtype=float,
+        default=1.05,
+    )
+    apertureInnerBufferFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Inner edge of the background/blend-check region inside the "
+            "obscuration, as a multiple of ``radius * obscuration``."
+        ),
+        dtype=float,
+        default=0.67,
+    )
+    bkgAnnulusInnerFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Inner edge of the outer background/blend-check annulus, as a "
+            "multiple of the nominal donut radius."
+        ),
+        dtype=float,
+        default=1.25,
+    )
+    bkgAnnulusOuterFrac: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Outer edge of the outer background/blend-check annulus, as a "
+            "multiple of the nominal donut radius. Also sets the half-width "
+            "of the photometry/quality-metric cutout window."
+        ),
+        dtype=float,
+        default=1.4,
     )
 
-    fluxOk = measTable["flux"] > 0
-    innerOk = np.abs(measTable["inner_flux"] / measTable["flux"]) < cutout_cfg["innerFracThreshold"]
-    outerOk = np.abs(measTable["outer_flux"] / measTable["flux"]) < cutout_cfg["outerFracThreshold"]
-    snrOk = measTable["snr"] > cutout_cfg["minStampSnr"]
-    allOk = fluxOk & innerOk & outerOk & snrOk
-    measTable = measTable[allOk]
-    order = np.argsort(measTable["flux"])[::-1]
-    measTable = measTable[order[:maxDonuts]]
-    return measTable
+
+class MeasureDonutCandidatesTask(pipeBase.Task):
+    """Measure aperture flux and apply quality cuts to candidate donuts.
+
+    For each candidate centroid, measures aperture flux and per-pixel noise
+    over precomputed annular masks, then keeps only donuts passing the
+    inner-fraction, outer-fraction, and SNR cuts. Survivors are returned
+    brightest-first, truncated to ``maxDonuts``.
+
+    The donut radius and obscuration come from the module-level instrument
+    (`_INSTRUMENT`), not config -- they are fixed geometry, not tunable.
+    """
+
+    ConfigClass = MeasureDonutCandidatesConfig
+    _DefaultName = "measureDonutCandidates"
+    config: MeasureDonutCandidatesConfig
+
+    def run(self, exposure: Exposure, selections: QTable) -> pipeBase.Struct:
+        """Measure aperture flux and quality metrics for candidate donuts.
+
+        Parameters
+        ----------
+        exposure : Exposure
+            Background-subtracted post-ISR science exposure, in un-binned
+            pixel coordinates.
+        selections : QTable
+            Catalog-selected (or blind-detection) centroids with columns
+            ``centroid_x``, ``centroid_y``, ``id``.
+
+        Returns
+        -------
+        pipeBase.Struct
+            ``measurements`` : QTable
+                A copy of ``selections`` with measurement columns added
+                (``flux``, ``inner_frac``, ``outer_frac``,
+                ``outer_sector_minmax_frac``, ``snr``, plus raw ``*_flux``,
+                ``std``, ``bkg``). No rows are dropped and no ordering is
+                imposed -- selection and culling happen downstream. An empty
+                input is returned unmodified, without measurement columns.
+        """
+        if len(selections) == 0:
+            return pipeBase.Struct(measurements=selections)
+        return pipeBase.Struct(measurements=self._measureFlux(selections, exposure))
+
+    def _measureFlux(self, selections: QTable, exposure: Exposure) -> QTable:
+        """Measure aperture flux and per-pixel noise for each detected donut.
+
+        For each peak a local background is estimated from an annular region
+        (inner pupil + outer sky), subtracted, then flux is summed over the
+        main annular aperture. Per-pixel noise is estimated from the IQR of
+        first-differences in the background region.
+
+        Returns a copy of ``selections`` with the measurement columns added;
+        peaks too close to the image border get ``nan`` values. The input
+        table is left unmodified.
+        """
+        radius = _INSTRUMENT.donutRadius
+        obscuration = _INSTRUMENT.obscuration
+        cfg = self.config
+
+        arr = exposure.image.array
+        half = int(radius * cfg.bkgAnnulusOuterFrac)
+
+        gy, gx = np.mgrid[-half : half + 1, -half : half + 1]
+        r = np.hypot(gx, gy)
+        sector_angle = np.arctan2(gy, gx)
+
+        main_mask = (r < radius * cfg.apertureOuterMarginFrac) & (r > radius * obscuration)
+        inner_mask = r < radius * obscuration * cfg.apertureInnerBufferFrac
+        outer_mask = (r > radius * cfg.bkgAnnulusInnerFrac) & (r < radius * cfg.bkgAnnulusOuterFrac)
+        bkg_mask = inner_mask | outer_mask
+        n_main = np.sum(main_mask)
+        outer_sector_masks = [
+            outer_mask
+            & (sector_angle >= -np.pi + k * np.pi / 4)
+            & (sector_angle < -np.pi + (k + 1) * np.pi / 4)
+            for k in range(8)
+        ]
+
+        flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
+        outer_sector_minmax_list = []
+        bkg_list = []
+
+        for row, col in zip(selections["centroid_y"], selections["centroid_x"]):
+            rmin, rmax = int(round(row)) - half, int(round(row)) + half + 1
+            cmin, cmax = int(round(col)) - half, int(round(col)) + half + 1
+
+            if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
+                flux_list.append(np.nan)
+                inner_flux_list.append(np.nan)
+                outer_flux_list.append(np.nan)
+                outer_sector_minmax_list.append(np.nan)
+                std_list.append(np.nan)
+                bkg_list.append(np.nan)
+                continue
+
+            stamp = arr[rmin:rmax, cmin:cmax]
+            bkg = np.nanmedian(stamp[bkg_mask])
+            bkg_list.append(float(bkg))
+            stamp_sub = stamp - bkg
+
+            flux_list.append(float(np.sum(stamp_sub[main_mask])))
+            inner_flux_list.append(float(np.sum(stamp_sub[inner_mask])))
+            outer_flux_list.append(float(np.sum(stamp_sub[outer_mask])))
+            sector_fluxes = [float(np.sum(stamp_sub[m])) for m in outer_sector_masks]
+            outer_sector_minmax_list.append(float(max(sector_fluxes) - min(sector_fluxes)))
+
+            diff = (stamp_sub - np.roll(stamp_sub, 1, axis=0))[bkg_mask]
+            q75, q25 = np.nanpercentile(diff, [75, 25])
+            std_list.append(float((q75 - q25) / 1.349 / np.sqrt(2)))
+
+        selections = selections.copy()  # avoid modifying the input in place
+        selections["flux"] = flux_list
+        selections["inner_flux"] = inner_flux_list
+        selections["outer_flux"] = outer_flux_list
+        selections["outer_sector_minmax_flux"] = outer_sector_minmax_list
+        selections["std"] = std_list
+        selections["bkg"] = bkg_list
+        with np.errstate(invalid="ignore", divide="ignore"):
+            selections["snr"] = (selections["flux"] / selections["std"]) / np.sqrt(n_main)
+            selections["inner_frac"] = selections["inner_flux"] / selections["flux"]
+            selections["outer_frac"] = selections["outer_flux"] / selections["flux"]
+            selections["outer_sector_minmax_frac"] = (
+                selections["outer_sector_minmax_flux"] / selections["flux"]
+            )
+        return selections
 
 
 @dataclass
@@ -429,206 +409,294 @@ class Donut:
     intrinsic_zk: npt.NDArray[np.float64] | None = None
 
 
-def _cut_and_evaluate_stamps(
-    postIsr: Exposure,
-    selected_centroids: QTable,
-    refcat: QTable | None,
-    cutout_cfg: dict,
-    blindDetections: QTable,
-) -> tuple[list[Donut], list[Donut]]:
-    """Cut stamps and evaluate rejection criteria for candidate donuts.
+class CutDonutStampsConfig(pexConfig.Config):
+    """Config for cutting donut stamps and evaluating rejection criteria."""
 
-    Takes filtered centroids and flux measurements, precomputes annular masks,
-    cuts stamps, computes per-stamp metrics, and evaluates rejection criteria
-    (SAT, field distance, flux fractions, SNR).
+    stampSize: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Side length in pixels of the square stamp cut around each donut "
+            "centroid. Stamps are cut odd (2*(stampSize//2)+1) so the centroid "
+            "pixel is exactly centered.\n\n"
+            "Danish requires an odd stamp after binning, and `binArray` "
+            "truncates before binning, so the fitted size is stampSize//binning. "
+            "That is odd for binning 1, 2 and 3 when stampSize = 3 or 11 (mod "
+            "12), and additionally for binning 4 when stampSize = 15 or 23 (mod "
+            "24). The default 167 (= 23 mod 24) satisfies all four, giving "
+            "167/83/55/41 px. Sizes failing this still work -- "
+            "_prep_donut_for_danish crops by one pixel -- but that shifts the "
+            "donut off center by half a pixel.\n\n"
+            "Must also be large enough to contain the main photometric annulus: "
+            "stampSize/2 >= donutRadius * apertureOuterMarginFrac."
+        ),
+        dtype=int,
+        default=167,
+    )
+    innerFracThreshold: pexConfig.Field = pexConfig.Field(
+        doc="Reject a donut if |inner_frac| exceeds this.",
+        dtype=float,
+        default=0.1,
+    )
+    outerFracThreshold: pexConfig.Field = pexConfig.Field(
+        doc="Reject a donut if |outer_frac| exceeds this.",
+        dtype=float,
+        default=0.1,
+    )
+    minStampSnr: pexConfig.Field = pexConfig.Field(
+        doc="Reject a donut if its per-stamp SNR falls below this.",
+        dtype=float,
+        default=500.0,
+    )
+    maxDonuts: pexConfig.Field = pexConfig.Field(
+        doc="Maximum number of accepted donuts to keep per sensor, brightest-first.",
+        dtype=int,
+        default=8,
+    )
+    maxRejectDonuts: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Maximum number of quality-rejected donuts to keep per sensor "
+            "(brightest-first) for downstream diagnostics."
+        ),
+        dtype=int,
+        default=8,
+    )
 
-    Parameters
-    ----------
-    postIsr : Exposure
-        Background-subtracted post-ISR science exposure.
-    selected_centroids : QTable
-        Candidate donuts from `_select_candidate_donuts`, with columns ``id``,
-        ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
-        ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``, ``std``, and
-        ``bkg``.  The photometric metrics are carried through to the Donut
-        objects as-is; only geometry and the SAT flag are computed here.
-    refcat : QTable or None
-        Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
-        ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
-    cutout_cfg : dict
-        Config dict with ``stampSize``, ``minStampSnr``, ``innerFracThreshold``,
-        ``outerFracThreshold``, ``maxFieldDist``.
-    blindDetections : QTable
-        Centroid table from `_blindDetect`, used for catalog_centroid_offset_px.
 
-    Returns
-    -------
-    donuts : list of Donut
-        Accepted donuts, sorted brightest-first.
-    rejected_donuts : list of Donut
-        Quality-failed donuts, sorted brightest-first.
+class CutDonutStampsTask(pipeBase.Task):
+    """Cut donut stamps and evaluate rejection criteria.
+
+    For each measured candidate, cuts an odd-sized stamp centered on the
+    centroid, computes per-stamp geometry (field angle, nearby refcat
+    sources, catalog offset) and the SAT flag, then applies the quality cuts
+    (SAT, field distance, inner/outer flux fraction, SNR) to split accepted
+    from rejected. This is the single stage where quality rejection happens;
+    the measurement stage upstream no longer culls.
+
+    Candidates are sorted flux-descending internally, so both output lists are
+    filled brightest-first and the cut loop early-exits once both the accepted
+    (``maxDonuts``) and rejected (``maxRejectDonuts``) buckets are full --
+    avoiding stamp cuts on the faint tail that would be discarded anyway.
+
+    Donut radius and obscuration come from the module-level instrument
+    (`_INSTRUMENT`), not config.
     """
-    donutRadius = _INSTRUMENT.donutRadius
-    obscuration = _INSTRUMENT.obscuration
 
-    detector = postIsr.getDetector()
-    band = postIsr.filter.bandLabel
-    visit_id = postIsr.getInfo().getVisitInfo().id
-    det_id = detector.getId()
-    n_quarter = detector.getOrientation().getNQuarter()
-    stampSize = cutout_cfg["stampSize"]
-    half = stampSize // 2
+    ConfigClass = CutDonutStampsConfig
+    _DefaultName = "cutDonutStamps"
+    config: CutDonutStampsConfig
 
-    arr = postIsr.image.array
-    mask_arr = postIsr.mask.array
-    sat_bit = postIsr.mask.getPlaneBitMask("SAT")
+    def run(
+        self,
+        exposure: Exposure,
+        measurements: QTable,
+        refcat: QTable | None,
+        blindDetections: QTable,
+    ) -> pipeBase.Struct:
+        """Cut stamps and split accepted vs. quality-rejected donuts.
 
-    if refcat is not None:
-        _rc_x = np.asarray(refcat["centroid_x"], dtype=float)
-        _rc_y = np.asarray(refcat["centroid_y"], dtype=float)
-        _rc_mag = {
-            "photo_mag": np.asarray(refcat["photo_mag"], dtype=float),
-            "astrom_mag": np.asarray(refcat["astrom_mag"], dtype=float),
-        }
-    else:
-        _rc_x = _rc_y = None
-        _rc_mag = {}
+        Parameters
+        ----------
+        exposure : Exposure
+            Background-subtracted post-ISR science exposure.
+        measurements : QTable
+            Measured candidates from the measurement task, with columns
+            ``id``, ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
+            ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``, ``std``,
+            ``bkg``. Photometric metrics are carried onto the Donut objects
+            as-is; only geometry and the SAT flag are computed here. Row order
+            is not assumed -- the table is sorted flux-descending internally
+            before stamps are cut.
+        refcat : QTable or None
+            Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
+            ``astrom_mag``, or ``None`` in the blind-detection fallback.
+        blindDetections : QTable
+            Centroids from ``BlindDetect``, used for
+            ``catalog_centroid_offset_px``.
 
-    def _cut_stamp(row, blind_cx=None, blind_cy=None) -> Donut | None:
-        """Cut one stamp and compute metrics. Returns Donut or None on failure."""
-        # Odd-sized cut (2*half+1) so the centroid pixel sits exactly at the
-        # stamp center. An even cut would offset the donut half a pixel from the
-        # stamp's geometric center, and would force the crop-by-1 fallback in
-        # _prep_donut_for_danish (Danish requires an odd stamp).
-        cx_f = float(row["centroid_x"])
-        cy_f = float(row["centroid_y"])
-        cx, cy = int(round(cx_f)), int(round(cy_f))
-        rmin, rmax = cy - half, cy + half + 1
-        cmin, cmax = cx - half, cx + half + 1
-        if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
-            return None
-        saturated = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
-        stamp = np.array(arr[rmin:rmax, cmin:cmax])
-        stamp_ccs = np.rot90(stamp, k=-n_quarter).T
+        Returns
+        -------
+        pipeBase.Struct
+            ``donuts`` : list of Donut
+                Accepted donuts, brightest-first, at most ``maxDonuts``.
+            ``rejected_donuts`` : list of Donut
+                Quality-rejected donuts, brightest-first, at most
+                ``maxRejectDonuts``.
+        """
+        donutRadius = _INSTRUMENT.donutRadius
+        obscuration = _INSTRUMENT.obscuration
 
-        # Vectorized box query over the precomputed refcat arrays.
-        # Offsets are relative to the *rounded* centroid (cx, cy), since that
-        # is the pixel the stamp is cut around and lands at the stamp center.
-        if _rc_x is None:
-            box_mask = None
-            dx_box = dy_box = None
+        detector = exposure.getDetector()
+        band = exposure.filter.bandLabel
+        visit_id = exposure.getInfo().getVisitInfo().id
+        det_id = detector.getId()
+        n_quarter = detector.getOrientation().getNQuarter()
+        half = self.config.stampSize // 2
+
+        arr = exposure.image.array
+        mask_arr = exposure.mask.array
+        sat_bit = exposure.mask.getPlaneBitMask("SAT")
+
+        # Sort candidates flux-descending up front so the fill loop below keeps
+        # brightest-first and can early-exit once both buckets are full, without
+        # depending on the upstream measurement task's row order.
+        if len(measurements) > 1:
+            measurements = measurements[np.argsort(measurements["flux"])[::-1]]
+
+        if refcat is not None:
+            _rc_x = np.asarray(refcat["centroid_x"], dtype=float)
+            _rc_y = np.asarray(refcat["centroid_y"], dtype=float)
+            _rc_mag = {
+                "photo_mag": np.asarray(refcat["photo_mag"], dtype=float),
+                "astrom_mag": np.asarray(refcat["astrom_mag"], dtype=float),
+            }
         else:
-            box_mask = (np.abs(_rc_x - cx) <= half) & (np.abs(_rc_y - cy) <= half)
-            dx_box = _rc_x[box_mask] - cx
-            dy_box = _rc_y[box_mask] - cy
+            _rc_x = _rc_y = None
+            _rc_mag = {}
 
-        def _nearby(mag_col):
-            if box_mask is None:
-                return []
-            mag_box = _rc_mag[mag_col][box_mask]
-            return list(zip(dx_box.tolist(), dy_box.tolist(), mag_box.tolist()))
+        def _cut_stamp(row, blind_cx=None, blind_cy=None) -> Donut | None:
+            """Cut one stamp and compute metrics. Returns Donut or None on failure."""
+            # Odd-sized cut (2*half+1) so the centroid pixel sits exactly at the
+            # stamp center. An even cut would offset the donut half a pixel from
+            # the stamp's geometric center, and force the crop-by-1 fallback in
+            # _prep_donut_for_danish (Danish requires an odd stamp).
+            cx_f = float(row["centroid_x"])
+            cy_f = float(row["centroid_y"])
+            cx, cy = int(round(cx_f)), int(round(cy_f))
+            rmin, rmax = cy - half, cy + half + 1
+            cmin, cmax = cx - half, cx + half + 1
+            if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
+                return None
+            saturated = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
+            stamp = np.array(arr[rmin:rmax, cmin:cmax])
+            stamp_ccs = np.rot90(stamp, k=-n_quarter).T
 
-        _fa = detector.transform(
-            [lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE
-        )[0]
-        _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
+            # Vectorized box query over the precomputed refcat arrays.
+            # Offsets are relative to the *rounded* centroid (cx, cy), since
+            # that is the pixel the stamp is cut around and lands at the stamp
+            # center.
+            if _rc_x is None:
+                box_mask = None
+                dx_box = dy_box = None
+            else:
+                box_mask = (np.abs(_rc_x - cx) <= half) & (np.abs(_rc_y - cy) <= half)
+                dx_box = _rc_x[box_mask] - cx
+                dy_box = _rc_y[box_mask] - cy
 
-        _nearby_photo_list = _nearby("photo_mag")
-        _neighbor_dists = [
-            np.hypot(dx, dy)
-            for dx, dy, _ in _nearby_photo_list
-            if np.hypot(dx, dy) >= 1.0
-        ]
+            def _nearby(mag_col):
+                if box_mask is None:
+                    return []
+                mag_box = _rc_mag[mag_col][box_mask]
+                return list(zip(dx_box.tolist(), dy_box.tolist(), mag_box.tolist()))
 
-        _catalog_centroid_offset_px = (
-            float(np.hypot(cx_f - blind_cx, cy_f - blind_cy))
-            if blind_cx is not None and blind_cy is not None
-            else float("nan")
+            _fa = detector.transform(
+                [lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE
+            )[0]
+            _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
+
+            _nearby_photo_list = _nearby("photo_mag")
+            _neighbor_dists = [
+                np.hypot(dx, dy)
+                for dx, dy, _ in _nearby_photo_list
+                if np.hypot(dx, dy) >= 1.0
+            ]
+
+            _catalog_centroid_offset_px = (
+                float(np.hypot(cx_f - blind_cx, cy_f - blind_cy))
+                if blind_cx is not None and blind_cy is not None
+                else float("nan")
+            )
+
+            return Donut(
+                sensor=detector.getName(),
+                stamp=stamp_ccs,
+                fa_x_ccs=float(_fa[1]),
+                fa_y_ccs=float(_fa[0]),
+                flux=float(row["flux"]),
+                band=band,
+                det_id=det_id,
+                visit_id=visit_id,
+                centroid_x_raw=cx_f,
+                centroid_y_raw=cy_f,
+                id=int(row["id"]),
+                inner_frac=float(row["inner_frac"]),
+                outer_frac=float(row["outer_frac"]),
+                outer_sector_minmax_frac=float(row["outer_sector_minmax_frac"]),
+                field_dist_deg=_field_dist_deg,
+                donut_radius=donutRadius,
+                obscuration=obscuration,
+                snr=float(row["snr"]),
+                bkg=float(row["bkg"]),
+                bkg_std=float(row["std"]),
+                nearest_neighbor_dist_px=(
+                    float(min(_neighbor_dists)) if _neighbor_dists else float("nan")
+                ),
+                n_neighbors_in_stamp=len(_neighbor_dists),
+                catalog_centroid_offset_px=_catalog_centroid_offset_px,
+                n_quarter=n_quarter,
+                nearby_photo=_nearby_photo_list,
+                nearby_astrom=_nearby("astrom_mag"),
+                saturated=saturated,
+            )
+
+        inner_thr = self.config.innerFracThreshold
+        outer_thr = self.config.outerFracThreshold
+        min_stamp_snr = self.config.minStampSnr
+
+        def _append_reject_reasons(d: Donut) -> None:
+            if d.saturated:
+                d.reject_reasons.append("SAT")
+            if np.isfinite(d.inner_frac) and abs(d.inner_frac) > inner_thr:
+                d.reject_reasons.append("inner_frac")
+            if np.isfinite(d.outer_frac) and abs(d.outer_frac) > outer_thr:
+                d.reject_reasons.append("outer_frac")
+            if np.isfinite(d.snr) and d.snr < min_stamp_snr:
+                d.reject_reasons.append("snr")
+
+        # Match each centroid to the nearest blind detection for
+        # catalog_centroid_offset_px.
+        _blind_cx = (
+            np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
         )
-
-        return Donut(
-            sensor=detector.getName(),
-            stamp=stamp_ccs,
-            fa_x_ccs=float(_fa[1]),
-            fa_y_ccs=float(_fa[0]),
-            flux=float(row["flux"]),
-            band=band,
-            det_id=det_id,
-            visit_id=visit_id,
-            centroid_x_raw=cx_f,
-            centroid_y_raw=cy_f,
-            id=int(row["id"]),
-            inner_frac=float(row["inner_frac"]),
-            outer_frac=float(row["outer_frac"]),
-            outer_sector_minmax_frac=float(row["outer_sector_minmax_frac"]),
-            field_dist_deg=_field_dist_deg,
-            donut_radius=donutRadius,
-            obscuration=obscuration,
-            snr=float(row["snr"]),
-            bkg=float(row["bkg"]),
-            bkg_std=float(row["std"]),
-            nearest_neighbor_dist_px=(
-                float(min(_neighbor_dists)) if _neighbor_dists else float("nan")
-            ),
-            n_neighbors_in_stamp=len(_neighbor_dists),
-            catalog_centroid_offset_px=_catalog_centroid_offset_px,
-            n_quarter=n_quarter,
-            nearby_photo=_nearby_photo_list,
-            nearby_astrom=_nearby("astrom_mag"),
-            saturated=saturated,
+        _blind_cy = (
+            np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
         )
+        _match_tol = donutRadius * 0.5
 
-    inner_thr = cutout_cfg["innerFracThreshold"]
-    outer_thr = cutout_cfg["outerFracThreshold"]
-    max_field_dist = cutout_cfg["maxFieldDist"]
-    min_stamp_snr = cutout_cfg["minStampSnr"]
+        def _nearest_blind(cx_f, cy_f):
+            if len(_blind_cx) == 0:
+                return None, None
+            dists = np.hypot(_blind_cx - cx_f, _blind_cy - cy_f)
+            idx = int(np.argmin(dists))
+            return (
+                (float(_blind_cx[idx]), float(_blind_cy[idx]))
+                if dists[idx] <= _match_tol
+                else (None, None)
+            )
 
-    def _append_reject_reasons(d: Donut) -> None:
-        if d.saturated:
-            d.reject_reasons.append("SAT")
-        if d.field_dist_deg > max_field_dist:
-            d.reject_reasons.append("field_dist")
-        if np.isfinite(d.inner_frac) and abs(d.inner_frac) > inner_thr:
-            d.reject_reasons.append("inner_frac")
-        if np.isfinite(d.outer_frac) and abs(d.outer_frac) > outer_thr:
-            d.reject_reasons.append("outer_frac")
-        if np.isfinite(d.snr) and d.snr < min_stamp_snr:
-            d.reject_reasons.append("snr")
+        max_donuts = self.config.maxDonuts
+        max_reject = self.config.maxRejectDonuts
 
-    # Match each centroid to the nearest blind detection for catalog_centroid_offset_px.
-    _blind_cx = np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
-    _blind_cy = np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
-    _match_tol = donutRadius * 0.5
+        # --- Single pass over candidates: accept or quality-reject ---
+        # Input is flux-descending, so both lists fill brightest-first. Once
+        # both buckets are full, every remaining candidate is fainter than
+        # everything kept, so we stop cutting stamps entirely.
+        donuts: list[Donut] = []
+        rejected_donuts: list[Donut] = []
+        for row in measurements:
+            if len(donuts) >= max_donuts and len(rejected_donuts) >= max_reject:
+                break
+            _b_cx, _b_cy = _nearest_blind(float(row["centroid_x"]), float(row["centroid_y"]))
+            d = _cut_stamp(row, blind_cx=_b_cx, blind_cy=_b_cy)
+            if d is None:
+                continue
+            _append_reject_reasons(d)
+            if d.reject_reasons:
+                if len(rejected_donuts) < max_reject:
+                    rejected_donuts.append(d)
+                continue
+            if len(donuts) < max_donuts:
+                donuts.append(d)
 
-    def _nearest_blind(cx_f, cy_f):
-        if len(_blind_cx) == 0:
-            return None, None
-        dists = np.hypot(_blind_cx - cx_f, _blind_cy - cy_f)
-        idx = int(np.argmin(dists))
-        return (
-            (float(_blind_cx[idx]), float(_blind_cy[idx]))
-            if dists[idx] <= _match_tol
-            else (None, None)
-        )
-
-    # --- Single pass over centroids: accept or quality-reject ---
-    donuts: list[Donut] = []
-    rejected_donuts: list[Donut] = []
-    for row in selected_centroids:
-        _b_cx, _b_cy = _nearest_blind(float(row["centroid_x"]), float(row["centroid_y"]))
-        d = _cut_stamp(row, blind_cx=_b_cx, blind_cy=_b_cy)
-        if d is None:
-            continue
-        _append_reject_reasons(d)
-        if d.reject_reasons:
-            rejected_donuts.append(d)
-            continue
-        donuts.append(d)
-
-    donuts.sort(key=lambda d: d.flux, reverse=True)
-    rejected_donuts.sort(key=lambda d: d.flux, reverse=True)
-
-    return donuts, rejected_donuts
+        return pipeBase.Struct(donuts=donuts, rejected_donuts=rejected_donuts)
 
 
 def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
@@ -735,7 +803,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     selections = blindDetections
     refcat = None
     cat_err = None
-    selection_source = "blind_unfiltered"
+    selection_source = None
     donut_selector = _CALIB_STORE["donut_selector_task"]
 
     if wcs is not None:
@@ -766,9 +834,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
             refcat = None  # don't leave a partially-built refcat around
 
     # If the refcat path didn't produce a selection, run the blind detections
-    # through the same selector.  With allowFluxless=True it auto-detects the
-    # missing flux and applies edge / field-radius / max cuts on geometry only.
-    # Fall back to the raw blind detections only if that also fails.
+    # through the same selector.  If that also fails, then exit gracefully.
     if selection_source != "refcat":
         try:
             result = donut_selector.run(blindDetections, detector, "")
@@ -776,36 +842,40 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
             selection_source = "blind_selected"
         except Exception as exc:
             cat_err = cat_err or str(exc)
-            selections = blindDetections
-            selection_source = "blind_unfiltered"
-
-    _log.info(
+            _log.warning(
+                "Donut selector failed on blind detections for %s; "
+                "dropping sensor's donuts: %s",
+                sensor_name,
+                exc,
+            )
+            selections = blindDetections[:0]  # empty; flows through to empty catalog
+            selection_source = "blind_failed"
+    logging.getLogger(__name__).info(
         "Donut selection path: %s (%d sources)", selection_source, len(selections)
     )
 
     # --- stamp cutting ---
     t5 = time.perf_counter()
-    candidates = _select_candidate_donuts(
+    measure_task = _CALIB_STORE["measure_candidates_task"]
+    candidates = measure_task.run(
         postIsr,
         selections,
-        cutout_cfg,
+    ).measurements
+    cut_stamps_task = _CALIB_STORE["cut_stamps_task"]
+    cut_result = cut_stamps_task.run(
+        postIsr,
+        candidates,
+        refcat,
+        blindDetections,
     )
-    if len(candidates) == 0:
-        donuts, rejected_donuts = [], []
-    else:
-        donuts, rejected_donuts = _cut_and_evaluate_stamps(
-            postIsr,
-            candidates,
-            refcat,
-            cutout_cfg,
-            blindDetections,
-        )
+    donuts = cut_result.donuts
+    rejected_donuts = cut_result.rejected_donuts
 
     t6 = time.perf_counter()
 
     return {
         "sensor": sensor_name,
-        "catalog": donuts,
+        "catalog": cut_result.donuts,
         "dispatch_to_arrival": t_arrival - t_dispatch,
         "isr_run": t1 - t0,
         "bkg_run": t2 - t1,
@@ -813,7 +883,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         "wcs_refit_run": t4 - t3,
         "catalog_select_run": t5 - t4,
         "stamp_cut_run": t6 - t5,
-        "rejected_catalog": rejected_donuts,
+        "rejected_catalog": cut_result.rejected_donuts,
         "scatter_arcsec": scatter_arcsec,
         "wcs_refit_error": wcs_err,
         "cat_select_error": cat_err,
@@ -1008,7 +1078,6 @@ def _residual_rms(
     model_img: np.ndarray,
     radius: float,
     obscuration: float,
-    apertureOuterMarginFrac: float,
 ) -> float:
     """RMS of (data - model) over the main donut annulus."""
     if img is None or model_img is None:
@@ -1020,7 +1089,7 @@ def _residual_rms(
         else np.mgrid[-half:half, -half:half]
     )
     r = np.hypot(gx, gy)
-    main_mask = (r < radius * apertureOuterMarginFrac) & (r > radius * obscuration)
+    main_mask = (r < radius) & (r > radius * obscuration)
     if main_mask.shape != img.shape:
         sz = min(main_mask.shape[0], img.shape[0])
         main_mask = main_mask[:sz, :sz]
@@ -1512,7 +1581,6 @@ def _wf_worker(group: _WfGroup) -> dict:
                     _mimg,
                     _INSTRUMENT.donutRadius,
                     _INSTRUMENT.obscuration,
-                    _CALIB_STORE["cutout_cfg"]["apertureOuterMarginFrac"],
                 ),
                 blend_frac=_blend_frac(
                     _img,
@@ -1748,6 +1816,14 @@ class DonutBlitzMonolithTaskConfig(
         target=DonutSourceSelectorTask,
         doc="Donut source selector subtask.",
     )
+    measureCandidatesTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=MeasureDonutCandidatesTask,
+        doc="Donut candidate measurement subtask.",
+    )
+    cutStampsTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=CutDonutStampsTask,
+        doc="Donut stamp cutting subtask.",
+    )
     instConfigFile: pexConfig.Field = pexConfig.Field(
         doc=(
             "Path to an instrument configuration file to override the default. "
@@ -1757,109 +1833,6 @@ class DonutBlitzMonolithTaskConfig(
         ),
         dtype=str,
         optional=True,
-    )
-    edgeMargin: pexConfig.Field = pexConfig.Field(
-        doc="Width of detector edge region to exclude from detection, in pixels.",
-        dtype=int,
-        default=80,
-    )
-    detectionBinning: pexConfig.Field = pexConfig.Field(
-        doc=("Integer factor by which to bin the image before running the cross-correlation detection step."),
-        dtype=int,
-        default=8,
-    )
-    peakMinDistanceFactor: pexConfig.Field = pexConfig.Field(
-        doc="Multiplier applied to the binned donut radius to set min_distance in peak_local_max.",
-        dtype=float,
-        default=1.6,
-    )
-    peakExcludeBorderFactor: pexConfig.Field = pexConfig.Field(
-        doc="Multiplier applied to the binned donut radius to set exclude_border in peak_local_max.",
-        dtype=float,
-        default=1.15,
-    )
-    apertureOuterMarginFrac: pexConfig.Field = pexConfig.Field(
-        doc=(
-            "Outer edge of the main photometric aperture, as a multiple of "
-            "the nominal donut radius. Adds margin beyond the nominal edge to "
-            "tolerate PSF blur and centroiding error."
-        ),
-        dtype=float,
-        default=1.05,
-    )
-    apertureInnerBufferFrac: pexConfig.Field = pexConfig.Field(
-        doc=(
-            "Inner edge of the background/blend-check region inside the "
-            "obscuration, as a multiple of ``radius * obscuration``."
-        ),
-        dtype=float,
-        default=0.67,
-    )
-    bkgAnnulusInnerFrac: pexConfig.Field = pexConfig.Field(
-        doc=(
-            "Inner edge of the outer background/blend-check annulus, as a "
-            "multiple of the nominal donut radius."
-        ),
-        dtype=float,
-        default=1.25,
-    )
-    bkgAnnulusOuterFrac: pexConfig.Field = pexConfig.Field(
-        doc=(
-            "Outer edge of the outer background/blend-check annulus, as a "
-            "multiple of the nominal donut radius. Also sets the half-width "
-            "of the photometry/quality-metric cutout window."
-        ),
-        dtype=float,
-        default=1.4,
-    )
-    innerFracThreshold: pexConfig.Field = pexConfig.Field(
-        doc="Maximum allowed |inner_flux / flux| for a candidate to be kept.",
-        dtype=float,
-        default=0.1,
-    )
-    outerFracThreshold: pexConfig.Field = pexConfig.Field(
-        doc="Maximum allowed |outer_flux / flux| for a candidate to be kept.",
-        dtype=float,
-        default=0.1,
-    )
-    snrThreshold: pexConfig.Field = pexConfig.Field(
-        doc="Minimum signal-to-noise ratio for a candidate to be kept.",
-        dtype=float,
-        default=100.0,
-    )
-    maxFieldDist: pexConfig.Field = pexConfig.Field(
-        doc="Maximum distance from the center of the focal plane in degrees.",
-        dtype=float,
-        default=1.725,
-    )
-    minStampSnr: pexConfig.Field = pexConfig.Field(
-        doc="Minimum per-stamp SNR for a donut to be accepted for WF estimation.",
-        dtype=float,
-        default=500.0,
-    )
-    stampSize: pexConfig.Field = pexConfig.Field(
-        doc=(
-            "Side length in pixels of the square stamp cut around each donut "
-            "centroid. Stamps are cut odd (2*(stampSize//2)+1) so the centroid "
-            "pixel is exactly centered.\n\n"
-            "Danish requires an odd stamp after binning, and `binArray` "
-            "truncates before binning, so the fitted size is stampSize//binning. "
-            "That is odd for binning 1, 2 and 3 when stampSize = 3 or 11 (mod "
-            "12), and additionally for binning 4 when stampSize = 15 or 23 (mod "
-            "24). The default 167 (= 23 mod 24) satisfies all four, giving "
-            "167/83/55/41 px. Sizes failing this still work -- "
-            "_prep_donut_for_danish crops by one pixel -- but that shifts the "
-            "donut off center by half a pixel.\n\n"
-            "Must also be large enough to contain the main photometric annulus: "
-            "stampSize/2 >= donutRadius * apertureOuterMarginFrac."
-        ),
-        dtype=int,
-        default=167,
-    )
-    maxDonuts: pexConfig.Field = pexConfig.Field(
-        doc="Maximum number of donuts to return per sensor, sorted by flux descending.",
-        dtype=int,
-        default=8,
     )
     maxFitScatter: pexConfig.Field = pexConfig.Field(
         doc="Maximum allowed on-sky scatter (arcsec) for WCS refit to be accepted.",
@@ -2061,12 +2034,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.makeSubtask("plotTask")
         self.makeSubtask("isrTask")
         self.makeSubtask("subtractBackground")
         self.makeSubtask("blindDetect")
         self.makeSubtask("astromTask")
         self.makeSubtask("donutSelector")
+        self.makeSubtask("measureCandidatesTask")
+        self.makeSubtask("cutStampsTask")
+        self.makeSubtask("plotTask")
         self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
 
     def runQuantum(
@@ -2308,17 +2283,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         self.astromTask.setRefObjLoader(astrom_stub_loader)
 
         cutout_cfg = dict(
-            apertureOuterMarginFrac=self.config.apertureOuterMarginFrac,
-            apertureInnerBufferFrac=self.config.apertureInnerBufferFrac,
-            bkgAnnulusInnerFrac=self.config.bkgAnnulusInnerFrac,
-            bkgAnnulusOuterFrac=self.config.bkgAnnulusOuterFrac,
-            innerFracThreshold=self.config.innerFracThreshold,
-            outerFracThreshold=self.config.outerFracThreshold,
-            snrThreshold=self.config.snrThreshold,
-            minStampSnr=self.config.minStampSnr,
-            maxFieldDist=self.config.maxFieldDist,
-            stampSize=self.config.stampSize,
-            maxDonuts=self.config.maxDonuts,
             maxFitScatter=self.config.maxFitScatter,
             astromRefFilter=self.config.astromRefFilter,
             resolvedPhotoFilterName=photo_filter_name,
@@ -2331,6 +2295,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["blind_detect_task"] = self.blindDetect
         _CALIB_STORE["astrom_task"] = self.astromTask
         _CALIB_STORE["donut_selector_task"] = self.donutSelector
+        _CALIB_STORE["measure_candidates_task"] = self.measureCandidatesTask
+        _CALIB_STORE["cut_stamps_task"] = self.cutStampsTask
         _CALIB_STORE["camera"] = camera
         _CALIB_STORE["cutout_cfg"] = cutout_cfg
         _CALIB_STORE["sensor_refcats"] = sensor_refcats
@@ -2671,7 +2637,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # wf/model images are binned and cropped to odd size (see
         # _prep_donut_for_danish). Derive from the actual odd cut size,
         # 2*(stampSize//2)+1, not from stampSize itself.
-        _cut = 2 * (self.config.stampSize // 2) + 1
+        _cut = 2 * (self.cutStampsTask.config.stampSize // 2) + 1
         _binned = _cut // self.config.binning
         max_wf_ny = max_wf_nx = _binned if _binned % 2 == 1 else _binned - 1
 
@@ -2792,11 +2758,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["donut_radius"] = _first_d.donut_radius
         table.meta["obscuration"] = _first_d.obscuration
         _cutout_cfg = _CALIB_STORE["cutout_cfg"]
-        table.meta["aperture_outer_margin_frac"] = _cutout_cfg["apertureOuterMarginFrac"]
-        table.meta["aperture_inner_buffer_frac"] = _cutout_cfg["apertureInnerBufferFrac"]
-        table.meta["bkg_annulus_inner_frac"] = _cutout_cfg["bkgAnnulusInnerFrac"]
-        table.meta["bkg_annulus_outer_frac"] = _cutout_cfg["bkgAnnulusOuterFrac"]
-        table.meta["max_donuts"] = int(_cutout_cfg["maxDonuts"])
+        table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
+        table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
+        table.meta["bkg_annulus_inner_frac"] = self.measureCandidatesTask.config.bkgAnnulusInnerFrac
+        table.meta["bkg_annulus_outer_frac"] = self.measureCandidatesTask.config.bkgAnnulusOuterFrac
+        table.meta["max_donuts"] = int(self.cutStampsTask.config.maxDonuts)
         return table
 
 
