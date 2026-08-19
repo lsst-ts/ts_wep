@@ -321,7 +321,7 @@ def _select_candidate_donuts(
     postIsr: Exposure,
     selections: QTable,
     cutout_cfg: dict,
-) -> tuple | None:
+) -> QTable | None:
     """Filter centroids by flux measurement and quality criteria.
 
     Measures flux on the full image and applies quality cuts (inner/outer flux
@@ -340,9 +340,10 @@ def _select_candidate_donuts(
 
     Returns
     -------
-    tuple or None
-        If candidates found: ``(centroid_x, centroid_y, source_ids, flux_arr,
-        inner_frac_arr, outer_frac_arr, outer_sector_max_arr)``; else ``None``.
+    QTable or None
+        If candidates found: QTable with columns ``centroid_x``, ``centroid_y``,
+        ``source_id``, ``flux``, ``inner_frac``, ``outer_frac``, ``outer_sector_minmax``;
+        else ``None``.
     """
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
@@ -386,7 +387,7 @@ def _select_candidate_donuts(
     flux_arr = np.array(measTable["flux"])
     inner_frac_arr = np.array(measTable["inner_flux"]) / flux_arr
     outer_frac_arr = np.array(measTable["outer_flux"]) / flux_arr
-    outer_sector_minmax_arr = np.array(measTable["outer_sector_minmax_flux"])
+    outer_sector_minmax_arr = np.array(measTable["outer_sector_minmax_flux"]) / flux_arr
     order = np.argsort(flux_arr)[::-1][:maxDonuts]
     centroid_x = np.array(measTable["centroid_x"])[order]
     centroid_y = np.array(measTable["centroid_y"])[order]
@@ -396,8 +397,18 @@ def _select_candidate_donuts(
     outer_sector_minmax_arr = outer_sector_minmax_arr[order]
     source_ids = source_ids[order]
 
-    return centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_minmax_arr
-
+    # Return as QTable instead of tuple
+    return QTable(
+        {
+            "source_id": source_ids,
+            "centroid_x": centroid_x,
+            "centroid_y": centroid_y,
+            "flux": flux_arr,
+            "inner_frac": inner_frac_arr,
+            "outer_frac": outer_frac_arr,
+            "outer_sector_minmax_frac": outer_sector_minmax_arr,
+        }
+    )
 
 def _cut_and_evaluate_stamps(
     postIsr: Exposure,
@@ -438,9 +449,14 @@ def _cut_and_evaluate_stamps(
     donutRadius = _INSTRUMENT.donutRadius
     obscuration = _INSTRUMENT.obscuration
     # Unpack selected centroids
-    centroid_x, centroid_y, source_ids, flux_arr, inner_frac_arr, outer_frac_arr, outer_sector_minmax_arr = (
-        selected_centroids
-    )
+
+    source_ids = selected_centroids["source_id"]
+    centroid_x = selected_centroids["centroid_x"]
+    centroid_y = selected_centroids["centroid_y"]
+    flux_arr = selected_centroids["flux"]
+    inner_frac_arr = selected_centroids["inner_frac"]
+    outer_frac_arr = selected_centroids["outer_frac"]
+    outer_sector_minmax_arr = selected_centroids["outer_sector_minmax_frac"]
 
     detector = postIsr.getDetector()
     band = postIsr.filter.bandLabel
@@ -486,7 +502,7 @@ def _cut_and_evaluate_stamps(
         source_id_val,
         inner_frac,
         outer_frac,
-        outer_sector_max,
+        outer_sector_minmax_frac,
         blind_cx=None,
         blind_cy=None,
     ):
@@ -558,7 +574,7 @@ def _cut_and_evaluate_stamps(
             source_id=int(source_id_val),
             inner_frac=inner_frac,
             outer_frac=outer_frac,
-            outer_sector_max=outer_sector_max,
+            outer_sector_minmax_frac=outer_sector_minmax_frac,
             field_dist_deg=_field_dist_deg,
             donut_radius=donutRadius,
             obscuration=obscuration,
@@ -616,7 +632,7 @@ def _cut_and_evaluate_stamps(
             source_ids[i],
             float(inner_frac_arr[i]),
             float(outer_frac_arr[i]),
-            float(outer_sector_max_arr[i]),
+            float(outer_sector_minmax_arr[i]),
             blind_cx=_b_cx,
             blind_cy=_b_cy,
         )
@@ -630,57 +646,6 @@ def _cut_and_evaluate_stamps(
     rejected_donuts.sort(key=lambda d: d["flux"], reverse=True)
 
     return donuts, rejected_donuts
-
-
-def _cutStamps(
-    postIsr: Exposure,
-    blindDetections: QTable,
-    selections: QTable,
-    refcat: QTable | None,
-    cutout_cfg: dict,
-) -> tuple:
-    """Measure image fluxes, apply quality cuts, and cut postISR stamps.
-
-    Parameters
-    ----------
-    postIsr : Exposure
-        Background-subtracted post-ISR science exposure.
-    blindDetections : QTable
-        Centroid table from `_blindDetect`, used for catalog_centroid_offset_px.
-    selections : QTable
-        Catalog-selected (or blind-detection) centroids with columns
-        ``centroid_x``, ``centroid_y``, ``id``.
-    refcat : QTable or None
-        Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
-        ``astrom_mag`` columns, or ``None`` in the blind-detection fallback.
-    cutout_cfg : dict
-        Config dict with ``stampSize``, ``minStampSnr``,
-        ``innerFluxFractionCut``, ``outerFluxFractionCut``, ``maxFieldDist``.
-
-    Returns
-    -------
-    donuts : list of dict
-        Accepted donut stamp dicts, sorted brightest-first.
-    rejected_donuts : list of dict
-        Quality-failed donut stamp dicts, sorted brightest-first.
-    """
-    # Phase 1: Filter centroids by flux and quality
-    selected_centroids = _select_candidate_donuts(
-        postIsr,
-        selections,
-        cutout_cfg,
-    )
-    if selected_centroids is None:
-        return [], []
-
-    # Phase 2: Cut and evaluate stamps
-    return _cut_and_evaluate_stamps(
-        postIsr,
-        selected_centroids,
-        refcat,
-        cutout_cfg,
-        blindDetections,
-    )
 
 
 def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
@@ -815,13 +780,21 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
 
     # --- stamp cutting ---
     t5 = time.perf_counter()
-    donuts, rejected_donuts = _cutStamps(
+    candidates = _select_candidate_donuts(
         postIsr,
-        blindDetections,
         selections,
-        refcat,
         cutout_cfg,
     )
+    if candidates is None:
+        donuts, rejected_donuts = [], []
+    else:
+        donuts, rejected_donuts = _cut_and_evaluate_stamps(
+            postIsr,
+            candidates,
+            refcat,
+            cutout_cfg,
+            blindDetections,
+        )
 
     t6 = time.perf_counter()
 
@@ -1534,7 +1507,7 @@ class BlindDetect(pipeBase.Task):
     """Detect donuts via annular template cross-correlation.
 
     Erodes the post-ISR exposure border by ``edgeMargin`` pixels, then calls
-    `_detectPeaks`.  Flux measurement is deferred to `_cutStamps`.
+    `_detectPeaks`.
 
     Parameters
     ----------
@@ -2695,7 +2668,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "snr": float(d["snr"]),
                 "inner_frac": float(d["inner_frac"]),
                 "outer_frac": float(d["outer_frac"]),
-                "outer_sector_max": float(d["outer_sector_max"]),
+                "outer_sector_minmax_frac": float(d["outer_sector_minmax_frac"]),
                 "bkg_level": float(d["bkg_level"]),
                 "bkg_std": float(d["bkg_std"]),
                 "nearest_neighbor_dist_px": float(d["nearest_neighbor_dist_px"]),
@@ -2995,7 +2968,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             def _xform(dx, dy):
                 """Map a raw-pixel offset to stamp display coords.
 
-                Must mirror the stamp transform in `_cutStamps`,
+                Must mirror the stamp transform in `_cut_and_evaluate_stamps`,
                 ``np.rot90(stamp, k=-n_quarter).T`` -- including the transpose.
                 The loop applies the rot90 in (row, col) space; returning
                 ``(r, c)`` rather than ``(c, r)`` is what applies the ``.T``.
@@ -3026,11 +2999,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
             inner_frac = float(row["inner_frac"])
             outer_frac = float(row["outer_frac"])
-            outer_sector_max = float(row["outer_sector_max"])
+            outer_sector_minmax = float(row["outer_sector_minmax_frac"])
             snr = float(row["snr"])
             if_str = f"if={inner_frac:.3f}" if np.isfinite(inner_frac) else "if=?"
             of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
-            osm_str = f"osm={outer_sector_max:.3f}" if np.isfinite(outer_sector_max) else "osm=?"
+            osm_str = f"osm={outer_sector_minmax:.3f}" if np.isfinite(outer_sector_minmax) else "osm=?"
             snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
             sid = int(row["source_id"])
             sid_str = f"id={sid}" if sid != 0 else ""
