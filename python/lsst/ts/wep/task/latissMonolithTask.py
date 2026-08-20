@@ -64,6 +64,7 @@ __all__ = [
 ]
 
 import warnings
+from collections.abc import Sequence
 from typing import Any, cast
 
 import astropy.units as u
@@ -86,11 +87,14 @@ from lsst.pipe.base import (
     QuantumContext,
 )
 from lsst.pipe.tasks.quickFrameMeasurement import QuickFrameMeasurementTask
+from lsst.ts.wep.image import Image
 from lsst.ts.wep.imageMapper import ImageMapper
+from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.cutOutDonutsScienceSensorTask import (
     CutOutDonutsScienceSensorTask,
     CutOutDonutsScienceSensorTaskConfig,
 )
+from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
 from lsst.ts.wep.task.pairTask import ExposurePairer
@@ -117,7 +121,14 @@ pos2f_dtype = np.dtype([("x", "<f4"), ("y", "<f4")])
 _ZK_REF_JMAX = 78
 
 
-def _opd_zk_ref(instrument, telescope, field_angle_deg, defocal_type, wavelength, jmax=_ZK_REF_JMAX):
+def _opd_zk_ref(
+    instrument: Instrument,
+    telescope: batoid.Optic,
+    field_angle_deg: np.ndarray | tuple[float, float],
+    defocal_type: str,
+    wavelength: float,
+    jmax: int = _ZK_REF_JMAX,
+) -> np.ndarray:
     """Wavefront-OPD reference Zernikes, in metres, Noll-indexed to jmax.
 
     This is the fix for regression (1) in the module docstring. We shift the
@@ -145,7 +156,12 @@ def _opd_zk_ref(instrument, telescope, field_angle_deg, defocal_type, wavelength
     return zk
 
 
-def _prep_stamp(wep_image, instrument, noll_indices, optical_model="onAxis"):
+def _prep_stamp(
+    wep_image: Image,
+    instrument: Instrument,
+    noll_indices: Sequence[int],
+    optical_model: str = "onAxis",
+) -> tuple[np.ndarray, float, float]:
     """Peak-normalize, background-subtract and trim one stamp.
 
     Returns (image, background_variance, peak). Works on a copy, never the
@@ -178,14 +194,14 @@ def _prep_stamp(wep_image, instrument, noll_indices, optical_model="onAxis"):
 
 
 def fit_latiss_danish(
-    stamp_extra,
-    stamp_intra,
-    instrument,
-    noll_indices=tuple(range(4, 23)),
-    optical_model="onAxis",
-    start_with_intrinsic=True,
-    lstsq_kwargs=None,
-):
+    stamp_extra: DonutStamp,
+    stamp_intra: DonutStamp,
+    instrument: Instrument,
+    noll_indices: Sequence[int] = tuple(range(4, 23)),
+    optical_model: str = "onAxis",
+    start_with_intrinsic: bool = True,
+    lstsq_kwargs: dict | None = None,
+) -> dict[str, Any]:
     """Jointly fit an intra/extra LATISS donut pair with danish.
 
     Parameters
