@@ -33,6 +33,7 @@ against:
 """
 
 import os
+import types
 import unittest
 
 import astropy.units as u
@@ -277,7 +278,7 @@ class TestMemory(lsst.utils.tests.MemoryTestCase):
     pass
 
 
-def setup_module(module) -> None:
+def setup_module(module: types.ModuleType) -> None:
     lsst.utils.tests.init()
 
 
