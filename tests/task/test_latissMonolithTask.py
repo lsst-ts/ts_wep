@@ -40,7 +40,10 @@ import astropy.units as u
 import numpy as np
 import pytest
 
+import lsst.afw.image as afwImage
+import lsst.pipe.base as pipeBase
 import lsst.utils.tests
+from lsst.afw.cameraGeom import Camera
 from lsst.daf.butler import Butler
 from lsst.ts.wep.task.latissMonolithTask import (
     LatissMonolithTask,
@@ -230,6 +233,12 @@ class TestLatissMonolithTaskOnSky(lsst.utils.tests.TestCase):
     """Run the real ISR -> QFM -> cutout -> danish chain on one on-sky pair."""
 
     repoDir = "/sdf/data/rubin/repo/main"
+    # Populated by setUpClass, so declared here for the type checker.
+    butler: Butler
+    camera: Camera
+    rawIntra: afwImage.Exposure
+    rawExtra: afwImage.Exposure
+    result: pipeBase.Struct
 
     @classmethod
     def setUpClass(cls) -> None:
