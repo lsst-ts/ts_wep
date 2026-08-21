@@ -159,7 +159,7 @@ def _opd_zk_ref(
 def _prep_stamp(
     wep_image: Image,
     instrument: Instrument,
-    noll_indices: Sequence[int],
+    noll_indices: Sequence[int] | np.ndarray,
     optical_model: str = "onAxis",
 ) -> tuple[np.ndarray, float, float]:
     """Peak-normalize, background-subtract and trim one stamp.
@@ -197,7 +197,7 @@ def fit_latiss_danish(
     stamp_extra: DonutStamp,
     stamp_intra: DonutStamp,
     instrument: Instrument,
-    noll_indices: Sequence[int] = tuple(range(4, 23)),
+    noll_indices: Sequence[int] | np.ndarray = tuple(range(4, 23)),
     optical_model: str = "onAxis",
     start_with_intrinsic: bool = True,
     lstsq_kwargs: dict | None = None,
@@ -557,6 +557,10 @@ class LatissMonolithTask(pipeBase.PipelineTask):
     ConfigClass = LatissMonolithTaskConfig
     _DefaultName = "latissMonolithTask"
     config: LatissMonolithTaskConfig
+    # Set by makeSubtask, so declared here for the type checker.
+    isrTask: IsrTask
+    quickFrameMeasurement: QuickFrameMeasurementTask
+    pairer: ExposurePairer
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
