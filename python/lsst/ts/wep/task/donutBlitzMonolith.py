@@ -822,7 +822,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     t4 = time.perf_counter()
     astrom_task = _CALIB_STORE["astrom_task"]
     detector = postIsr.getDetector()
-    refcat_handle = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
+    refcat_handle = _CALIB_STORE["sensor_refcats"].get(detector.getName())
     scatter_arcsec = None
     wcs = None
     wcs_err = None
@@ -859,7 +859,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
 
     if wcs is not None:
         try:
-            photo_filter = cutout_cfg["resolvedPhotoFilterName"]
+            photo_filter = cutout_cfg["photoRefFilter"]
             astrom_filter = cutout_cfg["astromRefFilter"]
             refcat = refcat_handle.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refcat)
@@ -1267,7 +1267,7 @@ def _wf_fitting_worker(group: "_WfGroup") -> dict:
     task = _CALIB_STORE["wf_fitting_task"]
     result = task.run(group)
     # Set fit_mode on each donut result from main config
-    fit_mode = _CALIB_STORE.get("wfEstimationMode", "")
+    fit_mode = _CALIB_STORE["wfEstimationMode"]
     for wd in result.get("donuts", []):
         wd.fit_mode = fit_mode
     return result
@@ -2296,10 +2296,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         }
 
         band = next(iter(rawByName.values())).filter.bandLabel
-        photo_filter_name = band
         if self.config.photoRefFilter is not None:
             photo_filter_name = self.config.photoRefFilter
-        elif self.config.photoRefFilterPrefix is not None:
+        else:
             photo_filter_name = f"{self.config.photoRefFilterPrefix}_{band}"
 
         loader = None
@@ -2344,8 +2343,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         cutout_cfg = dict(
             maxFitScatter=self.config.maxFitScatter,
             astromRefFilter=self.config.astromRefFilter,
-            resolvedPhotoFilterName=photo_filter_name,
-            saveDiagnosticPlot=self.config.savePlots,
+            photoRefFilter=photo_filter_name,
         )
 
         _CALIB_STORE.clear()
@@ -2357,7 +2355,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["donut_selector_task"] = self.donutSelector
         _CALIB_STORE["measure_candidates_task"] = self.measureCandidatesTask
         _CALIB_STORE["cut_stamps_task"] = self.cutStampsTask
-        _CALIB_STORE["camera"] = camera
         _CALIB_STORE["cutout_cfg"] = cutout_cfg
         _CALIB_STORE["sensor_refcats"] = sensor_refcats
         for name in CORNER_SENSOR_NAMES:
