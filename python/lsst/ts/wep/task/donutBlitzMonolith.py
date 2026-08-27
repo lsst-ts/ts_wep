@@ -2302,45 +2302,16 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         elif self.config.photoRefFilterPrefix is not None:
             photo_filter_name = f"{self.config.photoRefFilterPrefix}_{band}"
 
-        refcat_handles = list(refCat)
-
-        # Thin proxy to count how many shards loadPixelBox actually fetches.
-        class _CountingHandle:
-            def __init__(self, h, cnt):
-                self._h = h
-                self._cnt = cnt
-
-            def __getattr__(self, name):
-                return getattr(self._h, name)
-
-            def get(self, *args, **kwargs):
-                self._cnt.append(1)
-                return self._h.get(*args, **kwargs)
-
-        refcat_fetched: list = []
-
-        def _make_loader(handles, counter=None):
-            if not handles:
-                return None
-            wrapped = [_CountingHandle(h, counter) for h in handles] if counter is not None else handles
+        loader = None
+        if not refCat:
+            self.log.warning("No reference catalog shards provided; skipping WCS refit and donut selection.")
+        else:
+            self.log.info("Loading reference catalog shards for WCS refit and donut selection.")
             loader = ReferenceObjectLoader(
-                dataIds=[h.dataId for h in handles],
-                refCats=wrapped,
+                dataIds=[h.dataId for h in refCat],
+                refCats=refCat,
             )
             loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
-            return loader
-
-        # One dataset, one loader, one load per sensor, shared by both consumers.
-        #
-        # No anyFilterMapsToThis: that alias exists to redirect *every* filter
-        # request to a single column, for refcats that lack the filter being
-        # asked for. the_monster does carry astromRefFilter, so the alias is
-        # unnecessary here -- and actively harmful to sharing, since it would
-        # also redirect the photometry lookup and silently feed astrometry
-        # fluxes to donut selection. Without it, loadPixelBox resolves
-        # fluxField from filterName for AstrometryTask, while the per-band
-        # {prefix}_{band}_flux columns stay readable for donut selection.
-        refcat_loader = _make_loader(refcat_handles, refcat_fetched)
 
         t_refcat0 = time.perf_counter()
         sensor_refcats: dict = {}
@@ -2349,9 +2320,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             raw_bbox = raw.getBBox()
             raw_epoch = raw.getInfo().getVisitInfo().date.toAstropy()
             load_result = None
-            if refcat_loader is not None:
+            if loader is not None:
                 try:
-                    load_result = refcat_loader.loadPixelBox(
+                    load_result = loader.loadPixelBox(
                         bbox=raw_bbox,
                         wcs=raw_wcs,
                         filterName=self.config.astromRefFilter,
@@ -2360,18 +2331,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 except Exception as exc:
                     self.log.warning("Failed to load refcat for %s: %s", name, exc)
             sensor_refcats[name] = load_result
-        self.log.info(
-            "Refcat load (loadPixelBox): %d/%d shards  (%.3fs)",
-            len(refcat_fetched),
-            len(refcat_handles),
-            time.perf_counter() - t_refcat0,
-        )
         t_refcat_elapsed = time.perf_counter() - t_refcat0
 
         # Stub loader: AstrometryTask.solve() calls refObjLoader.getMetadataBox()
         # unconditionally even when load_result is pre-supplied. That method is
         # pure geometry -- it never accesses catalog data, dataId.region, or the
-        # flux aliases -- so the stub needs no anyFilterMapsToThis.
+        # flux aliases.
         astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
         astrom_stub_loader.config.pixelMargin = 0
         self.astromTask.setRefObjLoader(astrom_stub_loader)
