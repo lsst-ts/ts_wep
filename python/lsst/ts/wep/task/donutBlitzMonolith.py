@@ -52,7 +52,7 @@ import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 import numpy.typing as npt
 from astropy.table import QTable
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Camera
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import Exposure
 from lsst.fgcmcal.utilities import lookupStaticCalibrations
@@ -1868,14 +1868,6 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=("instrument", "exposure", "detector"),
         multiple=True,
     )
-    camera = connectionTypes.PrerequisiteInput(
-        name="camera",
-        storageClass="Camera",
-        doc="Input camera geometry.",
-        dimensions=["instrument"],
-        isCalibration=True,
-        lookupFunction=lookupStaticCalibrations,
-    )
     ptc = connectionTypes.PrerequisiteInput(
         name="ptc",
         storageClass="PhotonTransferCurveDataset",
@@ -2162,23 +2154,21 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         t0 = time.perf_counter()
         raws = butlerQC.get(inputRefs.raws)
         t1 = time.perf_counter()
-        camera = butlerQC.get(inputRefs.camera)
-        t2 = time.perf_counter()
         ptc = butlerQC.get(inputRefs.ptc)
-        t3 = time.perf_counter()
+        t2 = time.perf_counter()
         flat = butlerQC.get(inputRefs.flat)
-        t4 = time.perf_counter()
+        t3 = time.perf_counter()
         linearizer = butlerQC.get(inputRefs.linearizer)
-        t5 = time.perf_counter()
+        t4 = time.perf_counter()
         crosstalk = butlerQC.get(inputRefs.crosstalk)
-        t6 = time.perf_counter()
+        t5 = time.perf_counter()
         refCat = butlerQC.get(inputRefs.refCat)
-        t7 = time.perf_counter()
+        t6 = time.perf_counter()
         intrinsicZernikes = butlerQC.get(inputRefs.intrinsicZernikes)
-        t8 = time.perf_counter()
+        t7 = time.perf_counter()
         self.log.info(
             _colorize(
-                "butlerQC.get timing: raws=%.3fs camera=%.3fs ptc=%.3fs flat=%.3fs"
+                "butlerQC.get timing: raws=%.3fs ptc=%.3fs flat=%.3fs"
                 " linearizer=%.3fs crosstalk=%.3fs refCat=%.3fs"
                 " intrinsicZernikes=%.3fs total=%.3fs",
                 _ANSI_BOLD,
@@ -2192,23 +2182,20 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             t5 - t4,
             t6 - t5,
             t7 - t6,
-            t8 - t7,
-            t8 - t0,
+            t7 - t0,
         )
-        butler_elapsed = t8 - t0
+        butler_elapsed = t7 - t0
         butler_times = dict(
             raws=t1 - t0,
-            camera=t2 - t1,
-            ptc=t3 - t2,
-            flat=t4 - t3,
-            linearizer=t5 - t4,
-            crosstalk=t6 - t5,
-            refCat=t7 - t6,
-            intrinsicZernikes=t8 - t7,
+            ptc=t2 - t1,
+            flat=t3 - t2,
+            linearizer=t4 - t3,
+            crosstalk=t5 - t4,
+            refCat=t6 - t5,
+            intrinsicZernikes=t7 - t6,
         )
         outputs = self.run(
             raws=raws,
-            camera=camera,
             ptc=ptc,
             flat=flat,
             linearizer=linearizer,
@@ -2219,15 +2206,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             butler_times=butler_times,
             numCores=butlerQC.resources.num_cores,
         )
-        t9 = time.perf_counter()
-        self.log.info("run() execution: %.3fs", t9 - t8)
+        t8 = time.perf_counter()
+        self.log.info("run() execution: %.3fs", t8 - t7)
         butlerQC.put(outputs.blitzResults, outputRefs.blitzResults)
 
     @timeMethod
     def run(
         self,
         raws: list,
-        camera: Camera,
         ptc: list,
         flat: list,
         linearizer: list,
@@ -2244,7 +2230,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         Parameters
         ----------
         raws : list of lsst.afw.image.Exposure
-        camera : lsst.afw.cameraGeom.Camera
         ptc : list of lsst.ip.isr.PhotonTransferCurveDataset
         flat : list of lsst.afw.image.ExposureF
         linearizer : list of lsst.ip.isr.Linearizer
@@ -2275,7 +2260,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         )
         t_run0 = time.perf_counter()
 
-        rawByName = {exp.getDetector().getName(): exp for exp in raws}
+        detNameById = {}
+        rawByName = {}
+        for exp in raws:
+            det = exp.getDetector()
+            detNameById[det.getId()] = det.getName()
+            rawByName[det.getName()] = exp
         ptcByName = {p._detectorName: p for p in ptc}
         flatByName = {f.getDetector().getName(): f for f in flat}
         linearizerByName = {lin._detectorName: lin for lin in linearizer}
@@ -2291,7 +2281,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             self.log.warning("No intrinsic Zernike calibrations provided.")
         self.intrinsicZernikes = list(intrinsicZernikes) if intrinsicZernikes else []
         intrinsicZernikesByName = {
-            camera[iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]].getName(): iz
+            detNameById[iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]]: iz
             for iz in self.intrinsicZernikes
         }
 
@@ -2771,6 +2761,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "bkg": float(d.bkg),
                 "bkg_std": float(d.bkg_std),
                 "donut_radius": float(d.donut_radius),
+                "obscuration": float(d.obscuration),
                 "nearest_neighbor_dist_px": float(d.nearest_neighbor_dist_px),
                 "n_neighbors_in_stamp": int(d.n_neighbors_in_stamp),
                 "catalog_centroid_offset_px": float(d.catalog_centroid_offset_px),
@@ -2819,11 +2810,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["danish_elapsed"] = float(danish_elapsed)
         table.meta["photo_filter_name"] = str(photo_filter_name)
         table.meta["astrom_filter_name"] = str(astrom_filter_name)
-        table.meta["noll_indices"] = list(_CALIB_STORE.get("wf_cfg", {}).get("nollIndices", []))
+        table.meta["noll_indices"] = list(self.wfFittingTask.config.nollIndices)
         table.meta["sensor_meta"] = sensor_meta
         _first_d = all_donuts[0][0]
-        table.meta["donut_radius"] = _first_d.donut_radius
-        table.meta["obscuration"] = _first_d.obscuration
         table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
         table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
         table.meta["bkg_annulus_inner_frac"] = self.measureCandidatesTask.config.bkgAnnulusInnerFrac
@@ -2997,8 +2986,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # fallback for rows that lack the columns -- e.g. an older blitzResults
         # catalog written before these columns existed, read back by a
         # standalone DonutBlitzPlotTask.
-        _visit_dr = catalog.meta["donut_radius"]
-        _visit_ob = catalog.meta["obscuration"]
         _stamp_outer_margin_frac = catalog.meta["aperture_outer_margin_frac"]
         _stamp_inner_buffer_frac = catalog.meta["aperture_inner_buffer_frac"]
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
@@ -3040,10 +3027,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             # Per-sensor radius/obscuration off the row, falling back to the
             # visit-level meta scalar if a row lacks a finite value (stale
             # catalog). row is an astropy Row, so membership is via colnames.
-            _row_dr = float(row["donut_radius"]) if "donut_radius" in row.colnames else _visit_dr
-            _row_ob = float(row["obscuration"]) if "obscuration" in row.colnames else _visit_ob
-            dr = _row_dr if np.isfinite(_row_dr) else (_visit_dr if np.isfinite(_visit_dr) else None)
-            ob = _row_ob if np.isfinite(_row_ob) else (_visit_ob if np.isfinite(_visit_ob) else None)
+            dr = float(row["donut_radius"])
+            ob = float(row["obscuration"])
             if dr is not None and ob is not None:
                 _circ_specs = [
                     (dr * ob * _stamp_inner_buffer_frac, _COLOR_BKG_ANNULUS, "--"),
