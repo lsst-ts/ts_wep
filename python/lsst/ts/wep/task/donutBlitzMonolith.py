@@ -1005,7 +1005,7 @@ def _run_cutout_worker(args: tuple) -> dict:
 
 # Maximum Noll index fit/reported. Dense Noll-indexed arrays are length
 # _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
-_ZK_JMAX = 78
+_ZK_JMAX = 66
 
 
 @dataclass
@@ -1034,10 +1034,7 @@ class WfResult:
     fit_dy: float
     fit_flux: float
     fit_fwhm: float
-    fit_residual_rms: float
     blend_frac: float
-    fit_bkg: float
-    zk_norm_um: float
     group_id: str
     group_size: int
     fit_mode: str
@@ -1062,10 +1059,7 @@ _NULL_WF = WfResult(
     fit_dy=float("nan"),
     fit_flux=float("nan"),
     fit_fwhm=float("nan"),
-    fit_residual_rms=float("nan"),
     blend_frac=float("nan"),
-    fit_bkg=float("nan"),
-    zk_norm_um=float("nan"),
     group_id="",
     group_size=0,
     fit_mode="",
@@ -1138,19 +1132,6 @@ def _bkg_free_model(
         return model_img
 
 
-def _fit_bkg_val(fit_params, donut_idx: int) -> float:
-    """Extract the fitted background constant for one donut (ADU/pixel)."""
-    if fit_params is None:
-        return float("nan")
-    bkgs = fit_params.get("bkgs") or fit_params.get("bkg")
-    if bkgs is None or len(bkgs) == 0 or donut_idx >= len(bkgs):
-        return float("nan")
-    if np.ndim(bkgs[0]) > 0:
-        raveled = np.ravel(bkgs[donut_idx])
-        return float(raveled[0]) if len(raveled) > 0 else float("nan")
-    return float(bkgs[0])
-
-
 def _blend_frac(
     img: np.ndarray,
     model_img_bkg_free: np.ndarray,
@@ -1179,35 +1160,6 @@ def _blend_frac(
     faint_mask = model_img_bkg_free < faint_frac * model_peak
     sig_mask = np.abs(resid) > sig_thresh * bkg_std
     return float(np.sum(np.abs(resid[faint_mask & sig_mask]))) / total_model_flux
-
-
-def _residual_rms(
-    img: np.ndarray,
-    model_img: np.ndarray,
-    radius: float,
-    obscuration: float,
-) -> float:
-    """RMS of (data - model) over the main donut annulus."""
-    if img is None or model_img is None:
-        return float("nan")
-    half = img.shape[0] // 2
-    gy, gx = (
-        np.mgrid[-half : half + 1, -half : half + 1]
-        if img.shape[0] % 2 == 1
-        else np.mgrid[-half:half, -half:half]
-    )
-    r = np.hypot(gx, gy)
-    main_mask = (r < radius) & (r > radius * obscuration)
-    if main_mask.shape != img.shape:
-        sz = min(main_mask.shape[0], img.shape[0])
-        main_mask = main_mask[:sz, :sz]
-        img = img[:sz, :sz]
-        model_img = model_img[:sz, :sz]
-    resid = img - model_img
-    n = int(np.sum(main_mask))
-    if n == 0:
-        return float("nan")
-    return float(np.sqrt(np.mean(resid[main_mask] ** 2)))
 
 
 def _dense_intrinsic(donut: dict) -> np.ndarray:
@@ -1444,155 +1396,6 @@ def _wf_fitting_worker(group: "_WfGroup") -> dict:
     for wd in result.get("donuts", []):
         wd.fit_mode = fit_mode
     return result
-
-
-def _wf_worker(group: _WfGroup) -> dict:
-    """Unified wavefront fitting worker for all modes.
-
-    Fits all donuts in ``group`` jointly with a single ``DZMultiDonutModel``,
-    sharing one wavefront solution across the group.  Replaces the four
-    mode-specific workers (_wf_paired_worker etc.).
-    """
-    wf_cfg = _CALIB_STORE["wf_cfg"]
-    nollIndices = wf_cfg["nollIndices"]
-    all_donuts = group.donuts
-    n = len(all_donuts)
-
-    if not all_donuts:
-        return {
-            "mode": group.mode,
-            "group_id": group.group_id,
-            "group_size": 0,
-            "zk_dev": np.full(len(nollIndices), np.nan),
-            "success": False,
-            "fit_info": {},
-            "donuts": [],
-            "model_imgs": None,
-            "imgs": [],
-            "sensors": [],
-        }
-
-    t_setup0 = time.perf_counter()
-    factory = _build_wf_factory()
-    preps = [_prep_donut_for_danish(d) for d in all_donuts]
-    imgs = [p[0] for p in preps]
-    thxs = [p[1][0] for p in preps]
-    thys = [p[1][1] for p in preps]
-    zk_refs = [p[2] for p in preps]
-    sky_lvl = [p[3] for p in preps]
-    bkg_stds = [p[4] for p in preps]
-    dz_terms = [(1, int(j)) for j in nollIndices]
-
-    npix = min(img.shape[0] for img in imgs)
-    imgs = [img[:npix, :npix] for img in imgs]
-
-    model = danish.DZMultiDonutModel(
-        factory,
-        z_refs=zk_refs,
-        dz_terms=dz_terms,
-        field_radius=_DANISH_FIELD_RADIUS_RAD,
-        thxs=thxs,
-        thys=thys,
-        npix=npix,
-        bkg_order=wf_cfg["bkgOrder"],
-        loss_fn=_build_loss_fn(),
-    )
-    fluxes_init = [float(np.clip(np.sum(img), 1e3, 1e9)) for img in imgs]
-    x0 = model.pack_params(
-        fluxes=fluxes_init,
-        dxs=[0.0] * n,
-        dys=[0.0] * n,
-        fwhm=1.0,
-        bkgs=[[0.0] * model.nbkg] * n,
-        wavefront_params=[0.0] * len(dz_terms),
-    )
-    bounds = model.pack_params(
-        fluxes=[[0.0, np.inf]] * n,
-        dxs=[[-np.inf, np.inf]] * n,
-        dys=[[-np.inf, np.inf]] * n,
-        fwhm=[0.1, 5.0],
-        bkgs=[[[-np.inf, np.inf]] * model.nbkg] * n,
-        wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
-    )
-    bounds = [list(b) for b in zip(*bounds)]
-    x0 = np.clip(x0, bounds[0], bounds[1])
-    timeout = wf_cfg["wfFitTimeoutPerDonut"] * n
-    _setup_elapsed = float(time.perf_counter() - t_setup0)
-    label = f"{group.mode} group={group.group_id} n={n}"
-    _log.info("WF %s npix=%d setup=%.2fs", label, npix, _setup_elapsed)
-
-    zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
-        model, x0, bounds, imgs, sky_lvl, timeout, wf_cfg, label
-    )
-    zk_dev_dense = _dense_dev(zk_dev, nollIndices)
-    zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
-    fit_mode = wf_cfg.get("wfEstimationMode", group.mode)
-    _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
-    _fit_nfev = int(fit_info.get("nfev", 0))
-    _fit_cost = float(fit_info.get("cost", float("nan")))
-    _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
-    _dxs = fit_info.get("dxs", [float("nan")] * n)
-    _dys = fit_info.get("dys", [float("nan")] * n)
-    _fluxes = fit_info.get("fluxes", [float("nan")] * n)
-
-    donuts_out = []
-    for i, d in enumerate(all_donuts):
-        defocal = "intra" if int(d.det_id) in _INTRA_FOCAL_DET_IDS else "extra"
-        _img = imgs[i] if i < len(imgs) else None
-        _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
-        donuts_out.append(
-            WfResult(
-                donut_id=int(d.id),
-                sensor=d.sensor,
-                defocal=defocal,
-                zk_dev=zk_dev_dense,
-                zk_intrinsic=_dense_intrinsic(d),
-                img=_img,
-                model_img=_mimg,
-                fit_success=success,
-                fit_elapsed=_fit_elapsed,
-                setup_elapsed=_setup_elapsed,
-                fit_nfev=_fit_nfev,
-                fit_cost=_fit_cost,
-                fit_dx=float(_dxs[i]) if i < len(_dxs) else float("nan"),
-                fit_dy=float(_dys[i]) if i < len(_dys) else float("nan"),
-                fit_flux=float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
-                fit_fwhm=_fit_fwhm,
-                fit_residual_rms=_residual_rms(
-                    _img,
-                    _mimg,
-                    _INSTRUMENT.donutRadius,
-                    _INSTRUMENT.obscuration,
-                ),
-                blend_frac=_blend_frac(
-                    _img,
-                    (
-                        _bkg_free_model(_mimg, model, params, i, wf_cfg["bkgOrder"])
-                        if _mimg is not None
-                        else None
-                    ),
-                    bkg_stds[i] if i < len(bkg_stds) else float("nan"),
-                ),
-                fit_bkg=_fit_bkg_val(params, i),
-                zk_norm_um=zk_norm_um,
-                group_id=group.group_id,
-                group_size=n,
-                fit_mode=fit_mode,
-            )
-        )
-    return {
-        "mode": group.mode,
-        "fit_mode": fit_mode,
-        "group_id": group.group_id,
-        "group_size": n,
-        "zk_dev": zk_dev,
-        "success": success,
-        "fit_info": fit_info,
-        "donuts": donuts_out,
-        "model_imgs": model_imgs,
-        "imgs": imgs,
-        "sensors": [d.sensor for d in all_donuts],
-    }
 
 
 class BlindDetectConfig(pexConfig.Config):
@@ -1868,7 +1671,6 @@ class WavefrontFittingTask(pipeBase.Task):
             model, x0, bounds, imgs, sky_lvl, timeout, self.config, label
         )
         zk_dev_dense = _dense_dev(zk_dev, nollIndices)
-        zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
         _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
         _fit_nfev = int(fit_info.get("nfev", 0))
         _fit_cost = float(fit_info.get("cost", float("nan")))
@@ -1900,12 +1702,6 @@ class WavefrontFittingTask(pipeBase.Task):
                     fit_dy=float(_dys[i]) if i < len(_dys) else float("nan"),
                     fit_flux=float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
                     fit_fwhm=_fit_fwhm,
-                    fit_residual_rms=_residual_rms(
-                        _img,
-                        _mimg,
-                        _INSTRUMENT.donutRadius,
-                        _INSTRUMENT.obscuration,
-                    ),
                     blend_frac=_blend_frac(
                         _img,
                         (
@@ -1915,8 +1711,6 @@ class WavefrontFittingTask(pipeBase.Task):
                         ),
                         bkg_stds[i] if i < len(bkg_stds) else float("nan"),
                     ),
-                    fit_bkg=_fit_bkg_val(params, i),
-                    zk_norm_um=zk_norm_um,
                     group_id=group.group_id,
                     group_size=n,
                     fit_mode="",  # Will be set by caller with wfEstimationMode
@@ -3038,10 +2832,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "fit_dy": wd.fit_dy,
                 "fit_flux": wd.fit_flux,
                 "fit_fwhm": wd.fit_fwhm,
-                "fit_bkg": wd.fit_bkg,
-                "fit_residual_rms": wd.fit_residual_rms,
                 "blend_frac": wd.blend_frac,
-                "zk_norm_um": wd.zk_norm_um,
                 # --- per-Noll Zernikes (µm), Noll 4..``_ZK_JMAX`` ---
                 **_zk_cols("dev", zk_dev),
                 **_zk_cols("intrinsic", zk_int),
