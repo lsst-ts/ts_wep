@@ -1249,35 +1249,16 @@ def _zk_cols(suffix: str, zk: np.ndarray) -> dict:
     }
 
 
-def _build_loss_fn():
-    """Return a danish loss function from wf_cfg, or None for standard chi-squared."""
-    alpha = _CALIB_STORE["wf_cfg"].get("systematicLossAlpha", 0.0)
-    return danish.systematic_loss(alpha) if alpha != 0.0 else None
-
-
 @dataclass
 class _WfGroup:
     donuts: list  # donut dicts, ordered; each carries its own "sensor" key
     group_id: str
-    mode: str  # "paired" | "unpaired" | "full_detector" | "full_corner"
+    band: str
+    rtp: float | None  # Boresight rotation (spider angle), degrees or None
+    alt: float | None  # Boresight altitude, radians or None
 
 
-def _mode_groups_are_pairs(mode) -> bool:
-    """Does one group of this mode hold an intra/extra pair of its own?
-
-    True only for ``"paired"``, whose groups are built as ``[extra, intra]``.
-    Every other mode groups donuts without regard to defocal type: one donut
-    per group for ``"unpaired"``, all of a sensor's or corner's donuts for
-    ``"full_detector"``/``"full_corner"``.
-
-    This is the single place that answer lives.  ``_build_wf_groups`` creates
-    that structure and the WF diagnostic plot consumes it, so both ask here
-    rather than each testing the mode string themselves.
-    """
-    return mode == "paired"
-
-
-def _build_wf_groups(mode, results_by_sensor, wf_cfg):
+def _build_wf_groups(mode, results_by_sensor, band: str, rtp_deg: float | None, boresight_alt_rad: float | None):
     """Build _WfGroup list from per-sensor catalogs, matching the mode dispatch logic.
 
     Groups for ``"paired"`` hold one extra/intra pair; all other modes group
@@ -1288,153 +1269,30 @@ def _build_wf_groups(mode, results_by_sensor, wf_cfg):
     """
     groups = []
     unmatched_donuts = []
-    if _mode_groups_are_pairs(mode):
+    if mode == "paired":
         for _corner, (sw0, sw1) in CORNER_PAIRS.items():
             extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d.snr, reverse=True)
             intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d.snr, reverse=True)
             for extra, intra in zip(extra_donuts, intra_donuts):
                 gid = f"{extra.id}_{intra.id}"
-                groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, mode="paired"))
+                groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
             n_pairs = min(len(extra_donuts), len(intra_donuts))
             unmatched_donuts.extend(extra_donuts[n_pairs:])
             unmatched_donuts.extend(intra_donuts[n_pairs:])
     elif mode == "unpaired":
         for sensor_donuts in results_by_sensor.values():
             for d in sensor_donuts:
-                groups.append(_WfGroup(donuts=[d], group_id=str(d.id), mode="unpaired"))
+                groups.append(_WfGroup(donuts=[d], group_id=str(d.id), band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     elif mode == "full_detector":
         for sensor_name, sensor_donuts in results_by_sensor.items():
-            groups.append(_WfGroup(donuts=sensor_donuts, group_id=sensor_name, mode="full_detector"))
-    else:  # full_corner
+            groups.append(_WfGroup(donuts=sensor_donuts, group_id=sensor_name, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+    elif mode == "full_corner":
         for corner, (sw0, sw1) in CORNER_PAIRS.items():
             all_donuts = results_by_sensor.get(sw0, []) + results_by_sensor.get(sw1, [])
-            groups.append(_WfGroup(donuts=all_donuts, group_id=corner, mode="full_corner"))
+            groups.append(_WfGroup(donuts=all_donuts, group_id=corner, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+    else:
+        raise ValueError(f"Unknown WF mode {mode!r}")
     return groups, unmatched_donuts
-
-
-def _build_wf_factory():
-    """Build a Danish donut factory from _CALIB_STORE["wf_cfg"]."""
-    wf_cfg = _CALIB_STORE["wf_cfg"]
-    factory_class = danish.DonutTriangleFactory if wf_cfg["triangleMode"] else danish.DonutFactory
-    factory_kwargs = {}
-    if wf_cfg["doAoiThroughput"]:
-        factory_kwargs["bandpass_filter"] = wf_cfg["band"]
-        alt_rad = wf_cfg["boresight_alt_rad"]
-        if np.isfinite(alt_rad) and alt_rad > 0:
-            factory_kwargs["airmass"] = float(np.clip(round(1.0 / np.sin(alt_rad), 1), 1.0, 2.5))
-        else:
-            factory_kwargs["airmass"] = 1.2
-    return factory_class(
-        R_outer=_INSTRUMENT.radius,
-        R_inner=_INSTRUMENT.radius * _INSTRUMENT.obscuration,
-        mask_params=_INSTRUMENT.maskParams,
-        focal_length=_INSTRUMENT.focalLength,
-        pixel_scale=_INSTRUMENT.pixelSize * wf_cfg["binning"],
-        spider_angle=wf_cfg["rtp_deg"],
-        **factory_kwargs,
-    )
-
-
-def _prep_donut_for_danish(donut: Donut) -> tuple:
-    """Prepare a Donut for Danish fitting.
-
-    Bins and crops the stamp to an odd pixel size, estimates background noise,
-    computes the reference Zernike array ``zk_ref`` from ``batoid.zernikeTA``
-    (with optional measured-intrinsics correction), and extracts the field
-    angle.
-
-    Parameters
-    ----------
-    donut : Donut
-        Donut record. Uses ``stamp`` (2-D array), ``det_id``, ``band``,
-        ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and
-        ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``; ``None`` if uncalibrated).
-
-    Returns
-    -------
-    img : np.ndarray
-        ``(npix, npix)`` float stamp, binned and cropped to odd size.
-    angle_rad : np.ndarray
-        ``[fa_x_ccs, fa_y_ccs]`` field angle in radians.
-    zk_ref : np.ndarray
-        Reference Zernike array in metres, Noll-indexed, shape
-        ``(_ZK_JMAX + 1,)``.
-        Equals ``W_TA_defoc`` at uncalibrated indices and
-        ``W_TA_defoc + (W_meas - zk_opd_foc)`` at calibrated indices.
-    bkg_var : float
-        Background variance estimate (``bkg_std ** 2``) from pixel-difference
-        MAD of the stamp.
-    bkg_std : float
-        Background standard deviation estimate.
-    """
-    wf_cfg = _CALIB_STORE["wf_cfg"]
-    binning = wf_cfg["binning"]
-    det_id = donut.det_id
-    defocalSign = +1 if det_id in _EXTRA_FOCAL_DET_IDS else -1
-
-    img = donut.stamp.astype(float)
-    if binning > 1:
-        img = binArray(img, binning)
-    if img.shape[0] % 2 == 0:
-        img = img[:-1, :-1]
-    diff = (img[1:] - img[:-1]).ravel()
-    bkg_std = float(median_abs_deviation(diff, scale="normal") / np.sqrt(2.0))
-
-    band = donut.band
-    wavelength_by_band = wf_cfg["wavelength_by_band"]
-    if band not in wavelength_by_band:
-        raise RuntimeError(
-            f"No wavelength configured for band {band!r}; the instrument supplies "
-            f"{sorted(wavelength_by_band)}. Fitting with a wrong wavelength would "
-            "bias the whole wavefront, so this is fatal rather than defaulted."
-        )
-    wavelength = wavelength_by_band[band]
-    telescope = _CALIB_STORE["telescope"]
-    telescope_dz = (
-        _CALIB_STORE["telescope_extra"] if defocalSign > 0 else _CALIB_STORE["telescope_intra"]
-    )
-    eps = telescope.pupilObscuration
-    nrad = 10
-    zernikeTA_kwargs = dict(
-        jmax=_ZK_JMAX,
-        eps=eps,
-        focal_length=_INSTRUMENT.focalLength,
-        nrad=nrad,
-        naz=int(2 * np.pi * nrad / (1 - eps)),
-    )
-    # W_TA_defoc: off-axis + nominal intrinsics + defocus in one call
-    zk_ref = (
-        batoid.zernikeTA(
-            telescope_dz,
-            donut.fa_x_ccs,
-            donut.fa_y_ccs,
-            wavelength,
-            **zernikeTA_kwargs,
-        )
-        * wavelength
-    )  # meters, shape (_ZK_JMAX + 1,)
-
-    # Replace nominal on-axis model (zk_opd_foc) with measured intrinsics (W_meas)
-    # for calibrated indices.
-    intrinsic_zk = donut.intrinsic_zk
-    if intrinsic_zk is not None:
-        zk_opd_foc = (
-            batoid.zernikeTA(
-                telescope,
-                donut.fa_x_ccs,
-                donut.fa_y_ccs,
-                wavelength,
-                **zernikeTA_kwargs,
-            )
-            * wavelength
-        )  # meters
-        calib_noll = wf_cfg["calib_noll_indices"]
-        for i, j in enumerate(calib_noll):
-            if i < len(intrinsic_zk) and int(j) <= _ZK_JMAX:
-                zk_ref[int(j)] += float(intrinsic_zk[i]) * 1e-6 - zk_opd_foc[int(j)]
-
-    angle_rad = np.array([donut.fa_x_ccs, donut.fa_y_ccs])
-    return img, angle_rad, zk_ref, bkg_std**2, bkg_std
 
 
 # Module-level logger for the worker functions below. They are module-level
@@ -1448,7 +1306,7 @@ _log = logging.getLogger(__name__)
 _DZ_MODEL_KEYS = ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")
 
 
-def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_cfg, label):
+def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_fitting_config, label):
     """Run a DZMultiDonutModel least-squares fit and return results uniformly.
 
     Handles the ``wfInitialGuessOnly`` path, SIGALRM timeout, and all exception
@@ -1468,8 +1326,8 @@ def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_cfg, label):
         Per-pixel variance arrays aligned with ``imgs``.
     timeout : float
         SIGALRM timeout in seconds.
-    wf_cfg : dict
-        WF config dict supplying ``wfInitialGuessOnly``, ``lstsqKwargs``,
+    wf_fitting_config : WavefrontFittingTaskConfig
+        WF config supplying ``wfInitialGuessOnly``, ``lstsqKwargs``,
         ``nollIndices``.
     label : str
         Short description used in log messages (e.g. ``"paired extra=3 intra=7"``).
@@ -1487,10 +1345,10 @@ def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_cfg, label):
     fit_info : dict
         Timing, convergence, and parameter summary.
     """
-    nollIndices = wf_cfg["nollIndices"]
+    nollIndices = list(wf_fitting_config.nollIndices)
     t0 = time.perf_counter()
     params = None
-    if wf_cfg["wfInitialGuessOnly"]:
+    if wf_fitting_config.wfInitialGuessOnly:
         try:
             params = model.unpack_params(x0)
             zk_dev = np.zeros(len(nollIndices))
@@ -1522,13 +1380,14 @@ def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_cfg, label):
         galsim.errors.raise_fft_size_error = True
         try:
             with _fit_timeout(timeout):
+                lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in wf_fitting_config.lstsqKwargs.items()}
                 result = least_squares(
                     model.chi,
                     jac=model.jac,
                     x0=x0,
                     args=(imgs, variances),
                     bounds=bounds,
-                    **wf_cfg["lstsqKwargs"],
+                    **lstsq_kwargs_parsed,
                 )
             elapsed = time.perf_counter() - t0
             params = model.unpack_params(result.x)
@@ -1570,6 +1429,21 @@ def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_cfg, label):
             fit_info = dict(elapsed=elapsed, error=str(exc))
             _log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
     return zk_dev, params, model_imgs, success, fit_info
+
+
+def _wf_fitting_worker(group: "_WfGroup") -> dict:
+    """Wavefront fitting worker for multiprocessing pool.
+
+    Retrieves the WavefrontFittingTask from _CALIB_STORE and calls it
+    on the group. Designed to be used with multiprocessing.Pool.map().
+    """
+    task = _CALIB_STORE["wf_fitting_task"]
+    result = task.run(group)
+    # Set fit_mode on each donut result from main config
+    fit_mode = _CALIB_STORE.get("wfEstimationMode", "")
+    for wd in result.get("donuts", []):
+        wd.fit_mode = fit_mode
+    return result
 
 
 def _wf_worker(group: _WfGroup) -> dict:
@@ -1815,6 +1689,382 @@ class BlindDetect(pipeBase.Task):
         )
 
 
+class WavefrontFittingTaskConfig(pexConfig.Config):
+    """Configuration for wavefront fitting via Danish algorithm."""
+
+    nollIndices: pexConfig.ListField = pexConfig.ListField(
+        dtype=int,
+        doc="Noll indices to fit with Danish.",
+        default=list(range(4, 20)) + list(range(22, 27)),
+    )
+    lstsqKwargs: pexConfig.DictField = pexConfig.DictField(
+        keytype=str,
+        itemtype=str,
+        doc=(
+            "Keyword arguments for scipy.optimize.least_squares passed to the Danish "
+            "WF workers. Values are strings that will be eval()'d, e.g. "
+            "{'method': 'trf', 'max_nfev': '200'}."
+        ),
+        default={
+            "xtol": "1e-3",
+            "ftol": "1e-3",
+            "gtol": "1e-3",
+            "x_scale": "'jac'",
+        },
+    )
+    binning: pexConfig.Field = pexConfig.Field(
+        dtype=int,
+        default=2,
+        doc="Binning factor applied to donut stamps before Danish fitting.",
+    )
+    modelSpiderShadows: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Include spider shadow modeling in Danish forward model.",
+    )
+    bkgOrder: pexConfig.Field = pexConfig.Field(
+        dtype=int,
+        default=0,
+        doc="Background polynomial order for Danish (-1=none, 0=constant).",
+    )
+    doAoiThroughput: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc="Apply angle-of-incidence throughput correction in Danish forward model.",
+    )
+    systematicLossAlpha: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        default=0.0,
+        doc="Fractional systematic uncertainty for Danish loss function (0=chi2).",
+    )
+    triangleMode: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Use DonutTriangleFactory instead of DonutFactory.",
+    )
+    wfFitTimeoutPerDonut: pexConfig.Field = pexConfig.Field(
+        dtype=float,
+        default=10.0,
+        doc=(
+            "Timeout in seconds per donut for a single WF fit. "
+            "The total timeout for a work unit is this value times the number of donuts "
+            "(1 for unpaired, 2 for paired, N for full_corner). "
+            "Fits exceeding the limit are killed and return NaN Zernikes."
+        ),
+    )
+    wfInitialGuessOnly: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=False,
+        doc=(
+            "Skip the least-squares fit and return the initial-guess (x0) model only. "
+            "Useful for diagnosing stamp orientation and model setup without "
+            "waiting for convergence."
+        ),
+    )
+
+
+class WavefrontFittingTask(pipeBase.Task):
+    """Task to fit wavefront aberrations from grouped donut stamps using Danish algorithm.
+
+    This task takes a pre-grouped collection of donuts (a _WfGroup) and performs
+    joint wavefront fitting across all donuts in the group, returning Zernike
+    coefficients for the wavefront error.
+    """
+
+    ConfigClass = WavefrontFittingTaskConfig
+    _DefaultName = "wavefrontFittingTask"
+    config: WavefrontFittingTaskConfig
+
+    def run(self, group: "_WfGroup") -> dict:
+        """Fit wavefront aberrations for a group of donuts.
+
+        Parameters
+        ----------
+        group : _WfGroup
+            Pre-grouped collection of donuts to fit jointly, including
+            band, rtp, and alt for exposure-dependent parameters.
+
+        Returns
+        -------
+        result : dict
+            Dictionary containing:
+            - group_id: str
+            - group_size: int
+            - zk_dev: ndarray
+            - success: bool
+            - fit_info: dict
+            - donuts: list of WfResult
+            - model_imgs: list or None
+            - imgs: list
+            - sensors: list of str
+        """
+        nollIndices = self.config.nollIndices
+        all_donuts = group.donuts
+        n = len(all_donuts)
+
+        if not all_donuts:
+            return {
+                "group_id": group.group_id,
+                "group_size": 0,
+                "zk_dev": np.full(len(nollIndices), np.nan),
+                "success": False,
+                "fit_info": {},
+                "donuts": [],
+                "model_imgs": None,
+                "imgs": [],
+                "sensors": [],
+            }
+
+        t_setup0 = time.perf_counter()
+        factory = self._build_wf_factory(group)
+        preps = [self._prep_donut_for_danish(d) for d in all_donuts]
+        imgs = [p[0] for p in preps]
+        thxs = [p[1][0] for p in preps]
+        thys = [p[1][1] for p in preps]
+        zk_refs = [p[2] for p in preps]
+        sky_lvl = [p[3] for p in preps]
+        bkg_stds = [p[4] for p in preps]
+        dz_terms = [(1, int(j)) for j in nollIndices]
+
+        npix = min(img.shape[0] for img in imgs)
+        imgs = [img[:npix, :npix] for img in imgs]
+
+        model = danish.DZMultiDonutModel(
+            factory,
+            z_refs=zk_refs,
+            dz_terms=dz_terms,
+            field_radius=_DANISH_FIELD_RADIUS_RAD,
+            thxs=thxs,
+            thys=thys,
+            npix=npix,
+            bkg_order=self.config.bkgOrder,
+            loss_fn=self._build_loss_fn(),
+        )
+        fluxes_init = [float(np.clip(np.sum(img), 1e3, 1e9)) for img in imgs]
+        x0 = model.pack_params(
+            fluxes=fluxes_init,
+            dxs=[0.0] * n,
+            dys=[0.0] * n,
+            fwhm=1.0,
+            bkgs=[[0.0] * model.nbkg] * n,
+            wavefront_params=[0.0] * len(dz_terms),
+        )
+        bounds = model.pack_params(
+            fluxes=[[0.0, np.inf]] * n,
+            dxs=[[-np.inf, np.inf]] * n,
+            dys=[[-np.inf, np.inf]] * n,
+            fwhm=[0.1, 5.0],
+            bkgs=[[[-np.inf, np.inf]] * model.nbkg] * n,
+            wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
+        )
+        bounds = [list(b) for b in zip(*bounds)]
+        x0 = np.clip(x0, bounds[0], bounds[1])
+        timeout = self.config.wfFitTimeoutPerDonut * n
+        _setup_elapsed = float(time.perf_counter() - t_setup0)
+        label = f"group={group.group_id} n={n}"
+        self.log.info("WF %s npix=%d setup=%.2fs", label, npix, _setup_elapsed)
+
+        zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
+            model, x0, bounds, imgs, sky_lvl, timeout, self.config, label
+        )
+        zk_dev_dense = _dense_dev(zk_dev, nollIndices)
+        zk_norm_um = float(np.sqrt(np.nansum(zk_dev_dense[4:] ** 2)) * 1e6)
+        _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
+        _fit_nfev = int(fit_info.get("nfev", 0))
+        _fit_cost = float(fit_info.get("cost", float("nan")))
+        _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
+        _dxs = fit_info.get("dxs", [float("nan")] * n)
+        _dys = fit_info.get("dys", [float("nan")] * n)
+        _fluxes = fit_info.get("fluxes", [float("nan")] * n)
+
+        donuts_out = []
+        for i, d in enumerate(all_donuts):
+            defocal = "intra" if int(d.det_id) in _INTRA_FOCAL_DET_IDS else "extra"
+            _img = imgs[i] if i < len(imgs) else None
+            _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
+            donuts_out.append(
+                WfResult(
+                    donut_id=int(d.id),
+                    sensor=d.sensor,
+                    defocal=defocal,
+                    zk_dev=zk_dev_dense,
+                    zk_intrinsic=_dense_intrinsic(d),
+                    img=_img,
+                    model_img=_mimg,
+                    fit_success=success,
+                    fit_elapsed=_fit_elapsed,
+                    setup_elapsed=_setup_elapsed,
+                    fit_nfev=_fit_nfev,
+                    fit_cost=_fit_cost,
+                    fit_dx=float(_dxs[i]) if i < len(_dxs) else float("nan"),
+                    fit_dy=float(_dys[i]) if i < len(_dys) else float("nan"),
+                    fit_flux=float(_fluxes[i]) if i < len(_fluxes) else float("nan"),
+                    fit_fwhm=_fit_fwhm,
+                    fit_residual_rms=_residual_rms(
+                        _img,
+                        _mimg,
+                        _INSTRUMENT.donutRadius,
+                        _INSTRUMENT.obscuration,
+                    ),
+                    blend_frac=_blend_frac(
+                        _img,
+                        (
+                            _bkg_free_model(_mimg, model, params, i, self.config.bkgOrder)
+                            if _mimg is not None
+                            else None
+                        ),
+                        bkg_stds[i] if i < len(bkg_stds) else float("nan"),
+                    ),
+                    fit_bkg=_fit_bkg_val(params, i),
+                    zk_norm_um=zk_norm_um,
+                    group_id=group.group_id,
+                    group_size=n,
+                    fit_mode="",  # Will be set by caller with wfEstimationMode
+                )
+            )
+        return {
+            "group_id": group.group_id,
+            "group_size": n,
+            "zk_dev": zk_dev,
+            "success": success,
+            "fit_info": fit_info,
+            "donuts": donuts_out,
+            "model_imgs": model_imgs,
+            "imgs": imgs,
+            "sensors": [d.sensor for d in all_donuts],
+        }
+
+    def _build_wf_factory(self, group: "_WfGroup") -> "danish.DonutFactory":
+        """Build a Danish donut factory from config and group."""
+        factory_class = danish.DonutTriangleFactory if self.config.triangleMode else danish.DonutFactory
+        factory_kwargs = {}
+        if self.config.doAoiThroughput and group.band:
+            wavelength = _INSTRUMENT.wavelength.get(group.band)
+            if wavelength:
+                factory_kwargs["bandpass_filter"] = wavelength
+            if group.alt is not None and np.isfinite(group.alt) and group.alt > 0:
+                airmass = float(np.clip(round(1.0 / np.sin(group.alt), 1), 1.0, 2.5))
+                factory_kwargs["airmass"] = airmass
+            else:
+                factory_kwargs["airmass"] = 1.2
+        return factory_class(
+            R_outer=_INSTRUMENT.radius,
+            R_inner=_INSTRUMENT.radius * _INSTRUMENT.obscuration,
+            mask_params=_INSTRUMENT.maskParams,
+            focal_length=_INSTRUMENT.focalLength,
+            pixel_scale=_INSTRUMENT.pixelSize * self.config.binning,
+            spider_angle=group.rtp,
+            **factory_kwargs,
+        )
+
+    def _build_loss_fn(self) -> Any:
+        """Return a danish loss function from config, or None for standard chi-squared."""
+        alpha = self.config.systematicLossAlpha
+        if alpha <= 0:
+            return None
+        return danish.systematic_loss(alpha)
+
+    def _prep_donut_for_danish(self, donut: "Donut") -> tuple:
+        """Prepare a Donut for Danish fitting.
+
+        Bins and crops the stamp to an odd pixel size, estimates background noise,
+        computes the reference Zernike array ``zk_ref`` from ``batoid.zernikeTA``
+        (with optional measured-intrinsics correction), and extracts the field
+        angle.
+
+        Parameters
+        ----------
+        donut : Donut
+            Donut record. Uses ``stamp`` (2-D array), ``det_id``, ``band``,
+            ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and
+            ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``; ``None`` if uncalibrated).
+
+        Returns
+        -------
+        img : np.ndarray
+            ``(npix, npix)`` float stamp, binned and cropped to odd size.
+        angle_rad : np.ndarray
+            ``[fa_x_ccs, fa_y_ccs]`` field angle in radians.
+        zk_ref : np.ndarray
+            Reference Zernike array in metres, Noll-indexed, shape
+            ``(_ZK_JMAX + 1,)``.
+            Equals ``W_TA_defoc`` at uncalibrated indices and
+            ``W_TA_defoc + (W_meas - zk_opd_foc)`` at calibrated indices.
+        bkg_var : float
+            Background variance estimate (``bkg_std ** 2``) from pixel-difference
+            MAD of the stamp.
+        bkg_std : float
+            Background standard deviation estimate.
+        """
+        binning = self.config.binning
+        det_id = donut.det_id
+        defocalSign = +1 if det_id in _EXTRA_FOCAL_DET_IDS else -1
+
+        img = donut.stamp.astype(float)
+        if binning > 1:
+            img = binArray(img, binning)
+        if img.shape[0] % 2 == 0:
+            img = img[:-1, :-1]
+        diff = (img[1:] - img[:-1]).ravel()
+        bkg_std = float(median_abs_deviation(diff, scale="normal") / np.sqrt(2.0))
+
+        band = donut.band
+        wavelength_by_band = {bl.value: wl for bl, wl in _INSTRUMENT.wavelength.items()}
+        if band not in wavelength_by_band:
+            raise RuntimeError(
+                f"No wavelength configured for band {band!r}; the instrument supplies "
+                f"{sorted(wavelength_by_band)}. Fitting with a wrong wavelength would "
+                "bias the whole wavefront, so this is fatal rather than defaulted."
+            )
+        wavelength = wavelength_by_band[band]
+        telescope = _CALIB_STORE["telescope"]
+        telescope_dz = (
+            _CALIB_STORE["telescope_extra"] if defocalSign > 0 else _CALIB_STORE["telescope_intra"]
+        )
+        eps = telescope.pupilObscuration
+        nrad = 10
+        zernikeTA_kwargs = dict(
+            jmax=_ZK_JMAX,
+            eps=eps,
+            focal_length=_INSTRUMENT.focalLength,
+            nrad=nrad,
+            naz=int(2 * np.pi * nrad / (1 - eps)),
+        )
+        # W_TA_defoc: off-axis + nominal intrinsics + defocus in one call
+        zk_ref = (
+            batoid.zernikeTA(
+                telescope_dz,
+                donut.fa_x_ccs,
+                donut.fa_y_ccs,
+                wavelength,
+                **zernikeTA_kwargs,
+            )
+            * wavelength
+        )  # meters, shape (_ZK_JMAX + 1,)
+
+        # Replace nominal on-axis model (zk_opd_foc) with measured intrinsics (W_meas)
+        # for calibrated indices.
+        intrinsic_zk = donut.intrinsic_zk
+        if intrinsic_zk is not None:
+            zk_opd_foc = (
+                batoid.zernikeTA(
+                    telescope,
+                    donut.fa_x_ccs,
+                    donut.fa_y_ccs,
+                    wavelength,
+                    **zernikeTA_kwargs,
+                )
+                * wavelength
+            )  # meters
+            calib_noll = np.arange(4, _ZK_JMAX + 1)
+            for i, j in enumerate(calib_noll):
+                if i < len(intrinsic_zk) and int(j) <= _ZK_JMAX:
+                    zk_ref[int(j)] += float(intrinsic_zk[i]) * 1e-6 - zk_opd_foc[int(j)]
+
+        angle_rad = np.array([donut.fa_x_ccs, donut.fa_y_ccs])
+        return img, angle_rad, zk_ref, bkg_std**2, bkg_std
+
+
 class DonutBlitzMonolithTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),  # type: ignore
@@ -2018,75 +2268,9 @@ class DonutBlitzMonolithTaskConfig(
         },
         default="paired",
     )
-    nollIndices: pexConfig.ListField = pexConfig.ListField(
-        dtype=int,
-        doc="Noll indices to fit with Danish.",
-        default=list(range(4, 20)) + list(range(22, 27)),
-    )
-    lstsqKwargs: pexConfig.DictField = pexConfig.DictField(
-        keytype=str,
-        itemtype=str,
-        doc=(
-            "Keyword arguments for scipy.optimize.least_squares passed to the Danish "
-            "WF workers. Values are strings that will be eval()'d, e.g. "
-            "{'method': 'trf', 'max_nfev': '200'}."
-        ),
-        default={
-            "xtol": "1e-3",
-            "ftol": "1e-3",
-            "gtol": "1e-3",
-            "x_scale": "'jac'",
-            # "tr_solver": "'lsmr'",
-        },
-    )
-    binning: pexConfig.Field = pexConfig.Field(
-        dtype=int,
-        default=2,
-        doc="Binning factor applied to donut stamps before Danish fitting.",
-    )
-    modelSpiderShadows: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
-        default=False,
-        doc="Include spider shadow modeling in Danish forward model.",
-    )
-    bkgOrder: pexConfig.Field = pexConfig.Field(
-        dtype=int,
-        default=0,
-        doc="Background polynomial order for Danish (-1=none, 0=constant).",
-    )
-    doAoiThroughput: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
-        default=False,
-        doc="Apply angle-of-incidence throughput correction in Danish forward model.",
-    )
-    systematicLossAlpha: pexConfig.Field = pexConfig.Field(
-        dtype=float,
-        default=0.0,
-        doc="Fractional systematic uncertainty for Danish loss function (0=chi2).",
-    )
-    triangleMode: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
-        default=True,
-        doc="Use DonutTriangleFactory instead of DonutFactory.",
-    )
-    wfFitTimeoutPerDonut: pexConfig.Field = pexConfig.Field(
-        dtype=float,
-        default=10.0,
-        doc=(
-            "Timeout in seconds per donut for a single WF fit. "
-            "The total timeout for a work unit is this value times the number of donuts "
-            "(1 for unpaired, 2 for paired, N for full_corner). "
-            "Fits exceeding the limit are killed and return NaN Zernikes."
-        ),
-    )
-    wfInitialGuessOnly: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
-        default=False,
-        doc=(
-            "Skip the least-squares fit and return the initial-guess (x0) model only. "
-            "Useful for diagnosing stamp orientation and model setup without "
-            "waiting for convergence."
-        ),
+    wfFittingTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=WavefrontFittingTask,
+        doc="Wavefront fitting subtask using Danish algorithm.",
     )
 
     def setDefaults(self) -> None:
@@ -2160,6 +2344,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         self.makeSubtask("donutSelector")
         self.makeSubtask("measureCandidatesTask")
         self.makeSubtask("cutStampsTask")
+        self.makeSubtask("wfFittingTask")
         self.makeSubtask("plotTask")
         self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
 
@@ -2438,34 +2623,40 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 crosstalk=crosstalkByName[name],
             )
 
-        # WF estimation config — read by WF worker functions after fork.
+        # WF estimation config — populate CALIB_STORE for shared resources.
         example_visitInfo = next(iter(rawByName.values())).getInfo().getVisitInfo()
         boresight_rot_rad = example_visitInfo.boresightRotAngle.asRadians()
         boresight_par_rad = example_visitInfo.boresightParAngle.asRadians()
         boresight_alt_rad = example_visitInfo.boresightAzAlt.getLatitude().asRadians()
         rtp_deg = (
             (np.degrees(boresight_par_rad - boresight_rot_rad - np.pi / 2) + 180) % 360 - 180
-            if self.config.modelSpiderShadows
+            if self.wfFittingTask.config.modelSpiderShadows
             else None
         )
+
+        # Store task and mode for WF worker access
+        _CALIB_STORE["wf_fitting_task"] = self.wfFittingTask
+        _CALIB_STORE["wfEstimationMode"] = self.config.wfEstimationMode
+
+        # Keep old wf_cfg for backward compatibility with _wf_worker (deprecated)
         wavelength_by_band = {bl.value: wl for bl, wl in _INSTRUMENT.wavelength.items()}
-        lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in self.config.lstsqKwargs.items()}
+        lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in self.wfFittingTask.config.lstsqKwargs.items()}
         _CALIB_STORE["wf_cfg"] = dict(
-            nollIndices=np.array(list(self.config.nollIndices)),
+            nollIndices=np.array(list(self.wfFittingTask.config.nollIndices)),
             lstsqKwargs=lstsq_kwargs_parsed,
-            binning=self.config.binning,
-            bkgOrder=self.config.bkgOrder,
-            modelSpiderShadows=self.config.modelSpiderShadows,
-            doAoiThroughput=self.config.doAoiThroughput,
-            systematicLossAlpha=self.config.systematicLossAlpha,
-            triangleMode=self.config.triangleMode,
+            binning=self.wfFittingTask.config.binning,
+            bkgOrder=self.wfFittingTask.config.bkgOrder,
+            modelSpiderShadows=self.wfFittingTask.config.modelSpiderShadows,
+            doAoiThroughput=self.wfFittingTask.config.doAoiThroughput,
+            systematicLossAlpha=self.wfFittingTask.config.systematicLossAlpha,
+            triangleMode=self.wfFittingTask.config.triangleMode,
             rtp_deg=rtp_deg,
             boresight_alt_rad=boresight_alt_rad,
             band=example_band,
             calib_noll_indices=np.arange(4, _ZK_JMAX + 1),
             wavelength_by_band=wavelength_by_band,
-            wfFitTimeoutPerDonut=self.config.wfFitTimeoutPerDonut,
-            wfInitialGuessOnly=self.config.wfInitialGuessOnly,
+            wfFitTimeoutPerDonut=self.wfFittingTask.config.wfFitTimeoutPerDonut,
+            wfInitialGuessOnly=self.wfFittingTask.config.wfInitialGuessOnly,
             wfEstimationMode=self.config.wfEstimationMode,
         )
         # Telescope is band- and quantum-fixed; build once here and share via
@@ -2558,18 +2749,18 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # WF dispatch
         mode = self.config.wfEstimationMode
         results_by_sensor = {r["sensor"]: r["catalog"] for r in results}
-        groups, unmatched_donuts = _build_wf_groups(mode, results_by_sensor, _CALIB_STORE["wf_cfg"])
+        groups, unmatched_donuts = _build_wf_groups(mode, results_by_sensor, example_band, rtp_deg, boresight_alt_rad)
 
         self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
         t_wf0 = time.perf_counter()
         if not groups:
             wf_results = []
         elif numCores == 1 or len(groups) == 1:
-            wf_results = [_wf_worker(g) for g in groups]
+            wf_results = [_wf_fitting_worker(g) for g in groups]
         else:
             n_workers = min(numCores, len(groups))
             with mp.get_context("fork").Pool(processes=n_workers) as wf_pool:
-                wf_results = wf_pool.map(_wf_worker, groups)
+                wf_results = wf_pool.map(_wf_fitting_worker, groups)
         t_wf1 = time.perf_counter()
         n_ok = sum(r.get("success") for r in wf_results)
         elapsed_fits = [r["fit_info"].get("elapsed", float("nan")) for r in wf_results]
@@ -2760,7 +2951,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # _prep_donut_for_danish). Derive from the actual odd cut size,
         # 2*(stampSize//2)+1, not from stampSize itself.
         _cut = 2 * (self.cutStampsTask.config.stampSize // 2) + 1
-        _binned = _cut // self.config.binning
+        _binned = _cut // self.wfFittingTask.config.binning
         max_wf_ny = max_wf_nx = _binned if _binned % 2 == 1 else _binned - 1
 
         def _pad(arr, ny, nx):
@@ -3450,7 +3641,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         row_pairs: dict[str, list[tuple]] = {}
         for corner, corner_results in by_corner.items():
             mode = corner_results[0].get("mode") if corner_results else None
-            if _mode_groups_are_pairs(mode):
+            if mode == "paired":
                 # The group *is* an intra/extra pair, so it supplies both halves
                 # of the row; the donut of each defocal type is picked out below.
                 row_pairs[corner] = [(r, r) for r in corner_results]
