@@ -39,6 +39,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+import astropy.units as u
 import batoid
 import danish
 import galsim
@@ -51,7 +52,7 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import numpy as np
 import numpy.typing as npt
-from astropy.table import QTable
+from astropy.table import Table, QTable
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import Exposure
@@ -136,6 +137,9 @@ _ANSI_YELLOW = "\033[33m"
 _ANSI_BLUE = "\033[34m"
 _ANSI_MAGENTA = "\033[35m"
 _ANSI_CYAN = "\033[36m"
+
+# Maximum nearby sources to store in the output table for each donut.
+_MAX_NEARBY = 5
 
 
 def _resolveColorLogEnabled(colorLog: bool | None) -> bool:
@@ -2558,7 +2562,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             self.plotTask.run(catalog)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
-        return pipeBase.Struct(donuts=donuts, wf_results=wf_results, blitzResults=catalog)
+        return pipeBase.Struct(
+            donuts=donuts,
+            wf_results=wf_results,
+            blitzResults=Table(catalog)
+        )
 
     def _buildCatalog(
         self,
@@ -2613,8 +2621,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             to a common shape.  Visit-level and per-sensor scalars are stored in
             ``table.meta``.
         """
-        import json
-
         # Build lookup: (id, sensor) -> (wf donut entry, group index).
         # Key on both fields to handle the same refcat star on SW0 and SW1.
         wf_by_id: dict = {}
@@ -2657,7 +2663,22 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             return ",".join(out)
 
         def _encode_nearby(entries):
-            return json.dumps([[round(dx, 1), round(dy, 1), round(mag, 2)] for dx, dy, mag in entries])
+            """Return (x, y, mag) arrays of length ``_MAX_NEARBY`` for one donut.
+
+            Neighbors are sorted brightest-first (ascending magnitude); entries with
+            a NaN magnitude sort last. The brightest ``_MAX_NEARBY`` are kept and
+            shorter lists are NaN-padded. True pre-truncation counts are captured
+            separately (see n_nearby_*).
+            """
+            x = np.full(_MAX_NEARBY, np.nan, dtype=float)
+            y = np.full(_MAX_NEARBY, np.nan, dtype=float)
+            mag = np.full(_MAX_NEARBY, np.nan, dtype=float)
+            brightest = sorted(entries, key=lambda e: (np.isnan(e[2]), e[2]))[:_MAX_NEARBY]
+            for i, (dx, dy, m) in enumerate(brightest):
+                x[i] = round(dx, 1)
+                y[i] = round(dy, 1)
+                mag[i] = round(m, 2)
+            return x, y, mag
 
         # Collect every donut exactly once, tagged with whether it passed
         # selection ("candidate"). Whether a fit actually consumed it ("used")
@@ -2728,6 +2749,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 else np.full((max_wf_ny, max_wf_nx), np.nan, dtype=float)
             )
 
+            photo_x, photo_y, photo_mag = _encode_nearby(d.nearby_photo)
+            astrom_x, astrom_y, astrom_mag = _encode_nearby(d.nearby_astrom)
             row = {
                 # --- identity ---
                 "visit_id": int(d.visit_id),
@@ -2749,9 +2772,15 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "fa_y_ccs": float(d.fa_y_ccs),
                 "field_dist_deg": float(np.degrees(np.hypot(d.fa_x_ccs, d.fa_y_ccs))),
                 "n_quarter": d.n_quarter,
-                # --- nearby refcat sources (JSON-encoded, pixel offsets + magnitudes) ---
-                "nearby_photo": _encode_nearby(d.nearby_photo),
-                "nearby_astrom": _encode_nearby(d.nearby_astrom),
+                # --- nearby refcat sources (brightest-first, padded to _MAX_NEARBY) ---
+                "nearby_photo_x": photo_x * u.pix,
+                "nearby_photo_y": photo_y * u.pix,
+                "nearby_photo_mag": photo_mag * u.mag,
+                "nearby_astrom_x": astrom_x * u.pix,
+                "nearby_astrom_y": astrom_y * u.pix,
+                "nearby_astrom_mag": astrom_mag * u.mag,
+                "n_nearby_photo": int(len(d.nearby_photo)),
+                "n_nearby_astrom": int(len(d.nearby_astrom)),
                 # --- selection metrics ---
                 "flux": float(d.flux),
                 "snr": float(d.snr),
@@ -2812,7 +2841,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["astrom_filter_name"] = str(astrom_filter_name)
         table.meta["noll_indices"] = list(self.wfFittingTask.config.nollIndices)
         table.meta["sensor_meta"] = sensor_meta
-        _first_d = all_donuts[0][0]
         table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
         table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
         table.meta["bkg_annulus_inner_frac"] = self.measureCandidatesTask.config.bkgAnnulusInnerFrac
@@ -2882,7 +2910,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         catalog = inputs["blitzResults"].get(parameters={"strip_astropy_meta_yaml": False})
         self.run(catalog)
 
-    def run(self, catalog: QTable) -> None:
+    def run(self, catalog: Table) -> None:
         """Generate donut and WF diagnostic plots from the blitzResults catalog.
 
         Parameters
@@ -2892,6 +2920,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ``DonutBlitzMonolithTask._buildCatalog``.  Visit-level and
             per-sensor metadata are in ``catalog.meta``.
         """
+        catalog = QTable(catalog)
         self._saveDonutDiagnosticPlot(catalog)
         self._saveWfDiagnosticPlot(catalog)
 
@@ -2910,8 +2939,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ``catalog.meta["sensor_meta"]``; visit-level scalars are in
             ``catalog.meta``.
         """
-        import json
-
         import matplotlib.patches as mpatches
         from matplotlib.figure import Figure
         from matplotlib.gridspec import GridSpec
@@ -3073,17 +3100,25 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     r, c = c, -r
                 return r, c
 
-            for dx, dy, mag in json.loads(str(row["nearby_photo"])):
+            n_photo = min(int(row["n_nearby_photo"]), _MAX_NEARBY)
+            px = row["nearby_photo_x"][:n_photo].to_value(u.pix)
+            py = row["nearby_photo_y"][:n_photo].to_value(u.pix)
+            pm = row["nearby_photo_mag"][:n_photo].to_value(u.mag)
+            for dx, dy, mag in zip(px, py, pm):
                 tx, ty = _xform(dx, dy)
                 ax.plot(tx, ty, "o", ms=6, mfc="none", mec=_COLOR_PHOTO_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
                     ax.text(tx + 3, ty + 3, f"{mag:.2f}", color=_COLOR_PHOTO_REFCAT, fontsize=3.5, zorder=4)
-            for dx, dy, mag in json.loads(str(row["nearby_astrom"])):
+
+            n_astrom = min(int(row["n_nearby_astrom"]), _MAX_NEARBY)
+            ax_ = row["nearby_astrom_x"][:n_astrom].to_value(u.pix)
+            ay_ = row["nearby_astrom_y"][:n_astrom].to_value(u.pix)
+            am_ = row["nearby_astrom_mag"][:n_astrom].to_value(u.mag)
+            for dx, dy, mag in zip(ax_, ay_, am_):
                 tx, ty = _xform(dx, dy)
                 ax.plot(tx, ty, "+", ms=6, mec=_COLOR_ASTROM_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
                     ax.text(tx + 3, ty - 5, f"{mag:.2f}", color=_COLOR_ASTROM_REFCAT, fontsize=3.5, zorder=4)
-
             # Pin the view to the stamp's own edges: constant figure footprint
             # regardless of pixel count, and no autoscale from the overlays.
             ax.set_xlim(-_edge, _edge)
