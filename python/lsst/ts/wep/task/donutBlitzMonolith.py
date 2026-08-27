@@ -2295,12 +2295,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             for iz in self.intrinsicZernikes
         }
 
-        example_band = next(iter(rawByName.values())).filter.bandLabel
-        photo_filter_name = example_band
+        band = next(iter(rawByName.values())).filter.bandLabel
+        photo_filter_name = band
         if self.config.photoRefFilter is not None:
             photo_filter_name = self.config.photoRefFilter
         elif self.config.photoRefFilterPrefix is not None:
-            photo_filter_name = f"{self.config.photoRefFilterPrefix}_{example_band}"
+            photo_filter_name = f"{self.config.photoRefFilterPrefix}_{band}"
 
         refcat_handles = list(refCat)
 
@@ -2397,8 +2397,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["sensor_refcats"] = sensor_refcats
         for name in CORNER_SENSOR_NAMES:
             missing_calib = [
-                k for k, d in [("ptc", ptcByName), ("flat", flatByName),
-                                ("linearizer", linearizerByName), ("crosstalk", crosstalkByName)]
+                k for k, d in [
+                    ("ptc", ptcByName),
+                    ("flat", flatByName),
+                    ("linearizer", linearizerByName),
+                    ("crosstalk", crosstalkByName),
+                ]
                 if name not in d
             ]
             if missing_calib:
@@ -2414,10 +2418,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             )
 
         # WF estimation config — populate CALIB_STORE for shared resources.
-        example_visitInfo = next(iter(rawByName.values())).getInfo().getVisitInfo()
-        boresight_rot_rad = example_visitInfo.boresightRotAngle.asRadians()
-        boresight_par_rad = example_visitInfo.boresightParAngle.asRadians()
-        boresight_alt_rad = example_visitInfo.boresightAzAlt.getLatitude().asRadians()
+        visitInfo = next(iter(rawByName.values())).getInfo().getVisitInfo()
+        boresight_rot_rad = visitInfo.boresightRotAngle.asRadians()
+        boresight_par_rad = visitInfo.boresightParAngle.asRadians()
+        boresight_alt_rad = visitInfo.boresightAzAlt.getLatitude().asRadians()
         rtp_deg = (
             (np.degrees(boresight_par_rad - boresight_rot_rad - np.pi / 2) + 180) % 360 - 180
             if self.wfFittingTask.config.modelSpiderShadows
@@ -2442,7 +2446,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             triangleMode=self.wfFittingTask.config.triangleMode,
             rtp_deg=rtp_deg,
             boresight_alt_rad=boresight_alt_rad,
-            band=example_band,
+            band=band,
             calib_noll_indices=np.arange(4, _ZK_JMAX + 1),
             wavelength_by_band=wavelength_by_band,
             wfFitTimeoutPerDonut=self.wfFittingTask.config.wfFitTimeoutPerDonut,
@@ -2451,7 +2455,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         )
         # Telescope is band- and quantum-fixed; build once here and share via
         # COW instead of reloading "LSST_{band}.yaml" per donut in workers.
-        _telescope = batoid.Optic.fromYaml(f"LSST_{example_band}.yaml")
+        _telescope = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
         _CALIB_STORE["telescope"] = _telescope
         _CALIB_STORE["telescope_extra"] = _telescope.withLocallyShiftedOptic(
             "Detector", [0, 0, _INSTRUMENT.defocalOffset]
@@ -2539,7 +2543,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # WF dispatch
         mode = self.config.wfEstimationMode
         results_by_sensor = {r["sensor"]: r["catalog"] for r in results}
-        groups, unmatched_donuts = _build_wf_groups(mode, results_by_sensor, example_band, rtp_deg, boresight_alt_rad)
+        groups, unmatched_donuts = _build_wf_groups(mode, results_by_sensor, band, rtp_deg, boresight_alt_rad)
 
         self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
         t_wf0 = time.perf_counter()
