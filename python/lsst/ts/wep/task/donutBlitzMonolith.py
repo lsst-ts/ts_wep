@@ -1258,131 +1258,6 @@ _log = logging.getLogger(__name__)
 _DZ_MODEL_KEYS = ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")
 
 
-def _run_lstsq_fit(model, x0, bounds, imgs, variances, timeout, wf_fitting_config, label):
-    """Run a DZMultiDonutModel least-squares fit and return results uniformly.
-
-    Handles the ``wfInitialGuessOnly`` path, SIGALRM timeout, and all exception
-    cases so each worker only needs to build the model and call this helper.
-
-    Parameters
-    ----------
-    model : danish.DZMultiDonutModel
-        Fully-constructed model ready to call ``.chi``, ``.jac``, ``.model``.
-    x0 : np.ndarray
-        Initial parameter vector from ``model.pack_params``.
-    bounds : list
-        Two-element ``[lower, upper]`` bound lists from ``model.pack_params``.
-    imgs : list of np.ndarray
-        Donut image stamps, one per model donut.
-    variances : list of np.ndarray
-        Per-pixel variance arrays aligned with ``imgs``.
-    timeout : float
-        SIGALRM timeout in seconds.
-    wf_fitting_config : WavefrontFittingTaskConfig
-        WF config supplying ``wfInitialGuessOnly``, ``lstsqKwargs``,
-        ``nollIndices``.
-    label : str
-        Short description used in log messages (e.g. ``"paired extra=3 intra=7"``).
-
-    Returns
-    -------
-    zk_dev : np.ndarray
-        Fitted deviation Zernikes aligned to ``nollIndices`` (NaN on failure).
-    params : dict or None
-        Unpacked model parameters, or ``None`` on failure.
-    model_imgs : list or None
-        Model images from ``model.model(...)``, or ``None`` on failure.
-    success : bool
-        ``True`` if the fit converged without error or timeout.
-    fit_info : dict
-        Timing, convergence, and parameter summary.
-    """
-    nollIndices = list(wf_fitting_config.nollIndices)
-    t0 = time.perf_counter()
-    params = None
-    if wf_fitting_config.wfInitialGuessOnly:
-        try:
-            params = model.unpack_params(x0)
-            zk_dev = np.zeros(len(nollIndices))
-            model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
-            elapsed = time.perf_counter() - t0
-            success = True
-            fit_info = dict(
-                elapsed=elapsed,
-                nfev=0,
-                cost=float("nan"),
-                optimality=float("nan"),
-                njev=0,
-                status=0,
-                message="x0 only",
-                fluxes=list(params["fluxes"]),
-                dxs=list(params["dxs"]),
-                dys=list(params["dys"]),
-                fwhm=float(params["fwhm"]),
-            )
-            _log.info("WF %s (x0 only)", label)
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
-    else:
-        galsim.errors.raise_fft_size_error = True
-        try:
-            with _fit_timeout(timeout):
-                lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in wf_fitting_config.lstsqKwargs.items()}
-                result = least_squares(
-                    model.chi,
-                    jac=model.jac,
-                    x0=x0,
-                    args=(imgs, variances),
-                    bounds=bounds,
-                    **lstsq_kwargs_parsed,
-                )
-            elapsed = time.perf_counter() - t0
-            params = model.unpack_params(result.x)
-            zk_dev = np.array(params["wavefront_params"])
-            model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
-            success = bool(result.success)
-            fit_info = dict(
-                elapsed=elapsed,
-                nfev=int(result.nfev),
-                cost=float(result.cost),
-                optimality=float(result.optimality),
-                njev=int(result.njev),
-                status=int(result.status),
-                message=str(result.message),
-                fluxes=list(params["fluxes"]),
-                dxs=list(params["dxs"]),
-                dys=list(params["dys"]),
-                fwhm=float(params["fwhm"]),
-            )
-            _log.info(
-                "WF %s success=%s nfev=%d elapsed=%.1fs",
-                label,
-                success,
-                result.nfev,
-                elapsed,
-            )
-        except _WfFitTimeoutError:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
-            _log.warning("WF %s TIMED OUT after %.1fs", label, elapsed)
-        except Exception as exc:
-            elapsed = time.perf_counter() - t0
-            zk_dev = np.full(len(nollIndices), np.nan)
-            model_imgs = None
-            success = False
-            fit_info = dict(elapsed=elapsed, error=str(exc))
-            _log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
-    return zk_dev, params, model_imgs, success, fit_info
-
-
 def _wf_fitting_worker(group: "_WfGroup") -> dict:
     """Wavefront fitting worker for multiprocessing pool.
 
@@ -1667,8 +1542,8 @@ class WavefrontFittingTask(pipeBase.Task):
         label = f"group={group.group_id} n={n}"
         self.log.info("WF %s npix=%d setup=%.2fs", label, npix, _setup_elapsed)
 
-        zk_dev, params, model_imgs, success, fit_info = _run_lstsq_fit(
-            model, x0, bounds, imgs, sky_lvl, timeout, self.config, label
+        zk_dev, params, model_imgs, success, fit_info = self._run_lstsq_fit(
+            model, x0, bounds, imgs, sky_lvl, timeout, label
         )
         zk_dev_dense = _dense_dev(zk_dev, nollIndices)
         _fit_elapsed = float(fit_info.get("elapsed", float("nan")))
@@ -1857,6 +1732,127 @@ class WavefrontFittingTask(pipeBase.Task):
 
         angle_rad = np.array([donut.fa_x_ccs, donut.fa_y_ccs])
         return img, angle_rad, zk_ref, bkg_std**2, bkg_std
+
+    def _run_lstsq_fit(self, model, x0, bounds, imgs, variances, timeout, label):
+        """Run a DZMultiDonutModel least-squares fit and return results uniformly.
+
+        Handles the ``wfInitialGuessOnly`` path, SIGALRM timeout, and all exception
+        cases so each worker only needs to build the model and call this helper.
+
+        Parameters
+        ----------
+        model : danish.DZMultiDonutModel
+            Fully-constructed model ready to call ``.chi``, ``.jac``, ``.model``.
+        x0 : np.ndarray
+            Initial parameter vector from ``model.pack_params``.
+        bounds : list
+            Two-element ``[lower, upper]`` bound lists from ``model.pack_params``.
+        imgs : list of np.ndarray
+            Donut image stamps, one per model donut.
+        variances : list of np.ndarray
+            Per-pixel variance arrays aligned with ``imgs``.
+        timeout : float
+            SIGALRM timeout in seconds.
+        label : str
+            Short description used in log messages (e.g. ``"group=123 n=2"``).
+
+        Returns
+        -------
+        zk_dev : np.ndarray
+            Fitted deviation Zernikes aligned to ``nollIndices`` (NaN on failure).
+        params : dict or None
+            Unpacked model parameters, or ``None`` on failure.
+        model_imgs : list or None
+            Model images from ``model.model(...)``, or ``None`` on failure.
+        success : bool
+            ``True`` if the fit converged without error or timeout.
+        fit_info : dict
+            Timing, convergence, and parameter summary.
+        """
+        nollIndices = list(self.config.nollIndices)
+        t0 = time.perf_counter()
+        params = None
+        if self.config.wfInitialGuessOnly:
+            try:
+                params = model.unpack_params(x0)
+                zk_dev = np.zeros(len(nollIndices))
+                model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
+                elapsed = time.perf_counter() - t0
+                success = True
+                fit_info = dict(
+                    elapsed=elapsed,
+                    nfev=0,
+                    cost=float("nan"),
+                    optimality=float("nan"),
+                    njev=0,
+                    status=0,
+                    message="x0 only",
+                    fluxes=list(params["fluxes"]),
+                    dxs=list(params["dxs"]),
+                    dys=list(params["dys"]),
+                    fwhm=float(params["fwhm"]),
+                )
+                self.log.info("WF %s (x0 only)", label)
+            except Exception as exc:
+                elapsed = time.perf_counter() - t0
+                zk_dev = np.full(len(nollIndices), np.nan)
+                model_imgs = None
+                success = False
+                fit_info = dict(elapsed=elapsed, error=str(exc))
+                self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
+        else:
+            galsim.errors.raise_fft_size_error = True
+            try:
+                with _fit_timeout(timeout):
+                    lstsq_kwargs_parsed = {k: ast.literal_eval(v) for k, v in self.config.lstsqKwargs.items()}
+                    result = least_squares(
+                        model.chi,
+                        jac=model.jac,
+                        x0=x0,
+                        args=(imgs, variances),
+                        bounds=bounds,
+                        **lstsq_kwargs_parsed,
+                    )
+                elapsed = time.perf_counter() - t0
+                params = model.unpack_params(result.x)
+                zk_dev = np.array(params["wavefront_params"])
+                model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
+                success = bool(result.success)
+                fit_info = dict(
+                    elapsed=elapsed,
+                    nfev=int(result.nfev),
+                    cost=float(result.cost),
+                    optimality=float(result.optimality),
+                    njev=int(result.njev),
+                    status=int(result.status),
+                    message=str(result.message),
+                    fluxes=list(params["fluxes"]),
+                    dxs=list(params["dxs"]),
+                    dys=list(params["dys"]),
+                    fwhm=float(params["fwhm"]),
+                )
+                self.log.info(
+                    "WF %s success=%s nfev=%d elapsed=%.1fs",
+                    label,
+                    success,
+                    result.nfev,
+                    elapsed,
+                )
+            except _WfFitTimeoutError:
+                elapsed = time.perf_counter() - t0
+                zk_dev = np.full(len(nollIndices), np.nan)
+                model_imgs = None
+                success = False
+                fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
+                self.log.warning("WF %s TIMED OUT after %.1fs", label, elapsed)
+            except Exception as exc:
+                elapsed = time.perf_counter() - t0
+                zk_dev = np.full(len(nollIndices), np.nan)
+                model_imgs = None
+                success = False
+                fit_info = dict(elapsed=elapsed, error=str(exc))
+                self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
+        return zk_dev, params, model_imgs, success, fit_info
 
 
 class DonutBlitzMonolithTaskConnections(
