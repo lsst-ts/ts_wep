@@ -70,6 +70,7 @@ from lsst.pipe.base import (
 )
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
+from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.utils import binArray
 from lsst.utils.timer import timeMethod
 from scipy.optimize import least_squares
@@ -170,6 +171,32 @@ def _colorize(text: str, *codes: str, enabled: bool = True) -> str:
     return "".join(codes) + text + _ANSI_RESET
 
 
+def _resolveDonutRadius(donutRadius: float | None) -> float:
+    """Return a usable donut radius in pixels, falling back to the nominal one.
+
+    The per-exposure radius measured by `DonutDetectDiameterTask` is preferred,
+    but it is NaN whenever the sizing curve could not be formed (no surviving
+    peaks, monotonic curve). Rather than propagate NaN into every mask radius
+    downstream, fall back to the nominal `_INSTRUMENT.donutRadius`.
+
+    Parameters
+    ----------
+    donutRadius : float or None
+        Measured donut radius in un-binned pixels, or None/NaN if unmeasured.
+
+    Returns
+    -------
+    float
+        ``donutRadius`` if finite and positive, else ``_INSTRUMENT.donutRadius``.
+    """
+    if donutRadius is None:
+        return float(_INSTRUMENT.donutRadius)
+    donutRadius = float(donutRadius)
+    if not np.isfinite(donutRadius) or donutRadius <= 0:
+        return float(_INSTRUMENT.donutRadius)
+    return donutRadius
+
+
 def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
     """Return a binary annular stamp for cross-correlation donut detection."""
     r_int = int(radius)
@@ -263,7 +290,12 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
     _DefaultName = "measureDonutCandidates"
     config: MeasureDonutCandidatesConfig
 
-    def run(self, exposure: Exposure, selections: QTable) -> pipeBase.Struct:
+    def run(
+        self,
+        exposure: Exposure,
+        selections: QTable,
+        donutRadius: float | None = None,
+    ) -> pipeBase.Struct:
         """Measure aperture flux and quality metrics for candidate donuts.
 
         Parameters
@@ -274,6 +306,9 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         selections : QTable
             Catalog-selected (or blind-detection) centroids with columns
             ``centroid_x``, ``centroid_y``, ``id``.
+        donutRadius : float or None, optional
+            Measured donut radius in un-binned pixels, or None/NaN if
+            unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
 
         Returns
         -------
@@ -288,9 +323,9 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         """
         if len(selections) == 0:
             return pipeBase.Struct(measurements=selections)
-        return pipeBase.Struct(measurements=self._measureFlux(selections, exposure))
+        return pipeBase.Struct(measurements=self._measureFlux(selections, exposure, donutRadius=donutRadius))
 
-    def _measureFlux(self, selections: QTable, exposure: Exposure) -> QTable:
+    def _measureFlux(self, selections: QTable, exposure: Exposure, donutRadius: float | None = None) -> QTable:
         """Measure aperture flux and per-pixel noise for each detected donut.
 
         For each peak a local background is estimated from an annular region
@@ -302,7 +337,9 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         peaks too close to the image border get ``nan`` values. The input
         table is left unmodified.
         """
-        radius = _INSTRUMENT.donutRadius
+        if donutRadius is None:
+            donutRadius = _INSTRUMENT.donutRadius
+        radius = donutRadius
         obscuration = _INSTRUMENT.obscuration
         cfg = self.config
 
@@ -444,7 +481,7 @@ class CutDonutStampsConfig(pexConfig.Config):
     minStampSnr: pexConfig.Field = pexConfig.Field(
         doc="Reject a donut if its per-stamp SNR falls below this.",
         dtype=float,
-        default=500.0,
+        default=100.0,
     )
     maxDonuts: pexConfig.Field = pexConfig.Field(
         doc="Maximum number of accepted donuts to keep per sensor, brightest-first.",
@@ -490,6 +527,7 @@ class CutDonutStampsTask(pipeBase.Task):
         measurements: QTable,
         refcat: QTable | None,
         blindDetections: QTable,
+        donutRadius: float | None = None,
     ) -> pipeBase.Struct:
         """Cut stamps and split accepted vs. quality-rejected donuts.
 
@@ -511,6 +549,9 @@ class CutDonutStampsTask(pipeBase.Task):
         blindDetections : QTable
             Centroids from ``BlindDetect``, used for
             ``catalog_centroid_offset_px``.
+        donutRadius : float or None, optional
+            Measured donut radius in un-binned pixels, or None/NaN if
+            unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
 
         Returns
         -------
@@ -521,7 +562,8 @@ class CutDonutStampsTask(pipeBase.Task):
                 Quality-rejected donuts, brightest-first, at most
                 ``maxRejectDonuts``.
         """
-        donutRadius = _INSTRUMENT.donutRadius
+        if donutRadius is None:
+            donutRadius = _INSTRUMENT.donutRadius
         obscuration = _INSTRUMENT.obscuration
 
         detector = exposure.getDetector()
@@ -722,8 +764,8 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         Keys: ``sensor``, ``catalog`` (accepted donut dicts),
         ``rejected_catalog``, ``scatter_arcsec``, ``wcs_refit_error``,
         ``cat_select_error``, and timing floats ``dispatch_to_arrival``,
-        ``isr_run``, ``bkg_run``, ``blind_detect_run``, ``wcs_refit_run``,
-        ``catalog_select_run``, ``stamp_cut_run``.
+        ``isr_run``, ``bkg_run``, ``diam_run``, ``blind_detect_run``,
+        ``wcs_refit_run``, ``catalog_select_run``, ``stamp_cut_run``.
     """
     t_arrival = time.time()
     entry = _CALIB_STORE[sensor_name]
@@ -745,10 +787,18 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     bkg_task = _CALIB_STORE["bkg_task"]
     bkg_task.run(exposure=postIsr)
 
-    # --- blind detection ---
+    # --- detect diameter ---
     t2 = time.perf_counter()
+    detect_diameter_task = _CALIB_STORE["detect_diameter_task"]
+    donutDiameter = detect_diameter_task.run(postIsr).diameter
+    donutRadius = _resolveDonutRadius(
+        donutDiameter/ 2 if donutDiameter is not None else None
+    )
+
+    # --- blind detection ---
+    t3 = time.perf_counter()
     blind_detect_task = _CALIB_STORE["blind_detect_task"]
-    blindDetections = blind_detect_task.run(postIsr).detections
+    blindDetections = blind_detect_task.run(postIsr, donutRadius=donutRadius).detections
 
     if len(blindDetections) == 0:
         return {
@@ -757,6 +807,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
             "dispatch_to_arrival": time.time() - t_dispatch,
             "isr_run": t1 - t0,
             "bkg_run": t2 - t1,
+            "diam_run": t3 - t2,
             "blind_detect_run": time.perf_counter() - t2,
             "wcs_refit_run": 0.0,
             "catalog_select_run": 0.0,
@@ -768,7 +819,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         }
 
     # --- astrometry ---
-    t3 = time.perf_counter()
+    t4 = time.perf_counter()
     astrom_task = _CALIB_STORE["astrom_task"]
     detector = postIsr.getDetector()
     refcat_handle = _CALIB_STORE.get("sensor_refcats", {}).get(detector.getName())
@@ -799,7 +850,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         )
 
     # --- catalog selection ---
-    t4 = time.perf_counter()
+    t5 = time.perf_counter()
     selections = blindDetections
     refcat = None
     cat_err = None
@@ -855,11 +906,12 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     )
 
     # --- stamp cutting ---
-    t5 = time.perf_counter()
+    t6 = time.perf_counter()
     measure_task = _CALIB_STORE["measure_candidates_task"]
     candidates = measure_task.run(
         postIsr,
         selections,
+        donutRadius=donutRadius,
     ).measurements
     cut_stamps_task = _CALIB_STORE["cut_stamps_task"]
     cut_result = cut_stamps_task.run(
@@ -867,11 +919,66 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         candidates,
         refcat,
         blindDetections,
+        donutRadius=donutRadius
     )
-    donuts = cut_result.donuts
-    rejected_donuts = cut_result.rejected_donuts
 
-    t6 = time.perf_counter()
+    t7 = time.perf_counter()
+
+    # import matplotlib.pyplot as plt
+    # from matplotlib.patches import Annulus
+
+    # fig, ax = plt.subplots(figsize=(10, 10))
+    # vmin, vmax = np.nanquantile(postIsr.image.array, [0.01, 0.99])
+    # ax.imshow(postIsr.image.array, origin="lower", cmap="gray", vmin=vmin, vmax=vmax)
+    # ax.set_xlim(0, postIsr.image.array.shape[1])
+    # ax.set_ylim(0, postIsr.image.array.shape[0])
+    # ax.scatter(refcat["centroid_x"], refcat["centroid_y"], s=20, edgecolor="cyan", facecolor="none")
+    # ax.scatter(blindDetections["centroid_x"], blindDetections["centroid_y"], s=50, edgecolor="blue", facecolor="none")
+    # ax.scatter(selections["centroid_x"], selections["centroid_y"], s=80, edgecolor="red", facecolor="none")
+    # ax.scatter(
+    #     [d.centroid_x_raw for d in cut_result.donuts],
+    #     [d.centroid_y_raw for d in cut_result.donuts],
+    #     s=110, edgecolor="yellow", facecolor="none"
+    # )
+    # for d in cut_result.donuts:
+    #     ax.annotate(
+    #         f"{d.snr:.1f}",
+    #         (d.centroid_x_raw, d.centroid_y_raw),
+    #         xytext=(10, 10),
+    #         textcoords="offset points", color="yellow", fontsize=10,
+    #         annotation_clip=True,
+    #     )
+    # for d in cut_result.rejected_donuts:
+    #     ax.annotate(
+    #         f"{d.snr:.1f}",
+    #         (d.centroid_x_raw, d.centroid_y_raw),
+    #         xytext=(10, 10),
+    #         textcoords="offset points", color="red", fontsize=10,
+    #         annotation_clip=True,
+    #     )
+    # xform = detector.getTransform(FIELD_ANGLE, PIXELS)
+    # mapping = xform.getMapping()
+    # center = mapping.applyForward(np.array([[0.0], [0.0]]))
+    # cx = float(center[0, 0])
+    # cy = float(center[1, 0])
+    # # Find points on the circle inside the detector bounds
+    # th = np.linspace(0, 2 * np.pi, 1000)
+    # x = np.deg2rad(donut_selector.config.maxFieldDist) * np.cos(th)
+    # y = np.deg2rad(donut_selector.config.maxFieldDist) * np.sin(th)
+    # xyPix = mapping.applyForward(np.vstack([x, y]))
+    # keep = xyPix[0] >= 0
+    # keep &= xyPix[0] < postIsr.image.array.shape[1]
+    # keep &= xyPix[1] >= 0
+    # keep &= xyPix[1] < postIsr.image.array.shape[0]
+    # xyPix = xyPix[:, keep]
+    # radius = float(np.mean(np.hypot(xyPix[0] - cx, xyPix[1] - cy)))
+    # big_radius = radius * 2
+    # ann = Annulus(
+    #     (cx, cy), big_radius, big_radius - radius,
+    #     facecolor="purple", alpha=0.2, edgecolor="none"
+    # )
+    # ax.add_patch(ann)
+    # plt.show()
 
     return {
         "sensor": sensor_name,
@@ -879,10 +986,11 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
         "dispatch_to_arrival": t_arrival - t_dispatch,
         "isr_run": t1 - t0,
         "bkg_run": t2 - t1,
-        "blind_detect_run": t3 - t2,
-        "wcs_refit_run": t4 - t3,
-        "catalog_select_run": t5 - t4,
-        "stamp_cut_run": t6 - t5,
+        "diam_run": t3 - t2,
+        "blind_detect_run": t4 - t3,
+        "wcs_refit_run": t5 - t4,
+        "catalog_select_run": t6 - t5,
+        "stamp_cut_run": t7 - t6,
         "rejected_catalog": cut_result.rejected_donuts,
         "scatter_arcsec": scatter_arcsec,
         "wcs_refit_error": wcs_err,
@@ -1650,6 +1758,9 @@ class BlindDetect(pipeBase.Task):
     ----------
     exposure : Exposure
         Science exposure; background is subtracted in-place.
+    donutRadius : float or None
+        Donut radius in pixels.  If None, uses the instrument's configured
+        donut radius.
 
     Returns
     -------
@@ -1664,12 +1775,15 @@ class BlindDetect(pipeBase.Task):
     def run(
         self,
         exposure: Exposure,
+        donutRadius: float | None = None,
     ) -> pipeBase.Struct:
         config = self.config
+        if donutRadius is None:
+            donutRadius = _INSTRUMENT.donutRadius
 
         trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
         binning = config.detectionBinning
-        binned_donut_radius = _INSTRUMENT.donutRadius / binning
+        binned_donut_radius = donutRadius / binning
         template = _buildAnnularTemplate(
             binned_donut_radius,
             innerFrac=_INSTRUMENT.obscuration
@@ -1800,6 +1914,10 @@ class DonutBlitzMonolithTaskConfig(
     subtractBackground: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=SubtractBackgroundTask,
         doc="Background subtraction subtask run before donut detection.",
+    )
+    detectDiameter: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=DonutDetectDiameterTask,
+        doc="Donut diameter detection subtask.",
     )
     blindDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=BlindDetect,
@@ -2036,6 +2154,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         super().__init__(**kwargs)
         self.makeSubtask("isrTask")
         self.makeSubtask("subtractBackground")
+        self.makeSubtask("detectDiameter")
         self.makeSubtask("blindDetect")
         self.makeSubtask("astromTask")
         self.makeSubtask("donutSelector")
@@ -2292,6 +2411,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE.clear()
         _CALIB_STORE["isr_task"] = self.isrTask
         _CALIB_STORE["bkg_task"] = self.subtractBackground
+        _CALIB_STORE["detect_diameter_task"] = self.detectDiameter
         _CALIB_STORE["blind_detect_task"] = self.blindDetect
         _CALIB_STORE["astrom_task"] = self.astromTask
         _CALIB_STORE["donut_selector_task"] = self.donutSelector
@@ -2397,12 +2517,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             scatter_str = f'{r["scatter_arcsec"]:.3f}"' if r["scatter_arcsec"] is not None else "N/A"
             self.log.info(
                 "  %s: dispatch=%.3fs  isr=%.3fs  bkg=%.3fs"
-                "  detect=%.3fs  wcs=%.3fs (scatter=%s)"
+                "  diam=%.3fs  detect=%.3fs  wcs=%.3fs (scatter=%s)"
                 "  select=%.3fs  cut=%.3fs  donuts=%d",
                 r["sensor"],
                 r["dispatch_to_arrival"],
                 r["isr_run"],
                 r["bkg_run"],
+                r["diam_run"],
                 r["blind_detect_run"],
                 r["wcs_refit_run"],
                 scatter_str,
@@ -2577,6 +2698,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "cat_select_error": str(r.get("cat_select_error") or ""),
                 "isr_run": float(r.get("isr_run", float("nan"))),
                 "bkg_run": float(r.get("bkg_run", float("nan"))),
+                "diam_run": float(r.get("diam_run", float("nan"))),
                 "blind_detect_run": float(r.get("blind_detect_run", float("nan"))),
                 "wcs_refit_run": float(r.get("wcs_refit_run", float("nan"))),
                 "catalog_select_run": float(r.get("catalog_select_run", float("nan"))),
@@ -2701,6 +2823,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "outer_sector_minmax_frac": float(d.outer_sector_minmax_frac),
                 "bkg": float(d.bkg),
                 "bkg_std": float(d.bkg_std),
+                "donut_radius": float(d.donut_radius),
                 "nearest_neighbor_dist_px": float(d.nearest_neighbor_dist_px),
                 "n_neighbors_in_stamp": int(d.n_neighbors_in_stamp),
                 "catalog_centroid_offset_px": float(d.catalog_centroid_offset_px),
@@ -2757,7 +2880,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _first_d = all_donuts[0][0]
         table.meta["donut_radius"] = _first_d.donut_radius
         table.meta["obscuration"] = _first_d.obscuration
-        _cutout_cfg = _CALIB_STORE["cutout_cfg"]
         table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
         table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
         table.meta["bkg_annulus_inner_frac"] = self.measureCandidatesTask.config.bkgAnnulusInnerFrac
@@ -2925,10 +3047,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         COL_SPACER = 1 + STAMPS_PER_ROW
         COL_REJECTED_START = COL_SPACER + 1
 
-        _dr = catalog.meta["donut_radius"]
-        _ob = catalog.meta["obscuration"]
-        _stamp_dr = _dr if np.isfinite(_dr) else None
-        _stamp_ob = _ob if np.isfinite(_ob) else None
+        # Per-sensor radius/obscuration ride each donut row (from
+        # Donut.donut_radius), so a sensor's aperture/annulus circles match its
+        # own detected donut size. The visit-level meta scalars below are the
+        # fallback for rows that lack the columns -- e.g. an older blitzResults
+        # catalog written before these columns existed, read back by a
+        # standalone DonutBlitzPlotTask.
+        _visit_dr = catalog.meta["donut_radius"]
+        _visit_ob = catalog.meta["obscuration"]
         _stamp_outer_margin_frac = catalog.meta["aperture_outer_margin_frac"]
         _stamp_inner_buffer_frac = catalog.meta["aperture_inner_buffer_frac"]
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
@@ -2967,7 +3093,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 extent=[-_edge, _edge, -_edge, _edge],
             )
 
-            dr, ob = _stamp_dr, _stamp_ob
+            # Per-sensor radius/obscuration off the row, falling back to the
+            # visit-level meta scalar if a row lacks a finite value (stale
+            # catalog). row is an astropy Row, so membership is via colnames.
+            _row_dr = float(row["donut_radius"]) if "donut_radius" in row.colnames else _visit_dr
+            _row_ob = float(row["obscuration"]) if "obscuration" in row.colnames else _visit_ob
+            dr = _row_dr if np.isfinite(_row_dr) else (_visit_dr if np.isfinite(_visit_dr) else None)
+            ob = _row_ob if np.isfinite(_row_ob) else (_visit_ob if np.isfinite(_visit_ob) else None)
             if dr is not None and ob is not None:
                 _circ_specs = [
                     (dr * ob * _stamp_inner_buffer_frac, _COLOR_BKG_ANNULUS, "--"),
@@ -3072,6 +3204,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 f"donuts: {len(acc_rows)}",
                 f"isr:    {sm.get('isr_run', float('nan')):.3f}s",
                 f"bkg:    {sm.get('bkg_run', float('nan')):.3f}s",
+                f"diam:   {sm.get('diam_run', float('nan')):.3f}s",
                 f"detect: {sm.get('blind_detect_run', float('nan')):.3f}s",
                 f"wcs:    {sm.get('wcs_refit_run', float('nan')):.3f}s  ({scatter_str})",
                 f"select: {sm.get('catalog_select_run', float('nan')):.3f}s",
