@@ -444,9 +444,13 @@ class Donut:
     n_quarter: int
     nearby_photo: list[tuple[float, float, float]]
     nearby_astrom: list[tuple[float, float, float]]
-    saturated: bool
-    reject_reasons: list[str] = field(default_factory=list)
     intrinsic_zk: npt.NDArray[np.float64] | None = None
+    # --- reject flags (default False = not rejected) ---
+    rejected_sat: bool = False
+    rejected_inner_frac: bool = False
+    rejected_outer_frac: bool = False
+    rejected_snr: bool = False
+    rejected: bool = False
 
 
 class CutDonutStampsConfig(pexConfig.Config):
@@ -610,7 +614,6 @@ class CutDonutStampsTask(pipeBase.Task):
             cmin, cmax = cx - half, cx + half + 1
             if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
                 return None
-            saturated = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
             stamp = np.array(arr[rmin:rmax, cmin:cmax])
             stamp_ccs = np.rot90(stamp, k=-n_quarter).T
 
@@ -650,6 +653,12 @@ class CutDonutStampsTask(pipeBase.Task):
                 else float("nan")
             )
 
+            rejected_sat = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
+            rejected_inner_frac = bool(np.isfinite(row["inner_frac"]) and abs(row["inner_frac"]) > self.config.innerFracThreshold)
+            rejected_outer_frac = bool(np.isfinite(row["outer_frac"]) and abs(row["outer_frac"]) > self.config.outerFracThreshold)
+            rejected_snr = bool(np.isfinite(row["snr"]) and row["snr"] < self.config.minStampSnr)
+            rejected = rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr
+
             return Donut(
                 sensor=detector.getName(),
                 stamp=stamp_ccs,
@@ -679,22 +688,12 @@ class CutDonutStampsTask(pipeBase.Task):
                 n_quarter=n_quarter,
                 nearby_photo=_nearby_photo_list,
                 nearby_astrom=_nearby("astrom_mag"),
-                saturated=saturated,
+                rejected_sat=rejected_sat,
+                rejected_inner_frac=rejected_inner_frac,
+                rejected_outer_frac=rejected_outer_frac,
+                rejected_snr=rejected_snr,
+                rejected=rejected
             )
-
-        inner_thr = self.config.innerFracThreshold
-        outer_thr = self.config.outerFracThreshold
-        min_stamp_snr = self.config.minStampSnr
-
-        def _append_reject_reasons(d: Donut) -> None:
-            if d.saturated:
-                d.reject_reasons.append("SAT")
-            if np.isfinite(d.inner_frac) and abs(d.inner_frac) > inner_thr:
-                d.reject_reasons.append("inner_frac")
-            if np.isfinite(d.outer_frac) and abs(d.outer_frac) > outer_thr:
-                d.reject_reasons.append("outer_frac")
-            if np.isfinite(d.snr) and d.snr < min_stamp_snr:
-                d.reject_reasons.append("snr")
 
         # Match each centroid to the nearest blind detection for
         # catalog_centroid_offset_px.
@@ -733,8 +732,7 @@ class CutDonutStampsTask(pipeBase.Task):
             d = _cut_stamp(row, blind_cx=_b_cx, blind_cy=_b_cy)
             if d is None:
                 continue
-            _append_reject_reasons(d)
-            if d.reject_reasons:
+            if d.rejected:
                 if len(rejected_donuts) < max_reject:
                     rejected_donuts.append(d)
                 continue
@@ -2642,20 +2640,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             }
             rejected_by_sensor[sname] = r.get("rejected_catalog", [])
 
-        def _reject_reason_str(reasons):
-            """Comma-join reject reasons in their display form.
-
-            Order is preserved and duplicates are dropped, so a selector
-            "faint_neighbor" collapsing onto an existing "blend" (or the
-            selector's "field_dist" onto the monolith's) shows only once.
-            """
-            out: list[str] = []
-            for rr in reasons:
-                disp = _SELECTOR_REASON_DISP.get(rr, rr)
-                if disp not in out:
-                    out.append(disp)
-            return ",".join(out)
-
         def _encode_nearby(entries):
             """Return (x, y, mag) arrays of length ``_MAX_NEARBY`` for one donut.
 
@@ -2733,7 +2717,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             # group claimed evaluates False here without a special-case.
             used = bool(wd.fit_success and np.any(np.isfinite(zk_dev[4:])))
 
-            reject_reasons = d.reject_reasons
             stamp = _pad(d.stamp.astype(float), max_ny, max_nx)
 
             wf_img_raw = wd.img
@@ -2788,13 +2771,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "nearest_neighbor_dist_px": float(d.nearest_neighbor_dist_px),
                 "n_neighbors_in_stamp": int(d.n_neighbors_in_stamp),
                 "catalog_centroid_offset_px": float(d.catalog_centroid_offset_px),
-                "rejected_snr": bool("snr" in reject_reasons),
-                "rejected_inner_frac": bool("inner_frac" in reject_reasons),
-                "rejected_outer_frac": bool("outer_frac" in reject_reasons),
-                "rejected_sat": bool("SAT" in reject_reasons or d.saturated),
-                "rejected_field_dist": bool("field_dist" in reject_reasons),
-                "rejected_selector": False,
-                "reject_reasons": _reject_reason_str(reject_reasons),
+                "rejected_sat": d.rejected_sat,
+                "rejected_inner_frac": d.rejected_inner_frac,
+                "rejected_outer_frac": d.rejected_outer_frac,
+                "rejected_snr": d.rejected_snr,
+                "rejected": d.rejected,
                 # --- fit results ---
                 "fit_mode": wd.fit_mode,
                 "group": int(grp),
@@ -3129,8 +3110,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             sid = int(row["id"])
             sid_str = f"id={sid}" if sid != 0 else ""
             _text_color = _COLOR_REJECTED if rejected else "black"
-            _reasons = str(row["reject_reasons"]) if rejected else ""
-            rej_str = f"[{_reasons}]" if _reasons else ""
+
+            _flags = [
+                name
+                for name, val in (
+                    ("sat", row["rejected_sat"]),
+                    ("inner", row["rejected_inner_frac"]),
+                    ("outer", row["rejected_outer_frac"]),
+                    ("snr", row["rejected_snr"]),
+                )
+                if val
+            ]
+            rej_str = f"[{'|'.join(_flags)}]" if _flags else ""
             # Bottom-anchored just above the axes, so the block grows upward and
             # never overlaps the stamp -- clearance is independent of stamp size.
             # (Top-anchoring inside the axes hung the text down over the image;
