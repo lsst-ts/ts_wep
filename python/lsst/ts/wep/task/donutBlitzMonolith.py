@@ -56,7 +56,6 @@ from astropy.table import Table, QTable
 from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import Exposure
-from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import (
     MagnitudeLimit,
@@ -1879,7 +1878,6 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=["instrument", "detector"],
         isCalibration=True,
         multiple=True,
-        lookupFunction=lookupStaticCalibrations,
     )
     flat = connectionTypes.PrerequisiteInput(
         name="flat",
@@ -1888,7 +1886,6 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=["instrument", "detector", "physical_filter"],
         isCalibration=True,
         multiple=True,
-        lookupFunction=lookupStaticCalibrations,
     )
     linearizer = connectionTypes.PrerequisiteInput(
         name="linearizer",
@@ -1897,7 +1894,6 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=["instrument", "detector"],
         isCalibration=True,
         multiple=True,
-        lookupFunction=lookupStaticCalibrations,
     )
     crosstalk = connectionTypes.PrerequisiteInput(
         name="crosstalk",
@@ -1906,7 +1902,6 @@ class DonutBlitzMonolithTaskConnections(
         dimensions=["instrument", "detector"],
         isCalibration=True,
         multiple=True,
-        lookupFunction=lookupStaticCalibrations,
     )
     refCat = connectionTypes.PrerequisiteInput(
         doc="Reference catalog for both WCS fitting and donut selection.",
@@ -1923,7 +1918,6 @@ class DonutBlitzMonolithTaskConnections(
         name="intrinsicZernikes",
         multiple=True,
         isCalibration=True,
-        lookupFunction=lookupStaticCalibrations,  # type: ignore
         minimum=0,
     )
     blitzResults = connectionTypes.Output(
