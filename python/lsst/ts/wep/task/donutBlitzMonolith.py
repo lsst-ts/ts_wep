@@ -459,17 +459,11 @@ class CutDonutStampsConfig(pexConfig.Config):
     stampSize: pexConfig.Field = pexConfig.Field(
         doc=(
             "Side length in pixels of the square stamp cut around each donut "
-            "centroid. Stamps are cut odd (2*(stampSize//2)+1) so the centroid "
-            "pixel is exactly centered.\n\n"
-            "Danish requires an odd stamp after binning, and `binArray` "
-            "truncates before binning, so the fitted size is stampSize//binning. "
-            "That is odd for binning 1, 2 and 3 when stampSize = 3 or 11 (mod "
-            "12), and additionally for binning 4 when stampSize = 15 or 23 (mod "
-            "24). The default 167 (= 23 mod 24) satisfies all four, giving "
-            "167/83/55/41 px. Sizes failing this still work -- "
-            "_prep_donut_for_danish crops by one pixel -- but that shifts the "
-            "donut off center by half a pixel.\n\n"
-            "Must also be large enough to contain the main photometric annulus: "
+            "centroid. The binned size (stampSize // binning) must be odd for "
+            "the Danish fitting stage. The default 167 bins down to odd sizes "
+            "for binnings of 1 through 7 (167/83/55/41/33/27/23). The binning "
+            "stage forces the result to be odd if needed. Must also be large "
+            "enough to contain the main photometric annulus: "
             "stampSize/2 >= donutRadius * apertureOuterMarginFrac."
         ),
         dtype=int,
@@ -508,12 +502,10 @@ class CutDonutStampsConfig(pexConfig.Config):
 class CutDonutStampsTask(pipeBase.Task):
     """Cut donut stamps and evaluate rejection criteria.
 
-    For each measured candidate, cuts an odd-sized stamp centered on the
-    centroid, computes per-stamp geometry (field angle, nearby refcat
-    sources, catalog offset) and the SAT flag, then applies the quality cuts
-    (SAT, field distance, inner/outer flux fraction, SNR) to split accepted
-    from rejected. This is the single stage where quality rejection happens;
-    the measurement stage upstream no longer culls.
+    For each measured candidate, cuts a stamp centered on the centroid,
+    computes per-stamp geometry (field angle, nearby refcat sources, catalog
+    offset) and the SAT flag, then applies the quality cuts (SAT, field
+    distance, inner/outer flux fraction, SNR) to split accepted from rejected.
 
     Candidates are sorted flux-descending internally, so both output lists are
     filled brightest-first and the cut loop early-exits once both the accepted
@@ -603,29 +595,27 @@ class CutDonutStampsTask(pipeBase.Task):
 
         def _cut_stamp(row, blind_cx=None, blind_cy=None) -> Donut | None:
             """Cut one stamp and compute metrics. Returns Donut or None on failure."""
-            # Odd-sized cut (2*half+1) so the centroid pixel sits exactly at the
-            # stamp center. An even cut would offset the donut half a pixel from
-            # the stamp's geometric center, and force the crop-by-1 fallback in
-            # _prep_donut_for_danish (Danish requires an odd stamp).
+            # Cut a stamp of configured size, centered on the rounded centroid.
+            # Odd-size preference is enforced during binning in _prep_donut_for_danish.
             cx_f = float(row["centroid_x"])
             cy_f = float(row["centroid_y"])
             cx, cy = int(round(cx_f)), int(round(cy_f))
-            rmin, rmax = cy - half, cy + half + 1
-            cmin, cmax = cx - half, cx + half + 1
+            half_before = half
+            half_after = self.config.stampSize - half_before - 1
+            rmin, rmax = cy - half_before, cy + half_after + 1
+            cmin, cmax = cx - half_before, cx + half_after + 1
             if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
                 return None
             stamp = np.array(arr[rmin:rmax, cmin:cmax])
             stamp_ccs = np.rot90(stamp, k=-n_quarter).T
 
             # Vectorized box query over the precomputed refcat arrays.
-            # Offsets are relative to the *rounded* centroid (cx, cy), since
-            # that is the pixel the stamp is cut around and lands at the stamp
-            # center.
+            # Offsets are relative to the *rounded* centroid (cx, cy).
             if _rc_x is None:
                 box_mask = None
                 dx_box = dy_box = None
             else:
-                box_mask = (np.abs(_rc_x - cx) <= half) & (np.abs(_rc_y - cy) <= half)
+                box_mask = (np.abs(_rc_x - cx) <= half_before) & (np.abs(_rc_y - cy) <= half_before)
                 dx_box = _rc_x[box_mask] - cx
                 dy_box = _rc_y[box_mask] - cy
 
@@ -1637,10 +1627,10 @@ class WavefrontFittingTask(pipeBase.Task):
     def _prep_donut_for_danish(self, donut: "Donut") -> tuple:
         """Prepare a Donut for Danish fitting.
 
-        Bins and crops the stamp to an odd pixel size, estimates background noise,
-        computes the reference Zernike array ``zk_ref`` from ``batoid.zernikeTA``
-        (with optional measured-intrinsics correction), and extracts the field
-        angle.
+        Bins the stamp and forces it to an odd pixel size, estimates background
+        noise, computes the reference Zernike array ``zk_ref`` from
+        ``batoid.zernikeTA`` (with optional measured-intrinsics correction), and
+        extracts the field angle.
 
         Parameters
         ----------
@@ -1652,7 +1642,7 @@ class WavefrontFittingTask(pipeBase.Task):
         Returns
         -------
         img : np.ndarray
-            ``(npix, npix)`` float stamp, binned and cropped to odd size.
+            ``(npix, npix)`` float stamp, binned and forced to odd size.
         angle_rad : np.ndarray
             ``[fa_x_ccs, fa_y_ccs]`` field angle in radians.
         zk_ref : np.ndarray
@@ -2689,20 +2679,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         if not all_donuts:
             return QTable()
 
-        # Determine common stamp shape for padding.
-        max_ny = max(d.stamp.shape[0] for d, _ in all_donuts)
-        max_nx = max(d.stamp.shape[1] for d, _ in all_donuts)
-        # wf/model images are binned and cropped to odd size (see
-        # _prep_donut_for_danish). Derive from the actual odd cut size,
-        # 2*(stampSize//2)+1, not from stampSize itself.
-        _cut = 2 * (self.cutStampsTask.config.stampSize // 2) + 1
-        _binned = _cut // self.wfFittingTask.config.binning
-        max_wf_ny = max_wf_nx = _binned if _binned % 2 == 1 else _binned - 1
-
-        def _pad(arr, ny, nx):
-            out = np.full((ny, nx), np.nan, dtype=float)
-            out[: arr.shape[0], : arr.shape[1]] = arr
-            return out
+        # Pre-compute common sizes from config (all stamps and WF images are uniform).
+        stamp_size = self.cutStampsTask.config.stampSize
+        # WF images: binned and forced to odd size (see _prep_donut_for_danish).
+        _binned = self.cutStampsTask.config.stampSize // self.wfFittingTask.config.binning
+        wf_img_size = _binned if _binned % 2 == 1 else _binned - 1
 
         rows = []
         for d, candidate in all_donuts:
@@ -2717,13 +2698,22 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             # group claimed evaluates False here without a special-case.
             used = bool(wd.fit_success and np.any(np.isfinite(zk_dev[4:])))
 
-            stamp = _pad(d.stamp.astype(float), max_ny, max_nx)
+            stamp = (
+                d.stamp.astype(float)
+                if d.stamp is not None
+                else np.full((stamp_size, stamp_size), np.nan, dtype=float)
+            )
 
-            wf_img_raw = wd.img
             wf_img = (
-                _pad(wf_img_raw.astype(float), max_wf_ny, max_wf_nx)
-                if wf_img_raw is not None
-                else np.full((max_wf_ny, max_wf_nx), np.nan, dtype=float)
+                wd.img.astype(float)
+                if wd.img is not None
+                else np.full((wf_img_size, wf_img_size), np.nan, dtype=float)
+            )
+
+            model_img = (
+                wd.model_img.astype(float)
+                if wd.model_img is not None
+                else np.full((wf_img_size, wf_img_size), np.nan, dtype=float)
             )
 
             photo_x, photo_y, photo_mag = _encode_nearby(d.nearby_photo)
@@ -2796,11 +2786,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 # --- embedded images ---
                 "stamp": stamp,
                 "wf_img": wf_img,
-                "model_img": (
-                    _pad(wd.model_img.astype(float), max_wf_ny, max_wf_nx)
-                    if wd.model_img is not None
-                    else np.full((max_wf_ny, max_wf_nx), np.nan, dtype=float)
-                ),
+                "model_img": model_img,
             }
             rows.append(row)
 
@@ -3010,11 +2996,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             stamp = np.array(row["stamp"])
             h_px = stamp.shape[0] // 2
             vmin, vmax = np.nanpercentile(stamp, [1, 99])
-            # extent bounds the pixel *edges*, so the center pixel spans
-            # [-0.5, +0.5] and offset 0 lands on the centroid pixel's center --
-            # matching the annulus circles drawn at (0, 0) and the refcat
-            # symbols placed at raw pixel offsets. Correct because stamps are
-            # cut odd; an even stamp has no center pixel to align to.
             _edge = h_px + 0.5
             ax.imshow(
                 stamp,
