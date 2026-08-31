@@ -1123,30 +1123,19 @@ def _bkg_free_model(
 
 
 def _blend_frac(
-    img: np.ndarray,
+    resid: np.ndarray,
     model_img_bkg_free: np.ndarray,
     bkg_std: float,
     faint_frac: float = 0.05,
     sig_thresh: float = 2.0,
 ) -> float:
-    """Fraction of model flux found as significant residual in model-faint pixels.
-
-    A blending out-of-focus source produces a donut-shaped imprint in the residual
-    at locations where the forward model predicts near-zero flux. This metric
-    integrates that signal and normalises by the total model flux, so it is
-    comparable across SNR levels.
-
-    model_img_bkg_free should be the forward-model image with the fitted
-    background removed, so that faint_mask correctly identifies pixels where
-    the donut optics model predicts near-zero signal.
-    """
-    if img is None or model_img_bkg_free is None or not np.isfinite(bkg_std) or bkg_std <= 0:
+    """Fraction of significant residual flux in model-faint pixels, normalised by total model flux."""
+    if resid is None or model_img_bkg_free is None or not np.isfinite(bkg_std) or bkg_std <= 0:
         return float("nan")
     model_peak = np.nanmax(model_img_bkg_free)
     total_model_flux = np.sum(model_img_bkg_free[model_img_bkg_free > 0])
     if model_peak <= 0 or total_model_flux <= 0:
         return float("nan")
-    resid = img - model_img_bkg_free
     faint_mask = model_img_bkg_free < faint_frac * model_peak
     sig_mask = np.abs(resid) > sig_thresh * bkg_std
     return np.sum(np.abs(resid[faint_mask & sig_mask])) / total_model_flux
@@ -1532,7 +1521,7 @@ class WavefrontFittingTask(pipeBase.Task):
         label = f"group={group.group_id} n={n}"
         self.log.info("WF %s npix=%d setup=%.2fs", label, npix, _setup_elapsed)
 
-        zk_dev, params, model_imgs, success, fit_info = self._run_lstsq_fit(
+        zk_dev, model_imgs, blend_fracs, success, fit_info = self._run_lstsq_fit(
             model, x0, bounds, imgs, sky_lvl, timeout, label
         )
         zk_dev_dense = _dense_dev(zk_dev, nollIndices)
@@ -1567,15 +1556,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     fit_dy=float(_dys[i]),
                     fit_flux=float(_fluxes[i]),
                     fit_fwhm=_fit_fwhm,
-                    blend_frac=_blend_frac(
-                        _img,
-                        (
-                            _bkg_free_model(_mimg, model, params, i, self.config.bkgOrder)
-                            if _mimg is not None
-                            else None
-                        ),
-                        bkg_stds[i] if i < len(bkg_stds) else float("nan"),
-                    ),
+                    blend_frac=blend_fracs[i] if i < len(blend_fracs) else float("nan"),
                     group_id=group.group_id,
                     group_size=n,
                     fit_mode="",  # Will be set by caller with wfEstimationMode
@@ -1750,23 +1731,33 @@ class WavefrontFittingTask(pipeBase.Task):
         -------
         zk_dev : np.ndarray
             Fitted deviation Zernikes aligned to ``nollIndices`` (NaN on failure).
-        params : dict or None
-            Unpacked model parameters, or ``None`` on failure.
         model_imgs : list or None
-            Model images from ``model.model(...)``, or ``None`` on failure.
+            Full model images (background included) from ``model.model(...)``, or ``None`` on failure.
+        blend_fracs : list of float
+            Per-donut blend fraction (NaN on failure).
         success : bool
             ``True`` if the fit converged without error or timeout.
         fit_info : dict
-            Timing, convergence, and parameter summary.
+            Timing, convergence, and parameter summary (includes fluxes, dxs, dys, fwhm).
         """
         nollIndices = list(self.config.nollIndices)
+        n = len(imgs)
+        _nan_blends = [float("nan")] * n
         t0 = time.perf_counter()
-        params = None
         if self.config.wfInitialGuessOnly:
             try:
                 params = model.unpack_params(x0)
                 zk_dev = np.zeros(len(nollIndices))
                 model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
+                bkg_stds = [np.sqrt(v) for v in variances]
+                blend_fracs = [
+                    _blend_frac(
+                        imgs[i] - model_imgs[i],
+                        _bkg_free_model(model_imgs[i], model, params, i, self.config.bkgOrder),
+                        bkg_stds[i],
+                    )
+                    for i in range(n)
+                ]
                 elapsed = time.perf_counter() - t0
                 success = True
                 fit_info = dict(
@@ -1777,16 +1768,17 @@ class WavefrontFittingTask(pipeBase.Task):
                     njev=0,
                     status=0,
                     message="x0 only",
+                    fwhm=params["fwhm"],
                     fluxes=params["fluxes"],
                     dxs=params["dxs"],
                     dys=params["dys"],
-                    fwhm=params["fwhm"],
                 )
                 self.log.info("WF %s (x0 only)", label)
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
                 zk_dev = np.full(len(nollIndices), np.nan)
                 model_imgs = None
+                blend_fracs = _nan_blends
                 success = False
                 fit_info = dict(elapsed=elapsed, error=str(exc))
                 self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
@@ -1810,6 +1802,15 @@ class WavefrontFittingTask(pipeBase.Task):
                 params = model.unpack_params(result.x)
                 zk_dev = np.array(params["wavefront_params"])
                 model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
+                bkg_stds = [np.sqrt(v) for v in variances]
+                blend_fracs = [
+                    _blend_frac(
+                        imgs[i] - model_imgs[i],
+                        _bkg_free_model(model_imgs[i], model, params, i, self.config.bkgOrder),
+                        bkg_stds[i],
+                    )
+                    for i in range(n)
+                ]
                 success = bool(result.success)
                 fit_info = dict(
                     elapsed=elapsed,
@@ -1819,10 +1820,10 @@ class WavefrontFittingTask(pipeBase.Task):
                     njev=result.njev,
                     status=result.status,
                     message=result.message,
+                    fwhm=params["fwhm"],
                     fluxes=params["fluxes"],
                     dxs=params["dxs"],
                     dys=params["dys"],
-                    fwhm=params["fwhm"],
                 )
                 self.log.info(
                     "WF %s success=%s nfev=%d elapsed=%.1fs",
@@ -1835,6 +1836,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 elapsed = time.perf_counter() - t0
                 zk_dev = np.full(len(nollIndices), np.nan)
                 model_imgs = None
+                blend_fracs = _nan_blends
                 success = False
                 fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
                 self.log.warning("WF %s TIMED OUT after %.1fs", label, elapsed)
@@ -1842,10 +1844,11 @@ class WavefrontFittingTask(pipeBase.Task):
                 elapsed = time.perf_counter() - t0
                 zk_dev = np.full(len(nollIndices), np.nan)
                 model_imgs = None
+                blend_fracs = _nan_blends
                 success = False
                 fit_info = dict(elapsed=elapsed, error=str(exc))
                 self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
-        return zk_dev, params, model_imgs, success, fit_info
+        return zk_dev, model_imgs, blend_fracs, success, fit_info
 
 
 class DonutBlitzMonolithTaskConnections(
