@@ -102,15 +102,6 @@ CORNER_DET_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (s
 # Detector name -> corner, derived from CORNER_PAIRS rather than re-encoded.
 CORNER_BY_DET_NAME = {s: corner for corner, pair in CORNER_PAIRS.items() for s in pair}
 
-# Display names for DonutSourceSelectorTask rejection reasons. Reasons absent
-# here are shown verbatim. "faint_neighbor" folds into "blend" (both mean a
-# neighbor spoiled this donut).
-_SELECTOR_REASON_DISP = {
-    "faint_neighbor": "blend",
-    "too_many_blends": "many",
-    "source_limit": "limit",
-}
-
 # Colors below are drawn from the colorblind-safe Okabe-Ito palette.
 _COLOR_APERTURE = "#56B4E9"
 _COLOR_BKG_ANNULUS = "#E69F00"
