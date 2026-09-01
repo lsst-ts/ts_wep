@@ -584,6 +584,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         _CORNERS = list(CORNER_PAIRS)
         det_id_by_name = _detIdByName(catalog)
 
+        def _det_label(name):
+            """Detector header, with the id only when the detector has rows.
+
+            The 2x2 corner grid is always drawn in full, but a detector that was
+            not processed (or contributed no donuts) is absent from the catalog
+            and so has no id to report.
+            """
+            det_id = det_id_by_name.get(name)
+            return name if det_id is None else f"{name} ({det_id})"
+
         def _corner_of(r):
             for s in r["det_names"]:
                 if str(s) in CORNER_BY_DET_NAME:
@@ -734,8 +744,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 hspace=0.0, wspace=0.0,
                 width_ratios=[1, 1, 1, 2, 1, 1, 1, 2],
             )
-            sw1 = f"{corner}_SW1 ({det_id_by_name[f'{corner}_SW1']})"
-            sw0 = f"{corner}_SW0 ({det_id_by_name[f'{corner}_SW0']})"
+            sw1 = _det_label(f"{corner}_SW1")
+            sw0 = _det_label(f"{corner}_SW0")
 
             def _rec_info(r):
                 if r is None:
