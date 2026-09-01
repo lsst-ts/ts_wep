@@ -36,7 +36,7 @@ import multiprocessing as mp
 import signal
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import astropy.units as u
@@ -1420,6 +1420,27 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
     )
 
 
+@dataclass
+class _LstsqFitResult:
+    # All outputs from _run_lstsq_fit as first-class typed fields.
+    zk_dev: npt.NDArray[np.float64]
+    model_imgs: list
+    blend_fracs: list
+    success: bool
+    elapsed: float
+    fluxes: list
+    dxs: list
+    dys: list
+    fwhm: float
+    nfev: int = 0
+    cost: float = float("nan")
+    optimality: float = float("nan")
+    njev: int = 0
+    status: int = 0
+    message: str = ""
+    error: str = ""
+
+
 class WavefrontFittingTask(pipeBase.Task):
     """Task to fit wavefront aberrations from grouped donut stamps using Danish algorithm.
 
@@ -1521,23 +1542,15 @@ class WavefrontFittingTask(pipeBase.Task):
         label = f"group={group.group_id} n={n}"
         self.log.info("WF %s npix=%d setup=%.2fs", label, npix, _setup_elapsed)
 
-        zk_dev, model_imgs, blend_fracs, success, fit_info = self._run_lstsq_fit(
+        fit_result = self._run_lstsq_fit(
             model, x0, bounds, imgs, sky_lvl, timeout, label
         )
-        zk_dev_dense = _dense_dev(zk_dev, nollIndices)
-        _fit_elapsed = fit_info["elapsed"]
-        _fit_nfev = int(fit_info.get("nfev", 0))
-        _fit_cost = float(fit_info.get("cost", float("nan")))
-        _fit_fwhm = float(fit_info.get("fwhm", float("nan")))
-        _dxs = fit_info.get("dxs", [float("nan")] * n)
-        _dys = fit_info.get("dys", [float("nan")] * n)
-        _fluxes = fit_info.get("fluxes", [float("nan")] * n)
+        zk_dev_dense = _dense_dev(fit_result.zk_dev, nollIndices)
 
         donuts_out = []
         for i, d in enumerate(all_donuts):
             defocal = "intra" if int(d.det_id) in _INTRA_FOCAL_DET_IDS else "extra"
             _img = imgs[i] if i < len(imgs) else None
-            _mimg = model_imgs[i] if (model_imgs is not None and i < len(model_imgs)) else None
             donuts_out.append(
                 WfResult(
                     donut_id=int(d.id),
@@ -1546,17 +1559,17 @@ class WavefrontFittingTask(pipeBase.Task):
                     zk_dev=zk_dev_dense,
                     zk_intrinsic=_dense_intrinsic(d),
                     img=_img,
-                    model_img=_mimg,
-                    fit_success=success,
-                    fit_elapsed=_fit_elapsed,
+                    model_img=fit_result.model_imgs[i],
+                    fit_success=fit_result.success,
+                    fit_elapsed=fit_result.elapsed,
                     setup_elapsed=_setup_elapsed,
-                    fit_nfev=_fit_nfev,
-                    fit_cost=_fit_cost,
-                    fit_dx=float(_dxs[i]),
-                    fit_dy=float(_dys[i]),
-                    fit_flux=float(_fluxes[i]),
-                    fit_fwhm=_fit_fwhm,
-                    blend_frac=blend_fracs[i] if i < len(blend_fracs) else float("nan"),
+                    fit_nfev=fit_result.nfev,
+                    fit_cost=fit_result.cost,
+                    fit_dx=float(fit_result.dxs[i]),
+                    fit_dy=float(fit_result.dys[i]),
+                    fit_flux=float(fit_result.fluxes[i]),
+                    fit_fwhm=fit_result.fwhm,
+                    blend_frac=fit_result.blend_fracs[i],
                     group_id=group.group_id,
                     group_size=n,
                     fit_mode="",  # Will be set by caller with wfEstimationMode
@@ -1565,11 +1578,20 @@ class WavefrontFittingTask(pipeBase.Task):
         return {
             "group_id": group.group_id,
             "group_size": n,
-            "zk_dev": zk_dev,
-            "success": success,
-            "fit_info": fit_info,
+            "zk_dev": fit_result.zk_dev,
+            "success": fit_result.success,
+            "fit_info": {
+                "elapsed": fit_result.elapsed,
+                "nfev": fit_result.nfev,
+                "cost": fit_result.cost,
+                "optimality": fit_result.optimality,
+                "njev": fit_result.njev,
+                "status": fit_result.status,
+                "message": fit_result.message,
+                "error": fit_result.error,
+            },
             "donuts": donuts_out,
-            "model_imgs": model_imgs,
+            "model_imgs": fit_result.model_imgs,
             "imgs": imgs,
             "sensors": [d.sensor for d in all_donuts],
         }
@@ -1729,16 +1751,8 @@ class WavefrontFittingTask(pipeBase.Task):
 
         Returns
         -------
-        zk_dev : np.ndarray
-            Fitted deviation Zernikes aligned to ``nollIndices`` (NaN on failure).
-        model_imgs : list or None
-            Full model images (background included) from ``model.model(...)``, or ``None`` on failure.
-        blend_fracs : list of float
-            Per-donut blend fraction (NaN on failure).
-        success : bool
-            ``True`` if the fit converged without error or timeout.
-        fit_info : dict
-            Timing, convergence, and parameter summary (includes fluxes, dxs, dys, fwhm).
+        _LstsqFitResult
+            All fit outputs as first-class typed fields; see `_LstsqFitResult`.
         """
         nollIndices = list(self.config.nollIndices)
         n = len(imgs)
@@ -1759,29 +1773,39 @@ class WavefrontFittingTask(pipeBase.Task):
                     for i in range(n)
                 ]
                 elapsed = time.perf_counter() - t0
-                success = True
-                fit_info = dict(
+                self.log.info("WF %s (x0 only)", label)
+                return _LstsqFitResult(
+                    zk_dev=zk_dev,
+                    model_imgs=model_imgs,
+                    blend_fracs=blend_fracs,
+                    success=True,
                     elapsed=elapsed,
+                    fluxes=params["fluxes"],
+                    dxs=params["dxs"],
+                    dys=params["dys"],
+                    fwhm=params["fwhm"],
                     nfev=0,
                     cost=float("nan"),
                     optimality=float("nan"),
                     njev=0,
                     status=0,
                     message="x0 only",
-                    fwhm=params["fwhm"],
-                    fluxes=params["fluxes"],
-                    dxs=params["dxs"],
-                    dys=params["dys"],
                 )
-                self.log.info("WF %s (x0 only)", label)
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
-                zk_dev = np.full(len(nollIndices), np.nan)
-                model_imgs = None
-                blend_fracs = _nan_blends
-                success = False
-                fit_info = dict(elapsed=elapsed, error=str(exc))
                 self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
+                return _LstsqFitResult(
+                    zk_dev=np.full(len(nollIndices), np.nan),
+                    model_imgs=[None] * n,
+                    blend_fracs=_nan_blends,
+                    success=False,
+                    elapsed=elapsed,
+                    fluxes=[float("nan")] * n,
+                    dxs=[float("nan")] * n,
+                    dys=[float("nan")] * n,
+                    fwhm=float("nan"),
+                    error=str(exc),
+                )
         else:
             galsim.errors.raise_fft_size_error = True
             try:
@@ -1811,44 +1835,60 @@ class WavefrontFittingTask(pipeBase.Task):
                     )
                     for i in range(n)
                 ]
-                success = bool(result.success)
-                fit_info = dict(
+                self.log.info(
+                    "WF %s success=%s nfev=%d elapsed=%.1fs",
+                    label,
+                    bool(result.success),
+                    result.nfev,
+                    elapsed,
+                )
+                return _LstsqFitResult(
+                    zk_dev=zk_dev,
+                    model_imgs=model_imgs,
+                    blend_fracs=blend_fracs,
+                    success=bool(result.success),
                     elapsed=elapsed,
+                    fluxes=params["fluxes"],
+                    dxs=params["dxs"],
+                    dys=params["dys"],
+                    fwhm=params["fwhm"],
                     nfev=result.nfev,
                     cost=result.cost,
                     optimality=result.optimality,
                     njev=result.njev,
                     status=result.status,
                     message=result.message,
-                    fwhm=params["fwhm"],
-                    fluxes=params["fluxes"],
-                    dxs=params["dxs"],
-                    dys=params["dys"],
-                )
-                self.log.info(
-                    "WF %s success=%s nfev=%d elapsed=%.1fs",
-                    label,
-                    success,
-                    result.nfev,
-                    elapsed,
                 )
             except _WfFitTimeoutError:
                 elapsed = time.perf_counter() - t0
-                zk_dev = np.full(len(nollIndices), np.nan)
-                model_imgs = None
-                blend_fracs = _nan_blends
-                success = False
-                fit_info = dict(elapsed=elapsed, error=f"timeout after {timeout:.0f}s")
                 self.log.warning("WF %s TIMED OUT after %.1fs", label, elapsed)
+                return _LstsqFitResult(
+                    zk_dev=np.full(len(nollIndices), np.nan),
+                    model_imgs=[None] * n,
+                    blend_fracs=_nan_blends,
+                    success=False,
+                    elapsed=elapsed,
+                    fluxes=[float("nan")] * n,
+                    dxs=[float("nan")] * n,
+                    dys=[float("nan")] * n,
+                    fwhm=float("nan"),
+                    error=f"timeout after {timeout:.0f}s",
+                )
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
-                zk_dev = np.full(len(nollIndices), np.nan)
-                model_imgs = None
-                blend_fracs = _nan_blends
-                success = False
-                fit_info = dict(elapsed=elapsed, error=str(exc))
                 self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
-        return zk_dev, model_imgs, blend_fracs, success, fit_info
+                return _LstsqFitResult(
+                    zk_dev=np.full(len(nollIndices), np.nan),
+                    model_imgs=[None] * n,
+                    blend_fracs=_nan_blends,
+                    success=False,
+                    elapsed=elapsed,
+                    fluxes=[float("nan")] * n,
+                    dxs=[float("nan")] * n,
+                    dys=[float("nan")] * n,
+                    fwhm=float("nan"),
+                    error=str(exc),
+                )
 
 
 class DonutBlitzMonolithTaskConnections(
