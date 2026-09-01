@@ -46,9 +46,13 @@ from .utils import (
     CORNER_BY_DET_NAME,
     CORNER_PAIRS,
     _MAX_NEARBY,
-    _ZK_JMAX,
     _resolveColorLogEnabled,
 )
+
+# Stand-in for "this record has no Zernikes": rows the fitter never produced
+# deviations for (unfitted surplus donuts, blank layout padding). Noll-indexed
+# like the real thing, just empty, so `_draw_bar` needs no special case.
+_NO_ZK = np.zeros(0)
 
 # Colors below are drawn from the colorblind-safe Okabe-Ito palette.
 _COLOR_APERTURE = "#56B4E9"
@@ -522,7 +526,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             elapsed = first["fit_elapsed"]
             nfev = first["fit_nfev"]
             fwhm = first["fit_fwhm"]
-            zk_by_noll = {j: first[f"Z{j}_dev"] for j in range(4, _ZK_JMAX + 1)}
+            # Noll-indexed deviations in µm; element j is Noll j (see
+            # _buildCatalog), truncated at the highest fitted Noll index.
+            zk_dev = np.asarray(first["zk_dev_ccs"].to_value(u.micron), dtype=float)
 
             donuts_out = []
             for r in rows:
@@ -545,7 +551,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 "success": success,
                 "fit_info": {"elapsed": elapsed, "nfev": nfev, "fwhm": fwhm},
                 "donuts": donuts_out,
-                "zk_by_noll": zk_by_noll,
+                "zk_dev": zk_dev,
             })
 
         # Candidate donuts that no fit consumed (paired-mode surplus: no partner
@@ -574,7 +580,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     "model_img": None,
                     "blend_frac": row["blend_frac"],
                 }],
-                "zk_by_noll": {},
+                "zk_dev": _NO_ZK,
             })
 
         if not plottable and not unfitted:
@@ -631,8 +637,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             if label:
                 ax.set_title(label, fontsize=5, pad=1)
 
-        def _draw_bar(ax, zk_by_noll, inset_label=""):
+        def _draw_bar(ax, zk_dev, inset_label=""):
             """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels.
+
+            ``zk_dev`` is Noll-indexed (element j is Noll j) and in µm; it may be
+            shorter than ``ZK_MAX`` (or empty) since it stops at the highest
+            fitted Noll index.
 
             Always spans ZK_MIN..ZK_MAX regardless of the configured
             ``nollIndices`` so plots stay comparable across configs; indices
@@ -640,7 +650,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             """
             bar_noll = [j for j in range(ZK_MIN, ZK_MAX + 1)]
             vals = [
-                v if np.isfinite(v := zk_by_noll.get(j, 0.0)) else 0.0
+                zk_dev[j] if j < len(zk_dev) and np.isfinite(zk_dev[j]) else 0.0
                 for j in bar_noll
             ]
             ax.bar(bar_noll, vals, color="k", width=0.8)
@@ -760,26 +770,22 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         (d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"), None
                     )
                     elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(r_intra)
-                    zk_by_noll_i = r_intra.get(
-                        "zk_by_noll", {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
-                    )
+                    zk_dev_i = r_intra.get("zk_dev", _NO_ZK)
                 else:
                     intra_rec = None
                     elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(None)
-                    zk_by_noll_i = {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
+                    zk_dev_i = _NO_ZK
 
                 if r_extra is not None:
                     extra_rec = next(
                         (d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"), None
                     )
                     elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(r_extra)
-                    zk_by_noll_e = r_extra.get(
-                        "zk_by_noll", {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
-                    )
+                    zk_dev_e = r_extra.get("zk_dev", _NO_ZK)
                 else:
                     extra_rec = None
                     elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(None)
-                    zk_by_noll_e = {j: float("nan") for j in range(4, _ZK_JMAX + 1)}
+                    zk_dev_e = _NO_ZK
 
                 intra_img = intra_rec["img"] if intra_rec else None
                 intra_mod = intra_rec["model_img"] if intra_rec else None
@@ -801,7 +807,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
 
                 def _triplet_and_bar(col_start, data, model, det_hdr, label,
-                                     sid, fwhm, zk_by_noll, blend_frac_val=float("nan")):
+                                     sid, fwhm, zk_dev, blend_frac_val=float("nan")):
                     if data is not None:
                         vmax = np.nanpercentile(np.abs(data), 99) or 1.0
                         has_model = model is not None
@@ -832,7 +838,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                                 ax.text(0.02, 0.98, f"blend={blend_frac_val:.3f}", **ann_kw)
                         ax_bar = fig.add_subplot(inner[row_idx, col_start + 3])
                         if has_model:
-                            _draw_bar(ax_bar, zk_by_noll, inset_label=label)
+                            _draw_bar(ax_bar, zk_dev, inset_label=label)
                         else:
                             ax_bar.axis("off")
                     else:
@@ -843,9 +849,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                                 ax.set_title(det_hdr, fontsize=5, pad=1)
 
                 _triplet_and_bar(0, intra_img, intra_mod, intra_hdr, intra_label,
-                                 intra_sid, fwhm_i, zk_by_noll_i, intra_blend)
+                                 intra_sid, fwhm_i, zk_dev_i, intra_blend)
                 _triplet_and_bar(4, extra_img, extra_mod, extra_hdr, extra_label,
-                                 extra_sid, fwhm_e, zk_by_noll_e, extra_blend)
+                                 extra_sid, fwhm_e, zk_dev_e, extra_blend)
 
         proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
         bt = butler_times or {}
