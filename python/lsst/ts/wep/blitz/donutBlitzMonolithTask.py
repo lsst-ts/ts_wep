@@ -74,6 +74,7 @@ from .utils import (
     _bin_stamp_odd,
     _colorize,
     _resolveColorLogEnabled,
+    _rotate_zk,
 )
 from .wavefrontFittingTask import (
     WavefrontFittingTask,
@@ -637,11 +638,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         boresight_rot_rad = visitInfo.boresightRotAngle.asRadians()
         boresight_par_rad = visitInfo.boresightParAngle.asRadians()
         boresight_alt_rad = visitInfo.boresightAzAlt.getLatitude().asRadians()
-        rtp_deg = (
-            (np.degrees(boresight_par_rad - boresight_rot_rad - np.pi / 2) + 180) % 360 - 180
-            if self.wfFittingTask.config.modelSpiderShadows
-            else None
-        )
+        # rotTelPos, wrapped to (-pi, pi]. Always computed: the CCS -> OCS Zernike
+        # rotation in _buildCatalog needs it, whereas spider shadows are opt-in.
+        rtp_rad = (boresight_par_rad - boresight_rot_rad - np.pi / 2 + np.pi) % (2 * np.pi) - np.pi
+        rtp_deg = np.degrees(rtp_rad) if self.wfFittingTask.config.modelSpiderShadows else None
 
         # Store task and mode for WF worker access
         _CALIB_STORE["wf_fitting_task"] = self.wfFittingTask
@@ -793,6 +793,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             danish_elapsed=t_wf1 - t_wf0,
             photo_filter_name=photo_filter_name,
             astrom_filter_name=self.config.astromRefFilter,
+            rot_tel_pos_rad=rtp_rad,
         )
 
         if self.config.savePlots:
@@ -820,6 +821,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         danish_elapsed: float = 0.0,
         photo_filter_name: str = "",
         astrom_filter_name: str = "",
+        rot_tel_pos_rad: float = 0.0,
     ) -> QTable:
         """Build a per-donut QTable covering every donut cut from this visit.
 
@@ -837,6 +839,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             also appear in ``donuts``; the table carries one row per donut.
         visit_id : int
             Visit identifier.
+        rot_tel_pos_rad : float
+            Camera rotator angle on sky (rotTelPos) in radians, used to rotate the
+            Zernikes from the camera into the optical coordinate system.
 
         Returns
         -------
@@ -853,6 +858,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 (paired mode, surplus donut with no partner: ``fit_mode`` empty,
                 ``group`` -1) or because its fit timed out or raised
                 (``fit_success`` False).  Unused rows have all-NaN Zernikes.
+
+            Zernikes are Noll-indexed array columns in µm: ``zk_dev_ccs`` and
+            ``zk_intrinsic_ccs`` in the camera coordinate system (as fit), plus
+            ``zk_dev_ocs`` and ``zk_intrinsic_ocs`` in the optical coordinate
+            system (the camera frame rotated by ``-rot_tel_pos_rad``).  The
+            deviations stop at the highest fitted Noll index, the intrinsics run
+            to ``_ZK_JMAX``.
 
             Array columns (``stamp``, ``model_img``, ``wf_img``) are zero-padded
             to a common shape.  ``wf_img`` is filled for every donut with a
@@ -1056,12 +1068,20 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             rows.append(row)
 
         table = QTable(rows)
-        # Zernikes in the camera coordinate system (hence "_ccs"), Noll-indexed
-        # along axis 1 the way galsim orders Zernike coefficients: [:, j] is Noll j
-        # across donuts and [i] is donut i's coefficient vector. Slots below Noll 4
-        # are carried for indexing only (NaN for deviations, 0 for intrinsics).
-        table["zk_dev_ccs"] = np.array(zk_dev_rows) * 1e6 * u.micron
-        table["zk_intrinsic_ccs"] = np.array(zk_int_rows) * 1e6 * u.micron
+        # Zernikes are Noll-indexed along axis 1 the way galsim orders Zernike
+        # coefficients: [:, j] is Noll j across donuts and [i] is donut i's
+        # coefficient vector. Slots below Noll 4 are carried for indexing only
+        # (NaN for deviations, 0 for intrinsics).
+        zk_dev_um = np.array(zk_dev_rows) * 1e6
+        zk_int_um = np.array(zk_int_rows) * 1e6
+        # Camera coordinate system, i.e. as fit.
+        table["zk_dev_ccs"] = zk_dev_um * u.micron
+        table["zk_intrinsic_ccs"] = zk_int_um * u.micron
+        # Optical coordinate system: the camera frame rotated by -rotTelPos, so
+        # m != 0 terms are comparable across visits taken at different rotator
+        # angles.
+        table["zk_dev_ocs"] = _rotate_zk(zk_dev_um, -rot_tel_pos_rad) * u.micron
+        table["zk_intrinsic_ocs"] = _rotate_zk(zk_int_um, -rot_tel_pos_rad) * u.micron
         table.meta["visit_id"] = visit_id
         table.meta["run_elapsed"] = run_elapsed
         table.meta["refcat_elapsed"] = refcat_elapsed
@@ -1074,6 +1094,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["noll_indices"] = list(self.wfFittingTask.config.nollIndices)
         table.meta["zk_dev_jmax"] = zk_dev_jmax
         table.meta["zk_jmax"] = _ZK_JMAX
+        table.meta["rot_tel_pos"] = np.degrees(rot_tel_pos_rad)
         table.meta["det_meta"] = det_meta
         table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
         table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
