@@ -993,6 +993,22 @@ def _run_cutout_worker(args: tuple) -> dict:
     return _cutoutPipeline(sensor_name, t_dispatch)
 
 
+def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:
+    """Bin a stamp and trim it to an odd pixel size.
+
+    Danish wants an odd-sized image so the donut centre lands on a pixel
+    centre. Shared by `_prep_donut_for_danish` and `_buildCatalog` so that
+    donuts which never reached a fit (paired-mode surplus) still get a WF
+    image on the same pixel grid as the fitted ones.
+    """
+    img = stamp.astype(float)
+    if binning > 1:
+        img = binArray(img, binning)
+    if img.shape[0] % 2 == 0:
+        img = img[:-1, :-1]
+    return img
+
+
 # Maximum Noll index fit/reported. Dense Noll-indexed arrays are length
 # _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
 _ZK_JMAX = 66
@@ -1662,11 +1678,7 @@ class WavefrontFittingTask(pipeBase.Task):
         det_id = donut.det_id
         defocalSign = +1 if det_id in _EXTRA_FOCAL_DET_IDS else -1
 
-        img = donut.stamp.astype(float)
-        if binning > 1:
-            img = binArray(img, binning)
-        if img.shape[0] % 2 == 0:
-            img = img[:-1, :-1]
+        img = _bin_stamp_odd(donut.stamp, binning)
         diff = (img[1:] - img[:-1]).ravel()
         bkg_std = median_abs_deviation(diff, scale="normal") / np.sqrt(2.0)
 
@@ -2643,7 +2655,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 (``fit_success`` False).  Unused rows have all-NaN Zernikes.
 
             Array columns (``stamp``, ``model_img``, ``wf_img``) are zero-padded
-            to a common shape.  Visit-level and per-sensor scalars are stored in
+            to a common shape.  ``wf_img`` is filled for every donut with a
+            stamp -- from the fitter when a fit ran, otherwise by binning the
+            stamp the same way -- so only ``model_img`` is all-NaN for unused
+            donuts.  Visit-level and per-sensor scalars are stored in
             ``table.meta``.
         """
         # Build lookup: (id, sensor) -> (wf donut entry, group index).
@@ -2742,11 +2757,15 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 else np.full((stamp_size, stamp_size), np.nan, dtype=float)
             )
 
-            wf_img = (
-                wd.img.astype(float)
-                if wd.img is not None
-                else np.full((wf_img_size, wf_img_size), np.nan, dtype=float)
-            )
+            # Donuts no fit consumed (paired-mode surplus) have no WF image from
+            # the fitter, so bin their stamp here with the same prep the fitter
+            # would have applied. Keeps them plottable as data-only rows.
+            if wd.img is not None:
+                wf_img = wd.img.astype(float)
+            elif d.stamp is not None:
+                wf_img = _bin_stamp_odd(d.stamp, self.wfFittingTask.config.binning)
+            else:
+                wf_img = np.full((wf_img_size, wf_img_size), np.nan, dtype=float)
 
             model_img = (
                 wd.model_img.astype(float)
@@ -2762,7 +2781,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "det_id": d.det_id,
                 "sensor": d.sensor,
                 "id": sid,
-                "defocal": wd.defocal,
+                # From the detector, not from the fit result: donuts no fit
+                # consumed still belong to a defocal side.
+                "defocal": "intra" if d.det_id in _INTRA_FOCAL_DET_IDS else "extra",
                 "band": d.band,
                 # candidate: passed every selection/quality cut.
                 # used: a fit consumed it and returned a wavefront.
@@ -2845,6 +2866,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["bkg_annulus_inner_frac"] = self.measureCandidatesTask.config.bkgAnnulusInnerFrac
         table.meta["bkg_annulus_outer_frac"] = self.measureCandidatesTask.config.bkgAnnulusOuterFrac
         table.meta["max_donuts"] = self.cutStampsTask.config.maxDonuts
+        table.meta["wf_mode"] = self.config.wfEstimationMode
         return table
 
 
@@ -3255,6 +3277,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         cutout_elapsed = meta["cutout_elapsed"]
         danish_elapsed = meta["danish_elapsed"]
         noll_cfg = meta["noll_indices"]
+        wf_mode = meta["wf_mode"]
         ZK_MIN, ZK_MAX = 4, 28
 
         # Reconstruct wf_results-like list from QTable by grouping on "group" column.
@@ -3310,7 +3333,36 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 "zk_by_noll": zk_by_noll,
             })
 
-        if not plottable:
+        # Candidate donuts that no fit consumed (paired-mode surplus: no partner
+        # on the other sensor, so ``group`` is -1 and ``fit_mode`` empty). They
+        # have no model or Zernikes, but their binned stamp is still worth
+        # seeing, so carry them as data-only single-donut records.
+        unfitted = []
+        for row in catalog:
+            if row["group"] >= 0 or not row["candidate"]:
+                continue
+            img = np.array(row["wf_img"])
+            if np.all(np.isnan(img)):
+                continue
+            unfitted.append({
+                "mode": wf_mode,
+                "sensors": [row["sensor"]],
+                "success": False,
+                "fit_info": {
+                    "elapsed": float("nan"), "nfev": 0, "fwhm": float("nan"),
+                },
+                "donuts": [{
+                    "donut_id": row["id"],
+                    "sensor": row["sensor"],
+                    "defocal": row["defocal"],
+                    "img": img,
+                    "model_img": None,
+                    "blend_frac": row["blend_frac"],
+                }],
+                "zk_by_noll": {},
+            })
+
+        if not plottable and not unfitted:
             self.log.info("No WF results with model images; skipping WF diagnostic plot.")
             return
 
@@ -3392,6 +3444,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         for r in plottable:
             by_corner[_corner_of(r)].append(r)
 
+        unfitted_by_corner: dict[str, list] = {c: [] for c in _CORNERS}
+        for r in unfitted:
+            unfitted_by_corner[_corner_of(r)].append(r)
+
 
         def _explode(r):
             """Split a group record into one record per donut, sharing group fields."""
@@ -3414,18 +3470,20 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         row_pairs: dict[str, list[tuple]] = {}
         for corner, corner_results in by_corner.items():
-            mode = corner_results[0].get("mode") if corner_results else None
-            if mode == "paired":
+            if wf_mode == "paired":
                 # The group *is* an intra/extra pair, so it supplies both halves
                 # of the row; the donut of each defocal type is picked out below.
-                row_pairs[corner] = [(r, r) for r in corner_results]
+                fit_rows = [(r, r) for r in corner_results]
             else:
                 # These groups don't pair donuts, so flatten to one record per
                 # donut and pair for layout only. Exploding is a no-op for
                 # "unpaired" (one donut per group already).
-                row_pairs[corner] = _pair_up(
+                fit_rows = _pair_up(
                     [s for r in corner_results for s in _explode(r)]
                 )
+            # Surplus donuts have no partner by construction, so they lay out
+            # positionally below the fitted rows, one side of each row blank.
+            row_pairs[corner] = fit_rows + _pair_up(unfitted_by_corner[corner])
 
         CELL = 1.0
         ROW_H = 1.0
@@ -3569,9 +3627,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             "  ".join(f"{k}={v:.1f}s" for k, v in bt.items() if v > 0.0)
             or f"total={butler_elapsed:.1f}s"
         )
-        first_mode = plottable[0]["mode"] if plottable else ""
         fig.suptitle(
-            f"WF fits  visit={visit_id}  mode={first_mode}\n"
+            f"WF fits  visit={visit_id}  mode={wf_mode}\n"
             f"butler.get:  {butler_line}\n"
             f"refcat={refcat_elapsed:.1f}s  cutout={cutout_elapsed:.1f}s  "
             f"danish={danish_elapsed:.1f}s  proc_total={proc_total:.1f}s",
