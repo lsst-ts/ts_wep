@@ -139,15 +139,3 @@ def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:
     if img.shape[0] % 2 == 0:
         img = img[:-1, :-1]
     return img
-
-
-def _zk_cols(suffix: str, zk: np.ndarray) -> dict:
-    """Return ``{f"Z{j}_{suffix}": um}`` columns for Noll 4..``_ZK_JMAX``.
-
-    ``zk`` is a Noll-indexed array in metres of length ``_ZK_JMAX + 1``; values
-    are converted to µm, with NaN passed through as NaN.
-    """
-    return {
-        f"Z{j}_{suffix}": zk[j] * 1e6 if not np.isnan(zk[j]) else float("nan")
-        for j in range(4, _ZK_JMAX + 1)
-    }
