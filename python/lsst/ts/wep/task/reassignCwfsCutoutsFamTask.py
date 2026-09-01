@@ -66,7 +66,33 @@ class ReassignCwfsCutoutsFamTaskConnections(
 
     def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
         """This will drop intra quanta and assign
-        them to the extra detector quanta
+        them to the extra detector quanta.
+
+        Notes
+        -----
+        This task relies on the convention that the intra-focal and
+        extra-focal exposures are consecutive visits (the extra-focal
+        visit is ``visit + 1`` of the intra-focal visit) and that each
+        intra-focal detector is paired with the extra-focal detector one
+        id below it (``detector - 1``). The intra-focal donut stamps are
+        reassigned to the quantum of their paired extra-focal data id.
+
+        Because of this, the data query must select the intra-focal
+        detectors from the intra-focal visit and the extra-focal detectors
+        from the extra-focal visit, e.g.::
+
+            -d "instrument='LSSTCam' and (
+                    (visit.id=<intra_visit>
+                     and detector.id in (192,196,200,204))
+                 or (visit.id=<extra_visit>
+                     and detector.id in (191,195,199,203)))"
+
+        If instead both visits are selected on their own (without
+        restricting the detectors), the extra-focal visit will also
+        contain intra-focal detectors. Those intra-focal detectors resolve
+        to a paired extra-focal data id that does not exist in the quantum
+        graph, and a `RuntimeError` will be raised. Restrict each visit to
+        the correct set of detectors as shown above to avoid this.
         """
         to_do = set(adjuster.iter_data_ids())
         seen = set()
@@ -83,9 +109,13 @@ class ReassignCwfsCutoutsFamTaskConnections(
                     data_id, visit=int(data_id["visit"]) + 1, detector=int(data_id["detector"]) - 1
                 )
 
-                assert extra_focal_data_id in seen or extra_focal_data_id in to_do, (
-                    f"DataId {extra_focal_data_id} not found in seen or to_do sets."
-                )
+                if extra_focal_data_id not in seen and extra_focal_data_id not in to_do:
+                    raise RuntimeError(
+                        f"Could not find the extra-focal data id {extra_focal_data_id} paired "
+                        f"with intra-focal data id {data_id}. Restrict each visit to the correct "
+                        "detectors (intra-focal visit to the intra-focal detectors, extra-focal "
+                        "visit to the extra-focal detectors); see the docstring for an example."
+                    )
 
                 inputs = adjuster.get_inputs(data_id)
                 adjuster.add_input(extra_focal_data_id, "donutStampsIn", inputs["donutStampsIn"][0])

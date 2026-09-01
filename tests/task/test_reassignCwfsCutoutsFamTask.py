@@ -106,6 +106,20 @@ class TestReassignCwfsCutoutsFamTaskConnections(unittest.TestCase):
         self.assertEqual(adjuster.removed, [])
         self.assertEqual(adjuster.added, [])
 
+    def testAdjustAllQuantaRaisesWhenExtraFocalPairMissing(self) -> None:
+        # An intra-focal detector that appears in the extra-focal visit
+        # (e.g. both visits selected without restricting detectors) has no
+        # paired extra-focal quantum, so a RuntimeError should be raised.
+        universe = DimensionUniverse()
+        strayIntraDataId = DataCoordinate.standardize(
+            visit=101, detector=192, instrument="LSSTCam", universe=universe
+        )
+        connections = self._makeConnections(customQG=False)
+        adjuster = FakeQuantaAdjuster([self.extraDataId, strayIntraDataId])
+
+        with self.assertRaises(RuntimeError):
+            connections.adjust_all_quanta(adjuster)
+
 
 class TestReassignCwfsCutoutsFamTask(unittest.TestCase):
     def setUp(self) -> None:
