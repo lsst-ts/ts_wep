@@ -228,19 +228,24 @@ def configClass(config: Union[str, dict, None, Any], classObj: Any) -> Any:
     if not inspect.isclass(classObj):
         raise TypeError("classObj must be a class.")
 
+    # Keep an un-narrowed reference for construction: using classObj as
+    # the second isinstance argument below narrows it to type[object],
+    # whose __init__ takes no keyword arguments.
+    cls: Any = classObj
+
     # If config is an instance of this class, just return it
     if isinstance(config, classObj):
         return config
 
     # If config is a string, pass config as configFile
     if isinstance(config, str):
-        return classObj(configFile=config)
+        return cls(configFile=config)
     # If it's a dictionary, pass keyword arguments
     elif isinstance(config, dict):
-        return classObj(**config)
+        return cls(**config)
     # If it's None, try instantiating with defaults
     elif config is None:
-        return classObj()
+        return cls()
     # If it's none of these, raise an error
     else:
         raise TypeError("config must be a string, dictionary, None, or an instance of classObj.")
