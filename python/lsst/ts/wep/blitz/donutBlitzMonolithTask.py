@@ -35,6 +35,7 @@ import astropy.units as u
 import batoid
 import numpy as np
 from astropy.table import QTable, Table
+from galsim.zernike import noll_to_zern
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -81,6 +82,77 @@ from .wavefrontFittingTask import (
     _build_wf_groups,
     _wf_fitting_worker,
 )
+
+
+def build_noll_pairs(jmax):
+    """Return (pairs, singles) for Noll indices 1..jmax.
+
+    Assumes jmax is pair-complete (no truncated doublets).
+
+    pairs   : list of (j_cos, j_sin, n, |m|) doublets
+    singles : list of j with m==0
+    """
+    pairs, singles = [], []
+    j = 1
+    while j <= jmax:
+        n, m = noll_to_zern(j)
+        if m == 0:
+            singles.append(j)
+            j += 1
+            continue
+        if m > 0:
+            pairs.append((j, j + 1, n, m))
+        else:
+            pairs.append((j + 1, j, n, abs(m)))
+        j += 2
+    return pairs, singles
+
+
+def transform_eb(
+    zk_list,
+    thx,
+    thy,
+):
+    """Transform Noll-indexed Zernike coefficients to E/B (cosine/sine) representation.
+
+    Rotates each spin-m Zernike doublet by m*phi, phi = atan2(thy, thx),
+    referenced to the same axes as the Zernike azimuth. Same Noll layout:
+    cosine slot -> aligned (E), sine slot -> cross (B). The E/B values are
+    axis-independent; i.e., independent of the frame (_ccs) names.
+
+    NaN handling: an output doublet is defined only if BOTH members are
+    finite and phi is valid; otherwise both slots are NaN. m==0 terms pass
+    through (NaN preserved).
+    """
+    phi = np.arctan2(thy, thx)
+    phi_bad = ~np.isfinite(phi) | ((thx == 0.0) & (thy == 0.0))
+
+    out_list = []
+    for zk in zk_list:
+        unit = getattr(zk, "unit", None)
+        zk_val = zk.value if isinstance(zk, u.Quantity) else np.asarray(zk)
+        if zk_val.ndim != 2:
+            raise ValueError(f"zk must be 2D [nrow, n_noll]; got {zk_val.shape}")
+
+        pairs, _ = build_noll_pairs(zk_val.shape[1] - 1)
+        out = zk_val.copy()          # m==0 slots pass through, incl. NaNs
+
+        for (j_cos, j_sin, _, m_abs) in pairs:
+            c_cos = zk_val[:, j_cos]
+            c_sin = zk_val[:, j_sin]
+            a = m_abs * phi
+            ca, sa = np.cos(a), np.sin(a)
+            e = ca * c_cos + sa * c_sin
+            b = -sa * c_cos + ca * c_sin
+            bad = (~np.isfinite(c_cos)) | (~np.isfinite(c_sin)) | phi_bad
+            out[:, j_cos] = np.where(bad, np.nan, e)
+            out[:, j_sin] = np.where(bad, np.nan, b)
+
+        if unit is not None:
+            out = out << unit
+        out_list.append(out)
+
+    return out_list
 
 
 class DonutBlitzMonolithTaskConnections(
@@ -1077,6 +1149,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # Camera coordinate system, i.e. as fit.
         table["zk_dev_ccs"] = zk_dev_um * u.micron
         table["zk_intrinsic_ccs"] = zk_int_um * u.micron
+        dev_eb, intrinsic_eb = transform_eb(
+            [table["zk_dev_ccs"], table["zk_intrinsic_ccs"]],
+            table["thx_ccs"], table["thy_ccs"]
+        )
+        table["zk_dev_eb"] = dev_eb
+        table["zk_intrinsic_eb"] = intrinsic_eb
         # Optical coordinate system: the camera frame rotated by -rotTelPos, so
         # m != 0 terms are comparable across visits taken at different rotator
         # angles.
