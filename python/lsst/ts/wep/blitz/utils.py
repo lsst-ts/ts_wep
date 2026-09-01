@@ -25,6 +25,7 @@ __all__ = []
 
 import sys
 
+import galsim
 import numpy as np
 
 from lsst.ts.wep.instrument import Instrument
@@ -139,3 +140,27 @@ def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:
     if img.shape[0] % 2 == 0:
         img = img[:-1, :-1]
     return img
+
+
+def _rotate_zk(zk: np.ndarray, theta: float) -> np.ndarray:
+    """Rotate dense Noll-indexed Zernike coefficients into a rotated frame.
+
+    ``zk`` is ``(nrow, njmax + 1)``, Noll-indexed along axis 1 (index j holds
+    Zernike j) and no longer than ``_ZK_JMAX + 1``; ``theta`` is the frame
+    rotation in radians.
+
+    Coefficients only mix within an (n, |m|) pair, so the matrix is built once at
+    ``_ZK_JMAX`` -- a complete radial order, which galsim requires -- and the
+    input is zero-padded up to it. Sizing the matrix from ``zk``'s own width
+    would instead raise whenever that width splits a pair.
+
+    NaN slots (Noll indices below 4, indices that were not fitted, unfit donuts)
+    rotate as zero and are then restored, so the output is defined exactly where
+    the input was.
+    """
+    rot = galsim.zernike.zernikeRotMatrix(_ZK_JMAX, theta)
+    padded = np.zeros((len(zk), _ZK_JMAX + 1))
+    padded[:, : zk.shape[1]] = np.nan_to_num(zk, nan=0.0)
+    # Row-vector convention: each row is one donut's coefficient vector.
+    out = (padded @ rot)[:, : zk.shape[1]]
+    return np.where(np.isnan(zk), np.nan, out)

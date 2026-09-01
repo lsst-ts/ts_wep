@@ -319,6 +319,37 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
         ),
     )
 
+    def validate(self):
+        super().validate()
+        indices = set(self.nollIndices)
+        out_of_range = sorted(j for j in indices if j < 4 or j > _ZK_JMAX)
+        if out_of_range:
+            raise pexConfig.FieldValidationError(
+                self.__class__.nollIndices, self,
+                f"nollIndices must lie in 4..{_ZK_JMAX} (the dense Zernike arrays "
+                f"reported by the catalog are sized to {_ZK_JMAX}); "
+                f"got {out_of_range}",
+            )
+        # Rotating Zernikes between coordinate frames (CCS -> OCS) mixes each
+        # (n, +m) coefficient with its (n, -m) partner, so a lone half of a pair
+        # cannot be rotated: its rotated power belongs to a term that was never
+        # fit. Requiring whole pairs keeps every reported frame well defined.
+        missing = []
+        for j in sorted(indices):
+            n, m = galsim.zernike.noll_to_zern(j)
+            if m == 0:
+                continue
+            partner = j + 1 if galsim.zernike.noll_to_zern(j + 1) == (n, -m) else j - 1
+            if partner not in indices:
+                missing.append((j, partner))
+        if missing:
+            raise pexConfig.FieldValidationError(
+                self.__class__.nollIndices, self,
+                "nollIndices must contain both halves of every +/-m Zernike pair so "
+                "the coefficients can be rotated between coordinate frames; missing "
+                + ", ".join(f"{p} (partner of {j})" for j, p in missing),
+            )
+
 
 @dataclass
 class _LstsqFitResult:
