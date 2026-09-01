@@ -37,8 +37,8 @@ class Donut:
 
     det_name: str
     stamp: np.ndarray  #  CCS
-    fa_x_ccs: float
-    fa_y_ccs: float
+    thx_ccs: float
+    thy_ccs: float
     flux: float
     band: str
     det_id: int

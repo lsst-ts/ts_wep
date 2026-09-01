@@ -235,8 +235,8 @@ class CutDonutStampsTask(pipeBase.Task):
             return Donut(
                 det_name=detector.getName(),
                 stamp=stamp_ccs,
-                fa_x_ccs=_fa[1],
-                fa_y_ccs=_fa[0],
+                thx_ccs=_fa[1],
+                thy_ccs=_fa[0],
                 flux=row["flux"],
                 band=band,
                 det_id=det_id,
