@@ -91,7 +91,10 @@ class DonutBlitzMonolithTaskConnections(
     """Pipeline connections for DonutBlitzMonolithTask."""
 
     raws = connectionTypes.Input(
-        doc="Raw corner wavefront sensor exposures (all 8 detectors).",
+        doc=(
+            "Raw corner wavefront sensor exposures. Any subset of the 8 corner "
+            "detectors is processed; missing detectors are simply skipped."
+        ),
         name="raw",
         storageClass="Exposure",
         dimensions=("instrument", "exposure", "detector"),
@@ -269,7 +272,10 @@ class DonutBlitzMonolithTaskConfig(
         allowed={
             "paired": "Pair donuts from SW0/SW1 by SNR rank and dispatch as intra/extra pairs.",
             "unpaired": "Dispatch individual donuts independently.",
-            "full_corner": "Dispatch all donuts from a corner (SW0+SW1) as one work unit.",
+            "full_corner": (
+                "Dispatch all donuts from a corner (SW0+SW1, whichever are present) "
+                "as one work unit."
+            ),
             "full_detector": "Dispatch all donuts on each detector as one work unit (8 fits per visit).",
         },
         default="paired",
@@ -335,9 +341,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
     """Monolithic WEP task for corner wavefront sensors.
 
     Runs ISR, blind donut detection, WCS refit, catalog-based donut
-    selection, and stamp cutting on all 8 corner detector raws in parallel
-    using a multiprocessing pool.  Reference catalogs are loaded in the parent
-    process before forking and inherited by workers via copy-on-write.
+    selection, and stamp cutting on whichever corner detector raws are present,
+    in parallel using a multiprocessing pool.  Reference catalogs are loaded in
+    the parent process before forking and inherited by workers via
+    copy-on-write.
     """
 
     ConfigClass = DonutBlitzMonolithTaskConfig
@@ -452,12 +459,15 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         butler_times: dict | None = None,
         numCores: int = 1,
     ) -> pipeBase.Struct:
-        """Run ISR, WCS refit, catalog selection, and stamp cutting on all 8
-        corner raws in parallel.
+        """Run ISR, WCS refit, catalog selection, and stamp cutting on the
+        corner raws that are present, in parallel.
 
         Parameters
         ----------
         raws : list of lsst.afw.image.Exposure
+            Corner wavefront sensor raws.  Any subset of the 8 corner detectors
+            is accepted; processing covers exactly the detectors supplied here.
+            Calibrations must be complete for every detector present.
         ptc : list of lsst.ip.isr.PhotonTransferCurveDataset
         flat : list of lsst.afw.image.ExposureF
         linearizer : list of lsst.ip.isr.Linearizer
@@ -499,19 +509,46 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         linearizerByName = {lin._detectorName: lin for lin in linearizer}
         crosstalkByName = {ct._detectorName: ct for ct in crosstalk}
 
+        # Process whichever corner raws arrived. A partial set is normal (dropped
+        # image, per-detector butler gap) and there is no reason to throw away the
+        # corners that did arrive, so this is a warning rather than an abort.
+        # `detNames` -- not CORNER_DET_NAMES -- drives everything downstream.
+        unexpected = rawByName.keys() - CORNER_DET_NAMES
+        if unexpected:
+            raise RuntimeError(
+                f"Non-corner detector raws supplied: {sorted(unexpected)}"
+            )
+        if not rawByName:
+            raise RuntimeError("No corner detector raws supplied.")
+        detNames = sorted(rawByName)
         missing = CORNER_DET_NAMES - rawByName.keys()
         if missing:
-            raise RuntimeError(f"Missing corner detector raws: {sorted(missing)}")
+            self.log.warning(
+                "Processing %d/%d corner detectors; no raw for: %s",
+                len(detNames),
+                len(CORNER_DET_NAMES),
+                sorted(missing),
+            )
 
         if intrinsicZernikes:
             self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsicZernikes))
         else:
             self.log.warning("No intrinsic Zernike calibrations provided.")
         self.intrinsicZernikes = list(intrinsicZernikes) if intrinsicZernikes else []
-        intrinsicZernikesByName = {
-            detNameById[iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]]: iz
-            for iz in self.intrinsicZernikes
-        }
+        # detNameById only covers the raws present, so a calibration for a
+        # detector we are not processing is dropped rather than raising.
+        # runQuantum already filters these, but run() is also called directly.
+        intrinsicZernikesByName = {}
+        for iz in self.intrinsicZernikes:
+            iz_det_id = iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]
+            iz_det_name = detNameById.get(iz_det_id)
+            if iz_det_name is None:
+                self.log.debug(
+                    "Ignoring intrinsic Zernike calibration for detector %s: no raw.",
+                    iz_det_id,
+                )
+                continue
+            intrinsicZernikesByName[iz_det_name] = iz
 
         band = next(iter(rawByName.values())).filter.bandLabel
         if self.config.photoRefFilter is not None:
@@ -575,7 +612,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["cut_stamps_task"] = self.cutStampsTask
         _CALIB_STORE["cutout_cfg"] = cutout_cfg
         _CALIB_STORE["det_refcats"] = det_refcats
-        for name in CORNER_DET_NAMES:
+        for name in detNames:
             missing_calib = [
                 k for k, d in [
                     ("ptc", ptcByName),
@@ -623,7 +660,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             "Detector", [0, 0, -_INSTRUMENT.defocalOffset]
         )
 
-        cutout_args = sorted(CORNER_DET_NAMES)
+        cutout_args = detNames
 
         self.log.info(
             "Running cutout workers on %d corner detectors with %d core(s)",
@@ -637,7 +674,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         else:
             t_pool0 = time.perf_counter()
             # Never more workers than detectors to process, matching the WF pool
-            # below. cutout_args is CORNER_DET_NAMES, so never empty.
+            # below. cutout_args is the detectors with raws, non-empty by the
+            # guard above.
             n_cutout_workers = min(numCores, len(cutout_args))
             with mp.get_context("fork").Pool(processes=n_cutout_workers) as pool:
                 t_pool1 = time.perf_counter()

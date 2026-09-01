@@ -178,6 +178,11 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
     without regard to defocal type -- the invariant reported by
     `_mode_groups_are_pairs`.
 
+    ``results_by_det`` covers only the detectors that were processed, so a
+    partial corner set falls out naturally: groups are never emitted empty, and
+    ``"full_corner"`` fits a corner from one defocal side alone when that is all
+    that is present.
+
     Returns (groups, unmatched_donuts).
     """
     groups = []
@@ -197,11 +202,19 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
             for d in det_donuts:
                 groups.append(_WfGroup(donuts=[d], group_id=str(d.id), band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     elif mode == "full_detector":
+        # Skip detectors with no donuts: an empty group fits nothing but still
+        # reports success=False, which would skew the caller's success tally.
         for det_name, det_donuts in results_by_det.items():
+            if not det_donuts:
+                continue
             groups.append(_WfGroup(donuts=det_donuts, group_id=det_name, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     elif mode == "full_corner":
+        # A corner contributes whichever of its two detectors have donuts; one
+        # defocal side alone is still fit. Corners with neither are skipped.
         for corner, (sw0, sw1) in CORNER_PAIRS.items():
             all_donuts = results_by_det.get(sw0, []) + results_by_det.get(sw1, [])
+            if not all_donuts:
+                continue
             groups.append(_WfGroup(donuts=all_donuts, group_id=corner, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     else:
         raise ValueError(f"Unknown WF mode {mode!r}")
