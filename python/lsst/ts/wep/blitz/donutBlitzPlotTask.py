@@ -67,6 +67,24 @@ _COLOR_PENTAFOIL = "#CC79A7"
 _COLOR_HEXAFOIL = "#D55E00"
 
 
+def _detIdByName(catalog: QTable) -> dict[str, int]:
+    """Map detector name to detector id, read off the catalog rows.
+
+    Parameters
+    ----------
+    catalog : QTable
+        Per-donut table carrying ``det_name`` and ``det_id`` columns.
+
+    Returns
+    -------
+    dict [`str`, `int`]
+        Detector name -> detector id, for the detectors present in ``catalog``.
+    """
+    names = np.asarray(catalog["det_name"], dtype=str)
+    ids = np.asarray(catalog["det_id"], dtype=int)
+    return {str(n): int(i) for n, i in zip(names, ids)}
+
+
 class DonutBlitzPlotTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),  # type: ignore
@@ -178,6 +196,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # fit consumed still shows in the accepted panel, since it passed every
         # cut this plot reports on.
         det_name_col = np.asarray(catalog["det_name"], dtype=str)
+        det_id_by_name = _detIdByName(catalog)
         dets_with_data = []
         for det_name in sorted(set(det_name_col.tolist())):
             det_rows = catalog[det_name_col == det_name]
@@ -387,7 +406,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ax_stats = fig.add_subplot(gs[row_idx, 0])
             ax_stats.axis("off")
             lines = [
-                f"{det_name}",
+                f"{det_name} ({det_id_by_name[det_name]})",
                 f"donuts: {len(acc_rows)}",
                 f"isr:    {sm.get('isr_run', float('nan')):.3f}s",
                 f"bkg:    {sm.get('bkg_run', float('nan')):.3f}s",
@@ -563,6 +582,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return
 
         _CORNERS = list(CORNER_PAIRS)
+        det_id_by_name = _detIdByName(catalog)
 
         def _corner_of(r):
             for s in r["det_names"]:
@@ -714,8 +734,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 hspace=0.0, wspace=0.0,
                 width_ratios=[1, 1, 1, 2, 1, 1, 1, 2],
             )
-            sw1 = f"{corner}_SW1"
-            sw0 = f"{corner}_SW0"
+            sw1 = f"{corner}_SW1 ({det_id_by_name[f'{corner}_SW1']})"
+            sw0 = f"{corner}_SW0 ({det_id_by_name[f'{corner}_SW0']})"
 
             def _rec_info(r):
                 if r is None:
