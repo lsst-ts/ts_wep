@@ -106,7 +106,6 @@ from lsst.ts.wep.blitz.utils import (  # noqa: F401
     _colorize,
     _resolveColorLogEnabled,
     _resolveDonutRadius,
-    _zk_cols,
 )
 from lsst.ts.wep.blitz.wavefrontFittingTask import (  # noqa: F401
     WavefrontFittingTask,

@@ -27,7 +27,6 @@ __all__ = [
     "DonutBlitzMonolithTask",
 ]
 
-import ast
 import multiprocessing as mp
 import time
 from typing import Any
@@ -75,7 +74,6 @@ from .utils import (
     _bin_stamp_odd,
     _colorize,
     _resolveColorLogEnabled,
-    _zk_cols,
 )
 from .wavefrontFittingTask import (
     WavefrontFittingTask,
@@ -944,14 +942,21 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # WF images: binned and forced to odd size (see _prep_donut_for_danish).
         _binned = self.cutStampsTask.config.stampSize // self.wfFittingTask.config.binning
         wf_img_size = _binned if _binned % 2 == 1 else _binned - 1
+        # Deviations only exist for the fitted Noll indices, so the array column is
+        # cut off at the highest one; intrinsics are dense all the way to _ZK_JMAX.
+        zk_dev_jmax = max(self.wfFittingTask.config.nollIndices)
 
         rows = []
+        zk_dev_rows = []
+        zk_int_rows = []
         for d, candidate in all_donuts:
             sid = d.id
             wd, grp = wf_by_id.get((sid, d.det_name), (_NULL_WF, -1))
 
-            zk_dev = wd.zk_dev
-            zk_int = wd.zk_intrinsic
+            # Both are dense Noll-indexed arrays in meters of length _ZK_JMAX + 1;
+            # they become the zk_*_ccs array columns after the loop.
+            zk_dev_rows.append(wd.zk_dev[: zk_dev_jmax + 1])
+            zk_int_rows.append(wd.zk_intrinsic)
 
             stamp = (
                 d.stamp.astype(float)
@@ -1041,9 +1046,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "fit_flux": wd.fit_flux,
                 "fit_fwhm": wd.fit_fwhm,
                 "blend_frac": wd.blend_frac,
-                # --- per-Noll Zernikes (µm), Noll 4..``_ZK_JMAX`` ---
-                **_zk_cols("dev", zk_dev),
-                **_zk_cols("intrinsic", zk_int),
+                # Zernikes are attached after construction as the array columns
+                # zk_dev_ccs / zk_intrinsic_ccs.
                 # --- embedded images ---
                 "stamp": stamp,
                 "wf_img": wf_img,
@@ -1052,6 +1056,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             rows.append(row)
 
         table = QTable(rows)
+        # Zernikes in the camera coordinate system (hence "_ccs"), Noll-indexed
+        # along axis 1 the way galsim orders Zernike coefficients: [:, j] is Noll j
+        # across donuts and [i] is donut i's coefficient vector. Slots below Noll 4
+        # are carried for indexing only (NaN for deviations, 0 for intrinsics).
+        table["zk_dev_ccs"] = np.array(zk_dev_rows) * 1e6 * u.micron
+        table["zk_intrinsic_ccs"] = np.array(zk_int_rows) * 1e6 * u.micron
         table.meta["visit_id"] = visit_id
         table.meta["run_elapsed"] = run_elapsed
         table.meta["refcat_elapsed"] = refcat_elapsed
@@ -1062,6 +1072,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["photo_filter_name"] = photo_filter_name
         table.meta["astrom_filter_name"] = astrom_filter_name
         table.meta["noll_indices"] = list(self.wfFittingTask.config.nollIndices)
+        table.meta["zk_dev_jmax"] = zk_dev_jmax
+        table.meta["zk_jmax"] = _ZK_JMAX
         table.meta["det_meta"] = det_meta
         table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
         table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
