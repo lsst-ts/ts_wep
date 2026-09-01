@@ -98,9 +98,9 @@ CORNER_PAIRS = {
     "R40": ("R40_SW0", "R40_SW1"),
     "R44": ("R44_SW0", "R44_SW1"),
 }
-CORNER_SENSOR_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (sw0, sw1))
-# Sensor name -> corner, derived from CORNER_PAIRS rather than re-encoded.
-CORNER_BY_SENSOR = {s: corner for corner, pair in CORNER_PAIRS.items() for s in pair}
+CORNER_DET_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (sw0, sw1))
+# Detector name -> corner, derived from CORNER_PAIRS rather than re-encoded.
+CORNER_BY_DET_NAME = {s: corner for corner, pair in CORNER_PAIRS.items() for s in pair}
 
 # Display names for DonutSourceSelectorTask rejection reasons. Reasons absent
 # here are shown verbatim. "faint_neighbor" folds into "blend" (both mean a
@@ -417,7 +417,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
 class Donut:
     """One cut donut stamp with its selection/quality metrics."""
 
-    sensor: str
+    det_name: str
     stamp: np.ndarray  #  CCS
     fa_x_ccs: float
     fa_y_ccs: float
@@ -484,13 +484,13 @@ class CutDonutStampsConfig(pexConfig.Config):
         default=100.0,
     )
     maxDonuts: pexConfig.Field = pexConfig.Field(
-        doc="Maximum number of accepted donuts to keep per sensor, brightest-first.",
+        doc="Maximum number of accepted donuts to keep per detector, brightest-first.",
         dtype=int,
         default=8,
     )
     maxRejectDonuts: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Maximum number of quality-rejected donuts to keep per sensor "
+            "Maximum number of quality-rejected donuts to keep per detector "
             "(brightest-first) for downstream diagnostics."
         ),
         dtype=int,
@@ -649,7 +649,7 @@ class CutDonutStampsTask(pipeBase.Task):
             rejected = rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr
 
             return Donut(
-                sensor=detector.getName(),
+                det_name=detector.getName(),
                 stamp=stamp_ccs,
                 fa_x_ccs=_fa[1],
                 fa_y_ccs=_fa[0],
@@ -731,18 +731,18 @@ class CutDonutStampsTask(pipeBase.Task):
         return pipeBase.Struct(donuts=donuts, rejected_donuts=rejected_donuts)
 
 
-def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
+def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
     """Run ISR, background subtraction, blind detection, WCS refit, catalog
     selection, and stamp cutting.
 
-    Orchestrates the full per-sensor cutout pipeline in a worker process.
+    Orchestrates the full per-detector cutout pipeline in a worker process.
     All inputs are read from the module-level ``_CALIB_STORE`` dict, which is
     populated by the parent process before forking.
 
     Parameters
     ----------
-    sensor_name : str
-        Detector name; used to look up per-sensor calibrations in
+    det_name : str
+        Detector name; used to look up per-detector calibrations in
         ``_CALIB_STORE``.
     t_dispatch : float
         ``time.time()`` timestamp at which the task was dispatched from the
@@ -751,14 +751,14 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     Returns
     -------
     dict
-        Keys: ``sensor``, ``catalog`` (accepted donut dicts),
+        Keys: ``det_name``, ``catalog`` (accepted donut dicts),
         ``rejected_catalog``, ``scatter_arcsec``, ``wcs_refit_error``,
         ``cat_select_error``, and timing floats ``dispatch_to_arrival``,
         ``isr_run``, ``bkg_run``, ``diam_run``, ``blind_detect_run``,
         ``wcs_refit_run``, ``catalog_select_run``, ``stamp_cut_run``.
     """
     t_arrival = time.time()
-    entry = _CALIB_STORE[sensor_name]
+    entry = _CALIB_STORE[det_name]
     cutout_cfg = _CALIB_STORE["cutout_cfg"]
 
     # --- ISR ---
@@ -792,7 +792,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
 
     if len(blindDetections) == 0:
         return {
-            "sensor": sensor_name,
+            "det_name": det_name,
             "catalog": [],
             "dispatch_to_arrival": time.time() - t_dispatch,
             "isr_run": t1 - t0,
@@ -812,7 +812,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     t4 = time.perf_counter()
     astrom_task = _CALIB_STORE["astrom_task"]
     detector = postIsr.getDetector()
-    refcat_handle = _CALIB_STORE["sensor_refcats"].get(detector.getName())
+    refcat_handle = _CALIB_STORE["det_refcats"].get(detector.getName())
     scatter_arcsec = None
     wcs = None
     wcs_err = ""
@@ -835,7 +835,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
                 _ANSI_BOLD,
                 _ANSI_YELLOW
             ),
-            sensor_name,
+            det_name,
             wcs_err,
         )
 
@@ -885,8 +885,8 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
             cat_err = cat_err or str(exc)
             _log.warning(
                 "Donut selector failed on blind detections for %s; "
-                "dropping sensor's donuts: %s",
-                sensor_name,
+                "dropping detector's donuts: %s",
+                det_name,
                 exc,
             )
             selections = blindDetections[:0]  # empty; flows through to empty catalog
@@ -971,7 +971,7 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
     # plt.show()
 
     return {
-        "sensor": sensor_name,
+        "det_name": det_name,
         "catalog": cut_result.donuts,
         "dispatch_to_arrival": t_arrival - t_dispatch,
         "isr_run": t1 - t0,
@@ -989,8 +989,8 @@ def _cutoutPipeline(sensor_name: str, t_dispatch: float) -> dict:
 
 
 def _run_cutout_worker(args: tuple) -> dict:
-    sensor_name, t_dispatch = args
-    return _cutoutPipeline(sensor_name, t_dispatch)
+    det_name, t_dispatch = args
+    return _cutoutPipeline(det_name, t_dispatch)
 
 
 def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:
@@ -1018,14 +1018,14 @@ _ZK_JMAX = 66
 class WfResult:
     """One donut's wavefront-fit outputs, produced by `_wf_worker`.
 
-    Consumed by `_buildCatalog`, keyed by ``(donut_id, sensor)``. A fit that
+    Consumed by `_buildCatalog`, keyed by ``(donut_id, det_name)``. A fit that
     timed out or raised still produces a WfResult with ``fit_success=False``
     and all-NaN Zernikes. `_NULL_WF` is the sentinel for "no fit consumed this
     donut" (paired-mode surplus with no partner).
     """
 
     donut_id: int
-    sensor: str
+    det_name: str
     defocal: str
     zk_dev: npt.NDArray[np.float64]        # dense Noll 0.._ZK_JMAX, metres, NaN where unfit
     zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, metres
@@ -1050,7 +1050,7 @@ class WfResult:
 # fit_success=False -- so _buildCatalog's `used` derivation is naturally False.
 _NULL_WF = WfResult(
     donut_id=-1,
-    sensor="",
+    det_name="",
     defocal="",
     zk_dev=np.full(_ZK_JMAX + 1, np.nan),
     zk_intrinsic=np.full(_ZK_JMAX + 1, np.nan),
@@ -1198,15 +1198,15 @@ def _zk_cols(suffix: str, zk: np.ndarray) -> dict:
 
 @dataclass
 class _WfGroup:
-    donuts: list  # donut dicts, ordered; each carries its own "sensor" key
+    donuts: list  # donut dicts, ordered; each carries its own "det_name" key
     group_id: str
     band: str
     rtp: float | None  # Boresight rotation (spider angle), degrees or None
     alt: float | None  # Boresight altitude, radians or None
 
 
-def _build_wf_groups(mode, results_by_sensor, band: str, rtp_deg: float | None, boresight_alt_rad: float | None):
-    """Build _WfGroup list from per-sensor catalogs, matching the mode dispatch logic.
+def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, boresight_alt_rad: float | None):
+    """Build _WfGroup list from per-detector catalogs, matching the mode dispatch logic.
 
     Groups for ``"paired"`` hold one extra/intra pair; all other modes group
     without regard to defocal type -- the invariant reported by
@@ -1218,8 +1218,8 @@ def _build_wf_groups(mode, results_by_sensor, band: str, rtp_deg: float | None, 
     unmatched_donuts = []
     if mode == "paired":
         for _corner, (sw0, sw1) in CORNER_PAIRS.items():
-            extra_donuts = sorted(results_by_sensor.get(sw0, []), key=lambda d: d.snr, reverse=True)
-            intra_donuts = sorted(results_by_sensor.get(sw1, []), key=lambda d: d.snr, reverse=True)
+            extra_donuts = sorted(results_by_det.get(sw0, []), key=lambda d: d.snr, reverse=True)
+            intra_donuts = sorted(results_by_det.get(sw1, []), key=lambda d: d.snr, reverse=True)
             for extra, intra in zip(extra_donuts, intra_donuts):
                 gid = f"{extra.id}_{intra.id}"
                 groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
@@ -1227,15 +1227,15 @@ def _build_wf_groups(mode, results_by_sensor, band: str, rtp_deg: float | None, 
             unmatched_donuts.extend(extra_donuts[n_pairs:])
             unmatched_donuts.extend(intra_donuts[n_pairs:])
     elif mode == "unpaired":
-        for sensor_donuts in results_by_sensor.values():
-            for d in sensor_donuts:
+        for det_donuts in results_by_det.values():
+            for d in det_donuts:
                 groups.append(_WfGroup(donuts=[d], group_id=str(d.id), band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     elif mode == "full_detector":
-        for sensor_name, sensor_donuts in results_by_sensor.items():
-            groups.append(_WfGroup(donuts=sensor_donuts, group_id=sensor_name, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+        for det_name, det_donuts in results_by_det.items():
+            groups.append(_WfGroup(donuts=det_donuts, group_id=det_name, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     elif mode == "full_corner":
         for corner, (sw0, sw1) in CORNER_PAIRS.items():
-            all_donuts = results_by_sensor.get(sw0, []) + results_by_sensor.get(sw1, [])
+            all_donuts = results_by_det.get(sw0, []) + results_by_det.get(sw1, [])
             groups.append(_WfGroup(donuts=all_donuts, group_id=corner, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     else:
         raise ValueError(f"Unknown WF mode {mode!r}")
@@ -1490,7 +1490,7 @@ class WavefrontFittingTask(pipeBase.Task):
             - donuts: list of WfResult
             - model_imgs: list or None
             - imgs: list
-            - sensors: list of str
+            - det_names: list of str
         """
         nollIndices = self.config.nollIndices
         all_donuts = group.donuts
@@ -1506,7 +1506,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 "donuts": [],
                 "model_imgs": None,
                 "imgs": [],
-                "sensors": [],
+                "det_names": [],
             }
 
         t_setup0 = time.perf_counter()
@@ -1570,7 +1570,7 @@ class WavefrontFittingTask(pipeBase.Task):
             donuts_out.append(
                 WfResult(
                     donut_id=int(d.id),
-                    sensor=d.sensor,
+                    det_name=d.det_name,
                     defocal=defocal,
                     zk_dev=zk_dev_dense,
                     zk_intrinsic=_dense_intrinsic(d),
@@ -1609,7 +1609,7 @@ class WavefrontFittingTask(pipeBase.Task):
             "donuts": donuts_out,
             "model_imgs": fit_result.model_imgs,
             "imgs": imgs,
-            "sensors": [d.sensor for d in all_donuts],
+            "det_names": [d.det_name for d in all_donuts],
         }
 
     def _build_wf_factory(self, group: "_WfGroup") -> "danish.DonutFactory":
@@ -1910,7 +1910,7 @@ class DonutBlitzMonolithTaskConnections(
     """Pipeline connections for DonutBlitzMonolithTask."""
 
     raws = connectionTypes.Input(
-        doc="Raw corner wavefront sensor exposures (all 8 sensors).",
+        doc="Raw corner wavefront sensor exposures (all 8 detectors).",
         name="raw",
         storageClass="Exposure",
         dimensions=("instrument", "exposure", "detector"),
@@ -2089,7 +2089,7 @@ class DonutBlitzMonolithTaskConfig(
             "paired": "Pair donuts from SW0/SW1 by SNR rank and dispatch as intra/extra pairs.",
             "unpaired": "Dispatch individual donuts independently.",
             "full_corner": "Dispatch all donuts from a corner (SW0+SW1) as one work unit.",
-            "full_detector": "Dispatch all donuts on each sensor as one work unit (8 fits per visit).",
+            "full_detector": "Dispatch all donuts on each detector as one work unit (8 fits per visit).",
         },
         default="paired",
     )
@@ -2150,7 +2150,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
     """Monolithic WEP task for corner wavefront sensors.
 
     Runs ISR, blind donut detection, WCS refit, catalog-based donut
-    selection, and stamp cutting on all 8 corner sensor raws in parallel
+    selection, and stamp cutting on all 8 corner detector raws in parallel
     using a multiprocessing pool.  Reference catalogs are loaded in the parent
     process before forking and inherited by workers via copy-on-write.
     """
@@ -2279,7 +2279,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         crosstalk : list of lsst.ip.isr.CrosstalkCalib
         refCat : list of DeferredDatasetHandle or SimpleCatalog
             Shards used for both WCS fitting and donut selection, loaded once
-            per sensor.  The WCS fit reads ``astromRefFilter`` (resolved as the
+            per detector.  The WCS fit reads ``astromRefFilter`` (resolved as the
             load's ``fluxField``) and donut selection reads the per-band
             ``photoRefFilter``/``photoRefFilterPrefix`` column off the same
             catalog.
@@ -2314,9 +2314,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         linearizerByName = {lin._detectorName: lin for lin in linearizer}
         crosstalkByName = {ct._detectorName: ct for ct in crosstalk}
 
-        missing = CORNER_SENSOR_NAMES - rawByName.keys()
+        missing = CORNER_DET_NAMES - rawByName.keys()
         if missing:
-            raise RuntimeError(f"Missing corner sensor raws: {sorted(missing)}")
+            raise RuntimeError(f"Missing corner detector raws: {sorted(missing)}")
 
         if intrinsicZernikes:
             self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsicZernikes))
@@ -2346,7 +2346,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
 
         t_refcat0 = time.perf_counter()
-        sensor_refcats: dict = {}
+        det_refcats: dict = {}
         for name, raw in rawByName.items():
             raw_wcs = raw.getWcs()
             raw_bbox = raw.getBBox()
@@ -2362,7 +2362,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                     )
                 except Exception as exc:
                     self.log.warning("Failed to load refcat for %s: %s", name, exc)
-            sensor_refcats[name] = load_result
+            det_refcats[name] = load_result
         t_refcat_elapsed = time.perf_counter() - t_refcat0
 
         # Stub loader: AstrometryTask.solve() calls refObjLoader.getMetadataBox()
@@ -2389,8 +2389,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["measure_candidates_task"] = self.measureCandidatesTask
         _CALIB_STORE["cut_stamps_task"] = self.cutStampsTask
         _CALIB_STORE["cutout_cfg"] = cutout_cfg
-        _CALIB_STORE["sensor_refcats"] = sensor_refcats
-        for name in CORNER_SENSOR_NAMES:
+        _CALIB_STORE["det_refcats"] = det_refcats
+        for name in CORNER_DET_NAMES:
             missing_calib = [
                 k for k, d in [
                     ("ptc", ptcByName),
@@ -2402,7 +2402,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             ]
             if missing_calib:
                 raise RuntimeError(
-                    f"Missing calibration(s) for sensor {name}: {missing_calib}"
+                    f"Missing calibration(s) for detector {name}: {missing_calib}"
                 )
             _CALIB_STORE[name] = dict(
                 raw=rawByName[name],
@@ -2459,10 +2459,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             "Detector", [0, 0, -_INSTRUMENT.defocalOffset]
         )
 
-        cutout_args = sorted(CORNER_SENSOR_NAMES)
+        cutout_args = sorted(CORNER_DET_NAMES)
 
         self.log.info(
-            "Running cutout workers on %d corner sensors with %d core(s)",
+            "Running cutout workers on %d corner detectors with %d core(s)",
             len(cutout_args),
             numCores,
         )
@@ -2472,8 +2472,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             results = [_run_cutout_worker((arg, t_dispatch)) for arg in cutout_args]
         else:
             t_pool0 = time.perf_counter()
-            # Never more workers than sensors to process, matching the WF pool
-            # below. cutout_args is CORNER_SENSOR_NAMES, so never empty.
+            # Never more workers than detectors to process, matching the WF pool
+            # below. cutout_args is CORNER_DET_NAMES, so never empty.
             n_cutout_workers = min(numCores, len(cutout_args))
             with mp.get_context("fork").Pool(processes=n_cutout_workers) as pool:
                 t_pool1 = time.perf_counter()
@@ -2499,7 +2499,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "  %s: dispatch=%.3fs  isr=%.3fs  bkg=%.3fs"
                 "  diam=%.3fs  detect=%.3fs  wcs=%.3fs (scatter=%s)"
                 "  select=%.3fs  cut=%.3fs  donuts=%d",
-                r["sensor"],
+                r["det_name"],
                 r["dispatch_to_arrival"],
                 r["isr_run"],
                 r["bkg_run"],
@@ -2512,18 +2512,18 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 len(r["catalog"]),
             )
             if r["wcs_refit_error"]:
-                self.log.warning("  %s: WCS refit failed: %s", r["sensor"], r["wcs_refit_error"])
+                self.log.warning("  %s: WCS refit failed: %s", r["det_name"], r["wcs_refit_error"])
             if r["cat_select_error"]:
                 self.log.warning(
                     "  %s: catalog selection failed: %s",
-                    r["sensor"],
+                    r["det_name"],
                     r["cat_select_error"],
                 )
             donuts.extend(r["catalog"])
 
         # Annotate each accepted donut with realized intrinsic Zernikes.
         for r in results:
-            calib = intrinsicZernikesByName.get(r["sensor"])
+            calib = intrinsicZernikesByName.get(r["det_name"])
             for d in r["catalog"]:
                 if calib is not None:
                     d.intrinsic_zk = np.squeeze(
@@ -2537,8 +2537,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         # WF dispatch
         mode = self.config.wfEstimationMode
-        results_by_sensor = {r["sensor"]: r["catalog"] for r in results}
-        groups, unmatched_donuts = _build_wf_groups(mode, results_by_sensor, band, rtp_deg, boresight_alt_rad)
+        results_by_det = {r["det_name"]: r["catalog"] for r in results}
+        groups, unmatched_donuts = _build_wf_groups(mode, results_by_det, band, rtp_deg, boresight_alt_rad)
 
         self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
         t_wf0 = time.perf_counter()
@@ -2626,8 +2626,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         Parameters
         ----------
         results : list
-            Per-sensor cutout dicts from ``_cutoutPipeline`` (supplies rejected
-            donuts and per-sensor metadata).
+            Per-detector cutout dicts from ``_cutoutPipeline`` (supplies rejected
+            donuts and per-detector metadata).
         wf_results : list
             Per-fit WF result dicts from the WF worker pool.
         donuts : list
@@ -2641,7 +2641,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         Returns
         -------
         QTable
-            Exactly one row per donut, keyed by ``(sensor, id)``, with two
+            Exactly one row per donut, keyed by ``(det_name, id)``, with two
             independent flags:
 
             ``candidate``
@@ -2658,22 +2658,22 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             to a common shape.  ``wf_img`` is filled for every donut with a
             stamp -- from the fitter when a fit ran, otherwise by binning the
             stamp the same way -- so only ``model_img`` is all-NaN for unused
-            donuts.  Visit-level and per-sensor scalars are stored in
+            donuts.  Visit-level and per-detector scalars are stored in
             ``table.meta``.
         """
-        # Build lookup: (id, sensor) -> (wf donut entry, group index).
+        # Build lookup: (id, det_name) -> (wf donut entry, group index).
         # Key on both fields to handle the same refcat star on SW0 and SW1.
         wf_by_id: dict = {}
         for group_idx, r in enumerate(wf_results):
             for wd in r.get("donuts", []):
-                wf_by_id[(wd.donut_id, wd.sensor)] = (wd, group_idx)
+                wf_by_id[(wd.donut_id, wd.det_name)] = (wd, group_idx)
 
-        # Build lookup: sensor -> per-sensor metadata from cutout results.
-        sensor_meta: dict = {}
-        rejected_by_sensor: dict = {}
+        # Build lookup: det_name -> per-detector metadata from cutout results.
+        det_meta: dict = {}
+        rejected_by_det: dict = {}
         for r in results:
-            sname = str(r["sensor"])
-            sensor_meta[sname] = {
+            dname = str(r["det_name"])
+            det_meta[dname] = {
                 "scatter_arcsec": (
                     r["scatter_arcsec"] if r["scatter_arcsec"] is not None else float("nan")
                 ),
@@ -2686,7 +2686,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 "wcs_refit_run": r.get("wcs_refit_run", float("nan")),
                 "catalog_select_run": r.get("catalog_select_run", float("nan")),
             }
-            rejected_by_sensor[sname] = r.get("rejected_catalog", [])
+            rejected_by_det[dname] = r.get("rejected_catalog", [])
 
         def _encode_nearby(entries):
             """Return (x, y, mag) arrays of length ``_MAX_NEARBY`` for one donut.
@@ -2711,11 +2711,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # is derived per row below from the wavefront result.
         #
         # `donuts` and `unmatched_donuts` overlap: in paired mode the surplus
-        # donuts on whichever sensor detected more pass selection but have no
+        # donuts on whichever detector detected more pass selection but have no
         # partner, so they appear in both lists. Keyed dedupe keeps one row per
         # donut -- they stay candidates, they just never got fitted.
         def _key(d):
-            return (d.sensor, d.id)
+            return (d.det_name, d.id)
 
         all_donuts = []
         _seen = set()
@@ -2724,7 +2724,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             + [
                 (d, False)
                 for r in results
-                for d in rejected_by_sensor.get(str(r["sensor"]), [])
+                for d in rejected_by_det.get(str(r["det_name"]), [])
             ]
             + [(d, True) for d in unmatched_donuts]
         ):
@@ -2746,7 +2746,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         rows = []
         for d, candidate in all_donuts:
             sid = d.id
-            wd, grp = wf_by_id.get((sid, d.sensor), (_NULL_WF, -1))
+            wd, grp = wf_by_id.get((sid, d.det_name), (_NULL_WF, -1))
 
             zk_dev = wd.zk_dev
             zk_int = wd.zk_intrinsic
@@ -2779,7 +2779,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 # --- identity ---
                 "visit_id": d.visit_id,
                 "det_id": d.det_id,
-                "sensor": d.sensor,
+                "det_name": d.det_name,
                 "id": sid,
                 # From the detector, not from the fit result: donuts no fit
                 # consumed still belong to a defocal side.
@@ -2860,7 +2860,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["photo_filter_name"] = photo_filter_name
         table.meta["astrom_filter_name"] = astrom_filter_name
         table.meta["noll_indices"] = list(self.wfFittingTask.config.nollIndices)
-        table.meta["sensor_meta"] = sensor_meta
+        table.meta["det_meta"] = det_meta
         table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
         table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
         table.meta["bkg_annulus_inner_frac"] = self.measureCandidatesTask.config.bkgAnnulusInnerFrac
@@ -2939,16 +2939,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         catalog : QTable
             Per-donut table as produced by
             ``DonutBlitzMonolithTask._buildCatalog``.  Visit-level and
-            per-sensor metadata are in ``catalog.meta``.
+            per-detector metadata are in ``catalog.meta``.
         """
         catalog = QTable(catalog)
         self._saveDonutDiagnosticPlot(catalog)
         self._saveWfDiagnosticPlot(catalog)
 
     def _saveDonutDiagnosticPlot(self, catalog: QTable) -> None:
-        """Save a single diagnostic PNG with one section per sensor.
+        """Save a single diagnostic PNG with one section per detector.
 
-        Layout per sensor:
+        Layout per detector:
           - Left column: stats text (timing, WCS scatter, donut count, errors)
           - Remaining columns: donut stamps (up to maxDonuts), each annotated
             with flux and field angle
@@ -2956,8 +2956,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         Parameters
         ----------
         catalog : QTable
-            Per-donut table from ``_buildCatalog``.  Per-sensor metadata is in
-            ``catalog.meta["sensor_meta"]``; visit-level scalars are in
+            Per-donut table from ``_buildCatalog``.  Per-detector metadata is in
+            ``catalog.meta["det_meta"]``; visit-level scalars are in
             ``catalog.meta``.
         """
         import matplotlib.patches as mpatches
@@ -2974,23 +2974,23 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         photo_filter_label = meta["photo_filter_name"]
         astrom_filter_label = meta["astrom_filter_name"]
         visit_id = meta["visit_id"]
-        sensor_meta = meta["sensor_meta"]
+        det_meta = meta["det_meta"]
 
-        # Group rows by sensor; split on selection outcome. This plot is about
+        # Group rows by detector; split on selection outcome. This plot is about
         # donut *selection*, so it splits on "candidate" -- a candidate that no
         # fit consumed still shows in the accepted panel, since it passed every
         # cut this plot reports on.
-        sensor_col = np.asarray(catalog["sensor"], dtype=str)
-        sensors_with_data = []
-        for sensor in sorted(set(sensor_col.tolist())):
-            sensor_rows = catalog[sensor_col == sensor]
-            acc = sensor_rows[sensor_rows["candidate"]]
-            rej = sensor_rows[~sensor_rows["candidate"]]
+        det_name_col = np.asarray(catalog["det_name"], dtype=str)
+        dets_with_data = []
+        for det_name in sorted(set(det_name_col.tolist())):
+            det_rows = catalog[det_name_col == det_name]
+            acc = det_rows[det_rows["candidate"]]
+            rej = det_rows[~det_rows["candidate"]]
             if len(acc) > 0 or len(rej) > 0:
-                sensors_with_data.append((sensor, acc, rej))
+                dets_with_data.append((det_name, acc, rej))
 
-        n_sensors = len(sensors_with_data)
-        if n_sensors == 0:
+        n_dets = len(dets_with_data)
+        if n_dets == 0:
             return
 
         STAMPS_PER_ROW = 8
@@ -3004,7 +3004,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         N_COLS = 1 + STAMPS_PER_ROW + 1 + REJECTED_PER_ROW
         fig_w = STATS_COL_W + (STAMPS_PER_ROW + REJECTED_PER_ROW) * STAMP_COL_W + SPACER_W
-        fig_h = n_sensors * ROW_H + LEGEND_H + SUPTITLE_H
+        fig_h = n_dets * ROW_H + LEGEND_H + SUPTITLE_H
 
         fig = Figure(figsize=(fig_w, fig_h), layout="constrained")
         fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
@@ -3018,18 +3018,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         w_stats = STATS_COL_W / STAMP_COL_W
         w_spacer = SPACER_W / STAMP_COL_W
         gs = GridSpec(
-            n_sensors + 1,
+            n_dets + 1,
             N_COLS,
             figure=fig,
-            height_ratios=[ROW_H] * n_sensors + [LEGEND_H],
+            height_ratios=[ROW_H] * n_dets + [LEGEND_H],
             width_ratios=[w_stats] + [1] * STAMPS_PER_ROW + [w_spacer] + [1] * REJECTED_PER_ROW,
         )
         COL_ACCEPTED_START = 1
         COL_SPACER = 1 + STAMPS_PER_ROW
         COL_REJECTED_START = COL_SPACER + 1
 
-        # Per-sensor radius/obscuration ride each donut row (from
-        # Donut.donut_radius), so a sensor's aperture/annulus circles match its
+        # Per-detector radius/obscuration ride each donut row (from
+        # Donut.donut_radius), so a detector's aperture/annulus circles match its
         # own detected donut size. The visit-level meta scalars below are the
         # fallback for rows that lack the columns -- e.g. an older blitzResults
         # catalog written before these columns existed, read back by a
@@ -3067,7 +3067,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 extent=[-_edge, _edge, -_edge, _edge],
             )
 
-            # Per-sensor radius/obscuration off the row, falling back to the
+            # Per-detector radius/obscuration off the row, falling back to the
             # visit-level meta scalar if a row lacks a finite value (stale
             # catalog). row is an astropy Row, so membership is via colnames.
             dr = row["donut_radius"]
@@ -3182,15 +3182,15 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 annotation_clip=False,
             )
 
-        for row_idx, (sensor, acc_rows, rej_rows) in enumerate(sensors_with_data):
-            sm = sensor_meta.get(sensor, {})
+        for row_idx, (det_name, acc_rows, rej_rows) in enumerate(dets_with_data):
+            sm = det_meta.get(det_name, {})
             scatter_val = sm.get("scatter_arcsec", float("nan"))
             scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
 
             ax_stats = fig.add_subplot(gs[row_idx, 0])
             ax_stats.axis("off")
             lines = [
-                f"{sensor}",
+                f"{det_name}",
                 f"donuts: {len(acc_rows)}",
                 f"isr:    {sm.get('isr_run', float('nan')):.3f}s",
                 f"bkg:    {sm.get('bkg_run', float('nan')):.3f}s",
@@ -3225,7 +3225,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     continue
                 _draw_stamp(ax, rej_rows[col_idx], rejected=True)
 
-        ax_legend = fig.add_subplot(gs[n_sensors, :])
+        ax_legend = fig.add_subplot(gs[n_dets, :])
         ax_legend.axis("off")
         from matplotlib.lines import Line2D
 
@@ -3301,7 +3301,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             )
             if not has_model:
                 continue
-            sensors = list(dict.fromkeys(r["sensor"] for r in rows))
+            det_names = list(dict.fromkeys(r["det_name"] for r in rows))
             mode = first["fit_mode"]
             success = bool(first["fit_success"])
             elapsed = first["fit_elapsed"]
@@ -3314,7 +3314,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 model_arr = np.array(r["model_img"])
                 donuts_out.append({
                     "donut_id": r["id"],
-                    "sensor": r["sensor"],
+                    "det_name": r["det_name"],
                     "defocal": r["defocal"],
                     "img": np.array(r["wf_img"]),
                     "model_img": model_arr if not np.all(np.isnan(model_arr)) else None,
@@ -3326,7 +3326,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 })
             plottable.append({
                 "mode": mode,
-                "sensors": sensors,
+                "det_names": det_names,
                 "success": success,
                 "fit_info": {"elapsed": elapsed, "nfev": nfev, "fwhm": fwhm},
                 "donuts": donuts_out,
@@ -3334,7 +3334,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             })
 
         # Candidate donuts that no fit consumed (paired-mode surplus: no partner
-        # on the other sensor, so ``group`` is -1 and ``fit_mode`` empty). They
+        # on the other detector, so ``group`` is -1 and ``fit_mode`` empty). They
         # have no model or Zernikes, but their binned stamp is still worth
         # seeing, so carry them as data-only single-donut records.
         unfitted = []
@@ -3346,14 +3346,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 continue
             unfitted.append({
                 "mode": wf_mode,
-                "sensors": [row["sensor"]],
+                "det_names": [row["det_name"]],
                 "success": False,
                 "fit_info": {
                     "elapsed": float("nan"), "nfev": 0, "fwhm": float("nan"),
                 },
                 "donuts": [{
                     "donut_id": row["id"],
-                    "sensor": row["sensor"],
+                    "det_name": row["det_name"],
                     "defocal": row["defocal"],
                     "img": img,
                     "model_img": None,
@@ -3369,9 +3369,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         _CORNERS = list(CORNER_PAIRS)
 
         def _corner_of(r):
-            for s in r["sensors"]:
-                if str(s) in CORNER_BY_SENSOR:
-                    return CORNER_BY_SENSOR[str(s)]
+            for s in r["det_names"]:
+                if str(s) in CORNER_BY_DET_NAME:
+                    return CORNER_BY_DET_NAME[str(s)]
             return _CORNERS[0]
 
         # 4-stop diverging colormap: blue → white (zero) → vermillion.
@@ -3574,7 +3574,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 intra_hdr = f"intra {sw1}" if row_idx == 0 else ""
                 extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
 
-                def _triplet_and_bar(col_start, data, model, sensor_hdr, label,
+                def _triplet_and_bar(col_start, data, model, det_hdr, label,
                                      sid, fwhm, zk_by_noll, blend_frac_val=float("nan")):
                     if data is not None:
                         vmax = np.nanpercentile(np.abs(data), 99) or 1.0
@@ -3587,7 +3587,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                             (resid, _cmap_bwr_sym, -vmax_r, vmax_r),
                         ]):
                             ax = fig.add_subplot(inner[row_idx, col_start + ci])
-                            lbl = sensor_hdr if ci == 0 else ""
+                            lbl = det_hdr if ci == 0 else ""
                             if img is None:
                                 ax.axis("off")
                                 if lbl:
@@ -3613,8 +3613,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         for ci in range(4):
                             ax = fig.add_subplot(inner[row_idx, col_start + ci])
                             ax.axis("off")
-                            if ci == 0 and sensor_hdr:
-                                ax.set_title(sensor_hdr, fontsize=5, pad=1)
+                            if ci == 0 and det_hdr:
+                                ax.set_title(det_hdr, fontsize=5, pad=1)
 
                 _triplet_and_bar(0, intra_img, intra_mod, intra_hdr, intra_label,
                                  intra_sid, fwhm_i, zk_by_noll_i, intra_blend)
