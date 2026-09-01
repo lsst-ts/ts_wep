@@ -568,7 +568,7 @@ class WavefrontFittingTask(pipeBase.Task):
         ----------
         donut : Donut
             Donut record. Uses ``stamp`` (2-D array), ``det_id``, ``band``,
-            ``fa_x_ccs``, ``fa_y_ccs`` (field angles in radians), and
+            ``thx_ccs``, ``thy_ccs`` (field angles in radians), and
             ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``; ``None`` if uncalibrated).
 
         Returns
@@ -576,7 +576,7 @@ class WavefrontFittingTask(pipeBase.Task):
         img : np.ndarray
             ``(npix, npix)`` float stamp, binned and forced to odd size.
         angle_rad : np.ndarray
-            ``[fa_x_ccs, fa_y_ccs]`` field angle in radians.
+            ``[thx_ccs, thy_ccs]`` field angle in radians.
         zk_ref : np.ndarray
             Reference Zernike array in metres, Noll-indexed, shape
             ``(_ZK_JMAX + 1,)``.
@@ -622,8 +622,8 @@ class WavefrontFittingTask(pipeBase.Task):
         zk_ref = (
             batoid.zernikeTA(
                 telescope_dz,
-                donut.fa_x_ccs,
-                donut.fa_y_ccs,
+                donut.thx_ccs,
+                donut.thy_ccs,
                 wavelength,
                 **zernikeTA_kwargs,
             )
@@ -637,8 +637,8 @@ class WavefrontFittingTask(pipeBase.Task):
             zk_opd_foc = (
                 batoid.zernikeTA(
                     telescope,
-                    donut.fa_x_ccs,
-                    donut.fa_y_ccs,
+                    donut.thx_ccs,
+                    donut.thy_ccs,
                     wavelength,
                     **zernikeTA_kwargs,
                 )
@@ -649,7 +649,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 if i < len(intrinsic_zk) and j <= _ZK_JMAX:
                     zk_ref[j] += intrinsic_zk[i] * 1e-6 - zk_opd_foc[j]
 
-        angle_rad = np.array([donut.fa_x_ccs, donut.fa_y_ccs])
+        angle_rad = np.array([donut.thx_ccs, donut.thy_ccs])
         return img, angle_rad, zk_ref, bkg_std**2, bkg_std
 
     def _run_lstsq_fit(self, model, x0, bounds, imgs, variances, timeout, label):

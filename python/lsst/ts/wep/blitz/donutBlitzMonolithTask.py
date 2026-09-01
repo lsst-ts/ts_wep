@@ -728,8 +728,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 if calib is not None:
                     d.intrinsic_zk = np.squeeze(
                         calib.getIntrinsicZernikes(
-                            np.degrees(d.fa_x_ccs),
-                            np.degrees(d.fa_y_ccs),
+                            np.degrees(d.thx_ccs),
+                            np.degrees(d.thy_ccs),
                         )
                     )
                 else:
@@ -793,7 +793,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             danish_elapsed=t_wf1 - t_wf0,
             photo_filter_name=photo_filter_name,
             astrom_filter_name=self.config.astromRefFilter,
-            rot_tel_pos_rad=rtp_rad,
+            rtp_rad=rtp_rad,
         )
 
         if self.config.savePlots:
@@ -821,7 +821,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         danish_elapsed: float = 0.0,
         photo_filter_name: str = "",
         astrom_filter_name: str = "",
-        rot_tel_pos_rad: float = 0.0,
+        rtp_rad: float = 0.0,
     ) -> QTable:
         """Build a per-donut QTable covering every donut cut from this visit.
 
@@ -839,7 +839,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             also appear in ``donuts``; the table carries one row per donut.
         visit_id : int
             Visit identifier.
-        rot_tel_pos_rad : float
+        rtp_rad : float
             Camera rotator angle on sky (rotTelPos) in radians, used to rotate the
             Zernikes from the camera into the optical coordinate system.
 
@@ -862,7 +862,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             Zernikes are Noll-indexed array columns in µm: ``zk_dev_ccs`` and
             ``zk_intrinsic_ccs`` in the camera coordinate system (as fit), plus
             ``zk_dev_ocs`` and ``zk_intrinsic_ocs`` in the optical coordinate
-            system (the camera frame rotated by ``-rot_tel_pos_rad``).  The
+            system (the camera frame rotated by ``-rtp_rad``).  The
             deviations stop at the highest fitted Noll index, the intrinsics run
             to ``_ZK_JMAX``.
 
@@ -1013,9 +1013,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 # --- geometry ---
                 "centroid_x_raw": d.centroid_x_raw,
                 "centroid_y_raw": d.centroid_y_raw,
-                "fa_x_ccs": d.fa_x_ccs,
-                "fa_y_ccs": d.fa_y_ccs,
-                "field_dist_deg": np.degrees(np.hypot(d.fa_x_ccs, d.fa_y_ccs)),
+                "thx_ccs": d.thx_ccs,
+                "thy_ccs": d.thy_ccs,
+                "field_dist_deg": np.degrees(np.hypot(d.thx_ccs, d.thy_ccs)),
                 "n_quarter": d.n_quarter,
                 # --- nearby refcat sources (brightest-first, padded to _MAX_NEARBY) ---
                 "nearby_photo_x": photo_x * u.pix,
@@ -1080,8 +1080,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # Optical coordinate system: the camera frame rotated by -rotTelPos, so
         # m != 0 terms are comparable across visits taken at different rotator
         # angles.
-        table["zk_dev_ocs"] = _rotate_zk(zk_dev_um, -rot_tel_pos_rad) * u.micron
-        table["zk_intrinsic_ocs"] = _rotate_zk(zk_int_um, -rot_tel_pos_rad) * u.micron
+        table["thx_ocs"] = np.cos(rtp_rad) * table["thx_ccs"] - np.sin(rtp_rad) * table["thy_ccs"]
+        table["thy_ocs"] = np.sin(rtp_rad) * table["thx_ccs"] + np.cos(rtp_rad) * table["thy_ccs"]
+        table["zk_dev_ocs"] = _rotate_zk(zk_dev_um, -rtp_rad) * u.micron
+        table["zk_intrinsic_ocs"] = _rotate_zk(zk_int_um, -rtp_rad) * u.micron
         table.meta["visit_id"] = visit_id
         table.meta["run_elapsed"] = run_elapsed
         table.meta["refcat_elapsed"] = refcat_elapsed
@@ -1094,7 +1096,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["noll_indices"] = list(self.wfFittingTask.config.nollIndices)
         table.meta["zk_dev_jmax"] = zk_dev_jmax
         table.meta["zk_jmax"] = _ZK_JMAX
-        table.meta["rot_tel_pos"] = np.degrees(rot_tel_pos_rad)
+        table.meta["rot_tel_pos"] = np.degrees(rtp_rad)
         table.meta["det_meta"] = det_meta
         table.meta["aperture_outer_margin_frac"] = self.measureCandidatesTask.config.apertureOuterMarginFrac
         table.meta["aperture_inner_buffer_frac"] = self.measureCandidatesTask.config.apertureInnerBufferFrac
