@@ -40,3 +40,4 @@ towncrier.toml
 policy/cwfs/donutTemplateData/phosimTemplates/
 .ruff.toml
 towncrier.toml
+.LICENSE.txt
