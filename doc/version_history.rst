@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.9.1 (2026-09-02)
+====================
+
+Documentation
+-------------
+
+- Updated license headers with added ``insert-license`` hook. Compatible with v0.10.2 of ts_pre_commit_conf. (`RSO-903 <https://rubinobs.atlassian.net//browse/RSO-903>`_)
+
+
 v17.9.0 (2026-08-10)
 ====================
 
