@@ -3,7 +3,7 @@ requires = ["setuptools>=45", "setuptools-scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ts-wep"
+name = "ts_wep"
 description = "Rubin Observatory Wavefront Estimation Pipeline"
 license = { text = "GPL" }
 classifiers = [ "Programming Language :: Python :: 3" ]

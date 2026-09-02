@@ -1,6 +1,6 @@
 # This file is part of ts_wep.
 #
-# Developed for the LSST Telescope and Site Systems.
+# Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -13,11 +13,11 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
     "getModulePath",
@@ -228,19 +228,24 @@ def configClass(config: Union[str, dict, None, Any], classObj: Any) -> Any:
     if not inspect.isclass(classObj):
         raise TypeError("classObj must be a class.")
 
+    # Keep an un-narrowed reference for construction: using classObj as
+    # the second isinstance argument below narrows it to type[object],
+    # whose __init__ takes no keyword arguments.
+    cls: Any = classObj
+
     # If config is an instance of this class, just return it
     if isinstance(config, classObj):
         return config
 
     # If config is a string, pass config as configFile
     if isinstance(config, str):
-        return classObj(configFile=config)
+        return cls(configFile=config)
     # If it's a dictionary, pass keyword arguments
     elif isinstance(config, dict):
-        return classObj(**config)
+        return cls(**config)
     # If it's None, try instantiating with defaults
     elif config is None:
-        return classObj()
+        return cls()
     # If it's none of these, raise an error
     else:
         raise TypeError("config must be a string, dictionary, None, or an instance of classObj.")
