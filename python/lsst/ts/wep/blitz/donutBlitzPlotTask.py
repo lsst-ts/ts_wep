@@ -272,8 +272,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # overflows its axes by ~15%.
         _STAMP_TEXT_FONTSIZE = 3.5
 
+        # The unbinned `stamp` column is optional (see the monolith's saveStamps).
+        # Without it, draw the binned `wf_img`, which is always present. Every
+        # other quantity here -- aperture radii, refcat offsets, text offsets --
+        # is in unbinned pixels, so it scales by 1/binning to match.
+        _has_stamp = "stamp" in catalog.colnames
+        _px_scale = 1.0 if _has_stamp else 1.0 / catalog.meta.get("binning", 1)
+        _stamp_col = "stamp" if _has_stamp else "wf_img"
+
         def _draw_stamp(ax, row, rejected=False):
-            stamp = np.array(row["stamp"])
+            stamp = np.array(row[_stamp_col])
             h_px = stamp.shape[0] // 2
             vmin, vmax = np.nanpercentile(stamp, [1, 99])
             _edge = h_px + 0.5
@@ -293,6 +301,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             dr = row["donut_radius"]
             ob = row["obscuration"]
             if dr is not None and ob is not None:
+                dr = dr * _px_scale  # into the drawn image's pixel units
                 _circ_specs = [
                     (dr * ob * _stamp_inner_buffer_frac, _COLOR_BKG_ANNULUS, "--"),
                     (dr * ob, _COLOR_APERTURE, "-"),
@@ -334,7 +343,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 r, c = dy, dx
                 for _ in range(nq):
                     r, c = c, -r
-                return r, c
+                # Offsets are in unbinned pixels; scale to the drawn image.
+                return r * _px_scale, c * _px_scale
 
             n_photo = min(row["n_nearby_photo"], _MAX_NEARBY)
             px = row["nearby_photo_x"][:n_photo].to_value(u.pix)
@@ -344,7 +354,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 tx, ty = _xform(dx, dy)
                 ax.plot(tx, ty, "o", ms=6, mfc="none", mec=_COLOR_PHOTO_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
-                    ax.text(tx + 3, ty + 3, f"{mag:.2f}", color=_COLOR_PHOTO_REFCAT, fontsize=3.5, zorder=4)
+                    ax.text(
+                        tx + 3 * _px_scale,
+                        ty + 3 * _px_scale,
+                        f"{mag:.2f}",
+                        color=_COLOR_PHOTO_REFCAT,
+                        fontsize=3.5,
+                        zorder=4,
+                    )
 
             n_astrom = min(row["n_nearby_astrom"], _MAX_NEARBY)
             ax_ = row["nearby_astrom_x"][:n_astrom].to_value(u.pix)
@@ -354,7 +371,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 tx, ty = _xform(dx, dy)
                 ax.plot(tx, ty, "+", ms=6, mec=_COLOR_ASTROM_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
-                    ax.text(tx + 3, ty - 5, f"{mag:.2f}", color=_COLOR_ASTROM_REFCAT, fontsize=3.5, zorder=4)
+                    ax.text(
+                        tx + 3 * _px_scale,
+                        ty - 5 * _px_scale,
+                        f"{mag:.2f}",
+                        color=_COLOR_ASTROM_REFCAT,
+                        fontsize=3.5,
+                        zorder=4,
+                    )
             # Pin the view to the stamp's own edges: constant figure footprint
             # regardless of pixel count, and no autoscale from the overlays.
             ax.set_xlim(-_edge, _edge)
