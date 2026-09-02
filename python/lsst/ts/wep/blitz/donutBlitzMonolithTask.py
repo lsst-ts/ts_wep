@@ -317,6 +317,15 @@ class DonutBlitzMonolithTaskConfig(
         dtype=str,
         default="monster_ComCam",
     )
+    saveStamps: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Include the unbinned `stamp` image column in the output catalog. "
+            "The diagnostic plots use it when present and fall back to the "
+            "binned `wf_img` when not."
+        ),
+        dtype=bool,
+        default=True,
+    )
     savePlots: pexConfig.Field = pexConfig.Field(
         doc=(
             "Generate diagnostic PNGs for each visit. "
@@ -949,8 +958,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             to a common shape.  ``wf_img`` is filled for every donut with a
             stamp -- from the fitter when a fit ran, otherwise by binning the
             stamp the same way -- so only ``model_img`` is all-NaN for unused
-            donuts.  Visit-level and per-detector scalars are stored in
-            ``table.meta``.
+            donuts.  ``stamp`` is present only when ``saveStamps`` is set.
+            Visit-level and per-detector scalars are stored in ``table.meta``.
         """
         # Build lookup: (id, det_name) -> (wf donut entry, group index).
         # Key on both fields to handle the same refcat star on SW0 and SW1.
@@ -1030,6 +1039,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
 
         # Pre-compute common sizes from config (all stamps and WF images are uniform).
         stamp_size = self.cutStampsTask.config.stampSize
+        save_stamps = self.config.saveStamps
         # WF images: binned and forced to odd size (see _prep_donut_for_danish).
         _binned = self.cutStampsTask.config.stampSize // self.wfFittingTask.config.binning
         wf_img_size = _binned if _binned % 2 == 1 else _binned - 1
@@ -1049,11 +1059,15 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             zk_dev_rows.append(wd.zk_dev[: zk_dev_jmax + 1])
             zk_int_rows.append(wd.zk_intrinsic)
 
-            stamp = (
-                d.stamp.astype(float)
-                if d.stamp is not None
-                else np.full((stamp_size, stamp_size), np.nan, dtype=float)
-            )
+            # Skipped entirely when not saving, so we do not pay for the
+            # float64 copy of a column that is about to be discarded.
+            stamp = None
+            if save_stamps:
+                stamp = (
+                    d.stamp.astype(float)
+                    if d.stamp is not None
+                    else np.full((stamp_size, stamp_size), np.nan, dtype=float)
+                )
 
             # Donuts no fit consumed (paired-mode surplus) have no WF image from
             # the fitter, so bin their stamp here with the same prep the fitter
@@ -1140,7 +1154,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 # Zernikes are attached after construction as the array columns
                 # zk_dev_ccs / zk_intrinsic_ccs.
                 # --- embedded images ---
-                "stamp": stamp,
+                # `stamp` is optional (see saveStamps); `wf_img` is always
+                # present and is what the plots fall back to without it.
+                **({"stamp": stamp} if save_stamps else {}),
                 "wf_img": wf_img,
                 "model_img": model_img,
             }
@@ -1179,6 +1195,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         table.meta["photo_filter_name"] = photo_filter_name
         table.meta["astrom_filter_name"] = astrom_filter_name
         table.meta["noll_indices"] = list(self.wfFittingTask.config.nollIndices)
+        # Needed by the plots to convert raw-pixel quantities (aperture radii,
+        # refcat offsets) when they fall back to the binned wf_img.
+        table.meta["binning"] = self.wfFittingTask.config.binning
         table.meta["zk_dev_jmax"] = zk_dev_jmax
         table.meta["zk_jmax"] = _ZK_JMAX
         table.meta["rot_tel_pos"] = np.degrees(rtp_rad)
