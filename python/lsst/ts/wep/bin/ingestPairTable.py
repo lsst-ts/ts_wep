@@ -1,4 +1,4 @@
-# This file is part of ts-wep.
+# This file is part of ts_wep.
 #
 # Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
