@@ -747,6 +747,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             # below. cutout_args is the detectors with raws, non-empty by the
             # guard above.
             n_cutout_workers = min(numCores, len(cutout_args))
+            # A bare fork Pool is safe here only because these workers never
+            # touch the butler -- everything is preloaded in runQuantum and
+            # inherited via COW. Children sharing the parent's inherited psycopg2
+            # SSL socket corrupt it (~5-10% of 8-worker forks), so any worker
+            # that starts reading from the butler needs `initializer=`
+            # calling SqlRegistry.resetConnectionPool().
             with mp.get_context("fork").Pool(processes=n_cutout_workers) as pool:
                 t_pool1 = time.perf_counter()
                 t_dispatch = time.time()
@@ -820,6 +826,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             wf_results = [_wf_fitting_worker(g) for g in groups]
         else:
             n_workers = min(numCores, len(groups))
+            # Butler-free like the cutout pool above; same caveat applies.
             with mp.get_context("fork").Pool(processes=n_workers) as wf_pool:
                 wf_results = wf_pool.map(_wf_fitting_worker, groups)
         t_wf1 = time.perf_counter()
