@@ -79,45 +79,64 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
     return sourceCat
 
 
-def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
+def _cutout_one_exposure(
+    raw,
+    calibs: dict,
+    cutout_cfg: dict,
+    refcat_load_result,
+    det_name: str,
+) -> dict:
     """Run ISR, background subtraction, blind detection, WCS refit, catalog
-    selection, and stamp cutting.
+    selection, and stamp cutting on one exposure of one detector.
 
-    Orchestrates the full per-detector cutout pipeline in a worker process.
-    All inputs are read from the module-level ``_CALIB_STORE`` dict, which is
-    populated by the parent process before forking.
+    Takes its per-exposure inputs explicitly so both modes can drive it: corner
+    mode has one exposure per detector and reads them from ``_CALIB_STORE`` (see
+    `_cutoutPipeline`), while full-array mode calls this twice per detector with
+    the intra and extra exposures of a pair.
+
+    The *subtasks* are still read from the module-level ``_CALIB_STORE``, which
+    the parent populates before forking. That is deliberate: they are identical
+    for every call and shared by copy-on-write, so threading them through as
+    arguments would buy nothing and cost a pickle.
 
     Parameters
     ----------
+    raw : lsst.afw.image.Exposure
+        The raw exposure to process.
+    calibs : dict
+        Per-detector calibrations, keyed ``ptc``, ``flat``, ``linearizer``,
+        ``crosstalk``.
+    cutout_cfg : dict
+        Keyed ``maxFitScatter``, ``astromRefFilter``, ``photoRefFilter``.
+    refcat_load_result
+        Pre-loaded reference catalog for this detector, or None to skip the WCS
+        refit and refcat-based selection.
     det_name : str
-        Detector name; used to look up per-detector calibrations in
-        ``_CALIB_STORE``.
-    t_dispatch : float
-        ``time.time()`` timestamp at which the task was dispatched from the
-        parent, used to measure dispatch-to-arrival latency.
+        Detector name, for logging and the returned record.
 
     Returns
     -------
     dict
-        Keys: ``det_name``, ``catalog`` (accepted donut dicts),
-        ``rejected_catalog``, ``scatter_arcsec``, ``wcs_refit_error``,
-        ``cat_select_error``, and timing floats ``dispatch_to_arrival``,
-        ``isr_run``, ``bkg_run``, ``diam_run``, ``blind_detect_run``,
-        ``wcs_refit_run``, ``catalog_select_run``, ``stamp_cut_run``.
-    """
-    t_arrival = time.time()
-    entry = _CALIB_STORE[det_name]
-    cutout_cfg = _CALIB_STORE["cutout_cfg"]
+        Keys: ``det_name``, ``catalog`` (accepted donuts), ``rejected_catalog``,
+        ``scatter_arcsec``, ``wcs_refit_error``, ``cat_select_error``,
+        ``selection_source``, ``wcs`` (the WCS actually used, or None), and
+        timing floats ``isr_run``, ``bkg_run``, ``diam_run``,
+        ``blind_detect_run``, ``wcs_refit_run``, ``catalog_select_run``,
+        ``stamp_cut_run``.
 
+        ``selection_source`` and ``wcs`` exist because full-array mode has to
+        decide how to pair donuts between the two exposures: an exact refcat-id
+        match is only available when both exposures selected from the refcat.
+    """
     # --- ISR ---
     t0 = time.perf_counter()
     isr_task = _CALIB_STORE["isr_task"]
     postIsr = isr_task.run(
-        entry["raw"],
-        ptc=entry["ptc"],
-        flat=entry["flat"],
-        linearizer=entry["linearizer"],
-        crosstalk=entry["crosstalk"],
+        raw,
+        ptc=calibs["ptc"],
+        flat=calibs["flat"],
+        linearizer=calibs["linearizer"],
+        crosstalk=calibs["crosstalk"],
     ).exposure
 
     # --- background subtraction ---
@@ -142,7 +161,6 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
         return {
             "det_name": det_name,
             "catalog": [],
-            "dispatch_to_arrival": time.time() - t_dispatch,
             "isr_run": t1 - t0,
             "bkg_run": t2 - t1,
             "diam_run": t3 - t2,
@@ -154,13 +172,15 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
             "scatter_arcsec": None,
             "wcs_refit_error": "No blind detections",
             "cat_select_error": "",
+            "selection_source": None,
+            "wcs": None,
         }
 
     # --- astrometry ---
     t4 = time.perf_counter()
     astrom_task = _CALIB_STORE["astrom_task"]
     detector = postIsr.getDetector()
-    refcat_handle = _CALIB_STORE["det_refcats"].get(detector.getName())
+    refcat_handle = refcat_load_result
     scatter_arcsec = None
     wcs = None
     wcs_err = ""
@@ -321,7 +341,6 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
     return {
         "det_name": det_name,
         "catalog": cut_result.donuts,
-        "dispatch_to_arrival": t_arrival - t_dispatch,
         "isr_run": t1 - t0,
         "bkg_run": t2 - t1,
         "diam_run": t3 - t2,
@@ -333,7 +352,39 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
         "scatter_arcsec": scatter_arcsec,
         "wcs_refit_error": wcs_err,
         "cat_select_error": cat_err,
+        "selection_source": selection_source,
+        "wcs": wcs,
     }
+
+
+def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
+    """Corner-mode entry point: one exposure per detector, all from _CALIB_STORE.
+
+    Parameters
+    ----------
+    det_name : str
+        Detector name; used to look up the raw and its calibrations in
+        ``_CALIB_STORE``.
+    t_dispatch : float
+        ``time.time()`` timestamp at which the task was dispatched from the
+        parent, used to measure dispatch-to-arrival latency.
+
+    Returns
+    -------
+    dict
+        As `_cutout_one_exposure`, plus ``dispatch_to_arrival``.
+    """
+    t_arrival = time.time()
+    entry = _CALIB_STORE[det_name]
+    result = _cutout_one_exposure(
+        raw=entry["raw"],
+        calibs=entry,
+        cutout_cfg=_CALIB_STORE["cutout_cfg"],
+        refcat_load_result=_CALIB_STORE["det_refcats"].get(det_name),
+        det_name=det_name,
+    )
+    result["dispatch_to_arrival"] = t_arrival - t_dispatch
+    return result
 
 
 def _run_cutout_worker(args: tuple) -> dict:

@@ -45,11 +45,10 @@ import lsst.pipe.base as pipeBase
 from .dataStructures import Donut, WfResult, _WfGroup
 from .utils import (
     _CALIB_STORE,
-    _EXTRA_FOCAL_DET_IDS,
     _INSTRUMENT,
-    _INTRA_FOCAL_DET_IDS,
     _ZK_JMAX,
     _bin_stamp_odd,
+    _telescope_for_offsets,
     CORNER_PAIRS,
 )
 
@@ -479,7 +478,7 @@ class WavefrontFittingTask(pipeBase.Task):
 
         donuts_out = []
         for i, d in enumerate(all_donuts):
-            defocal = "intra" if int(d.det_id) in _INTRA_FOCAL_DET_IDS else "extra"
+            defocal = d.defocal
             _img = imgs[i] if i < len(imgs) else None
             donuts_out.append(
                 WfResult(
@@ -589,8 +588,6 @@ class WavefrontFittingTask(pipeBase.Task):
             Background standard deviation estimate.
         """
         binning = self.config.binning
-        det_id = donut.det_id
-        defocalSign = +1 if det_id in _EXTRA_FOCAL_DET_IDS else -1
 
         img = _bin_stamp_odd(donut.stamp, binning)
         diff = (img[1:] - img[:-1]).ravel()
@@ -606,9 +603,16 @@ class WavefrontFittingTask(pipeBase.Task):
             )
         wavelength = wavelength_by_band[band]
         telescope = _CALIB_STORE["telescope"]
-        telescope_dz = (
-            _CALIB_STORE["telescope_extra"] if defocalSign > 0 else _CALIB_STORE["telescope_intra"]
-        )
+        # The defocused telescope comes from the donut's own offset triplet, so
+        # the fitter no longer needs to know which detectors sit on which side of
+        # focus -- a rule that has no meaning in full-array mode, where every
+        # detector appears on both sides.
+        if donut.defocal_offsets is None:
+            raise RuntimeError(
+                f"Donut {donut.id} on {donut.det_name} has no defocal_offsets; the "
+                "task that built it must set them (see Donut.defocal_offsets)."
+            )
+        telescope_dz = _telescope_for_offsets(donut.defocal_offsets)
         eps = telescope.pupilObscuration
         nrad = 10
         zernikeTA_kwargs = dict(

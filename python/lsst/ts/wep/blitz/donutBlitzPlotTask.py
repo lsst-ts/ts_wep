@@ -277,6 +277,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # other quantity here -- aperture radii, refcat offsets, text offsets --
         # is in unbinned pixels, so it scales by 1/binning to match.
         _has_stamp = "stamp" in catalog.colnames
+        if not _has_stamp and "wf_img" not in catalog.colnames:
+            raise RuntimeError(
+                "Catalog has neither a 'stamp' nor a 'wf_img' column, so there is "
+                "nothing to draw. Re-run with saveStamps or saveWfImages enabled "
+                "if you want these plots."
+            )
         _px_scale = 1.0 if _has_stamp else 1.0 / catalog.meta.get("binning", 1)
         _stamp_col = "stamp" if _has_stamp else "wf_img"
 

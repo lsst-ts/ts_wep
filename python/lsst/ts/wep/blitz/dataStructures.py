@@ -62,6 +62,14 @@ class Donut:
     nearby_photo: list[tuple[float, float, float]]
     nearby_astrom: list[tuple[float, float, float]]
     intrinsic_zk: npt.NDArray[np.float64] | None = None
+    # Which side of focus this donut is on, and the optic shifts that put it
+    # there. Set by whichever task builds the donut, because the two modes decide
+    # it differently: corner mode from the detector id (SW0/SW1 sit either side of
+    # focus within one exposure), FAM from which exposure of the pair it came
+    # from. `defocal_offsets` is signed metres, ordered
+    # (detector, camera, m2) -- see `_telescope_for_offsets`.
+    defocal: str = ""
+    defocal_offsets: tuple[float, float, float] | None = None
     # --- reject flags (default False = not rejected) ---
     rejected_sat: bool = False
     rejected_inner_frac: bool = False
