@@ -44,7 +44,7 @@ def runSelection(
     filterName: str,
     donutSelectorTask: DonutSourceSelectorTask,
     edgeMargin: int,
-) -> tuple[QTable, list, list]:
+) -> tuple[QTable, list, list, list, list, list]:
     """
     Match the detector area to the reference catalog
     and then run the LSST DM reference selection task.
@@ -80,6 +80,12 @@ def runSelection(
         X pixel location of centroids of blended donuts.
     list
         Y pixel location of centroids of blended donuts.
+    list
+        Magnitudes (ABmag) of blended donuts.
+    list
+        Separations in pixels between primary and blended donuts.
+    list
+        Magnitude differences between blended and primary donuts.
     """
 
     bbox = detector.getBBox()
@@ -87,13 +93,17 @@ def runSelection(
     donutCatalog = refObjLoader.loadPixelBox(trimmedBBox, wcs, filterName).refCat
 
     if donutSelectorTask is None:
-        return donutCatalog, [[]] * len(donutCatalog), [[]] * len(donutCatalog)
+        empty: list = [[]] * len(donutCatalog)
+        return donutCatalog, empty, empty, empty, empty, empty
     else:
         donutSelection = donutSelectorTask.run(donutCatalog, detector, filterName)
         return (
             donutCatalog[donutSelection.selected],
             donutSelection.blendCentersX,
             donutSelection.blendCentersY,
+            donutSelection.blendMags,
+            donutSelection.blendSeparations,
+            donutSelection.blendMagDiffs,
         )
 
 
@@ -102,6 +112,9 @@ def donutCatalogToAstropy(
     filterName: str | list[str],
     blendCentersX: list | None = None,
     blendCentersY: list | None = None,
+    blendMags: list | None = None,
+    blendSeparations: list | None = None,
+    blendMagDiffs: list | None = None,
     sortFilterIdx: int = 0,
 ) -> QTable:
     """
@@ -128,6 +141,17 @@ def donutCatalogToAstropy(
         should be the same length as the donutCatalog. If
         blendCentersX is not None then this cannot be None. (the default
         is None.)
+    blendMags : `list` or `None`, optional
+        Magnitudes (ABmag) of blended objects. List should be
+        the same length as the donutCatalog. (the default is None.)
+    blendSeparations : `list` or `None`, optional
+        Separations in pixels between primary and blended objects.
+        List should be the same length as the donutCatalog.
+        (the default is None.)
+    blendMagDiffs : `list` or `None`, optional
+        Magnitude differences between blended and primary objects.
+        List should be the same length as the donutCatalog.
+        (the default is None.)
     sortFilterIdx : int, optional
         Index for which filter in filterName to sort the entire catalog
         by brightness. (the default is 0.)
@@ -191,6 +215,22 @@ def donutCatalogToAstropy(
             blendErrMsg = "blendCentersX and blendCentersY must be" + " both be None or both be a list."
             raise ValueError(blendErrMsg)
 
+        # Unpack per-blend metadata fields (mag, separation, mag diff).
+        # Each must be None or a list with the same length as donutCatalog.
+        def _unpack_blend_field(field: list | None, name: str) -> list:
+            if field is None:
+                return [list() for _ in range(len(donutCatalog))]
+            elif isinstance(field, list):
+                if len(field) != len(donutCatalog):
+                    raise ValueError(f"{name} must be same length as donutCatalog.")
+                return field
+            else:
+                raise ValueError(f"{name} must be None or a list.")
+
+        blendM = _unpack_blend_field(blendMags, "blendMags")
+        blendSep = _unpack_blend_field(blendSeparations, "blendSeparations")
+        blendMD = _unpack_blend_field(blendMagDiffs, "blendMagDiffs")
+
     fieldObjects = QTable()
     fieldObjects["coord_ra"] = ra * u.rad
     fieldObjects["coord_dec"] = dec * u.rad
@@ -204,11 +244,17 @@ def donutCatalogToAstropy(
         fieldObjects = fieldObjects[flux_sort]
         fieldObjects.meta["blend_centroid_x"] = [blendCX[idx] for idx in flux_sort]
         fieldObjects.meta["blend_centroid_y"] = [blendCY[idx] for idx in flux_sort]
+        fieldObjects.meta["blend_mag"] = [blendM[idx] for idx in flux_sort]
+        fieldObjects.meta["blend_separation"] = [blendSep[idx] for idx in flux_sort]
+        fieldObjects.meta["blend_mag_diff"] = [blendMD[idx] for idx in flux_sort]
     else:
         for idx in range(len(filterName)):
             fieldObjects[f"{filterName[idx]}_flux"] = list() * u.nJy
         fieldObjects.meta["blend_centroid_x"] = list()
         fieldObjects.meta["blend_centroid_y"] = list()
+        fieldObjects.meta["blend_mag"] = list()
+        fieldObjects.meta["blend_separation"] = list()
+        fieldObjects.meta["blend_mag_diff"] = list()
 
     return fieldObjects
 
