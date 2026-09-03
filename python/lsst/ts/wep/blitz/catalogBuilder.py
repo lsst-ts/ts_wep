@@ -130,8 +130,10 @@ class CatalogOptions:
     noll_indices : tuple of int
         Noll indices actually fitted. The deviation array column stops at the
         highest one.
-    aperture_outer_margin_frac : float
-        Outer edge of the photometric aperture, from the measurement subtask.
+    aperture_margin_frac : float
+        Fractional margin on both edges of the photometric annulus, from the
+        measurement subtask: the outer edge sits at ``radius * (1 + frac)``, the
+        inner edge at ``radius * obscuration * (1 - frac)``.
     bkg_inner_disc_frac : float
         Outer edge of the inner background disc (inside the obscuration), from
         the measurement subtask.
@@ -151,7 +153,7 @@ class CatalogOptions:
     stamp_size: int
     binning: int
     noll_indices: tuple[int, ...]
-    aperture_outer_margin_frac: float
+    aperture_margin_frac: float
     bkg_inner_disc_frac: float
     bkg_annulus_inner_frac: float
     bkg_annulus_outer_frac: float
@@ -479,7 +481,7 @@ def build_donut_catalog(
     table.meta["zk_jmax"] = _ZK_JMAX
     table.meta["rot_tel_pos"] = np.degrees(rtp_rad)
     table.meta["det_meta"] = det_meta
-    table.meta["aperture_outer_margin_frac"] = options.aperture_outer_margin_frac
+    table.meta["aperture_margin_frac"] = options.aperture_margin_frac
     table.meta["bkg_inner_disc_frac"] = options.bkg_inner_disc_frac
     table.meta["bkg_annulus_inner_frac"] = options.bkg_annulus_inner_frac
     table.meta["bkg_annulus_outer_frac"] = options.bkg_annulus_outer_frac

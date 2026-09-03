@@ -852,7 +852,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             stamp_size=self.cutStampsTask.config.stampSize,
             binning=self.wfFittingTask.config.binning,
             noll_indices=tuple(self.wfFittingTask.config.nollIndices),
-            aperture_outer_margin_frac=self.measureCandidatesTask.config.apertureOuterMarginFrac,
+            aperture_margin_frac=self.measureCandidatesTask.config.apertureMarginFrac,
             bkg_inner_disc_frac=self.measureCandidatesTask.config.bkgInnerDiscFrac,
             bkg_annulus_inner_frac=self.measureCandidatesTask.config.bkgAnnulusInnerFrac,
             bkg_annulus_outer_frac=self.measureCandidatesTask.config.bkgAnnulusOuterFrac,
