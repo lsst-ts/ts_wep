@@ -25,6 +25,7 @@ __all__ = []
 
 import sys
 
+import batoid
 import galsim
 import numpy as np
 
@@ -66,6 +67,109 @@ _MAX_NEARBY = 5
 # Maximum Noll index fit/reported. Dense Noll-indexed arrays are length
 # _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
 _ZK_JMAX = 66
+
+
+# Optics that can be shifted along z to defocus, in the order the offset triplet
+# carried on each `Donut` uses. Corner mode moves the detector plane inside the
+# camera; full-array mode moves the whole camera; some data instead moves M2.
+# Names match the batoid LSST model, where M1/M2/M3/LSSTCamera are top level and
+# Detector is nested inside LSSTCamera.
+_OFFSET_OPTICS = ("Detector", "LSSTCamera", "M2")
+
+
+def _telescope_for_offsets(offsets: tuple[float, float, float]):
+    """Return the telescope defocused by an offset triplet, memoised.
+
+    Parameters
+    ----------
+    offsets : tuple of float
+        Signed z shifts in metres, ordered as `_OFFSET_OPTICS`
+        ``(detector, camera, m2)``. Zero components are skipped, so the common
+        single-optic case costs one shift.
+
+    Returns
+    -------
+    batoid.Optic
+        ``_CALIB_STORE["telescope"]`` with each non-zero component applied.
+
+    Notes
+    -----
+    Callers are expected to pre-build every triplet they will need in the parent
+    process before forking, so workers inherit the built telescopes via
+    copy-on-write rather than each paying for them. A worker asking for a triplet
+    the parent did not anticipate still gets a correct answer, it just builds it
+    itself and the result does not propagate back.
+
+    Uses ``withGloballyShiftedOptic``. For a pure z shift of these optics that is
+    identical to the ``withLocallyShiftedOptic`` corner mode used previously --
+    verified bit-for-bit on the Zernikes -- because the camera's coordinate system
+    carries no rotation relative to the global frame. Were that ever to change,
+    global is the meaning we want: the offsets describe how the hardware moved.
+    """
+    store = _CALIB_STORE.setdefault("telescope_by_offsets", {})
+    key = tuple(float(o) for o in offsets)
+    telescope = store.get(key)
+    if telescope is None:
+        telescope = _CALIB_STORE["telescope"]
+        for name, dz in zip(_OFFSET_OPTICS, key):
+            if dz:
+                telescope = telescope.withGloballyShiftedOptic(name, [0.0, 0.0, dz])
+        store[key] = telescope
+    return telescope
+
+
+# Field angle at which the defocal radial scale is evaluated. The displacement is
+# linear in field angle (verified against batoid: 7.9/15.7/23.6 px at
+# 0.5/1.0/1.5 deg for a 1.5 mm camera shift), so it is a pure scale and any
+# non-zero reference angle gives the same answer.
+_RADIAL_SCALE_REF_THETA = np.deg2rad(1.0)
+
+
+def _defocal_radial_scale(offsets: tuple[float, float, float]) -> float:
+    """Fractional radial stretch of the focal plane produced by a defocus.
+
+    Shifting an optic along z moves an off-axis chief ray radially, so the *same*
+    star lands at slightly different field angles either side of focus -- ~27 px
+    apart at 1.725 deg for a 1.5 mm camera shift, and zero on axis. Any attempt
+    to associate donuts between an intra and an extra exposure by position has to
+    account for this, or it will work at the field centre and fail at the edge.
+
+    Because the displacement is linear in field angle it is a pure scale, so one
+    number per offset triplet corrects the whole focal plane.
+
+    Parameters
+    ----------
+    offsets : tuple of float
+        Signed z shifts in metres, ordered as `_OFFSET_OPTICS`.
+
+    Returns
+    -------
+    float
+        Ratio of defocused to in-focus radial position. Divide a measured field
+        angle by this to recover the common frame. 1.0 for a null defocus.
+    """
+    store = _CALIB_STORE.setdefault("radial_scale_by_offsets", {})
+    key = tuple(float(o) for o in offsets)
+    scale = store.get(key)
+    if scale is None:
+        wavelength = _INSTRUMENT.wavelength[_INSTRUMENT.refBand]
+
+        def _chief_ray_x(telescope):
+            ray = batoid.RayVector.fromStop(
+                0.0,
+                0.0,
+                optic=telescope,
+                wavelength=wavelength,
+                theta_x=_RADIAL_SCALE_REF_THETA,
+                theta_y=0.0,
+            )
+            telescope.trace(ray)
+            return float(ray.x[0])
+
+        base = _chief_ray_x(_CALIB_STORE["telescope"])
+        scale = _chief_ray_x(_telescope_for_offsets(key)) / base
+        store[key] = scale
+    return scale
 
 
 def _resolveColorLogEnabled(colorLog: bool | None) -> bool:
