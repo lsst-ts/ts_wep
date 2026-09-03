@@ -50,6 +50,15 @@ CORNER_PAIRS = {
 CORNER_DET_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (sw0, sw1))
 # Detector name -> corner, derived from CORNER_PAIRS rather than re-encoded.
 CORNER_BY_DET_NAME = {s: corner for corner, pair in CORNER_PAIRS.items() for s in pair}
+# Detector name -> intra/extra, likewise derived. Corner mode's defocal side is a
+# property of the detector, so donuts carry only their optic offsets and anything
+# needing the label (currently just plot layout) looks it up here. Full-array mode
+# has no equivalent: there the side comes from which exposure of the pair.
+CORNER_DEFOCAL_BY_DET_NAME = {
+    name: ("extra" if name == sw0 else "intra")
+    for sw0, sw1 in CORNER_PAIRS.values()
+    for name in (sw0, sw1)
+}
 
 # ANSI escape codes for colorizing log messages (see colorLog config field).
 _ANSI_RESET = "\033[0m"
