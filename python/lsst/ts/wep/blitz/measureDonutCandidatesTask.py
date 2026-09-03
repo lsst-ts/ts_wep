@@ -45,10 +45,15 @@ class MeasureDonutCandidatesConfig(pexConfig.Config):
         dtype=float,
         default=1.05,
     )
-    apertureInnerBufferFrac: pexConfig.Field = pexConfig.Field(
+    # Two background regions are sampled, and each has an "inner" radius, so keep
+    # the names apart: this one bounds the filled disc inside the central
+    # obscuration, bkgAnnulusInnerFrac bounds the annulus outside the donut.
+    bkgInnerDiscFrac: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Inner edge of the background/blend-check region inside the "
-            "obscuration, as a multiple of ``radius * obscuration``."
+            "Outer edge of the inner background/blend-check disc, which sits "
+            "inside the central obscuration, as a multiple of "
+            "``radius * obscuration``. Held back from the obscuration edge so "
+            "background is not sampled right against the donut's inner rim."
         ),
         dtype=float,
         default=0.67,
@@ -149,7 +154,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         sector_angle = np.arctan2(gy, gx)
 
         main_mask = (r < radius * cfg.apertureOuterMarginFrac) & (r > radius * obscuration)
-        inner_mask = r < radius * obscuration * cfg.apertureInnerBufferFrac
+        inner_mask = r < radius * obscuration * cfg.bkgInnerDiscFrac
         outer_mask = (r > radius * cfg.bkgAnnulusInnerFrac) & (r < radius * cfg.bkgAnnulusOuterFrac)
         bkg_mask = inner_mask | outer_mask
         n_main = np.sum(main_mask)
