@@ -469,7 +469,7 @@ class WavefrontFittingTask(pipeBase.Task):
         timeout = self.config.wfFitTimeoutPerDonut * n
         _setup_elapsed = time.perf_counter() - t_setup0
         label = f"group={group.group_id} n={n}"
-        self.log.info("WF %s npix=%d setup=%.2fs", label, npix, _setup_elapsed)
+        self.log.info("WF %s setup=%.2fs", label, _setup_elapsed)
 
         fit_result = self._run_lstsq_fit(
             model, x0, bounds, imgs, sky_lvl, timeout, label
@@ -478,13 +478,11 @@ class WavefrontFittingTask(pipeBase.Task):
 
         donuts_out = []
         for i, d in enumerate(all_donuts):
-            defocal = d.defocal
             _img = imgs[i] if i < len(imgs) else None
             donuts_out.append(
                 WfResult(
                     donut_id=int(d.id),
                     det_name=d.det_name,
-                    defocal=defocal,
                     zk_dev=zk_dev_dense,
                     zk_intrinsic=_dense_intrinsic(d),
                     img=_img,

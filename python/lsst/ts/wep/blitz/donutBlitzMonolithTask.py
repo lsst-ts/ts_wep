@@ -741,16 +741,17 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 )
             donuts.extend(r["catalog"])
 
-        # Annotate the defocal side and the optic shifts that produced it. In
-        # corner mode this follows from the detector: SW0 is extra-focal, SW1
-        # intra-focal. Rejected donuts are annotated too -- they get a row in the
-        # output catalog, so they need a defocal label as much as accepted ones do.
+        # Annotate the optic shifts that put each donut off focus. In corner mode
+        # this follows from the detector: SW0 is extra-focal, SW1 intra-focal.
+        # Rejected donuts are annotated too -- they get a row in the output
+        # catalog, and _prep_donut_for_danish requires the offsets of anything it
+        # is handed.
         for r in results:
             for d in r["catalog"] + r.get("rejected_catalog", []):
-                is_intra = d.det_id in _INTRA_FOCAL_DET_IDS
-                d.defocal = "intra" if is_intra else "extra"
                 d.defocal_offsets = (
-                    _INTRA_FOCAL_OFFSETS if is_intra else _EXTRA_FOCAL_OFFSETS
+                    _INTRA_FOCAL_OFFSETS
+                    if d.det_id in _INTRA_FOCAL_DET_IDS
+                    else _EXTRA_FOCAL_OFFSETS
                 )
 
         # Annotate each accepted donut with realized intrinsic Zernikes.
@@ -852,7 +853,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             binning=self.wfFittingTask.config.binning,
             noll_indices=tuple(self.wfFittingTask.config.nollIndices),
             aperture_outer_margin_frac=self.measureCandidatesTask.config.apertureOuterMarginFrac,
-            aperture_inner_buffer_frac=self.measureCandidatesTask.config.apertureInnerBufferFrac,
+            bkg_inner_disc_frac=self.measureCandidatesTask.config.bkgInnerDiscFrac,
             bkg_annulus_inner_frac=self.measureCandidatesTask.config.bkgAnnulusInnerFrac,
             bkg_annulus_outer_frac=self.measureCandidatesTask.config.bkgAnnulusOuterFrac,
             max_donuts=self.cutStampsTask.config.maxDonuts,

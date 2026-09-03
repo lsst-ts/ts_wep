@@ -130,10 +130,13 @@ class CatalogOptions:
     noll_indices : tuple of int
         Noll indices actually fitted. The deviation array column stops at the
         highest one.
-    aperture_outer_margin_frac, aperture_inner_buffer_frac : float
-        Photometry aperture geometry, from the measurement subtask.
+    aperture_outer_margin_frac : float
+        Outer edge of the photometric aperture, from the measurement subtask.
+    bkg_inner_disc_frac : float
+        Outer edge of the inner background disc (inside the obscuration), from
+        the measurement subtask.
     bkg_annulus_inner_frac, bkg_annulus_outer_frac : float
-        Background annulus geometry, from the measurement subtask.
+        Outer background annulus geometry, from the measurement subtask.
     max_donuts : int
         Per-detector accepted-donut cap.
     wf_mode : str
@@ -149,7 +152,7 @@ class CatalogOptions:
     binning: int
     noll_indices: tuple[int, ...]
     aperture_outer_margin_frac: float
-    aperture_inner_buffer_frac: float
+    bkg_inner_disc_frac: float
     bkg_annulus_inner_frac: float
     bkg_annulus_outer_frac: float
     max_donuts: int
@@ -369,9 +372,6 @@ def build_donut_catalog(
             "det_id": d.det_id,
             "det_name": d.det_name,
             "id": sid,
-            # Annotated on the donut before dispatch, not taken from the fit
-            # result: donuts no fit consumed still belong to a defocal side.
-            "defocal": d.defocal,
             "band": d.band,
             # candidate: passed every selection/quality cut.
             # used: a fit consumed it and returned a wavefront.
@@ -480,7 +480,7 @@ def build_donut_catalog(
     table.meta["rot_tel_pos"] = np.degrees(rtp_rad)
     table.meta["det_meta"] = det_meta
     table.meta["aperture_outer_margin_frac"] = options.aperture_outer_margin_frac
-    table.meta["aperture_inner_buffer_frac"] = options.aperture_inner_buffer_frac
+    table.meta["bkg_inner_disc_frac"] = options.bkg_inner_disc_frac
     table.meta["bkg_annulus_inner_frac"] = options.bkg_annulus_inner_frac
     table.meta["bkg_annulus_outer_frac"] = options.bkg_annulus_outer_frac
     table.meta["max_donuts"] = options.max_donuts

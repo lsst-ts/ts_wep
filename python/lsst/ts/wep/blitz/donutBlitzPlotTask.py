@@ -44,6 +44,7 @@ from lsst.pipe.base import (
 
 from .utils import (
     CORNER_BY_DET_NAME,
+    CORNER_DEFOCAL_BY_DET_NAME,
     CORNER_PAIRS,
     _MAX_NEARBY,
     _resolveColorLogEnabled,
@@ -254,8 +255,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # fallback for rows that lack the columns -- e.g. an older blitzResults
         # catalog written before these columns existed, read back by a
         # standalone DonutBlitzPlotTask.
+        # Two of these are background "inner" radii and are easy to confuse:
+        # _bkg_inner_disc is the filled disc inside the central obscuration,
+        # _bkg_inner_annulus is the inner edge of the annulus outside the donut.
         _stamp_outer_margin_frac = catalog.meta["aperture_outer_margin_frac"]
-        _stamp_inner_buffer_frac = catalog.meta["aperture_inner_buffer_frac"]
+        _stamp_bkg_inner_disc_frac = catalog.meta["bkg_inner_disc_frac"]
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
         _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
 
@@ -309,7 +313,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             if dr is not None and ob is not None:
                 dr = dr * _px_scale  # into the drawn image's pixel units
                 _circ_specs = [
-                    (dr * ob * _stamp_inner_buffer_frac, _COLOR_BKG_ANNULUS, "--"),
+                    (dr * ob * _stamp_bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
                     (dr * ob, _COLOR_APERTURE, "-"),
                     (dr * _stamp_outer_margin_frac, _COLOR_APERTURE, "-"),
                     (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "--"),
@@ -566,7 +570,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 donuts_out.append({
                     "donut_id": r["id"],
                     "det_name": r["det_name"],
-                    "defocal": r["defocal"],
+                    # Layout only (intra left, extra right); see _pair_up below.
+                    "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(r["det_name"]), ""),
                     "img": np.array(r["wf_img"]),
                     "model_img": model_arr if not np.all(np.isnan(model_arr)) else None,
                     "blend_frac": r["blend_frac"],
@@ -605,7 +610,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 "donuts": [{
                     "donut_id": row["id"],
                     "det_name": row["det_name"],
-                    "defocal": row["defocal"],
+                    "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(row["det_name"]), ""),
                     "img": img,
                     "model_img": None,
                     "blend_frac": row["blend_frac"],
