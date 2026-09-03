@@ -21,6 +21,7 @@
 
 from .utils import *
 from .dataStructures import *
+from .catalogBuilder import *
 from .measureDonutCandidatesTask import *
 from .cutDonutStampsTask import *
 from .blindDetectTask import *
