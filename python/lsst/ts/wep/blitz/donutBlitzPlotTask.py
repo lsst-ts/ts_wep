@@ -258,7 +258,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # Two of these are background "inner" radii and are easy to confuse:
         # _bkg_inner_disc is the filled disc inside the central obscuration,
         # _bkg_inner_annulus is the inner edge of the annulus outside the donut.
-        _stamp_outer_margin_frac = catalog.meta["aperture_outer_margin_frac"]
+        _stamp_aperture_margin_frac = catalog.meta["aperture_margin_frac"]
         _stamp_bkg_inner_disc_frac = catalog.meta["bkg_inner_disc_frac"]
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
         _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
@@ -314,8 +314,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 dr = dr * _px_scale  # into the drawn image's pixel units
                 _circ_specs = [
                     (dr * ob * _stamp_bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
-                    (dr * ob, _COLOR_APERTURE, "-"),
-                    (dr * _stamp_outer_margin_frac, _COLOR_APERTURE, "-"),
+                    (dr * ob * (1 - _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
+                    (dr * (1 + _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
                     (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "--"),
                     (dr * _stamp_bkg_outer_frac, _COLOR_BKG_ANNULUS, "--"),
                 ]

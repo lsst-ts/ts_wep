@@ -36,14 +36,17 @@ from .utils import _INSTRUMENT
 class MeasureDonutCandidatesConfig(pexConfig.Config):
     """Config for donut candidate flux measurement and quality selection."""
 
-    apertureOuterMarginFrac: pexConfig.Field = pexConfig.Field(
+    apertureMarginFrac: pexConfig.Field = pexConfig.Field(
         doc=(
-            "Outer edge of the main photometric aperture, as a multiple of "
-            "the nominal donut radius. Adds margin beyond the nominal edge to "
-            "tolerate PSF blur and centroiding error."
+            "Fractional margin added to both edges of the main photometric "
+            "annulus, to tolerate PSF blur and centroiding error: the outer "
+            "edge grows to radius * (1 + apertureMarginFrac) and the inner "
+            "edge shrinks to radius * obscuration * (1 - apertureMarginFrac). "
+            "Unlike the bkg*Frac fields below, this is the margin itself, not "
+            "an absolute multiple of the nominal donut radius."
         ),
         dtype=float,
-        default=1.05,
+        default=0.05,
     )
     # Two background regions are sampled, and each has an "inner" radius, so keep
     # the names apart: this one bounds the filled disc inside the central
@@ -153,7 +156,8 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         r = np.hypot(gx, gy)
         sector_angle = np.arctan2(gy, gx)
 
-        main_mask = (r < radius * cfg.apertureOuterMarginFrac) & (r > radius * obscuration)
+        margin = cfg.apertureMarginFrac
+        main_mask = (r < radius * (1 + margin)) & (r > radius * obscuration * (1 - margin))
         inner_mask = r < radius * obscuration * cfg.bkgInnerDiscFrac
         outer_mask = (r > radius * cfg.bkgAnnulusInnerFrac) & (r < radius * cfg.bkgAnnulusOuterFrac)
         bkg_mask = inner_mask | outer_mask

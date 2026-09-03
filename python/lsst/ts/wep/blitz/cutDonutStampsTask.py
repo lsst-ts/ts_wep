@@ -47,7 +47,7 @@ class CutDonutStampsConfig(pexConfig.Config):
             "for binnings of 1 through 7 (167/83/55/41/33/27/23). The binning "
             "stage forces the result to be odd if needed. Must also be large "
             "enough to contain the main photometric annulus: "
-            "stampSize/2 >= donutRadius * apertureOuterMarginFrac."
+            "stampSize/2 >= donutRadius * (1 + apertureMarginFrac)."
         ),
         dtype=int,
         default=167,
