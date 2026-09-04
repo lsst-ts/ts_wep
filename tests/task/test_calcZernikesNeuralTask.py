@@ -19,9 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import hashlib
 import importlib.util
 import os
 import tempfile
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -211,6 +213,68 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             },
             collections=["LSSTCam/aos/intrinsic"],
         )
+
+    def _makeNeuralConfig(self) -> CalcZernikesNeuralTaskConfig:
+        """Build a minimal neural config sharing this test's dataset params."""
+        config = CalcZernikesNeuralTaskConfig()
+        config.wavenetPath = None
+        config.alignetPath = None
+        config.aggregatornetPath = None
+        config.datasetParamPath = self.config.datasetParamPath
+        config.device = "cpu"
+        config.nollIndices = self.config.nollIndices
+        return config
+
+    def testModelHashesRecordedAndVerified(self) -> None:
+        """Configured model files are hashed, recorded, verified per-file."""
+        content = b"pretend wavenet weights"
+        expected = hashlib.sha256(content).hexdigest()
+        with tempfile.NamedTemporaryFile(suffix=".ckpt", delete=False) as f:
+            f.write(content)
+            modelPath = f.name
+        self.addCleanup(os.remove, modelPath)
+        basename = os.path.basename(modelPath)
+
+        # Exercise the recording/verification directly on a stand-in with a
+        # fresh (unfrozen) config; constructing the full task would require
+        # TARTS to load this dummy file.
+        config = self._makeNeuralConfig()
+        config.wavenetPath = modelPath
+        stub = SimpleNamespace(config=config)
+
+        # A matching wavenetSha256 verifies and records the hash.
+        config.wavenetSha256 = expected
+        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+        self.assertEqual(stub.modelHashes, {basename: expected})
+
+        # An empty digest skips verification but still records the hash.
+        config.wavenetSha256 = ""
+        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+        self.assertEqual(stub.modelHashes, {basename: expected})
+
+        # A mismatched digest raises.
+        config.wavenetSha256 = "0" * 64
+        with self.assertRaises(RuntimeError):
+            CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+
+        # With all model paths None (random weights), nothing is recorded.
+        config.wavenetPath = None
+        config.wavenetSha256 = ""
+        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+        self.assertEqual(stub.modelHashes, {})
+
+    def testModelSha256MismatchRaises(self) -> None:
+        """A file not matching its configured Sha256 raises RuntimeError."""
+        with tempfile.NamedTemporaryFile(suffix=".ckpt", delete=False) as f:
+            f.write(b"pretend wavenet weights")
+            modelPath = f.name
+        self.addCleanup(os.remove, modelPath)
+
+        config = self._makeNeuralConfig()
+        config.wavenetPath = modelPath
+        config.wavenetSha256 = "0" * 64
+        with self.assertRaises(RuntimeError):
+            CalcZernikesNeuralTask(config=config, name="Sha Mismatch Task")
 
     def testConfigurableNollIndices(self) -> None:
         """

@@ -39,6 +39,7 @@ from lsst.ts.wep.task import (
 )
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
+    computeSha256,
     getModulePath,
     runProgram,
     WfAlgorithmName,
@@ -162,6 +163,13 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         zernCoeff = self.task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
 
         self.assertEqual(np.shape(zernCoeff), (len(self.donutStampsExtra), 8))
+
+    def testModelChecksumRecorded(self) -> None:
+        """AiDonut records the loaded model checksum in its metadata on run."""
+        aiDonutTask = self.task.estimateZernikes
+        aiDonutTask.run(self.donutStampsExtra, self.donutStampsIntra)
+        expected = f"{os.path.basename(TEST_MODEL_PATH)}={computeSha256(TEST_MODEL_PATH)}"
+        self.assertEqual(aiDonutTask.metadata["modelChecksums"], expected)
 
     def testTableMetadata(self) -> None:
         # First estimate without pairs

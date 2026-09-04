@@ -46,6 +46,7 @@ from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTask
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
+from lsst.ts.wep.utils import computeSha256
 from lsst.ts.wep.utils.zernikeUtils import checkNollIndices
 from lsst.utils.timer import timeMethod
 
@@ -206,20 +207,38 @@ class CalcZernikesNeuralTaskConfig(
         outward defocus. Default is 1.5 mm.
     """
 
+    # Each model-weights path has a matching optional SHA-256 field. If the
+    # digest is set, the file is verified against it before loading (raising
+    # RuntimeError on mismatch) and it catches unfetched git-lfs pointer stubs;
+    # if empty (default) the check is skipped. This mirrors AiDonut's
+    # modelPath/modelSha256 pairing. datasetParamPath is not verified, as it
+    # lives with the TARTS package rather than the versioned model store.
     wavenetPath: pexConfig.Field = pexConfig.Field(
         doc="Model Weights Path for wavenet", dtype=str, default=None, optional=True
+    )
+    wavenetSha256: pexConfig.Field = pexConfig.Field(
+        doc="Expected SHA-256 hex digest of the wavenet model file.", dtype=str, default=""
     )
     alignetPath: pexConfig.Field = pexConfig.Field(
         doc="Model Weights Path for alignet", dtype=str, default=None, optional=True
     )
+    alignetSha256: pexConfig.Field = pexConfig.Field(
+        doc="Expected SHA-256 hex digest of the alignet model file.", dtype=str, default=""
+    )
     aggregatornetPath: pexConfig.Field = pexConfig.Field(
         doc="Model Weights Path for aggregatornet", dtype=str, default=None, optional=True
+    )
+    aggregatornetSha256: pexConfig.Field = pexConfig.Field(
+        doc="Expected SHA-256 hex digest of the aggregatornet model file.", dtype=str, default=""
     )
     oodModelPath: pexConfig.Field = pexConfig.Field(
         doc="Directory path for OOD model used by TARTS (optional)",
         dtype=str,
         default=None,
         optional=True,
+    )
+    oodModelSha256: pexConfig.Field = pexConfig.Field(
+        doc="Expected SHA-256 hex digest of the OOD model file.", dtype=str, default=""
     )
     datasetParamPath: pexConfig.Field = pexConfig.Field(
         doc="Path to TARTS dataset parameters YAML file containing normalization "
@@ -340,6 +359,12 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.nollIndices = self.config.nollIndices
         self.log.debug("Configured Noll indices: %s", self.nollIndices)
 
+        # Record the SHA-256 of each configured model file (for output
+        # provenance) and, if a manifest is configured, verify against it
+        # before loading. This pins exact model versions and catches unfetched
+        # git-lfs pointer stubs.
+        self._recordAndVerifyModelChecksums()
+
         # Deferred import of TARTS to handle cases where it's not in the build
         from tarts import NeuralActiveOpticsSys
 
@@ -403,6 +428,54 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
 
         # Initialize cache for per-donut OOD scores
         self._lastOodScores: list[float] = []
+
+    def _recordAndVerifyModelChecksums(self) -> None:
+        """Compute, record, and (optionally) verify TARTS model checksums.
+
+        The SHA-256 digest of every configured model-weights file that is not
+        ``None`` (``wavenetPath``, ``alignetPath``, ``aggregatornetPath``,
+        ``oodModelPath``) is computed and stored in ``self.modelHashes`` as a
+        ``{basename: sha256}`` mapping. These are written to the task output
+        metadata in ``run`` so an on-sky run can be traced back to the exact
+        model version that produced it (see the ts_aos_ai
+        ``model_history.yaml`` ledger). ``datasetParamPath`` is intentionally
+        excluded, as it lives with the TARTS package rather than the versioned
+        model store.
+
+        Each file is verified against its matching ``*Sha256`` config field
+        (e.g. ``wavenetPath`` against ``wavenetSha256``) when that digest is
+        set, mirroring AiDonut's ``modelPath``/``modelSha256`` pairing. An
+        empty digest skips the check for that file.
+
+        Raises
+        ------
+        RuntimeError
+            If a configured file's SHA-256 digest does not match its expected
+            ``*Sha256`` value.
+        """
+        # (path, expected sha256) for each TARTS model file.
+        modelFields = {
+            "wavenetPath": (self.config.wavenetPath, self.config.wavenetSha256),
+            "alignetPath": (self.config.alignetPath, self.config.alignetSha256),
+            "aggregatornetPath": (self.config.aggregatornetPath, self.config.aggregatornetSha256),
+            "oodModelPath": (self.config.oodModelPath, self.config.oodModelSha256),
+        }
+        self.modelHashes: dict[str, str] = {}
+        for path, expectedSha256 in modelFields.values():
+            if path is None:
+                continue
+            expandedPath = os.path.expandvars(path)
+            # Hash the file once, then reuse the digest for both verification
+            # and provenance recording.
+            digest = computeSha256(expandedPath)
+            if expectedSha256 and digest != expectedSha256:
+                raise RuntimeError(
+                    f"Model checksum mismatch for {expandedPath}: expected "
+                    f"{expectedSha256}, got {digest}. This usually means the wrong "
+                    f"model version is installed, or git-lfs did not fetch the file "
+                    f"(you may have a pointer stub instead of the real weights)."
+                )
+            self.modelHashes[os.path.basename(expandedPath)] = digest
 
     def validate(self) -> None:
         """Validate configuration parameters for the neural Zernike task.
@@ -1285,6 +1358,14 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         --------
         calcZernikesFromExposure : Method that processes individual exposures.
         """
+        # Record the loaded model checksums in the task output metadata so an
+        # on-sky run can be traced back to the exact model version used (via
+        # the ts_aos_ai model_history.yaml ledger).
+        if self.modelHashes:
+            self.metadata["modelChecksums"] = "; ".join(
+                f"{name}={digest}" for name, digest in self.modelHashes.items()
+            )
+
         if exposure is None:
             self.log.info("No exposure supplied; producing empty neural Zernike outputs.")
             return self.empty()
