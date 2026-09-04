@@ -17,6 +17,22 @@ Version History
 
 .. towncrier release notes start
 
+v17.10.0 (2026-09-04)
+=====================
+
+New Features
+------------
+
+- Added reassignCwfsCutoutsFamTask to enable wavefront estimation on wavefront sensors in pairs of images taken with FAM mode. (`RSO-596 <https://rubinobs.atlassian.net//browse/RSO-596>`_)
+
+
+Bug Fixes
+---------
+
+- Made ``getModulePath`` fall back to the package's on-disk location when ts_wep is not set up with EUPS. This allows ts_wep to be imported in non-EUPS environments (e.g. plain pip installs and downstream documentation builds such as donut_viz) without raising ``LookupError: Package ts_wep not found``.
+  Also updated ts_wep documentation files that were outdated and not completing the documentation build step in Jenkins CI. (`RSO-904 <https://rubinobs.atlassian.net//browse/RSO-904>`_)
+
+
 v17.9.1 (2026-09-02)
 ====================
 
