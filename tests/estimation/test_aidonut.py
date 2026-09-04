@@ -26,6 +26,8 @@ from lsst.ts.wep.utils.testUtils import enforce_single_threading
 enforce_single_threading()
 
 from lsst.ts.wep.estimation import AiDonutAlgorithm  # noqa: E402
+from lsst.ts.wep.estimation.aiDonut import DEFAULT_MODEL_PATH  # noqa: E402
+from lsst.ts.wep.utils import computeSha256  # noqa: E402
 from lsst.ts.wep.utils.modelUtils import forwardModelPair  # noqa: E402
 
 
@@ -41,6 +43,17 @@ class TestAiDonutAlgorithm(unittest.TestCase):
         """Test that bad model path raises error."""
         with self.assertRaises(FileNotFoundError):
             AiDonutAlgorithm(modelPath="non_existent_model.pt", device="cpu")
+
+    def testCorrectChecksum(self) -> None:
+        """Test that a matching modelSha256 loads the model successfully."""
+        expected = computeSha256(DEFAULT_MODEL_PATH)
+        algo = AiDonutAlgorithm(modelPath=DEFAULT_MODEL_PATH, modelSha256=expected)
+        self.assertEqual(algo.modelPath, DEFAULT_MODEL_PATH)
+
+    def testBadChecksum(self) -> None:
+        """Test that a mismatched modelSha256 raises RuntimeError."""
+        with self.assertRaises(RuntimeError):
+            AiDonutAlgorithm(modelPath=DEFAULT_MODEL_PATH, modelSha256="0" * 64)
 
     def testBadTemperature(self) -> None:
         """Test that bad temperature raises error."""

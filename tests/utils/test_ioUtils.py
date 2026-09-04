@@ -19,11 +19,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import hashlib
 import os
+import tempfile
 import unittest
 from typing import Union
 
 from lsst.ts.wep.utils import (
+    computeSha256,
     configClass,
     getConfigDir,
     getModulePath,
@@ -31,6 +34,7 @@ from lsst.ts.wep.utils import (
     mergeConfigWithFile,
     readConfigYaml,
     resolveRelativeConfigPath,
+    verifyModelChecksum,
 )
 
 
@@ -102,6 +106,37 @@ class TestIoUtils(unittest.TestCase):
         # If first argument is none of these, should raise error
         with self.assertRaises(TypeError):
             configClass(123, dict)
+
+    def testComputeSha256(self) -> None:
+        content = b"hello ts_wep model bytes"
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            self.assertEqual(computeSha256(path), hashlib.sha256(content).hexdigest())
+        finally:
+            os.remove(path)
+
+    def testVerifyModelChecksum(self) -> None:
+        content = b"some model weights"
+        expected = hashlib.sha256(content).hexdigest()
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            # Matching checksum: no exception.
+            verifyModelChecksum(path, expected)
+
+            # Empty/None expected checksum: check is skipped (no exception,
+            # even for a path that does not exist).
+            verifyModelChecksum(path, "")
+            verifyModelChecksum("/does/not/exist.pt", None)
+
+            # Mismatched checksum: RuntimeError.
+            with self.assertRaises(RuntimeError):
+                verifyModelChecksum(path, "0" * 64)
+        finally:
+            os.remove(path)
 
     def testGetObsLsstCmdTaskConfigDir(self) -> None:
         obsLsstCmdTaskConfirDir = getObsLsstCmdTaskConfigDir()

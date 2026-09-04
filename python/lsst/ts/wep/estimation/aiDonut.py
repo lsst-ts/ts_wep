@@ -27,7 +27,13 @@ import torch
 from lsst.ts.wep import Image, Instrument
 from lsst.ts.wep.estimation.observingConditions import ObservingConditions
 from lsst.ts.wep.estimation.wfAlgorithm import WfAlgorithm
-from lsst.ts.wep.utils import WfAlgorithmName, getModulePath, makeDense, makeSparse
+from lsst.ts.wep.utils import (
+    WfAlgorithmName,
+    getModulePath,
+    makeDense,
+    makeSparse,
+    verifyModelChecksum,
+)
 
 __all__ = ["AiDonutAlgorithm"]
 
@@ -42,6 +48,12 @@ class AiDonutAlgorithm(WfAlgorithm):
     modelPath : str
         Path to the torchscript model file. See notes below for
         model requirements. Default is a test model included with ts_wep.
+    modelSha256 : str, optional
+        Expected SHA-256 hex digest of the model file. If provided, the file
+        at ``modelPath`` is verified against this digest before loading and a
+        ``RuntimeError`` is raised on mismatch. If empty (default) the check
+        is skipped. Use this to pin an exact model version in production and
+        to catch unfetched git-lfs pointer stubs.
     device : str, optional
         Device to load the model on ('cpu' or 'cuda'). Default is 'cpu'.
     temperature : float, optional
@@ -91,11 +103,15 @@ class AiDonutAlgorithm(WfAlgorithm):
     def __init__(
         self,
         modelPath: str = DEFAULT_MODEL_PATH,
+        modelSha256: str = "",
         device: str = "cpu",
         temperature: float = 0.005,
     ) -> None:
         self.device = device
         self.temperature = temperature
+        # Set the expected checksum before modelPath, since the modelPath
+        # setter verifies against it while loading the model.
+        self.modelSha256 = modelSha256
         self.modelPath = os.path.expandvars(modelPath)
 
     @property
@@ -156,6 +172,7 @@ class AiDonutAlgorithm(WfAlgorithm):
             Path to the PyTorch model file.
         """
         try:
+            verifyModelChecksum(value, self.modelSha256)
             self.model = torch.load(value, map_location=self.device, weights_only=False)
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Model file not found: {value}") from e
