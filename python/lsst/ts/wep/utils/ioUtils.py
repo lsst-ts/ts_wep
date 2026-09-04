@@ -49,9 +49,21 @@ def getModulePath() -> str:
     -------
     str
         Directory path of module.
+
+    Notes
+    -----
+    When ts_wep is set up with EUPS the package directory is returned via
+    ``getPackageDir``. When it is not (e.g. a plain pip install or a
+    downstream documentation build), fall back to the package's location on
+    disk so that importing ts_wep does not require an EUPS environment.
     """
 
-    return getPackageDir("ts_wep")
+    try:
+        return getPackageDir("ts_wep")
+    except LookupError:
+        # ioUtils.py lives at <root>/python/lsst/ts/wep/utils/ioUtils.py, so
+        # the package root is five directories up from this file.
+        return os.path.normpath(os.path.join(os.path.dirname(__file__), *([os.pardir] * 5)))
 
 
 def getConfigDir() -> str:

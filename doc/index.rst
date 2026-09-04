@@ -1,4 +1,4 @@
-.. |developer| replace:: *Bryce Kalmbach <brycek@uw.edu>* and *Chris Suberlak <suberlak@uw.edu>*
+.. |developer| replace:: *Bryce Kalmbach <brycek@slac.stanford.edu>* and *Chris Suberlak <suberlak@uw.edu>*
 .. |product_owner| replace:: *Sandrine Thomas <sthomas@lsst.org>*
 
 .. Note that the ts_ prefix is omitted from the title

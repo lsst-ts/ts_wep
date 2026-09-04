@@ -21,6 +21,7 @@
 
 # flake8: noqa
 import os
+from unittest.mock import patch
 
 from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
@@ -157,6 +158,23 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         self.task = CalcZernikesTask(config=self.config, name="Base Task")
 
         self.assertEqual(type(self.task.combineZernikes), CombineZernikesMeanTask)
+
+    def testGetModulePathEupsFallback(self) -> None:
+        # getModulePath should fall back to the on-disk package location when
+        # ts_wep is not set up with EUPS (e.g. pip installs or downstream doc
+        # builds such as donut_viz) rather than raising LookupError.
+        with patch(
+            "lsst.ts.wep.utils.ioUtils.getPackageDir",
+            side_effect=LookupError("Package ts_wep not found"),
+        ):
+            fallbackPath = getModulePath()
+
+        self.assertTrue(os.path.isdir(fallbackPath))
+        self.assertTrue(
+            os.path.isfile(
+                os.path.join(fallbackPath, "tests", "testData", "testAiModels", "test_aidonut_model_file.pt")
+            )
+        )
 
     def testEstimateZernikes(self) -> None:
         zernCoeff = self.task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra).zernikes
