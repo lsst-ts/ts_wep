@@ -306,7 +306,7 @@ class TestCutOutDonutsScienceSensorTask(lsst.utils.tests.TestCase):
             "BANDPASS",
         ]
         # Test that all expected metadata is included in the butler
-        self.assertEqual(np.sum(np.in1d(expectedMetadata, metadata)), len(expectedMetadata))
+        self.assertEqual(np.sum(np.isin(expectedMetadata, metadata)), len(expectedMetadata))
         for measure in [
             "SIGNAL_SUM",
             "SIGNAL_MEAN",
