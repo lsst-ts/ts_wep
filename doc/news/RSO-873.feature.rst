@@ -1,0 +1,10 @@
+Added ``LatissMonolithTask``, a self-contained LATISS wavefront estimation task that runs ISR, ``QuickFrameMeasurementTask``, ``CutOutDonutsScienceSensorTask`` and a Danish fit in a single quantum.
+
+It exists because ``CalcZernikesTask`` with ``EstimateZernikesDanishTask`` does not work for AuxTel on modern ts_wep, for two independent reasons that are both invisible for LSSTCam:
+
+* ``_prepDanish`` builds its reference Zernikes from ``Instrument.getOffAxisCoeff``, which returns *transverse-aberration* coefficients. ``AuxTel.yaml`` offsets M2 rather than the Detector, and transverse aberration -- unlike wavefront OPD -- picks up the M2-to-detector magnification, making the reference 43.5x too large. The task computes an OPD reference with ``batoid.zernike`` instead.
+* Danish's ``sky_levels`` and ``fluxes`` are scale dependent, and the cutout task now returns raw ADU where ts_wep 15.1.0 returned peak-normalized stamps. The task peak-normalizes before fitting.
+
+On 12 LATISS pairs, stock ts_wep 17.8.1 returns NaN on 11 of them ("Non-positive image flux"); with both corrections all 12 fit, and on identical stamps they agree with ts_wep 15.1.0 at Z4 and Z8 correlation 0.953.
+
+The task also exposes the Danish fit ``cost`` and fitted ``fwhm`` as output columns, since fit cost predicts the Z4 error at r=0.90 in simulation and is therefore usable as a quality flag, together with an optional ``maxFitCost`` cut.
