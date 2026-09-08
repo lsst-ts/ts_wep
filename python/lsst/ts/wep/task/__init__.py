@@ -40,9 +40,11 @@ from .estimateZernikesTieTask import *
 from .generateDonutCatalogOnlineTask import *
 from .generateDonutCatalogUtils import *
 from .generateDonutCatalogWcsTask import *
+from .generateDonutBlitzDetectTask import *
 from .generateDonutDirectDetectTask import *
 from .generateDonutFromRefitWcsTask import *
 from .pairTask import *
 from .reassignCwfsCutoutsTask import *
 from .refCatalogInterface import *
 from .calcZernikesNeuralTask import *
+from .donutDetectDiameterTask import *
