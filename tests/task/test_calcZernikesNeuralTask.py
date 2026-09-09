@@ -191,8 +191,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         self.registry = self.butler.registry
 
         # Define data ID for single exposure
-        # Using detector 191 from the same visit
-        self.visitNum = 2031063000001
+        # Using detector 191 from the same visit as other CWFS task tests
+        self.visitNum = 4021123106000
         self.detector: int = 191
         self.dataId = {
             "instrument": "LSSTCam",
@@ -201,7 +201,9 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         }
 
     def _getIntrinsicZernikes(self, exposure: Exposure, detector: int) -> IntrinsicZernikes:
-        physicalFilter = getattr(exposure.filter, "physicalLabel", None) or exposure.filter.bandLabel
+        # Test-repo calibrations are keyed by band label ("g"), not the raw
+        # physical filter label ("g_6").
+        physicalFilter = exposure.filter.bandLabel
         return self.butler.get(
             "intrinsicZernikes",
             dataId={
@@ -406,8 +408,13 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             "outputZernikesRaw should contain NaN values when no exposure available",
         )
 
-        # Verify that zernikes table is empty
-        self.assertEqual(len(values.zernikes), 0, "Zernikes table should be empty when no exposure available")
+        # Verify that zernikes table has only the average row (RSO-663)
+        self.assertEqual(
+            len(values.zernikes), 1, "Zernikes table should have only the average row when no exposure"
+        )
+        self.assertEqual(values.zernikes["label"][0], "average")
+        self.assertFalse(bool(values.zernikes["used"][0]))
+        self.assertTrue(np.isnan(values.zernikes["ood_score"][0]))
 
     def testRunWithNoDetectedDonuts(self) -> None:
         """TARTS zero-donut detections should emit empty tables like Danish."""
@@ -429,8 +436,13 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         )
 
         self.assertEqual(
-            len(values.zernikes), 0, "Zernikes table should be empty when TARTS detects no donuts"
+            len(values.zernikes),
+            1,
+            "Zernikes table should have only the average row when TARTS detects no donuts",
         )
+        self.assertEqual(values.zernikes["label"][0], "average")
+        self.assertFalse(bool(values.zernikes["used"][0]))
+        self.assertTrue(np.isnan(values.zernikes["ood_score"][0]))
         self.assertEqual(len(values.donutStampsNeural), 0, "Neural donut stamps should be empty")
         self.assertEqual(len(values.donutTable), 0, "Donut table should be empty")
         self.assertTrue(np.all(np.isnan(values.outputZernikesAvg)))
@@ -460,7 +472,14 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             intrinsicZernikesIntra=intrinsicZernikes,
         )
 
-        self.assertEqual(len(values.zernikes), 0, "Zernikes table should be empty for all-zero TARTS output")
+        self.assertEqual(
+            len(values.zernikes),
+            1,
+            "Zernikes table should have only the average row for all-zero TARTS output",
+        )
+        self.assertEqual(values.zernikes["label"][0], "average")
+        self.assertFalse(bool(values.zernikes["used"][0]))
+        self.assertTrue(np.isnan(values.zernikes["ood_score"][0]))
         self.assertEqual(len(values.donutStampsNeural), 0, "Neural donut stamps should be empty")
         self.assertEqual(len(values.donutTable), 0, "Donut table should be empty")
         self.assertEqual(
@@ -499,9 +518,12 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
 
         self.assertEqual(
             len(values.zernikes),
-            0,
-            "Zernikes table should be empty when raw TARTS output is the all-zero sentinel",
+            1,
+            "Zernikes table should have only the average row when raw TARTS output is the all-zero sentinel",
         )
+        self.assertEqual(values.zernikes["label"][0], "average")
+        self.assertFalse(bool(values.zernikes["used"][0]))
+        self.assertTrue(np.isnan(values.zernikes["ood_score"][0]))
         self.assertEqual(len(values.donutStampsNeural), 0, "Neural donut stamps should be empty")
         self.assertEqual(len(values.donutTable), 0, "Donut table should be empty")
         self.assertEqual(
