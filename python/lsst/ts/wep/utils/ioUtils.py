@@ -29,8 +29,11 @@ __all__ = [
     "getObsLsstCmdTaskConfigDir",
     "writeFile",
     "readPhoSimSettingData",
+    "computeSha256",
+    "verifyModelChecksum",
 ]
 
+import hashlib
 import inspect
 import os
 from functools import lru_cache
@@ -64,6 +67,64 @@ def getModulePath() -> str:
         # ioUtils.py lives at <root>/python/lsst/ts/wep/utils/ioUtils.py, so
         # the package root is five directories up from this file.
         return os.path.normpath(os.path.join(os.path.dirname(__file__), *([os.pardir] * 5)))
+
+
+def computeSha256(path: str, chunkSize: int = 1 << 20) -> str:
+    """Compute the SHA-256 hex digest of a file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the file to hash.
+    chunkSize : int, optional
+        Number of bytes read per chunk while streaming the file.
+        Default is 1 MiB.
+
+    Returns
+    -------
+    str
+        The hexadecimal SHA-256 digest of the file contents.
+    """
+    hasher = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunkSize), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def verifyModelChecksum(path: str, expectedSha256: str) -> None:
+    """Verify that a model file matches an expected SHA-256 checksum.
+
+    Parameters
+    ----------
+    path : str
+        Path to the model file to verify.
+    expectedSha256 : str
+        Expected SHA-256 hex digest. If this is empty or ``None`` the check
+        is skipped, so local or experimental runs that do not pin a checksum
+        are unaffected.
+
+    Raises
+    ------
+    RuntimeError
+        If the file's SHA-256 digest does not match ``expectedSha256``.
+
+    Notes
+    -----
+    This guards against loading the wrong model version and against loading a
+    git-lfs pointer stub that was never fetched (which hashes to something
+    other than the real weights).
+    """
+    if not expectedSha256:
+        return
+    actual = computeSha256(path)
+    if actual != expectedSha256:
+        raise RuntimeError(
+            f"Model checksum mismatch for {path}: expected {expectedSha256}, "
+            f"got {actual}. This usually means the wrong model version is "
+            f"installed, or git-lfs did not fetch the file (you may have a "
+            f"pointer stub instead of the real weights)."
+        )
 
 
 def getConfigDir() -> str:

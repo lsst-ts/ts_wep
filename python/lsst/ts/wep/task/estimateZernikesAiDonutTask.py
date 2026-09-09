@@ -21,14 +21,16 @@
 
 __all__ = ["EstimateZernikesAiDonutConfig", "EstimateZernikesAiDonutTask"]
 
-from typing import Callable, Iterable
+import os
+from typing import Any, Callable, Iterable
 
 import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 from lsst.ts.wep.task.estimateZernikesBase import (
     EstimateZernikesBaseConfig,
     EstimateZernikesBaseTask,
 )
-from lsst.ts.wep.utils import WfAlgorithmName
+from lsst.ts.wep.utils import WfAlgorithmName, computeSha256
 
 
 class EstimateZernikesAiDonutConfig(EstimateZernikesBaseConfig):
@@ -38,6 +40,15 @@ class EstimateZernikesAiDonutConfig(EstimateZernikesBaseConfig):
         dtype=str,
         default="",
         doc="Path to the AiDonut model file.",
+    )
+    modelSha256: pexConfig.Field = pexConfig.Field(
+        dtype=str,
+        default="",
+        doc="Expected SHA-256 hex digest of the AiDonut model file. If set, "
+        "the model file is verified against this digest before loading and a "
+        "RuntimeError is raised on mismatch. If empty (default) the check is "
+        "skipped. Pins an exact model version and catches unfetched git-lfs "
+        "pointer stubs.",
     )
     device: pexConfig.Field = pexConfig.Field(
         dtype=str,
@@ -62,6 +73,33 @@ class EstimateZernikesAiDonutTask(EstimateZernikesBaseTask):
     def wfAlgoName(self) -> WfAlgorithmName:
         """Return the WfAlgorithmName enum."""
         return WfAlgorithmName.AiDonut
+
+    def _recordModelChecksum(self) -> None:
+        """Record the loaded model checksum in the task metadata.
+
+        Writes ``modelChecksums`` as a ``"<basename>=<sha256>"`` string so an
+        on-sky run can be traced back to the exact model version used, via the
+        ts_aos_ai ``model_history.yaml`` ledger. This mirrors the provenance
+        recorded by ``CalcZernikesNeuralTask`` for TARTS. No-op if no model
+        file is configured (the algorithm raises its own error if the path is
+        set but missing).
+        """
+        if not self.config.modelPath:
+            return
+        modelPath = os.path.expandvars(self.config.modelPath)
+        if not os.path.isfile(modelPath):
+            return
+        self.metadata["modelChecksums"] = f"{os.path.basename(modelPath)}={computeSha256(modelPath)}"
+
+    def run(
+        self,
+        donutStampsExtra: Any,
+        donutStampsIntra: Any,
+        numCores: int = 1,
+    ) -> pipeBase.Struct:
+        """Record model provenance, then estimate Zernikes via base task."""
+        self._recordModelChecksum()
+        return super().run(donutStampsExtra, donutStampsIntra, numCores=numCores)
 
     def _applyToList(self, fun: Callable, args: Iterable, numCores: int) -> list:
         """Apply a function to a list of arguments, optionally in parallel.
