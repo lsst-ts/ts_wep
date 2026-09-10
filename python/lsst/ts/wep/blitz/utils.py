@@ -77,6 +77,23 @@ _MAX_NEARBY = 5
 # _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
 _ZK_JMAX = 66
 
+# Short stage label -> the key `_cutout_one_exposure` returns its elapsed time
+# under, in the order the stages run.  That function defines the keys; this is
+# the one ordered list of them, because four separate places report the same
+# seven stages -- the corner-mode and full-array per-detector log lines, the
+# plot task's per-detector panel, and the `det_meta` block of the output
+# catalog -- and a stage added to the cutout pipeline should not be able to
+# show up in some of them and silently not others.
+_CUTOUT_STAGE_KEYS = {
+    "isr": "isr_run",
+    "bkg": "bkg_run",
+    "diam": "diam_run",
+    "detect": "blind_detect_run",
+    "wcs": "wcs_refit_run",
+    "select": "catalog_select_run",
+    "cut": "stamp_cut_run",
+}
+
 
 # Optics that can be shifted along z to defocus, in the order the offset triplet
 # carried on each `Donut` uses. Corner mode moves the detector plane inside the
@@ -92,9 +109,8 @@ def _telescope_for_offsets(offsets: tuple[float, float, float]):
     Parameters
     ----------
     offsets : tuple of float
-        Signed z shifts in metres, ordered as `_OFFSET_OPTICS`
-        ``(detector, camera, m2)``. Zero components are skipped, so the common
-        single-optic case costs one shift.
+        Signed z shifts in meters, ordered as `_OFFSET_OPTICS`
+        ``(detector, camera, m2)``.
 
     Returns
     -------
@@ -108,12 +124,6 @@ def _telescope_for_offsets(offsets: tuple[float, float, float]):
     copy-on-write rather than each paying for them. A worker asking for a triplet
     the parent did not anticipate still gets a correct answer, it just builds it
     itself and the result does not propagate back.
-
-    Uses ``withGloballyShiftedOptic``. For a pure z shift of these optics that is
-    identical to the ``withLocallyShiftedOptic`` corner mode used previously --
-    verified bit-for-bit on the Zernikes -- because the camera's coordinate system
-    carries no rotation relative to the global frame. Were that ever to change,
-    global is the meaning we want: the offsets describe how the hardware moved.
     """
     store = _CALIB_STORE.setdefault("telescope_by_offsets", {})
     key = tuple(float(o) for o in offsets)

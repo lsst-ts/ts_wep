@@ -82,9 +82,11 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
 def _cutout_one_exposure(
     raw,
     calibs: dict,
-    cutout_cfg: dict,
     refcat_load_result,
     det_name: str,
+    maxFitScatter: float,
+    astromRefFilter: str,
+    photoRefFilter: str,
 ) -> dict:
     """Run ISR, background subtraction, blind detection, WCS refit, catalog
     selection, and stamp cutting on one exposure of one detector.
@@ -106,27 +108,39 @@ def _cutout_one_exposure(
     calibs : dict
         Per-detector calibrations, keyed ``ptc``, ``flat``, ``linearizer``,
         ``crosstalk``.
-    cutout_cfg : dict
-        Keyed ``maxFitScatter``, ``astromRefFilter``, ``photoRefFilter``.
     refcat_load_result
         Pre-loaded reference catalog for this detector, or None to skip the WCS
         refit and refcat-based selection.
     det_name : str
         Detector name, for logging and the returned record.
+    maxFitScatter : float
+        Maximum acceptable astrometric scatter, in arcseconds, for the refit WCS
+        to be used.
+    astromRefFilter : str
+        Reference catalog flux column prefix used for astrometry.
+    photoRefFilter : str
+        Reference catalog flux column prefix used for donut selection.
 
     Returns
     -------
     dict
         Keys: ``det_name``, ``catalog`` (accepted donuts), ``rejected_catalog``,
         ``scatter_arcsec``, ``wcs_refit_error``, ``cat_select_error``,
-        ``selection_source``, ``wcs`` (the WCS actually used, or None), and
-        timing floats ``isr_run``, ``bkg_run``, ``diam_run``,
-        ``blind_detect_run``, ``wcs_refit_run``, ``catalog_select_run``,
-        ``stamp_cut_run``.
+        ``selection_source``, ``pair_path``, ``wcs`` (the WCS actually used, or
+        None), and one timing float per stage, keyed as
+        `lsst.ts.wep.blitz.utils._CUTOUT_STAGE_KEYS` lists -- this function is
+        where those keys are defined, and everything that reports them takes
+        the order from there.  A stage that never ran is NaN, not 0.0.
 
         ``selection_source`` and ``wcs`` exist because full-array mode has to
         decide how to pair donuts between the two exposures: an exact refcat-id
         match is only available when both exposures selected from the refcat.
+
+        ``pair_path`` is not decided here -- it is the grouping stage's, and both
+        modes overwrite it once they know which pairing algorithm ran.  It is
+        seeded with ``"n/a"`` rather than left absent so that every result
+        reaching `build_donut_catalog` carries a meaningful string, including the
+        results of a full-array worker that died before it reached grouping.
     """
     # --- ISR ---
     t0 = time.perf_counter()
@@ -164,15 +178,21 @@ def _cutout_one_exposure(
             "isr_run": t1 - t0,
             "bkg_run": t2 - t1,
             "diam_run": t3 - t2,
-            "blind_detect_run": time.perf_counter() - t2,
-            "wcs_refit_run": 0.0,
-            "catalog_select_run": 0.0,
-            "stamp_cut_run": 0.0,
+            "blind_detect_run": time.perf_counter() - t3,
+            # NaN, not 0.0: these three never ran, and reporting them as zero
+            # makes a detector that bailed out here read as one whose WCS refit
+            # and selection were instantaneous.
+            "wcs_refit_run": float("nan"),
+            "catalog_select_run": float("nan"),
+            "stamp_cut_run": float("nan"),
             "rejected_catalog": [],
             "scatter_arcsec": None,
             "wcs_refit_error": "No blind detections",
             "cat_select_error": "",
-            "selection_source": None,
+            # No selector ran at all on this detector, which is distinct from the
+            # selector running and rejecting everything ("blind_failed").
+            "selection_source": "no_detections",
+            "pair_path": "n/a",
             "wcs": None,
         }
 
@@ -191,10 +211,10 @@ def _cutout_one_exposure(
             load_result=refcat_handle,
         )
         scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
-        if scatter_arcsec < cutout_cfg["maxFitScatter"]:
+        if scatter_arcsec < maxFitScatter:
             wcs = postIsr.getWcs()
         else:
-            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {cutout_cfg["maxFitScatter"]}"'
+            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {maxFitScatter}"'
     except Exception as exc:
         wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
         logging.getLogger(__name__).warning(
@@ -217,8 +237,6 @@ def _cutout_one_exposure(
 
     if wcs is not None:
         try:
-            photo_filter = cutout_cfg["photoRefFilter"]
-            astrom_filter = cutout_cfg["astromRefFilter"]
             refcat = refcat_handle.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refcat)
             # Much quicker to just copy the keys we need than convert the whole table to
@@ -227,15 +245,15 @@ def _cutout_one_exposure(
                 "id",
                 "coord_ra", "coord_dec",
                 "centroid_x", "centroid_y",
-                f"{photo_filter}_flux", f"{astrom_filter}_flux"
+                f"{photoRefFilter}_flux", f"{astromRefFilter}_flux"
             ]
             refcat = QTable({k: np.array(refcat[k]) for k in keys})
-            refcat["photo_flux"] = refcat[f"{photo_filter}_flux"]
-            refcat["astrom_flux"] = refcat[f"{astrom_filter}_flux"]
+            refcat["photo_flux"] = refcat[f"{photoRefFilter}_flux"]
+            refcat["astrom_flux"] = refcat[f"{astromRefFilter}_flux"]
             with np.errstate(invalid="ignore", divide="ignore"):
                 refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
                 refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
-            result = donut_selector.run(refcat, detector, photo_filter)
+            result = donut_selector.run(refcat, detector, photoRefFilter)
             selections = result.sourceCat
             selection_source = "refcat"
         except Exception as exc:
@@ -284,8 +302,9 @@ def _cutout_one_exposure(
 
     # import matplotlib.pyplot as plt
     # from matplotlib.patches import Annulus
+    # from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 
-    # fig, ax = plt.subplots(figsize=(10, 10))
+    # fig, ax = plt.subplots(figsize=(10, 5))
     # vmin, vmax = np.nanquantile(postIsr.image.array, [0.01, 0.99])
     # ax.imshow(postIsr.image.array, origin="lower", cmap="gray", vmin=vmin, vmax=vmax)
     # ax.set_xlim(0, postIsr.image.array.shape[1])
@@ -336,6 +355,9 @@ def _cutout_one_exposure(
     #     facecolor="purple", alpha=0.2, edgecolor="none"
     # )
     # ax.add_patch(ann)
+    # ax.set_xticks([])
+    # ax.set_yticks([])
+    # fig.suptitle(f"Detector: {det_name}")
     # plt.show()
 
     return {
@@ -353,6 +375,8 @@ def _cutout_one_exposure(
         "wcs_refit_error": wcs_err,
         "cat_select_error": cat_err,
         "selection_source": selection_source,
+        # Overwritten by the grouping stage; see the Returns note above.
+        "pair_path": "n/a",
         "wcs": wcs,
     }
 
@@ -379,9 +403,11 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
     result = _cutout_one_exposure(
         raw=entry["raw"],
         calibs=entry,
-        cutout_cfg=_CALIB_STORE["cutout_cfg"],
         refcat_load_result=_CALIB_STORE["det_refcats"].get(det_name),
         det_name=det_name,
+        maxFitScatter=_CALIB_STORE["maxFitScatter"],
+        astromRefFilter=_CALIB_STORE["astromRefFilter"],
+        photoRefFilter=_CALIB_STORE["photoRefFilter"],
     )
     result["dispatch_to_arrival"] = t_arrival - t_dispatch
     return result

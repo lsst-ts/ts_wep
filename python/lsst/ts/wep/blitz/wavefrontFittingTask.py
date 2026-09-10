@@ -23,12 +23,12 @@
 
 __all__ = ["WavefrontFittingTaskConfig", "WavefrontFittingTask"]
 
-import ast
 import contextlib
 import logging
 import signal
 import time
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 import batoid
@@ -56,6 +56,18 @@ from .utils import (
 # field-dependent optics term), so any value works; set to roughly the Rubin
 # field of view for a physically sensible default.
 _DANISH_FIELD_RADIUS_RAD = np.deg2rad(1.85)
+
+
+def _jacobian_callable(model, jacobian_format: str):
+    """The Jacobian to hand `least_squares`, per `jacobianFormat`.
+
+    `least_squares` calls `jac(x, *args)` and its own `kwargs` argument goes to
+    `fun` as well as `jac`, so the format cannot be forwarded through it --
+    `model.chi` would reject it. Bind it here instead.
+    """
+    if jacobian_format == "dense":
+        return model.jac
+    return partial(model.jac_sparse, format=jacobian_format)
 
 
 class _WfFitTimeoutError(Exception):
@@ -171,27 +183,79 @@ def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
 
 
 def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, boresight_alt_rad: float | None):
-    """Build _WfGroup list from per-detector catalogs, matching the mode dispatch logic.
+    """Build `_WfGroup` work units from per-detector catalogs, for corner mode.
 
-    Groups for ``"paired"`` hold one extra/intra pair; all other modes group
-    without regard to defocal type -- the invariant reported by
-    `_mode_groups_are_pairs`.
+    Runs in the parent process after every detector has returned, because
+    ``paired`` and ``full_corner`` group *across* the two detectors of a corner.
+    Full-array mode groups within a single detector and so has its own
+    `_fam_group_donuts`, which runs inside the worker; the two mode vocabularies
+    overlap but are not interchangeable.
 
     ``results_by_det`` covers only the detectors that were processed, so a
     partial corner set falls out naturally: groups are never emitted empty, and
-    ``"full_corner"`` fits a corner from one defocal side alone when that is all
+    ``full_corner`` fits a corner from one defocal side alone when that is all
     that is present.
 
-    Returns (groups, unmatched_donuts).
+    Modes
+    -----
+    ``paired``
+        One star, both sides of focus: SW0 and SW1 donuts of a corner zipped in
+        descending SNR order.  The only mode that pairs, and so the only one that
+        can leave donuts unmatched.
+    ``unpaired``
+        One donut per group.
+    ``full_detector``
+        Every donut on a detector in one joint fit -- a single defocal side,
+        since side is a property of the detector here.
+    ``full_corner``
+        Every donut on both detectors of a corner in one joint fit.  Does not
+        pair: each donut carries its own optic offsets, so Danish already knows
+        which side of focus it is on and no association is needed.
+
+    Parameters
+    ----------
+    mode : `str`
+        One of the modes above.
+    results_by_det : `dict` [`str`, `list`]
+        Detector name -> accepted donuts on that detector.
+    band : `str`
+        Photometric band, passed through to every group.
+    rtp_deg : `float` or `None`
+        Boresight rotation (spider angle) in degrees.
+    boresight_alt_rad : `float` or `None`
+        Boresight altitude in radians.
+
+    Returns
+    -------
+    groups : `list` [`_WfGroup`]
+        Work units to dispatch; never contains an empty group.
+    unmatched_donuts : `list`
+        Donuts left over by pairing.  Non-empty only for ``paired``.
+    path : `str`
+        Pairing path taken: ``"snr_rank"`` for ``paired``, ``"n/a"`` for the modes
+        that do not pair.  Unlike full-array mode's `_pair_donuts`, which chooses
+        between refcat-id and spatial matching at runtime, corner mode has a
+        single algorithm and so a constant here; it is returned anyway so both
+        modes record pairing provenance in the same ``det_meta`` field.
+
+    Raises
+    ------
+    ValueError
+        Raised if ``mode`` is not one of the modes above -- in particular for the
+        full-array-only ``full_detector_pair``.
     """
     groups = []
     unmatched_donuts = []
+    path = "n/a"
     if mode == "paired":
-        for _corner, (sw0, sw1) in CORNER_PAIRS.items():
+        path = "snr_rank"
+        for corner, (sw0, sw1) in CORNER_PAIRS.items():
             extra_donuts = sorted(results_by_det.get(sw0, []), key=lambda d: d.snr, reverse=True)
             intra_donuts = sorted(results_by_det.get(sw1, []), key=lambda d: d.snr, reverse=True)
             for extra, intra in zip(extra_donuts, intra_donuts):
-                gid = f"{extra.id}_{intra.id}"
+                # Qualified by corner: under blind detection the ids are per-detector
+                # 1..N slots, so every corner would otherwise log as group=1_1, 2_2, ...
+                gid = f"{corner}_{extra.id}_{intra.id}"
                 groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
             n_pairs = min(len(extra_donuts), len(intra_donuts))
             unmatched_donuts.extend(extra_donuts[n_pairs:])
@@ -199,7 +263,8 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
     elif mode == "unpaired":
         for det_donuts in results_by_det.values():
             for d in det_donuts:
-                groups.append(_WfGroup(donuts=[d], group_id=str(d.id), band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+                gid = f"{d.det_name}_{d.id}"
+                groups.append(_WfGroup(donuts=[d], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     elif mode == "full_detector":
         # Skip detectors with no donuts: an empty group fits nothing but still
         # reports success=False, which would skew the caller's success tally.
@@ -217,7 +282,7 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
             groups.append(_WfGroup(donuts=all_donuts, group_id=corner, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     else:
         raise ValueError(f"Unknown WF mode {mode!r}")
-    return groups, unmatched_donuts
+    return groups, unmatched_donuts, path
 
 # Module-level logger for the worker functions below. They are module-level
 # (not methods) so the fork-based pools can pickle them by name, which means
@@ -255,17 +320,22 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
     )
     lstsqKwargs: pexConfig.DictField = pexConfig.DictField(
         keytype=str,
-        itemtype=str,
         doc=(
             "Keyword arguments for scipy.optimize.least_squares passed to the Danish "
-            "WF workers. Values are strings that will be eval()'d, e.g. "
-            "{'method': 'trf', 'max_nfev': '200'}."
+            "WF workers, e.g. {'method': 'trf', 'max_nfev': 200}. `fun`, `x0`, `jac`, "
+            "`args` and `bounds` are supplied by the task and are rejected here."
         ),
         default={
-            "xtol": "1e-3",
-            "ftol": "1e-3",
-            "gtol": "1e-3",
-            "x_scale": "'jac'",
+            "xtol": 1e-3,
+            "ftol": 1e-3,
+            "gtol": 1e-3,
+            "x_scale": "jac",
+            # 'lsmr' is faster than the default of 'exact' for simultaneous
+            # donut fitting and about the same for single donuts.  It also
+            # appears to be slightly more robust, running into the unphysical
+            # parameter space less often (as caught via the "very large FFT"
+            # guard in Danish).
+            "tr_solver": "lsmr",
         },
     )
     binning: pexConfig.Field = pexConfig.Field(
@@ -298,13 +368,46 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
         default=True,
         doc="Use DonutTriangleFactory instead of DonutFactory.",
     )
+    jacobianFormat: pexConfig.ChoiceField = pexConfig.ChoiceField(
+        dtype=str,
+        default="dense",
+        optional=False,
+        # There is some weak evidence that one or the other sparse formats may be
+        # modestly faster for large groups of donuts.  But since these modes are
+        # primarily run offline, we just leave the default to dense here.
+        doc=(
+            "Storage for the Danish Jacobian passed to least_squares. "
+            "All three give bit-identical Jacobian *values*; "
+            "they differ only in how those values are stored. A sparse "
+            "Jacobian also requires an iterative tr_solver: scipy rejects it "
+            "under tr_solver='exact', which `validate` checks for."
+        ),
+        allowed={
+            "dense": "model.jac -- a dense ndarray.",
+            "csr": "model.jac_sparse in CSR.",
+            "csc": "model.jac_sparse in CSC.",
+        },
+    )
+    logPerGroup: pexConfig.Field = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc=(
+            "Log a setup line and a result line per fit group at INFO.  Useful when "
+            "a quantum holds tens of groups, as corner mode's do; full-array mode "
+            "turns it off because 'paired' over 189 detectors is ~5000 groups, and "
+            "~10k lines bury the per-detector summaries that supersede them.  "
+            "Failures and timeouts are logged as warnings either way -- this "
+            "silences narration, not problems."
+        ),
+    )
     wfFitTimeoutPerDonut: pexConfig.Field = pexConfig.Field(
         dtype=float,
         default=10.0,
         doc=(
             "Timeout in seconds per donut for a single WF fit. "
             "The total timeout for a work unit is this value times the number of donuts "
-            "(1 for unpaired, 2 for paired, N for full_corner). "
+            "(1 for unpaired, 2 for paired, N for "
+            "full_detector/full_corner/full_detector_pair). "
             "Fits exceeding the limit are killed and return NaN Zernikes."
         ),
     )
@@ -320,6 +423,26 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
 
     def validate(self):
         super().validate()
+        # `_run_lstsq_fit` supplies these itself, so setting them here would
+        # pass a duplicate keyword argument to least_squares.
+        reserved = {"fun", "x0", "jac", "args", "bounds"} & set(self.lstsqKwargs)
+        if reserved:
+            raise pexConfig.FieldValidationError(
+                self.__class__.lstsqKwargs, self,
+                f"{sorted(reserved)} are supplied by the task and must not be set "
+                "in lstsqKwargs; passing them would duplicate a keyword argument "
+                "to scipy.optimize.least_squares",
+            )
+
+        if self.jacobianFormat != "dense" and self.lstsqKwargs.get("tr_solver") == "exact":
+            raise pexConfig.FieldValidationError(
+                self.__class__.jacobianFormat, self,
+                f"jacobianFormat={self.jacobianFormat!r} needs an iterative "
+                "tr_solver, but lstsqKwargs sets tr_solver='exact'. Use "
+                "'lsmr', or omit tr_solver and scipy will choose lsmr for a "
+                "sparse Jacobian.",
+            )
+
         indices = set(self.nollIndices)
         out_of_range = sorted(j for j in indices if j < 4 or j > _ZK_JMAX)
         if out_of_range:
@@ -469,7 +592,8 @@ class WavefrontFittingTask(pipeBase.Task):
         timeout = self.config.wfFitTimeoutPerDonut * n
         _setup_elapsed = time.perf_counter() - t_setup0
         label = f"group={group.group_id} n={n}"
-        self.log.info("WF %s setup=%.2fs", label, _setup_elapsed)
+        if self.config.logPerGroup:
+            self.log.info("WF %s setup=%.2fs", label, _setup_elapsed)
 
         fit_result = self._run_lstsq_fit(
             model, x0, bounds, imgs, sky_lvl, timeout, label
@@ -483,6 +607,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 WfResult(
                     donut_id=int(d.id),
                     det_name=d.det_name,
+                    visit_id=int(d.visit_id),
                     zk_dev=zk_dev_dense,
                     zk_intrinsic=_dense_intrinsic(d),
                     img=_img,
@@ -602,7 +727,7 @@ class WavefrontFittingTask(pipeBase.Task):
         wavelength = wavelength_by_band[band]
         telescope = _CALIB_STORE["telescope"]
         # The defocused telescope comes from the donut's own offset triplet, so
-        # the fitter no longer needs to know which detectors sit on which side of
+        # the fitter never needs to know which detectors sit on which side of
         # focus -- a rule that has no meaning in full-array mode, where every
         # detector appears on both sides.
         if donut.defocal_offsets is None:
@@ -632,8 +757,11 @@ class WavefrontFittingTask(pipeBase.Task):
             * wavelength
         )  # meters, shape (_ZK_JMAX + 1,)
 
-        # Replace nominal on-axis model (zk_opd_foc) with measured intrinsics (W_meas)
-        # for calibrated indices.
+        # Swap the nominal design intrinsics for the measured ones at calibrated
+        # indices. zk_opd_foc is the same raytrace as zk_ref minus the defocal
+        # offsets, so subtracting it leaves the defocus contribution intact and
+        # only the static aberration field is replaced by W_meas. Both are
+        # evaluated at this donut's field angle, so neither is on-axis.
         intrinsic_zk = donut.intrinsic_zk
         if intrinsic_zk is not None:
             zk_opd_foc = (
@@ -701,7 +829,8 @@ class WavefrontFittingTask(pipeBase.Task):
                     for i in range(n)
                 ]
                 elapsed = time.perf_counter() - t0
-                self.log.info("WF %s (x0 only)", label)
+                if self.config.logPerGroup:
+                    self.log.info("WF %s (x0 only)", label)
                 return _LstsqFitResult(
                     zk_dev=zk_dev,
                     model_imgs=model_imgs,
@@ -738,13 +867,10 @@ class WavefrontFittingTask(pipeBase.Task):
             galsim.errors.raise_fft_size_error = True
             try:
                 with _fit_timeout(timeout):
-                    lstsq_kwargs = {
-                        k: ast.literal_eval(v)
-                        for k, v in self.config.lstsqKwargs.items()
-                    }
+                    lstsq_kwargs = dict(self.config.lstsqKwargs)
                     result = least_squares(
                         model.chi,
-                        jac=model.jac,
+                        jac=_jacobian_callable(model, self.config.jacobianFormat),
                         x0=x0,
                         args=(imgs, variances),
                         bounds=bounds,
@@ -763,13 +889,14 @@ class WavefrontFittingTask(pipeBase.Task):
                     )
                     for i in range(n)
                 ]
-                self.log.info(
-                    "WF %s success=%s nfev=%d elapsed=%.1fs",
-                    label,
-                    bool(result.success),
-                    result.nfev,
-                    elapsed,
-                )
+                if self.config.logPerGroup:
+                    self.log.info(
+                        "WF %s success=%s nfev=%d elapsed=%.1fs",
+                        label,
+                        bool(result.success),
+                        result.nfev,
+                        elapsed,
+                    )
                 return _LstsqFitResult(
                     zk_dev=zk_dev,
                     model_imgs=model_imgs,
