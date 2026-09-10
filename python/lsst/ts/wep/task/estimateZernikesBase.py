@@ -25,6 +25,7 @@ import abc
 import itertools
 import logging
 import multiprocessing as mp
+import os
 from typing import Any, Callable, Iterable
 
 import numpy as np
@@ -33,6 +34,7 @@ from astropy.coordinates import Angle
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.ts.wep.estimation import ObservingConditions, WfAlgorithm, WfAlgorithmFactory, WfEstimator
+from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.utils import (
@@ -42,6 +44,28 @@ from lsst.ts.wep.utils import (
 )
 
 
+def _failedZkResult(wfEstimator: WfEstimator) -> tuple[np.array, dict, dict]:
+    """Build the fallback result for a donut whose Zernike estimation failed.
+
+    Returns NaN Zernikes (one per Noll index) flagged with
+    ``fit_success=False`` and an empty history. Marking the fit as
+    unsuccessful lets the downstream ``CalcZernikesTask`` drop the donut
+    (its Zernikes are already NaN) rather than failing the whole task.
+
+    Parameters
+    ----------
+    wfEstimator : WfEstimator
+        The wavefront estimator, used to determine the number of Noll indices.
+
+    Returns
+    -------
+    tuple
+        NaN Zernike array, metadata dict flagging the failure, empty history.
+    """
+    zk = np.full(len(wfEstimator.nollIndices), np.nan)
+    return zk, {"fit_success": False}, {}
+
+
 def estimate_zk_pair(
     args: tuple[DonutStamp, DonutStamp, ObservingConditions, WfEstimator],
 ) -> tuple[np.array, dict, dict]:
@@ -49,7 +73,19 @@ def estimate_zk_pair(
     donutExtra, donutIntra, obs, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Extra Donut {donutExtra.donut_id}, Intra Donut {donutIntra.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, obs)
+    try:
+        zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, obs)
+    except Exception:
+        # Don't let a single bad donut pair abort the whole task. Log the
+        # failure with a full traceback and return NaN Zernikes flagged as a
+        # fit failure so this pair is dropped downstream.
+        log.exception(
+            "Zernike estimation failed for Extra Donut %s, Intra Donut %s; "
+            "flagging pair as a fit failure and continuing.",
+            donutExtra.donut_id,
+            donutIntra.donut_id,
+        )
+        return _failedZkResult(wfEstimator)
     log.info(
         f"Zernike estimation completed for Extra Donut {donutExtra.donut_id}, "
         f"Intra Donut {donutIntra.donut_id}"
@@ -70,7 +106,17 @@ def estimate_zk_single(
     donut, obs, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Donut {donut.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, obs)
+    try:
+        zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, obs)
+    except Exception:
+        # Don't let a single bad donut abort the whole task. Log the failure
+        # with a full traceback and return NaN Zernikes flagged as a fit
+        # failure so this donut is dropped downstream.
+        log.exception(
+            "Zernike estimation failed for Donut %s; flagging as a fit failure and continuing.",
+            donut.donut_id,
+        )
+        return _failedZkResult(wfEstimator)
     log.info(f"Zernike estimation completed for Donut {donut.donut_id}")
     # Log number of function evaluations if available (currently only danish)
     if (nfev := zkMeta.get("lstsq_nfev")) is not None:
@@ -185,6 +231,38 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return results
 
+    @staticmethod
+    def _collateZkMeta(zkMetaList: Iterable[dict]) -> dict:
+        """Collate per-donut metadata dicts into a dict of per-key lists.
+
+        Different donuts can contribute different keys: a donut whose
+        estimation failed returns only ``fit_success=False`` (see
+        ``estimate_zk_pair``/``estimate_zk_single``), while successful donuts
+        return the algorithm's full metadata. We therefore take the union of
+        all keys and fill any value a given donut did not provide, so every
+        list stays aligned with the donut order. ``fit_success`` defaults to
+        ``True`` (a donut that did not report the flag did not hit the failure
+        path); all other missing values default to NaN.
+
+        Parameters
+        ----------
+        zkMetaList : Iterable[dict]
+            Per-donut metadata dicts, in donut order.
+
+        Returns
+        -------
+        dict
+            Mapping of metadata key to a list of per-donut values.
+        """
+        zkMetaList = list(zkMetaList)
+        keys = list(dict.fromkeys(key for meta in zkMetaList for key in meta))
+        zkMeta: dict = {key: [] for key in keys}
+        for meta in zkMetaList:
+            for key in keys:
+                default = True if key == "fit_success" else np.nan
+                zkMeta[key].append(meta.get(key, default))
+        return zkMeta
+
     def _get_obs_conditions(self, donutStamps: DonutStamps | None) -> ObservingConditions:
         """Extract per-observation pointing state from stamp metadata.
 
@@ -258,10 +336,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         results = self._applyToList(estimate_zk_pair, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
-        zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}
-        for zkMetaSingle in zkMetaList:
-            for key, value in zkMetaSingle.items():
-                zkMeta[key].append(value)
+        zkMeta = self._collateZkMeta(zkMetaList)
 
         zkArray = np.array(zkList)
 
@@ -312,10 +387,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         results = self._applyToList(estimate_zk_single, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
-        zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}
-        for zkMetaSingle in zkMetaList:
-            for key, value in zkMetaSingle.items():
-                zkMeta[key].append(value)
+        zkMeta = self._collateZkMeta(zkMetaList)
 
         zkArray = np.array(zkList)
 
@@ -327,6 +399,62 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         self.metadata["history"] = histories_dict
 
         return zkArray, zkMeta
+
+    def _logMaskVersions(self, instrument: Instrument) -> None:
+        """Log the mask model and Batoid optical model used by the instrument.
+
+        The pupil mask is defined by both the danish mask parameters and the
+        Batoid optical model they are compared against. Logging the danish
+        version, the resolved mask file (including the version encoded in the
+        file name, e.g. via the ``RubinObsc.yaml`` symlink), and the Batoid
+        version and model name allows a run to be traced back to a specific
+        mask + optics pair later.
+
+        Parameters
+        ----------
+        instrument : Instrument
+            The instrument whose mask model should be logged.
+        """
+        # Log the danish mask model. Explicitly-set maskParams take precedence
+        # over maskParamsFile (mirroring Instrument.maskParams), so report that
+        # case rather than the danish file that is being overridden.
+        maskParamsFile = instrument.maskParamsFile
+        if getattr(instrument, "_maskParams", None) is not None:
+            self.log.info("Mask model: instrument-provided maskParams (overrides any danish file)")
+        elif maskParamsFile is None:
+            self.log.info("Mask model: instrument-provided maskParams (no danish file)")
+        else:
+            try:
+                import danish
+
+                danishVersion = getattr(danish, "__version__", "unknown")
+                resolvedFile = os.path.basename(
+                    os.path.realpath(os.path.join(danish.datadir, maskParamsFile))
+                )
+            except Exception:
+                danishVersion = "unknown"
+                resolvedFile = maskParamsFile
+
+            self.log.info(
+                "Mask model: danish %s, maskParamsFile=%s (resolved to %s)",
+                danishVersion,
+                maskParamsFile,
+                resolvedFile,
+            )
+
+        # Log the Batoid optical model the mask is paired with.
+        try:
+            import batoid
+
+            batoidVersion = getattr(batoid, "__version__", "unknown")
+        except Exception:
+            batoidVersion = "unknown"
+
+        self.log.info(
+            "Batoid model: batoid %s, batoidModelName=%s",
+            batoidVersion,
+            instrument.batoidModelName,
+        )
 
     def run(
         self,
@@ -367,6 +495,10 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             detectorName,
             self.config.instConfigFile,
         )
+
+        # Log the mask and Batoid model versions so runs can be traced back
+        # to a specific mask + optics pair later.
+        self._logMaskVersions(instrument)
 
         # Create the wavefront estimator
         wfEst = WfEstimator(
