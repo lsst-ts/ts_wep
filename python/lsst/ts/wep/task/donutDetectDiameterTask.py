@@ -118,7 +118,7 @@ def _shiftSubtractNoise(image):
     independent pixels doubles the variance.
 
     Same estimator as used on stamp backgrounds elsewhere in ts_wep (see
-    MeasureDonutCandidatesTask._measureFlux in donutBlitzMonolith), applied to the whole
+    MeasureDonutCandidatesTask._measureFlux in lsst.ts.wep.blitz), applied to the whole
     binned image rather than to a stamp's background annulus.
 
     Returns

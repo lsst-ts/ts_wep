@@ -287,7 +287,7 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
 # Module-level logger for the worker functions below. They are module-level
 # (not methods) so the fork-based pools can pickle them by name, which means
 # there is no `self` and so no `Task.log`. Consequence: worker output goes to
-# the `lsst.ts.wep.task.donutBlitzMonolith` logger rather than the task's own
+# the `lsst.ts.wep.blitz.wavefrontFittingTask` logger rather than the task's own
 # `donutBlitzMonolithTask` hierarchy, so it is not affected by that task's log
 # level. Parent-process code should keep using `self.log`.
 _log = logging.getLogger(__name__)
