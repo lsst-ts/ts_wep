@@ -86,17 +86,17 @@ class CutDonutStampsTask(pipeBase.Task):
     """Cut donut stamps and evaluate rejection criteria.
 
     For each measured candidate, cuts a stamp centered on the centroid,
-    computes per-stamp geometry (field angle, nearby refcat sources, catalog
-    offset) and the SAT flag, then applies the quality cuts (SAT, field
-    distance, inner/outer flux fraction, SNR) to split accepted from rejected.
+    computes per-stamp geometry (field angle, nearby refcat sources) and the SAT
+    flag, then applies the quality cuts (SAT, inner/outer flux fraction, SNR) to
+    split accepted from rejected.
 
     Candidates are sorted flux-descending internally, so both output lists are
     filled brightest-first and the cut loop early-exits once both the accepted
     (``maxDonuts``) and rejected (``maxRejectDonuts``) buckets are full --
     avoiding stamp cuts on the faint tail that would be discarded anyway.
 
-    Donut radius and obscuration come from the module-level instrument
-    (`_INSTRUMENT`), not config.
+    Donut radius comes from the module-level instrument (`_INSTRUMENT`), not
+    config.
     """
 
     ConfigClass = CutDonutStampsConfig
@@ -108,7 +108,6 @@ class CutDonutStampsTask(pipeBase.Task):
         exposure: Exposure,
         measurements: QTable,
         refcat: QTable | None,
-        blindDetections: QTable,
         donutRadius: float | None = None,
     ) -> pipeBase.Struct:
         """Cut stamps and split accepted vs. quality-rejected donuts.
@@ -119,18 +118,20 @@ class CutDonutStampsTask(pipeBase.Task):
             Background-subtracted post-ISR science exposure.
         measurements : QTable
             Measured candidates from the measurement task, with columns
-            ``id``, ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
-            ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``, ``std``,
-            ``bkg``. Photometric metrics are carried onto the Donut objects
-            as-is; only geometry and the SAT flag are computed here. Row order
-            is not assumed -- the table is sorted flux-descending internally
-            before stamps are cut.
+            ``donut_id``, ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
+            ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``, ``bkg_std``,
+            ``bkg``, plus every column in
+            `lsst.ts.wep.blitz.utils._REFCAT_COLUMNS` -- present whichever
+            selection path ran, NaN-valued on the blind-detection one.
+            Photometric metrics are carried onto the Donut objects as-is; only
+            geometry and the SAT flag are computed here. Row order is not
+            assumed -- the table is sorted flux-descending internally before
+            stamps are cut.
         refcat : QTable or None
-            Full refcat with ``centroid_x``, ``centroid_y``, ``photo_mag``,
-            ``astrom_mag``, or ``None`` in the blind-detection fallback.
-        blindDetections : QTable
-            Centroids from ``BlindDetect``, used for
-            ``catalog_centroid_offset_px``.
+            Full refcat with ``donut_id``, ``centroid_x``, ``centroid_y``,
+            ``photo_mag``, ``astrom_mag``, or ``None`` in the blind-detection
+            fallback. Supplies the nearby-source lists; ``donut_id`` is what
+            excludes each donut from its own neighbour list.
         donutRadius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if
             unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
@@ -146,7 +147,6 @@ class CutDonutStampsTask(pipeBase.Task):
         """
         if donutRadius is None:
             donutRadius = _INSTRUMENT.donutRadius
-        obscuration = _INSTRUMENT.obscuration
 
         detector = exposure.getDetector()
         band = exposure.filter.bandLabel
@@ -168,15 +168,16 @@ class CutDonutStampsTask(pipeBase.Task):
         if refcat is not None:
             _rc_x = np.asarray(refcat["centroid_x"], dtype=float)
             _rc_y = np.asarray(refcat["centroid_y"], dtype=float)
+            _rc_id = np.asarray(refcat["donut_id"])
             _rc_mag = {
                 "photo_mag": np.asarray(refcat["photo_mag"], dtype=float),
                 "astrom_mag": np.asarray(refcat["astrom_mag"], dtype=float),
             }
         else:
-            _rc_x = _rc_y = None
+            _rc_x = _rc_y = _rc_id = None
             _rc_mag = {}
 
-        def _cut_stamp(row, blind_cx=None, blind_cy=None) -> Donut | None:
+        def _cut_stamp(row) -> Donut | None:
             """Cut one stamp and compute metrics. Returns Donut or None on failure."""
             # Cut a stamp of configured size, centered on the rounded centroid.
             # Odd-size preference is enforced during binning in _prep_donut_for_danish.
@@ -198,9 +199,23 @@ class CutDonutStampsTask(pipeBase.Task):
                 box_mask = None
                 dx_box = dy_box = None
             else:
+                # Membership is against the *rounded* centroid, because that is
+                # what the stamp bounds were cut on -- these are the sources
+                # actually inside the stamp.
                 box_mask = (np.abs(_rc_x - cx) <= half_before) & (np.abs(_rc_y - cy) <= half_before)
-                dx_box = _rc_x[box_mask] - cx
-                dy_box = _rc_y[box_mask] - cy
+                # Drop this donut itself: it is a refcat source too, so the box
+                # always contains it at zero offset. Matched on refcat id rather
+                # than on a distance threshold -- `refcat` is non-None only when
+                # the selections were drawn from it, so the id comparison is
+                # exact.
+                box_mask &= _rc_id != row["donut_id"]
+                # Offsets are from cx_f/cy_f, not the rounded cx/cy, so that
+                # ``x_det + nearby_*_dx_det`` is the neighbour's detector x with
+                # no correction term. Anything wanting stamp-display coordinates
+                # has to add the rounding residual ``x_det - round(x_det)``; see
+                # `_xform` in donutBlitzPlotTask.
+                dx_box = _rc_x[box_mask] - cx_f
+                dy_box = _rc_y[box_mask] - cy_f
 
             def _nearby(mag_col):
                 if box_mask is None:
@@ -211,20 +226,6 @@ class CutDonutStampsTask(pipeBase.Task):
             _fa = detector.transform(
                 [lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE
             )[0]
-            _field_dist_deg = np.degrees(np.hypot(_fa[0], _fa[1]))
-
-            _nearby_photo_list = _nearby("photo_mag")
-            _neighbor_dists = [
-                np.hypot(dx, dy)
-                for dx, dy, _ in _nearby_photo_list
-                if np.hypot(dx, dy) >= 1.0
-            ]
-
-            _catalog_centroid_offset_px = (
-                np.hypot(cx_f - blind_cx, cy_f - blind_cy)
-                if blind_cx is not None and blind_cy is not None
-                else float("nan")
-            )
 
             rejected_sat = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
             rejected_inner_frac = bool(np.isfinite(row["inner_frac"]) and abs(row["inner_frac"]) > self.config.innerFracThreshold)
@@ -241,52 +242,32 @@ class CutDonutStampsTask(pipeBase.Task):
                 band=band,
                 det_id=det_id,
                 visit_id=visit_id,
-                centroid_x_raw=cx_f,
-                centroid_y_raw=cy_f,
-                id=row["id"],
+                x_det=cx_f,
+                y_det=cy_f,
+                donut_id=row["donut_id"],
                 inner_frac=row["inner_frac"],
                 outer_frac=row["outer_frac"],
                 outer_sector_minmax_frac=row["outer_sector_minmax_frac"],
-                field_dist_deg=_field_dist_deg,
                 donut_radius=donutRadius,
-                obscuration=obscuration,
                 snr=row["snr"],
                 bkg=row["bkg"],
-                bkg_std=row["std"],
-                nearest_neighbor_dist_px=(
-                    min(_neighbor_dists) if _neighbor_dists else float("nan")
-                ),
-                n_neighbors_in_stamp=len(_neighbor_dists),
-                catalog_centroid_offset_px=_catalog_centroid_offset_px,
+                bkg_std=row["bkg_std"],
                 n_quarter=n_quarter,
-                nearby_photo=_nearby_photo_list,
+                # The donut's own refcat values ride the selections table, a row
+                # subset of the refcat on that path. `_REFCAT_COLUMNS` guarantees
+                # they are present on the blind path too, NaN-filled, so there is
+                # nothing to test for here.
+                photo_mag=float(row["photo_mag"]),
+                astrom_mag=float(row["astrom_mag"]),
+                coord_ra=float(row["coord_ra"]),
+                coord_dec=float(row["coord_dec"]),
+                nearby_photo=_nearby("photo_mag"),
                 nearby_astrom=_nearby("astrom_mag"),
                 rejected_sat=rejected_sat,
                 rejected_inner_frac=rejected_inner_frac,
                 rejected_outer_frac=rejected_outer_frac,
                 rejected_snr=rejected_snr,
                 rejected=rejected
-            )
-
-        # Match each centroid to the nearest blind detection for
-        # catalog_centroid_offset_px.
-        _blind_cx = (
-            np.array(blindDetections["centroid_x"]) if len(blindDetections) > 0 else np.empty(0)
-        )
-        _blind_cy = (
-            np.array(blindDetections["centroid_y"]) if len(blindDetections) > 0 else np.empty(0)
-        )
-        _match_tol = donutRadius * 0.5
-
-        def _nearest_blind(cx_f, cy_f):
-            if len(_blind_cx) == 0:
-                return None, None
-            dists = np.hypot(_blind_cx - cx_f, _blind_cy - cy_f)
-            idx = np.argmin(dists)
-            return (
-                (_blind_cx[idx], _blind_cy[idx])
-                if dists[idx] <= _match_tol
-                else (None, None)
             )
 
         max_donuts = self.config.maxDonuts
@@ -301,8 +282,7 @@ class CutDonutStampsTask(pipeBase.Task):
         for row in measurements:
             if len(donuts) >= max_donuts and len(rejected_donuts) >= max_reject:
                 break
-            _b_cx, _b_cy = _nearest_blind(row["centroid_x"], row["centroid_y"])
-            d = _cut_stamp(row, blind_cx=_b_cx, blind_cy=_b_cy)
+            d = _cut_stamp(row)
             if d is None:
                 continue
             if d.rejected:

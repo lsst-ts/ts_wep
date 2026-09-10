@@ -158,16 +158,16 @@ def _pair_donuts(
     # Fast path: when both exposures selected from the reference catalog, the
     # refcat id identifies the same star exactly, so there is nothing to infer.
     if intra_source == "refcat" and extra_source == "refcat":
-        intra_by_id = {d.id: d for d in intra}
+        intra_by_id = {d.donut_id: d for d in intra}
         pairs = []
         matched_ids = set()
         for e in extra:
-            i = intra_by_id.get(e.id)
+            i = intra_by_id.get(e.donut_id)
             if i is not None:
                 pairs.append((e, i))
-                matched_ids.add(e.id)
-        unmatched = [e for e in extra if e.id not in matched_ids]
-        unmatched += [i for i in intra if i.id not in matched_ids]
+                matched_ids.add(e.donut_id)
+        unmatched = [e for e in extra if e.donut_id not in matched_ids]
+        unmatched += [i for i in intra if i.donut_id not in matched_ids]
         return pairs, unmatched, "refcat_id"
 
     # Fallback: match spatially in the common (de-defocused) field-angle frame.
@@ -256,13 +256,13 @@ def _fam_group_donuts(
             intra, extra, tol_frac, intra_source, extra_source
         )
         groups = [
-            _group([e, i], f"{det_name}_{e.id}_{i.id}") for e, i in pairs
+            _group([e, i], f"{det_name}_{e.donut_id}_{i.donut_id}") for e, i in pairs
         ]
         return groups, unmatched, path
 
     if mode == "unpaired":
         groups = [
-            _group([d], f"{det_name}_{d.visit_id}_{d.id}") for d in extra + intra
+            _group([d], f"{det_name}_{d.visit_id}_{d.donut_id}") for d in extra + intra
         ]
         return groups, [], "n/a"
 
@@ -305,7 +305,13 @@ def _fam_detector_worker(args: tuple) -> dict:
         dicts, each tagged with its ``visit_id``), ``wf_results``,
         ``donuts`` (accepted, both sides), ``unmatched_donuts``, ``pair_path``,
         ``error``, and timings ``dispatch_to_arrival``, ``io_run``,
-        ``cutout_run``, ``fit_run``, ``worker_wall``, plus ``pid``.
+        ``refcat_run``, ``cutout_run``, ``fit_run``, ``worker_wall``, plus
+        ``pid``.
+
+        ``refcat_run`` is per *detector*, not per exposure: one refcat load
+        covers both sides of focus (see below).  It therefore belongs here and
+        not on the two entries of ``results``, where summing it across the
+        quantum would double-count every detector.
     """
     det_id, t_dispatch = args
     t_arrival = time.time()
@@ -324,6 +330,7 @@ def _fam_detector_worker(args: tuple) -> dict:
         "skipped": False,
         "dispatch_to_arrival": t_arrival - t_dispatch,
         "io_run": float("nan"),
+        "refcat_run": float("nan"),
         "cutout_run": float("nan"),
         "fit_run": float("nan"),
         "worker_wall": float("nan"),
@@ -353,6 +360,7 @@ def _fam_detector_worker(args: tuple) -> dict:
         # spans the few-arcsecond difference between them, and the loader itself
         # intersects each shard's region with the search box, so handing it all of
         # the visit's shard handles still reads only the ~2 that overlap.
+        t_refcat0 = time.perf_counter()
         load_result = None
         refcat_handles = _CALIB_STORE["refcat_handles"]
         if refcat_handles:
@@ -374,6 +382,10 @@ def _fam_detector_worker(args: tuple) -> dict:
             # ref_raw is a live reference to one of the raws; drop it so the
             # per-exposure `del raws[exp]` below can actually free those pixels.
             del ref_raw, loader
+        # Recorded even when no shards were supplied (then it is ~0), so the
+        # key distinguishes "no refcat" from "the worker died before this
+        # point", which stays NaN.
+        out["refcat_run"] = time.perf_counter() - t_refcat0
 
         # --- cutouts, one call per exposure ---
         cutout_elapsed = 0.0
@@ -477,8 +489,6 @@ def _fam_detector_worker(args: tuple) -> dict:
         wf_results = []
         for group in groups:
             r = wf_task.run(group)
-            for wd in r.get("donuts", []):
-                wd.fit_mode = mode
             wf_results.append(r)
         out["wf_results"] = wf_results
         out["fit_run"] = time.perf_counter() - t2
