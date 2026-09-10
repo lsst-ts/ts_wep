@@ -66,6 +66,7 @@ from .utils import (
     _ANSI_CYAN,
     _ANSI_GREEN,
     _CALIB_STORE,
+    _CUTOUT_STAGE_KEYS,
     _INSTRUMENT,
     _INTRA_FOCAL_DET_IDS,
     _colorize,
@@ -608,12 +609,6 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         astrom_stub_loader.config.pixelMargin = 0
         self.astromTask.setRefObjLoader(astrom_stub_loader)
 
-        cutout_cfg = dict(
-            maxFitScatter=self.config.maxFitScatter,
-            astromRefFilter=self.config.astromRefFilter,
-            photoRefFilter=photo_filter_name,
-        )
-
         _CALIB_STORE.clear()
         _CALIB_STORE["isr_task"] = self.isrTask
         _CALIB_STORE["bkg_task"] = self.subtractBackground
@@ -623,7 +618,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["donut_selector_task"] = self.donutSelector
         _CALIB_STORE["measure_candidates_task"] = self.measureCandidatesTask
         _CALIB_STORE["cut_stamps_task"] = self.cutStampsTask
-        _CALIB_STORE["cutout_cfg"] = cutout_cfg
+        _CALIB_STORE["maxFitScatter"] = self.config.maxFitScatter
+        _CALIB_STORE["astromRefFilter"] = self.config.astromRefFilter
+        _CALIB_STORE["photoRefFilter"] = photo_filter_name
         _CALIB_STORE["det_refcats"] = det_refcats
         for name in detNames:
             missing_calib = [
@@ -715,22 +712,17 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         donuts = []
         for r in results:
             scatter_str = f'{r["scatter_arcsec"]:.3f}"' if r["scatter_arcsec"] is not None else "N/A"
-            self.log.info(
-                "  %s: dispatch=%.3fs  isr=%.3fs  bkg=%.3fs"
-                "  diam=%.3fs  detect=%.3fs  wcs=%.3fs (scatter=%s)"
-                "  select=%.3fs  cut=%.3fs  donuts=%d",
-                r["det_name"],
-                r["dispatch_to_arrival"],
-                r["isr_run"],
-                r["bkg_run"],
-                r["diam_run"],
-                r["blind_detect_run"],
-                r["wcs_refit_run"],
-                scatter_str,
-                r["catalog_select_run"],
-                r.get("stamp_cut_run", 0.0),
-                len(r["catalog"]),
-            )
+            # Stage columns come off `_CUTOUT_STAGE_KEYS` rather than being
+            # spelled out, so a stage added to the cutout pipeline reaches this
+            # line for free.  A stage the worker never reached prints as `nan`
+            # by design: a missing stage should not read as a fast one.
+            pieces = [f"dispatch={r['dispatch_to_arrival']:.3f}s"]
+            for label, key in _CUTOUT_STAGE_KEYS.items():
+                piece = f"{label}={r.get(key, float('nan')):.3f}s"
+                # Scatter belongs to the WCS refit, so it hangs off that stage.
+                pieces.append(f"{piece} (scatter={scatter_str})" if label == "wcs" else piece)
+            pieces.append(f"donuts={len(r['catalog'])}")
+            self.log.info("  %s: %s", r["det_name"], "  ".join(pieces))
             if r["wcs_refit_error"]:
                 self.log.warning("  %s: WCS refit failed: %s", r["det_name"], r["wcs_refit_error"])
             if r["cat_select_error"]:
@@ -771,7 +763,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # WF dispatch
         mode = self.config.wfEstimationMode
         results_by_det = {r["det_name"]: r["catalog"] for r in results}
-        groups, unmatched_donuts = _build_wf_groups(mode, results_by_det, band, rtp_deg, boresight_alt_rad)
+        groups, unmatched_donuts, pair_path = _build_wf_groups(
+            mode, results_by_det, band, rtp_deg, boresight_alt_rad
+        )
+        # Stamp the pairing path on every cutout result: those are what reach
+        # build_donut_catalog, so this is what gets pairing provenance into the
+        # persisted table.  Full-array mode does the same in its worker.
+        for r in results:
+            r["pair_path"] = pair_path
 
         self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
         t_wf0 = time.perf_counter()

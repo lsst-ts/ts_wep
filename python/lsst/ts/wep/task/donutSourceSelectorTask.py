@@ -439,7 +439,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 # exists, this source is the fainter member of the overlap.
                 # Short-circuiting pure-Python test avoids building a numpy
                 # array for the common rejection path.
-                # (Equivalent to the old np.min(magDiff) < 0.0.)
+                # (Equivalent to np.min(magDiff) < 0.0 over all neighbors.)
                 if any(j < srcOn for j in neighbors):
                     continue
 

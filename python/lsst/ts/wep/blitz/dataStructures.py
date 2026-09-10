@@ -82,14 +82,20 @@ class Donut:
 class WfResult:
     """One donut's wavefront-fit outputs, produced by `_wf_worker`.
 
-    Consumed by `_buildCatalog`, keyed by ``(donut_id, det_name)``. A fit that
-    timed out or raised still produces a WfResult with ``fit_success=False``
-    and all-NaN Zernikes. `_NULL_WF` is the sentinel for "no fit consumed this
-    donut" (paired-mode surplus with no partner).
+    Consumed by `build_donut_catalog`, keyed by ``(donut_id, det_name,
+    visit_id)``. A fit that timed out or raised still produces a WfResult with
+    ``fit_success=False`` and all-NaN Zernikes. `_NULL_WF` is the sentinel for
+    "no fit consumed this donut" (paired-mode surplus with no partner).
+
+    ``visit_id`` is part of the key because full-array mode fits the same star on
+    the same detector twice, once per side of focus, so ``(donut_id, det_name)``
+    alone is ambiguous there. Corner mode has one visit per quantum, so including
+    it changes nothing.
     """
 
     donut_id: int
     det_name: str
+    visit_id: int
     zk_dev: npt.NDArray[np.float64]        # dense Noll 0.._ZK_JMAX, metres, NaN where unfit
     zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, metres
     img: np.ndarray | None
@@ -114,6 +120,7 @@ class WfResult:
 _NULL_WF = WfResult(
     donut_id=-1,
     det_name="",
+    visit_id=-1,
     zk_dev=np.full(_ZK_JMAX + 1, np.nan),
     zk_intrinsic=np.full(_ZK_JMAX + 1, np.nan),
     img=None,
