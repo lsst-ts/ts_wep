@@ -1178,6 +1178,14 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         detectors that neither failed nor skipped, since a NaN-filled row would
         otherwise widen every standard deviation with a number that means "absent"
         rather than "slow".
+
+        ``dispatch`` is deliberately left out of the timing line.  Every task is
+        timed from the same dispatch epoch, so it is a queue wait that grows with
+        position in the queue rather than work done: its mean is set by
+        ``n_detectors / n_workers`` and its standard deviation by the spread within
+        one wave, and neither says anything about the detector.  It stays on the
+        per-detector lines, where the step from ~0 to nonzero shows the pool size
+        and the growth after that shows the pool draining.
         """
         n = len(ok)
         stages = [_detector_stage_times(r) for r in ok]
@@ -1192,6 +1200,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             "  ".join(
                 "{}={:.2f}+/-{:.2f}s".format(key, *_mean_std_max([s[key] for s in stages])[:2])
                 for key in _STAGE_KEYS
+                if key != "dispatch"
             ),
         )
 
