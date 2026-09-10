@@ -73,6 +73,18 @@ _ANSI_CYAN = "\033[36m"
 # Maximum nearby sources to store in the output table for each donut.
 _MAX_NEARBY = 5
 
+# Columns that come from the reference catalog, and so exist only on the refcat
+# selection path -- but which every table reaching `CutDonutStampsTask` carries
+# regardless, NaN-filled on the blind-detection path. The blind path is a *data*
+# gap, not a schema difference, so the consumer reads these unconditionally
+# instead of testing `colnames` for their presence. Filled in `_cutout_one_exposure`.
+_REFCAT_COLUMNS = (
+    "coord_ra",
+    "coord_dec",
+    "photo_mag",
+    "astrom_mag",
+)
+
 # Maximum Noll index fit/reported. Dense Noll-indexed arrays are length
 # _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
 _ZK_JMAX = 66
@@ -247,6 +259,26 @@ def _resolveDonutRadius(donutRadius: float | None) -> float:
     if not np.isfinite(donutRadius) or donutRadius <= 0:
         return _INSTRUMENT.donutRadius
     return donutRadius
+
+
+def _dense_intrinsic(donut) -> np.ndarray:
+    """Return intrinsic Zernikes in meters, dense over Noll 0..``_ZK_JMAX``.
+
+    Indices with no supplied value are 0.0; ``Donut.intrinsic_zk`` is in µm and
+    starts at Noll 4.
+
+    Lives here rather than beside its original caller in
+    `WavefrontFittingTask` because `build_donut_catalog` needs the same
+    conversion: intrinsics are a function of field position, so a donut no fit
+    consumed still has them, and the catalog falls back to this for that row.
+    """
+    out = np.zeros(_ZK_JMAX + 1)
+    raw = donut.intrinsic_zk  # µm, Noll 4.._ZK_JMAX
+    if raw is not None:
+        n_slots = _ZK_JMAX + 1 - 4  # Noll 4.._ZK_JMAX inclusive
+        for idx in range(min(len(raw), n_slots)):
+            out[idx + 4] = raw[idx] * 1e-6
+    return out
 
 
 def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:

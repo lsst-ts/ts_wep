@@ -42,12 +42,13 @@ from scipy.stats import median_abs_deviation
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 
-from .dataStructures import Donut, WfResult, _WfGroup
+from .dataStructures import _FIT_OUTCOMES, Donut, WfResult, _WfGroup
 from .utils import (
     _CALIB_STORE,
     _INSTRUMENT,
     _ZK_JMAX,
     _bin_stamp_odd,
+    _dense_intrinsic,
     _telescope_for_offsets,
     CORNER_PAIRS,
 )
@@ -155,24 +156,11 @@ def _blend_frac(
     return np.sum(np.abs(resid[faint_mask & sig_mask])) / total_model_flux
 
 
-def _dense_intrinsic(donut: dict) -> np.ndarray:
-    """Return intrinsic Zernikes in metres, dense over Noll 0..``_ZK_JMAX``.
-
-    Indices with no supplied value are 0.0.
-    """
-    out = np.zeros(_ZK_JMAX + 1)
-    raw = donut.intrinsic_zk  # µm, Noll 4.._ZK_JMAX
-    if raw is not None:
-        n_slots = _ZK_JMAX + 1 - 4  # Noll 4.._ZK_JMAX inclusive
-        for idx in range(min(len(raw), n_slots)):
-            out[idx + 4] = raw[idx] * 1e-6
-    return out
-
-
 def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
     """Return deviations in metres, dense over Noll 0..``_ZK_JMAX``.
 
-    Indices that were not fitted are ``np.nan``.
+    Indices that were not fitted are ``np.nan``, except Noll 0..3, which are
+    0.0: they are carried for indexing only and are never fitted.
     """
     out = np.full(_ZK_JMAX + 1, np.nan)
     out[0:4] = 0.0
@@ -255,7 +243,7 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
             for extra, intra in zip(extra_donuts, intra_donuts):
                 # Qualified by corner: under blind detection the ids are per-detector
                 # 1..N slots, so every corner would otherwise log as group=1_1, 2_2, ...
-                gid = f"{corner}_{extra.id}_{intra.id}"
+                gid = f"{corner}_{extra.donut_id}_{intra.donut_id}"
                 groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
             n_pairs = min(len(extra_donuts), len(intra_donuts))
             unmatched_donuts.extend(extra_donuts[n_pairs:])
@@ -263,7 +251,7 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
     elif mode == "unpaired":
         for det_donuts in results_by_det.values():
             for d in det_donuts:
-                gid = f"{d.det_name}_{d.id}"
+                gid = f"{d.det_name}_{d.donut_id}"
                 groups.append(_WfGroup(donuts=[d], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
     elif mode == "full_detector":
         # Skip detectors with no donuts: an empty group fits nothing but still
@@ -302,12 +290,7 @@ def _wf_fitting_worker(group: "_WfGroup") -> dict:
     on the group. Designed to be used with multiprocessing.Pool.map().
     """
     task = _CALIB_STORE["wf_fitting_task"]
-    result = task.run(group)
-    # Set fit_mode on each donut result from main config
-    fit_mode = _CALIB_STORE["wfEstimationMode"]
-    for wd in result.get("donuts", []):
-        wd.fit_mode = fit_mode
-    return result
+    return task.run(group)
 
 
 class WavefrontFittingTaskConfig(pexConfig.Config):
@@ -489,9 +472,18 @@ class _LstsqFitResult:
     cost: float = float("nan")
     optimality: float = float("nan")
     njev: int = 0
-    status: int = 0
+    status: int = -99
     message: str = ""
     error: str = ""
+    # Which of the mutually exclusive fit paths produced this result.
+    outcome: str = ""
+
+    def __post_init__(self):
+        if not self.outcome or self.outcome not in _FIT_OUTCOMES:
+            raise ValueError(
+                "outcome must be one of "
+                f"{tuple(o for o in _FIT_OUTCOMES if o)}; got {self.outcome!r}"
+            )
 
 
 class WavefrontFittingTask(pipeBase.Task):
@@ -605,7 +597,7 @@ class WavefrontFittingTask(pipeBase.Task):
             _img = imgs[i] if i < len(imgs) else None
             donuts_out.append(
                 WfResult(
-                    donut_id=int(d.id),
+                    donut_id=int(d.donut_id),
                     det_name=d.det_name,
                     visit_id=int(d.visit_id),
                     zk_dev=zk_dev_dense,
@@ -617,6 +609,9 @@ class WavefrontFittingTask(pipeBase.Task):
                     setup_elapsed=_setup_elapsed,
                     fit_nfev=fit_result.nfev,
                     fit_cost=fit_result.cost,
+                    fit_optimality=fit_result.optimality,
+                    fit_njev=fit_result.njev,
+                    fit_outcome=fit_result.outcome,
                     fit_dx=float(fit_result.dxs[i]),
                     fit_dy=float(fit_result.dys[i]),
                     fit_flux=float(fit_result.fluxes[i]),
@@ -624,7 +619,6 @@ class WavefrontFittingTask(pipeBase.Task):
                     blend_frac=fit_result.blend_fracs[i],
                     group_id=group.group_id,
                     group_size=n,
-                    fit_mode="",  # Will be set by caller with wfEstimationMode
                 )
             )
         return {
@@ -641,6 +635,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 "status": fit_result.status,
                 "message": fit_result.message,
                 "error": fit_result.error,
+                "outcome": fit_result.outcome,
             },
             "donuts": donuts_out,
             "model_imgs": fit_result.model_imgs,
@@ -732,7 +727,7 @@ class WavefrontFittingTask(pipeBase.Task):
         # detector appears on both sides.
         if donut.defocal_offsets is None:
             raise RuntimeError(
-                f"Donut {donut.id} on {donut.det_name} has no defocal_offsets; the "
+                f"Donut {donut.donut_id} on {donut.det_name} has no defocal_offsets; the "
                 "task that built it must set them (see Donut.defocal_offsets)."
             )
         telescope_dz = _telescope_for_offsets(donut.defocal_offsets)
@@ -847,6 +842,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     njev=0,
                     status=0,
                     message="x0 only",
+                    outcome="x0_only",
                 )
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
@@ -862,6 +858,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     dys=[float("nan")] * n,
                     fwhm=float("nan"),
                     error=str(exc),
+                    outcome="exception",
                 )
         else:
             galsim.errors.raise_fft_size_error = True
@@ -913,6 +910,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     njev=result.njev,
                     status=result.status,
                     message=result.message,
+                    outcome="ok" if result.success else "nonconvergent",
                 )
             except _WfFitTimeoutError:
                 elapsed = time.perf_counter() - t0
@@ -928,6 +926,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     dys=[float("nan")] * n,
                     fwhm=float("nan"),
                     error=f"timeout after {timeout:.0f}s",
+                    outcome="timeout",
                 )
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
@@ -943,4 +942,5 @@ class WavefrontFittingTask(pipeBase.Task):
                     dys=[float("nan")] * n,
                     fwhm=float("nan"),
                     error=str(exc),
+                    outcome="exception",
                 )

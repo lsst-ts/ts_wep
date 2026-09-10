@@ -111,7 +111,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
             pixel coordinates.
         selections : QTable
             Catalog-selected (or blind-detection) centroids with columns
-            ``centroid_x``, ``centroid_y``, ``id``.
+            ``centroid_x``, ``centroid_y``, ``donut_id``.
         donutRadius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if
             unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
@@ -123,7 +123,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
                 A copy of ``selections`` with measurement columns added
                 (``flux``, ``inner_frac``, ``outer_frac``,
                 ``outer_sector_minmax_frac``, ``snr``, plus raw ``*_flux``,
-                ``std``, ``bkg``). No rows are dropped and no ordering is
+                ``bkg_std``, ``bkg``). No rows are dropped and no ordering is
                 imposed -- selection and culling happen downstream. An empty
                 input is returned unmodified, without measurement columns.
         """
@@ -169,7 +169,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
             for k in range(8)
         ]
 
-        flux_list, inner_flux_list, outer_flux_list, std_list = [], [], [], []
+        flux_list, inner_flux_list, outer_flux_list, bkg_std_list = [], [], [], []
         outer_sector_minmax_list = []
         bkg_list = []
 
@@ -182,7 +182,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
                 inner_flux_list.append(np.nan)
                 outer_flux_list.append(np.nan)
                 outer_sector_minmax_list.append(np.nan)
-                std_list.append(np.nan)
+                bkg_std_list.append(np.nan)
                 bkg_list.append(np.nan)
                 continue
 
@@ -199,17 +199,17 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
 
             diff = (stamp_sub - np.roll(stamp_sub, 1, axis=0))[bkg_mask]
             q75, q25 = np.nanpercentile(diff, [75, 25])
-            std_list.append((q75 - q25) / 1.349 / np.sqrt(2))
+            bkg_std_list.append((q75 - q25) / 1.349 / np.sqrt(2))
 
         selections = selections.copy()  # avoid modifying the input in place
         selections["flux"] = flux_list
         selections["inner_flux"] = inner_flux_list
         selections["outer_flux"] = outer_flux_list
         selections["outer_sector_minmax_flux"] = outer_sector_minmax_list
-        selections["std"] = std_list
+        selections["bkg_std"] = bkg_std_list
         selections["bkg"] = bkg_list
         with np.errstate(invalid="ignore", divide="ignore"):
-            selections["snr"] = (selections["flux"] / selections["std"]) / np.sqrt(n_main)
+            selections["snr"] = (selections["flux"] / selections["bkg_std"]) / np.sqrt(n_main)
             selections["inner_frac"] = selections["inner_flux"] / selections["flux"]
             selections["outer_frac"] = selections["outer_flux"] / selections["flux"]
             selections["outer_sector_minmax_frac"] = (

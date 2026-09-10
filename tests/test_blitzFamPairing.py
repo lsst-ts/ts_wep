@@ -66,22 +66,19 @@ def _donut(donut_id, visit_id, offsets, thx=0.0, thy=0.0, snr=500.0):
         band="r",
         det_id=0,
         visit_id=visit_id,
-        centroid_x_raw=0.0,
-        centroid_y_raw=0.0,
-        id=donut_id,
+        x_det=0.0,
+        y_det=0.0,
+        donut_id=donut_id,
         inner_frac=0.0,
         outer_frac=0.0,
         outer_sector_minmax_frac=0.0,
-        field_dist_deg=np.degrees(np.hypot(thx, thy)),
         donut_radius=_DONUT_RADIUS,
-        obscuration=0.612,
         snr=snr,
         bkg=0.0,
         bkg_std=1.0,
-        nearest_neighbor_dist_px=np.nan,
-        n_neighbors_in_stamp=0,
-        catalog_centroid_offset_px=0.0,
         n_quarter=0,
+        photo_mag=float("nan"),
+        astrom_mag=float("nan"),
         nearby_photo=[],
         nearby_astrom=[],
         defocal_offsets=offsets,
@@ -166,10 +163,10 @@ class TestPairDonuts(FamPairingTestCase):
         self.assertEqual(unmatched, [])
         # extra first, matching corner mode's paired group order.
         for e, i in pairs:
-            self.assertEqual(e.id, i.id)
+            self.assertEqual(e.donut_id, i.donut_id)
             self.assertEqual(e.visit_id, 2)
             self.assertEqual(i.visit_id, 1)
-        self.assertEqual({e.id for e, _ in pairs}, {101, 102})
+        self.assertEqual({e.donut_id for e, _ in pairs}, {101, 102})
 
     def testRefcatIdLeavesUnmatchedOnBothSides(self) -> None:
         intra = [_donut(1, 1, _INTRA_OFFSETS), _donut(2, 1, _INTRA_OFFSETS)]
@@ -177,7 +174,7 @@ class TestPairDonuts(FamPairingTestCase):
         pairs, unmatched, path = _pair_donuts(intra, extra, 0.25, "refcat", "refcat")
         self.assertEqual(path, "refcat_id")
         self.assertEqual(len(pairs), 1)
-        self.assertEqual({d.id for d in unmatched}, {1, 3})
+        self.assertEqual({d.donut_id for d in unmatched}, {1, 3})
 
     def testBlindPathFallsBackToSpatial(self) -> None:
         """Blind detection renumbers per exposure, so ids must not be trusted."""
@@ -197,7 +194,7 @@ class TestPairDonuts(FamPairingTestCase):
         self.assertEqual(len(pairs), 2)
         for e, i in pairs:
             # Paired by position, so their ids do *not* agree.
-            self.assertNotEqual(e.id, i.id)
+            self.assertNotEqual(e.donut_id, i.donut_id)
             np.testing.assert_allclose(
                 (e.thx_ccs / _defocal_radial_scale(_EXTRA_OFFSETS)),
                 (i.thx_ccs / _defocal_radial_scale(_INTRA_OFFSETS)),
@@ -254,8 +251,8 @@ class TestPairDonuts(FamPairingTestCase):
         ]
         pairs, unmatched, _ = _pair_donuts(intra, extra, 0.25, "blind", "blind")
         self.assertEqual(len(pairs), 1)
-        self.assertEqual(pairs[0][0].id, 1)
-        self.assertEqual([d.id for d in unmatched], [2])
+        self.assertEqual(pairs[0][0].donut_id, 1)
+        self.assertEqual([d.donut_id for d in unmatched], [2])
 
     def testOneSidedInputIsAllUnmatched(self) -> None:
         intra = [_donut(1, 1, _INTRA_OFFSETS), _donut(2, 1, _INTRA_OFFSETS)]
@@ -303,7 +300,7 @@ class TestFamGrouping(FamPairingTestCase):
         self.assertEqual(path, "refcat_id")
         self.assertEqual(len(groups), 3)
         self.assertTrue(all(len(g.donuts) == 2 for g in groups))
-        self.assertEqual([d.id for d in unmatched], [3])
+        self.assertEqual([d.donut_id for d in unmatched], [3])
 
         for mode in ("unpaired", "full_detector", "full_detector_pair"):
             _, unmatched, path = self._group(mode, intra, extra)
