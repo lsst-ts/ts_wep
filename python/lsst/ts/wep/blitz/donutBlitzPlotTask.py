@@ -46,6 +46,7 @@ from .utils import (
     CORNER_BY_DET_NAME,
     CORNER_DEFOCAL_BY_DET_NAME,
     CORNER_PAIRS,
+    _CUTOUT_STAGE_KEYS,
     _MAX_NEARBY,
     _resolveColorLogEnabled,
 )
@@ -177,8 +178,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         ----------
         catalog : QTable
             Per-donut table from ``_buildCatalog``.  Per-detector metadata is in
-            ``catalog.meta["det_meta"]``; visit-level scalars are in
-            ``catalog.meta``.
+            ``catalog.meta["det_meta"]``, keyed by ``f"{det_name}_{visit_id}"``;
+            visit-level scalars are in ``catalog.meta``.
         """
         import matplotlib.patches as mpatches
         from matplotlib.figure import Figure
@@ -437,7 +438,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             )
 
         for row_idx, (det_name, acc_rows, rej_rows) in enumerate(dets_with_data):
-            sm = det_meta.get(det_name, {})
+            # Keyed by detector *and* visit; corner mode has just this one visit.
+            # A miss degrades to the defaults below rather than raising.
+            sm = det_meta.get(f"{det_name}_{visit_id}", {})
             scatter_val = sm.get("scatter_arcsec", float("nan"))
             scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
 
@@ -446,13 +449,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             lines = [
                 f"{det_name} ({det_id_by_name[det_name]})",
                 f"donuts: {len(acc_rows)}",
-                f"isr:    {sm.get('isr_run', float('nan')):.3f}s",
-                f"bkg:    {sm.get('bkg_run', float('nan')):.3f}s",
-                f"diam:   {sm.get('diam_run', float('nan')):.3f}s",
-                f"detect: {sm.get('blind_detect_run', float('nan')):.3f}s",
-                f"wcs:    {sm.get('wcs_refit_run', float('nan')):.3f}s  ({scatter_str})",
-                f"select: {sm.get('catalog_select_run', float('nan')):.3f}s",
             ]
+            # One line per cutout stage, driven off the shared key list so this
+            # panel cannot fall behind the log lines reporting the same stages.
+            # The label column is padded to the longest label rather than to a
+            # hard-coded width, since this is monospace text.
+            width = max(len(label) for label in _CUTOUT_STAGE_KEYS) + 2
+            for label, key in _CUTOUT_STAGE_KEYS.items():
+                line = f"{label + ':':<{width}}{sm.get(key, float('nan')):.3f}s"
+                # Scatter belongs to the WCS refit, so it hangs off that stage.
+                lines.append(f"{line}  ({scatter_str})" if label == "wcs" else line)
             if sm.get("wcs_refit_error"):
                 lines.append(f"WCS ERR: {sm['wcs_refit_error'][:40]}")
             if sm.get("cat_select_error"):

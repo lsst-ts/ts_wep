@@ -21,10 +21,10 @@
 
 """Deprecated alias for the `lsst.ts.wep.blitz` subpackage.
 
-Everything this module used to define now lives in one module per task under
-``lsst.ts.wep.blitz``; import from there instead.  The names are re-exported
-here so existing imports -- and stored ``pexConfig`` targets recorded against
-this module path -- keep resolving.
+This module defines nothing of its own: each task lives in one module per task
+under ``lsst.ts.wep.blitz``, and new code should import from there.  The names
+are re-exported here so imports against this module path -- and stored
+``pexConfig`` targets recorded against it -- keep resolving.
 """
 
 __all__ = [

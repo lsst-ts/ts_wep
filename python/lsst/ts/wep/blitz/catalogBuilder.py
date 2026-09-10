@@ -22,9 +22,7 @@
 """The per-donut output catalog, shared by corner and full-array mode.
 
 Both modes emit the same schema, so this lives in one place rather than in each
-task -- a divergence here would show up as two subtly different `blitzResults`
-flavours for downstream consumers to discover the hard way. Everything the
-builder used to read off the task's config is now passed in as `CatalogOptions`.
+task.
 """
 
 __all__ = ["CatalogOptions", "build_donut_catalog", "build_noll_pairs", "transform_eb"]
@@ -37,7 +35,13 @@ from astropy.table import QTable
 from galsim.zernike import noll_to_zern
 
 from .dataStructures import _NULL_WF
-from .utils import _MAX_NEARBY, _ZK_JMAX, _bin_stamp_odd, _rotate_zk
+from .utils import (
+    _CUTOUT_STAGE_KEYS,
+    _MAX_NEARBY,
+    _ZK_JMAX,
+    _bin_stamp_odd,
+    _rotate_zk,
+)
 
 
 def build_noll_pairs(jmax):
@@ -216,7 +220,11 @@ def build_donut_catalog(
     ----------
     results : list
         Per-detector cutout dicts (supplies rejected donuts and per-detector
-        metadata).
+        metadata).  Full-array mode passes two per detector, one per exposure of
+        the pair, each tagged with its own ``visit_id``; corner mode passes one
+        per detector and omits ``visit_id``, defaulting to the ``visit_id``
+        argument.  Either way the metadata is keyed by ``f"{det_name}_{visit_id}"``
+        (see ``table.meta["det_meta"]``).
     wf_results : list
         Per-fit WF result dicts from the WF worker pool.
     donuts : list
@@ -235,8 +243,11 @@ def build_donut_catalog(
     Returns
     -------
     QTable
-        Exactly one row per donut, keyed by ``(det_name, id)``, with two
-        independent flags:
+        Exactly one row per donut, keyed by ``(visit_id, det_name, id)``, with
+        two independent flags. ``visit_id`` is in the key for full-array mode,
+        which cuts the same star on the same detector once per side of focus --
+        the two donuts share an ``id`` (the same refcat source, or the same
+        ``1..N`` blind-detection slot) and would otherwise collapse into one row:
 
         ``candidate``
             The donut passed every selection and quality cut.  See
@@ -261,35 +272,51 @@ def build_donut_catalog(
         count makes them dominate the file.  When present, ``wf_img`` is filled
         for every donut with a stamp -- from the fitter when a fit ran,
         otherwise by binning the stamp the same way -- so only ``model_img`` is
-        all-NaN for unused donuts.  Visit-level and per-detector scalars are
-        stored in ``table.meta``.
+        all-NaN for unused donuts.  Visit-level scalars are stored in
+        ``table.meta``; per-detector scalars in ``table.meta["det_meta"]``, keyed
+        by ``f"{det_name}_{visit_id}"`` in both modes.
     """
-    # Build lookup: (id, det_name) -> (wf donut entry, group index).
-    # Key on both fields to handle the same refcat star on two detectors.
+    # Build lookup: (id, det_name, visit_id) -> (wf donut entry, group index).
+    # det_name handles the same refcat star landing on two detectors; visit_id
+    # handles full-array mode, where the same star on the same detector is cut
+    # twice, once per side of focus, and so shares an id with its partner.
     wf_by_id: dict = {}
     for group_idx, r in enumerate(wf_results):
         for wd in r.get("donuts", []):
-            wf_by_id[(wd.donut_id, wd.det_name)] = (wd, group_idx)
+            wf_by_id[(wd.donut_id, wd.det_name, wd.visit_id)] = (wd, group_idx)
 
-    # Build lookup: det_name -> per-detector metadata from cutout results.
+    # Build lookup: "{det_name}_{visit_id}" -> per-detector metadata from cutout
+    # results.  The visit is part of the key because full-array mode passes one
+    # cutout result per detector *per exposure*, so det_name alone would collide
+    # and drop half the metadata.  Corner mode has a single exposure and so falls
+    # back to the visit this whole table is for, which keys it the same way.
     det_meta: dict = {}
-    rejected_by_det: dict = {}
     for r in results:
-        dname = str(r["det_name"])
-        det_meta[dname] = {
+        det_key = f"{r['det_name']}_{r.get('visit_id', visit_id)}"
+        det_meta[det_key] = {
             "scatter_arcsec": (
                 r["scatter_arcsec"] if r["scatter_arcsec"] is not None else float("nan")
             ),
             "wcs_refit_error": r["wcs_refit_error"],
             "cat_select_error": r["cat_select_error"],
-            "isr_run": r.get("isr_run", float("nan")),
-            "bkg_run": r.get("bkg_run", float("nan")),
-            "diam_run": r.get("diam_run", float("nan")),
-            "blind_detect_run": r.get("blind_detect_run", float("nan")),
-            "wcs_refit_run": r.get("wcs_refit_run", float("nan")),
-            "catalog_select_run": r.get("catalog_select_run", float("nan")),
+            # Where this detector's donut ids came from. "refcat" ids are Monster
+            # source ids; the blind paths number donuts 1..N per detector per
+            # exposure, so an id is only comparable across exposures on the refcat
+            # path. "no_detections" when no selector ran at all.
+            "selection_source": r["selection_source"],
+            # Which pairing algorithm ran: "refcat_id", "spatial" or "empty" in
+            # full-array mode, "snr_rank" in corner mode, "n/a" in the modes that
+            # do not pair. Both are always set by their grouping stage, so an
+            # empty string here would mean a bug rather than "not applicable".
+            "pair_path": r["pair_path"],
+            # Every cutout stage, keyed as the worker returns it.  Driven off
+            # the shared list so a stage added to the pipeline lands in the
+            # metadata too; NaN for anything this detector never reached.
+            **{
+                key: r.get(key, float("nan"))
+                for key in _CUTOUT_STAGE_KEYS.values()
+            },
         }
-        rejected_by_det[dname] = r.get("rejected_catalog", [])
 
     # Collect every donut exactly once, tagged with whether it passed
     # selection ("candidate"). Whether a fit actually consumed it ("used")
@@ -300,7 +327,7 @@ def build_donut_catalog(
     # both lists. Keyed dedupe keeps one row per donut -- they stay candidates,
     # they just never got fitted.
     def _key(d):
-        return (d.det_name, d.id)
+        return (d.visit_id, d.det_name, d.id)
 
     all_donuts = []
     _seen = set()
@@ -309,7 +336,7 @@ def build_donut_catalog(
         + [
             (d, False)
             for r in results
-            for d in rejected_by_det.get(str(r["det_name"]), [])
+            for d in r.get("rejected_catalog", [])
         ]
         + [(d, True) for d in unmatched_donuts]
     ):
@@ -331,7 +358,7 @@ def build_donut_catalog(
     zk_int_rows = []
     for d, candidate in all_donuts:
         sid = d.id
-        wd, grp = wf_by_id.get((sid, d.det_name), (_NULL_WF, -1))
+        wd, grp = wf_by_id.get((sid, d.det_name, d.visit_id), (_NULL_WF, -1))
 
         # Both are dense Noll-indexed arrays in meters of length _ZK_JMAX + 1;
         # they become the zk_*_ccs array columns after the loop.

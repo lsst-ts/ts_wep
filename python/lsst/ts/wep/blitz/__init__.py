@@ -27,5 +27,7 @@ from .cutDonutStampsTask import *
 from .blindDetectTask import *
 from .cutoutPipeline import *
 from .wavefrontFittingTask import *
+from .famPipeline import *
 from .donutBlitzPlotTask import *
 from .donutBlitzMonolithTask import *
+from .donutBlitzFamTask import *
