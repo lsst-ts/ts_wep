@@ -42,6 +42,7 @@ from .utils import (
     _ANSI_BOLD,
     _ANSI_YELLOW,
     _CALIB_STORE,
+    _REFCAT_COLUMNS,
     _colorize,
     _resolveDonutRadius,
 )
@@ -126,7 +127,8 @@ def _cutout_one_exposure(
     dict
         Keys: ``det_name``, ``catalog`` (accepted donuts), ``rejected_catalog``,
         ``scatter_arcsec``, ``wcs_refit_error``, ``cat_select_error``,
-        ``selection_source``, ``pair_path``, ``wcs`` (the WCS actually used, or
+        ``selection_source``, ``pair_path``, ``n_quarter`` (detector
+        orientation), ``wcs`` (the WCS actually used, or
         None), and one timing float per stage, keyed as
         `lsst.ts.wep.blitz.utils._CUTOUT_STAGE_KEYS` lists -- this function is
         where those keys are defined, and everything that reports them takes
@@ -152,6 +154,11 @@ def _cutout_one_exposure(
         linearizer=calibs["linearizer"],
         crosstalk=calibs["crosstalk"],
     ).exposure
+
+    # Detector orientation, reported per detector so a consumer can undo the CCS
+    # stamp rotation without loading the camera model. Read here because both
+    # returns below carry it, including the one that bails out before selection.
+    n_quarter = postIsr.getDetector().getOrientation().getNQuarter()
 
     # --- background subtraction ---
     t1 = time.perf_counter()
@@ -193,6 +200,7 @@ def _cutout_one_exposure(
             # selector running and rejecting everything ("blind_failed").
             "selection_source": "no_detections",
             "pair_path": "n/a",
+            "n_quarter": n_quarter,
             "wcs": None,
         }
 
@@ -248,6 +256,11 @@ def _cutout_one_exposure(
                 f"{photoRefFilter}_flux", f"{astromRefFilter}_flux"
             ]
             refcat = QTable({k: np.array(refcat[k]) for k in keys})
+            # The refcat source id is the donut id from here on: it is what
+            # `Donut.donut_id` and the catalog's `donut_id` column carry on the
+            # refcat path (blind detection supplies its own 1..N counter under
+            # the same name).
+            refcat.rename_column("id", "donut_id")
             refcat["photo_flux"] = refcat[f"{photoRefFilter}_flux"]
             refcat["astrom_flux"] = refcat[f"{astromRefFilter}_flux"]
             with np.errstate(invalid="ignore", divide="ignore"):
@@ -263,6 +276,15 @@ def _cutout_one_exposure(
     # If the refcat path didn't produce a selection, run the blind detections
     # through the same selector.  If that also fails, then exit gracefully.
     if selection_source != "refcat":
+        # Every table reaching `CutDonutStampsTask` carries the refcat-provenance
+        # columns, so that a blind-path donut is a row with NaN values rather than
+        # a row the consumer has to test the schema for.  Both branches below
+        # derive `selections` from `blindDetections` -- the selector returns a row
+        # subset, and the failure branch an empty slice -- so filling them here
+        # covers both.  Mutating in place is safe: `blindDetections` is built
+        # fresh per detector, and this path is the only one that reads it again.
+        for column in _REFCAT_COLUMNS:
+            blindDetections[column] = np.full(len(blindDetections), np.nan)
         try:
             result = donut_selector.run(blindDetections, detector, "")
             selections = result.sourceCat
@@ -294,7 +316,6 @@ def _cutout_one_exposure(
         postIsr,
         candidates,
         refcat,
-        blindDetections,
         donutRadius=donutRadius
     )
 
@@ -313,14 +334,14 @@ def _cutout_one_exposure(
     # ax.scatter(blindDetections["centroid_x"], blindDetections["centroid_y"], s=50, edgecolor="blue", facecolor="none")
     # ax.scatter(selections["centroid_x"], selections["centroid_y"], s=80, edgecolor="red", facecolor="none")
     # ax.scatter(
-    #     [d.centroid_x_raw for d in cut_result.donuts],
-    #     [d.centroid_y_raw for d in cut_result.donuts],
+    #     [d.x_det for d in cut_result.donuts],
+    #     [d.y_det for d in cut_result.donuts],
     #     s=110, edgecolor="yellow", facecolor="none"
     # )
     # for d in cut_result.donuts:
     #     ax.annotate(
     #         f"{d.snr:.1f}",
-    #         (d.centroid_x_raw, d.centroid_y_raw),
+    #         (d.x_det, d.y_det),
     #         xytext=(10, 10),
     #         textcoords="offset points", color="yellow", fontsize=10,
     #         annotation_clip=True,
@@ -328,7 +349,7 @@ def _cutout_one_exposure(
     # for d in cut_result.rejected_donuts:
     #     ax.annotate(
     #         f"{d.snr:.1f}",
-    #         (d.centroid_x_raw, d.centroid_y_raw),
+    #         (d.x_det, d.y_det),
     #         xytext=(10, 10),
     #         textcoords="offset points", color="red", fontsize=10,
     #         annotation_clip=True,
@@ -377,6 +398,7 @@ def _cutout_one_exposure(
         "selection_source": selection_source,
         # Overwritten by the grouping stage; see the Returns note above.
         "pair_path": "n/a",
+        "n_quarter": n_quarter,
         "wcs": wcs,
     }
 

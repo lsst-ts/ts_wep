@@ -99,6 +99,7 @@ def _worker_result(
         "skipped": skipped,
         "dispatch_to_arrival": 0.25,
         "io_run": 3.0 * base,
+        "refcat_run": 1.5 * base,
         "cutout_run": 2.0 * base,
         "fit_run": 40.0 * base,
         "worker_wall": 50.0 * base,

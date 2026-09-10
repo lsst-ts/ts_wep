@@ -80,6 +80,25 @@ from .wavefrontFittingTask import (
 )
 
 
+def _exposure_group(refs) -> str:
+    """The butler ``group`` of the exposure these raw refs came from.
+
+    Corner mode's quantum is visit-dimensioned, so unlike full-array mode it
+    cannot read ``group`` off its own data ID.  The ``raws`` connection is
+    exposure-dimensioned though, and ``exposure`` implies ``group``, so an
+    expanded data ID carries it.  All the raws of one corner set share an
+    exposure, so the first ref answers for all of them.
+
+    Returns ``""`` when the data IDs are not expanded (``hasFull()`` False),
+    which is the only way the implied dimension can be missing; the group is
+    metadata for the output table, not something worth failing a quantum over.
+    """
+    for ref in refs:
+        if ref.dataId.hasFull():
+            return str(ref.dataId["group"])
+    return ""
+
+
 # Corner mode defocuses by shifting the detector plane inside the camera: SW0
 # (extra-focal) sits at +defocalOffset, SW1 (intra-focal) at -defocalOffset.
 # Ordered as `_OFFSET_OPTICS`: (detector, camera, m2). Full-array mode shifts the
@@ -454,6 +473,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             butler_elapsed=butler_elapsed,
             butler_times=butler_times,
             numCores=butlerQC.resources.num_cores,
+            exposure_group=_exposure_group(inputRefs.raws),
+            instrument=str(butlerQC.quantum.dataId["instrument"]),
         )
         t8 = time.perf_counter()
         self.log.info("run() execution: %.3fs", t8 - t7)
@@ -472,6 +493,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         butler_elapsed: float = 0.0,
         butler_times: dict | None = None,
         numCores: int = 1,
+        exposure_group: str = "",
+        instrument: str = "",
     ) -> pipeBase.Struct:
         """Run ISR, WCS refit, catalog selection, and stamp cutting on the
         corner raws that are present, in parallel.
@@ -499,6 +522,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         butler_times : dict, optional
             Per-dataset butlerQC.get() times keyed by dataset type name.
         numCores : int
+        exposure_group : str, optional
+            Butler ``group`` of the corner exposure, for output meta.
+        instrument : str, optional
+            Butler ``instrument`` dimension, for output meta.  Taken from the
+            dataId rather than ``visitInfo.instrumentLabel`` because the
+            dimension is authoritative where the header field can be blank.
         """
         self.log.info(
             _colorize(
@@ -746,10 +775,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                     else _EXTRA_FOCAL_OFFSETS
                 )
 
-        # Annotate each accepted donut with realized intrinsic Zernikes.
+        # Annotate every donut with realized intrinsic Zernikes, rejected ones
+        # included: intrinsics are a function of field position, not of whether
+        # the donut passed selection, and rejected donuts get catalog rows too.
+        # Full-array mode already annotates both lists.
         for r in results:
             calib = intrinsicZernikesByName.get(r["det_name"])
-            for d in r["catalog"]:
+            for d in r["catalog"] + r.get("rejected_catalog", []):
                 if calib is not None:
                     d.intrinsic_zk = np.squeeze(
                         calib.getIntrinsicZernikes(
@@ -819,6 +851,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             unmatched_donuts=unmatched_donuts,
             visit_id=visit_id,
             options=self._catalogOptions(),
+            intra_visit_id=visit_id,
+            extra_visit_id=visit_id,
+            exposure_group=exposure_group,
             run_elapsed=t_plot0 - t_run0,
             refcat_elapsed=t_refcat_elapsed,
             butler_elapsed=butler_elapsed,
@@ -828,6 +863,12 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             photo_filter_name=photo_filter_name,
             astrom_filter_name=self.config.astromRefFilter,
             rtp_rad=rtp_rad,
+            mode="corner",
+            # Corner mode has one exposure holding both sides of focus, so the
+            # single visitInfo read above for the boresight angles is also the
+            # observation record for the whole table.
+            visit_info=visitInfo,
+            instrument=instrument,
         )
 
         if self.config.savePlots:

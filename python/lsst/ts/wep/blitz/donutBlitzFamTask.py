@@ -112,9 +112,12 @@ _REFCAT_HTM_LEVEL = 7
 # slot and then does its own butler reads, where corner mode's parent has already
 # loaded every pixel before it forks. `fit` likewise, because FAM fits inside the
 # same worker rather than in a second pool the parent summarises separately.
+# `refcat` is per detector rather than per exposure -- one load covers both
+# sides of focus -- so it sits outside the spliced-in cutout stages.
 _STAGE_KEYS = (
     "dispatch",
     "io",
+    "refcat",
     *_CUTOUT_STAGE_KEYS,
     "fit",
     "wall",
@@ -153,6 +156,9 @@ def _detector_stage_times(r: dict) -> dict[str, float]:
     stages = {
         "dispatch": r.get("dispatch_to_arrival", float("nan")),
         "io": r.get("io_run", float("nan")),
+        # Per detector, not per exposure: one refcat load serves both sides of
+        # focus, so unlike the cutout stages below there is nothing to sum.
+        "refcat": r.get("refcat_run", float("nan")),
         "fit": r.get("fit_run", float("nan")),
         "wall": r.get("worker_wall", float("nan")),
     }
@@ -844,14 +850,18 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         catalog = self._buildCatalog(
             results=results,
             visit_id=extra_exp,
+            intra_visit_id=intra_exp,
+            extra_visit_id=extra_exp,
+            exposure_group=str(group),
             rtp_rad=rtp_rad,
             photo_filter_name=photo_filter_name,
             run_elapsed=time.perf_counter() - t_start,
             butler_elapsed=t_resolve,
+            # The extra-focal exposure's header, matching meta["ref_visit_id"]
+            # and already read above as a component for the rotator angle.
+            visit_info=visit_info,
+            instrument=str(butlerQC.quantum.dataId["instrument"]),
         )
-        catalog.meta["group"] = str(group)
-        catalog.meta["intra_exposure"] = intra_exp
-        catalog.meta["extra_exposure"] = extra_exp
 
         # Keyed to the extra-focal visit, 1:1 with groups. The intra ref is
         # predicted but deliberately left unproduced.
@@ -1245,10 +1255,15 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         self,
         results: list[dict],
         visit_id: int,
+        intra_visit_id: int,
+        extra_visit_id: int,
+        exposure_group: str,
         rtp_rad: float,
         photo_filter_name: str,
         run_elapsed: float,
         butler_elapsed: float,
+        visit_info: Any = None,
+        instrument: str = "",
     ) -> Any:
         """Flatten the per-detector worker results into the shared catalog schema."""
         cutout_results = [r for w in results for r in w["results"]]
@@ -1271,8 +1286,21 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             unmatched_donuts=unmatched,
             visit_id=visit_id,
             options=self._catalogOptions(),
+            intra_visit_id=intra_visit_id,
+            extra_visit_id=extra_visit_id,
+            exposure_group=exposure_group,
             run_elapsed=run_elapsed,
             butler_elapsed=butler_elapsed,
+            # Summed across workers, which run in parallel, so these are CPU time
+            # and not the wall clock corner mode reports -- documented on the timing
+            # keys in `build_donut_catalog`, and keyed off meta["mode"].  Each term
+            # is per detector: `cutout_run` is already accumulated over the two
+            # exposures inside the worker, and one refcat load serves both, which is
+            # why `refcat_run` lives on the worker instead of on each per-exposure
+            # cutout result (summing it there would double-count).
+            refcat_elapsed=sum(
+                w["refcat_run"] for w in results if np.isfinite(w["refcat_run"])
+            ),
             cutout_elapsed=sum(
                 w["cutout_run"] for w in results if np.isfinite(w["cutout_run"])
             ),
@@ -1282,6 +1310,9 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             photo_filter_name=photo_filter_name,
             astrom_filter_name=self.config.astromRefFilter,
             rtp_rad=rtp_rad,
+            mode="fam",
+            visit_info=visit_info,
+            instrument=instrument,
         )
 
     def _catalogOptions(self) -> CatalogOptions:

@@ -88,7 +88,7 @@ class BlindDetect(pipeBase.Task):
     Returns
     -------
     QTable
-        Columns ``id``, ``centroid_x``, ``centroid_y`` in full-exposure pixel
+        Columns ``donut_id``, ``centroid_x``, ``centroid_y`` in full-exposure pixel
         coordinates.  Empty table if no peaks are found.
     """
 
@@ -130,7 +130,7 @@ class BlindDetect(pipeBase.Task):
         return pipeBase.Struct(
             detections=QTable(
                 {
-                    "id": np.arange(1, len(peaks) + 1, dtype=np.int64),
+                    "donut_id": np.arange(1, len(peaks) + 1, dtype=np.int64),
                     "centroid_x": peaks[:, 1] + trimmedBBox.getMinX(),
                     "centroid_y": peaks[:, 0] + trimmedBBox.getMinY(),
                 }

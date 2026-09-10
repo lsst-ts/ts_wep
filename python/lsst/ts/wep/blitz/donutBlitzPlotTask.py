@@ -73,6 +73,19 @@ _COLOR_PENTAFOIL = "#CC79A7"
 _COLOR_HEXAFOIL = "#D55E00"
 
 
+def _metaValue(meta: dict, key: str, unit: u.UnitBase) -> float:
+    """Return one ``meta`` scalar as a bare float in ``unit``.
+
+    The catalog's meta values are Quantities (see `build_donut_catalog`), but
+    every use here is a format string that already carries its own unit suffix
+    ("run=%.1fs"), so they are stripped at the read the same way the column
+    Quantities are.  A missing key degrades to NaN, which the callers already
+    render as "N/A" rather than raising mid-plot.
+    """
+    value = meta.get(key)
+    return np.nan if value is None else value.to_value(unit)
+
+
 def _detIdByName(catalog: QTable) -> dict[str, int]:
     """Map detector name to detector id, read off the catalog rows.
 
@@ -189,12 +202,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return
 
         meta = catalog.meta
-        run_elapsed = meta["run_elapsed"]
-        refcat_elapsed = meta["refcat_elapsed"]
-        butler_elapsed = meta["butler_elapsed"]
+        run_elapsed = _metaValue(meta, "run_elapsed", u.s)
+        refcat_elapsed = _metaValue(meta, "refcat_elapsed", u.s)
+        butler_elapsed = _metaValue(meta, "butler_elapsed", u.s)
         photo_filter_label = meta["photo_filter_name"]
         astrom_filter_label = meta["astrom_filter_name"]
-        visit_id = meta["visit_id"]
+        visit_id = meta["ref_visit_id"]
         det_meta = meta["det_meta"]
 
         # Group rows by detector; split on selection outcome. This plot is about
@@ -250,12 +263,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         COL_SPACER = 1 + STAMPS_PER_ROW
         COL_REJECTED_START = COL_SPACER + 1
 
-        # Per-detector radius/obscuration ride each donut row (from
-        # Donut.donut_radius), so a detector's aperture/annulus circles match its
-        # own detected donut size. The visit-level meta scalars below are the
-        # fallback for rows that lack the columns -- e.g. an older blitzResults
-        # catalog written before these columns existed, read back by a
-        # standalone DonutBlitzPlotTask.
+        # The per-detector radius rides each donut row (from Donut.donut_radius),
+        # so a detector's aperture/annulus circles match its own detected donut
+        # size. Everything else that shapes those circles is a visit-level meta
+        # scalar.
         # Two of these are background "inner" radii and are easy to confuse:
         # _bkg_inner_disc is the filled disc inside the central obscuration,
         # _bkg_inner_annulus is the inner edge of the annulus outside the donut.
@@ -263,6 +274,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         _stamp_bkg_inner_disc_frac = catalog.meta["bkg_inner_disc_frac"]
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
         _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
+        _stamp_obscuration = catalog.meta["obscuration"]
 
         # Every stamp's view is pinned to its own pixel extent, so a stamp fills
         # its axes exactly and consumes the same figure area no matter how many
@@ -306,42 +318,55 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 extent=[-_edge, _edge, -_edge, _edge],
             )
 
-            # Per-detector radius/obscuration off the row, falling back to the
-            # visit-level meta scalar if a row lacks a finite value (stale
-            # catalog). row is an astropy Row, so membership is via colnames.
-            dr = row["donut_radius"]
-            ob = row["obscuration"]
-            if dr is not None and ob is not None:
-                dr = dr * _px_scale  # into the drawn image's pixel units
-                _circ_specs = [
-                    (dr * ob * _stamp_bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
-                    (dr * ob * (1 - _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
-                    (dr * (1 + _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
-                    (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "--"),
-                    (dr * _stamp_bkg_outer_frac, _COLOR_BKG_ANNULUS, "--"),
-                ]
-                for _rad, _col, _ls in _circ_specs:
-                    ax.add_patch(
-                        mpatches.Circle(
-                            (0, 0),
-                            _rad,
-                            fill=False,
-                            edgecolor=_col,
-                            linewidth=1.0,
-                            linestyle=_ls,
-                            alpha=0.45,
-                            zorder=4,
-                        )
+            # Per-detector radius off the row; obscuration is a global
+            # instrument constant and so lives in meta.
+            # into the drawn image's pixel units
+            dr = row["donut_radius"].to_value(u.pix) * _px_scale
+            ob = _stamp_obscuration
+            _circ_specs = [
+                (dr * ob * _stamp_bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
+                (dr * ob * (1 - _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
+                (dr * (1 + _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
+                (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "--"),
+                (dr * _stamp_bkg_outer_frac, _COLOR_BKG_ANNULUS, "--"),
+            ]
+            for _rad, _col, _ls in _circ_specs:
+                ax.add_patch(
+                    mpatches.Circle(
+                        (0, 0),
+                        _rad,
+                        fill=False,
+                        edgecolor=_col,
+                        linewidth=1.0,
+                        linestyle=_ls,
+                        alpha=0.45,
+                        zorder=4,
                     )
+                )
 
             if rejected:
                 ax.plot([-_edge, _edge], [-_edge, _edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
                 ax.plot([-_edge, _edge], [_edge, -_edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
 
-            nq = row["n_quarter"] % 4
+            # Detector orientation is per-detector, so it lives in det_meta rather
+            # than on every row. Keyed by the row's own visit, not the table's:
+            # full-array mode has one entry per detector per side of focus.
+            nq = det_meta.get(
+                f"{row['det_name']}_{row['visit_id']}", {}
+            ).get("n_quarter", 0) % 4
+
+            # The stamp was cut on integer bounds around the rounded centroid, so
+            # display coordinate (0, 0) is that rounded position, while the
+            # nearby_* offsets are measured from x_det/y_det. The rounding
+            # residual converts between the two -- sub-pixel, but the difference
+            # between a marker on the source and one up to half a pixel off it.
+            _x_det = row["x_det"].to_value(u.pix)
+            _y_det = row["y_det"].to_value(u.pix)
+            _res_x = _x_det - round(_x_det)
+            _res_y = _y_det - round(_y_det)
 
             def _xform(dx, dy):
-                """Map a raw-pixel offset to stamp display coords.
+                """Map a detector-frame offset to stamp display coords.
 
                 Must mirror the stamp transform in `_cut_and_evaluate_stamps`,
                 ``np.rot90(stamp, k=-n_quarter).T`` -- including the transpose.
@@ -350,16 +375,19 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 Under ``origin="lower"`` the displayed x axis is the column
                 index and y is the row index, so the returned pair is
                 ``(x, y)`` after transposition.
+
+                The rounding residual is applied here, before the rotation,
+                because it is a correction in the detector frame.
                 """
-                r, c = dy, dx
+                r, c = dy + _res_y, dx + _res_x
                 for _ in range(nq):
                     r, c = c, -r
                 # Offsets are in unbinned pixels; scale to the drawn image.
                 return r * _px_scale, c * _px_scale
 
             n_photo = min(row["n_nearby_photo"], _MAX_NEARBY)
-            px = row["nearby_photo_x"][:n_photo].to_value(u.pix)
-            py = row["nearby_photo_y"][:n_photo].to_value(u.pix)
+            px = row["nearby_photo_dx_det"][:n_photo].to_value(u.pix)
+            py = row["nearby_photo_dy_det"][:n_photo].to_value(u.pix)
             pm = row["nearby_photo_mag"][:n_photo].to_value(u.mag)
             for dx, dy, mag in zip(px, py, pm):
                 tx, ty = _xform(dx, dy)
@@ -375,8 +403,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     )
 
             n_astrom = min(row["n_nearby_astrom"], _MAX_NEARBY)
-            ax_ = row["nearby_astrom_x"][:n_astrom].to_value(u.pix)
-            ay_ = row["nearby_astrom_y"][:n_astrom].to_value(u.pix)
+            ax_ = row["nearby_astrom_dx_det"][:n_astrom].to_value(u.pix)
+            ay_ = row["nearby_astrom_dy_det"][:n_astrom].to_value(u.pix)
             am_ = row["nearby_astrom_mag"][:n_astrom].to_value(u.mag)
             for dx, dy, mag in zip(ax_, ay_, am_):
                 tx, ty = _xform(dx, dy)
@@ -403,7 +431,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
             osm_str = f"osm={outer_sector_minmax:.3f}" if np.isfinite(outer_sector_minmax) else "osm=?"
             snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
-            sid = row["id"]
+            sid = row["donut_id"]
             sid_str = f"id={sid}" if sid != 0 else ""
             _text_color = _COLOR_REJECTED if rejected else "black"
 
@@ -441,7 +469,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             # Keyed by detector *and* visit; corner mode has just this one visit.
             # A miss degrades to the defaults below rather than raising.
             sm = det_meta.get(f"{det_name}_{visit_id}", {})
-            scatter_val = sm.get("scatter_arcsec", float("nan"))
+            scatter_val = _metaValue(sm, "astrom_scatter", u.arcsec)
             scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
 
             ax_stats = fig.add_subplot(gs[row_idx, 0])
@@ -456,7 +484,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             # hard-coded width, since this is monospace text.
             width = max(len(label) for label in _CUTOUT_STAGE_KEYS) + 2
             for label, key in _CUTOUT_STAGE_KEYS.items():
-                line = f"{label + ':':<{width}}{sm.get(key, float('nan')):.3f}s"
+                line = f"{label + ':':<{width}}{_metaValue(sm, key, u.s):.3f}s"
                 # Scatter belongs to the WCS refit, so it hangs off that stage.
                 lines.append(f"{line}  ({scatter_str})" if label == "wcs" else line)
             if sm.get("wcs_refit_error"):
@@ -530,29 +558,30 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return
 
         meta = catalog.meta
-        visit_id = meta["visit_id"]
-        refcat_elapsed = meta["refcat_elapsed"]
-        butler_elapsed = meta["butler_elapsed"]
-        butler_times = meta["butler_times"]
-        cutout_elapsed = meta["cutout_elapsed"]
-        danish_elapsed = meta["danish_elapsed"]
+        visit_id = meta["ref_visit_id"]
+        refcat_elapsed = _metaValue(meta, "refcat_elapsed", u.s)
+        butler_elapsed = _metaValue(meta, "butler_elapsed", u.s)
+        butler_times = {
+            key: value.to_value(u.s) for key, value in meta["butler_times"].items()
+        }
+        cutout_elapsed = _metaValue(meta, "cutout_elapsed", u.s)
+        danish_elapsed = _metaValue(meta, "danish_elapsed", u.s)
         wf_mode = meta["wf_mode"]
         ZK_MIN, ZK_MAX = 4, 28
 
-        # Reconstruct wf_results-like list from QTable by grouping on "group" column.
-        # Include only rows with a valid fit (fit_mode != "" and group >= 0).
-        groups: dict[int, list] = {}
+        # Reconstruct wf_results-like list from QTable by grouping on "group_id".
+        # Include only rows a fit claimed; an empty group_id means none did.
+        groups: dict[str, list] = {}
         for row in catalog:
-            fm = row["fit_mode"]
-            grp = row["group"]
-            if grp < 0 or fm == "":
+            grp = str(row["group_id"])
+            if not grp:
                 continue
             if grp not in groups:
                 groups[grp] = []
             groups[grp].append(row)
 
         plottable = []
-        for grp_idx, rows in sorted(groups.items()):
+        for group_id, rows in sorted(groups.items()):
             first = rows[0]
             # Determine if this group has a real model (any non-NaN model_img).
             has_model = any(
@@ -561,20 +590,23 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             if not has_model:
                 continue
             det_names = list(dict.fromkeys(r["det_name"] for r in rows))
-            mode = first["fit_mode"]
-            success = bool(first["fit_success"])
-            elapsed = first["fit_elapsed"]
-            nfev = first["fit_nfev"]
-            fwhm = first["fit_fwhm"]
+            # group_* columns are replicated across the group, so the first row
+            # carries the whole fit's values.
+            success = bool(first["group_fit_success"])
+            # Stripped to bare floats: these flow into format strings that
+            # already carry their own unit suffix ("t=%.1fs", "blur=...").
+            elapsed = first["group_fit_elapsed"].to_value(u.s)
+            nfev = first["group_fit_nfev"]
+            fwhm = first["group_fwhm"].to_value(u.arcsec)
             # Noll-indexed deviations in µm; element j is Noll j (see
             # _buildCatalog), truncated at the highest fitted Noll index.
-            zk_dev = np.asarray(first["zk_dev_ccs"].to_value(u.micron), dtype=float)
+            zk_dev = np.asarray(first["zk_deviation_ccs"].to_value(u.micron), dtype=float)
 
             donuts_out = []
             for r in rows:
                 model_arr = np.array(r["model_img"])
                 donuts_out.append({
-                    "donut_id": r["id"],
+                    "donut_id": r["donut_id"],
                     "det_name": r["det_name"],
                     # Layout only (intra left, extra right); see _pair_up below.
                     "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(r["det_name"]), ""),
@@ -587,7 +619,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     "success": success,
                 })
             plottable.append({
-                "mode": mode,
+                "mode": wf_mode,
                 "det_names": det_names,
                 "success": success,
                 "fit_info": {"elapsed": elapsed, "nfev": nfev, "fwhm": fwhm},
@@ -596,12 +628,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             })
 
         # Candidate donuts that no fit consumed (paired-mode surplus: no partner
-        # on the other detector, so ``group`` is -1 and ``fit_mode`` empty). They
+        # on the other detector, so ``group_id`` is empty). They
         # have no model or Zernikes, but their binned stamp is still worth
         # seeing, so carry them as data-only single-donut records.
         unfitted = []
         for row in catalog:
-            if row["group"] >= 0 or not row["candidate"]:
+            if str(row["group_id"]) or not row["candidate"]:
                 continue
             img = np.array(row["wf_img"])
             if np.all(np.isnan(img)):
@@ -614,7 +646,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     "elapsed": float("nan"), "nfev": 0, "fwhm": float("nan"),
                 },
                 "donuts": [{
-                    "donut_id": row["id"],
+                    "donut_id": row["donut_id"],
                     "det_name": row["det_name"],
                     "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(row["det_name"]), ""),
                     "img": img,

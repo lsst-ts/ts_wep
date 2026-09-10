@@ -38,7 +38,7 @@ _NON_PAIRING_MODES = ("unpaired", "full_detector", "full_corner")
 
 def _donut(det_name, donut_id, snr):
     """A stand-in for `Donut`: grouping reads only these three attributes."""
-    return SimpleNamespace(det_name=det_name, id=donut_id, snr=snr)
+    return SimpleNamespace(det_name=det_name, donut_id=donut_id, snr=snr)
 
 
 def _groups(mode, results_by_det):
