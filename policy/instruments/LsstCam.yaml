@@ -19,8 +19,10 @@ wavelength:
   z: 866.8e-9
   y: 973.9e-9
 batoidModelName: Rubin_v3.14_{band} # name used to load the Batoid model
+# batoidModelName: Rubin_v1000_{band} # name used to load the Batoid model
 batoidOffsetOptic: Detector
 batoidOffsetValue: 1.5e-3 # amount Detector is offset in the Batoid model, in meters
 
 # Mask parameters are loaded from the danish package's data directory.
-maskParamsFile: RubinObsc.yaml
+# maskParamsFile: RubinObsc_v1000_r_rtpp0_azp45_pp0d0.yaml
+maskParamsFile: RubinObsc_v3.14_r_rtpp0_azp45_pp0d0.yaml
