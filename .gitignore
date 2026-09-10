@@ -40,3 +40,10 @@ towncrier.toml
 policy/cwfs/donutTemplateData/phosimTemplates/
 .ruff.toml
 towncrier.toml
+
+# Local bps configs.  Personal runs...
+bps/
+# bps submit dir
+submit/
+# Local analysis scratch: cached catalogs, parsed logs, one-off scripts
+scratch/
