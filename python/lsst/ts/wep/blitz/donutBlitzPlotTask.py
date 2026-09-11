@@ -538,7 +538,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         self.log.info("Saved diagnostic plot: %s", fname)
 
     def _saveWfDiagnosticPlot(self, catalog: QTable) -> None:
-        """Save a WF diagnostic PNG modelled on the AOS donut-fits layout.
+        """Save a WF diagnostic PNG modeled on the AOS donut-fits layout.
 
         Layout: 2×2 grid of corners (R00, R04, R40, R44).
         Within each corner: one row per fit result.
@@ -681,7 +681,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         # 4-stop diverging colormap: blue → white (zero) → vermillion.
         # Anchors: -vmax=blue, -vmax/10=sky blue, 0=white, +vmax=vermillion.
-        # Normalised positions over [-vmax, vmax]: 0.0, 0.45, 0.5, 1.0.
+        # Normalized positions over [-vmax, vmax]: 0.0, 0.45, 0.5, 1.0.
         def _hex_to_rgb(h):
             return tuple(int(h[i : i + 2], 16) / 255 for i in (1, 3, 5))
 

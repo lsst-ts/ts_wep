@@ -111,7 +111,7 @@ _REFCAT_HTM_LEVEL = 7
 # `dispatch` and `io` have no corner-mode counterpart: a FAM worker waits for a pool
 # slot and then does its own butler reads, where corner mode's parent has already
 # loaded every pixel before it forks. `fit` likewise, because FAM fits inside the
-# same worker rather than in a second pool the parent summarises separately.
+# same worker rather than in a second pool the parent summarizes separately.
 # `refcat` is per detector rather than per exposure -- one load covers both
 # sides of focus -- so it sits outside the spliced-in cutout stages.
 _STAGE_KEYS = (
@@ -477,7 +477,7 @@ class DonutBlitzFamTaskConfig(
     detectorOffset: pexConfig.Field = pexConfig.Field(
         doc=(
             "Magnitude of the detector-plane z shift that defocuses each "
-            "exposure, in metres.  Signed per exposure: +offset extra-focal, "
+            "exposure, in meters.  Signed per exposure: +offset extra-focal, "
             "-offset intra-focal.  Zero by default -- full-array mode defocuses "
             "by moving the whole camera, see cameraOffset."
         ),
@@ -487,7 +487,7 @@ class DonutBlitzFamTaskConfig(
     cameraOffset: pexConfig.Field = pexConfig.Field(
         doc=(
             "Magnitude of the camera z shift that defocuses each exposure, in "
-            "metres.  Signed per exposure as detectorOffset is.  This is the "
+            "meters.  Signed per exposure as detectorOffset is.  This is the "
             "full-array default; the nested detector moves with the camera, so "
             "the sign convention agrees with corner mode's."
         ),
@@ -497,7 +497,7 @@ class DonutBlitzFamTaskConfig(
     m2Offset: pexConfig.Field = pexConfig.Field(
         doc=(
             "Magnitude of the M2 z shift that defocuses each exposure, in "
-            "metres.  Signed per exposure as detectorOffset is.  For data taken "
+            "meters.  Signed per exposure as detectorOffset is.  For data taken "
             "by moving M2 rather than the camera."
         ),
         dtype=float,
@@ -1010,7 +1010,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
         # Telescope is band- and quantum-fixed. Build the base and both defocused
         # variants here so workers only ever look them up; the radial scales they
-        # need for spatial pairing memoise into the same store.
+        # need for spatial pairing memoize into the same store.
         _CALIB_STORE["telescope"] = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
         for offsets in (self._intraFocalOffsets, self._extraFocalOffsets):
             _telescope_for_offsets(offsets)
@@ -1098,11 +1098,11 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     def _logWorkerSummaries(self, results: list[dict]) -> None:
         """Log one summary line per detector, then aggregates over them.
 
-        The per-detector line is modelled on `DonutBlitzMonolithTask`'s, with two
+        The per-detector line is modeled on `DonutBlitzMonolithTask`'s, with two
         differences that follow from FAM fusing the whole pipeline into one worker:
         it carries an ``io`` stage, because each worker does its own butler reads;
         and it carries the Danish ``fit`` result, because the fit happens in the
-        same process rather than in a separate pool the parent can summarise on its
+        same process rather than in a separate pool the parent can summarize on its
         own.  Between them they replace `WavefrontFittingTask`'s per-group lines,
         which `setDefaults` turns off here.
 

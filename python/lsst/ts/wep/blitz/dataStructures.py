@@ -58,7 +58,7 @@ class Donut:
     # there is no refcat to take them from.
     photo_mag: float
     astrom_mag: float
-    # Neighbouring refcat sources inside the stamp box as (dx, dy, mag), offset
+    # Neighboring refcat sources inside the stamp box as (dx, dy, mag), offset
     # from (x_det, y_det) so the offsets compose with it directly. Excludes this
     # donut itself. Stamp *membership* is decided on the rounded centroid, which
     # is what the stamp bounds were cut on.
@@ -70,7 +70,7 @@ class Donut:
     coord_ra: float = float("nan")
     coord_dec: float = float("nan")
     intrinsic_zk: npt.NDArray[np.float64] | None = None
-    # The optic shifts that put this donut off focus: signed metres, ordered
+    # The optic shifts that put this donut off focus: signed meters, ordered
     # (detector, camera, m2) -- see `_telescope_for_offsets`. Set by whichever
     # task builds the donut, because the two modes decide it differently: corner
     # mode from the detector id (SW0/SW1 sit either side of focus within one
@@ -116,8 +116,8 @@ class WfResult:
     donut_id: int
     det_name: str
     visit_id: int
-    zk_dev: npt.NDArray[np.float64]        # dense Noll 0.._ZK_JMAX, metres, NaN where unfit
-    zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, metres
+    zk_dev: npt.NDArray[np.float64]        # dense Noll 0.._ZK_JMAX, meters, NaN where unfit
+    zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, meters
     img: np.ndarray | None
     model_img: np.ndarray | None
     fit_success: bool

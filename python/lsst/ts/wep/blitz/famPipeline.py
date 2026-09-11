@@ -94,7 +94,7 @@ def _common_frame_angles(donuts: list) -> np.ndarray:
     *opposite* directions either side of focus, so the same star sits at
     measurably different field angles in the intra and extra exposures -- 27.2 px
     apart at 1.725 deg for a 1.5 mm camera shift, and zero on axis.  A tolerance
-    tight enough to be safe at the field centre therefore fails at the edge, which
+    tight enough to be safe at the field center therefore fails at the edge, which
     presents as "the outer rafts just don't pair".
 
     `_defocal_radial_scale` removes it exactly: the displacement is linear in field

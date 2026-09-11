@@ -116,7 +116,7 @@ _OFFSET_OPTICS = ("Detector", "LSSTCamera", "M2")
 
 
 def _telescope_for_offsets(offsets: tuple[float, float, float]):
-    """Return the telescope defocused by an offset triplet, memoised.
+    """Return the telescope defocused by an offset triplet, memoized.
 
     Parameters
     ----------
@@ -163,7 +163,7 @@ def _defocal_radial_scale(offsets: tuple[float, float, float]) -> float:
     star lands at slightly different field angles either side of focus -- ~27 px
     apart at 1.725 deg for a 1.5 mm camera shift, and zero on axis. Any attempt
     to associate donuts between an intra and an extra exposure by position has to
-    account for this, or it will work at the field centre and fail at the edge.
+    account for this, or it will work at the field center and fail at the edge.
 
     Because the displacement is linear in field angle it is a pure scale, so one
     number per offset triplet corrects the whole focal plane.
@@ -171,7 +171,7 @@ def _defocal_radial_scale(offsets: tuple[float, float, float]) -> float:
     Parameters
     ----------
     offsets : tuple of float
-        Signed z shifts in metres, ordered as `_OFFSET_OPTICS`.
+        Signed z shifts in meters, ordered as `_OFFSET_OPTICS`.
 
     Returns
     -------
@@ -284,8 +284,8 @@ def _dense_intrinsic(donut) -> np.ndarray:
 def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:
     """Bin a stamp and trim it to an odd pixel size.
 
-    Danish wants an odd-sized image so the donut centre lands on a pixel
-    centre. Shared by `_prep_donut_for_danish` and `_buildCatalog` so that
+    Danish wants an odd-sized image so the donut center lands on a pixel
+    center. Shared by `_prep_donut_for_danish` and `_buildCatalog` so that
     donuts which never reached a fit (paired-mode surplus) still get a WF
     image on the same pixel grid as the fitted ones.
     """
