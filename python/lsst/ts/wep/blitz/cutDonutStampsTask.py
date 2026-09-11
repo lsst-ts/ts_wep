@@ -131,7 +131,7 @@ class CutDonutStampsTask(pipeBase.Task):
             Full refcat with ``donut_id``, ``centroid_x``, ``centroid_y``,
             ``photo_mag``, ``astrom_mag``, or ``None`` in the blind-detection
             fallback. Supplies the nearby-source lists; ``donut_id`` is what
-            excludes each donut from its own neighbour list.
+            excludes each donut from its own neighbor list.
         donutRadius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if
             unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
@@ -210,7 +210,7 @@ class CutDonutStampsTask(pipeBase.Task):
                 # exact.
                 box_mask &= _rc_id != row["donut_id"]
                 # Offsets are from cx_f/cy_f, not the rounded cx/cy, so that
-                # ``x_det + nearby_*_dx_det`` is the neighbour's detector x with
+                # ``x_det + nearby_*_dx_det`` is the neighbor's detector x with
                 # no correction term. Anything wanting stamp-display coordinates
                 # has to add the rounding residual ``x_det - round(x_det)``; see
                 # `_xform` in donutBlitzPlotTask.

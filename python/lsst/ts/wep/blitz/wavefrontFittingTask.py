@@ -144,7 +144,7 @@ def _blend_frac(
     faint_frac: float = 0.05,
     sig_thresh: float = 2.0,
 ) -> float:
-    """Fraction of significant residual flux in model-faint pixels, normalised by total model flux."""
+    """Fraction of significant residual flux in model-faint pixels, normalized by total model flux."""
     if resid is None or model_img_bkg_free is None or not np.isfinite(bkg_std) or bkg_std <= 0:
         return float("nan")
     model_peak = np.nanmax(model_img_bkg_free)
@@ -157,7 +157,7 @@ def _blend_frac(
 
 
 def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
-    """Return deviations in metres, dense over Noll 0..``_ZK_JMAX``.
+    """Return deviations in meters, dense over Noll 0..``_ZK_JMAX``.
 
     Indices that were not fitted are ``np.nan``, except Noll 0..3, which are
     0.0: they are carried for indexing only and are never fitted.
@@ -695,7 +695,7 @@ class WavefrontFittingTask(pipeBase.Task):
         angle_rad : np.ndarray
             ``[thx_ccs, thy_ccs]`` field angle in radians.
         zk_ref : np.ndarray
-            Reference Zernike array in metres, Noll-indexed, shape
+            Reference Zernike array in meters, Noll-indexed, shape
             ``(_ZK_JMAX + 1,)``.
             Equals ``W_TA_defoc`` at uncalibrated indices and
             ``W_TA_defoc + (W_meas - zk_opd_foc)`` at calibrated indices.
