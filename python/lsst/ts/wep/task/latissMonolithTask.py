@@ -80,7 +80,7 @@ import lsst.afw.image as afwImage
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as ct
-from lsst.ip.isr.isrTask import IsrTask
+from lsst.ip.isr import IsrTaskLSST
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -391,6 +391,72 @@ class LatissMonolithTaskConnections(
         dimensions=("instrument",),
         isCalibration=True,
     )
+    # The full calibration set, matching what BestEffortIsr passes on the
+    # summit.
+    # Withholding these was the cause of the QFM mis-picks: with doDefect off,
+    # the LATISS defect column at x=3795-3797 (y 6-1999) survived ISR at ~1.2e5
+    # ADU against an image median of ~20, and since QuickFrameMeasurement ranks
+    # candidates on a 70 px aperture flux -- which a solid column fills more
+    # uniformly than a donut with a hole -- the column outranked the donut.
+    # Enabling defects moved 38 of 60 previously-bad pair sides back on-axis
+    # (median pick distance 2092 px -> 50 px) and broke none. See RSO-873.
+    bias = ct.PrerequisiteInput(
+        doc="Combined bias calibration frame.",
+        name="bias",
+        storageClass="ExposureF",
+        dimensions=("instrument", "detector"),
+        isCalibration=True,
+        minimum=0,
+    )
+    dark = ct.PrerequisiteInput(
+        doc="Combined dark calibration frame.",
+        name="dark",
+        storageClass="ExposureF",
+        dimensions=("instrument", "detector"),
+        isCalibration=True,
+        minimum=0,
+    )
+    flat = ct.PrerequisiteInput(
+        doc="Combined flat calibration frames, one per physical_filter.",
+        name="flat",
+        storageClass="ExposureF",
+        dimensions=("instrument", "detector", "physical_filter"),
+        isCalibration=True,
+        multiple=True,
+        minimum=0,
+    )
+    defects = ct.PrerequisiteInput(
+        doc="Defect list; masks the bad LATISS column that otherwise outranks the donut.",
+        name="defects",
+        storageClass="Defects",
+        dimensions=("instrument", "detector"),
+        isCalibration=True,
+        minimum=0,
+    )
+    linearizer = ct.PrerequisiteInput(
+        doc="Linearity correction calibration.",
+        name="linearizer",
+        storageClass="Linearizer",
+        dimensions=("instrument", "detector"),
+        isCalibration=True,
+        minimum=0,
+    )
+    crosstalk = ct.PrerequisiteInput(
+        doc="Intra-detector crosstalk coefficients.",
+        name="crosstalk",
+        storageClass="CrosstalkCalib",
+        dimensions=("instrument", "detector"),
+        isCalibration=True,
+        minimum=0,
+    )
+    ptc = ct.PrerequisiteInput(
+        doc="Photon transfer curve dataset. Required by IsrTaskLSST.",
+        name="ptc",
+        storageClass="PhotonTransferCurveDataset",
+        dimensions=("instrument", "detector"),
+        isCalibration=True,
+        minimum=0,
+    )
     zernikes = ct.Output(
         doc="Zernike coefficients per pair and averaged, with fit quality columns.",
         name="zernikes",
@@ -427,7 +493,7 @@ class LatissMonolithTaskConfig(
     """Configuration for LatissMonolithTask."""
 
     isrTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=IsrTask,
+        target=IsrTaskLSST,
         doc="ISR subtask run on each raw exposure.",
     )
     quickFrameMeasurement: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
@@ -514,24 +580,41 @@ class LatissMonolithTaskConfig(
     def setDefaults(self) -> None:
         super().setDefaults()
 
-        # LATISS ISR: gains and overscan only. There are no usable bias/dark/
-        # flat calibrations for these alignment sequences, which is why this
-        # uses IsrTask rather than blitz's IsrTaskLSST. Mirrors
-        # tests/testData/pipelineConfigs/testCalcZernikesLatissPipeline.yaml.
+        # LATISS ISR, configured to match BestEffortIsr -- which is what
+        # ``latiss_wep_align.run_wep`` uses on the summit, where detection
+        # works. BestEffortIsr cannot be used here directly: it builds its own
+        # Butler from a repo string and writes to CURRENT_RUN, and its engine
+        # QuickLookIsrTask raises "IsrTaskLSST requires a PTC" on a raw.
+        # So this replicates its configuration instead, on the same underlying
+        # IsrTaskLSST. Reference: summit_utils config/quickLookIsr.py.
+        #
+        # An earlier version of this task ran gains + overscan only, on the
+        # premise that "there are no usable bias/dark/flat calibrations for
+        # alignment sequences". That premise was wrong -- bias, dark, flat,
+        # defects, linearizer, crosstalk and ptc are all present for LATISS in
+        # LATISS/defaults -- and withholding them made QuickFrameMeasurement
+        # centroid on a detector artifact rather than the donut. See the
+        # ``defects`` connection above for the mechanism and the effect.
+        self.isrTask.doSaturation = True  # "very important for roundness in qfm"
+        self.isrTask.brighterFatterMaxIter = 2
+        self.isrTask.doDeferredCharge = False  # no calibration for this yet
+        self.isrTask.doBootstrap = False
         self.isrTask.doApplyGains = True
-        self.isrTask.doOverscan = True
-        self.isrTask.overscan.fitType = "MEDIAN_PER_ROW"
-        self.isrTask.doBias = False
-        self.isrTask.doDark = False
-        self.isrTask.doFlat = False
-        self.isrTask.doFringe = False
-        self.isrTask.doDefect = False
-        self.isrTask.doLinearize = False
-        self.isrTask.doCrosstalk = False
+        self.isrTask.doSuspect = False
+        self.isrTask.defaultSaturationSource = "CAMERAMODEL"
+
+        # Departures from BestEffortIsr, forced by LATISS calib availability:
+        # there is no bfKernel/bfGains for LATISS, and IsrTaskLSST raises
+        # "Must supply an kernel if BF correction method is COULTON*" if told
+        # do brighter-fatter without one.
         self.isrTask.doBrighterFatter = False
+        # Not needed downstream, and cheaper to skip.
         self.isrTask.doVariance = False
-        self.isrTask.doNanMasking = False
-        self.isrTask.doInterpolate = False
+
+        # Everything else -- defects, flat, linearize, crosstalk, bias, dark,
+        # interpolation, NaN masking -- is left at the IsrTaskLSST default of
+        # True, which is what BestEffortIsr also does. Do not disable these
+        # without re-checking donut detection on the pairs listed in RSO-873.
 
         # AuxTel is defocused by moving M2, so the extra-focal exposure has the
         # *smaller* focusZ -- inverted relative to LSSTCam. -0.8 mm is what
@@ -558,7 +641,7 @@ class LatissMonolithTask(pipeBase.PipelineTask):
     _DefaultName = "latissMonolithTask"
     config: LatissMonolithTaskConfig
     # Set by makeSubtask, so declared here for the type checker.
-    isrTask: IsrTask
+    isrTask: IsrTaskLSST
     quickFrameMeasurement: QuickFrameMeasurementTask
     pairer: ExposurePairer
 
@@ -596,6 +679,32 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         """
         camera = butlerQC.get(inputRefs.camera)
 
+        # The calibrations IsrTaskLSST needs. Each is declared minimum=0 so a
+        # missing product degrades rather than failing the quantum, but the
+        # detection depends on `defects`: without it the LATISS bad column
+        # outranks the real donut (see the connection docstring).
+        isrCalibs = {}
+        # `flat` is per physical_filter while this quantum is per detector, so
+        # several resolve; keep them keyed by filter and choose per exposure.
+        flatsByFilter = {}
+        for ref in getattr(inputRefs, "flat", None) or []:
+            flatsByFilter[str(ref.dataId["physical_filter"])] = ref
+        for name in ("bias", "dark", "defects", "linearizer", "crosstalk", "ptc"):
+            ref = getattr(inputRefs, name, None)
+            if ref is None:
+                continue
+            value = butlerQC.get(ref)
+            # minimum=0 connections arrive as a possibly-empty list.
+            if isinstance(value, list):
+                value = value[0] if value else None
+            if value is not None:
+                isrCalibs[name] = value
+        missing = {"defects", "linearizer", "crosstalk", "ptc"} - set(isrCalibs)
+        if not flatsByFilter:
+            missing.add("flat")
+        if missing:
+            self.log.warning("ISR calibrations not found, donut detection may suffer: %s", sorted(missing))
+
         # butlerQC.get resolves the deferred refs into DeferredDatasetHandles;
         # the refs themselves cannot be read from.
         rawHandles = dict(
@@ -630,7 +739,17 @@ class LatissMonolithTask(pipeBase.PipelineTask):
             # written for it, which is what makes it visible afterwards as a
             # missing dataset rather than a NaN row.
             try:
-                outputs = self.run(rawExtra, rawIntra, camera)
+                pairCalibs = dict(isrCalibs)
+                if flatsByFilter:
+                    # Both sides of a CWFS pair share a filter, so the
+                    # extra-focal exposure's filter selects the flat for both.
+                    extraFilter = str(rawExtra.getFilter().physicalLabel)
+                    ref = flatsByFilter.get(extraFilter)
+                    if ref is None:
+                        self.log.warning("No flat for filter %s; skipping flat correction", extraFilter)
+                    else:
+                        pairCalibs["flat"] = butlerQC.get(ref)
+                outputs = self.run(rawExtra, rawIntra, camera, isrCalibs=pairCalibs)
             except Exception as exc:  # noqa: BLE001
                 self.log.warning("Skipping pair extra=%d intra=%d: %s", pair.extra, pair.intra, exc)
                 continue
@@ -654,6 +773,7 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         rawIntra: afwImage.Exposure,
         camera: lsst.afw.cameraGeom.Camera,
         doIsr: bool = True,
+        isrCalibs: dict | None = None,
     ) -> pipeBase.Struct:
         """Run the full chain on one intra/extra pair.
 
@@ -661,6 +781,12 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         ----------
         rawExtra, rawIntra : `lsst.afw.image.Exposure`
             The pair. Raw if ``doIsr``, else already ISR-corrected.
+        isrCalibs : `dict`, optional
+            Calibrations forwarded to ``isrTask.run`` (``defects``, ``flat``,
+            ``linearizer``, ``crosstalk``, ``ptc``, ``bias``, ``dark``). Only
+            used when ``doIsr``. Callers outside a pipeline -- ``run_wep``, for
+            instance -- may omit it, but donut detection is markedly worse
+            without ``defects``.
         camera : `lsst.afw.cameraGeom.Camera`
             LATISS camera geometry.
         doIsr : bool, optional
@@ -675,8 +801,13 @@ class LatissMonolithTask(pipeBase.PipelineTask):
             danish fit.
         """
         if doIsr:
-            expExtra = self.isrTask.run(rawExtra, camera=camera).outputExposure
-            expIntra = self.isrTask.run(rawIntra, camera=camera).outputExposure
+            # IsrTaskLSST returns .exposure (IsrTask returned .outputExposure).
+            # isrCalibs carries defects/flat/linearizer/crosstalk/ptc/bias;
+            # withholding them is what caused QFM to centroid on a detector
+            # artifact, so pass through whatever runQuantum found.
+            calibs = isrCalibs or {}
+            expExtra = self.isrTask.run(rawExtra, camera=camera, **calibs).exposure
+            expIntra = self.isrTask.run(rawIntra, camera=camera, **calibs).exposure
         else:
             expExtra, expIntra = rawExtra, rawIntra
 
