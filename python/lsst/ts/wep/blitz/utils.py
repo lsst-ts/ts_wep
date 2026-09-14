@@ -34,6 +34,7 @@ from lsst.ts.wep.utils import binArray
 
 _CALIB_STORE: dict = {}  # populated in parent before fork; workers inherit via COW
 
+
 # Hard coding global wavefront sensor geometry for now
 _INSTRUMENT: Instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
 

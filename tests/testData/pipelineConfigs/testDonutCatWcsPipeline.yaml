@@ -33,5 +33,7 @@ tasks:
     class: lsst.ts.wep.task.generateDonutCatalogWcsTask.GenerateDonutCatalogWcsTask
     config:
       donutSelector.unblendedSeparation: 1
+      # Must stay <= unblendedSeparation; nothing blends at 1 px anyway.
+      donutSelector.minBlendedSeparation: 1
       donutSelector.useCustomMagLimit: True
       catalogFilterList: ["g"]
