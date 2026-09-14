@@ -533,6 +533,50 @@ def _fam_detector_worker(args: tuple) -> dict:
     return out
 
 
+def _dead_fam_result(det_id: int, reason: str) -> dict:
+    """Stand-in result for a detector whose worker was killed outright.
+
+    `_fam_detector_worker` catches `BaseException` so that "this function
+    always returns its dict", but that cannot cover a SIGKILL: no Python runs
+    in a process the kernel has already destroyed. The parent fills in the same
+    shape so one dead detector costs one detector, not the other 180 and the
+    hours already spent on them.
+
+    Recorded as an error rather than a skip: `skipped` means an expected
+    no-work outcome such as a dead CCD, whereas a killed worker is a fault.
+
+    Parameters
+    ----------
+    det_id : `int`
+        Detector whose worker died.
+    reason : `str`
+        Cause, from `_forkMap`'s `_WorkerDeath`.
+
+    Returns
+    -------
+    `dict`
+        Same keys as `_fam_detector_worker`.
+    """
+    return {
+        "det_id": det_id,
+        "det_name": "",
+        "results": [],
+        "wf_results": [],
+        "donuts": [],
+        "unmatched_donuts": [],
+        "pair_path": "n/a",
+        "error": f"worker died: {reason}"[:400],
+        "skipped": False,
+        "dispatch_to_arrival": float("nan"),
+        "io_run": float("nan"),
+        "refcat_run": float("nan"),
+        "cutout_run": float("nan"),
+        "fit_run": float("nan"),
+        "worker_wall": float("nan"),
+        "pid": -1,
+    }
+
+
 def _shed_images(out: dict) -> None:
     """Drop image arrays the output catalog will not use, before pickling back.
 

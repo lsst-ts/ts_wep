@@ -38,7 +38,6 @@ __all__ = [
 ]
 
 import logging
-import multiprocessing as mp
 import time
 from collections import Counter
 from typing import Any
@@ -70,7 +69,8 @@ from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from .blindDetectTask import BlindDetect
 from .catalogBuilder import CatalogOptions, build_donut_catalog
 from .cutDonutStampsTask import CutDonutStampsTask
-from .famPipeline import _fam_detector_worker, _fam_pool_initializer
+from .famPipeline import _dead_fam_result, _fam_detector_worker, _fam_pool_initializer
+from .forkPool import _dumpStacksOnHang, _forkMap
 from .measureDonutCandidatesTask import MeasureDonutCandidatesTask
 from .utils import (
     _ANSI_BOLD,
@@ -532,6 +532,20 @@ class DonutBlitzFamTaskConfig(
         dtype=bool,
         default=False,
     )
+    hangTimeout: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Seconds the detector pool may run before the hang watchdog dumps "
+            "stacks and aborts the quantum, so that a pool blocked forever "
+            "fails loudly and gets retried instead of burning its walltime.  "
+            "The default is ~3x the slowest pool observed over a large run "
+            "(max 620s over 189 detectors, 21 workers on a Torino node).  "
+            "Raise it for a slower configuration -- fewer cores, or a "
+            "wfEstimationMode pooling more donuts per fit -- since tripping "
+            "it kills healthy work."
+        ),
+        dtype=float,
+        default=1800.0,
+    )
     colorLog: pexConfig.Field = pexConfig.Field(
         doc=(
             "Colorize select log messages with ANSI escape codes. If None "
@@ -607,6 +621,10 @@ class DonutBlitzFamTaskConfig(
         self.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
         self.astromTask.maxIter = 5
         self.astromTask.matcher.maxOffsetPix = 1000
+
+        # Cap the references handed to the pattern matcher.  Essential for
+        # keeping the cost to refit the WCS near the galactic bulge.
+        self.astromTask.matcher.maxRefObjects = 2048
 
         # Monster refcat uses full filter names (e.g. phot_g_mean), not band
         # labels, so the default mag-limit policy lookup by band would fail.
@@ -1036,19 +1054,22 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             # Unlike the monolith's pools these workers read from the butler, so
             # the initializer is mandatory, not defensive: children sharing the
             # parent's inherited psycopg2 SSL socket corrupt it.
-            # chunksize=1 is the streaming knob -- work-stealing keeps at most
-            # n_workers detectors' pixels resident at once.
-            with mp.get_context("fork").Pool(
-                processes=n_workers, initializer=_fam_pool_initializer
-            ) as pool:
-                t_dispatch = time.time()
-                results = list(
-                    pool.imap_unordered(
-                        _fam_detector_worker,
-                        [(d, t_dispatch) for d in det_ids],
-                        chunksize=1,
-                    )
+            # One fork per detector with at most n_workers alive, so at most
+            # n_workers detectors' pixels are resident at once. _forkMap ensures
+            # that one killed worker does not take down the entire pool/quantum.
+            t_dispatch = time.time()
+            with _dumpStacksOnHang(
+                self.config.hangTimeout, "FAM detector pool", self.log
+            ):
+                results, deaths = _forkMap(
+                    _fam_detector_worker,
+                    [(d, t_dispatch) for d in det_ids],
+                    n_workers,
+                    initializer=_fam_pool_initializer,
                 )
+            for unit, reason in deaths:
+                self.log.error("FAM worker for detector %s died: %s", unit[0], reason)
+                results.append(_dead_fam_result(unit[0], reason))
         elapsed = time.perf_counter() - t0
 
         # A skip is an expected outcome (a dead CCD), a failure is not; keeping
@@ -1106,7 +1127,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         own.  Between them they replace `WavefrontFittingTask`'s per-group lines,
         which `setDefaults` turns off here.
 
-        Lines are sorted by detector name: `imap_unordered` returns detectors in
+        Lines are sorted by detector name: the pool returns detectors in
         completion order, which is neither reproducible between runs nor useful for
         finding a raft.  Skipped and failed detectors get a line too -- a truncated
         one, since the full error is already logged above -- so that a missing
