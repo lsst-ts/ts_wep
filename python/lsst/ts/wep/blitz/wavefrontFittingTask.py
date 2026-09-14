@@ -293,6 +293,42 @@ def _wf_fitting_worker(group: "_WfGroup") -> dict:
     return task.run(group)
 
 
+def _dead_wf_result(group: "_WfGroup", reason: str, nZk: int) -> dict:
+    """Stand-in result for a fit group whose worker was killed outright.
+
+    Mirrors the empty-group return in `WavefrontFittingTask.run`: no Python
+    runs in a process the kernel has already destroyed, so the parent reports
+    group as failed on its behalf and the remaining groups' Zernikes still
+    reach the output.
+
+    Parameters
+    ----------
+    group : `_WfGroup`
+        The group that was lost.
+    reason : `str`
+        Cause, from `_forkMap`'s `_WorkerDeath`.
+    nZk : `int`
+        Length of the Zernike vector, so the NaN row matches its siblings and
+        the output table stays rectangular.
+
+    Returns
+    -------
+    `dict`
+        Same keys as `WavefrontFittingTask.run`.
+    """
+    return {
+        "group_id": group.group_id,
+        "group_size": len(group.donuts),
+        "zk_dev": np.full(nZk, np.nan),
+        "success": False,
+        "fit_info": {"error": f"worker died: {reason}"},
+        "donuts": group.donuts,
+        "model_imgs": None,
+        "imgs": [],
+        "det_names": [d.det_name for d in group.donuts],
+    }
+
+
 class WavefrontFittingTaskConfig(pexConfig.Config):
     """Configuration for wavefront fitting via Danish algorithm."""
 

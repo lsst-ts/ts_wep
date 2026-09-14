@@ -27,7 +27,6 @@ __all__ = [
     "DonutBlitzMonolithTask",
 ]
 
-import multiprocessing as mp
 import time
 from typing import Any
 
@@ -57,11 +56,11 @@ from lsst.utils.timer import timeMethod
 from .blindDetectTask import BlindDetect
 from .catalogBuilder import CatalogOptions, build_donut_catalog
 from .cutDonutStampsTask import CutDonutStampsTask
-from .cutoutPipeline import _run_cutout_worker
+from .cutoutPipeline import _dead_cutout_result, _run_cutout_worker
 from .donutBlitzPlotTask import DonutBlitzPlotTask
+from .forkPool import _dumpStacksOnHang, _forkMap
 from .measureDonutCandidatesTask import MeasureDonutCandidatesTask
 from .utils import (
-    CORNER_DET_NAMES,
     _ANSI_BOLD,
     _ANSI_CYAN,
     _ANSI_GREEN,
@@ -69,6 +68,7 @@ from .utils import (
     _CUTOUT_STAGE_KEYS,
     _INSTRUMENT,
     _INTRA_FOCAL_DET_IDS,
+    CORNER_DET_NAMES,
     _colorize,
     _resolveColorLogEnabled,
     _telescope_for_offsets,
@@ -76,6 +76,7 @@ from .utils import (
 from .wavefrontFittingTask import (
     WavefrontFittingTask,
     _build_wf_groups,
+    _dead_wf_result,
     _wf_fitting_worker,
 )
 
@@ -289,6 +290,22 @@ class DonutBlitzMonolithTaskConfig(
         dtype=bool,
         default=False,
     )
+    hangTimeout: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Seconds either the cutout or the wavefront pool may run before "
+            "the hang watchdog dumps stacks and aborts the quantum, so that a "
+            "pool blocked forever fails loudly and gets retried instead of "
+            "burning its walltime.  Both pools finish in a few seconds over a "
+            "large run -- cutout median 1.9s, wavefront median 3.1s, neither "
+            "past 26s across ~2900 visits -- so the default is a wide enough "
+            "margin that tripping it means a wedge rather than slow work.  "
+            "Raise it if a crowded field pushes either pool past it; cutout "
+            "time is the one that scales with reference density, so the "
+            "galactic-bulge visits are where to check."
+        ),
+        dtype=float,
+        default=60.0,
+    )
     colorLog: pexConfig.Field = pexConfig.Field(
         doc=(
             "Colorize select log messages with ANSI escape codes. If None "
@@ -360,6 +377,10 @@ class DonutBlitzMonolithTaskConfig(
         self.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
         self.astromTask.maxIter = 5
         self.astromTask.matcher.maxOffsetPix = 1000
+
+        # Cap the references handed to the pattern matcher.  Essential for
+        # keeping the cost to refit the WCS near the galactic bulge.
+        self.astromTask.matcher.maxRefObjects = 2048
 
         # Monster refcat uses full filter names (e.g. phot_g_mean), not band
         # labels, so the default mag-limit policy lookup by band would fail.
@@ -715,26 +736,35 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             # below. cutout_args is the detectors with raws, non-empty by the
             # guard above.
             n_cutout_workers = min(numCores, len(cutout_args))
-            # A bare fork Pool is safe here only because these workers never
-            # touch the butler -- everything is preloaded in runQuantum and
-            # inherited via COW. Children sharing the parent's inherited psycopg2
-            # SSL socket corrupt it (~5-10% of 8-worker forks), so any worker
-            # that starts reading from the butler needs `initializer=`
-            # calling SqlRegistry.resetConnectionPool().
-            with mp.get_context("fork").Pool(processes=n_cutout_workers) as pool:
-                t_pool1 = time.perf_counter()
-                t_dispatch = time.time()
-                results = pool.map(_run_cutout_worker, [(arg, t_dispatch) for arg in cutout_args])
-            t_pool2 = time.perf_counter()
+            # Bare fork workers are safe here. Everything is preloaded in
+            # runQuantum and inherited via COW.  _forkMap ensures that one killed
+            # worker does not take down the entire pool/quantum.
+            t_dispatch = time.time()
+            with _dumpStacksOnHang(self.config.hangTimeout, "cutout pool", self.log):
+                results, deaths = _forkMap(
+                    _run_cutout_worker,
+                    [(arg, t_dispatch) for arg in cutout_args],
+                    n_cutout_workers,
+                )
+            for unit, reason in deaths:
+                # A killed worker is a real fault, not a routine per-detector
+                # failure, so it is logged at error level even though the visit
+                # goes on without it.
+                self.log.error("Cutout worker for detector %s died: %s", unit[0], reason)
+                results.append(_dead_cutout_result(unit[0], reason))
+            # One fork per detector, started as slots free up, so there is no
+            # separate pool-creation phase left to time.
             self.log.info(
                 _colorize(
-                    "Cutout pipeline: pool create: %.3fs, pool.map: %.3fs",
+                    "Cutout pipeline: %d worker(s), %d/%d detector(s) returned, map: %.3fs",
                     _ANSI_BOLD,
                     _ANSI_CYAN,
                     enabled=self._colorLogEnabled,
                 ),
-                t_pool1 - t_pool0,
-                t_pool2 - t_pool1,
+                n_cutout_workers,
+                len(cutout_args) - len(deaths),
+                len(cutout_args),
+                time.perf_counter() - t_pool0,
             )
         t_cutout1 = time.perf_counter()
 
@@ -812,9 +842,14 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             wf_results = [_wf_fitting_worker(g) for g in groups]
         else:
             n_workers = min(numCores, len(groups))
-            # Butler-free like the cutout pool above; same caveat applies.
-            with mp.get_context("fork").Pool(processes=n_workers) as wf_pool:
-                wf_results = wf_pool.map(_wf_fitting_worker, groups)
+            # _forkMap again ensures that one killed worker does not take down
+            # the entire pool/quantum
+            with _dumpStacksOnHang(self.config.hangTimeout, "WF pool", self.log):
+                wf_results, wf_deaths = _forkMap(_wf_fitting_worker, groups, n_workers)
+            nZk = len(self.wfFittingTask.config.nollIndices)
+            for group, reason in wf_deaths:
+                self.log.error("WF worker for group %s died: %s", group.group_id, reason)
+                wf_results.append(_dead_wf_result(group, reason, nZk))
         t_wf1 = time.perf_counter()
         n_ok = sum(r.get("success") for r in wf_results)
         elapsed_fits = [r["fit_info"].get("elapsed", float("nan")) for r in wf_results]

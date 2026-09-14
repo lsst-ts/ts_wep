@@ -438,3 +438,52 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
 def _run_cutout_worker(args: tuple) -> dict:
     det_name, t_dispatch = args
     return _cutoutPipeline(det_name, t_dispatch)
+
+
+def _dead_cutout_result(det_name: str, reason: str) -> dict:
+    """Stand-in result for a detector whose worker was killed outright.
+
+    `_cutout_one_exposure` reports its own failures in ``wcs_refit_error`` /
+    ``cat_select_error`` and always returns a dict, but it cannot report a
+    SIGKILL -- no Python runs in a process the kernel has already destroyed. So
+    the parent synthesizes the same shape on the worker's behalf, letting the
+    visit proceed on the surviving detectors instead of being lost entirely.
+
+    Every timing is NaN and the catalogs empty, matching the convention of the
+    early-bailout return above: a stage that never ran must not read as one
+    that was instantaneous.
+
+    Parameters
+    ----------
+    det_name : `str`
+        Detector whose worker died.
+    reason : `str`
+        Cause, from `_forkMap`'s `_WorkerDeath`.
+
+    Returns
+    -------
+    `dict`
+        Same keys as `_cutoutPipeline`.
+    """
+    return {
+        "det_name": det_name,
+        "catalog": [],
+        "isr_run": float("nan"),
+        "bkg_run": float("nan"),
+        "diam_run": float("nan"),
+        "blind_detect_run": float("nan"),
+        "wcs_refit_run": float("nan"),
+        "catalog_select_run": float("nan"),
+        "stamp_cut_run": float("nan"),
+        "rejected_catalog": [],
+        "scatter_arcsec": None,
+        "wcs_refit_error": f"worker died: {reason}",
+        "cat_select_error": "",
+        "selection_source": "worker_died",
+        "pair_path": "n/a",
+        # Unknown: the orientation is read off the post-ISR exposure, which
+        # this worker never got far enough to produce.
+        "n_quarter": 0,
+        "wcs": None,
+        "dispatch_to_arrival": float("nan"),
+    }

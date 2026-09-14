@@ -21,6 +21,7 @@
 
 __all__ = ["DonutSourceSelectorTaskConfig", "DonutSourceSelectorTask"]
 
+from collections.abc import Iterator
 from typing import Any
 
 import astropy.units as u
@@ -85,12 +86,23 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
         dtype=int,
         default=160,
         doc="Distance in pixels between two donut centers for them to be considered unblended. "
-        + "This setting and minBlendedSeparation will both be affected by the defocal distance.",
+        + "Two donut centers closer together than this are treated as overlapping; anything "
+        + "farther apart is never considered a neighbor.",
     )
     minBlendedSeparation: pexConfig.Field = pexConfig.Field(
         dtype=int,
         default=120,
         doc="Minimum separation in pixels between blended donut centers. "
+        + "How close an overlapping neighbor may come, in pixels, before the candidate is "
+        + "rejected outright instead of deblended. Neighbors between this and "
+        + "unblendedSeparation are acceptable blends: they count against maxBlended and their "
+        + "positions are returned in blendCentersX/Y so a deblend mask can be built. Closer "
+        + "than this and the donut is considered unrecoverable no matter how large maxBlended "
+        + "is. Must be <= unblendedSeparation, since no neighbor is ever found beyond that "
+        + "radius; a larger value would make every blend unrecoverable and so silently reduce "
+        + "maxBlended to 0. When flux is available this floor applies only to neighbors within "
+        + "isolatedMagDiff of the candidate's magnitude -- a much fainter neighbor never "
+        + "disqualifies it -- whereas the flux-less path applies it to every neighbor. "
         + "This setting and unblendedSeparation will both be affected by the defocal distance.",
     )
     isolatedMagDiff: pexConfig.Field = pexConfig.Field(
@@ -107,31 +119,34 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
         dtype=int,
         default=0,
         doc="Number of blended objects (defined by unblendedSeparation and isolatedMagDiff) "
-        + "allowed with a bright source.",
+        + "allowed with a bright source. 0 requires full isolation. Has no say over neighbors "
+        + "closer than minBlendedSeparation, which reject the candidate outright.",
+        check=lambda x: x >= 0,
+    )
+    queryChunkSize: pexConfig.Field = pexConfig.Field(
+        dtype=int,
+        default=2048,
+        doc="Number of sources whose neighbor lists are materialized at a time. Lower it to "
+        + "trade speed for a smaller memory footprint; raise it for the reverse.",
+        check=lambda x: x > 0,
     )
 
-def validate(self) -> None:
-    super().validate()
-    if self.sourceLimit != -1 and self.sourceLimit <= 0:
-        raise pexConfig.FieldValidationError(
-            self.__class__.sourceLimit,
-            self,
-            "sourceLimit must be a positive integer "
-            "or turned off by setting it to '-1'",
-        )
-    if self.minBlendedSeparation > self.unblendedSeparation:
-        raise pexConfig.FieldValidationError(
-            self.__class__.minBlendedSeparation,
-            self,
-            "minBlendedSeparation must be <= unblendedSeparation "
-            "(neighbors are only found within unblendedSeparation).",
-        )
-    if self.maxBlended < 0:
-        raise pexConfig.FieldValidationError(
-            self.__class__.maxBlended,
-            self,
-            "maxBlended must be >= 0.",
-        )
+    def validate(self) -> None:
+        super().validate()
+        if self.sourceLimit != -1 and self.sourceLimit <= 0:
+            raise pexConfig.FieldValidationError(
+                self.__class__.sourceLimit,
+                self,
+                "sourceLimit must be a positive integer "
+                "or turned off by setting it to '-1'",
+            )
+        if self.minBlendedSeparation > self.unblendedSeparation:
+            raise pexConfig.FieldValidationError(
+                self.__class__.minBlendedSeparation,
+                self,
+                "minBlendedSeparation must be <= unblendedSeparation "
+                "(neighbors are only found within unblendedSeparation).",
+            )
 
 
 class DonutSourceSelectorTask(pipeBase.Task):
@@ -266,6 +281,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         maxFieldDist = self.config.maxFieldDist
         sourceLimit = self.config.sourceLimit
         allowFluxless = self.config.allowFluxless
+        queryChunkSize = self.config.queryChunkSize
 
         # Determine whether flux is available.  Try to read it via the same
         # code path that would be used to consume it, so detection and
@@ -358,10 +374,38 @@ class DonutSourceSelectorTask(pipeBase.Task):
             & (ySorted <= maxY)
         )
 
-        # Nearest-neighbor structure on the (sorted) positions.
+        # Sources that can possibly be kept.  The mag / field-distance / edge-box
+        # cuts are applied here to shrink the set of candidate sources before
+        # building neighbor lists.
+        isCandidate = inBox & (fieldDistSorted <= maxFieldDist)
+        if useFlux:
+            isCandidate &= (magSorted <= magMax) & (magSorted >= magMin)
+        candidates = np.flatnonzero(isCandidate)
+
+        # Nearest-neighbor structure on the (sorted) positions.  Every source
+        # stays in the tree -- a faint neighbor still blends a donut -- but
+        # only candidates are used as query points.
         xy = np.ascontiguousarray(np.column_stack([xSorted, ySorted]), dtype=np.float64)
         tree = KDTree(xy)
-        radIdxList = tree.query_ball_point(xy, r=unblendedSeparation, return_sorted=True)
+
+        def neighborLists() -> Iterator[tuple[int, list[int]]]:
+            """Yield ``(sortedIndex, neighborIndices)`` for each candidate.
+
+            The tree is queried `config.queryChunkSize` candidates at a time
+            so that only one chunk's neighbor lists are alive at once; each is
+            freed before the next is built.  Peak memory therefore follows the
+            chunk size rather than the size of the catalog.  Candidates are
+            visited in ascending sorted order -- brightest first, or center-out
+            when flux-less -- which the blend arbitration below relies on.
+            """
+            for start in range(0, len(candidates), queryChunkSize):
+                chunk = candidates[start : start + queryChunkSize]
+                # return_sorted keeps the lists (and hence the reported blend
+                # centers) in a deterministic order.
+                yield from zip(
+                    chunk,
+                    tree.query_ball_point(xy[chunk], r=unblendedSeparation, return_sorted=True),
+                )
 
         index = list()
         # Sparse storage: most sources have no blend centers, so only populate
@@ -373,22 +417,10 @@ class DonutSourceSelectorTask(pipeBase.Task):
         # Go through catalog (brightest first, or center-out when flux-less)
         # with nearest neighbor information and keep sources that match our
         # configuration settings.
-        for srcOn, idxList in enumerate(radIdxList):
-            # Move on if source is within unblendedSeparation
-            # of the edge of a given exposure
-            if not inBox[srcOn]:
-                continue
-
-            # If distance from field center is greater than
-            # maxFieldDist discard the source and move on
-            if fieldDistSorted[srcOn] > maxFieldDist:
-                continue
-
-            # If this source's magnitude is outside our bounds then discard.
-            # (Vacuous when flux-less: magMin/magMax are +/-inf and srcMag=0.)
+        # (The edge-box, maxFieldDist and magMin/magMax cuts were applied when
+        # building `candidates`, so every srcOn here already passes them.)
+        for srcOn, idxList in neighborLists():
             srcMag = magSorted[srcOn]
-            if (srcMag > magMax) | (srcMag < magMin):
-                continue
 
             # If there is no overlapping source keep
             # the source and move on to next
@@ -398,9 +430,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
             elif not useFlux:
                 # --- Geometry-only isolation/blending (no flux) ---
-                # idxList is a plain Python list (distance-sorted, self first).
-                # Neighbors excluding the self-match at position 0.
-                neighbors = idxList[1:]
+                # idxList is a plain Python list of indices into the sorted
+                # arrays, including this source itself.
+                neighbors = [j for j in idxList if j != srcOn]
 
                 # Because the arrays are sorted center-out, any neighbor with a
                 # smaller sorted index is more central than this source.  If one
@@ -430,9 +462,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
             # In this case there is at least one overlapping source and we have
             # flux information to arbitrate the blend.
             else:
-                # idxList is a plain Python list (distance-sorted, self first).
-                # Neighbors excluding the self-match at position 0.
-                neighbors = idxList[1:]
+                # idxList is a plain Python list of indices into the sorted
+                # arrays, including this source itself.
+                neighbors = [j for j in idxList if j != srcOn]
 
                 # Because the arrays are magnitude-sorted, any neighbor with a
                 # smaller sorted index is brighter than this source.  If one
@@ -475,10 +507,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # blended based upon isolatedMagDiff. Otherwise
                     # masks for deblending will include footprints of
                     # all the faint sources that we don't care about
-                    # when deblending. Add one to index because
-                    # magDiff is all sources after index=0.
-                    blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
-                    keepIdx = np.asarray(idxList)[blendMagIdx]
+                    # when deblending.  magDiff is aligned with neighborIdx.
+                    keepIdx = neighborIdx[magDiff < minMagDiff]
                     blendCentersXMap[groupIndices[srcOn]] = xSorted[keepIdx]
                     blendCentersYMap[groupIndices[srcOn]] = ySorted[keepIdx]
                     sourcesKept += 1
@@ -492,8 +522,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     index.append(groupIndices[srcOn])
                     # Same process as above to make sure we only get
                     # the blend centers we care about
-                    blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
-                    keepIdx = np.asarray(idxList)[blendMagIdx]
+                    keepIdx = neighborIdx[magDiff < minMagDiff]
                     blendCentersXMap[groupIndices[srcOn]] = xSorted[keepIdx]
                     blendCentersYMap[groupIndices[srcOn]] = ySorted[keepIdx]
                     sourcesKept += 1
