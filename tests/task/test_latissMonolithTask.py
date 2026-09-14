@@ -75,13 +75,30 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         self.assertEqual(self.config.donutDiameter, 228)
         self.assertEqual(list(self.config.nollIndices), NOLL_INDICES)
 
-    def testIsrDefaultsAreGainsAndOverscanOnly(self) -> None:
-        """LATISS alignment sequences have no usable bias/dark/flat."""
+    def testIsrAppliesTheFullCalibrationSet(self) -> None:
+        """Regression guard: ISR must apply defects, flat, linearize, crosstalk.
+
+        An earlier version of this task ran gains + overscan only, on the premise
+        that LATISS alignment sequences have no usable calibrations. That premise
+        was false -- bias, dark, flat, defects, linearizer, crosstalk and ptc are
+        all present for LATISS in ``LATISS/defaults`` -- and disabling them broke
+        donut detection: the LATISS bad column at x=3795-3797 survived ISR at
+        ~1.2e5 ADU against an image median of ~20, and since
+        ``QuickFrameMeasurement`` ranks candidates on a 70 px aperture flux --
+        which a solid column fills more uniformly than a donut with a hole -- the
+        column outranked the donut. Enabling defects moved 38 of 60
+        previously-bad pair sides back on-axis and broke none.
+
+        These are ``IsrTaskLSST`` defaults, so this test guards against someone
+        re-disabling them rather than against a missing assignment.
+        """
+        for field in ("doDefect", "doFlat", "doLinearize", "doCrosstalk", "doInterpolate"):
+            self.assertTrue(getattr(self.config.isrTask, field), field)
         self.assertTrue(self.config.isrTask.doApplyGains)
-        self.assertTrue(self.config.isrTask.doOverscan)
-        self.assertEqual(self.config.isrTask.overscan.fitType, "MEDIAN_PER_ROW")
-        for field in ("doBias", "doDark", "doFlat", "doDefect", "doLinearize", "doCrosstalk"):
-            self.assertFalse(getattr(self.config.isrTask, field), field)
+        self.assertTrue(self.config.isrTask.doSaturation)
+        # No bfKernel/bfGains exist for LATISS, and IsrTaskLSST raises if asked
+        # to do brighter-fatter without one.
+        self.assertFalse(self.config.isrTask.doBrighterFatter)
 
     def testBoresightToleranceIsInArcsecNotPixels(self) -> None:
         """Regression guard: the unit of maxDistanceFromBoresight.
@@ -117,7 +134,14 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         connections = LatissMonolithTaskConnections(config=self.config)
         self.assertEqual(set(connections.dimensions), {"instrument", "detector"})
         self.assertEqual(set(connections.inputs), {"raws"})
-        self.assertEqual(set(connections.prerequisiteInputs), {"camera"})
+        # The full calibration set BestEffortIsr passes on the summit. `defects`
+        # is the load-bearing one: without it the LATISS bad column at
+        # x=3795-3797 outranks the real donut in QuickFrameMeasurement's
+        # aperture flux, putting the "donut" ~2000 px off the boresight.
+        self.assertEqual(
+            set(connections.prerequisiteInputs),
+            {"camera", "bias", "dark", "flat", "defects", "linearizer", "crosstalk", "ptc"},
+        )
         self.assertEqual(set(connections.outputs), {"zernikes", "donutStampsExtra", "donutStampsIntra"})
         # No intrinsicZernikes connection: LATISS has no such calibration.
         self.assertFalse(hasattr(connections, "intrinsicZernikes"))
@@ -239,6 +263,7 @@ class TestLatissMonolithTaskOnSky(lsst.utils.tests.TestCase):
     rawIntra: afwImage.Exposure
     rawExtra: afwImage.Exposure
     result: pipeBase.Struct
+    isrCalibs: dict
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -249,8 +274,17 @@ class TestLatissMonolithTaskOnSky(lsst.utils.tests.TestCase):
         cls.rawIntra = cls.butler.get("raw", instrument="LATISS", exposure=EXPOSURE_INTRA, detector=0)
         cls.rawExtra = cls.butler.get("raw", instrument="LATISS", exposure=EXPOSURE_EXTRA, detector=0)
 
+        # IsrTaskLSST needs a PTC (it reads gains from it), and donut detection
+        # needs `defects` -- so a caller outside a pipeline must supply the
+        # calibrations itself, exactly as ``run_wep`` will have to.
+        dataId = {"instrument": "LATISS", "exposure": EXPOSURE_EXTRA, "detector": 0}
+        cls.isrCalibs = {}
+        for name in ("bias", "dark", "flat", "defects", "linearizer", "crosstalk", "ptc"):
+            if cls.butler.exists(name, dataId):
+                cls.isrCalibs[name] = cls.butler.get(name, dataId=dataId)
+
         task = LatissMonolithTask(config=LatissMonolithTaskConfig())
-        cls.result = task.run(cls.rawExtra, cls.rawIntra, cls.camera)
+        cls.result = task.run(cls.rawExtra, cls.rawIntra, cls.camera, isrCalibs=cls.isrCalibs)
 
     def testStampsAreTheConfiguredSize(self) -> None:
         for stamps in (self.result.donutStampsExtra, self.result.donutStampsIntra):
