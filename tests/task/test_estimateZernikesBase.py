@@ -166,7 +166,7 @@ class TestGetObsConditions(unittest.TestCase):
         self.assertIsNone(result.rtp)
         self.assertAlmostEqual(result.altitude.rad, 0.8)
 
-    def _makeInstrument(self, maskParamsFile, maskParams=None) -> MagicMock:
+    def _makeInstrument(self, maskParamsFile: str | None, maskParams: dict | None = None) -> MagicMock:
         # Only the attributes touched by _logMaskVersions are needed.
         inst = MagicMock()
         inst.maskParamsFile = maskParamsFile
