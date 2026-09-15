@@ -40,7 +40,6 @@ import lsst.pipe.base as pipeBase
 from lsst.afw.geom import makeSkyWcs
 from lsst.afw.image import Exposure
 from lsst.daf.base import PropertyList
-from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.geom import Point2D, degrees
 from lsst.pipe.base import connectionTypes
 from lsst.ts.wep.donutImageCheck import DonutImageCheck
@@ -75,7 +74,6 @@ class CutOutDonutsBaseTaskConnections(
         doc="Input camera to construct complete exposures.",
         dimensions=["instrument"],
         isCalibration=True,
-        lookupFunction=lookupStaticCalibrations,
     )
 
 
