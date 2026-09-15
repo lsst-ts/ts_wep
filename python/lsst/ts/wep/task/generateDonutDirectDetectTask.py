@@ -37,7 +37,6 @@ import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 from lsst.afw.cameraGeom import Camera
 from lsst.afw.image import Exposure
-from lsst.fgcmcal.utilities import lookupStaticCalibrations
 from lsst.meas.algorithms import SubtractBackgroundTask
 from lsst.ts.wep.task.donutQuickMeasurementTask import DonutQuickMeasurementTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
@@ -79,7 +78,6 @@ class GenerateDonutDirectDetectTaskConnections(
         doc="Input camera to construct complete exposures.",
         dimensions=["instrument"],
         isCalibration=True,
-        lookupFunction=lookupStaticCalibrations,
     )
 
 
