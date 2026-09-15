@@ -17,6 +17,22 @@ Version History
 
 .. towncrier release notes start
 
+v17.11.0 (2026-09-15)
+=====================
+
+Bug Fixes
+---------
+
+- Replaced deprecated np.in1d with np.isin in tests/task/test_cutOutDonutScienceSensorTask.py.
+  Updated testCutoutsFamPipeline.yaml so test works with --skip-pretest option. (`RSO-925 <https://rubinobs.atlassian.net//browse/RSO-925>`_)
+
+
+Performance Enhancement
+-----------------------
+
+- Removed the `lookupStaticCalibrations` lookup function from the `camera` prerequisite input of `CutOutDonutsBaseTask` and `GenerateDonutDirectDetectTask`, and the resulting `fgcmcal` dependency. The lookup function was a 2022 workaround for a butler limitation that no longer exists; it forced the quantum-graph builder to resolve `camera` with one registry query per quantum instead of a single bulk query, which dominated graph-building time for large runs (~7 of ~11 hours for a 343k-quantum LSSTCam CWFS graph; 215 s to 99 s for 200 visits). Resolved camera datasets are unchanged. (`RSO-941 <https://rubinobs.atlassian.net//browse/RSO-941>`_)
+
+
 v17.10.0 (2026-09-04)
 =====================
 
