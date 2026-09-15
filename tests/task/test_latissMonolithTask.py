@@ -45,11 +45,15 @@ import lsst.pipe.base as pipeBase
 import lsst.utils.tests
 from lsst.afw.cameraGeom import Camera
 from lsst.daf.butler import Butler
+from lsst.ts.wep.image import Image
+from lsst.ts.wep.task.estimateZernikesDanishTask import EstimateZernikesDanishTask
 from lsst.ts.wep.task.latissMonolithTask import (
     LatissMonolithTask,
     LatissMonolithTaskConfig,
     LatissMonolithTaskConnections,
+    peakNormalize,
 )
+from lsst.ts.wep.utils import DefocalType
 
 # The pair used throughout: a BLOCK-T743 CWFS sequence on 20260625 with visit
 # records defined. Note LATISS visits are not defined for the most recent
@@ -73,7 +77,27 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         # 228 px is what latiss_wep_align derives for dz=0.8. The ts_wep
         # default of 160 is LSSTCam-sized and clips a 194 px AuxTel donut.
         self.assertEqual(self.config.donutDiameter, 228)
-        self.assertEqual(list(self.config.nollIndices), NOLL_INDICES)
+        # Z4-Z22 as latiss_wep_align fits, not the ts_wep default of Z4-Z28.
+        self.assertEqual(list(self.config.estimateZernikes.nollIndices), NOLL_INDICES)
+        # The fit is the stock Danish task, not a private reimplementation.
+        self.assertIs(self.config.estimateZernikes.target, EstimateZernikesDanishTask)
+
+    def testPeakNormalize(self) -> None:
+        """Only wep_im is rescaled, to peak 1; a flat stamp is an error."""
+        stamp = _FakeStamp()
+        stamp.wep_im = Image(
+            image=np.arange(16, dtype=float).reshape(4, 4) * 1000.0,
+            fieldAngle=(0.0, 0.0),
+            defocalType=DefocalType.Extra,
+            bandLabel="ref",
+        )
+        peakNormalize([stamp])
+        self.assertAlmostEqual(float(stamp.wep_im.image.max()), 1.0)
+        self.assertAlmostEqual(float(stamp.wep_im.image[0, 1]), 1.0 / 15.0)
+
+        stamp.wep_im.image = np.zeros((4, 4))
+        with self.assertRaises(ValueError):
+            peakNormalize([stamp])
 
     def testIsrAppliesTheFullCalibrationSet(self) -> None:
         """Regression guard: ISR must apply defects, flat, linearize, crosstalk.
@@ -126,13 +150,16 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         self.assertEqual(self.config.pairer.overrideSeparation, -0.8)
 
     def testConnections(self) -> None:
-        """Dimensions must be (instrument, detector), not visit.
+        """Dimensions must be (instrument, detector, day_obs), not visit.
 
         The task consumes two exposures and pairs them internally, so the
         quantum cannot be keyed on a single visit.
         """
         connections = LatissMonolithTaskConnections(config=self.config)
-        self.assertEqual(set(connections.dimensions), {"instrument", "detector"})
+        # day_obs is the temporal dimension that lets the graph builder pick
+        # the night's calibrations; without one the lookup raises on multiple
+        # validity ranges.
+        self.assertEqual(set(connections.dimensions), {"instrument", "detector", "day_obs"})
         self.assertEqual(set(connections.inputs), {"raws"})
         # The full calibration set BestEffortIsr passes on the summit. `defects`
         # is the load-bearing one: without it the LATISS bad column at
@@ -162,35 +189,38 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         self.assertEqual(task.cutOutDonuts.config.initialCutoutPadding, 40)
 
     def testZkTableSchemaAndFailedFit(self) -> None:
-        """A failed fit becomes a NaN row that is excluded from the average."""
+        """A failed fit becomes a NaN row that is excluded from the average.
+
+        Inputs mimic ``EstimateZernikesDanishTask.run``: Zernikes in microns,
+        shape (nPairs, nNoll), and a metadata dict of per-pair lists.
+        """
         task = LatissMonolithTask(config=self.config)
-        nan = np.full(len(NOLL_INDICES), np.nan)
-        failed = dict(
-            zk_sum=nan,
-            zk_fit=nan,
-            zernikes_nm={j: np.nan for j in NOLL_INDICES},
-            noll_indices=np.array(NOLL_INDICES),
-            fwhm=np.nan,
-            cost=np.nan,
-            nfev=0,
-            success=False,
-        )
-        good = dict(failed, zk_sum=np.full(len(NOLL_INDICES), 1e-7), cost=100.0, fwhm=1.5, success=True)
+        n = len(NOLL_INDICES)
+        zernikes = np.vstack([np.full(n, 0.1), np.full(n, np.nan)])  # 0.1 um = 100 nm
+        wfEstInfo = {
+            "chi_square": [100.0, np.nan],
+            "fwhm": [1.5, np.nan],
+            "lstsq_nfev": [20, None],
+            "fit_success": [True, False],
+            "model_img": [object(), None],  # must not leak into table.meta
+        }
 
         stamps = _FakeStamps([_FakeStamp(), _FakeStamp()])
-        table = task._makeZkTable([good, failed], stamps, stamps)
+        table = task._makeZkTable(zernikes, wfEstInfo, stamps, stamps)
 
         self.assertEqual(len(table), 3)  # average + 2 pairs
         self.assertEqual(list(table["label"]), ["average", "pair1", "pair2"])
         self.assertEqual(list(table["used"]), [True, True, False])
         self.assertEqual(list(table["fit_success"]), [True, True, False])
+        self.assertEqual(list(table["nfev"]), [20, 20, 0])
 
-        # The QA columns that CalcZernikesTask does not have.
-        for column in ("cost", "fwhm", "nfev", "fit_success"):
+        # The QA columns that CalcZernikesTask keeps only in metadata.
+        for column in ("chi_square", "fwhm", "nfev", "fit_success"):
             self.assertIn(column, table.colnames)
 
-        # 1e-7 m == 100 nm, and the failed pair must not drag the average.
+        # 100 nm, and the failed pair must not drag the average.
         self.assertAlmostEqual(table["Z4"][0].to_value(u.nm), 100.0, places=3)
+        self.assertAlmostEqual(table["Z4"][1].to_value(u.nm), 100.0, places=3)
         self.assertTrue(np.isnan(table["Z4"][2].to_value(u.nm)))
 
         # LATISS has no intrinsic Zernike calibration, so these are NaN by
@@ -200,24 +230,17 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
 
         self.assertEqual(table.meta["noll_indices"], NOLL_INDICES)
         self.assertEqual(table.meta["opd_columns"], [f"Z{j}" for j in NOLL_INDICES])
-        self.assertTrue(table.meta["opd_zk_ref"])
         self.assertTrue(table.meta["peak_normalized_stamps"])
+        self.assertEqual(table.meta["estimatorInfo"]["fit_success"], [True, False])
+        self.assertNotIn("model_img", table.meta["estimatorInfo"])
 
-    def testMaxFitCostRejectsHighCostPairs(self) -> None:
-        self.config.maxFitCost = 50.0
+    def testMaxChiSquareRejectsPoorFits(self) -> None:
+        self.config.maxChiSquare = 50.0
         task = LatissMonolithTask(config=self.config)
-        result = dict(
-            zk_sum=np.full(len(NOLL_INDICES), 1e-7),
-            zk_fit=np.zeros(len(NOLL_INDICES)),
-            zernikes_nm={j: 100.0 for j in NOLL_INDICES},
-            noll_indices=np.array(NOLL_INDICES),
-            fwhm=1.5,
-            cost=100.0,  # above maxFitCost
-            nfev=10,
-            success=True,
-        )
+        zernikes = np.full((1, len(NOLL_INDICES)), 0.1)
+        wfEstInfo = {"chi_square": [100.0], "fwhm": [1.5], "lstsq_nfev": [10], "fit_success": [True]}
         stamps = _FakeStamps([_FakeStamp()])
-        table = task._makeZkTable([result], stamps, stamps)
+        table = task._makeZkTable(zernikes, wfEstInfo, stamps, stamps)
         # The fit succeeded but is rejected by the quality cut, so it is not
         # used and the average is NaN.
         self.assertTrue(table["fit_success"][1])
@@ -291,26 +314,33 @@ class TestLatissMonolithTaskOnSky(lsst.utils.tests.TestCase):
             self.assertEqual(len(stamps), 1)
             self.assertEqual(stamps[0].stamp_im.image.array.shape, (228, 228))
 
-    def testFitSucceeds(self) -> None:
-        """The whole point: the fit converges rather than returning NaN.
+    def testStampsArePeakNormalized(self) -> None:
+        """wep_im is order unity for the fit; stamp_im keeps the ADU pixels.
 
-        Stock ts_wep 17.8.1 returns NaN on 11 of 12 LATISS pairs.
+        The peak is slightly below 1 because Danish's ``prepImage`` then
+        subtracts the median background from ``wep_im`` in place.
+        """
+        for stamps in (self.result.donutStampsExtra, self.result.donutStampsIntra):
+            peak = float(np.nanmax(stamps[0].wep_im.image))
+            self.assertTrue(0.5 < peak <= 1.0, peak)
+            self.assertGreater(float(np.nanmax(stamps[0].stamp_im.image.array)), 100.0)
+
+    def testFitSucceeds(self) -> None:
+        """The whole point: the fit converges rather than stopping early.
+
+        Without peak normalization the stock fit on raw-ADU LATISS stamps
+        returns after a handful of function evaluations.
         """
         table = self.result.zernikes
         pair = table[table["label"] == "pair1"]
         self.assertTrue(bool(pair["fit_success"][0]))
         self.assertTrue(np.isfinite(pair["Z4"][0].to_value(u.nm)))
-        # A converged fit takes many function evaluations; the degenerate
-        # zkRef regression produced nfev=1.
         self.assertGreater(int(pair["nfev"][0]), 5)
         # And the fitted seeing must be physical.
         self.assertTrue(0.1 < pair["fwhm"][0].to_value(u.arcsec) < 5.0)
 
     def testZernikesAreOfPlausibleMagnitude(self) -> None:
-        """Guards against the 43.5x zkRef regression returning silently.
-
-        LATISS low-order aberrations are hundreds of nm, not tens of microns.
-        """
+        """LATISS low-order aberrations are hundreds of nm, not microns."""
         table = self.result.zernikes
         pair = table[table["label"] == "pair1"]
         for j in (4, 7, 8):
