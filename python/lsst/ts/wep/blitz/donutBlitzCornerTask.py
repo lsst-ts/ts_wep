@@ -19,12 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""The monolithic corner-wavefront WEP pipeline task."""
+"""The corner-wavefront-sensor blitz pipeline task."""
 
 __all__ = [
-    "DonutBlitzMonolithTaskConnections",
-    "DonutBlitzMonolithTaskConfig",
-    "DonutBlitzMonolithTask",
+    "DonutBlitzCornerTaskConnections",
+    "DonutBlitzCornerTaskConfig",
+    "DonutBlitzCornerTask",
 ]
 
 import time
@@ -111,11 +111,11 @@ _EXTRA_FOCAL_OFFSETS = (+_INSTRUMENT.defocalOffset, 0.0, 0.0)
 _INTRA_FOCAL_OFFSETS = (-_INSTRUMENT.defocalOffset, 0.0, 0.0)
 
 
-class DonutBlitzMonolithTaskConnections(
+class DonutBlitzCornerTaskConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),  # type: ignore
 ):
-    """Pipeline connections for DonutBlitzMonolithTask."""
+    """Pipeline connections for DonutBlitzCornerTask."""
 
     raws = connectionTypes.Input(
         doc=(
@@ -176,22 +176,22 @@ class DonutBlitzMonolithTaskConnections(
         isCalibration=True,
         minimum=0,
     )
-    blitzResults = connectionTypes.Output(
+    cornerResults = connectionTypes.Output(
         doc=(
             "Per-donut catalog containing selection metrics, fit results, Zernikes, "
             "stamp/model images, and all metadata needed to regenerate diagnostic plots."
         ),
-        name="donutBlitzResults",
+        name="donutBlitzCornerResults",
         storageClass="ArrowAstropy",
         dimensions=("instrument", "visit"),
     )
 
 
-class DonutBlitzMonolithTaskConfig(
+class DonutBlitzCornerTaskConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=DonutBlitzMonolithTaskConnections,  # type: ignore
+    pipelineConnections=DonutBlitzCornerTaskConnections,  # type: ignore
 ):
-    """Configuration for DonutBlitzMonolithTask."""
+    """Configuration for DonutBlitzCornerTask."""
 
     isrTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
@@ -389,8 +389,8 @@ class DonutBlitzMonolithTaskConfig(
         self.donutSelector.allowFluxless = True
 
 
-class DonutBlitzMonolithTask(pipeBase.PipelineTask):
-    """Monolithic WEP task for corner wavefront sensors.
+class DonutBlitzCornerTask(pipeBase.PipelineTask):
+    """Blitz WEP task for the corner wavefront sensors.
 
     Runs ISR, blind donut detection, WCS refit, catalog-based donut
     selection, and stamp cutting on whichever corner detector raws are present,
@@ -399,9 +399,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
     copy-on-write.
     """
 
-    ConfigClass = DonutBlitzMonolithTaskConfig
-    _DefaultName = "donutBlitzMonolithTask"
-    config: DonutBlitzMonolithTaskConfig
+    ConfigClass = DonutBlitzCornerTaskConfig
+    _DefaultName = "donutBlitzCornerTask"
+    config: DonutBlitzCornerTaskConfig
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -425,7 +425,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
     ) -> None:
         self.log.info(
             _colorize(
-                "DonutBlitzMonolithTask.runQuantum() on exposure %d",
+                "DonutBlitzCornerTask.runQuantum() on exposure %d",
                 _ANSI_BOLD,
                 _ANSI_GREEN,
                 enabled=self._colorLogEnabled,
@@ -497,7 +497,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         )
         t8 = time.perf_counter()
         self.log.info("run() execution: %.3fs", t8 - t7)
-        butlerQC.put(outputs.blitzResults, outputRefs.blitzResults)
+        butlerQC.put(outputs.cornerResults, outputRefs.cornerResults)
 
     @timeMethod
     def run(
@@ -550,7 +550,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         """
         self.log.info(
             _colorize(
-                "DonutBlitzMonolithTask.run() with %d cores, butler elapsed=%.3fs",
+                "DonutBlitzCornerTask.run() with %d cores, butler elapsed=%.3fs",
                 _ANSI_BOLD,
                 _ANSI_GREEN,
                 enabled=self._colorLogEnabled,
@@ -906,7 +906,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             self.plotTask.run(catalog)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
-        return pipeBase.Struct(donuts=donuts, wf_results=wf_results, blitzResults=Table(catalog))
+        return pipeBase.Struct(donuts=donuts, wf_results=wf_results, cornerResults=Table(catalog))
 
     def _catalogOptions(self) -> CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.

@@ -39,7 +39,7 @@ import unittest
 import batoid
 import numpy as np
 
-from lsst.ts.wep.blitz.donutBlitzMonolithTask import (
+from lsst.ts.wep.blitz.donutBlitzCornerTask import (
     _EXTRA_FOCAL_OFFSETS,
     _INTRA_FOCAL_OFFSETS,
 )

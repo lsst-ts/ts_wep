@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Diagnostic plots regenerated from the ``donutBlitzResults`` catalog."""
+"""Diagnostic plots regenerated from the ``donutBlitzCornerResults`` table."""
 
 __all__ = [
     "DonutBlitzPlotTaskConnections",
@@ -110,12 +110,12 @@ class DonutBlitzPlotTaskConnections(
 ):
     """Pipeline connections for DonutBlitzPlotTask."""
 
-    blitzResults = connectionTypes.Input(
+    cornerResults = connectionTypes.Input(
         doc=(
-            "Per-donut catalog from DonutBlitzMonolithTask containing all data "
+            "Per-donut catalog from DonutBlitzCornerTask containing all data "
             "needed to regenerate diagnostic plots."
         ),
-        name="donutBlitzResults",
+        name="donutBlitzCornerResults",
         storageClass="ArrowAstropy",
         dimensions=("instrument", "visit"),
         deferLoad=True,
@@ -141,10 +141,15 @@ class DonutBlitzPlotTaskConfig(
 
 
 class DonutBlitzPlotTask(pipeBase.PipelineTask):
-    """PipelineTask regenerating diagnostic plots from ``donutBlitzResults``.
+    """PipelineTask regenerating diagnostic plots from a blitz catalog.
 
-    Can run standalone (reading from the butler) or be called as a subtask of
-    ``DonutBlitzMonolithTask`` when ``savePlots=True``.
+    Reads ``donutBlitzCornerResults``.  Can run standalone (reading from the
+    butler) or be called as a subtask of ``DonutBlitzCornerTask`` when
+    ``savePlots=True``.
+
+    Runs written before that dataset type was renamed hold their catalog as
+    ``donutBlitzResults``; point this task at one with
+    ``-c donutBlitzPlotTask:connections.cornerResults=donutBlitzResults``.
     """
 
     ConfigClass = DonutBlitzPlotTaskConfig
@@ -162,17 +167,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         outputRefs: OutputQuantizedConnection,
     ) -> None:
         inputs = butlerQC.get(inputRefs)
-        catalog = inputs["blitzResults"].get(parameters={"strip_astropy_meta_yaml": False})
+        catalog = inputs["cornerResults"].get(parameters={"strip_astropy_meta_yaml": False})
         self.run(catalog)
 
     def run(self, catalog: Table) -> None:
-        """Generate donut and WF plots from the ``blitzResults`` catalog.
+        """Generate donut and WF plots from the ``cornerResults`` catalog.
 
         Parameters
         ----------
         catalog : QTable
             Per-donut table as produced by
-            ``DonutBlitzMonolithTask._buildCatalog``.  Visit-level and
+            ``DonutBlitzCornerTask._buildCatalog``.  Visit-level and
             per-detector metadata are in ``catalog.meta``.
         """
         catalog = QTable(catalog)
@@ -290,7 +295,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # image overflows its axes by ~15%.
         _STAMP_TEXT_FONTSIZE = 3.5
 
-        # The unbinned `stamp` column is optional (see the monolith's
+        # The unbinned `stamp` column is optional (see corner mode's
         # saveStamps). Without it, draw the binned `wf_img`, which is always
         # present. Every other quantity here -- aperture radii, refcat offsets,
         # text offsets -- is in unbinned pixels, so it scales by 1/binning to
