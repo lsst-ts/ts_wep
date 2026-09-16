@@ -131,7 +131,9 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
             return pipeBase.Struct(measurements=selections)
         return pipeBase.Struct(measurements=self._measureFlux(selections, exposure, donutRadius=donutRadius))
 
-    def _measureFlux(self, selections: QTable, exposure: Exposure, donutRadius: float | None = None) -> QTable:
+    def _measureFlux(
+        self, selections: QTable, exposure: Exposure, donutRadius: float | None = None
+    ) -> QTable:
         """Measure aperture flux and per-pixel noise for each detected donut.
 
         For each peak a local background is estimated from an annular region

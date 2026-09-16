@@ -137,8 +137,7 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
             raise pexConfig.FieldValidationError(
                 self.__class__.sourceLimit,
                 self,
-                "sourceLimit must be a positive integer "
-                "or turned off by setting it to '-1'",
+                "sourceLimit must be a positive integer or turned off by setting it to '-1'",
             )
         if self.minBlendedSeparation > self.unblendedSeparation:
             raise pexConfig.FieldValidationError(
@@ -295,8 +294,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
         if not useFlux and not allowFluxless:
             raise RuntimeError(
-                f"Flux field '{fluxField}' not found in catalog and "
-                "config.allowFluxless is False."
+                f"Flux field '{fluxField}' not found in catalog and config.allowFluxless is False."
             )
 
         if useFlux:
@@ -367,12 +365,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
         # NOTE: erodedBy on an integer bbox yields a Box2I, whose contains() is
         # inclusive of the max corner.  Match that with <=.  If trimmedBBox is a
         # Box2D in your build, change the upper comparisons to <.
-        inBox = (
-            (xSorted >= minX)
-            & (xSorted <= maxX)
-            & (ySorted >= minY)
-            & (ySorted <= maxY)
-        )
+        inBox = (xSorted >= minX) & (xSorted <= maxX) & (ySorted >= minY) & (ySorted <= maxY)
 
         # Sources that can possibly be kept.  The mag / field-distance / edge-box
         # cuts are applied here to shrink the set of candidate sources before

@@ -181,9 +181,13 @@ def _pair_donuts(
     )
     # Tolerance is a fraction of the donut radius; take the smaller radius of the
     # candidate pair so a mis-measured radius on one side cannot loosen the cut.
-    tol = tol_frac * _RAD_PER_PIXEL * np.minimum(
-        np.array([e.donut_radius for e in extra])[:, None],
-        np.array([i.donut_radius for i in intra])[None, :],
+    tol = (
+        tol_frac
+        * _RAD_PER_PIXEL
+        * np.minimum(
+            np.array([e.donut_radius for e in extra])[:, None],
+            np.array([i.donut_radius for i in intra])[None, :],
+        )
     )
 
     # Mutual nearest neighbors: a pair is accepted only if each is the other's
@@ -246,34 +250,23 @@ def _fam_group_donuts(
     path : str
         Pairing path taken, or ``"n/a"`` for the modes that do not pair.
     """
+
     def _group(donuts, gid):
-        return _WfGroup(
-            donuts=donuts, group_id=gid, band=band, rtp=rtp_deg, alt=alt_rad
-        )
+        return _WfGroup(donuts=donuts, group_id=gid, band=band, rtp=rtp_deg, alt=alt_rad)
 
     if mode == "paired":
-        pairs, unmatched, path = _pair_donuts(
-            intra, extra, tol_frac, intra_source, extra_source
-        )
-        groups = [
-            _group([e, i], f"{det_name}_{e.donut_id}_{i.donut_id}") for e, i in pairs
-        ]
+        pairs, unmatched, path = _pair_donuts(intra, extra, tol_frac, intra_source, extra_source)
+        groups = [_group([e, i], f"{det_name}_{e.donut_id}_{i.donut_id}") for e, i in pairs]
         return groups, unmatched, path
 
     if mode == "unpaired":
-        groups = [
-            _group([d], f"{det_name}_{d.visit_id}_{d.donut_id}") for d in extra + intra
-        ]
+        groups = [_group([d], f"{det_name}_{d.visit_id}_{d.donut_id}") for d in extra + intra]
         return groups, [], "n/a"
 
     if mode == "full_detector":
         # Skip a side with no donuts: an empty group fits nothing but still
         # reports success=False, which would skew the caller's success tally.
-        groups = [
-            _group(side, f"{det_name}_{side[0].visit_id}")
-            for side in (extra, intra)
-            if side
-        ]
+        groups = [_group(side, f"{det_name}_{side[0].visit_id}") for side in (extra, intra) if side]
         return groups, [], "n/a"
 
     if mode == "full_detector_pair":
@@ -411,9 +404,7 @@ def _fam_detector_worker(args: tuple) -> dict:
             result = _cutout_one_exposure(
                 raw=raws[exp],
                 calibs=calibs,
-                refcat_load_result=(
-                    copy.deepcopy(load_result) if load_result is not None else None
-                ),
+                refcat_load_result=(copy.deepcopy(load_result) if load_result is not None else None),
                 det_name=det_name,
                 maxFitScatter=_CALIB_STORE["maxFitScatter"],
                 astromRefFilter=_CALIB_STORE["astromRefFilter"],
@@ -455,9 +446,7 @@ def _fam_detector_worker(args: tuple) -> dict:
                 d.defocal_offsets = offsets
                 if intrinsic_calib is not None:
                     d.intrinsic_zk = np.squeeze(
-                        intrinsic_calib.getIntrinsicZernikes(
-                            np.degrees(d.thx_ccs), np.degrees(d.thy_ccs)
-                        )
+                        intrinsic_calib.getIntrinsicZernikes(np.degrees(d.thx_ccs), np.degrees(d.thy_ccs))
                     )
                 else:
                     d.intrinsic_zk = None

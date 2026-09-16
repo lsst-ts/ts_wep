@@ -100,9 +100,9 @@ def transform_eb(
             raise ValueError(f"zk must be 2D [nrow, n_noll]; got {zk_val.shape}")
 
         pairs, _ = build_noll_pairs(zk_val.shape[1] - 1)
-        out = zk_val.copy()          # m==0 slots pass through, incl. NaNs
+        out = zk_val.copy()  # m==0 slots pass through, incl. NaNs
 
-        for (j_cos, j_sin, _, m_abs) in pairs:
+        for j_cos, j_sin, _, m_abs in pairs:
             c_cos = zk_val[:, j_cos]
             c_sin = zk_val[:, j_sin]
             a = m_abs * phi
@@ -205,8 +205,7 @@ def _encode_nearby(entries):
 
 
 def _defocal_offsets(donut) -> np.ndarray:
-    """Return one donut's optic z shifts as a length-3 array of meters.
-    """
+    """Return one donut's optic z shifts as a length-3 array of meters."""
     offsets = donut.defocal_offsets
     if offsets is None:
         return np.full(len(_OFFSET_OPTICS), np.nan, dtype=float)
@@ -413,9 +412,7 @@ def build_donut_catalog(
     for r in results:
         det_key = f"{r['det_name']}_{r.get('visit_id', visit_id)}"
         det_meta[det_key] = {
-            "astrom_scatter": (
-                r["scatter_arcsec"] if r["scatter_arcsec"] is not None else np.nan
-            ) * u.arcsec,
+            "astrom_scatter": (r["scatter_arcsec"] if r["scatter_arcsec"] is not None else np.nan) * u.arcsec,
             "wcs_refit_error": r["wcs_refit_error"],
             "cat_select_error": r["cat_select_error"],
             # Where this detector's donut ids came from. "refcat" ids are refcat
@@ -433,10 +430,7 @@ def build_donut_catalog(
             # full-array mode, "snr_rank" in corner mode, "n/a" in the modes that
             # do not pair.
             "pair_path": r["pair_path"],
-            **{
-                key: r.get(key, np.nan) * u.s
-                for key in _CUTOUT_STAGE_KEYS.values()
-            },
+            **{key: r.get(key, np.nan) * u.s for key in _CUTOUT_STAGE_KEYS.values()},
         }
 
     # Collect every donut exactly once, tagged with whether it passed
@@ -454,11 +448,7 @@ def build_donut_catalog(
     _seen = set()
     for d, candidate in (
         [(d, True) for d in donuts]
-        + [
-            (d, False)
-            for r in results
-            for d in r.get("rejected_catalog", [])
-        ]
+        + [(d, False) for r in results for d in r.get("rejected_catalog", [])]
         + [(d, True) for d in unmatched_donuts]
     ):
         k = _key(d)
@@ -490,9 +480,7 @@ def build_donut_catalog(
         # them -- take them off the donut rather than inheriting `_NULL_WF`'s
         # all-NaN. Donuts whose intrinsic calib was missing have
         # `intrinsic_zk is None` and get zeros, as an unsupplied index does.
-        zk_int_rows.append(
-            wd.zk_intrinsic if wd is not _NULL_WF else _dense_intrinsic(d)
-        )
+        zk_int_rows.append(wd.zk_intrinsic if wd is not _NULL_WF else _dense_intrinsic(d))
 
         # Image columns are skipped entirely when not saving, so we do not pay
         # for float64 copies of columns that are about to be discarded.
@@ -531,7 +519,7 @@ def build_donut_catalog(
             "det_name": d.det_name,
             "donut_id": sid,
             "band": d.band,
-            "candidate": bool(candidate), # Passed every selection/quality cut.
+            "candidate": bool(candidate),  # Passed every selection/quality cut.
             # --- geometry ---
             "x_det": d.x_det * u.pix,
             "y_det": d.y_det * u.pix,
@@ -590,11 +578,7 @@ def build_donut_catalog(
             # Zernikes are attached after construction.
             # --- embedded images, both optional ---
             **({"stamp": stamp} if options.save_stamps else {}),
-            **(
-                {"wf_img": wf_img, "model_img": model_img}
-                if options.save_wf_images
-                else {}
-            ),
+            **({"wf_img": wf_img, "model_img": model_img} if options.save_wf_images else {}),
         }
         rows.append(row)
 
@@ -614,7 +598,8 @@ def build_donut_catalog(
     # to strip units from arbitrary angle Quantities.
     dev_eb, intrinsic_eb = transform_eb(
         [table["zk_deviation_ccs"], table["zk_intrinsic_ccs"]],
-        table["thx_ccs"].to_value(u.rad), table["thy_ccs"].to_value(u.rad)
+        table["thx_ccs"].to_value(u.rad),
+        table["thy_ccs"].to_value(u.rad),
     )
     table["zk_deviation_eb"] = dev_eb
     table["zk_intrinsic_eb"] = intrinsic_eb
@@ -641,9 +626,7 @@ def build_donut_catalog(
     table.meta["run_elapsed"] = run_elapsed * u.s
     table.meta["refcat_elapsed"] = refcat_elapsed * u.s
     table.meta["butler_elapsed"] = butler_elapsed * u.s
-    table.meta["butler_times"] = {
-        key: value * u.s for key, value in (butler_times or {}).items()
-    }
+    table.meta["butler_times"] = {key: value * u.s for key, value in (butler_times or {}).items()}
     table.meta["cutout_elapsed"] = cutout_elapsed * u.s
     table.meta["danish_elapsed"] = danish_elapsed * u.s
     table.meta["photo_filter_name"] = photo_filter_name

@@ -198,9 +198,7 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # runs from Task.__init__, so the raise happens at construction rather
         # than in selectSources.
         self.config.sourceLimit = 0
-        with self.assertRaisesRegex(
-            FieldValidationError, "sourceLimit must be a positive integer"
-        ):
+        with self.assertRaisesRegex(FieldValidationError, "sourceLimit must be a positive integer"):
             DonutSourceSelectorTask(config=self.config, name="Test Task")
 
         # Test that setting sourceLimit returns all selected sources
