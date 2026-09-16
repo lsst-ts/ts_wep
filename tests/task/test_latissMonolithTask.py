@@ -81,6 +81,9 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         self.assertEqual(list(self.config.estimateZernikes.nollIndices), NOLL_INDICES)
         # The fit is the stock Danish task, not a private reimplementation.
         self.assertIs(self.config.estimateZernikes.target, EstimateZernikesDanishTask)
+        # Jacobian scaling only: it makes the fit reproducible across numpy
+        # versions; the LSSTCam pipelines' loose tolerances would stall it.
+        self.assertEqual(dict(self.config.estimateZernikes.lstsqKwargs), {"x_scale": "jac"})
 
     def testPeakNormalize(self) -> None:
         """Only wep_im is rescaled, to peak 1; a flat stamp is an error."""
@@ -151,16 +154,17 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         self.assertEqual(self.config.pairer.overrideSeparation, -0.8)
 
     def testConnections(self) -> None:
-        """Dimensions must be (instrument, detector, day_obs), not visit.
+        """One quantum per pair, keyed on the extra-focal visit.
 
-        The task consumes two exposures and pairs them internally, so the
-        quantum cannot be keyed on a single visit.
+        The intra-focal raw is attached at graph-build time by
+        adjust_all_quanta, so the quantum can be visit-keyed even though it
+        consumes two exposures. That is what makes the _log/_metadata
+        provenance datasets per pair: rapid analysis reuses one output run
+        for a whole night, and a per-night or per-run quantum would make the
+        second pair collide on them.
         """
         connections = LatissMonolithTaskConnections(config=self.config)
-        # day_obs is the temporal dimension that lets the graph builder pick
-        # the night's calibrations; without one the lookup raises on multiple
-        # validity ranges.
-        self.assertEqual(set(connections.dimensions), {"instrument", "detector", "day_obs"})
+        self.assertEqual(set(connections.dimensions), {"instrument", "visit", "detector"})
         self.assertEqual(set(connections.inputs), {"raws"})
         # The full calibration set BestEffortIsr passes on the summit.
         # `defects` is the load-bearing one: without it the LATISS bad column
@@ -171,6 +175,11 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
             {"camera", "bias", "dark", "flat", "defects", "linearizer", "crosstalk", "ptc"},
         )
         self.assertEqual(set(connections.outputs), {"zernikes", "donutStampsExtra", "donutStampsIntra"})
+        # One pair per quantum, so single outputs; the raws input is the only
+        # multiple one (the pair's two exposures).
+        for name in ("zernikes", "donutStampsExtra", "donutStampsIntra"):
+            self.assertFalse(getattr(connections, name).multiple, name)
+        self.assertTrue(connections.raws.multiple)
         # No intrinsicZernikes connection: LATISS has no such calibration.
         self.assertFalse(hasattr(connections, "intrinsicZernikes"))
         # And no refcat/astrometry: a LATISS exposure has one bright donut.
