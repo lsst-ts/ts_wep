@@ -32,7 +32,7 @@ from lsst.afw.image import VisitInfo
 from lsst.daf.base import DateTime
 from lsst.daf.butler.formatters.parquet import arrow_to_astropy, astropy_to_arrow
 from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
-from lsst.ts.wep.blitz.dataStructures import Donut, WfResult
+from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
 from lsst.ts.wep.blitz.donutBlitzCornerTask import (
     DonutBlitzCornerTask,
     DonutBlitzCornerTaskConfig,
@@ -205,7 +205,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         wf_results = [
             {
                 "donuts": [
-                    WfResult(
+                    WfDonutResult(
                         donut_id=7,
                         det_name="R00_SW0",
                         visit_id=visit,
@@ -265,10 +265,11 @@ class TestBuildDonutCatalog(unittest.TestCase):
     def testGroupIdIsCarriedAndGroupColumnsAreReplicated(self) -> None:
         """``group_id`` labels the fit; ``group_*`` repeat across its rows.
 
-        The label comes straight off the `WfResult`, so a consumer can collapse
-        the replicated group-level values to one measurement per fit -- which
-        an array index into a list that no longer exists could not support.  A
-        donut no fit claimed gets the empty string rather than a sentinel int.
+        The label comes straight off the `WfDonutResult`, so a consumer can
+        collapse the replicated group-level values to one measurement per fit
+        -- which an array index into a list that no longer exists could not
+        support.  A donut no fit claimed gets the empty string rather than a
+        sentinel int.
         """
         paired = [_donut(donut_id=1), _donut(donut_id=2)]
         surplus = _donut(donut_id=3)
@@ -276,7 +277,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         wf_results = [
             {
                 "donuts": [
-                    WfResult(
+                    WfDonutResult(
                         donut_id=d.donut_id,
                         det_name=d.det_name,
                         visit_id=d.visit_id,
@@ -448,7 +449,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
 
         Intrinsic Zernikes are a function of field position, not of the fit,
         so a row no fit consumed still has them -- taking them from
-        `_NULL_WF` made them all-NaN even where the calibration was known.
+        `_NULL_WF_DONUT` made them all-NaN even where the calibration was
+        known.
         Deviations *are* a measurement, so they stay NaN.
         """
         d = _donut(donut_id=1)
