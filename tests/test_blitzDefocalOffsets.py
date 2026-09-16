@@ -43,14 +43,13 @@ from lsst.ts.wep.blitz.donutBlitzMonolithTask import (
     _INTRA_FOCAL_OFFSETS,
 )
 from lsst.ts.wep.blitz.utils import (
-    CORNER_DEFOCAL_BY_DET_NAME,
-    CORNER_DET_NAMES,
     _CALIB_STORE,
     _EXTRA_FOCAL_DET_IDS,
     _INSTRUMENT,
     _INTRA_FOCAL_DET_IDS,
-    _OFFSET_OPTICS,
     _ZK_JMAX,
+    CORNER_DEFOCAL_BY_DET_NAME,
+    CORNER_DET_NAMES,
     _defocal_radial_scale,
     _telescope_for_offsets,
 )
@@ -184,8 +183,12 @@ class TestDefocalOffsets(unittest.TestCase):
         def traced_x(offsets, theta_deg):
             telescope = _telescope_for_offsets(offsets)
             ray = batoid.RayVector.fromStop(
-                0.0, 0.0, optic=telescope, wavelength=wavelength,
-                theta_x=np.deg2rad(theta_deg), theta_y=0.0,
+                0.0,
+                0.0,
+                optic=telescope,
+                wavelength=wavelength,
+                theta_x=np.deg2rad(theta_deg),
+                theta_y=0.0,
             )
             telescope.trace(ray)
             return float(ray.x[0])
@@ -193,9 +196,7 @@ class TestDefocalOffsets(unittest.TestCase):
         for theta in (0.5, 1.0, 1.725):
             traced_px = abs(traced_x(extra, theta) - traced_x(intra, theta)) / px
             r_m = _INSTRUMENT.focalLength * np.tan(np.deg2rad(theta))
-            scaled_px = abs(
-                r_m * _defocal_radial_scale(extra) - r_m * _defocal_radial_scale(intra)
-            ) / px
+            scaled_px = abs(r_m * _defocal_radial_scale(extra) - r_m * _defocal_radial_scale(intra)) / px
             self.assertAlmostEqual(
                 traced_px,
                 scaled_px,

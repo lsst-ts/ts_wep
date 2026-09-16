@@ -47,10 +47,10 @@ from .utils import (
     _CALIB_STORE,
     _INSTRUMENT,
     _ZK_JMAX,
+    CORNER_PAIRS,
     _bin_stamp_odd,
     _dense_intrinsic,
     _telescope_for_offsets,
-    CORNER_PAIRS,
 )
 
 # DZMultiDonutModel's field_radius has no effect on our fit (we don't model any
@@ -244,7 +244,11 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
                 # Qualified by corner: under blind detection the ids are per-detector
                 # 1..N slots, so every corner would otherwise log as group=1_1, 2_2, ...
                 gid = f"{corner}_{extra.donut_id}_{intra.donut_id}"
-                groups.append(_WfGroup(donuts=[extra, intra], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+                groups.append(
+                    _WfGroup(
+                        donuts=[extra, intra], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad
+                    )
+                )
             n_pairs = min(len(extra_donuts), len(intra_donuts))
             unmatched_donuts.extend(extra_donuts[n_pairs:])
             unmatched_donuts.extend(intra_donuts[n_pairs:])
@@ -252,14 +256,18 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
         for det_donuts in results_by_det.values():
             for d in det_donuts:
                 gid = f"{d.det_name}_{d.donut_id}"
-                groups.append(_WfGroup(donuts=[d], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+                groups.append(
+                    _WfGroup(donuts=[d], group_id=gid, band=band, rtp=rtp_deg, alt=boresight_alt_rad)
+                )
     elif mode == "full_detector":
         # Skip detectors with no donuts: an empty group fits nothing but still
         # reports success=False, which would skew the caller's success tally.
         for det_name, det_donuts in results_by_det.items():
             if not det_donuts:
                 continue
-            groups.append(_WfGroup(donuts=det_donuts, group_id=det_name, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+            groups.append(
+                _WfGroup(donuts=det_donuts, group_id=det_name, band=band, rtp=rtp_deg, alt=boresight_alt_rad)
+            )
     elif mode == "full_corner":
         # A corner contributes whichever of its two detectors have donuts; one
         # defocal side alone is still fit. Corners with neither are skipped.
@@ -267,10 +275,13 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
             all_donuts = results_by_det.get(sw0, []) + results_by_det.get(sw1, [])
             if not all_donuts:
                 continue
-            groups.append(_WfGroup(donuts=all_donuts, group_id=corner, band=band, rtp=rtp_deg, alt=boresight_alt_rad))
+            groups.append(
+                _WfGroup(donuts=all_donuts, group_id=corner, band=band, rtp=rtp_deg, alt=boresight_alt_rad)
+            )
     else:
         raise ValueError(f"Unknown WF mode {mode!r}")
     return groups, unmatched_donuts, path
+
 
 # Module-level logger for the worker functions below. They are module-level
 # (not methods) so the fork-based pools can pickle them by name, which means
@@ -447,7 +458,8 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
         reserved = {"fun", "x0", "jac", "args", "bounds"} & set(self.lstsqKwargs)
         if reserved:
             raise pexConfig.FieldValidationError(
-                self.__class__.lstsqKwargs, self,
+                self.__class__.lstsqKwargs,
+                self,
                 f"{sorted(reserved)} are supplied by the task and must not be set "
                 "in lstsqKwargs; passing them would duplicate a keyword argument "
                 "to scipy.optimize.least_squares",
@@ -455,7 +467,8 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
 
         if self.jacobianFormat != "dense" and self.lstsqKwargs.get("tr_solver") == "exact":
             raise pexConfig.FieldValidationError(
-                self.__class__.jacobianFormat, self,
+                self.__class__.jacobianFormat,
+                self,
                 f"jacobianFormat={self.jacobianFormat!r} needs an iterative "
                 "tr_solver, but lstsqKwargs sets tr_solver='exact'. Use "
                 "'lsmr', or omit tr_solver and scipy will choose lsmr for a "
@@ -466,7 +479,8 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
         out_of_range = sorted(j for j in indices if j < 4 or j > _ZK_JMAX)
         if out_of_range:
             raise pexConfig.FieldValidationError(
-                self.__class__.nollIndices, self,
+                self.__class__.nollIndices,
+                self,
                 f"nollIndices must lie in 4..{_ZK_JMAX} (the dense Zernike arrays "
                 f"reported by the catalog are sized to {_ZK_JMAX}); "
                 f"got {out_of_range}",
@@ -485,7 +499,8 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
                 missing.append((j, partner))
         if missing:
             raise pexConfig.FieldValidationError(
-                self.__class__.nollIndices, self,
+                self.__class__.nollIndices,
+                self,
                 "nollIndices must contain both halves of every +/-m Zernike pair so "
                 "the coefficients can be rotated between coordinate frames; missing "
                 + ", ".join(f"{p} (partner of {j})" for j, p in missing),
@@ -517,8 +532,7 @@ class _LstsqFitResult:
     def __post_init__(self):
         if not self.outcome or self.outcome not in _FIT_OUTCOMES:
             raise ValueError(
-                "outcome must be one of "
-                f"{tuple(o for o in _FIT_OUTCOMES if o)}; got {self.outcome!r}"
+                f"outcome must be one of {tuple(o for o in _FIT_OUTCOMES if o)}; got {self.outcome!r}"
             )
 
 
@@ -623,9 +637,7 @@ class WavefrontFittingTask(pipeBase.Task):
         if self.config.logPerGroup:
             self.log.info("WF %s setup=%.2fs", label, _setup_elapsed)
 
-        fit_result = self._run_lstsq_fit(
-            model, x0, bounds, imgs, sky_lvl, timeout, label
-        )
+        fit_result = self._run_lstsq_fit(model, x0, bounds, imgs, sky_lvl, timeout, label)
         zk_dev_dense = _dense_dev(fit_result.zk_dev, nollIndices)
 
         donuts_out = []

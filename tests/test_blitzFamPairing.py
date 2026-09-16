@@ -38,11 +38,9 @@ import batoid
 import numpy as np
 
 from lsst.pipe.base import NoWorkFound, UnprocessableDataError
-
 from lsst.ts.wep.blitz import famPipeline
-
 from lsst.ts.wep.blitz.dataStructures import Donut
-from lsst.ts.wep.blitz.donutBlitzFamTask import DonutBlitzFamTaskConfig, DonutBlitzFamTask
+from lsst.ts.wep.blitz.donutBlitzFamTask import DonutBlitzFamTask, DonutBlitzFamTaskConfig
 from lsst.ts.wep.blitz.famPipeline import (
     _RAD_PER_PIXEL,
     _fam_group_donuts,
@@ -186,9 +184,7 @@ class TestPairDonuts(FamPairingTestCase):
             (ix, iy), (ex, ey) = _defocused_angles(thx, thy)
             intra.append(_donut(k + 1, 1, _INTRA_OFFSETS, thx=ix, thy=iy))
             extra.append(_donut(2 - k, 2, _EXTRA_OFFSETS, thx=ex, thy=ey))
-        pairs, unmatched, path = _pair_donuts(
-            intra, extra, 0.25, "blind_selected", "blind_selected"
-        )
+        pairs, unmatched, path = _pair_donuts(intra, extra, 0.25, "blind_selected", "blind_selected")
         self.assertEqual(path, "spatial")
         self.assertEqual(unmatched, [])
         self.assertEqual(len(pairs), 2)

@@ -205,10 +205,7 @@ class DonutBlitzMonolithTaskConfig(
     )
     blindDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=BlindDetect,
-        doc=(
-            "Blind donut detection subtask run on each corner wavefront sensor "
-            "exposure."
-        ),
+        doc=("Blind donut detection subtask run on each corner wavefront sensor exposure."),
     )
     astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=AstrometryTask,
@@ -323,8 +320,7 @@ class DonutBlitzMonolithTaskConfig(
             "paired": "Pair donuts from SW0/SW1 by SNR rank and dispatch as intra/extra pairs.",
             "unpaired": "Dispatch individual donuts independently.",
             "full_corner": (
-                "Dispatch all donuts from a corner (SW0+SW1, whichever are present) "
-                "as one work unit."
+                "Dispatch all donuts from a corner (SW0+SW1, whichever are present) as one work unit."
             ),
             "full_detector": "Dispatch all donuts on each detector as one work unit (8 fits per visit).",
         },
@@ -579,9 +575,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # `detNames` -- not CORNER_DET_NAMES -- drives everything downstream.
         unexpected = rawByName.keys() - CORNER_DET_NAMES
         if unexpected:
-            raise RuntimeError(
-                f"Non-corner detector raws supplied: {sorted(unexpected)}"
-            )
+            raise RuntimeError(f"Non-corner detector raws supplied: {sorted(unexpected)}")
         if not rawByName:
             raise RuntimeError("No corner detector raws supplied.")
         detNames = sorted(rawByName)
@@ -674,7 +668,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         _CALIB_STORE["det_refcats"] = det_refcats
         for name in detNames:
             missing_calib = [
-                k for k, d in [
+                k
+                for k, d in [
                     ("ptc", ptcByName),
                     ("flat", flatByName),
                     ("linearizer", linearizerByName),
@@ -683,9 +678,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 if name not in d
             ]
             if missing_calib:
-                raise RuntimeError(
-                    f"Missing calibration(s) for detector {name}: {missing_calib}"
-                )
+                raise RuntimeError(f"Missing calibration(s) for detector {name}: {missing_calib}")
             _CALIB_STORE[name] = dict(
                 raw=rawByName[name],
                 ptc=ptcByName[name],
@@ -800,9 +793,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         for r in results:
             for d in r["catalog"] + r.get("rejected_catalog", []):
                 d.defocal_offsets = (
-                    _INTRA_FOCAL_OFFSETS
-                    if d.det_id in _INTRA_FOCAL_DET_IDS
-                    else _EXTRA_FOCAL_OFFSETS
+                    _INTRA_FOCAL_OFFSETS if d.det_id in _INTRA_FOCAL_DET_IDS else _EXTRA_FOCAL_OFFSETS
                 )
 
         # Annotate every donut with realized intrinsic Zernikes, rejected ones
@@ -910,11 +901,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             self.plotTask.run(catalog)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
-        return pipeBase.Struct(
-            donuts=donuts,
-            wf_results=wf_results,
-            blitzResults=Table(catalog)
-        )
+        return pipeBase.Struct(donuts=donuts, wf_results=wf_results, blitzResults=Table(catalog))
 
     def _catalogOptions(self) -> CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.

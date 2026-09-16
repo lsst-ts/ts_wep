@@ -43,11 +43,11 @@ from lsst.pipe.base import (
 )
 
 from .utils import (
+    _CUTOUT_STAGE_KEYS,
+    _MAX_NEARBY,
     CORNER_BY_DET_NAME,
     CORNER_DEFOCAL_BY_DET_NAME,
     CORNER_PAIRS,
-    _CUTOUT_STAGE_KEYS,
-    _MAX_NEARBY,
     _resolveColorLogEnabled,
 )
 
@@ -351,9 +351,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             # Detector orientation is per-detector, so it lives in det_meta rather
             # than on every row. Keyed by the row's own visit, not the table's:
             # full-array mode has one entry per detector per side of focus.
-            nq = det_meta.get(
-                f"{row['det_name']}_{row['visit_id']}", {}
-            ).get("n_quarter", 0) % 4
+            nq = det_meta.get(f"{row['det_name']}_{row['visit_id']}", {}).get("n_quarter", 0) % 4
 
             # The stamp was cut on integer bounds around the rounded centroid, so
             # display coordinate (0, 0) is that rounded position, while the
@@ -492,8 +490,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             if sm.get("cat_select_error"):
                 lines.append(f"CAT ERR: {sm['cat_select_error'][:40]}")
             ax_stats.text(
-                0.05, 0.95, "\n".join(lines), transform=ax_stats.transAxes,
-                fontsize=6, va="top", family="monospace",
+                0.05,
+                0.95,
+                "\n".join(lines),
+                transform=ax_stats.transAxes,
+                fontsize=6,
+                va="top",
+                family="monospace",
             )
 
             for col_idx in range(STAMPS_PER_ROW):
@@ -519,18 +522,33 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         legend_handles = [
             Line2D(
-                [0], [0], marker="o", color="w", markerfacecolor="none",
-                markeredgecolor=_COLOR_PHOTO_REFCAT, markersize=6,
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor="none",
+                markeredgecolor=_COLOR_PHOTO_REFCAT,
+                markersize=6,
                 label=f"photo refcat ({photo_filter_label})",
             ),
             Line2D(
-                [0], [0], marker="+", color=_COLOR_ASTROM_REFCAT, markersize=6, linestyle="none",
+                [0],
+                [0],
+                marker="+",
+                color=_COLOR_ASTROM_REFCAT,
+                markersize=6,
+                linestyle="none",
                 label=f"astrom refcat ({astrom_filter_label})",
             ),
         ]
         ax_legend.legend(
-            handles=legend_handles, loc="center", ncol=2, fontsize=7,
-            frameon=False, handletextpad=0.5, columnspacing=2.0,
+            handles=legend_handles,
+            loc="center",
+            ncol=2,
+            fontsize=7,
+            frameon=False,
+            handletextpad=0.5,
+            columnspacing=2.0,
         )
 
         fname = f"donut_diag_{visit_id}.png"
@@ -561,9 +579,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         visit_id = meta["ref_visit_id"]
         refcat_elapsed = _metaValue(meta, "refcat_elapsed", u.s)
         butler_elapsed = _metaValue(meta, "butler_elapsed", u.s)
-        butler_times = {
-            key: value.to_value(u.s) for key, value in meta["butler_times"].items()
-        }
+        butler_times = {key: value.to_value(u.s) for key, value in meta["butler_times"].items()}
         cutout_elapsed = _metaValue(meta, "cutout_elapsed", u.s)
         danish_elapsed = _metaValue(meta, "danish_elapsed", u.s)
         wf_mode = meta["wf_mode"]
@@ -584,9 +600,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         for group_id, rows in sorted(groups.items()):
             first = rows[0]
             # Determine if this group has a real model (any non-NaN model_img).
-            has_model = any(
-                not np.all(np.isnan(np.array(r["model_img"]))) for r in rows
-            )
+            has_model = any(not np.all(np.isnan(np.array(r["model_img"]))) for r in rows)
             if not has_model:
                 continue
             det_names = list(dict.fromkeys(r["det_name"] for r in rows))
@@ -605,27 +619,31 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             donuts_out = []
             for r in rows:
                 model_arr = np.array(r["model_img"])
-                donuts_out.append({
-                    "donut_id": r["donut_id"],
-                    "det_name": r["det_name"],
-                    # Layout only (intra left, extra right); see _pair_up below.
-                    "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(r["det_name"]), ""),
-                    "img": np.array(r["wf_img"]),
-                    "model_img": model_arr if not np.all(np.isnan(model_arr)) else None,
-                    "blend_frac": r["blend_frac"],
-                    "elapsed": elapsed,
-                    "nfev": nfev,
-                    "fwhm": fwhm,
+                donuts_out.append(
+                    {
+                        "donut_id": r["donut_id"],
+                        "det_name": r["det_name"],
+                        # Layout only (intra left, extra right); see _pair_up below.
+                        "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(r["det_name"]), ""),
+                        "img": np.array(r["wf_img"]),
+                        "model_img": model_arr if not np.all(np.isnan(model_arr)) else None,
+                        "blend_frac": r["blend_frac"],
+                        "elapsed": elapsed,
+                        "nfev": nfev,
+                        "fwhm": fwhm,
+                        "success": success,
+                    }
+                )
+            plottable.append(
+                {
+                    "mode": wf_mode,
+                    "det_names": det_names,
                     "success": success,
-                })
-            plottable.append({
-                "mode": wf_mode,
-                "det_names": det_names,
-                "success": success,
-                "fit_info": {"elapsed": elapsed, "nfev": nfev, "fwhm": fwhm},
-                "donuts": donuts_out,
-                "zk_dev": zk_dev,
-            })
+                    "fit_info": {"elapsed": elapsed, "nfev": nfev, "fwhm": fwhm},
+                    "donuts": donuts_out,
+                    "zk_dev": zk_dev,
+                }
+            )
 
         # Candidate donuts that no fit consumed (paired-mode surplus: no partner
         # on the other detector, so ``group_id`` is empty). They
@@ -638,23 +656,29 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             img = np.array(row["wf_img"])
             if np.all(np.isnan(img)):
                 continue
-            unfitted.append({
-                "mode": wf_mode,
-                "det_names": [row["det_name"]],
-                "success": False,
-                "fit_info": {
-                    "elapsed": float("nan"), "nfev": 0, "fwhm": float("nan"),
-                },
-                "donuts": [{
-                    "donut_id": row["donut_id"],
-                    "det_name": row["det_name"],
-                    "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(row["det_name"]), ""),
-                    "img": img,
-                    "model_img": None,
-                    "blend_frac": row["blend_frac"],
-                }],
-                "zk_dev": _NO_ZK,
-            })
+            unfitted.append(
+                {
+                    "mode": wf_mode,
+                    "det_names": [row["det_name"]],
+                    "success": False,
+                    "fit_info": {
+                        "elapsed": float("nan"),
+                        "nfev": 0,
+                        "fwhm": float("nan"),
+                    },
+                    "donuts": [
+                        {
+                            "donut_id": row["donut_id"],
+                            "det_name": row["det_name"],
+                            "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(row["det_name"]), ""),
+                            "img": img,
+                            "model_img": None,
+                            "blend_frac": row["blend_frac"],
+                        }
+                    ],
+                    "zk_dev": _NO_ZK,
+                }
+            )
 
         if not plottable and not unfitted:
             self.log.info("No WF results with model images; skipping WF diagnostic plot.")
@@ -687,24 +711,35 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         _cmap_bwr = LinearSegmentedColormap.from_list(
             "bwr_donut",
-            list(zip(
-                [0.0, 0.45, 0.5, 1.0],
-                [_hex_to_rgb(h) for h in (
-                    _COLOR_CMAP_NEG, _COLOR_CMAP_MID, "#FFFFFF", _COLOR_CMAP_POS,
-                )],
-            )),
+            list(
+                zip(
+                    [0.0, 0.45, 0.5, 1.0],
+                    [
+                        _hex_to_rgb(h)
+                        for h in (
+                            _COLOR_CMAP_NEG,
+                            _COLOR_CMAP_MID,
+                            "#FFFFFF",
+                            _COLOR_CMAP_POS,
+                        )
+                    ],
+                )
+            ),
         )
         _cmap_bwr_sym = LinearSegmentedColormap.from_list(
             "bwr_donut_sym",
-            list(zip(
-                [0.0, 0.5, 1.0],
-                [_hex_to_rgb(h) for h in (_COLOR_CMAP_NEG, "#FFFFFF", _COLOR_CMAP_POS)],
-            )),
+            list(
+                zip(
+                    [0.0, 0.5, 1.0],
+                    [_hex_to_rgb(h) for h in (_COLOR_CMAP_NEG, "#FFFFFF", _COLOR_CMAP_POS)],
+                )
+            ),
         )
 
         def _draw_stamp(ax, img, cmap, vmin, vmax, label=""):
-            ax.imshow(img, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax,
-                      interpolation="nearest", aspect="equal")
+            ax.imshow(
+                img, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax, interpolation="nearest", aspect="equal"
+            )
             ax.set_xticks([])
             ax.set_yticks([])
             if label:
@@ -722,32 +757,36 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             that were not fitted plot as zero rather than dropping out.
             """
             bar_noll = [j for j in range(ZK_MIN, ZK_MAX + 1)]
-            vals = [
-                zk_dev[j] if j < len(zk_dev) and np.isfinite(zk_dev[j]) else 0.0
-                for j in bar_noll
-            ]
+            vals = [zk_dev[j] if j < len(zk_dev) and np.isfinite(zk_dev[j]) else 0.0 for j in bar_noll]
             ax.bar(bar_noll, vals, color="k", width=0.8)
             ax.axhline(0, color="k", linewidth=0.4)
             ax.set_ylim(-1.0, 1.0)
             ax.set_xlim(ZK_MIN - 0.5, ZK_MAX + 0.5)
             ax.set_xticks([])
             ax.set_yticks([])
-            for j in [4, 11, 22]:   # spherical (m=0)
+            for j in [4, 11, 22]:  # spherical (m=0)
                 ax.axvspan(j - 0.5, j + 0.5, color="#000000", alpha=0.15, ec="none")
-            for j in [7, 16]:       # coma (m=1)
+            for j in [7, 16]:  # coma (m=1)
                 ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_COMA, alpha=0.35, ec="none")
-            for j in [5, 12, 23]:   # astigmatism (m=2)
+            for j in [5, 12, 23]:  # astigmatism (m=2)
                 ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_ASTIGMATISM, alpha=0.25, ec="none")
-            for j in [9, 18]:       # trefoil (m=3)
+            for j in [9, 18]:  # trefoil (m=3)
                 ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_TREFOIL, alpha=0.25, ec="none")
-            for j in [14, 25]:      # quadrafoil (m=4)
+            for j in [14, 25]:  # quadrafoil (m=4)
                 ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_QUADRAFOIL, alpha=0.25, ec="none")
-            ax.axvspan(19.5, 21.5, color=_COLOR_PENTAFOIL, alpha=0.25, ec="none")   # pentafoil (m=5)
-            ax.axvspan(26.5, 28.5, color=_COLOR_HEXAFOIL, alpha=0.25, ec="none")   # hexafoil (m=6)
+            ax.axvspan(19.5, 21.5, color=_COLOR_PENTAFOIL, alpha=0.25, ec="none")  # pentafoil (m=5)
+            ax.axvspan(26.5, 28.5, color=_COLOR_HEXAFOIL, alpha=0.25, ec="none")  # hexafoil (m=6)
             if inset_label:
-                ax.text(0.03, 0.97, inset_label, transform=ax.transAxes, fontsize=4,
-                        va="top", ha="left",
-                        bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6))
+                ax.text(
+                    0.03,
+                    0.97,
+                    inset_label,
+                    transform=ax.transAxes,
+                    fontsize=4,
+                    va="top",
+                    ha="left",
+                    bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
+                )
 
         by_corner: dict[str, list] = {c: [] for c in _CORNERS}
         for r in plottable:
@@ -756,7 +795,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         unfitted_by_corner: dict[str, list] = {c: [] for c in _CORNERS}
         for r in unfitted:
             unfitted_by_corner[_corner_of(r)].append(r)
-
 
         def _explode(r):
             """Split a group record into one record per donut, sharing group fields."""
@@ -772,8 +810,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             intras = [r for r in records if r["donuts"][0].get("defocal") == "intra"]
             extras = [r for r in records if r["donuts"][0].get("defocal") == "extra"]
             return [
-                (intras[i] if i < len(intras) else None,
-                 extras[i] if i < len(extras) else None)
+                (intras[i] if i < len(intras) else None, extras[i] if i < len(extras) else None)
                 for i in range(max(len(intras), len(extras)))
             ]
 
@@ -787,9 +824,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 # These groups don't pair donuts, so flatten to one record per
                 # donut and pair for layout only. Exploding is a no-op for
                 # "unpaired" (one donut per group already).
-                fit_rows = _pair_up(
-                    [s for r in corner_results for s in _explode(r)]
-                )
+                fit_rows = _pair_up([s for r in corner_results for s in _explode(r)])
             # Surplus donuts have no partner by construction, so they lay out
             # positionally below the fitted rows, one side of each row blank.
             row_pairs[corner] = fit_rows + _pair_up(unfitted_by_corner[corner])
@@ -803,10 +838,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # makes plots for the same exposure blinkable across fitting modes.
         # Never fewer rows than any corner actually has, so a corner with more
         # fits than maxDonuts grows the layout rather than losing rows.
-        max_rows = max(
-            [meta["max_donuts"], 1]
-            + [len(v) for v in row_pairs.values()]
-        )
+        max_rows = max([meta["max_donuts"], 1] + [len(v) for v in row_pairs.values()])
         for corner, pairs in row_pairs.items():
             row_pairs[corner] = pairs + [(None, None)] * (max_rows - len(pairs))
 
@@ -815,16 +847,20 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         fig_h = 2 * max_rows * ROW_H + 0.4
 
         fig = Figure(figsize=(fig_w, fig_h))
-        outer = GridSpec(2, 2, figure=fig, hspace=HPAD, wspace=0.06,
-                         left=0.01, right=0.99, top=0.94, bottom=0.01)
+        outer = GridSpec(
+            2, 2, figure=fig, hspace=HPAD, wspace=0.06, left=0.01, right=0.99, top=0.94, bottom=0.01
+        )
         corner_pos = {"R00": (0, 0), "R40": (0, 1), "R04": (1, 0), "R44": (1, 1)}
 
         for corner in _CORNERS:
             pairs = row_pairs[corner]
             grow, gcol = corner_pos[corner]
             inner = GridSpecFromSubplotSpec(
-                max_rows, 8, subplot_spec=outer[grow, gcol],
-                hspace=0.0, wspace=0.0,
+                max_rows,
+                8,
+                subplot_spec=outer[grow, gcol],
+                hspace=0.0,
+                wspace=0.0,
                 width_ratios=[1, 1, 1, 2, 1, 1, 1, 2],
             )
             sw1 = _det_label(f"{corner}_SW1")
@@ -834,14 +870,16 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 if r is None:
                     return float("nan"), 0, False, float("nan")
                 fi = r.get("fit_info", {})
-                return (fi.get("elapsed", float("nan")), fi.get("nfev", 0),
-                        r.get("success", False), fi.get("fwhm", float("nan")))
+                return (
+                    fi.get("elapsed", float("nan")),
+                    fi.get("nfev", 0),
+                    r.get("success", False),
+                    fi.get("fwhm", float("nan")),
+                )
 
             for row_idx, (r_intra, r_extra) in enumerate(pairs):
                 if r_intra is not None:
-                    intra_rec = next(
-                        (d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"), None
-                    )
+                    intra_rec = next((d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"), None)
                     elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(r_intra)
                     zk_dev_i = r_intra.get("zk_dev", _NO_ZK)
                 else:
@@ -850,9 +888,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     zk_dev_i = _NO_ZK
 
                 if r_extra is not None:
-                    extra_rec = next(
-                        (d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"), None
-                    )
+                    extra_rec = next((d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"), None)
                     elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(r_extra)
                     zk_dev_e = r_extra.get("zk_dev", _NO_ZK)
                 else:
@@ -879,18 +915,21 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 intra_hdr = f"intra {sw1}" if row_idx == 0 else ""
                 extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
 
-                def _triplet_and_bar(col_start, data, model, det_hdr, label,
-                                     sid, fwhm, zk_dev, blend_frac_val=float("nan")):
+                def _triplet_and_bar(
+                    col_start, data, model, det_hdr, label, sid, fwhm, zk_dev, blend_frac_val=float("nan")
+                ):
                     if data is not None:
                         vmax = np.nanpercentile(np.abs(data), 99) or 1.0
                         has_model = model is not None
                         resid = (data - model) if has_model else None
                         vmax_r = (np.nanpercentile(np.abs(resid), 99) or 1.0) if has_model else 1.0
-                        for ci, (img, cmap, vmin, vmx) in enumerate([
-                            (data, _cmap_bwr, -vmax, vmax),
-                            (model if has_model else None, _cmap_bwr, -vmax, vmax),
-                            (resid, _cmap_bwr_sym, -vmax_r, vmax_r),
-                        ]):
+                        for ci, (img, cmap, vmin, vmx) in enumerate(
+                            [
+                                (data, _cmap_bwr, -vmax, vmax),
+                                (model if has_model else None, _cmap_bwr, -vmax, vmax),
+                                (resid, _cmap_bwr_sym, -vmax_r, vmax_r),
+                            ]
+                        ):
                             ax = fig.add_subplot(inner[row_idx, col_start + ci])
                             lbl = det_hdr if ci == 0 else ""
                             if img is None:
@@ -899,10 +938,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                                     ax.set_title(lbl, fontsize=5, pad=1)
                                 continue
                             _draw_stamp(ax, img, cmap, vmin, vmx, label=lbl)
-                            ann_kw = dict(transform=ax.transAxes, fontsize=4, color="k",
-                                         va="top", ha="left",
-                                         bbox=dict(boxstyle="square,pad=0.1",
-                                                   fc="white", ec="none", alpha=0.6))
+                            ann_kw = dict(
+                                transform=ax.transAxes,
+                                fontsize=4,
+                                color="k",
+                                va="top",
+                                ha="left",
+                                bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
+                            )
                             if ci == 0 and sid is not None:
                                 ax.text(0.02, 0.98, f"id={sid}", **ann_kw)
                             if ci == 1 and np.isfinite(fwhm):
@@ -921,16 +964,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                             if ci == 0 and det_hdr:
                                 ax.set_title(det_hdr, fontsize=5, pad=1)
 
-                _triplet_and_bar(0, intra_img, intra_mod, intra_hdr, intra_label,
-                                 intra_sid, fwhm_i, zk_dev_i, intra_blend)
-                _triplet_and_bar(4, extra_img, extra_mod, extra_hdr, extra_label,
-                                 extra_sid, fwhm_e, zk_dev_e, extra_blend)
+                _triplet_and_bar(
+                    0, intra_img, intra_mod, intra_hdr, intra_label, intra_sid, fwhm_i, zk_dev_i, intra_blend
+                )
+                _triplet_and_bar(
+                    4, extra_img, extra_mod, extra_hdr, extra_label, extra_sid, fwhm_e, zk_dev_e, extra_blend
+                )
 
         proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
         bt = butler_times or {}
         butler_line = (
-            "  ".join(f"{k}={v:.1f}s" for k, v in bt.items() if v > 0.0)
-            or f"total={butler_elapsed:.1f}s"
+            "  ".join(f"{k}={v:.1f}s" for k, v in bt.items() if v > 0.0) or f"total={butler_elapsed:.1f}s"
         )
         fig.suptitle(
             f"WF fits  visit={visit_id}  mode={wf_mode}\n"

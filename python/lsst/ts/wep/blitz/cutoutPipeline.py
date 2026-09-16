@@ -169,9 +169,7 @@ def _cutout_one_exposure(
     t2 = time.perf_counter()
     detect_diameter_task = _CALIB_STORE["detect_diameter_task"]
     donutDiameter = detect_diameter_task.run(postIsr).diameter
-    donutRadius = _resolveDonutRadius(
-        donutDiameter/ 2 if donutDiameter is not None else None
-    )
+    donutRadius = _resolveDonutRadius(donutDiameter / 2 if donutDiameter is not None else None)
 
     # --- blind detection ---
     t3 = time.perf_counter()
@@ -229,7 +227,7 @@ def _cutout_one_exposure(
             _colorize(
                 "Astrometry solve failed for %s; falling back to blind detections: %s",
                 _ANSI_BOLD,
-                _ANSI_YELLOW
+                _ANSI_YELLOW,
             ),
             det_name,
             wcs_err,
@@ -251,9 +249,12 @@ def _cutout_one_exposure(
             # astropy
             keys = [
                 "id",
-                "coord_ra", "coord_dec",
-                "centroid_x", "centroid_y",
-                f"{photoRefFilter}_flux", f"{astromRefFilter}_flux"
+                "coord_ra",
+                "coord_dec",
+                "centroid_x",
+                "centroid_y",
+                f"{photoRefFilter}_flux",
+                f"{astromRefFilter}_flux",
             ]
             refcat = QTable({k: np.array(refcat[k]) for k in keys})
             # The refcat source id is the donut id from here on: it is what
@@ -292,8 +293,7 @@ def _cutout_one_exposure(
         except Exception as exc:
             cat_err = cat_err or str(exc)
             _log.warning(
-                "Donut selector failed on blind detections for %s; "
-                "dropping detector's donuts: %s",
+                "Donut selector failed on blind detections for %s; dropping detector's donuts: %s",
                 det_name,
                 exc,
             )
@@ -312,12 +312,7 @@ def _cutout_one_exposure(
         donutRadius=donutRadius,
     ).measurements
     cut_stamps_task = _CALIB_STORE["cut_stamps_task"]
-    cut_result = cut_stamps_task.run(
-        postIsr,
-        candidates,
-        refcat,
-        donutRadius=donutRadius
-    )
+    cut_result = cut_stamps_task.run(postIsr, candidates, refcat, donutRadius=donutRadius)
 
     t7 = time.perf_counter()
 

@@ -90,12 +90,12 @@ class Donut:
 # mutually exclusive paths through `WavefrontFittingTask._run_lstsq_fit`
 # produced a result.
 _FIT_OUTCOMES = (
-    "ok",             # least_squares converged (success=True)
+    "ok",  # least_squares converged (success=True)
     "nonconvergent",  # least_squares returned but success=False
-    "timeout",        # SIGALRM fired; wfFitTimeoutPerDonut * group_size exceeded
-    "exception",      # the fit raised
-    "x0_only",        # wfInitialGuessOnly: the model was evaluated, never fit
-    "",               # no fit consumed this donut (`_NULL_WF`)
+    "timeout",  # SIGALRM fired; wfFitTimeoutPerDonut * group_size exceeded
+    "exception",  # the fit raised
+    "x0_only",  # wfInitialGuessOnly: the model was evaluated, never fit
+    "",  # no fit consumed this donut (`_NULL_WF`)
 )
 
 
@@ -116,7 +116,7 @@ class WfResult:
     donut_id: int
     det_name: str
     visit_id: int
-    zk_dev: npt.NDArray[np.float64]        # dense Noll 0.._ZK_JMAX, meters, NaN where unfit
+    zk_dev: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, meters, NaN where unfit
     zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, meters
     img: np.ndarray | None
     model_img: np.ndarray | None
@@ -127,7 +127,7 @@ class WfResult:
     fit_cost: float
     fit_optimality: float
     fit_njev: int
-    fit_outcome: str                       # one of _FIT_OUTCOMES
+    fit_outcome: str  # one of _FIT_OUTCOMES
     fit_dx: float
     fit_dy: float
     fit_flux: float
