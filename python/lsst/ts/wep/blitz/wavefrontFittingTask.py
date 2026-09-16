@@ -44,13 +44,13 @@ import lsst.pipe.base as pipeBase
 
 from .dataStructures import _FIT_OUTCOMES, Donut, WfResult, _WfGroup
 from .utils import (
-    _CALIB_STORE,
+    _COW_STORE,
     _INSTRUMENT,
     _ZK_JMAX,
     CORNER_PAIRS,
     _bin_stamp_odd,
+    _defocused_telescope,
     _dense_intrinsic,
-    _telescope_for_offsets,
 )
 
 # DZMultiDonutModel's field_radius has no effect on our fit (we don't model any
@@ -301,10 +301,10 @@ _DZ_MODEL_KEYS = ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")
 def _wf_fitting_worker(group: "_WfGroup") -> dict:
     """Wavefront fitting worker for multiprocessing pool.
 
-    Retrieves the WavefrontFittingTask from _CALIB_STORE and calls it
+    Retrieves the WavefrontFittingTask from _COW_STORE and calls it
     on the group. Designed to be used with multiprocessing.Pool.map().
     """
-    task = _CALIB_STORE["wf_fitting_task"]
+    task = _COW_STORE.wf_fitting_task
     return task.run(group)
 
 
@@ -774,7 +774,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 "bias the whole wavefront, so this is fatal rather than defaulted."
             )
         wavelength = wavelength_by_band[band]
-        telescope = _CALIB_STORE["telescope"]
+        telescope = _COW_STORE.telescope
         # The defocused telescope comes from the donut's own offset triplet, so
         # the fitter never needs to know which detectors sit on which side of
         # focus -- a rule that has no meaning in full-array mode, where every
@@ -784,7 +784,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 f"Donut {donut.donut_id} on {donut.det_name} has no defocal_offsets; the "
                 "task that built it must set them (see Donut.defocal_offsets)."
             )
-        telescope_dz = _telescope_for_offsets(donut.defocal_offsets)
+        telescope_dz = _defocused_telescope(telescope, donut.defocal_offsets)
         eps = telescope.pupilObscuration
         nrad = 10
         zernikeTA_kwargs = dict(

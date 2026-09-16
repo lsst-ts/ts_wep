@@ -71,7 +71,7 @@ class Donut:
     coord_dec: float = float("nan")
     intrinsic_zk: npt.NDArray[np.float64] | None = None
     # The optic shifts that put this donut off focus: signed meters, ordered
-    # (detector, camera, m2) -- see `_telescope_for_offsets`. Set by whichever
+    # (detector, camera, m2) -- see `_defocused_telescope`. Set by whichever
     # task builds the donut, because the two modes decide it differently:
     # corner mode from the detector id (SW0/SW1 sit either side of focus within
     # one exposure), FAM from which exposure of the pair it came from. This is
