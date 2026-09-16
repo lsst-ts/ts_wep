@@ -24,11 +24,11 @@
 `_forkMap` is only worth its custom implementation if a worker killed outright
 costs exactly its own work unit, so that is what these tests kill for: a child
 SIGKILLed before it writes anything, and -- the case the length-framed payload
-was designed for -- a child killed *between* its frame header and the end of its
-payload, which is the one truncation an unframed stream could not tell apart
-from a complete result. Both are forced deterministically by patching `os.write`
-in the parent and letting the fork inherit the patch, rather than by racing a
-sleep against a signal.
+was designed for -- a child killed *between* its frame header and the end of
+its payload, which is the one truncation an unframed stream could not tell
+apart from a complete result. Both are forced deterministically by patching
+`os.write` in the parent and letting the fork inherit the patch, rather than by
+racing a sleep against a signal.
 
 The complement matters just as much and is easy to lose in a refactor: a worker
 that returns `None`, or that is killed *after* writing a complete payload, must
@@ -41,8 +41,8 @@ is a property of the interpreter rather than of this module, so it is asserted
 here to keep anyone from "fixing" the loop back into complexity.
 
 Not covered: `_killChildProcesses`, which would SIGKILL every child of the
-process running the tests (including the test runner's own), and the firing path
-of `_dumpStacksOnHang`, which ends in `os._exit`.
+process running the tests (including the test runner's own), and the firing
+path of `_dumpStacksOnHang`, which ends in `os._exit`.
 """
 
 import os
@@ -163,9 +163,9 @@ def _killDuringWrite(afterBytes: int | None):
 
     The patch is installed in the parent and inherited through the fork, which
     makes the kill deterministic: no sleep is raced against a signal. The frame
-    header is always let through -- it is the payload write that is cut short --
-    so `afterBytes` counts payload bytes only. `None` means write the payload in
-    full and *then* die, which is the "killed after finishing" case.
+    header is always let through -- it is the payload write that is cut short
+    -- so `afterBytes` counts payload bytes only. `None` means write the
+    payload in full and *then* die, which is the "killed after finishing" case.
 
     Only the children call `os.write` inside `_forkMap`; the parent reads. So
     the patch is inert in the process that installs it.
@@ -270,8 +270,9 @@ class TestKilledWorkers(unittest.TestCase):
         units = list(range(8))
         results, deaths = _forkMap(_dieIfThree, units, 4)
         self.assertEqual([d.unit for d in deaths], [3])
-        # Relative order of `args`, with the dead unit simply absent -- there is
-        # no placeholder, which is why callers must not index `results` by unit.
+        # Relative order of `args`, with the dead unit simply absent -- there
+        # is no placeholder, which is why callers must not index `results` by
+        # unit.
         self.assertEqual(results, [0, 10, 20, 40, 50, 60, 70])
 
     def testKilledMidPayloadIsADeathNotACorruptResult(self) -> None:
@@ -296,8 +297,8 @@ class TestKilledWorkers(unittest.TestCase):
         """A truncated stream must not desynchronize its siblings' pipes.
 
         Every unit here is truncated because the patch is global to the fork,
-        which is the strongest version of the claim: N independent pipes means N
-        independent failures, never one poisoned transport.
+        which is the strongest version of the claim: N independent pipes means
+        N independent failures, never one poisoned transport.
         """
         with _killDuringWrite(afterBytes=16):
             results, deaths = _forkMap(_bigPayload, list(range(4)), 2)
@@ -332,7 +333,7 @@ class TestFailingWorkers(unittest.TestCase):
         self.assertEqual(deaths[0].reason, "exited 1")
 
     def testUnpicklableResult(self) -> None:
-        """A result that cannot cross the pipe is a death, not a parent crash."""
+        """A result that cannot cross the pipe is a death, not a crash."""
         with _silencedStderr():
             results, deaths = _forkMap(_returnUnpicklable, [0], 1)
         self.assertEqual(results, [])
@@ -350,19 +351,19 @@ class TestSignalsDuringWrite(unittest.TestCase):
 
     @staticmethod
     def _armRepeatingAlarm() -> None:
-        # Signals land continuously while the child blocks writing a payload far
-        # larger than the pipe, so every EINTR-capable write is interrupted many
-        # times over.
+        # Signals land continuously while the child blocks writing a payload
+        # far larger than the pipe, so every EINTR-capable write is interrupted
+        # many times over.
         signal.signal(signal.SIGALRM, lambda *args: None)
         signal.setitimer(signal.ITIMER_REAL, 0.001, 0.001)
 
     def testResultSurvivesSignalsInterruptingTheWrite(self) -> None:
         """PEP 475 retries `os.write` on EINTR; the loop absorbs short writes.
 
-        So a handled signal arriving mid-payload must not be able to turn a unit
-        whose computation completed into a spurious death. If this ever fails,
-        the fix is an EINTR-retry helper around the child's writes -- until then
-        one would be dead code asserting the opposite of the truth.
+        So a handled signal arriving mid-payload must not be able to turn a
+        unit whose computation completed into a spurious death. If this ever
+        fails, the fix is an EINTR-retry helper around the child's writes --
+        until then one would be dead code asserting the opposite of the truth.
         """
         results, deaths = _forkMap(_bigPayload, [0], 1, initializer=self._armRepeatingAlarm)
         self.assertEqual(deaths, [])

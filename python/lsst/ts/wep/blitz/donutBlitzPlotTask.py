@@ -141,7 +141,7 @@ class DonutBlitzPlotTaskConfig(
 
 
 class DonutBlitzPlotTask(pipeBase.PipelineTask):
-    """PipelineTask that regenerates diagnostic plots from ``donutBlitzResults``.
+    """PipelineTask regenerating diagnostic plots from ``donutBlitzResults``.
 
     Can run standalone (reading from the butler) or be called as a subtask of
     ``DonutBlitzMonolithTask`` when ``savePlots=True``.
@@ -166,7 +166,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         self.run(catalog)
 
     def run(self, catalog: Table) -> None:
-        """Generate donut and WF diagnostic plots from the blitzResults catalog.
+        """Generate donut and WF plots from the ``blitzResults`` catalog.
 
         Parameters
         ----------
@@ -190,9 +190,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         Parameters
         ----------
         catalog : QTable
-            Per-donut table from ``_buildCatalog``.  Per-detector metadata is in
-            ``catalog.meta["det_meta"]``, keyed by ``f"{det_name}_{visit_id}"``;
-            visit-level scalars are in ``catalog.meta``.
+            Per-donut table from ``_buildCatalog``.  Per-detector metadata is
+            in ``catalog.meta["det_meta"]``, keyed by
+            ``f"{det_name}_{visit_id}"``; visit-level scalars are in
+            ``catalog.meta``.
         """
         import matplotlib.patches as mpatches
         from matplotlib.figure import Figure
@@ -210,10 +211,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         visit_id = meta["ref_visit_id"]
         det_meta = meta["det_meta"]
 
-        # Group rows by detector; split on selection outcome. This plot is about
-        # donut *selection*, so it splits on "candidate" -- a candidate that no
-        # fit consumed still shows in the accepted panel, since it passed every
-        # cut this plot reports on.
+        # Group rows by detector; split on selection outcome. This plot is
+        # about donut *selection*, so it splits on "candidate" -- a candidate
+        # that no fit consumed still shows in the accepted panel, since it
+        # passed every cut this plot reports on.
         det_name_col = np.asarray(catalog["det_name"], dtype=str)
         det_id_by_name = _detIdByName(catalog)
         dets_with_data = []
@@ -263,36 +264,37 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         COL_SPACER = 1 + STAMPS_PER_ROW
         COL_REJECTED_START = COL_SPACER + 1
 
-        # The per-detector radius rides each donut row (from Donut.donut_radius),
-        # so a detector's aperture/annulus circles match its own detected donut
-        # size. Everything else that shapes those circles is a visit-level meta
-        # scalar.
-        # Two of these are background "inner" radii and are easy to confuse:
-        # _bkg_inner_disc is the filled disc inside the central obscuration,
-        # _bkg_inner_annulus is the inner edge of the annulus outside the donut.
+        # The per-detector radius rides each donut row (from
+        # Donut.donut_radius), so a detector's aperture/annulus circles match
+        # its own detected donut size. Everything else that shapes those
+        # circles is a visit-level meta scalar. Two of these are background
+        # "inner" radii and are easy to confuse: _bkg_inner_disc is the filled
+        # disc inside the central obscuration, _bkg_inner_annulus is the inner
+        # edge of the annulus outside the donut.
         _stamp_aperture_margin_frac = catalog.meta["aperture_margin_frac"]
         _stamp_bkg_inner_disc_frac = catalog.meta["bkg_inner_disc_frac"]
         _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
         _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
         _stamp_obscuration = catalog.meta["obscuration"]
 
-        # Every stamp's view is pinned to its own pixel extent, so a stamp fills
-        # its axes exactly and consumes the same figure area no matter how many
-        # pixels it contains. Setting the limits explicitly (rather than leaving
-        # them to autoscale) is also required because ax.plot of the refcat
-        # overlays triggers autoscale where add_patch alone does not, which would
-        # otherwise pull in the annulus circles and shrink the stamp only on rows
-        # that happen to have overlays.
+        # Every stamp's view is pinned to its own pixel extent, so a stamp
+        # fills its axes exactly and consumes the same figure area no matter
+        # how many pixels it contains. Setting the limits explicitly (rather
+        # than leaving them to autoscale) is also required because ax.plot of
+        # the refcat overlays triggers autoscale where add_patch alone does
+        # not, which would otherwise pull in the annulus circles and shrink the
+        # stamp only on rows that happen to have overlays.
         #
         # A config-derived view (e.g. donutRadius * bkgAnnulusOuterFrac) would
-        # instead couple the drawn size to stampSize: at stampSize=215 the image
-        # overflows its axes by ~15%.
+        # instead couple the drawn size to stampSize: at stampSize=215 the
+        # image overflows its axes by ~15%.
         _STAMP_TEXT_FONTSIZE = 3.5
 
-        # The unbinned `stamp` column is optional (see the monolith's saveStamps).
-        # Without it, draw the binned `wf_img`, which is always present. Every
-        # other quantity here -- aperture radii, refcat offsets, text offsets --
-        # is in unbinned pixels, so it scales by 1/binning to match.
+        # The unbinned `stamp` column is optional (see the monolith's
+        # saveStamps). Without it, draw the binned `wf_img`, which is always
+        # present. Every other quantity here -- aperture radii, refcat offsets,
+        # text offsets -- is in unbinned pixels, so it scales by 1/binning to
+        # match.
         _has_stamp = "stamp" in catalog.colnames
         if not _has_stamp and "wf_img" not in catalog.colnames:
             raise RuntimeError(
@@ -348,16 +350,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ax.plot([-_edge, _edge], [-_edge, _edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
                 ax.plot([-_edge, _edge], [_edge, -_edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
 
-            # Detector orientation is per-detector, so it lives in det_meta rather
-            # than on every row. Keyed by the row's own visit, not the table's:
-            # full-array mode has one entry per detector per side of focus.
+            # Detector orientation is per-detector, so it lives in det_meta
+            # rather than on every row. Keyed by the row's own visit, not the
+            # table's: full-array mode has one entry per detector per side of
+            # focus.
             nq = det_meta.get(f"{row['det_name']}_{row['visit_id']}", {}).get("n_quarter", 0) % 4
 
-            # The stamp was cut on integer bounds around the rounded centroid, so
-            # display coordinate (0, 0) is that rounded position, while the
+            # The stamp was cut on integer bounds around the rounded centroid,
+            # so display coordinate (0, 0) is that rounded position, while the
             # nearby_* offsets are measured from x_det/y_det. The rounding
-            # residual converts between the two -- sub-pixel, but the difference
-            # between a marker on the source and one up to half a pixel off it.
+            # residual converts between the two -- sub-pixel, but the
+            # difference between a marker on the source and one up to half a
+            # pixel off it.
             _x_det = row["x_det"].to_value(u.pix)
             _y_det = row["y_det"].to_value(u.pix)
             _res_x = _x_det - round(_x_det)
@@ -444,10 +448,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 if val
             ]
             rej_str = f"[{'|'.join(_flags)}]" if _flags else ""
-            # Bottom-anchored just above the axes, so the block grows upward and
-            # never overlaps the stamp -- clearance is independent of stamp size.
-            # (Top-anchoring inside the axes hung the text down over the image;
-            # at stampSize 167 it overlapped by ~1pt, and worse for larger stamps.)
+            # Bottom-anchored just above the axes, so the block grows upward
+            # and never overlaps the stamp -- clearance is independent of stamp
+            # size. (Top-anchoring inside the axes hung the text down over the
+            # image; at stampSize 167 it overlapped by ~1pt, and worse for
+            # larger stamps.)
             ax.annotate(
                 f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
                 xy=(0.05, 1.00),
@@ -464,8 +469,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             )
 
         for row_idx, (det_name, acc_rows, rej_rows) in enumerate(dets_with_data):
-            # Keyed by detector *and* visit; corner mode has just this one visit.
-            # A miss degrades to the defaults below rather than raising.
+            # Keyed by detector *and* visit; corner mode has just this one
+            # visit. A miss degrades to the defaults below rather than raising.
             sm = det_meta.get(f"{det_name}_{visit_id}", {})
             scatter_val = _metaValue(sm, "astrom_scatter", u.arcsec)
             scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
@@ -585,8 +590,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         wf_mode = meta["wf_mode"]
         ZK_MIN, ZK_MAX = 4, 28
 
-        # Reconstruct wf_results-like list from QTable by grouping on "group_id".
-        # Include only rows a fit claimed; an empty group_id means none did.
+        # Reconstruct wf_results-like list from QTable by grouping on
+        # "group_id". Include only rows a fit claimed; an empty group_id means
+        # none did.
         groups: dict[str, list] = {}
         for row in catalog:
             grp = str(row["group_id"])
@@ -623,7 +629,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     {
                         "donut_id": r["donut_id"],
                         "det_name": r["det_name"],
-                        # Layout only (intra left, extra right); see _pair_up below.
+                        # Layout only (intra left, extra right); see _pair_up
+                        # below.
                         "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(r["det_name"]), ""),
                         "img": np.array(r["wf_img"]),
                         "model_img": model_arr if not np.all(np.isnan(model_arr)) else None,
@@ -645,10 +652,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 }
             )
 
-        # Candidate donuts that no fit consumed (paired-mode surplus: no partner
-        # on the other detector, so ``group_id`` is empty). They
-        # have no model or Zernikes, but their binned stamp is still worth
-        # seeing, so carry them as data-only single-donut records.
+        # Candidate donuts that no fit consumed (paired-mode surplus: no
+        # partner on the other detector, so ``group_id`` is empty). They have
+        # no model or Zernikes, but their binned stamp is still worth seeing,
+        # so carry them as data-only single-donut records.
         unfitted = []
         for row in catalog:
             if str(row["group_id"]) or not row["candidate"]:
@@ -690,9 +697,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         def _det_label(name):
             """Detector header, with the id only when the detector has rows.
 
-            The 2x2 corner grid is always drawn in full, but a detector that was
-            not processed (or contributed no donuts) is absent from the catalog
-            and so has no id to report.
+            The 2x2 corner grid is always drawn in full, but a detector that
+            was not processed (or contributed no donuts) is absent from the
+            catalog and so has no id to report.
             """
             det_id = det_id_by_name.get(name)
             return name if det_id is None else f"{name} ({det_id})"
@@ -748,8 +755,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         def _draw_bar(ax, zk_dev, inset_label=""):
             """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels.
 
-            ``zk_dev`` is Noll-indexed (element j is Noll j) and in µm; it may be
-            shorter than ``ZK_MAX`` (or empty) since it stops at the highest
+            ``zk_dev`` is Noll-indexed (element j is Noll j) and in µm; it may
+            be shorter than ``ZK_MAX`` (or empty) since it stops at the highest
             fitted Noll index.
 
             Always spans ZK_MIN..ZK_MAX regardless of the configured
@@ -797,7 +804,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             unfitted_by_corner[_corner_of(r)].append(r)
 
         def _explode(r):
-            """Split a group record into one record per donut, sharing group fields."""
+            """One record per donut, each keeping the group's fields."""
             return [{**r, "donuts": [d]} for d in r.get("donuts", [])]
 
         def _pair_up(records):
@@ -817,8 +824,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         row_pairs: dict[str, list[tuple]] = {}
         for corner, corner_results in by_corner.items():
             if wf_mode == "paired":
-                # The group *is* an intra/extra pair, so it supplies both halves
-                # of the row; the donut of each defocal type is picked out below.
+                # The group *is* an intra/extra pair, so it supplies both
+                # halves of the row; the donut of each defocal type is picked
+                # out below.
                 fit_rows = [(r, r) for r in corner_results]
             else:
                 # These groups don't pair donuts, so flatten to one record per

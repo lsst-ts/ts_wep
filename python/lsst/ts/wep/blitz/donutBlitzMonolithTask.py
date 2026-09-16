@@ -102,9 +102,9 @@ def _exposure_group(refs) -> str:
 
 # Corner mode defocuses by shifting the detector plane inside the camera: SW0
 # (extra-focal) sits at +defocalOffset, SW1 (intra-focal) at -defocalOffset.
-# Ordered as `_OFFSET_OPTICS`: (detector, camera, m2). Full-array mode shifts the
-# whole camera instead, which is why the offsets ride on each Donut rather than
-# being assumed by the fitter.
+# Ordered as `_OFFSET_OPTICS`: (detector, camera, m2). Full-array mode shifts
+# the whole camera instead, which is why the offsets ride on each Donut rather
+# than being assumed by the fitter.
 _EXTRA_FOCAL_OFFSETS = (+_INSTRUMENT.defocalOffset, 0.0, 0.0)
 _INTRA_FOCAL_OFFSETS = (-_INSTRUMENT.defocalOffset, 0.0, 0.0)
 
@@ -528,8 +528,8 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         crosstalk : list of lsst.ip.isr.CrosstalkCalib
         refCat : list of DeferredDatasetHandle or SimpleCatalog
             Shards used for both WCS fitting and donut selection, loaded once
-            per detector.  The WCS fit reads ``astromRefFilter`` (resolved as the
-            load's ``fluxField``) and donut selection reads the per-band
+            per detector.  The WCS fit reads ``astromRefFilter`` (resolved as
+            the load's ``fluxField``) and donut selection reads the per-band
             ``photoRefFilter``/``photoRefFilterPrefix`` column off the same
             catalog.
         intrinsicZernikes : list of IntrinsicZernikes, optional
@@ -569,10 +569,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         linearizerByName = {lin._detectorName: lin for lin in linearizer}
         crosstalkByName = {ct._detectorName: ct for ct in crosstalk}
 
-        # Process whichever corner raws arrived. A partial set is normal (dropped
-        # image, per-detector butler gap) and there is no reason to throw away the
-        # corners that did arrive, so this is a warning rather than an abort.
-        # `detNames` -- not CORNER_DET_NAMES -- drives everything downstream.
+        # Process whichever corner raws arrived. A partial set is normal
+        # (dropped image, per-detector butler gap) and there is no reason to
+        # throw away the corners that did arrive, so this is a warning rather
+        # than an abort. `detNames` -- not CORNER_DET_NAMES -- drives
+        # everything downstream.
         unexpected = rawByName.keys() - CORNER_DET_NAMES
         if unexpected:
             raise RuntimeError(f"Non-corner detector raws supplied: {sorted(unexpected)}")
@@ -645,10 +646,10 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             det_refcats[name] = load_result
         t_refcat_elapsed = time.perf_counter() - t_refcat0
 
-        # Stub loader: AstrometryTask.solve() calls refObjLoader.getMetadataBox()
-        # unconditionally even when load_result is pre-supplied. That method is
-        # pure geometry -- it never accesses catalog data, dataId.region, or the
-        # flux aliases.
+        # Stub loader: AstrometryTask.solve() calls
+        # refObjLoader.getMetadataBox() unconditionally even when load_result
+        # is pre-supplied. That method is pure geometry -- it never accesses
+        # catalog data, dataId.region, or the flux aliases.
         astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
         astrom_stub_loader.config.pixelMargin = 0
         self.astromTask.setRefObjLoader(astrom_stub_loader)
@@ -692,8 +693,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         boresight_rot_rad = visitInfo.boresightRotAngle.asRadians()
         boresight_par_rad = visitInfo.boresightParAngle.asRadians()
         boresight_alt_rad = visitInfo.boresightAzAlt.getLatitude().asRadians()
-        # rotTelPos, wrapped to (-pi, pi]. Always computed: the CCS -> OCS Zernike
-        # rotation in _buildCatalog needs it, whereas spider shadows are opt-in.
+        # rotTelPos, wrapped to (-pi, pi]. Always computed: the CCS -> OCS
+        # Zernike rotation in _buildCatalog needs it, whereas spider shadows
+        # are opt-in.
         rtp_rad = (boresight_par_rad - boresight_rot_rad - np.pi / 2 + np.pi) % (2 * np.pi) - np.pi
         rtp_deg = np.degrees(rtp_rad) if self.wfFittingTask.config.modelSpiderShadows else None
 
@@ -705,9 +707,9 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         # COW instead of reloading "LSST_{band}.yaml" per donut in workers.
         _telescope = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
         _CALIB_STORE["telescope"] = _telescope
-        # Pre-build both defocused telescopes so the workers only ever look them
-        # up. Corner mode defocuses by moving the detector plane, hence the
-        # (detector, camera, m2) triplets below.
+        # Pre-build both defocused telescopes so the workers only ever look
+        # them up. Corner mode defocuses by moving the detector plane, hence
+        # the (detector, camera, m2) triplets below.
         _CALIB_STORE.pop("telescope_by_offsets", None)
         for _offsets in (_EXTRA_FOCAL_OFFSETS, _INTRA_FOCAL_OFFSETS):
             _telescope_for_offsets(_offsets)
@@ -725,13 +727,13 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             results = [_run_cutout_worker((arg, t_dispatch)) for arg in cutout_args]
         else:
             t_pool0 = time.perf_counter()
-            # Never more workers than detectors to process, matching the WF pool
-            # below. cutout_args is the detectors with raws, non-empty by the
-            # guard above.
+            # Never more workers than detectors to process, matching the WF
+            # pool below. cutout_args is the detectors with raws, non-empty by
+            # the guard above.
             n_cutout_workers = min(numCores, len(cutout_args))
             # Bare fork workers are safe here. Everything is preloaded in
-            # runQuantum and inherited via COW.  _forkMap ensures that one killed
-            # worker does not take down the entire pool/quantum.
+            # runQuantum and inherited via COW. _forkMap ensures that one
+            # killed worker does not take down the entire pool/quantum.
             t_dispatch = time.time()
             with _dumpStacksOnHang(self.config.hangTimeout, "cutout pool", self.log):
                 results, deaths = _forkMap(
@@ -785,11 +787,11 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
                 )
             donuts.extend(r["catalog"])
 
-        # Annotate the optic shifts that put each donut off focus. In corner mode
-        # this follows from the detector: SW0 is extra-focal, SW1 intra-focal.
-        # Rejected donuts are annotated too -- they get a row in the output
-        # catalog, and _prep_donut_for_danish requires the offsets of anything it
-        # is handed.
+        # Annotate the optic shifts that put each donut off focus. In corner
+        # mode this follows from the detector: SW0 is extra-focal, SW1
+        # intra-focal. Rejected donuts are annotated too -- they get a row in
+        # the output catalog, and _prep_donut_for_danish requires the offsets
+        # of anything it is handed.
         for r in results:
             for d in r["catalog"] + r.get("rejected_catalog", []):
                 d.defocal_offsets = (

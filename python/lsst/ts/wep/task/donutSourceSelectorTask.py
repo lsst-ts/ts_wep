@@ -158,11 +158,11 @@ class DonutSourceSelectorTask(pipeBase.Task):
     numSources kept or going through the whole list.
 
     When the input catalog lacks flux information (and ``config.allowFluxless``
-    is True) the selector operates on coordinates only (e.g. a detection catalog
-    with only coordinates).  In that mode magnitude cuts are skipped, sources are
-    ordered by field distance (center-out), and isolation/blending decisions are
-    made purely on separation.  No blend centers are produced.  Flux is always
-    used when it is present.
+    is True) the selector operates on coordinates only (e.g.  a detection
+    catalog with only coordinates).  In that mode magnitude cuts are skipped,
+    sources are ordered by field distance (center-out), and isolation/blending
+    decisions are made purely on separation.  No blend centers are produced.
+    Flux is always used when it is present.
     """
 
     ConfigClass = DonutSourceSelectorTaskConfig
@@ -258,9 +258,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
             Raised if the catalog lacks the flux field ``f"{filterName}_flux"``
             and ``config.allowFluxless`` is False.
         `KeyError`
-            Raised if a required coordinate column is missing from ``sourceCat``,
-            or (when flux is used and useCustomMagLimit is False) if
-            ``filterName`` has no entry in policy:magLimitStar.yaml.
+            Raised if a required coordinate column is missing from
+            ``sourceCat``, or (when flux is used and useCustomMagLimit is
+            False) if ``filterName`` has no entry in policy:magLimitStar.yaml.
         """
 
         bbox = detector.getBBox()
@@ -363,13 +363,13 @@ class DonutSourceSelectorTask(pipeBase.Task):
         maxX = trimmedBBox.getMaxX()
         maxY = trimmedBBox.getMaxY()
         # NOTE: erodedBy on an integer bbox yields a Box2I, whose contains() is
-        # inclusive of the max corner.  Match that with <=.  If trimmedBBox is a
-        # Box2D in your build, change the upper comparisons to <.
+        # inclusive of the max corner.  Match that with <=.  If trimmedBBox is
+        # a Box2D in your build, change the upper comparisons to <.
         inBox = (xSorted >= minX) & (xSorted <= maxX) & (ySorted >= minY) & (ySorted <= maxY)
 
-        # Sources that can possibly be kept.  The mag / field-distance / edge-box
-        # cuts are applied here to shrink the set of candidate sources before
-        # building neighbor lists.
+        # Sources that can possibly be kept.  The mag / field-distance /
+        # edge-box cuts are applied here to shrink the set of candidate sources
+        # before building neighbor lists.
         isCandidate = inBox & (fieldDistSorted <= maxFieldDist)
         if useFlux:
             isCandidate &= (magSorted <= magMax) & (magSorted >= magMin)
@@ -402,7 +402,8 @@ class DonutSourceSelectorTask(pipeBase.Task):
 
         index = list()
         # Sparse storage: most sources have no blend centers, so only populate
-        # the ones we actually keep-with-blends.  Keyed by sorted-order position.
+        # the ones we actually keep-with-blends.  Keyed by sorted-order
+        # position.
         blendCentersXMap: dict = {}
         blendCentersYMap: dict = {}
         sourcesKept = 0
@@ -428,9 +429,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 neighbors = [j for j in idxList if j != srcOn]
 
                 # Because the arrays are sorted center-out, any neighbor with a
-                # smaller sorted index is more central than this source.  If one
-                # exists, let that (already-considered) source own the overlap so
-                # we don't keep both members of a close pair.
+                # smaller sorted index is more central than this source.  If
+                # one exists, let that (already-considered) source own the
+                # overlap so we don't keep both members of a close pair.
                 if any(j < srcOn for j in neighbors):
                     continue
 
