@@ -59,9 +59,9 @@ class Donut:
     photo_mag: float
     astrom_mag: float
     # Neighboring refcat sources inside the stamp box as (dx, dy, mag), offset
-    # from (x_det, y_det) so the offsets compose with it directly. Excludes this
-    # donut itself. Stamp *membership* is decided on the rounded centroid, which
-    # is what the stamp bounds were cut on.
+    # from (x_det, y_det) so the offsets compose with it directly. Excludes
+    # this donut itself. Stamp *membership* is decided on the rounded centroid,
+    # which is what the stamp bounds were cut on.
     nearby_photo: list[tuple[float, float, float]]
     nearby_astrom: list[tuple[float, float, float]]
     # Refcat sky position in radians, NaN on the blind-detection path. Refcat
@@ -72,11 +72,12 @@ class Donut:
     intrinsic_zk: npt.NDArray[np.float64] | None = None
     # The optic shifts that put this donut off focus: signed meters, ordered
     # (detector, camera, m2) -- see `_telescope_for_offsets`. Set by whichever
-    # task builds the donut, because the two modes decide it differently: corner
-    # mode from the detector id (SW0/SW1 sit either side of focus within one
-    # exposure), FAM from which exposure of the pair it came from. This is the
-    # only representation of defocal state; an intra/extra label would be
-    # redundant with it, and derivable from det_name (corner) or visit_id (FAM).
+    # task builds the donut, because the two modes decide it differently:
+    # corner mode from the detector id (SW0/SW1 sit either side of focus within
+    # one exposure), FAM from which exposure of the pair it came from. This is
+    # the only representation of defocal state; an intra/extra label would be
+    # redundant with it, and derivable from det_name (corner) or visit_id
+    # (FAM).
     defocal_offsets: tuple[float, float, float] | None = None
     # --- reject flags (default False = not rejected) ---
     rejected_sat: bool = False
@@ -107,10 +108,10 @@ class WfResult:
     visit_id)``. A fit that timed out or raised still produces a WfResult with
     ``fit_success=False`` and all-NaN Zernikes; ``fit_outcome`` says which.
 
-    ``visit_id`` is part of the key because full-array mode fits the same star on
-    the same detector twice, once per side of focus, so ``(donut_id, det_name)``
-    alone is ambiguous there. Corner mode has one visit per quantum, so including
-    it changes nothing.
+    ``visit_id`` is part of the key because full-array mode fits the same star
+    on the same detector twice, once per side of focus, so ``(donut_id,
+    det_name)`` alone is ambiguous there. Corner mode has one visit per
+    quantum, so including it changes nothing.
     """
 
     donut_id: int

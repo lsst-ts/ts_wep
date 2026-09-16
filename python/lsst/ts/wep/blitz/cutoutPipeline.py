@@ -93,9 +93,9 @@ def _cutout_one_exposure(
     selection, and stamp cutting on one exposure of one detector.
 
     Takes its per-exposure inputs explicitly so both modes can drive it: corner
-    mode has one exposure per detector and reads them from ``_CALIB_STORE`` (see
-    `_cutoutPipeline`), while full-array mode calls this twice per detector with
-    the intra and extra exposures of a pair.
+    mode has one exposure per detector and reads them from ``_CALIB_STORE``
+    (see `_cutoutPipeline`), while full-array mode calls this twice per
+    detector with the intra and extra exposures of a pair.
 
     The *subtasks* are still read from the module-level ``_CALIB_STORE``, which
     the parent populates before forking. That is deliberate: they are identical
@@ -115,8 +115,8 @@ def _cutout_one_exposure(
     det_name : str
         Detector name, for logging and the returned record.
     maxFitScatter : float
-        Maximum acceptable astrometric scatter, in arcseconds, for the refit WCS
-        to be used.
+        Maximum acceptable astrometric scatter, in arcseconds, for the refit
+        WCS to be used.
     astromRefFilter : str
         Reference catalog flux column prefix used for astrometry.
     photoRefFilter : str
@@ -125,11 +125,11 @@ def _cutout_one_exposure(
     Returns
     -------
     dict
-        Keys: ``det_name``, ``catalog`` (accepted donuts), ``rejected_catalog``,
-        ``scatter_arcsec``, ``wcs_refit_error``, ``cat_select_error``,
-        ``selection_source``, ``pair_path``, ``n_quarter`` (detector
-        orientation), ``wcs`` (the WCS actually used, or
-        None), and one timing float per stage, keyed as
+        Keys: ``det_name``, ``catalog`` (accepted donuts),
+        ``rejected_catalog``, ``scatter_arcsec``, ``wcs_refit_error``,
+        ``cat_select_error``, ``selection_source``, ``pair_path``,
+        ``n_quarter`` (detector orientation), ``wcs`` (the WCS actually used,
+        or None), and one timing float per stage, keyed as
         `lsst.ts.wep.blitz.utils._CUTOUT_STAGE_KEYS` lists -- this function is
         where those keys are defined, and everything that reports them takes
         the order from there.  A stage that never ran is NaN, not 0.0.
@@ -138,11 +138,12 @@ def _cutout_one_exposure(
         decide how to pair donuts between the two exposures: an exact refcat-id
         match is only available when both exposures selected from the refcat.
 
-        ``pair_path`` is not decided here -- it is the grouping stage's, and both
-        modes overwrite it once they know which pairing algorithm ran.  It is
-        seeded with ``"n/a"`` rather than left absent so that every result
-        reaching `build_donut_catalog` carries a meaningful string, including the
-        results of a full-array worker that died before it reached grouping.
+        ``pair_path`` is not decided here -- it is the grouping stage's, and
+        both modes overwrite it once they know which pairing algorithm ran.  It
+        is seeded with ``"n/a"`` rather than left absent so that every result
+        reaching `build_donut_catalog` carries a meaningful string, including
+        the results of a full-array worker that died before it reached
+        grouping.
     """
     # --- ISR ---
     t0 = time.perf_counter()
@@ -155,9 +156,10 @@ def _cutout_one_exposure(
         crosstalk=calibs["crosstalk"],
     ).exposure
 
-    # Detector orientation, reported per detector so a consumer can undo the CCS
-    # stamp rotation without loading the camera model. Read here because both
-    # returns below carry it, including the one that bails out before selection.
+    # Detector orientation, reported per detector so a consumer can undo the
+    # CCS stamp rotation without loading the camera model. Read here because
+    # both returns below carry it, including the one that bails out before
+    # selection.
     n_quarter = postIsr.getDetector().getOrientation().getNQuarter()
 
     # --- background subtraction ---
@@ -194,8 +196,8 @@ def _cutout_one_exposure(
             "scatter_arcsec": None,
             "wcs_refit_error": "No blind detections",
             "cat_select_error": "",
-            # No selector ran at all on this detector, which is distinct from the
-            # selector running and rejecting everything ("blind_failed").
+            # No selector ran at all on this detector, which is distinct from
+            # the selector running and rejecting everything ("blind_failed").
             "selection_source": "no_detections",
             "pair_path": "n/a",
             "n_quarter": n_quarter,
@@ -245,8 +247,8 @@ def _cutout_one_exposure(
         try:
             refcat = refcat_handle.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refcat)
-            # Much quicker to just copy the keys we need than convert the whole table to
-            # astropy
+            # Much quicker to just copy the keys we need than convert the whole
+            # table to astropy
             keys = [
                 "id",
                 "coord_ra",
@@ -277,13 +279,14 @@ def _cutout_one_exposure(
     # If the refcat path didn't produce a selection, run the blind detections
     # through the same selector.  If that also fails, then exit gracefully.
     if selection_source != "refcat":
-        # Every table reaching `CutDonutStampsTask` carries the refcat-provenance
-        # columns, so that a blind-path donut is a row with NaN values rather than
-        # a row the consumer has to test the schema for.  Both branches below
-        # derive `selections` from `blindDetections` -- the selector returns a row
-        # subset, and the failure branch an empty slice -- so filling them here
-        # covers both.  Mutating in place is safe: `blindDetections` is built
-        # fresh per detector, and this path is the only one that reads it again.
+        # Every table reaching `CutDonutStampsTask` carries the
+        # refcat-provenance columns, so that a blind-path donut is a row with
+        # NaN values rather than a row the consumer has to test the schema for.
+        # Both branches below derive `selections` from `blindDetections` -- the
+        # selector returns a row subset, and the failure branch an empty slice
+        # -- so filling them here covers both.  Mutating in place is safe:
+        # `blindDetections` is built fresh per detector, and this path is the
+        # only one that reads it again.
         for column in _REFCAT_COLUMNS:
             blindDetections[column] = np.full(len(blindDetections), np.nan)
         try:
@@ -322,12 +325,12 @@ def _cutout_one_exposure(
 
     # fig, ax = plt.subplots(figsize=(10, 5))
     # vmin, vmax = np.nanquantile(postIsr.image.array, [0.01, 0.99])
-    # ax.imshow(postIsr.image.array, origin="lower", cmap="gray", vmin=vmin, vmax=vmax)
+    # ax.imshow(postIsr.image.array, origin="lower", cmap="gray", vmin=vmin, vmax=vmax)  # noqa: W505
     # ax.set_xlim(0, postIsr.image.array.shape[1])
     # ax.set_ylim(0, postIsr.image.array.shape[0])
-    # ax.scatter(refcat["centroid_x"], refcat["centroid_y"], s=20, edgecolor="cyan", facecolor="none")
-    # ax.scatter(blindDetections["centroid_x"], blindDetections["centroid_y"], s=50, edgecolor="blue", facecolor="none")
-    # ax.scatter(selections["centroid_x"], selections["centroid_y"], s=80, edgecolor="red", facecolor="none")
+    # ax.scatter(refcat["centroid_x"], refcat["centroid_y"], s=20, edgecolor="cyan", facecolor="none")  # noqa: E501, W505
+    # ax.scatter(blindDetections["centroid_x"], blindDetections["centroid_y"], s=50, edgecolor="blue", facecolor="none")  # noqa: E501, W505
+    # ax.scatter(selections["centroid_x"], selections["centroid_y"], s=80, edgecolor="red", facecolor="none")  # noqa: E501, W505
     # ax.scatter(
     #     [d.x_det for d in cut_result.donuts],
     #     [d.y_det for d in cut_result.donuts],
@@ -399,7 +402,7 @@ def _cutout_one_exposure(
 
 
 def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
-    """Corner-mode entry point: one exposure per detector, all from _CALIB_STORE.
+    """Corner-mode entry point: one exposure per detector, from _CALIB_STORE.
 
     Parameters
     ----------

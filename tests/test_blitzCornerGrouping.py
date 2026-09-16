@@ -24,8 +24,8 @@
 Corner mode pairs by SNR rank and has no fallback, so unlike full-array mode's
 `_pair_donuts` there is no algorithm choice to test.  What is worth pinning is
 the provenance contract the two modes share: ``_build_wf_groups`` reports a
-non-empty token for every mode, so an empty ``pair_path`` in a persisted catalog
-means a bug rather than "not applicable".
+non-empty token for every mode, so an empty ``pair_path`` in a persisted
+catalog means a bug rather than "not applicable".
 """
 
 import unittest
@@ -49,8 +49,8 @@ class TestCornerGroupingPairPath(unittest.TestCase):
     """The ``pair_path`` token, per mode."""
 
     def setUp(self) -> None:
-        # One corner, with a surplus SW0 donut so `paired` has something to leave
-        # unmatched. SNRs are distinct so the rank zip is unambiguous.
+        # One corner, with a surplus SW0 donut so `paired` has something to
+        # leave unmatched. SNRs are distinct so the rank zip is unambiguous.
         self.results_by_det = {
             "R00_SW0": [
                 _donut("R00_SW0", 1, 900.0),
@@ -66,8 +66,8 @@ class TestCornerGroupingPairPath(unittest.TestCase):
     def testPairedRecordsSnrRank(self) -> None:
         groups, unmatched, path = _groups("paired", self.results_by_det)
         self.assertEqual(path, "snr_rank")
-        # Two pairs from the ranks that exist on both sides, and the faintest SW0
-        # donut left over.
+        # Two pairs from the ranks that exist on both sides, and the faintest
+        # SW0 donut left over.
         self.assertEqual(len(groups), 2)
         self.assertTrue(all(len(g.donuts) == 2 for g in groups))
         self.assertEqual([d.snr for d in unmatched], [100.0])
@@ -80,7 +80,7 @@ class TestCornerGroupingPairPath(unittest.TestCase):
                 self.assertEqual(unmatched, [])
 
     def testEveryModeReportsANonEmptyPath(self) -> None:
-        """The invariant the catalog builder relies on: never "" and never None."""
+        """The invariant the catalog builder needs: never "" and never None."""
         for mode in ("paired",) + _NON_PAIRING_MODES:
             with self.subTest(mode=mode):
                 path = _groups(mode, self.results_by_det)[2]

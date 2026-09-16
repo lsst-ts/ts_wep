@@ -84,9 +84,9 @@ def _result(det_name="R00_SW0", rejected=()):
         "wcs_refit_error": "",
         "cat_select_error": "",
         "rejected_catalog": list(rejected),
-        # Both provenance fields are unconditional in the real results: the cutout
-        # pipeline always sets a selection_source, and it seeds pair_path with
-        # "n/a" for the grouping stage to overwrite.
+        # Both provenance fields are unconditional in the real results: the
+        # cutout pipeline always sets a selection_source, and it seeds
+        # pair_path with "n/a" for the grouping stage to overwrite.
         "selection_source": "refcat",
         "n_quarter": 0,
         "pair_path": "n/a",
@@ -123,9 +123,10 @@ class TestCatalogOptions(unittest.TestCase):
     def testMonolithWiresEveryFieldFromConfig(self) -> None:
         """Corner mode's options come from the config fields they claim to.
 
-        The extraction replaced ~10 ``self.<subtask>.config.<field>`` reads with
-        an options object; a crossed pair of floats here would silently change
-        the annulus geometry recorded in ``meta`` and drawn on the plots.
+        The extraction replaced ~10 ``self.<subtask>.config.<field>`` reads
+        with an options object; a crossed pair of floats here would silently
+        change the annulus geometry recorded in ``meta`` and drawn on the
+        plots.
         """
         config = DonutBlitzMonolithTaskConfig()
         config.cutStampsTask.stampSize = 215
@@ -177,8 +178,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         self.assertEqual({str(r["group_id"]) for r in table}, {""})
         self.assertFalse(any(bool(r["group_fit_success"]) for r in table))
         self.assertTrue(np.all(np.isnan(table["zk_deviation_ccs"].value)))
-        # `rejected` is not a column: the rejected_* reasons carry it, and their
-        # OR is exactly ~candidate.
+        # `rejected` is not a column: the rejected_* reasons carry it, and
+        # their OR is exactly ~candidate.
         self.assertNotIn("rejected", table.colnames)
         self.assertTrue(bool(by_id[2]["rejected_snr"]))
 
@@ -190,12 +191,12 @@ class TestBuildDonutCatalog(unittest.TestCase):
         self.assertTrue(bool(table[0]["candidate"]))
 
     def testSameStarOnBothSidesOfFocusKeepsBothRows(self) -> None:
-        """The full-array case that ``(det_name, donut_id)`` alone would have collapsed.
+        """The full-array case ``(det_name, donut_id)`` alone would collapse.
 
-        FAM cuts the same star on the same detector once per side of focus, so the
-        two donuts share a ``donut_id`` -- the same refcat source, or the same ``1..N``
-        blind-detection slot. Only ``visit_id`` separates them, in the row key and
-        in the wavefront-result lookup.
+        FAM cuts the same star on the same detector once per side of focus, so
+        the two donuts share a ``donut_id`` -- the same refcat source, or the
+        same ``1..N`` blind-detection slot. Only ``visit_id`` separates them,
+        in the row key and in the wavefront-result lookup.
         """
         intra_visit, extra_visit = 2026070900036, 2026070900037
         intra = _donut(donut_id=7, visit_id=intra_visit)
@@ -245,8 +246,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         )
 
         self.assertEqual(len(table), 2)
-        # Which visit was which side, so a consumer need not infer it. Set inside
-        # the builder for both modes, so meta stays schema-identical.
+        # Which visit was which side, so a consumer need not infer it. Set
+        # inside the builder for both modes, so meta stays schema-identical.
         self.assertEqual(table.meta["intra_visit_id"], intra_visit)
         self.assertEqual(table.meta["extra_visit_id"], extra_visit)
         self.assertEqual(table.meta["ref_visit_id"], extra_visit)
@@ -265,8 +266,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         """``group_id`` labels the fit; ``group_*`` repeat across its rows.
 
         The label comes straight off the `WfResult`, so a consumer can collapse
-        the replicated group-level values to one measurement per fit -- which an
-        array index into a list that no longer exists could not support.  A
+        the replicated group-level values to one measurement per fit -- which
+        an array index into a list that no longer exists could not support.  A
         donut no fit claimed gets the empty string rather than a sentinel int.
         """
         paired = [_donut(donut_id=1), _donut(donut_id=2)]
@@ -315,7 +316,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
 
         by_id = {int(r["donut_id"]): r for r in table}
         self.assertEqual({str(by_id[i]["group_id"]) for i in (1, 2)}, {gid})
-        # No fit claimed the surplus donut: empty label, and nothing to succeed.
+        # No fit claimed the surplus donut: empty label, and nothing to
+        # succeed.
         self.assertEqual(str(by_id[3]["group_id"]), "")
         self.assertFalse(bool(by_id[3]["group_fit_success"]))
         # "" is the outcome reserved for "no group claimed it", distinct from
@@ -346,8 +348,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
     def testDefocalOffsetsCarryTheSideOfFocus(self) -> None:
         """The triplet is the defocal state, and its sign is the side.
 
-        Both modes negate the extra-focal triplet to get the intra-focal one, so
-        a consumer reads the side off the sign without needing to know that
+        Both modes negate the extra-focal triplet to get the intra-focal one,
+        so a consumer reads the side off the sign without needing to know that
         SW0/SW1 straddle focus (corner) or which visit was intra (FAM).
         """
         extra = _donut(donut_id=1, defocal_offsets=(+1.5e-3, 0.0, 0.0))
@@ -359,7 +361,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         np.testing.assert_allclose(by_id[2]["defocal_offsets"].to_value(u.m), [-1.5e-3, 0.0, 0.0])
 
     def testDefocalOffsetsAreNaNWhenUnannotated(self) -> None:
-        """A donut that never reached the fitter still gets a well-shaped row."""
+        """A donut that never reached the fitter gets a well-shaped row."""
         table = build_donut_catalog([_result()], [], [_donut(defocal_offsets=None)], [], 42, _options())
         offsets = table["defocal_offsets"].to_value(u.m)
         self.assertEqual(offsets.shape, (1, 3))
@@ -433,8 +435,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         self.assertAlmostEqual(table.meta["rot_tel_pos"].to_value(u.deg), np.degrees(0.25))
         self.assertAlmostEqual(table.meta["bkg_annulus_outer_frac"], options.bkg_annulus_outer_frac)
         self.assertAlmostEqual(table.meta["bkg_inner_disc_frac"], options.bkg_inner_disc_frac)
-        # Per-detector metadata survives for the plots.  Corner mode supplies no
-        # per-result visit_id, so the key falls back to this table's visit.
+        # Per-detector metadata survives for the plots.  Corner mode supplies
+        # no per-result visit_id, so the key falls back to this table's visit.
         self.assertIn("R00_SW0_99", table.meta["det_meta"])
         self.assertAlmostEqual(
             table.meta["det_meta"]["R00_SW0_99"]["astrom_scatter"].to_value(u.arcsec),
@@ -630,9 +632,10 @@ class TestBuildDonutCatalog(unittest.TestCase):
     def testDetectorOrientationIsPerDetectorNotPerRow(self) -> None:
         """n_quarter lives in det_meta, keyed by detector *and* visit.
 
-        It is a per-detector constant, and only useful next to x_det/y_det -- so
-        it is recorded for provenance (undoing the CCS stamp rotation without
-        loading the camera model) without being replicated onto every row.
+        It is a per-detector constant, and only useful next to x_det/y_det --
+        so it is recorded for provenance (undoing the CCS stamp rotation
+        without loading the camera model) without being replicated onto every
+        row.
         """
         results = [
             {**_result(), "visit_id": 1, "n_quarter": 1},
@@ -647,11 +650,11 @@ class TestBuildDonutCatalog(unittest.TestCase):
     def testDetMetaProvenanceRecordsNotApplicable(self) -> None:
         """ "Nothing to report" is a named token, not an empty string.
 
-        The producers cover every case -- corner mode's ``snr_rank``/``n/a``, the
-        no-detections early return's ``no_detections`` -- so the builder copies
-        both fields verbatim with no default. An empty string, ``None`` or a
-        missing key reaching ``det_meta`` would therefore be a bug, not "not
-        applicable".
+        The producers cover every case -- corner mode's ``snr_rank``/``n/a``,
+        the no-detections early return's ``no_detections`` -- so the builder
+        copies both fields verbatim with no default. An empty string, ``None``
+        or a missing key reaching ``det_meta`` would therefore be a bug, not
+        "not applicable".
         """
         results = [{**_result(), "selection_source": "no_detections", "pair_path": "n/a"}]
         table = build_donut_catalog(results, [], [_donut()], [], 42, _options())

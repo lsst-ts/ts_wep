@@ -88,8 +88,8 @@ class BlindDetect(pipeBase.Task):
     Returns
     -------
     QTable
-        Columns ``donut_id``, ``centroid_x``, ``centroid_y`` in full-exposure pixel
-        coordinates.  Empty table if no peaks are found.
+        Columns ``donut_id``, ``centroid_x``, ``centroid_y`` in full-exposure
+        pixel coordinates.  Empty table if no peaks are found.
     """
 
     def __init__(self, *args, **kwargs):
