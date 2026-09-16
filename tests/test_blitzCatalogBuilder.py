@@ -33,9 +33,9 @@ from lsst.daf.base import DateTime
 from lsst.daf.butler.formatters.parquet import arrow_to_astropy, astropy_to_arrow
 from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
 from lsst.ts.wep.blitz.dataStructures import Donut, WfResult
-from lsst.ts.wep.blitz.donutBlitzMonolithTask import (
-    DonutBlitzMonolithTask,
-    DonutBlitzMonolithTaskConfig,
+from lsst.ts.wep.blitz.donutBlitzCornerTask import (
+    DonutBlitzCornerTask,
+    DonutBlitzCornerTaskConfig,
 )
 from lsst.ts.wep.blitz.utils import _ZK_JMAX
 
@@ -120,7 +120,7 @@ class TestCatalogOptions(unittest.TestCase):
         self.assertEqual(_options(stamp_size=168).wf_img_size, 83)
         self.assertEqual(_options(noll_indices=(4, 11, 22)).zk_deviation_jmax, 22)
 
-    def testMonolithWiresEveryFieldFromConfig(self) -> None:
+    def testCornerWiresEveryFieldFromConfig(self) -> None:
         """Corner mode's options come from the config fields they claim to.
 
         The extraction replaced ~10 ``self.<subtask>.config.<field>`` reads
@@ -128,7 +128,7 @@ class TestCatalogOptions(unittest.TestCase):
         change the annulus geometry recorded in ``meta`` and drawn on the
         plots.
         """
-        config = DonutBlitzMonolithTaskConfig()
+        config = DonutBlitzCornerTaskConfig()
         config.cutStampsTask.stampSize = 215
         config.cutStampsTask.maxDonuts = 11
         config.wfFittingTask.binning = 3
@@ -142,7 +142,7 @@ class TestCatalogOptions(unittest.TestCase):
         config.wfEstimationMode = "unpaired"
         config.saveStamps = False
 
-        options = DonutBlitzMonolithTask(config=config)._catalogOptions()
+        options = DonutBlitzCornerTask(config=config)._catalogOptions()
 
         self.assertEqual(options.stamp_size, 215)
         self.assertEqual(options.max_donuts, 11)
