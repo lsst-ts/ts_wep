@@ -42,7 +42,7 @@ from scipy.stats import median_abs_deviation
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 
-from .dataStructures import _FIT_OUTCOMES, Donut, WfResult, _WfGroup
+from .dataStructures import _FIT_OUTCOMES, Donut, WfDonutResult, _WfGroup
 from .utils import (
     _COW_STORE,
     _INSTRUMENT,
@@ -571,7 +571,7 @@ class WavefrontFittingTask(pipeBase.Task):
             - zk_dev: ndarray
             - success: bool
             - fit_info: dict
-            - donuts: list of WfResult
+            - donuts: list of WfDonutResult
             - model_imgs: list or None
             - imgs: list
             - det_names: list of str
@@ -649,7 +649,7 @@ class WavefrontFittingTask(pipeBase.Task):
         for i, d in enumerate(all_donuts):
             _img = imgs[i] if i < len(imgs) else None
             donuts_out.append(
-                WfResult(
+                WfDonutResult(
                     donut_id=int(d.donut_id),
                     det_name=d.det_name,
                     visit_id=int(d.visit_id),

@@ -33,7 +33,7 @@ import unittest
 import numpy as np
 
 from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
-from lsst.ts.wep.blitz.dataStructures import Donut, WfResult
+from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
 from lsst.ts.wep.blitz.donutBlitzPlotTask import (
     DonutBlitzPlotTask,
     DonutBlitzPlotTaskConfig,
@@ -102,7 +102,7 @@ def _wf_result(donuts, group_id):
     rng = np.random.default_rng(0)
     return {
         "donuts": [
-            WfResult(
+            WfDonutResult(
                 donut_id=d.donut_id,
                 det_name=d.det_name,
                 visit_id=d.visit_id,
