@@ -66,12 +66,12 @@ def _exposure():
 def _measurements(with_refcat_values: bool, d1_xy=_D1_XY) -> QTable:
     """The two selected donuts, as the measurement task would hand them over.
 
-    ``with_refcat_values`` distinguishes the two upstream paths, but only in the
-    *values*: the refcat path carries the donut's own magnitudes and sky position
-    through from the refcat subset, while the blind-detection path has the same
-    columns NaN-filled (see `_REFCAT_COLUMNS`, filled in `_cutout_one_exposure`).
-    The schema is the same either way, which is what lets `CutDonutStampsTask`
-    read them unconditionally.
+    ``with_refcat_values`` distinguishes the two upstream paths, but only in
+    the *values*: the refcat path carries the donut's own magnitudes and sky
+    position through from the refcat subset, while the blind-detection path has
+    the same columns NaN-filled (see `_REFCAT_COLUMNS`, filled in
+    `_cutout_one_exposure`). The schema is the same either way, which is what
+    lets `CutDonutStampsTask` read them unconditionally.
     """
     table = QTable(
         {
@@ -134,7 +134,7 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(mag, 18.0)
 
     def test_isolated_donut_has_no_neighbors(self):
-        """An isolated donut has an empty neighbour list, not one holding itself."""
+        """An isolated donut's neighbour list is empty, not holding itself."""
         donuts = _run(_measurements(with_refcat_values=True), _refcat())
 
         self.assertEqual(donuts[20].nearby_photo, [])
@@ -149,7 +149,7 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(donuts[20].astrom_mag, 15.2)
 
     def test_own_sky_position_carried_from_selections(self):
-        """Radians in, radians on the Donut -- the degrees conversion is the builder's."""
+        """Radians in, radians on the Donut; degrees are the builder's job."""
         donuts = _run(_measurements(with_refcat_values=True), _refcat())
 
         self.assertAlmostEqual(np.degrees(donuts[10].coord_ra), 30.0)
@@ -158,10 +158,10 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(np.degrees(donuts[20].coord_dec), -20.1)
 
     def test_blind_path_has_no_refcat_information(self):
-        """No refcat means no neighbours, magnitudes or sky position -- NaN, not zero.
+        """No refcat: no neighbours, magnitudes or position -- NaN, not zero.
 
-        The columns are still *present*: `_REFCAT_COLUMNS` is NaN-filled upstream
-        so the task reads them without testing the schema.
+        The columns are still *present*: `_REFCAT_COLUMNS` is NaN-filled
+        upstream so the task reads them without testing the schema.
         """
         donuts = _run(_measurements(with_refcat_values=False), None)
 
@@ -178,10 +178,11 @@ class TestNeighborSelfExclusion(unittest.TestCase):
 class TestRefcatColumnsAreRequired(unittest.TestCase):
     """The task reads `_REFCAT_COLUMNS` unconditionally, by design.
 
-    It used to test ``measurements.colnames`` for them and substitute NaN, which
-    made a schema gap indistinguishable from a genuine data gap. The guarantee now
-    lives upstream, in `_cutout_one_exposure`, so a table arriving without them is
-    a bug and should say so rather than quietly producing NaN donuts.
+    It used to test ``measurements.colnames`` for them and substitute NaN,
+    which made a schema gap indistinguishable from a genuine data gap. The
+    guarantee now lives upstream, in `_cutout_one_exposure`, so a table
+    arriving without them is a bug and should say so rather than quietly
+    producing NaN donuts.
     """
 
     def test_each_column_is_load_bearing(self):
@@ -222,7 +223,7 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
         self.assertAlmostEqual(dy, 0.0)
 
     def test_offset_is_not_from_the_rounded_centroid(self):
-        """Stated explicitly, so a drift to the rounded centroid is unambiguous."""
+        """Stated explicitly, so a drift to the rounded centroid shows."""
         donut, (dx, _, _) = self._neighbor_of_donut_10()
         rounded = _NEIGHBOR_XY[0] - round(self._FRACTIONAL_D1_XY[0])
 
@@ -237,13 +238,13 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
         self.assertAlmostEqual(donut.y_det + dy, _NEIGHBOR_XY[1])
 
     def test_rounding_residual_recovers_the_stamp_grid(self):
-        """Adding ``x_det - round(x_det)`` back puts the offset on the stamp grid.
+        """Adding ``x_det - round(x_det)`` back puts the offset on the grid.
 
-        This is the property `donutBlitzPlotTask._xform` relies on to draw refcat
-        markers: the stamp was cut on integer bounds around the rounded centroid,
-        so a neighbour sitting on an integer detector pixel must land exactly on
-        a stamp pixel centre once the residual is applied. Omitting it puts the
-        marker ~0.4 px off the source.
+        This is the property `donutBlitzPlotTask._xform` relies on to draw
+        refcat markers: the stamp was cut on integer bounds around the rounded
+        centroid, so a neighbour sitting on an integer detector pixel must land
+        exactly on a stamp pixel centre once the residual is applied. Omitting
+        it puts the marker ~0.4 px off the source.
         """
         donut, (dx, dy, _) = self._neighbor_of_donut_10()
         residual_x = donut.x_det - round(donut.x_det)
@@ -263,8 +264,8 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
         stamp bounds were cut on.
         """
         d1_xy = self._FRACTIONAL_D1_XY
-        # Just inside the stamp: the box spans rounded centroid +/- (stampSize //
-        # 2), so at stampSize 21 that is 100 +/- 10.
+        # Just inside the stamp: the box spans rounded centroid +/- (stampSize
+        # // 2), so at stampSize 21 that is 100 +/- 10.
         edge_x = round(d1_xy[0]) + _STAMP_SIZE // 2
         refcat = _refcat(d1_xy=d1_xy)
         refcat["centroid_x"][2] = edge_x

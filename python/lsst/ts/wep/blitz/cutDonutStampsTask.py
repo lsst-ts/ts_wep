@@ -86,9 +86,9 @@ class CutDonutStampsTask(pipeBase.Task):
     """Cut donut stamps and evaluate rejection criteria.
 
     For each measured candidate, cuts a stamp centered on the centroid,
-    computes per-stamp geometry (field angle, nearby refcat sources) and the SAT
-    flag, then applies the quality cuts (SAT, inner/outer flux fraction, SNR) to
-    split accepted from rejected.
+    computes per-stamp geometry (field angle, nearby refcat sources) and the
+    SAT flag, then applies the quality cuts (SAT, inner/outer flux fraction,
+    SNR) to split accepted from rejected.
 
     Candidates are sorted flux-descending internally, so both output lists are
     filled brightest-first and the cut loop early-exits once both the accepted
@@ -118,9 +118,9 @@ class CutDonutStampsTask(pipeBase.Task):
             Background-subtracted post-ISR science exposure.
         measurements : QTable
             Measured candidates from the measurement task, with columns
-            ``donut_id``, ``centroid_x``, ``centroid_y``, ``flux``, ``inner_frac``,
-            ``outer_frac``, ``outer_sector_minmax_frac``, ``snr``, ``bkg_std``,
-            ``bkg``, plus every column in
+            ``donut_id``, ``centroid_x``, ``centroid_y``, ``flux``,
+            ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``,
+            ``snr``, ``bkg_std``, ``bkg``, plus every column in
             `lsst.ts.wep.blitz.utils._REFCAT_COLUMNS` -- present whichever
             selection path ran, NaN-valued on the blind-detection one.
             Photometric metrics are carried onto the Donut objects as-is; only
@@ -160,8 +160,8 @@ class CutDonutStampsTask(pipeBase.Task):
         sat_bit = exposure.mask.getPlaneBitMask("SAT")
 
         # Sort candidates flux-descending up front so the fill loop below keeps
-        # brightest-first and can early-exit once both buckets are full, without
-        # depending on the upstream measurement task's row order.
+        # brightest-first and can early-exit once both buckets are full,
+        # without depending on the upstream measurement task's row order.
         if len(measurements) > 1:
             measurements = measurements[np.argsort(measurements["flux"])[::-1]]
 
@@ -178,9 +178,10 @@ class CutDonutStampsTask(pipeBase.Task):
             _rc_mag = {}
 
         def _cut_stamp(row) -> Donut | None:
-            """Cut one stamp and compute metrics. Returns Donut or None on failure."""
+            """Cut one stamp and compute metrics; None on failure."""
             # Cut a stamp of configured size, centered on the rounded centroid.
-            # Odd-size preference is enforced during binning in _prep_donut_for_danish.
+            # Odd-size preference is enforced during binning in
+            # _prep_donut_for_danish.
             cx_f = row["centroid_x"]
             cy_f = row["centroid_y"]
             cx, cy = round(cx_f), round(cy_f)
@@ -204,16 +205,16 @@ class CutDonutStampsTask(pipeBase.Task):
                 # actually inside the stamp.
                 box_mask = (np.abs(_rc_x - cx) <= half_before) & (np.abs(_rc_y - cy) <= half_before)
                 # Drop this donut itself: it is a refcat source too, so the box
-                # always contains it at zero offset. Matched on refcat id rather
-                # than on a distance threshold -- `refcat` is non-None only when
-                # the selections were drawn from it, so the id comparison is
-                # exact.
+                # always contains it at zero offset. Matched on refcat id
+                # rather than on a distance threshold -- `refcat` is non-None
+                # only when the selections were drawn from it, so the id
+                # comparison is exact.
                 box_mask &= _rc_id != row["donut_id"]
                 # Offsets are from cx_f/cy_f, not the rounded cx/cy, so that
                 # ``x_det + nearby_*_dx_det`` is the neighbor's detector x with
-                # no correction term. Anything wanting stamp-display coordinates
-                # has to add the rounding residual ``x_det - round(x_det)``; see
-                # `_xform` in donutBlitzPlotTask.
+                # no correction term. Anything wanting stamp-display
+                # coordinates has to add the rounding residual ``x_det -
+                # round(x_det)``; see `_xform` in donutBlitzPlotTask.
                 dx_box = _rc_x[box_mask] - cx_f
                 dy_box = _rc_y[box_mask] - cy_f
 
@@ -255,10 +256,10 @@ class CutDonutStampsTask(pipeBase.Task):
                 bkg=row["bkg"],
                 bkg_std=row["bkg_std"],
                 n_quarter=n_quarter,
-                # The donut's own refcat values ride the selections table, a row
-                # subset of the refcat on that path. `_REFCAT_COLUMNS` guarantees
-                # they are present on the blind path too, NaN-filled, so there is
-                # nothing to test for here.
+                # The donut's own refcat values ride the selections table, a
+                # row subset of the refcat on that path. `_REFCAT_COLUMNS`
+                # guarantees they are present on the blind path too,
+                # NaN-filled, so there is nothing to test for here.
                 photo_mag=float(row["photo_mag"]),
                 astrom_mag=float(row["astrom_mag"]),
                 coord_ra=float(row["coord_ra"]),

@@ -78,7 +78,7 @@ def transform_eb(
     thx,
     thy,
 ):
-    """Transform Noll-indexed Zernike coefficients to E/B (cosine/sine) representation.
+    """Transform Noll-indexed Zernikes to an E/B (cosine/sine) basis.
 
     Rotates each spin-m Zernike doublet by m*phi, phi = atan2(thy, thx),
     referenced to the same axes as the Zernike azimuth. Same Noll layout:
@@ -122,10 +122,10 @@ def transform_eb(
 
 @dataclass(frozen=True)
 class CatalogOptions:
-    """Config-derived scalars the catalog needs, gathered from the calling task.
+    """Config-derived scalars the catalog needs, taken from the calling task.
 
-    Grouped into one object rather than a dozen positional arguments because the
-    two callers assemble them from different config trees, and a silently
+    Grouped into one object rather than a dozen positional arguments because
+    the two callers assemble them from different config trees, and a silently
     mismatched argument order would be hard to spot in the output.
 
     Attributes
@@ -133,16 +133,16 @@ class CatalogOptions:
     stamp_size : int
         Un-binned stamp side, from the stamp-cutting subtask.
     binning : int
-        WF binning factor, from the fitting subtask. Also written to ``meta`` so
-        the plots can convert raw-pixel quantities when they fall back to
+        WF binning factor, from the fitting subtask. Also written to ``meta``
+        so the plots can convert raw-pixel quantities when they fall back to
         ``wf_img``.
     noll_indices : tuple of int
         Noll indices actually fitted. The deviation array column stops at the
         highest one.
     aperture_margin_frac : float
         Fractional margin on both edges of the photometric annulus, from the
-        measurement subtask: the outer edge sits at ``radius * (1 + frac)``, the
-        inner edge at ``radius * obscuration * (1 - frac)``.
+        measurement subtask: the outer edge sits at ``radius * (1 + frac)``,
+        the inner edge at ``radius * obscuration * (1 - frac)``.
     bkg_inner_disc_frac : float
         Outer edge of the inner background disc (inside the obscuration), from
         the measurement subtask.
@@ -155,8 +155,8 @@ class CatalogOptions:
     save_stamps : bool
         Include the un-binned ``stamp`` column. Much the largest column.
     save_wf_images : bool
-        Include ``wf_img`` and ``model_img``. Dropped as a pair: a model with no
-        data to compare it against is not useful.
+        Include ``wf_img`` and ``model_img``. Dropped as a pair: a model with
+        no data to compare it against is not useful.
     """
 
     stamp_size: int
@@ -315,11 +315,11 @@ def build_donut_catalog(
     ----------
     results : list
         Per-detector cutout dicts (supplies rejected donuts and per-detector
-        metadata).  Full-array mode passes two per detector, one per exposure of
-        the pair, each tagged with its own ``visit_id``; corner mode passes one
-        per detector and omits ``visit_id``, defaulting to the ``visit_id``
-        argument.  Either way the metadata is keyed by ``f"{det_name}_{visit_id}"``
-        (see ``table.meta["det_meta"]``).
+        metadata).  Full-array mode passes two per detector, one per exposure
+        of the pair, each tagged with its own ``visit_id``; corner mode passes
+        one per detector and omits ``visit_id``, defaulting to the ``visit_id``
+        argument.  Either way the metadata is keyed by
+        ``f"{det_name}_{visit_id}"`` (see ``table.meta["det_meta"]``).
     wf_results : list
         Per-fit WF result dicts from the WF worker pool.
     donuts : list
@@ -404,10 +404,10 @@ def build_donut_catalog(
         for wd in r.get("donuts", []):
             wf_by_id[(wd.donut_id, wd.det_name, wd.visit_id)] = wd
 
-    # Build lookup: "{det_name}_{visit_id}" -> per-detector metadata from cutout
-    # results.  The visit is part of the key because full-array mode passes one
-    # cutout result per detector *per exposure*, so det_name alone would collide
-    # and drop half the metadata.
+    # Build lookup: "{det_name}_{visit_id}" -> per-detector metadata from
+    # cutout results.  The visit is part of the key because full-array mode
+    # passes one cutout result per detector *per exposure*, so det_name alone
+    # would collide and drop half the metadata.
     det_meta: dict = {}
     for r in results:
         det_key = f"{r['det_name']}_{r.get('visit_id', visit_id)}"
@@ -415,26 +415,27 @@ def build_donut_catalog(
             "astrom_scatter": (r["scatter_arcsec"] if r["scatter_arcsec"] is not None else np.nan) * u.arcsec,
             "wcs_refit_error": r["wcs_refit_error"],
             "cat_select_error": r["cat_select_error"],
-            # Where this detector's donut ids came from. "refcat" ids are refcat
-            # source ids; the blind paths number donuts 1..N per detector per
-            # exposure, so a donut_id is only comparable across exposures on the refcat
-            # path. "no_detections" when no selector ran at all.
+            # Where this detector's donut ids came from. "refcat" ids are
+            # refcat source ids; the blind paths number donuts 1..N per
+            # detector per exposure, so a donut_id is only comparable across
+            # exposures on the refcat path. "no_detections" when no selector
+            # ran at all.
             "selection_source": r["selection_source"],
-            # Detector orientation: the `k` in the `np.rot90(stamp, k=-n_quarter).T`
-            # that put the stamps in CCS. Per-detector, and only meaningful
-            # alongside x_det/y_det, so it lives here rather than replicated onto
-            # every row -- but recorded, so undoing the transform does not mean
-            # loading the camera model.
+            # Detector orientation: the `k` in the `np.rot90(stamp,
+            # k=-n_quarter).T` that put the stamps in CCS. Per-detector, and
+            # only meaningful alongside x_det/y_det, so it lives here rather
+            # than replicated onto every row -- but recorded, so undoing the
+            # transform does not mean loading the camera model.
             "n_quarter": r["n_quarter"],
             # Which pairing algorithm ran: "refcat_id", "spatial" or "empty" in
-            # full-array mode, "snr_rank" in corner mode, "n/a" in the modes that
-            # do not pair.
+            # full-array mode, "snr_rank" in corner mode, "n/a" in the modes
+            # that do not pair.
             "pair_path": r["pair_path"],
             **{key: r.get(key, np.nan) * u.s for key in _CUTOUT_STAGE_KEYS.values()},
         }
 
-    # Collect every donut exactly once, tagged with whether it passed
-    # selection ("candidate"). Whether a fit actually consumed it comes from the
+    # Collect every donut exactly once, tagged with whether it passed selection
+    # ("candidate"). Whether a fit actually consumed it comes from the
     # wavefront result per row below (group_id / group_fit_success).
     #
     # `donuts` and `unmatched_donuts` overlap: the surplus donuts on whichever
@@ -469,7 +470,8 @@ def build_donut_catalog(
     zk_int_rows = []
     for d, candidate in all_donuts:
         sid = d.donut_id
-        # `_NULL_WF` carries group_id "", the "no fit claimed this donut" marker.
+        # `_NULL_WF` carries group_id "", the "no fit claimed this donut"
+        # marker.
         wd = wf_by_id.get((sid, d.det_name, d.visit_id), _NULL_WF)
 
         # Both are dense Noll-indexed arrays in meters of length _ZK_JMAX + 1;
@@ -494,9 +496,9 @@ def build_donut_catalog(
 
         wf_img = model_img = None
         if options.save_wf_images:
-            # Donuts no fit consumed (surplus) have no WF image from the fitter,
-            # so bin their stamp here with the same prep the fitter would have
-            # applied. Keeps them plottable as data-only rows.
+            # Donuts no fit consumed (surplus) have no WF image from the
+            # fitter, so bin their stamp here with the same prep the fitter
+            # would have applied. Keeps them plottable as data-only rows.
             if wd.img is not None:
                 wf_img = wd.img.astype(float)
             elif d.stamp is not None:
@@ -529,12 +531,13 @@ def build_donut_catalog(
             # --- this donut's own refcat values (NaN off the refcat path) ---
             "photo_mag": d.photo_mag * u.mag,
             "astrom_mag": d.astrom_mag * u.mag,
-            # Refcat truth.  NaN rather than approximate wherever there was no refcat.
+            # Refcat truth.  NaN rather than approximate wherever there was no
+            # refcat.
             "coord_ra": np.degrees(d.coord_ra) * u.deg,
             "coord_dec": np.degrees(d.coord_dec) * u.deg,
-            # --- nearby refcat sources (brightest-first, padded to _MAX_NEARBY) ---
-            # Excludes this donut itself, so a count of 0 means genuinely
-            # isolated within the stamp box.
+            # --- nearby refcat sources (brightest-first, padded to
+            # _MAX_NEARBY) --- Excludes this donut itself, so a count of 0
+            # means genuinely isolated within the stamp box.
             "nearby_photo_dx_det": nb_photo_dx * u.pix,
             "nearby_photo_dy_det": nb_photo_dy * u.pix,
             "nearby_photo_mag": nb_photo_mag * u.mag,
@@ -556,9 +559,9 @@ def build_donut_catalog(
             "rejected_inner_frac": d.rejected_inner_frac,
             "rejected_outer_frac": d.rejected_outer_frac,
             "rejected_snr": d.rejected_snr,
-            # --- fit results ---
-            # group_*: a property of the joint fit, replicated onto every row of
-            # the group. Dedupe on group_id before averaging or summing these.
+            # --- fit results --- group_*: a property of the joint fit,
+            # replicated onto every row of the group. Dedupe on group_id before
+            # averaging or summing these.
             "group_id": wd.group_id,
             "group_size": wd.group_size,
             "group_fit_success": wd.fit_success,
@@ -615,7 +618,8 @@ def build_donut_catalog(
     # so it is deliberately not named visit_id: with group_id it forms the
     # cross-visit key for a fit, which the row's own visit_id cannot.
     table.meta["ref_visit_id"] = visit_id
-    # Which visit supplied each side of focus.  In corner mode they are both this visit.
+    # Which visit supplied each side of focus.  In corner mode they are both
+    # this visit.
     table.meta["intra_visit_id"] = visit_id if intra_visit_id is None else intra_visit_id
     table.meta["extra_visit_id"] = visit_id if extra_visit_id is None else extra_visit_id
     # The butler group dimension value.

@@ -21,16 +21,16 @@
 
 """The FAM per-detector log block and its aggregates.
 
-This is the one part of a 189-detector quantum that is *only* observable through
-the log, so the failure mode it guards against is a summary that either crashes or
-lies at the end of a run that took an hour. Both are cheap to pin here: the
-functions under test take plain worker-result dicts, so none of this needs a
-butler, a fit, or a fork.
+This is the one part of a 189-detector quantum that is *only* observable
+through the log, so the failure mode it guards against is a summary that either
+crashes or lies at the end of a run that took an hour. Both are cheap to pin
+here: the functions under test take plain worker-result dicts, so none of this
+needs a butler, a fit, or a fork.
 
-The cases that matter are the degenerate ones -- a detector that failed before it
-timed anything, a quantum where every detector failed -- because those are exactly
-when someone is reading the log, and `np.nanmean` of nothing warns and returns NaN
-rather than raising.
+The cases that matter are the degenerate ones -- a detector that failed before
+it timed anything, a quantum where every detector failed -- because those are
+exactly when someone is reading the log, and `np.nanmean` of nothing warns and
+returns NaN rather than raising.
 """
 
 import unittest
@@ -49,7 +49,7 @@ from lsst.ts.wep.blitz.wavefrontFittingTask import WavefrontFittingTaskConfig
 
 
 def _cutout_result(visit_id, n_donuts=3, scatter=0.6, base=1.0):
-    """One exposure's cutout result, holding only the keys the summary reads."""
+    """One exposure's cutout result, only the keys the summary reads."""
     return {
         "visit_id": visit_id,
         "catalog": [object()] * n_donuts,
@@ -108,7 +108,8 @@ class FamLoggingTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.task = DonutBlitzFamTask(config=DonutBlitzFamTaskConfig())
-        # Deterministic output regardless of whether pytest is attached to a tty.
+        # Deterministic output regardless of whether pytest is attached to a
+        # tty.
         self.task._colorLogEnabled = False
 
     def logLines(self, results):
@@ -123,10 +124,10 @@ class FamLoggingTestCase(unittest.TestCase):
 
 
 class TestStageTimes(unittest.TestCase):
-    """`_detector_stage_times` is where the two exposures get folded together."""
+    """`_detector_stage_times` is where the two exposures fold together."""
 
     def testCutoutStagesSumOverBothExposures(self) -> None:
-        """The pair is summed, not sampled -- a stage total must cover both sides."""
+        """The pair is summed, not sampled: a total covers both sides."""
         r = _worker_result(base=1.0)
         stages = _detector_stage_times(r)
         # isr_run is base per exposure, two exposures.
@@ -143,7 +144,7 @@ class TestStageTimes(unittest.TestCase):
         self.assertAlmostEqual(stages["wall"], 50.0)
 
     def testKeysAreExactlyTheStageKeysInOrder(self) -> None:
-        """The per-detector line and the aggregate line iterate the same order."""
+        """The per-detector and aggregate lines iterate the same order."""
         self.assertEqual(tuple(_detector_stage_times(_worker_result())), _STAGE_KEYS)
 
     def testNoResultsGivesNaNNotZero(self) -> None:
@@ -189,7 +190,7 @@ class TestPerDetectorLines(FamLoggingTestCase):
     """One line per detector, whatever happened to it."""
 
     def testOneLinePerDetectorSortedByName(self) -> None:
-        """`imap_unordered` scrambles the order; the log must not be scrambled."""
+        """`imap_unordered` scrambles order; the log must not."""
         results = [
             _worker_result(det_id=3, det_name="R13_S02"),
             _worker_result(det_id=1, det_name="R01_S00"),
@@ -212,7 +213,7 @@ class TestPerDetectorLines(FamLoggingTestCase):
         self.assertIn("nfev=6.0", line)
 
     def testFailedAndSkippedDetectorsStillGetALine(self) -> None:
-        """A missing detector must be visibly missing, not absent from the block."""
+        """A missing detector must be visibly missing, not simply absent."""
         results = [
             _worker_result(det_id=1, det_name="R01_S00"),
             _worker_result(
@@ -273,7 +274,7 @@ class TestAggregates(FamLoggingTestCase):
         self.assertIn("io=6.00+/-3.00s", timing)
 
     def testAggregatesCoverOnlyDetectorsThatRan(self) -> None:
-        """A failed detector's NaN row would widen every std with an absence."""
+        """A failed detector's NaN row would widen every std."""
         results = [
             _worker_result(det_id=1, det_name="R01_S00", base=1.0),
             _worker_result(det_id=2, det_name="R02_S11", base=1.0),
@@ -305,7 +306,7 @@ class TestAggregates(FamLoggingTestCase):
         self.assertLess(slowest.index("R13_S02"), slowest.index("R01_S00"))
 
     def testNoAggregatesWhenEveryDetectorFailed(self) -> None:
-        """The all-failed case: per-detector lines, no NaN-only statistics block."""
+        """The all-failed case: per-detector lines, no statistics block."""
         results = [
             _worker_result(det_id=i, det_name=f"R0{i}_S00", error="boom", with_results=False) for i in (1, 2)
         ]
@@ -314,7 +315,7 @@ class TestAggregates(FamLoggingTestCase):
         self.assertFalse([line for line in lines if line.startswith("Per-detector timing")])
 
     def testEmptyResultsLogNothing(self) -> None:
-        """assertLogs fails on no output, so check the log call count directly."""
+        """assertLogs fails on no output, so check the call count directly."""
         with unittest.mock.patch.object(self.task.log, "info") as info:
             self.task._logWorkerSummaries([])
         info.assert_not_called()

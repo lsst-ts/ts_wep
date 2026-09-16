@@ -15,11 +15,11 @@ def _nOffsetsFor(diameter: float) -> int:
     """Number of sub-pixel sampling offsets per axis for anti-aliasing a disk.
 
     Chooses how finely to super-sample each pixel when rasterizing a disk
-    template (see `_createDisk`). Small disks need more offsets because a single
-    sample per pixel badly quantizes their edge; large disks need fewer because
-    their edge already spans many pixels. The heuristic 60/diameter is clipped to
-    [2, 10] to bound both the aliasing error (floor) and the cost (ceiling): the
-    inner loops in `_createDisk` scale as (nOffsets + 1)**2.
+    template (see `_createDisk`). Small disks need more offsets because a
+    single sample per pixel badly quantizes their edge; large disks need fewer
+    because their edge already spans many pixels. The heuristic 60/diameter is
+    clipped to [2, 10] to bound both the aliasing error (floor) and the cost
+    (ceiling): the inner loops in `_createDisk` scale as (nOffsets + 1)**2.
 
     Parameters
     ----------
@@ -38,16 +38,16 @@ def _createDisk(diameter: float, nOffsets: int | None = None) -> np.ndarray:
     """Rasterize an anti-aliased filled-disk template centered on the grid.
 
     Each pixel value is the fraction of its area covered by a disk of the given
-    diameter, estimated by super-sampling: the disk membership test is evaluated
-    on an (nOffsets + 1) x (nOffsets + 1) grid of sub-pixel offsets spanning
-    [-0.5, 0.5) in each axis and averaged. This yields soft edge pixels in
-    (0, 1) rather than a hard binary mask, which keeps the correlation scores
-    smooth in diameter and centroid position.
+    diameter, estimated by super-sampling: the disk membership test is
+    evaluated on an (nOffsets + 1) x (nOffsets + 1) grid of sub-pixel offsets
+    spanning [-0.5, 0.5) in each axis and averaged. This yields soft edge
+    pixels in (0, 1) rather than a hard binary mask, which keeps the
+    correlation scores smooth in diameter and centroid position.
 
-    The output grid is sized `diameter + 5` per axis and centered, so the disk is
-    fully contained with a small margin. The template is not normalized; its sum
-    (`~pi*(diameter/2)**2`) is used elsewhere (via _buildRegions) to build the
-    matched-filter template norms.
+    The output grid is sized `diameter + 5` per axis and centered, so the disk
+    is fully contained with a small margin. The template is not normalized; its
+    sum (`~pi*(diameter/2)**2`) is used elsewhere (via _buildRegions) to build
+    the matched-filter template norms.
 
     Parameters
     ----------
@@ -110,16 +110,16 @@ def _cropSame(full, imgShape, kerShape):
 def _shiftSubtractNoise(image):
     """Robust per-pixel noise sigma via shift-and-subtract.
 
-    Differencing adjacent ROWS cancels any fixed per-column offset (the residual
-    amplifier banding in these images) along with the sky gradient and nearly all
-    donut signal, so real sources do not inflate the estimate the way a plain MAD
-    of the image would. The IQR of the difference is then converted to a sigma of
-    the original image: /1.349 for IQR->sigma, /sqrt(2) because differencing two
-    independent pixels doubles the variance.
+    Differencing adjacent ROWS cancels any fixed per-column offset (the
+    residual amplifier banding in these images) along with the sky gradient and
+    nearly all donut signal, so real sources do not inflate the estimate the
+    way a plain MAD of the image would. The IQR of the difference is then
+    converted to a sigma of the original image: /1.349 for IQR->sigma, /sqrt(2)
+    because differencing two independent pixels doubles the variance.
 
     Same estimator as used on stamp backgrounds elsewhere in ts_wep (see
-    MeasureDonutCandidatesTask._measureFlux in lsst.ts.wep.blitz), applied to the whole
-    binned image rather than to a stamp's background annulus.
+    MeasureDonutCandidatesTask._measureFlux in lsst.ts.wep.blitz), applied to
+    the whole binned image rather than to a stamp's background annulus.
 
     Returns
     -------
@@ -205,7 +205,8 @@ class DiskCorrelationBank:
             A_B = background.sum()
             if A_S <= 0 or A_B <= 0:
                 continue
-            # Zero-mean matched-filter template: t = signal - (A_S/A_B)*background.
+            # Zero-mean matched-filter template: t = signal -
+            # (A_S/A_B)*background.
             t = signal - (A_S / A_B) * background
             self.annulusNorm[i] = np.sqrt((t**2).sum())
             self.bgWeight[i] = A_S / A_B
@@ -216,8 +217,8 @@ class DiskCorrelationBank:
         """Return (signalIndicator, backgroundIndicator) on a common centered
         grid, from the anti-aliased disk templates.
 
-        signal     = disk(d_i) - disk(d_ii)                 [the annulus]
-        background = disk(d_ii) + (disk(d_oi) - disk(d_i))  [hole + outer collar]
+        signal = disk(d_i) - disk(d_ii) [the annulus] background = disk(d_ii) +
+        (disk(d_oi) - disk(d_i)) [hole + outer collar]
                    = disk(d_oi) - signal
         """
         big = disks[oi] if oi >= 0 else disks[i]
@@ -250,13 +251,15 @@ class DiskCorrelationBank:
             Binned image, shape must equal self.binnedShape.
         secondMoment : bool
             If True, also return the image-squared correlations (needed for the
-            energy normalization). Pass False for the bad-pixel mask, which only
-            needs the first moment -- this saves one rfftn + one irfftn/diameter.
+            energy normalization). Pass False for the bad-pixel mask, which
+            only needs the first moment -- this saves one rfftn + one
+            irfftn/diameter.
 
         Returns
         -------
         diskCorr : list[np.ndarray]
-            <image, disk_i> at each location (template-sum units), one per diam.
+            <image, disk_i> at each location (template-sum units), one per
+            diam.
         diskCorrSq : list[np.ndarray] or None
             <image**2, disk_i>, or None if secondMoment is False.
         """
@@ -418,8 +421,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
 
     Bad pixels (config.badPixelTypes) are zeroed before binning (_prepImage).
     Peaks are declustered by a per-peak separation scaled to the winning
-    diameter, then quality-cut, in _selectPeaks. Finally the pooled per-detection
-    likeness sizing curve yields a single exposure diameter.
+    diameter, then quality-cut, in _selectPeaks. Finally the pooled
+    per-detection likeness sizing curve yields a single exposure diameter.
 
     Quality-control cuts and diagnostics
     ------------------------------------
@@ -431,18 +434,19 @@ class DonutDetectDiameterTask(pipeBase.Task):
     rather than being spent on rejects. Each peak carries two complementary
     scores:
 
-        likeness -- the cosine score above. Measures SHAPE agreement only; being
-            scale- and brightness-invariant, it discards the amplitude, which is
-            why pure-noise local maxima can still reach ~0.5-0.6 (hence the
+        likeness -- the cosine score above. Measures SHAPE agreement only;
+        being
+            scale- and brightness-invariant, it discards the amplitude, which
+            is why pure-noise local maxima can still reach ~0.5-0.6 (hence the
             default likeness threshold sits just above that noise floor).
-        snr      -- the matched-filter SNR, dot / (||t|| * pixelNoise). Restores
+        snr -- the matched-filter SNR, dot / (||t|| * pixelNoise). Restores
             the amplitude information the cosine normalization throws away.
 
     They fail differently -- and so are required jointly: the cosine rejects
     wrong-shape features at any brightness, the SNR rejects noise at any shape.
     On a measured failure (2026070900182 det 203, 2 real donuts and 3 noise
-    peaks) the two real peaks separated from the three spurious ones by ~1.7x in
-    likeness but ~15x in SNR.
+    peaks) the two real peaks separated from the three spurious ones by ~1.7x
+    in likeness but ~15x in SNR.
 
     Also reported per peak (diagnostic only, no cut applied) is
     `curve_argmax_edge`, true when the sizing curve's maximum lands on a ladder
@@ -520,14 +524,14 @@ class DonutDetectDiameterTask(pipeBase.Task):
             rho = dot / (||t|| * eLoc)
 
         where
-            dot  = <image, t> = sumS - bgWeight * sumB   (a SUM, matches ||t||)
-            eLoc = sqrt( <image^2, U> - <image, U>^2 / A_U )   local image energy
+            dot = <image, t> = sumS - bgWeight * sumB (a SUM, matches ||t||)
+            eLoc = sqrt( <image^2, U> - <image, U>^2 / A_U ) local image energy
                    (mean-removed, over the signal+background support U)
 
-        rho lies in ~[-1, 1] and is invariant to both donut SIZE and BRIGHTNESS.
-        A small noise floor (energyFloorFactor * median(eLoc)) is added to the
-        denominator so flat/empty regions (tiny eLoc) can't yield spuriously
-        high scores.
+        rho lies in ~[-1, 1] and is invariant to both donut SIZE and
+        BRIGHTNESS. A small noise floor (energyFloorFactor * median(eLoc)) is
+        added to the denominator so flat/empty regions (tiny eLoc) can't yield
+        spuriously high scores.
 
         Alongside it, the matched-filter SNR
 
@@ -594,7 +598,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
             var = sumsqU - (sumU * sumU) / A_U
             eLoc = np.sqrt(np.maximum(var, 0.0))
 
-            # Noise floor: fraction of the median local energy for this diameter.
+            # Noise floor: fraction of the median local energy for this
+            # diameter.
             if floorFrac > 0:
                 floor = floorFrac * np.median(eLoc[np.isfinite(eLoc)])
             else:
@@ -610,14 +615,14 @@ class DonutDetectDiameterTask(pipeBase.Task):
             yield i, rho, snr
 
     def _likenessMap(self, diskCorr, diskCorrSq, bank, pixelNoise=None):
-        """Scale- and brightness-invariant donut-likeness map (max over diameters
-        of the normalized cross-correlation), plus the matched-filter SNR at the
-        winning diameter.
+        """Scale- and brightness-invariant donut-likeness map (max over
+        diameters of the normalized cross-correlation), plus the matched-filter
+        SNR at the winning diameter.
 
         Also records, per pixel, which diameter won (argDiameter), used by
         _selectPeaks for per-peak declustering. The per-diameter rho maps are
-        retained (rhoMaps / rhoDiametersBinned) so the sizing step can reuse them
-        rather than recomputing the whole _annulusTerms pass per peak.
+        retained (rhoMaps / rhoDiametersBinned) so the sizing step can reuse
+        them rather than recomputing the whole _annulusTerms pass per peak.
 
         Returns
         -------
@@ -626,8 +631,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
                 max over diameters of rho -- the detection score.
             snrAtWinner : np.ndarray
                 Matched-filter SNR at the diameter that won the likeness max,
-                i.e. the amplitude that goes with the reported score. All-NaN if
-                pixelNoise is unusable.
+                i.e. the amplitude that goes with the reported score. All-NaN
+                if pixelNoise is unusable.
             argDiameter : np.ndarray
                 Winning diameter per pixel, in BINNED px (0 where nothing won).
             rhoMaps : list[np.ndarray]
@@ -665,22 +670,22 @@ class DonutDetectDiameterTask(pipeBase.Task):
     ):
         """Candidate (y, x) peaks in the binned likeness map, best-first.
 
-        Local maxima, declustered by a per-peak minimum separation scaled to the
-        diameter that won at each peak. Two peaks are considered distinct only if
-        their squared separation exceeds the LARGER of the two peaks' squared
-        separation radii (max(sepSq, cSepSq)) -- so a large donut cannot sit
-        immediately beside a small one (the large radius dominates), while two
-        small donuts may legitimately be close.
+        Local maxima, declustered by a per-peak minimum separation scaled to
+        the diameter that won at each peak. Two peaks are considered distinct
+        only if their squared separation exceeds the LARGER of the two peaks'
+        squared separation radii (max(sepSq, cSepSq)) -- so a large donut
+        cannot sit immediately beside a small one (the large radius dominates),
+        while two small donuts may legitimately be close.
 
         Quality cuts (likeness and matched-filter SNR thresholds) are applied
         here, inside the selection loop, rather than afterwards: a candidate
-        failing either cut is discarded and the descent through the sorted maxima
-        continues, so up to `nPeaks` genuine survivors can still be returned even
-        when high-SNR/low-likeness or high-likeness/low-SNR features are pruned.
-        A peak must pass BOTH cuts (they fail differently -- see class docstring).
-        Either cut is disabled by setting its threshold <= 0; the SNR cut is
-        additionally skipped for any peak whose SNR is non-finite (e.g. when the
-        pixel-noise estimate failed).
+        failing either cut is discarded and the descent through the sorted
+        maxima continues, so up to `nPeaks` genuine survivors can still be
+        returned even when high-SNR/low-likeness or high-likeness/low-SNR
+        features are pruned. A peak must pass BOTH cuts (they fail differently
+        -- see class docstring). Either cut is disabled by setting its
+        threshold <= 0; the SNR cut is additionally skipped for any peak whose
+        SNR is non-finite (e.g. when the pixel-noise estimate failed).
 
         Parameters
         ----------
@@ -689,8 +694,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
         bank : DiskCorrelationBank
             The correlation bank (for the max diameter fallback).
         snrAtWinner : np.ndarray or None
-            Matched-filter SNR at the winning diameter, aligned with `likeness`.
-            If None, the SNR cut is skipped entirely.
+            Matched-filter SNR at the winning diameter, aligned with
+            `likeness`. If None, the SNR cut is skipped entirely.
         argDiameter : np.ndarray or None
             Winning diameter per pixel (binned px), aligned with `likeness`,
             used to scale each peak's declustering radius. If None, the max
@@ -749,7 +754,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
         for k in range(len(ys)):
             y, x = ys[k], xs[k]
 
-            # Quality cuts: prune here so the descent can keep filling to nPeaks.
+            # Quality cuts: prune here so the descent can keep filling to
+            # nPeaks.
             if likeThresh > 0 and likeness[y, x] < likeThresh:
                 nRejLike += 1
                 continue
@@ -790,11 +796,12 @@ class DonutDetectDiameterTask(pipeBase.Task):
     def _sizingCurveAt(self, y, x, rhoMaps, rhoDiametersBinned, window=1):
         """Likeness sizing curve at a pixel: cosine response vs. diameter.
 
-        Reads the per-diameter rho response maps precomputed by _likenessMap and
-        samples them at (y, x), so no correlation algebra is repeated here. The
-        curve's peak locates the donut size while rejecting wrong-shape features:
-        a ring of small donuts whose mean-flux profile would peak at a large
-        (wrong) diameter does NOT produce a matching likeness peak there.
+        Reads the per-diameter rho response maps precomputed by _likenessMap
+        and samples them at (y, x), so no correlation algebra is repeated here.
+        The curve's peak locates the donut size while rejecting wrong-shape
+        features: a ring of small donuts whose mean-flux profile would peak at
+        a large (wrong) diameter does NOT produce a matching likeness peak
+        there.
 
         The value reported at each diameter is the local maximum over a
         (2*window + 1) box about (y, x), to tolerate small centroid offsets
@@ -854,9 +861,9 @@ class DonutDetectDiameterTask(pipeBase.Task):
         """Single exposure diameter (full-res px) from the pooled sizing curve,
         plus per-detection scatter and the underlying curves for inspection.
 
-        Since the exposure has one true diameter, per-detection curves are noisy
-        realizations of one curve; the median across detections at each diameter
-        gives a robust combined curve whose single peak is the answer.
+        Since the exposure has one true diameter, per-detection curves are
+        noisy realizations of one curve; the median across detections at each
+        diameter gives a robust combined curve whose single peak is the answer.
 
         Sizing reuses the per-diameter rho maps from _likenessMap (rhoMaps /
         rhoDiametersBinned) rather than recomputing them per peak.
@@ -955,8 +962,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
                 len(curveInfo["peaksUsed"]),
             )
 
-        # Binned, edge-trimmed (y, x) -> full-exposure pixels.
-        # A bin covers [i*b, (i+1)*b); its center is i*b + (b-1)/2, plus origin.
+        # Binned, edge-trimmed (y, x) -> full-exposure pixels. A bin covers
+        # [i*b, (i+1)*b); its center is i*b + (b-1)/2, plus origin.
         binning = self.config.detectionBinning
         half = (binning - 1) / 2.0
         minx, miny = bbox.getMinX(), bbox.getMinY()
@@ -969,9 +976,9 @@ class DonutDetectDiameterTask(pipeBase.Task):
             cx = np.array([])
             cy = np.array([])
 
-        # Per-peak QC diagnostics. The likeness/SNR cuts were already applied in
-        # _selectPeaks; these columns report the surviving peaks' scores (plus
-        # the no-cut curve_argmax_edge flag). See class docstring.
+        # Per-peak QC diagnostics. The likeness/SNR cuts were already applied
+        # in _selectPeaks; these columns report the surviving peaks' scores
+        # (plus the no-cut curve_argmax_edge flag). See class docstring.
         ys = [p[0] for p in peaks]
         xs = [p[1] for p in peaks]
         detections = QTable(

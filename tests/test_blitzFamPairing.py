@@ -21,13 +21,13 @@
 
 """Full-array-mode donut association and work-unit grouping.
 
-The pairing is the part of FAM with a failure mode that does not announce itself:
-FAM sees the same star on the same detector twice, so a mis-association silently
-fits two *different* stars as an intra/extra pair rather than raising. These tests
-pin both paths -- exact refcat-id matching, and the spatial fallback -- and in
-particular that the fallback still works at the edge of the field, where the
-radial defocus shift is ~27 px and an uncorrected tolerance would quietly stop
-pairing whole rafts.
+The pairing is the part of FAM with a failure mode that does not announce
+itself: FAM sees the same star on the same detector twice, so a mis-association
+silently fits two *different* stars as an intra/extra pair rather than raising.
+These tests pin both paths -- exact refcat-id matching, and the spatial
+fallback -- and in particular that the fallback still works at the edge of the
+field, where the radial defocus shift is ~27 px and an uncorrected tolerance
+would quietly stop pairing whole rafts.
 """
 
 import time
@@ -86,10 +86,11 @@ def _donut(donut_id, visit_id, offsets, thx=0.0, thy=0.0, snr=500.0):
 def _defocused_angles(thx, thy):
     """Where a star at in-focus ``(thx, thy)`` lands on each side of focus.
 
-    This is the input the pairing actually receives: the measured field angle of
-    the *donut*, not of the star. Built from the same radial scale the pairing
-    divides out, so a wrong scale would cancel here rather than show up --
-    `TestRadialScale` is what pins the scale itself, against its known px values.
+    This is the input the pairing actually receives: the measured field angle
+    of the *donut*, not of the star. Built from the same radial scale the
+    pairing divides out, so a wrong scale would cancel here rather than show up
+    -- `TestRadialScale` is what pins the scale itself, against its known px
+    values.
     """
     intra_scale = _defocal_radial_scale(_INTRA_OFFSETS)
     extra_scale = _defocal_radial_scale(_EXTRA_OFFSETS)
@@ -102,7 +103,8 @@ class FamPairingTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         # `_defocal_radial_scale` traces chief rays through
-        # ``_CALIB_STORE["telescope"]``, which the task populates before forking.
+        # ``_CALIB_STORE["telescope"]``, which the task populates before
+        # forking.
         _CALIB_STORE.clear()
         _CALIB_STORE["telescope"] = batoid.Optic.fromYaml("LSST_r.yaml")
 
@@ -117,11 +119,11 @@ class TestRadialScale(FamPairingTestCase):
     def testScaleIsOppositeEitherSideOfFocus(self) -> None:
         intra = _defocal_radial_scale(_INTRA_OFFSETS)
         extra = _defocal_radial_scale(_EXTRA_OFFSETS)
-        # One side stretches and the other compresses, by nearly the same amount
-        # -- which is why the same star does not land at the same pixel twice.
-        # A negative optic shift (intra) pushes a chief ray outward, a positive
-        # one (extra) pulls it in: +/-13.6 px at 1.725 deg for a 1.5 mm camera
-        # shift, hence the ~27 px total separation.
+        # One side stretches and the other compresses, by nearly the same
+        # amount -- which is why the same star does not land at the same pixel
+        # twice. A negative optic shift (intra) pushes a chief ray outward, a
+        # positive one (extra) pulls it in: +/-13.6 px at 1.725 deg for a 1.5
+        # mm camera shift, hence the ~27 px total separation.
         self.assertGreater(intra, 1.0)
         self.assertLess(extra, 1.0)
         self.assertAlmostEqual(intra - 1.0, 1.0 - extra, places=4)
@@ -130,7 +132,7 @@ class TestRadialScale(FamPairingTestCase):
         self.assertAlmostEqual(_defocal_radial_scale((0.0, 0.0, 0.0)), 1.0)
 
     def testSeparationGrowsLinearlyToTheKnownEdgeValue(self) -> None:
-        """~27 px between the two sides at 1.725 deg, and linear in field angle."""
+        """~27 px between the sides at 1.725 deg, linear in field angle."""
         seps = {}
         for deg in (0.0, 1.0, 1.725):
             (ix, _), (ex, _) = _defocused_angles(np.deg2rad(deg), 0.0)
@@ -145,9 +147,10 @@ class TestPairDonuts(FamPairingTestCase):
     """`_pair_donuts` on both paths."""
 
     def testRefcatIdFastPath(self) -> None:
-        """Same refcat id => same star, regardless of where the donuts landed."""
+        """Same refcat id => same star, wherever the donuts landed."""
         # Deliberately give the two sides *different* positions and swapped SNR
-        # order, so an id match is the only thing that could pair them correctly.
+        # order, so an id match is the only thing that could pair them
+        # correctly.
         intra = [
             _donut(101, 1, _INTRA_OFFSETS, thx=0.01, snr=100.0),
             _donut(102, 1, _INTRA_OFFSETS, thx=0.02, snr=900.0),
@@ -175,9 +178,9 @@ class TestPairDonuts(FamPairingTestCase):
         self.assertEqual({d.donut_id for d in unmatched}, {1, 3})
 
     def testBlindPathFallsBackToSpatial(self) -> None:
-        """Blind detection renumbers per exposure, so ids must not be trusted."""
-        # Ids deliberately disagree with position: id 1 intra is at the same sky
-        # position as id 2 extra. Only spatial matching gets this right.
+        """Blind detection renumbers per exposure, so ids are not trusted."""
+        # Ids deliberately disagree with position: id 1 intra is at the same
+        # sky position as id 2 extra. Only spatial matching gets this right.
         thetas = [(np.deg2rad(1.7), 0.0), (0.0, np.deg2rad(1.7))]
         intra, extra = [], []
         for k, (thx, thy) in enumerate(thetas):
@@ -200,9 +203,10 @@ class TestPairDonuts(FamPairingTestCase):
     def testSpatialPairsAtTheFieldEdgeWhereTheShiftIsLargest(self) -> None:
         """The case the radial correction exists for.
 
-        At 1.725 deg the same star's two donuts are ~27 px apart -- well outside a
-        16 px tolerance -- so without dividing the shift out the outer rafts would
-        simply stop pairing, with nothing in the logs to say why.
+        At 1.725 deg the same star's two donuts are ~27 px apart -- well
+        outside a 16 px tolerance -- so without dividing the shift out the
+        outer rafts would simply stop pairing, with nothing in the logs to say
+        why.
         """
         tol_frac = 0.25  # 0.25 * 65.5 px = 16.4 px, smaller than the 27 px shift
         (ix, iy), (ex, ey) = _defocused_angles(np.deg2rad(1.725), 0.0)
@@ -213,9 +217,10 @@ class TestPairDonuts(FamPairingTestCase):
         self.assertEqual(len(pairs), 1, "corrected pairing must work at the edge")
         self.assertEqual(unmatched, [])
 
-        # Same donuts, but with the correction defeated by claiming both sides sit
-        # at the same (null) defocus: now the 27 px shift is not removed and the
-        # pair is lost. This is the regression the correction guards against.
+        # Same donuts, but with the correction defeated by claiming both sides
+        # sit at the same (null) defocus: now the 27 px shift is not removed
+        # and the pair is lost. This is the regression the correction guards
+        # against.
         intra[0].defocal_offsets = (0.0, 0.0, 0.0)
         extra[0].defocal_offsets = (0.0, 0.0, 0.0)
         pairs, unmatched, _ = _pair_donuts(intra, extra, tol_frac, "blind", "blind")
@@ -223,7 +228,7 @@ class TestPairDonuts(FamPairingTestCase):
         self.assertEqual(len(unmatched), 2)
 
     def testSpatialRejectsBeyondTolerance(self) -> None:
-        """A star present on one side only must not be paired with a neighbour."""
+        """A star on one side only must not be paired with a neighbour."""
         (ix, iy), _ = _defocused_angles(np.deg2rad(1.0), 0.0)
         # Put the extra donut 40 px away in the common frame -- more than the
         # 16.4 px tolerance, and not explicable by the radial shift.
@@ -319,7 +324,7 @@ class TestFamGrouping(FamPairingTestCase):
             self.assertEqual(len(g.donuts), 3)
 
     def testFullDetectorPairIsOneJointGroupOverBothSides(self) -> None:
-        """Unpaired by design: each donut's own offsets tell the fit its side."""
+        """Unpaired by design: each donut's offsets tell the fit its side."""
         intra, extra = self._sides(n_intra=3, n_extra=4)
         groups, unmatched, _ = self._group("full_detector_pair", intra, extra)
         self.assertEqual(len(groups), 1)
@@ -364,7 +369,7 @@ class TestFamOffsetSigns(unittest.TestCase):
     """The defocus triplets the task hands its donuts."""
 
     def testExtraIsPositiveAndIntraNegative(self) -> None:
-        """`extra -> +offset`, matching corner mode; the likeliest sign error."""
+        """`extra -> +offset`, as in corner mode; the likeliest sign error."""
         config = DonutBlitzFamTaskConfig()
         task = DonutBlitzFamTask(config=config)
         extra, intra = task._extraFocalOffsets, task._intraFocalOffsets
@@ -386,10 +391,10 @@ class TestFamOffsetSigns(unittest.TestCase):
 class TestWorkerNeverDies(unittest.TestCase):
     """A worker that dies instead of returning hangs the whole quantum.
 
-    ``multiprocessing.Pool`` respawns a dead worker but never re-queues the task
-    it was holding, so ``imap`` waits for a result that will never be produced --
-    forever, with the pool looking perfectly healthy from outside. On top of
-    that, the dying child's interpreter shutdown destroys the
+    ``multiprocessing.Pool`` respawns a dead worker but never re-queues the
+    task it was holding, so ``imap`` waits for a result that will never be
+    produced -- forever, with the pool looking perfectly healthy from outside.
+    On top of that, the dying child's interpreter shutdown destroys the
     ``QuantumBackedButler`` datastore-records sqlite database that all the
     workers inherited across the fork, so every detector dispatched after it
     fails too.
@@ -403,7 +408,7 @@ class TestWorkerNeverDies(unittest.TestCase):
         _CALIB_STORE.update(self._saved)
 
     def _run_with_store_raising(self, exc):
-        """Make the worker's very first ``_CALIB_STORE`` lookup raise ``exc``."""
+        """Make the worker's first ``_CALIB_STORE`` lookup raise ``exc``."""
 
         class Raiser(dict):
             def __getitem__(self, key):
@@ -440,8 +445,8 @@ class TestWorkerNeverDies(unittest.TestCase):
             self._run_with_store_raising(KeyboardInterrupt())
 
     def testUnprocessableDataErrorIsNotAnException(self):
-        # The whole trap: `except Exception` cannot catch this, which is why the
-        # guard in the worker has to be written against BaseException.
+        # The whole trap: `except Exception` cannot catch this, which is why
+        # the guard in the worker has to be written against BaseException.
         self.assertTrue(issubclass(UnprocessableDataError, NoWorkFound))
         self.assertFalse(issubclass(UnprocessableDataError, Exception))
 

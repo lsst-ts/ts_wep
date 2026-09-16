@@ -22,11 +22,11 @@
 """The full-array-mode worker: one detector, both exposures of a pair.
 
 Unlike corner mode -- where `runQuantum` loads every pixel and the pool workers
-only compute -- a FAM worker does its *own* butler I/O from deferred handles the
-parent resolved, so peak memory scales with the worker count rather than with the
-visit.  Cutting and fitting are fused into one worker for the same reason: the
-pixels are freed as soon as the stamps are cut, instead of being held for the
-duration of Danish fitting that follow.
+only compute -- a FAM worker does its *own* butler I/O from deferred handles
+the parent resolved, so peak memory scales with the worker count rather than
+with the visit.  Cutting and fitting are fused into one worker for the same
+reason: the pixels are freed as soon as the stamps are cut, instead of being
+held for the duration of Danish fitting that follow.
 
 Everything shared comes from `lsst.ts.wep.blitz.utils._CALIB_STORE`, which the
 parent populates before forking; workers inherit it by copy-on-write.
@@ -61,12 +61,12 @@ _RAD_PER_PIXEL = _INSTRUMENT.pixelSize / _INSTRUMENT.focalLength
 
 
 def _fam_pool_initializer() -> None:
-    """Reset the inherited DB connection pool, once per child, right after fork.
+    """Reset the inherited DB connection pool, once per child, after fork.
 
     A forked child inherits the parent's live psycopg2 socket.  Under
-    ``pipetask run`` the butler behind a deferred handle is a full `Butler`, and
-    if two children use that inherited SSL connection concurrently the stream
-    corrupts::
+    ``pipetask run`` the butler behind a deferred handle is a full `Butler`,
+    and if two children use that inherited SSL connection concurrently the
+    stream corrupts::
 
         psycopg2.OperationalError: SSL error: ssl/tls alert bad record mac
 
@@ -74,9 +74,9 @@ def _fam_pool_initializer() -> None:
     ``file_datastore_records`` lookup, which is to say a resolved ref is *not*
     self-contained and this is not avoidable by resolving earlier.
 
-    `SqlRegistry.resetConnectionPool` exists for exactly this and is documented to
-    be called by the child immediately after the fork; `mp.Pool(initializer=...)`
-    is that hook.
+    `SqlRegistry.resetConnectionPool` exists for exactly this and is documented
+    to be called by the child immediately after the fork;
+    `mp.Pool(initializer=...)` is that hook.
     """
     reset = getattr(
         getattr(_CALIB_STORE.get("butler"), "registry", None),
@@ -92,15 +92,15 @@ def _common_frame_angles(donuts: list) -> np.ndarray:
 
     Shifting an optic along z moves an off-axis chief ray radially, and in
     *opposite* directions either side of focus, so the same star sits at
-    measurably different field angles in the intra and extra exposures -- 27.2 px
-    apart at 1.725 deg for a 1.5 mm camera shift, and zero on axis.  A tolerance
-    tight enough to be safe at the field center therefore fails at the edge, which
-    presents as "the outer rafts just don't pair".
+    measurably different field angles in the intra and extra exposures -- 27.2
+    px apart at 1.725 deg for a 1.5 mm camera shift, and zero on axis.  A
+    tolerance tight enough to be safe at the field center therefore fails at
+    the edge, which presents as "the outer rafts just don't pair".
 
-    `_defocal_radial_scale` removes it exactly: the displacement is linear in field
-    angle, hence a pure scale, so one factor per offset triplet corrects the whole
-    focal plane.  Dividing by it puts both sides in a common frame where the same
-    star lands at the same place.
+    `_defocal_radial_scale` removes it exactly: the displacement is linear in
+    field angle, hence a pure scale, so one factor per offset triplet corrects
+    the whole focal plane.  Dividing by it puts both sides in a common frame
+    where the same star lands at the same place.
 
     Returns
     -------
@@ -124,9 +124,9 @@ def _pair_donuts(
 ) -> tuple[list, list, str]:
     """Match the same star's intra and extra donuts on one detector.
 
-    Corner mode must pair by SNR rank because SW0 and SW1 see different sky.  FAM
-    sees the *same star on the same detector twice*, so it's natural to match by
-    star ID.
+    Corner mode must pair by SNR rank because SW0 and SW1 see different sky.
+    FAM sees the *same star on the same detector twice*, so it's natural to
+    match by star ID.
 
     Parameters
     ----------
@@ -141,16 +141,16 @@ def _pair_donuts(
     Returns
     -------
     pairs : list of tuple
-        ``(extra_donut, intra_donut)`` -- extra first, matching the order corner
-        mode's paired groups use.
+        ``(extra_donut, intra_donut)`` -- extra first, matching the order
+        corner mode's paired groups use.
     unmatched : list of Donut
         Donuts from either side with no partner.  These flow through to the
         catalog as candidate-but-unused rows, exactly as corner mode's surplus
         donuts do.
     path : str
-        ``"refcat_id"``, ``"spatial"``, or ``"empty"``.  Recorded per detector so a
-        run that quietly fell back to spatial matching is visible in the logs
-        rather than only in the Zernikes.
+        ``"refcat_id"``, ``"spatial"``, or ``"empty"``.  Recorded per detector
+        so a run that quietly fell back to spatial matching is visible in the
+        logs rather than only in the Zernikes.
     """
     if not intra or not extra:
         return [], list(intra) + list(extra), "empty"
@@ -179,8 +179,9 @@ def _pair_donuts(
         extra_ang[:, None, 0] - intra_ang[None, :, 0],
         extra_ang[:, None, 1] - intra_ang[None, :, 1],
     )
-    # Tolerance is a fraction of the donut radius; take the smaller radius of the
-    # candidate pair so a mis-measured radius on one side cannot loosen the cut.
+    # Tolerance is a fraction of the donut radius; take the smaller radius of
+    # the candidate pair so a mis-measured radius on one side cannot loosen the
+    # cut.
     tol = (
         tol_frac
         * _RAD_PER_PIXEL
@@ -191,8 +192,8 @@ def _pair_donuts(
     )
 
     # Mutual nearest neighbors: a pair is accepted only if each is the other's
-    # closest candidate. One-sided nearest-neighbor matching would happily assign
-    # two extra donuts to the same intra donut.
+    # closest candidate. One-sided nearest-neighbor matching would happily
+    # assign two extra donuts to the same intra donut.
     best_for_extra = np.argmin(dist, axis=1)
     best_for_intra = np.argmin(dist, axis=0)
     pairs = []
@@ -231,16 +232,17 @@ def _fam_group_donuts(
     Modes
     -----
     ``paired``
-        One star, both sides.  The only mode that pairs, and so the only one that
-        can leave donuts unmatched.
+        One star, both sides.  The only mode that pairs, and so the only one
+        that can leave donuts unmatched.
     ``unpaired``
         One star, one side.
     ``full_detector``
         Every star on the detector, one side: two groups.
     ``full_detector_pair``
         Every star on the detector, both sides, in one joint fit.  Deliberately
-        does *not* pair: each donut carries its own ``defocal_offsets``, so Danish
-        already knows which side of focus it is on and no association is needed.
+        does *not* pair: each donut carries its own ``defocal_offsets``, so
+        Danish already knows which side of focus it is on and no association is
+        needed.
 
     Returns
     -------
@@ -280,10 +282,10 @@ def _fam_detector_worker(args: tuple) -> dict:
     """Cut and fit one detector across both exposures of a FAM pair.
 
     Never raises, for any ``BaseException`` short of ``KeyboardInterrupt`` or
-    ``SystemExit``: a failure is reported in the returned ``error`` field so one
-    bad detector out of 189 cannot take down the pool and lose the rest of the
-    visit. ``NoWorkFound`` -- which is a ``BaseException``, and which ip_isr
-    raises for every dead CCD -- is reported as ``skipped`` instead.
+    ``SystemExit``: a failure is reported in the returned ``error`` field so
+    one bad detector out of 189 cannot take down the pool and lose the rest of
+    the visit. ``NoWorkFound`` -- which is a ``BaseException``, and which
+    ip_isr raises for every dead CCD -- is reported as ``skipped`` instead.
 
     Parameters
     ----------
@@ -316,8 +318,8 @@ def _fam_detector_worker(args: tuple) -> dict:
         "wf_results": [],
         "donuts": [],
         "unmatched_donuts": [],
-        # Overwritten once grouping runs; stays "n/a" for a detector that failed
-        # or was skipped before it got that far.
+        # Overwritten once grouping runs; stays "n/a" for a detector that
+        # failed or was skipped before it got that far.
         "pair_path": "n/a",
         "error": "",
         "skipped": False,
@@ -349,10 +351,11 @@ def _fam_detector_worker(args: tuple) -> dict:
         det_name = next(iter(raws.values())).getDetector().getName()
         out["det_name"] = det_name
 
-        # One refcat load covers both exposures: either WCS plus pixelMargin=300
-        # spans the few-arcsecond difference between them, and the loader itself
-        # intersects each shard's region with the search box, so handing it all of
-        # the visit's shard handles still reads only the ~2 that overlap.
+        # One refcat load covers both exposures: either WCS plus
+        # pixelMargin=300 spans the few-arcsecond difference between them, and
+        # the loader itself intersects each shard's region with the search box,
+        # so handing it all of the visit's shard handles still reads only the
+        # ~2 that overlap.
         t_refcat0 = time.perf_counter()
         load_result = None
         refcat_handles = _CALIB_STORE["refcat_handles"]
@@ -373,7 +376,8 @@ def _fam_detector_worker(args: tuple) -> dict:
             except Exception as exc:
                 _log.warning("Failed to load refcat for %s: %s", det_name, exc)
             # ref_raw is a live reference to one of the raws; drop it so the
-            # per-exposure `del raws[exp]` below can actually free those pixels.
+            # per-exposure `del raws[exp]` below can actually free those
+            # pixels.
             del ref_raw, loader
         # Recorded even when no shards were supplied (then it is ~0), so the
         # key distinguishes "no refcat" from "the worker died before this
@@ -384,12 +388,13 @@ def _fam_detector_worker(args: tuple) -> dict:
         cutout_elapsed = 0.0
         results = []
         for exp in (intra_exp, extra_exp):
-            # Calibrations are fetched per exposure rather than once per detector.
-            # ISR is the only consumer and it is called twice here, where corner
-            # mode calls it once per loaded calib, so a calib modified in place
-            # would be invisible there and would corrupt the second exposure here.
-            # Two 197 MB flat reads cost ~1 s against 10s of seconds of fitting,
-            # and peak memory is no worse -- each is freed after its own ISR.
+            # Calibrations are fetched per exposure rather than once per
+            # detector. ISR is the only consumer and it is called twice here,
+            # where corner mode calls it once per loaded calib, so a calib
+            # modified in place would be invisible there and would corrupt the
+            # second exposure here. Two 197 MB flat reads cost ~1 s against 10s
+            # of seconds of fitting, and peak memory is no worse -- each is
+            # freed after its own ISR.
             t_io = time.perf_counter()
             calibs = {
                 key: entry[key].get() if entry.get(key) is not None else None
@@ -426,17 +431,18 @@ def _fam_detector_worker(args: tuple) -> dict:
         out["cutout_run"] = cutout_elapsed
         out["results"] = results
 
-        # Free the remaining pixels before fitting. This is what makes fusing cut
-        # and fit into one worker safe: ~850 MB is transient during the I/O phase
-        # rather than held for the duration of Danish fitting that follow.
+        # Free the remaining pixels before fitting. This is what makes fusing
+        # cut and fit into one worker safe: ~850 MB is transient during the I/O
+        # phase rather than held for the duration of Danish fitting that
+        # follow.
         raws.clear()
         del raws, load_result
 
-        # --- annotate every donut, accepted and rejected ---
-        # Rejected donuts get catalog rows too, and _prep_donut_for_danish raises
-        # on a donut with no defocal_offsets, so both lists must be annotated.
-        # There is no intra/extra label to set: the side is the offsets, and is
-        # recoverable from visit_id.
+        # --- annotate every donut, accepted and rejected --- Rejected donuts
+        # get catalog rows too, and _prep_donut_for_danish raises on a donut
+        # with no defocal_offsets, so both lists must be annotated. There is no
+        # intra/extra label to set: the side is the offsets, and is recoverable
+        # from visit_id.
         by_exp = {}
         for result in results:
             exp = result["visit_id"]
@@ -466,9 +472,10 @@ def _fam_detector_worker(args: tuple) -> dict:
             alt_rad=_CALIB_STORE["boresight_alt_rad"],
         )
         out["pair_path"] = path
-        # Also stamp it on both of this detector's cutout results: those are what
-        # reach build_donut_catalog, so this is what gets pairing provenance into
-        # the persisted table instead of only the parent's log line.
+        # Also stamp it on both of this detector's cutout results: those are
+        # what reach build_donut_catalog, so this is what gets pairing
+        # provenance into the persisted table instead of only the parent's log
+        # line.
         for r in results:
             r["pair_path"] = path
         out["unmatched_donuts"] = unmatched
@@ -569,8 +576,9 @@ def _dead_fam_result(det_id: int, reason: str) -> dict:
 def _shed_images(out: dict) -> None:
     """Drop image arrays the output catalog will not use, before pickling back.
 
-    The images are the dominant contributors to the size of the output dictionary,
-    so trimming them when possible can significantly improve performance.
+    The images are the dominant contributors to the size of the output
+    dictionary, so trimming them when possible can significantly improve
+    performance.
     """
     if not _CALIB_STORE["saveWfImages"]:
         for r in out["wf_results"]:

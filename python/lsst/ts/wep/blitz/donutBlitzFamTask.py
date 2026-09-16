@@ -21,14 +21,14 @@
 
 """The full-array-mode (FAM) blitz pipeline task.
 
-Where `DonutBlitzMonolithTask` processes one visit's 8 corner wavefront sensors,
-this processes the 189 science detectors of an intra/extra **exposure pair** -- one
-quantum per ``group``.
+Where `DonutBlitzMonolithTask` processes one visit's 8 corner wavefront
+sensors, this processes the 189 science detectors of an intra/extra **exposure
+pair** -- one quantum per ``group``.
 
-To be frugal with memory, the task avoids loading the entire focal plane at once.
-So here the parent resolves *deferred* handles only and each forked worker does
-its own butler I/O, frees the pixels, and fits.  See `famPipeline` for the worker
-and for why children must reset the DB connection pool.
+To be frugal with memory, the task avoids loading the entire focal plane at
+once.  So here the parent resolves *deferred* handles only and each forked
+worker does its own butler I/O, frees the pixels, and fits.  See `famPipeline`
+for the worker and for why children must reset the DB connection pool.
 """
 
 __all__ = [
@@ -95,25 +95,26 @@ _SCIENCE_PURPOSE = "SCIENCE"
 # task, so it has no `self.log`.
 _log = logging.getLogger(__name__)
 
-# On-sky radius, in degrees, of the circle used to cut the reference catalog down
-# to the shards the focal plane can actually reach. Science detector corners reach
-# 2.05 deg; the extra covers the loaders' 300 px pixelMargin (~0.02 deg) and any
-# pointing error, since over-including a shard costs one wasted file read and
-# under-including one would silently lose donuts.
+# On-sky radius, in degrees, of the circle used to cut the reference catalog
+# down to the shards the focal plane can actually reach. Science detector
+# corners reach 2.05 deg; the extra covers the loaders' 300 px pixelMargin
+# (~0.02 deg) and any pointing error, since over-including a shard costs one
+# wasted file read and under-including one would silently lose donuts.
 _FOCAL_PLANE_SEARCH_RADIUS_DEG = 2.2
 
 # htm7, matching the reference catalog's own dimension.
 _REFCAT_HTM_LEVEL = 7
 
-# Pipeline stages reported per detector and aggregated over them, in the order they
-# run: the shared cutout stages, spliced in from `_CUTOUT_STAGE_KEYS` so this
-# and corner mode cannot disagree about them, wrapped in the four this task adds.
-# `dispatch` and `io` have no corner-mode counterpart: a FAM worker waits for a pool
-# slot and then does its own butler reads, where corner mode's parent has already
-# loaded every pixel before it forks. `fit` likewise, because FAM fits inside the
-# same worker rather than in a second pool the parent summarizes separately.
-# `refcat` is per detector rather than per exposure -- one load covers both
-# sides of focus -- so it sits outside the spliced-in cutout stages.
+# Pipeline stages reported per detector and aggregated over them, in the order
+# they run: the shared cutout stages, spliced in from `_CUTOUT_STAGE_KEYS` so
+# this and corner mode cannot disagree about them, wrapped in the four this
+# task adds. `dispatch` and `io` have no corner-mode counterpart: a FAM worker
+# waits for a pool slot and then does its own butler reads, where corner mode's
+# parent has already loaded every pixel before it forks. `fit` likewise,
+# because FAM fits inside the same worker rather than in a second pool the
+# parent summarizes separately. `refcat` is per detector rather than per
+# exposure -- one load covers both sides of focus -- so it sits outside the
+# spliced-in cutout stages.
 _STAGE_KEYS = (
     "dispatch",
     "io",
@@ -123,24 +124,24 @@ _STAGE_KEYS = (
     "wall",
 )
 
-# How many stragglers to name. With 189 detectors over a handful of cores the slow
-# tail sets the wall clock, and the aggregate mean cannot show whether the pool was
-# starved at the end or one CCD was pathological.
+# How many stragglers to name. With 189 detectors over a handful of cores the
+# slow tail sets the wall clock, and the aggregate mean cannot show whether the
+# pool was starved at the end or one CCD was pathological.
 _N_SLOWEST = 5
 
 
 def _detector_stage_times(r: dict) -> dict[str, float]:
     """Per-stage elapsed times for one detector, in `_STAGE_KEYS` order.
 
-    A FAM worker runs the cutout pipeline once per exposure, so the seven cutout
-    stages are **summed over the pair** -- the two halves are not independently
-    interesting, and summing keeps the row comparable to ``wall``.  ``io`` is
-    likewise already summed by the worker across the raw reads and both
-    per-exposure calibration reads.
+    A FAM worker runs the cutout pipeline once per exposure, so the seven
+    cutout stages are **summed over the pair** -- the two halves are not
+    independently interesting, and summing keeps the row comparable to
+    ``wall``. ``io`` is likewise already summed by the worker across the raw
+    reads and both per-exposure calibration reads.
 
     NaN propagates deliberately: a detector that failed part way through has no
-    meaningful stage total, and reporting the one exposure that did finish would
-    read as a suspiciously fast detector rather than a broken one.
+    meaningful stage total, and reporting the one exposure that did finish
+    would read as a suspiciously fast detector rather than a broken one.
 
     Parameters
     ----------
@@ -186,13 +187,13 @@ def _mean_std_max(values: list[float]) -> tuple[float, float, float]:
 def _lookup_refcat_shards(datasetType, registry, quantumDataId, collections):
     """Find the reference catalog shards this group's focal plane overlaps.
 
-    A ``PrerequisiteInput`` lookup function, called once per quantum during graph
-    generation. It exists because this task's quantum is dimensioned
+    A ``PrerequisiteInput`` lookup function, called once per quantum during
+    graph generation. It exists because this task's quantum is dimensioned
     ``(instrument, group, physical_filter)`` and **carries no spatial region**:
     ``group`` is what makes the quantum an exposure *pair*, but only
-    ``visit``/``exposure`` are spatial, so the default spatial lookup has nothing
-    to constrain against and returns all 131072 htm7 shards on the sky instead of
-    the ~48 the field actually covers
+    ``visit``/``exposure`` are spatial, so the default spatial lookup has
+    nothing to constrain against and returns all 131072 htm7 shards on the sky
+    instead of the ~48 the field actually covers
 
     Parameters
     ----------
@@ -215,9 +216,10 @@ def _lookup_refcat_shards(datasetType, registry, quantumDataId, collections):
 
     Notes
     -----
-    The region comes from the boresight on the group's ``exposure`` records plus
-    `_FOCAL_PLANE_SEARCH_RADIUS_DEG`, and `lsst.sphgeom.HtmPixelization.envelope`
-    turns it straight into shard indices -- so nothing enumerates the 131072.
+    The region comes from the boresight on the group's ``exposure`` records
+    plus `_FOCAL_PLANE_SEARCH_RADIUS_DEG`, and
+    `lsst.sphgeom.HtmPixelization.envelope` turns it straight into shard
+    indices -- so nothing enumerates the 131072.
     """
     instrument = quantumDataId["instrument"]
     group = quantumDataId["group"]
@@ -269,25 +271,27 @@ class DonutBlitzFamTaskConnections(
 ):
     """Pipeline connections for DonutBlitzFamTask.
 
-    Every pixel and calibration input is ``deferLoad=True``: the parent resolves
-    handles and reads nothing, so its memory stays flat regardless of how many
-    detectors the quantum covers.
+    Every pixel and calibration input is ``deferLoad=True``: the parent
+    resolves handles and reads nothing, so its memory stays flat regardless of
+    how many detectors the quantum covers.
 
     Notes
     -----
-    ``group`` is what makes the quantum a *pair*: ``exposure`` implies ``group``,
-    so a group-dimensioned quantum receives both exposures across all detectors.
+    ``group`` is what makes the quantum a *pair*: ``exposure`` implies
+    ``group``, so a group-dimensioned quantum receives both exposures across
+    all detectors.
 
-    ``physical_filter`` is *required*, not incidental. ``group`` does not imply it
-    (only ``exposure``/``visit`` do), so without it the filter-dependent
-    prerequisites arrive once per filter -- 8 ``flat`` and 6 ``intrinsicZernikes``
-    refs per detector rather than 1.  It also carries ``band`` into the quantum
-    data ID for free.
+    ``physical_filter`` is *required*, not incidental.  ``group`` does not
+    imply it (only ``exposure``/``visit`` do), so without it the
+    filter-dependent prerequisites arrive once per filter -- 8 ``flat`` and 6
+    ``intrinsicZernikes`` refs per detector rather than 1.  It also carries
+    ``band`` into the quantum data ID for free.
 
-    What it does *not* fix is the reference catalog: ``group`` carries no spatial
-    region either, so the htm7 lookup is unconstrained and every shard on the sky
-    arrives -- so ``refCat`` carries a `lookupFunction` (`_lookup_refcat_shards`)
-    that narrows it at graph-build time, where a registry is available.
+    What it does *not* fix is the reference catalog: ``group`` carries no
+    spatial region either, so the htm7 lookup is unconstrained and every shard
+    on the sky arrives -- so ``refCat`` carries a `lookupFunction`
+    (`_lookup_refcat_shards`) that narrows it at graph-build time, where a
+    registry is available.
     """
 
     raws = connectionTypes.Input(
@@ -621,16 +625,16 @@ class DonutBlitzFamTaskConfig(
         # labels, so the default mag-limit policy lookup by band would fail.
         self.donutSelector.useCustomMagLimit = True
         # Load-bearing, not a tuning knob: this is what keeps every selected
-        # donut inside the LsstCam.yaml maskParams validity domain
-        # (thetaMax: 1.85 deg) even though science detector corners reach
-        # 2.05 deg.  Eight detectors lie entirely outside it and yield nothing by
-        # design -- 189 detectors are read, 181 produce donuts.
+        # donut inside the LsstCam.yaml maskParams validity domain (thetaMax:
+        # 1.85 deg) even though science detector corners reach 2.05 deg.  Eight
+        # detectors lie entirely outside it and yield nothing by design -- 189
+        # detectors are read, 181 produce donuts.
         self.donutSelector.maxFieldDist = 1.725
         self.donutSelector.sourceLimit = 40
         self.donutSelector.allowFluxless = True
 
-        # A science detector is ~2x the area of a corner sensor, plus we're less
-        # constrained for time here.
+        # A science detector is ~2x the area of a corner sensor, plus we're
+        # less constrained for time here.
         self.cutStampsTask.maxDonuts = 20
 
         # 189 detectors x up to 40 groups each is ~10k lines of per-group
@@ -643,11 +647,12 @@ class DonutBlitzFamTaskConfig(
 class DonutBlitzFamTask(pipeBase.PipelineTask):
     """Full-array-mode WEP task: one intra/extra exposure pair, 189 detectors.
 
-    One quantum per ``group``.  `runQuantum` resolves deferred handles, works out
-    which exposure is which side of focus, restricts to the science array, and
-    forks a pool of workers -- one detector each, both exposures -- that do their
-    own butler I/O and their own Danish fits.  Results are assembled into the same
-    catalog schema corner mode emits and written against the extra-focal visit.
+    One quantum per ``group``. `runQuantum` resolves deferred handles, works
+    out which exposure is which side of focus, restricts to the science array,
+    and forks a pool of workers -- one detector each, both exposures -- that do
+    their own butler I/O and their own Danish fits.  Results are assembled into
+    the same catalog schema corner mode emits and written against the
+    extra-focal visit.
     """
 
     ConfigClass = DonutBlitzFamTaskConfig
@@ -669,7 +674,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
     @property
     def _extraFocalOffsets(self) -> tuple[float, float, float]:
-        """Optic z shifts of the extra-focal exposure, ordered as `_OFFSET_OPTICS`."""
+        """Optic z shifts of the extra-focal exposure, per `_OFFSET_OPTICS`."""
         return (
             +self.config.detectorOffset,
             +self.config.cameraOffset,
@@ -678,7 +683,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
     @property
     def _intraFocalOffsets(self) -> tuple[float, float, float]:
-        """Optic z shifts of the intra-focal exposure, ordered as `_OFFSET_OPTICS`."""
+        """Optic z shifts of the intra-focal exposure, per `_OFFSET_OPTICS`."""
         # `-o if o else 0.0` rather than plain negation, to keep an unused
         # component as 0.0 instead of -0.0 in logs and store keys.
         return tuple(-o if o else 0.0 for o in self._extraFocalOffsets)  # type: ignore[return-value]
@@ -789,10 +794,10 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
         band = str(butlerQC.quantum.dataId["band"])
 
-        # The rest of the exposure metadata is read as a *component* off one raw
-        # handle -- header only, no pixels. Everything downstream that needs the
-        # rotator angle is quantum-wide, so reading it once here is both cheapest
-        # and the only way to keep it consistent across workers.
+        # The rest of the exposure metadata is read as a *component* off one
+        # raw handle -- header only, no pixels. Everything downstream that
+        # needs the rotator angle is quantum-wide, so reading it once here is
+        # both cheapest and the only way to keep it consistent across workers.
         visit_info = raw_handles[det_ids[0]][extra_exp].get(component="visitInfo")
         if visit_info.id != extra_exp:
             self.log.warning(
@@ -876,12 +881,12 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         """Resolve one calibration connection to one handle per detector.
 
         Raises rather than silently keeping the last ref if a detector has more
-        than one. Declaring ``physical_filter`` on the quantum is what guarantees
-        it does not: without it, ``flat`` and ``intrinsicZernikes`` arrive once per
-        filter (8 and 6 per detector on the reference night), and a plain
-        detector-keyed dict would quietly flat-field with an arbitrary band.  That
-        failure produces plausible-looking wrong numbers rather than an error, so
-        it is worth an assertion rather than trust.
+        than one.  Declaring ``physical_filter`` on the quantum is what
+        guarantees it does not: without it, ``flat`` and ``intrinsicZernikes``
+        arrive once per filter (8 and 6 per detector on the reference night),
+        and a plain detector-keyed dict would quietly flat-field with an
+        arbitrary band.  That failure produces plausible-looking wrong numbers
+        rather than an error, so it is worth an assertion rather than trust.
         """
         handles: dict[int, Any] = {}
         for ref in getattr(inputRefs, name):
@@ -898,12 +903,12 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         return handles
 
     def _checkDefocalOrder(self, raws_by_exp: dict, intra_exp: int, extra_exp: int, group: Any) -> None:
-        """Warn if ``observation_reason`` contradicts the intra-first convention.
+        """Warn if ``observation_reason`` contradicts the intra-first order.
 
         The side of focus is assigned from the exposure id alone, because
-        ``observation_reason`` is free-form and cannot be relied on.  But when it
-        *is* populated and disagrees, every Zernike in the output has the wrong
-        sign, so it is worth saying so loudly.
+        ``observation_reason`` is free-form and cannot be relied on.  But when
+        it *is* populated and disagrees, every Zernike in the output has the
+        wrong sign, so it is worth saying so loudly.
         """
         reasons = {}
         for exp in (intra_exp, extra_exp):
@@ -936,14 +941,14 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     ) -> None:
         """Fill `_CALIB_STORE` with everything the workers need.
 
-        Subtasks, handles, and the pre-built batoid telescopes all go in here so
-        the children inherit them by copy-on-write instead of receiving them
+        Subtasks, handles, and the pre-built batoid telescopes all go in here
+        so the children inherit them by copy-on-write instead of receiving them
         through a pickle.
         """
         # AstrometryTask.solve() calls refObjLoader.getMetadataBox()
-        # unconditionally even when load_result is pre-supplied, and that method
-        # is pure geometry -- it never touches catalog data. So a stub satisfies
-        # it, and each worker builds its own real loader.
+        # unconditionally even when load_result is pre-supplied, and that
+        # method is pure geometry -- it never touches catalog data. So a stub
+        # satisfies it, and each worker builds its own real loader.
         astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
         astrom_stub_loader.config.pixelMargin = 0
         self.astromTask.setRefObjLoader(astrom_stub_loader)
@@ -996,9 +1001,9 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         # inherited connection pool. See `_fam_pool_initializer`.
         _CALIB_STORE["butler"] = getattr(raw_handles[det_ids[0]][extra_exp], "butler", None)
 
-        # Telescope is band- and quantum-fixed. Build the base and both defocused
-        # variants here so workers only ever look them up; the radial scales they
-        # need for spatial pairing memoize into the same store.
+        # Telescope is band- and quantum-fixed. Build the base and both
+        # defocused variants here so workers only ever look them up; the radial
+        # scales they need for spatial pairing memoize into the same store.
         _CALIB_STORE["telescope"] = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
         for offsets in (self._intraFocalOffsets, self._extraFocalOffsets):
             _telescope_for_offsets(offsets)
@@ -1019,12 +1024,12 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         else:
             n_workers = min(num_cores, len(det_ids))
             self.log.info("Forking %d worker(s) over %d detector(s)", n_workers, len(det_ids))
-            # Unlike the monolith's pools these workers read from the butler, so
-            # the initializer is mandatory, not defensive: children sharing the
-            # parent's inherited psycopg2 SSL socket corrupt it.
-            # One fork per detector with at most n_workers alive, so at most
-            # n_workers detectors' pixels are resident at once. _forkMap ensures
-            # that one killed worker does not take down the entire pool/quantum.
+            # Unlike the monolith's pools these workers read from the butler,
+            # so the initializer is mandatory, not defensive: children sharing
+            # the parent's inherited psycopg2 SSL socket corrupt it. One fork
+            # per detector with at most n_workers alive, so at most n_workers
+            # detectors' pixels are resident at once. _forkMap ensures that one
+            # killed worker does not take down the entire pool/quantum.
             t_dispatch = time.time()
             with _dumpStacksOnHang(self.config.hangTimeout, "FAM detector pool", self.log):
                 results, deaths = _forkMap(
@@ -1085,19 +1090,20 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     def _logWorkerSummaries(self, results: list[dict]) -> None:
         """Log one summary line per detector, then aggregates over them.
 
-        The per-detector line is modeled on `DonutBlitzMonolithTask`'s, with two
-        differences that follow from FAM fusing the whole pipeline into one worker:
-        it carries an ``io`` stage, because each worker does its own butler reads;
-        and it carries the Danish ``fit`` result, because the fit happens in the
-        same process rather than in a separate pool the parent can summarize on its
-        own.  Between them they replace `WavefrontFittingTask`'s per-group lines,
-        which `setDefaults` turns off here.
+        The per-detector line is modeled on `DonutBlitzMonolithTask`'s, with
+        two differences that follow from FAM fusing the whole pipeline into one
+        worker: it carries an ``io`` stage, because each worker does its own
+        butler reads; and it carries the Danish ``fit`` result, because the fit
+        happens in the same process rather than in a separate pool the parent
+        can summarize on its own.  Between them they replace
+        `WavefrontFittingTask`'s per-group lines, which `setDefaults` turns off
+        here.
 
         Lines are sorted by detector name: the pool returns detectors in
-        completion order, which is neither reproducible between runs nor useful for
-        finding a raft.  Skipped and failed detectors get a line too -- a truncated
-        one, since the full error is already logged above -- so that a missing
-        detector is visibly missing rather than absent.
+        completion order, which is neither reproducible between runs nor useful
+        for finding a raft.  Skipped and failed detectors get a line too -- a
+        truncated one, since the full error is already logged above -- so that
+        a missing detector is visibly missing rather than absent.
 
         The aggregates cover only the detectors that produced results.
         """
@@ -1167,20 +1173,20 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         self._logWorkerAggregates(ok)
 
     def _logWorkerAggregates(self, ok: list[dict]) -> None:
-        """Log mean/std of every per-detector quantity over the detectors that ran.
+        """Log mean/std of every per-detector quantity over detectors that ran.
 
-        Split out from `_logWorkerSummaries` only for length; it is called with the
-        detectors that neither failed nor skipped, since a NaN-filled row would
-        otherwise widen every standard deviation with a number that means "absent"
-        rather than "slow".
+        Split out from `_logWorkerSummaries` only for length; it is called with
+        the detectors that neither failed nor skipped, since a NaN-filled row
+        would otherwise widen every standard deviation with a number that means
+        "absent" rather than "slow".
 
-        ``dispatch`` is deliberately left out of the timing line.  Every task is
-        timed from the same dispatch epoch, so it is a queue wait that grows with
-        position in the queue rather than work done: its mean is set by
-        ``n_detectors / n_workers`` and its standard deviation by the spread within
-        one wave, and neither says anything about the detector.  It stays on the
-        per-detector lines, where the step from ~0 to nonzero shows the pool size
-        and the growth after that shows the pool draining.
+        ``dispatch`` is deliberately left out of the timing line.  Every task
+        is timed from the same dispatch epoch, so it is a queue wait that grows
+        with position in the queue rather than work done: its mean is set by
+        ``n_detectors / n_workers`` and its standard deviation by the spread
+        within one wave, and neither says anything about the detector.  It
+        stays on the per-detector lines, where the step from ~0 to nonzero
+        shows the pool size and the growth after that shows the pool draining.
         """
         n = len(ok)
         stages = [_detector_stage_times(r) for r in ok]
@@ -1242,7 +1248,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         visit_info: Any = None,
         instrument: str = "",
     ) -> Any:
-        """Flatten the per-detector worker results into the shared catalog schema."""
+        """Flatten per-detector worker results into the catalog schema."""
         cutout_results = [r for w in results for r in w["results"]]
         wf_results = [r for w in results for r in w["wf_results"]]
         donuts = [d for w in results for d in w["donuts"]]
@@ -1268,13 +1274,14 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             exposure_group=exposure_group,
             run_elapsed=run_elapsed,
             butler_elapsed=butler_elapsed,
-            # Summed across workers, which run in parallel, so these are CPU time
-            # and not the wall clock corner mode reports -- documented on the timing
-            # keys in `build_donut_catalog`, and keyed off meta["mode"].  Each term
-            # is per detector: `cutout_run` is already accumulated over the two
-            # exposures inside the worker, and one refcat load serves both, which is
-            # why `refcat_run` lives on the worker instead of on each per-exposure
-            # cutout result (summing it there would double-count).
+            # Summed across workers, which run in parallel, so these are CPU
+            # time and not the wall clock corner mode reports -- documented on
+            # the timing keys in `build_donut_catalog`, and keyed off
+            # meta["mode"].  Each term is per detector: `cutout_run` is already
+            # accumulated over the two exposures inside the worker, and one
+            # refcat load serves both, which is why `refcat_run` lives on the
+            # worker instead of on each per-exposure cutout result (summing it
+            # there would double-count).
             refcat_elapsed=sum(w["refcat_run"] for w in results if np.isfinite(w["refcat_run"])),
             cutout_elapsed=sum(w["cutout_run"] for w in results if np.isfinite(w["cutout_run"])),
             danish_elapsed=sum(w["fit_run"] for w in results if np.isfinite(w["fit_run"])),
@@ -1289,9 +1296,9 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     def _catalogOptions(self) -> CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.
 
-        Same function corner mode calls, deliberately: one schema for both modes
-        rather than two that drift.  The image flags differ -- full-array mode has
-        ~10k rows per pair, where they would dominate the file.
+        Same function corner mode calls, deliberately: one schema for both
+        modes rather than two that drift.  The image flags differ -- full-array
+        mode has ~10k rows per pair, where they would dominate the file.
         """
         return CatalogOptions(
             stamp_size=self.cutStampsTask.config.stampSize,

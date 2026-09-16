@@ -48,8 +48,8 @@ class MeasureDonutCandidatesConfig(pexConfig.Config):
         dtype=float,
         default=0.05,
     )
-    # Two background regions are sampled, and each has an "inner" radius, so keep
-    # the names apart: this one bounds the filled disc inside the central
+    # Two background regions are sampled, and each has an "inner" radius, so
+    # keep the names apart: this one bounds the filled disc inside the central
     # obscuration, bkgAnnulusInnerFrac bounds the annulus outside the donut.
     bkgInnerDiscFrac: pexConfig.Field = pexConfig.Field(
         doc=(

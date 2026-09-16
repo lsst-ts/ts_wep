@@ -144,7 +144,10 @@ def _blend_frac(
     faint_frac: float = 0.05,
     sig_thresh: float = 2.0,
 ) -> float:
-    """Fraction of significant residual flux in model-faint pixels, normalized by total model flux."""
+    """Fraction of significant residual flux in model-faint pixels.
+
+    Normalized by the total model flux.
+    """
     if resid is None or model_img_bkg_free is None or not np.isfinite(bkg_std) or bkg_std <= 0:
         return float("nan")
     model_peak = np.nanmax(model_img_bkg_free)
@@ -174,10 +177,10 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
     """Build `_WfGroup` work units from per-detector catalogs, for corner mode.
 
     Runs in the parent process after every detector has returned, because
-    ``paired`` and ``full_corner`` group *across* the two detectors of a corner.
-    Full-array mode groups within a single detector and so has its own
-    `_fam_group_donuts`, which runs inside the worker; the two mode vocabularies
-    overlap but are not interchangeable.
+    ``paired`` and ``full_corner`` group *across* the two detectors of a
+    corner. Full-array mode groups within a single detector and so has its own
+    `_fam_group_donuts`, which runs inside the worker; the two mode
+    vocabularies overlap but are not interchangeable.
 
     ``results_by_det`` covers only the detectors that were processed, so a
     partial corner set falls out naturally: groups are never emitted empty, and
@@ -188,8 +191,8 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
     -----
     ``paired``
         One star, both sides of focus: SW0 and SW1 donuts of a corner zipped in
-        descending SNR order.  The only mode that pairs, and so the only one that
-        can leave donuts unmatched.
+        descending SNR order.  The only mode that pairs, and so the only one
+        that can leave donuts unmatched.
     ``unpaired``
         One donut per group.
     ``full_detector``
@@ -220,17 +223,17 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
     unmatched_donuts : `list`
         Donuts left over by pairing.  Non-empty only for ``paired``.
     path : `str`
-        Pairing path taken: ``"snr_rank"`` for ``paired``, ``"n/a"`` for the modes
-        that do not pair.  Unlike full-array mode's `_pair_donuts`, which chooses
-        between refcat-id and spatial matching at runtime, corner mode has a
-        single algorithm and so a constant here; it is returned anyway so both
-        modes record pairing provenance in the same ``det_meta`` field.
+        Pairing path taken: ``"snr_rank"`` for ``paired``, ``"n/a"`` for the
+        modes that do not pair.  Unlike full-array mode's `_pair_donuts`, which
+        chooses between refcat-id and spatial matching at runtime, corner mode
+        has a single algorithm and so a constant here; it is returned anyway so
+        both modes record pairing provenance in the same ``det_meta`` field.
 
     Raises
     ------
     ValueError
-        Raised if ``mode`` is not one of the modes above -- in particular for the
-        full-array-only ``full_detector_pair``.
+        Raised if ``mode`` is not one of the modes above -- in particular for
+        the full-array-only ``full_detector_pair``.
     """
     groups = []
     unmatched_donuts = []
@@ -241,8 +244,9 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
             extra_donuts = sorted(results_by_det.get(sw0, []), key=lambda d: d.snr, reverse=True)
             intra_donuts = sorted(results_by_det.get(sw1, []), key=lambda d: d.snr, reverse=True)
             for extra, intra in zip(extra_donuts, intra_donuts):
-                # Qualified by corner: under blind detection the ids are per-detector
-                # 1..N slots, so every corner would otherwise log as group=1_1, 2_2, ...
+                # Qualified by corner: under blind detection the ids are
+                # per-detector 1..N slots, so every corner would otherwise log
+                # as group=1_1, 2_2, ...
                 gid = f"{corner}_{extra.donut_id}_{intra.donut_id}"
                 groups.append(
                     _WfGroup(
@@ -286,9 +290,9 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
 # Module-level logger for the worker functions below. They are module-level
 # (not methods) so the fork-based pools can pickle them by name, which means
 # there is no `self` and so no `Task.log`. Consequence: worker output goes to
-# the `lsst.ts.wep.blitz.wavefrontFittingTask` logger rather than the task's own
-# `donutBlitzMonolithTask` hierarchy, so it is not affected by that task's log
-# level. Parent-process code should keep using `self.log`.
+# the `lsst.ts.wep.blitz.wavefrontFittingTask` logger rather than the task's
+# own `donutBlitzMonolithTask` hierarchy, so it is not affected by that task's
+# log level. Parent-process code should keep using `self.log`.
 _log = logging.getLogger(__name__)
 
 _DZ_MODEL_KEYS = ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")
@@ -402,9 +406,9 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
         dtype=str,
         default="dense",
         optional=False,
-        # There is some weak evidence that one or the other sparse formats may be
-        # modestly faster for large groups of donuts.  But since these modes are
-        # primarily run offline, we just leave the default to dense here.
+        # There is some weak evidence that one or the other sparse formats may
+        # be modestly faster for large groups of donuts.  But since these modes
+        # are primarily run offline, we just leave the default to dense here.
         doc=(
             "Storage for the Danish Jacobian passed to least_squares. "
             "All three give bit-identical Jacobian *values*; "
@@ -486,9 +490,10 @@ class WavefrontFittingTaskConfig(pexConfig.Config):
                 f"got {out_of_range}",
             )
         # Rotating Zernikes between coordinate frames (CCS -> OCS) mixes each
-        # (n, +m) coefficient with its (n, -m) partner, so a lone half of a pair
-        # cannot be rotated: its rotated power belongs to a term that was never
-        # fit. Requiring whole pairs keeps every reported frame well defined.
+        # (n, +m) coefficient with its (n, -m) partner, so a lone half of a
+        # pair cannot be rotated: its rotated power belongs to a term that was
+        # never fit. Requiring whole pairs keeps every reported frame well
+        # defined.
         missing = []
         for j in sorted(indices):
             n, m = galsim.zernike.noll_to_zern(j)
@@ -537,11 +542,11 @@ class _LstsqFitResult:
 
 
 class WavefrontFittingTask(pipeBase.Task):
-    """Task to fit wavefront aberrations from grouped donut stamps using Danish algorithm.
+    """Fit wavefront aberrations from grouped donut stamps with danish.
 
-    This task takes a pre-grouped collection of donuts (a _WfGroup) and performs
-    joint wavefront fitting across all donuts in the group, returning Zernike
-    coefficients for the wavefront error.
+    This task takes a pre-grouped collection of donuts (a _WfGroup) and
+    performs joint wavefront fitting across all donuts in the group, returning
+    Zernike coefficients for the wavefront error.
     """
 
     ConfigClass = WavefrontFittingTaskConfig
@@ -715,7 +720,7 @@ class WavefrontFittingTask(pipeBase.Task):
         )
 
     def _build_loss_fn(self) -> Any:
-        """Return a danish loss function from config, or None for standard chi-squared."""
+        """Return a danish loss function from config, None for chi-squared."""
         alpha = self.config.systematicLossAlpha
         if alpha <= 0:
             return None
@@ -726,15 +731,16 @@ class WavefrontFittingTask(pipeBase.Task):
 
         Bins the stamp and forces it to an odd pixel size, estimates background
         noise, computes the reference Zernike array ``zk_ref`` from
-        ``batoid.zernikeTA`` (with optional measured-intrinsics correction), and
-        extracts the field angle.
+        ``batoid.zernikeTA`` (with optional measured-intrinsics correction),
+        and extracts the field angle.
 
         Parameters
         ----------
         donut : Donut
             Donut record. Uses ``stamp`` (2-D array), ``det_id``, ``band``,
             ``thx_ccs``, ``thy_ccs`` (field angles in radians), and
-            ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``; ``None`` if uncalibrated).
+            ``intrinsic_zk`` (µm, Noll 4..``_ZK_JMAX``; ``None`` if
+            uncalibrated).
 
         Returns
         -------
@@ -748,8 +754,8 @@ class WavefrontFittingTask(pipeBase.Task):
             Equals ``W_TA_defoc`` at uncalibrated indices and
             ``W_TA_defoc + (W_meas - zk_opd_foc)`` at calibrated indices.
         bkg_var : float
-            Background variance estimate (``bkg_std ** 2``) from pixel-difference
-            MAD of the stamp.
+            Background variance estimate (``bkg_std ** 2``) from
+            pixel-difference MAD of the stamp.
         bkg_std : float
             Background standard deviation estimate.
         """
@@ -800,11 +806,12 @@ class WavefrontFittingTask(pipeBase.Task):
             * wavelength
         )  # meters, shape (_ZK_JMAX + 1,)
 
-        # Swap the nominal design intrinsics for the measured ones at calibrated
-        # indices. zk_opd_foc is the same raytrace as zk_ref minus the defocal
-        # offsets, so subtracting it leaves the defocus contribution intact and
-        # only the static aberration field is replaced by W_meas. Both are
-        # evaluated at this donut's field angle, so neither is on-axis.
+        # Swap the nominal design intrinsics for the measured ones at
+        # calibrated indices. zk_opd_foc is the same raytrace as zk_ref minus
+        # the defocal offsets, so subtracting it leaves the defocus
+        # contribution intact and only the static aberration field is replaced
+        # by W_meas. Both are evaluated at this donut's field angle, so neither
+        # is on-axis.
         intrinsic_zk = donut.intrinsic_zk
         if intrinsic_zk is not None:
             zk_opd_foc = (
@@ -826,19 +833,22 @@ class WavefrontFittingTask(pipeBase.Task):
         return img, angle_rad, zk_ref, bkg_std**2, bkg_std
 
     def _run_lstsq_fit(self, model, x0, bounds, imgs, variances, timeout, label):
-        """Run a DZMultiDonutModel least-squares fit and return results uniformly.
+        """Run a DZMultiDonutModel least-squares fit with a uniform result.
 
-        Handles the ``wfInitialGuessOnly`` path, SIGALRM timeout, and all exception
-        cases so each worker only needs to build the model and call this helper.
+        Handles the ``wfInitialGuessOnly`` path, SIGALRM timeout, and all
+        exception cases so each worker only needs to build the model and call
+        this helper.
 
         Parameters
         ----------
         model : danish.DZMultiDonutModel
-            Fully-constructed model ready to call ``.chi``, ``.jac``, ``.model``.
+            Fully-constructed model ready to call ``.chi``, ``.jac``,
+            ``.model``.
         x0 : np.ndarray
             Initial parameter vector from ``model.pack_params``.
         bounds : list
-            Two-element ``[lower, upper]`` bound lists from ``model.pack_params``.
+            Two-element ``[lower, upper]`` bound lists from
+            ``model.pack_params``.
         imgs : list of np.ndarray
             Donut image stamps, one per model donut.
         variances : list of np.ndarray

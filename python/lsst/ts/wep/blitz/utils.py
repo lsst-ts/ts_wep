@@ -51,10 +51,11 @@ CORNER_PAIRS = {
 CORNER_DET_NAMES = frozenset(s for sw0, sw1 in CORNER_PAIRS.values() for s in (sw0, sw1))
 # Detector name -> corner, derived from CORNER_PAIRS rather than re-encoded.
 CORNER_BY_DET_NAME = {s: corner for corner, pair in CORNER_PAIRS.items() for s in pair}
-# Detector name -> intra/extra, likewise derived. Corner mode's defocal side is a
-# property of the detector, so donuts carry only their optic offsets and anything
-# needing the label (currently just plot layout) looks it up here. Full-array mode
-# has no equivalent: there the side comes from which exposure of the pair.
+# Detector name -> intra/extra, likewise derived. Corner mode's defocal side is
+# a property of the detector, so donuts carry only their optic offsets and
+# anything needing the label (currently just plot layout) looks it up here.
+# Full-array mode has no equivalent: there the side comes from which exposure
+# of the pair.
 CORNER_DEFOCAL_BY_DET_NAME = {
     name: ("extra" if name == sw0 else "intra") for sw0, sw1 in CORNER_PAIRS.values() for name in (sw0, sw1)
 }
@@ -74,9 +75,10 @@ _MAX_NEARBY = 5
 
 # Columns that come from the reference catalog, and so exist only on the refcat
 # selection path -- but which every table reaching `CutDonutStampsTask` carries
-# regardless, NaN-filled on the blind-detection path. The blind path is a *data*
-# gap, not a schema difference, so the consumer reads these unconditionally
-# instead of testing `colnames` for their presence. Filled in `_cutout_one_exposure`.
+# regardless, NaN-filled on the blind-detection path. The blind path is a
+# *data* gap, not a schema difference, so the consumer reads these
+# unconditionally instead of testing `colnames` for their presence. Filled in
+# `_cutout_one_exposure`.
 _REFCAT_COLUMNS = (
     "coord_ra",
     "coord_dec",
@@ -106,11 +108,11 @@ _CUTOUT_STAGE_KEYS = {
 }
 
 
-# Optics that can be shifted along z to defocus, in the order the offset triplet
-# carried on each `Donut` uses. Corner mode moves the detector plane inside the
-# camera; full-array mode moves the whole camera; some data instead moves M2.
-# Names match the batoid LSST model, where M1/M2/M3/LSSTCamera are top level and
-# Detector is nested inside LSSTCamera.
+# Optics that can be shifted along z to defocus, in the order the offset
+# triplet carried on each `Donut` uses. Corner mode moves the detector plane
+# inside the camera; full-array mode moves the whole camera; some data instead
+# moves M2. Names match the batoid LSST model, where M1/M2/M3/LSSTCamera are
+# top level and Detector is nested inside LSSTCamera.
 _OFFSET_OPTICS = ("Detector", "LSSTCamera", "M2")
 
 
@@ -130,11 +132,11 @@ def _telescope_for_offsets(offsets: tuple[float, float, float]):
 
     Notes
     -----
-    Callers are expected to pre-build every triplet they will need in the parent
-    process before forking, so workers inherit the built telescopes via
-    copy-on-write rather than each paying for them. A worker asking for a triplet
-    the parent did not anticipate still gets a correct answer, it just builds it
-    itself and the result does not propagate back.
+    Callers are expected to pre-build every triplet they will need in the
+    parent process before forking, so workers inherit the built telescopes via
+    copy-on-write rather than each paying for them. A worker asking for a
+    triplet the parent did not anticipate still gets a correct answer, it just
+    builds it itself and the result does not propagate back.
     """
     store = _CALIB_STORE.setdefault("telescope_by_offsets", {})
     key = tuple(float(o) for o in offsets)
@@ -148,8 +150,8 @@ def _telescope_for_offsets(offsets: tuple[float, float, float]):
     return telescope
 
 
-# Field angle at which the defocal radial scale is evaluated. The displacement is
-# linear in field angle (verified against batoid: 7.9/15.7/23.6 px at
+# Field angle at which the defocal radial scale is evaluated. The displacement
+# is linear in field angle (verified against batoid: 7.9/15.7/23.6 px at
 # 0.5/1.0/1.5 deg for a 1.5 mm camera shift), so it is a pure scale and any
 # non-zero reference angle gives the same answer.
 _RADIAL_SCALE_REF_THETA = np.deg2rad(1.0)
@@ -158,14 +160,15 @@ _RADIAL_SCALE_REF_THETA = np.deg2rad(1.0)
 def _defocal_radial_scale(offsets: tuple[float, float, float]) -> float:
     """Fractional radial stretch of the focal plane produced by a defocus.
 
-    Shifting an optic along z moves an off-axis chief ray radially, so the *same*
-    star lands at slightly different field angles either side of focus -- ~27 px
-    apart at 1.725 deg for a 1.5 mm camera shift, and zero on axis. Any attempt
-    to associate donuts between an intra and an extra exposure by position has to
-    account for this, or it will work at the field center and fail at the edge.
+    Shifting an optic along z moves an off-axis chief ray radially, so the
+    *same* star lands at slightly different field angles either side of focus
+    -- ~27 px apart at 1.725 deg for a 1.5 mm camera shift, and zero on axis.
+    Any attempt to associate donuts between an intra and an extra exposure by
+    position has to account for this, or it will work at the field center and
+    fail at the edge.
 
-    Because the displacement is linear in field angle it is a pure scale, so one
-    number per offset triplet corrects the whole focal plane.
+    Because the displacement is linear in field angle it is a pure scale, so
+    one number per offset triplet corrects the whole focal plane.
 
     Parameters
     ----------
@@ -251,7 +254,8 @@ def _resolveDonutRadius(donutRadius: float | None) -> float:
     Returns
     -------
     float
-        ``donutRadius`` if finite and positive, else ``_INSTRUMENT.donutRadius``.
+        ``donutRadius`` if finite and positive, else
+        ``_INSTRUMENT.donutRadius``.
     """
     if donutRadius is None:
         return _INSTRUMENT.donutRadius
@@ -303,14 +307,14 @@ def _rotate_zk(zk: np.ndarray, theta: float) -> np.ndarray:
     Zernike j) and no longer than ``_ZK_JMAX + 1``; ``theta`` is the frame
     rotation in radians.
 
-    Coefficients only mix within an (n, |m|) pair, so the matrix is built once at
-    ``_ZK_JMAX`` -- a complete radial order, which galsim requires -- and the
-    input is zero-padded up to it. Sizing the matrix from ``zk``'s own width
-    would instead raise whenever that width splits a pair.
+    Coefficients only mix within an (n, |m|) pair, so the matrix is built once
+    at ``_ZK_JMAX`` -- a complete radial order, which galsim requires -- and
+    the input is zero-padded up to it. Sizing the matrix from ``zk``'s own
+    width would instead raise whenever that width splits a pair.
 
-    NaN slots (Noll indices below 4, indices that were not fitted, unfit donuts)
-    rotate as zero and are then restored, so the output is defined exactly where
-    the input was.
+    NaN slots (Noll indices below 4, indices that were not fitted, unfit
+    donuts) rotate as zero and are then restored, so the output is defined
+    exactly where the input was.
     """
     rot = galsim.zernike.zernikeRotMatrix(_ZK_JMAX, theta)
     padded = np.zeros((len(zk), _ZK_JMAX + 1))

@@ -22,13 +22,14 @@
 """Defocus is selected by optic-offset triplet rather than by detector id.
 
 The fitter reads a signed ``(detector, camera, m2)`` offset triplet off each
-`Donut` rather than inferring a hardcoded detector-plane shift from the detector
-id, which lets full-array mode put the same detector on both sides of focus. For
-corner mode the two formulations must agree bit-for-bit, so the things worth
-asserting are that the telescope lookup reproduces a plain detector-plane shift
-exactly, that the camera and M2 components are wired to distinct optics, and that
-the SW0/SW1 convention is pinned in `CORNER_DEFOCAL_BY_DET_NAME` -- its only home,
-since donuts carry no intra/extra label at all.
+`Donut` rather than inferring a hardcoded detector-plane shift from the
+detector id, which lets full-array mode put the same detector on both sides of
+focus. For corner mode the two formulations must agree bit-for-bit, so the
+things worth asserting are that the telescope lookup reproduces a plain
+detector-plane shift exactly, that the camera and M2 components are wired to
+distinct optics, and that the SW0/SW1 convention is pinned in
+`CORNER_DEFOCAL_BY_DET_NAME` -- its only home, since donuts carry no
+intra/extra label at all.
 
 Also covers `_defocal_radial_scale`, which full-array donut pairing depends on.
 """
@@ -124,11 +125,11 @@ class TestDefocalOffsets(unittest.TestCase):
         this lookup. That makes it the single point where "SW0 is extra-focal,
         SW1 is intra-focal" is written down, and worth pinning.
 
-        The name-based lookup and the id-based `_INTRA/_EXTRA_FOCAL_DET_IDS` used
-        to pick offsets are two encodings of the same convention. Linking them
-        detector-by-detector would need camera geometry; this checks that they
-        agree in structure and count, which is what would break if one were
-        edited without the other.
+        The name-based lookup and the id-based `_INTRA/_EXTRA_FOCAL_DET_IDS`
+        used to pick offsets are two encodings of the same convention. Linking
+        them detector-by-detector would need camera geometry; this checks that
+        they agree in structure and count, which is what would break if one
+        were edited without the other.
         """
         self.assertEqual(set(CORNER_DEFOCAL_BY_DET_NAME), set(CORNER_DET_NAMES))
         for name, side in CORNER_DEFOCAL_BY_DET_NAME.items():
@@ -171,8 +172,9 @@ class TestDefocalOffsets(unittest.TestCase):
 
         Full-array donut pairing relies on the intra/extra radial displacement
         being a pure scale, so one factor corrects every detector. If it were
-        instead field-dependent, pairing would work at the centre and fail at the
-        edge -- so this asserts the scale against an independent per-angle trace.
+        instead field-dependent, pairing would work at the centre and fail at
+        the edge -- so this asserts the scale against an independent per-angle
+        trace.
         """
         dz = _INSTRUMENT.defocalOffset
         px = _INSTRUMENT.pixelSize
@@ -217,7 +219,7 @@ class TestDefocalOffsets(unittest.TestCase):
         self.assertAlmostEqual(extra - 1.0, -(intra - 1.0), places=6)
 
     def testMissingOffsetsIsFatalNotSilent(self) -> None:
-        """A donut with no offsets must raise rather than guess a defocal side."""
+        """A donut with no offsets must raise, not guess a defocal side."""
         from lsst.ts.wep.blitz.wavefrontFittingTask import WavefrontFittingTask
 
         task = WavefrontFittingTask()

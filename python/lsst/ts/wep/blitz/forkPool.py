@@ -21,14 +21,14 @@
 
 """A fork-per-work-unit process pool, plus the hang watchdog that guards it.
 
-The blitz tasks run their per-detector and per-group work in parallel processes,
-and the failure they have to survive is a worker being *killed outright*: an OOM
-kill by the enclosing cgroup (batch jobs run under a memory limit and a whole
-focal plane of pixels is not far from it), a segfault out of a compiled
-dependency, an external SIGKILL. One killed worker should cost exactly its own
-detector or group; every sibling should run to completion and the lost unit
-should be named, so the visit still produces a catalog with a documented hole in
-it rather than nothing at all.
+The blitz tasks run their per-detector and per-group work in parallel
+processes, and the failure they have to survive is a worker being *killed
+outright*: an OOM kill by the enclosing cgroup (batch jobs run under a memory
+limit and a whole focal plane of pixels is not far from it), a segfault out of
+a compiled dependency, an external SIGKILL. One killed worker should cost
+exactly its own detector or group; every sibling should run to completion and
+the lost unit should be named, so the visit still produces a catalog with a
+documented hole in it rather than nothing at all.
 
 Neither pool in the standard library can do that:
 
@@ -56,8 +56,8 @@ are built once in the parent and inherited copy-on-write, which neither a
 spawn-based pool nor a thread pool (the GIL aside) would give.
 
 `_dumpStacksOnHang` remains as a backstop for hangs that come from somewhere
-other than the pool, and turns the next one from something that has to be caught
-live with `py-spy` into something the job log already explains.
+other than the pool, and turns the next one from something that has to be
+caught live with `py-spy` into something the job log already explains.
 """
 
 __all__ = []
