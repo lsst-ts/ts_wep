@@ -53,7 +53,9 @@ _INTRA_OFFSETS = (-1.5e-3, 0.0, 0.0)
 def _donut(det_name, donut_id, **overrides):
     kwargs = dict(
         det_name=det_name,
-        stamp=np.random.default_rng(donut_id).normal(100.0, 5.0, (_STAMP_SIZE, _STAMP_SIZE)).astype(np.float32),
+        stamp=np.random.default_rng(donut_id)
+        .normal(100.0, 5.0, (_STAMP_SIZE, _STAMP_SIZE))
+        .astype(np.float32),
         thx_ccs=0.01,
         thy_ccs=0.02,
         flux=1e5,
@@ -158,9 +160,7 @@ def _catalog():
     extra = _donut("R00_SW0", 1, defocal_offsets=_EXTRA_OFFSETS)
     intra = _donut("R00_SW1", 2, defocal_offsets=_INTRA_OFFSETS)
     surplus = _donut("R00_SW0", 3, defocal_offsets=_EXTRA_OFFSETS)
-    rejected = _donut(
-        "R00_SW0", 4, rejected=True, rejected_snr=True, defocal_offsets=_EXTRA_OFFSETS
-    )
+    rejected = _donut("R00_SW0", 4, rejected=True, rejected_snr=True, defocal_offsets=_EXTRA_OFFSETS)
     return build_donut_catalog(
         [_result("R00_SW0", rejected=[rejected]), _result("R00_SW1")],
         [_wf_result([extra, intra], "R00_1_2")],
@@ -203,9 +203,7 @@ class TestDonutBlitzPlotTask(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 os.chdir(tmp)
-                task.run(
-                    build_donut_catalog([], [], [], [], _VISIT_ID, _options())
-                )
+                task.run(build_donut_catalog([], [], [], [], _VISIT_ID, _options()))
                 self.assertEqual(os.listdir(tmp), [])
             finally:
                 os.chdir(cwd)

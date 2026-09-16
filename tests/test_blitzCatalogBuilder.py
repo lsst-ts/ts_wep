@@ -19,8 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""The output catalog builder, shared by corner and full-array mode.
-"""
+"""The output catalog builder, shared by corner and full-array mode."""
 
 import unittest
 
@@ -32,7 +31,6 @@ import lsst.geom as geom
 from lsst.afw.image import VisitInfo
 from lsst.daf.base import DateTime
 from lsst.daf.butler.formatters.parquet import arrow_to_astropy, astropy_to_arrow
-
 from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
 from lsst.ts.wep.blitz.dataStructures import Donut, WfResult
 from lsst.ts.wep.blitz.donutBlitzMonolithTask import (
@@ -169,9 +167,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
     def testOneRowPerDonutIncludingRejected(self) -> None:
         accepted = _donut(donut_id=1)
         rejected = _donut(donut_id=2, rejected=True, rejected_snr=True)
-        table = build_donut_catalog(
-            [_result(rejected=[rejected])], [], [accepted], [], 42, _options()
-        )
+        table = build_donut_catalog([_result(rejected=[rejected])], [], [accepted], [], 42, _options())
         self.assertEqual(len(table), 2)
         by_id = {int(r["donut_id"]): r for r in table}
         self.assertTrue(bool(by_id[1]["candidate"]))
@@ -236,9 +232,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
             }
             for visit, value in ((intra_visit, 1e-6), (extra_visit, 2e-6))
         ]
-        results = [
-            {**_result(), "visit_id": visit} for visit in (intra_visit, extra_visit)
-        ]
+        results = [{**_result(), "visit_id": visit} for visit in (intra_visit, extra_visit)]
         table = build_donut_catalog(
             results,
             wf_results,
@@ -358,23 +352,15 @@ class TestBuildDonutCatalog(unittest.TestCase):
         """
         extra = _donut(donut_id=1, defocal_offsets=(+1.5e-3, 0.0, 0.0))
         intra = _donut(donut_id=2, defocal_offsets=(-1.5e-3, 0.0, 0.0))
-        table = build_donut_catalog(
-            [_result()], [], [extra, intra], [], 42, _options()
-        )
+        table = build_donut_catalog([_result()], [], [extra, intra], [], 42, _options())
         by_id = {int(r["donut_id"]): r for r in table}
         self.assertEqual(table["defocal_offsets"].unit, u.m)
-        np.testing.assert_allclose(
-            by_id[1]["defocal_offsets"].to_value(u.m), [1.5e-3, 0.0, 0.0]
-        )
-        np.testing.assert_allclose(
-            by_id[2]["defocal_offsets"].to_value(u.m), [-1.5e-3, 0.0, 0.0]
-        )
+        np.testing.assert_allclose(by_id[1]["defocal_offsets"].to_value(u.m), [1.5e-3, 0.0, 0.0])
+        np.testing.assert_allclose(by_id[2]["defocal_offsets"].to_value(u.m), [-1.5e-3, 0.0, 0.0])
 
     def testDefocalOffsetsAreNaNWhenUnannotated(self) -> None:
         """A donut that never reached the fitter still gets a well-shaped row."""
-        table = build_donut_catalog(
-            [_result()], [], [_donut(defocal_offsets=None)], [], 42, _options()
-        )
+        table = build_donut_catalog([_result()], [], [_donut(defocal_offsets=None)], [], 42, _options())
         offsets = table["defocal_offsets"].to_value(u.m)
         self.assertEqual(offsets.shape, (1, 3))
         self.assertTrue(np.all(np.isnan(offsets)))
@@ -432,9 +418,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
 
     def testMetaCarriesOptionsAndGeometry(self) -> None:
         options = _options(binning=4, max_donuts=3, wf_mode="full_detector")
-        table = build_donut_catalog(
-            [_result()], [], [_donut()], [], 99, options, rtp_rad=0.25
-        )
+        table = build_donut_catalog([_result()], [], [_donut()], [], 99, options, rtp_rad=0.25)
         self.assertEqual(table.meta["ref_visit_id"], 99)
         # Corner mode has one exposure holding both sides of focus, so the two
         # side keys default to it rather than being left out for FAM to add.
@@ -446,15 +430,9 @@ class TestBuildDonutCatalog(unittest.TestCase):
         # Both jmax keys name which Zernike set they bound; neither is bare.
         self.assertEqual(table.meta["zk_deviation_jmax"], max(options.noll_indices))
         self.assertEqual(table.meta["zk_intrinsic_jmax"], _ZK_JMAX)
-        self.assertAlmostEqual(
-            table.meta["rot_tel_pos"].to_value(u.deg), np.degrees(0.25)
-        )
-        self.assertAlmostEqual(
-            table.meta["bkg_annulus_outer_frac"], options.bkg_annulus_outer_frac
-        )
-        self.assertAlmostEqual(
-            table.meta["bkg_inner_disc_frac"], options.bkg_inner_disc_frac
-        )
+        self.assertAlmostEqual(table.meta["rot_tel_pos"].to_value(u.deg), np.degrees(0.25))
+        self.assertAlmostEqual(table.meta["bkg_annulus_outer_frac"], options.bkg_annulus_outer_frac)
+        self.assertAlmostEqual(table.meta["bkg_inner_disc_frac"], options.bkg_inner_disc_frac)
         # Per-detector metadata survives for the plots.  Corner mode supplies no
         # per-result visit_id, so the key falls back to this table's visit.
         self.assertIn("R00_SW0_99", table.meta["det_meta"])
@@ -538,8 +516,15 @@ class TestBuildDonutCatalog(unittest.TestCase):
             boresightRotAngle=30.0 * geom.degrees,
         )
         table = build_donut_catalog(
-            [_result()], [], [_donut()], [], 42, _options(),
-            mode="fam", visit_info=visit_info, instrument="LSSTCam",
+            [_result()],
+            [],
+            [_donut()],
+            [],
+            42,
+            _options(),
+            mode="fam",
+            visit_info=visit_info,
+            instrument="LSSTCam",
             rtp_rad=np.deg2rad(12.5),
         )
         self.assertEqual(table.meta["mode"], "fam")
@@ -575,9 +560,16 @@ class TestBuildDonutCatalog(unittest.TestCase):
             boresightRotAngle=30.0 * geom.degrees,
         )
         table = build_donut_catalog(
-            [{**_result(), "isr_run": 1.25}], [], [_donut()], [], 42, _options(),
-            visit_info=visit_info, run_elapsed=12.5,
-            butler_times={"raw": 2.0}, rtp_rad=np.deg2rad(12.5),
+            [{**_result(), "isr_run": 1.25}],
+            [],
+            [_donut()],
+            [],
+            42,
+            _options(),
+            visit_info=visit_info,
+            run_elapsed=12.5,
+            butler_times={"raw": 2.0},
+            rtp_rad=np.deg2rad(12.5),
         )
 
         meta = arrow_to_astropy(astropy_to_arrow(Table(table))).meta
@@ -653,7 +645,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         self.assertEqual(det_meta["R00_SW0_2"]["n_quarter"], 3)
 
     def testDetMetaProvenanceRecordsNotApplicable(self) -> None:
-        """"Nothing to report" is a named token, not an empty string.
+        """ "Nothing to report" is a named token, not an empty string.
 
         The producers cover every case -- corner mode's ``snr_rank``/``n/a``, the
         no-detections early return's ``no_detections`` -- so the builder copies
@@ -661,9 +653,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         missing key reaching ``det_meta`` would therefore be a bug, not "not
         applicable".
         """
-        results = [
-            {**_result(), "selection_source": "no_detections", "pair_path": "n/a"}
-        ]
+        results = [{**_result(), "selection_source": "no_detections", "pair_path": "n/a"}]
         table = build_donut_catalog(results, [], [_donut()], [], 42, _options())
         entry = table.meta["det_meta"]["R00_SW0_42"]
         self.assertEqual(entry["selection_source"], "no_detections")

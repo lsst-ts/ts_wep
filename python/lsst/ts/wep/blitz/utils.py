@@ -56,9 +56,7 @@ CORNER_BY_DET_NAME = {s: corner for corner, pair in CORNER_PAIRS.items() for s i
 # needing the label (currently just plot layout) looks it up here. Full-array mode
 # has no equivalent: there the side comes from which exposure of the pair.
 CORNER_DEFOCAL_BY_DET_NAME = {
-    name: ("extra" if name == sw0 else "intra")
-    for sw0, sw1 in CORNER_PAIRS.values()
-    for name in (sw0, sw1)
+    name: ("extra" if name == sw0 else "intra") for sw0, sw1 in CORNER_PAIRS.values() for name in (sw0, sw1)
 }
 
 # ANSI escape codes for colorizing log messages (see colorLog config field).

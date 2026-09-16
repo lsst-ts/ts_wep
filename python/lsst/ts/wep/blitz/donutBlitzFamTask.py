@@ -163,11 +163,7 @@ def _detector_stage_times(r: dict) -> dict[str, float]:
         "wall": r.get("worker_wall", float("nan")),
     }
     for label, key in _CUTOUT_STAGE_KEYS.items():
-        stages[label] = (
-            np.sum([res.get(key, float("nan")) for res in results])
-            if results
-            else float("nan")
-        )
+        stages[label] = np.sum([res.get(key, float("nan")) for res in results]) if results else float("nan")
     return {key: stages[key] for key in _STAGE_KEYS}
 
 
@@ -241,9 +237,7 @@ def _lookup_refcat_shards(datasetType, registry, quantumDataId, collections):
         ranges = ranges | pixelization.envelope(
             lsst.sphgeom.Circle(
                 lsst.sphgeom.UnitVector3d(
-                    lsst.sphgeom.LonLat.fromDegrees(
-                        record.tracking_ra, record.tracking_dec
-                    )
+                    lsst.sphgeom.LonLat.fromDegrees(record.tracking_ra, record.tracking_dec)
                 ),
                 lsst.sphgeom.Angle.fromDegrees(_FOCAL_PLANE_SEARCH_RADIUS_DEG),
             )
@@ -256,9 +250,7 @@ def _lookup_refcat_shards(datasetType, registry, quantumDataId, collections):
             "catalog could not be narrowed; falling back to every shard.",
             group,
         )
-        return list(
-            registry.queryDatasets(datasetType, collections=collections, findFirst=True)
-        )
+        return list(registry.queryDatasets(datasetType, collections=collections, findFirst=True))
 
     return list(
         registry.queryDatasets(
@@ -570,8 +562,7 @@ class DonutBlitzFamTaskConfig(
             ),
             "unpaired": "One star, one side of focus; each donut fit alone.",
             "full_detector": (
-                "Every donut on the detector from one exposure, as one work unit: "
-                "two per detector."
+                "Every donut on the detector from one exposure, as one work unit: two per detector."
             ),
             "full_detector_pair": (
                 "Every donut on the detector from both exposures, as one joint "
@@ -730,31 +721,23 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             det_purpose[ref.dataId["detector"]] = (
                 str(record.purpose) if record is not None else _SCIENCE_PURPOSE
             )
-        dets_by_exp = {
-            exp: {ref.dataId["detector"] for ref in refs}
-            for exp, refs in raws_by_exp.items()
-        }
+        dets_by_exp = {exp: {ref.dataId["detector"] for ref in refs} for exp, refs in raws_by_exp.items()}
         all_dets = dets_by_exp[intra_exp] | dets_by_exp[extra_exp]
-        det_ids = sorted(
-            d for d in all_dets if det_purpose.get(d) == _SCIENCE_PURPOSE
-        )
+        det_ids = sorted(d for d in all_dets if det_purpose.get(d) == _SCIENCE_PURPOSE)
         # A detector missing from one side of the pair has nothing to be paired
         # with, so drop it here rather than failing inside a worker.
         both_sides = dets_by_exp[intra_exp] & dets_by_exp[extra_exp]
         one_sided = [d for d in det_ids if d not in both_sides]
         if one_sided:
             self.log.warning(
-                "Dropping %d detector(s) present in only one exposure of the "
-                "pair: %s",
+                "Dropping %d detector(s) present in only one exposure of the pair: %s",
                 len(one_sided),
                 one_sided,
             )
         det_ids = [d for d in det_ids if d in both_sides]
         n_skipped = len(all_dets) - len(det_ids)
         if not det_ids:
-            raise NoWorkFound(
-                f"group={group}: no science detectors present in both exposures."
-            )
+            raise NoWorkFound(f"group={group}: no science detectors present in both exposures.")
         self.log.info(
             _colorize(
                 "DonutBlitzFamTask.runQuantum() group=%s intra=%d extra=%d "
@@ -785,15 +768,10 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         refcat_handles = list(butlerQC.get(inputRefs.refCat))
         t_resolve = time.perf_counter() - t_resolve0
 
-        missing = {
-            name: sorted(set(det_ids) - set(handles))
-            for name, handles in calib_handles.items()
-        }
+        missing = {name: sorted(set(det_ids) - set(handles)) for name, handles in calib_handles.items()}
         for name in ("ptc", "flat", "linearizer", "crosstalk"):
             if missing[name]:
-                raise RuntimeError(
-                    f"Missing {name} calibration for detector(s) {missing[name]}"
-                )
+                raise RuntimeError(f"Missing {name} calibration for detector(s) {missing[name]}")
         if missing["intrinsicZernikes"]:
             self.log.warning(
                 "No intrinsic Zernike calibration for %d detector(s); their "
@@ -833,11 +811,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             - np.pi / 2
             + np.pi
         ) % (2 * np.pi) - np.pi
-        rtp_deg = (
-            np.degrees(rtp_rad)
-            if self.wfFittingTask.config.modelSpiderShadows
-            else None
-        )
+        rtp_deg = np.degrees(rtp_rad) if self.wfFittingTask.config.modelSpiderShadows else None
         boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
 
         photo_filter_name = (
@@ -923,9 +897,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             handles[det] = butlerQC.get(ref)
         return handles
 
-    def _checkDefocalOrder(
-        self, raws_by_exp: dict, intra_exp: int, extra_exp: int, group: Any
-    ) -> None:
+    def _checkDefocalOrder(self, raws_by_exp: dict, intra_exp: int, extra_exp: int, group: Any) -> None:
         """Warn if ``observation_reason`` contradicts the intra-first convention.
 
         The side of focus is assigned from the exposure id alone, because
@@ -1022,9 +994,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         # `QuantumContext` does not expose its butler, but a resolved deferred
         # handle does -- and the fork pool initializer needs it to reset the
         # inherited connection pool. See `_fam_pool_initializer`.
-        _CALIB_STORE["butler"] = getattr(
-            raw_handles[det_ids[0]][extra_exp], "butler", None
-        )
+        _CALIB_STORE["butler"] = getattr(raw_handles[det_ids[0]][extra_exp], "butler", None)
 
         # Telescope is band- and quantum-fixed. Build the base and both defocused
         # variants here so workers only ever look them up; the radial scales they
@@ -1048,9 +1018,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             results = [_fam_detector_worker((d, t_dispatch)) for d in det_ids]
         else:
             n_workers = min(num_cores, len(det_ids))
-            self.log.info(
-                "Forking %d worker(s) over %d detector(s)", n_workers, len(det_ids)
-            )
+            self.log.info("Forking %d worker(s) over %d detector(s)", n_workers, len(det_ids))
             # Unlike the monolith's pools these workers read from the butler, so
             # the initializer is mandatory, not defensive: children sharing the
             # parent's inherited psycopg2 SSL socket corrupt it.
@@ -1058,9 +1026,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             # n_workers detectors' pixels are resident at once. _forkMap ensures
             # that one killed worker does not take down the entire pool/quantum.
             t_dispatch = time.time()
-            with _dumpStacksOnHang(
-                self.config.hangTimeout, "FAM detector pool", self.log
-            ):
+            with _dumpStacksOnHang(self.config.hangTimeout, "FAM detector pool", self.log):
                 results, deaths = _forkMap(
                     _fam_detector_worker,
                     [(d, t_dispatch) for d in det_ids],
@@ -1171,13 +1137,11 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 sizes = [g.get("group_size", 0) for g in wf]
                 # A timed-out or failed group has an empty fit_info, so nfev is
                 # missing rather than zero.
-                nfev_mean = _mean_std_max(
-                    [g.get("fit_info", {}).get("nfev", np.nan) or np.nan for g in wf]
-                )[0]
-                fit = (
-                    f"fit={stages['fit']:.1f}s ({n_ok}/{len(wf)} ok, "
-                    f"n={np.mean(sizes):.1f}"
-                    + (f", nfev={nfev_mean:.1f})" if np.isfinite(nfev_mean) else ")")
+                nfev_mean = _mean_std_max([g.get("fit_info", {}).get("nfev", np.nan) or np.nan for g in wf])[
+                    0
+                ]
+                fit = f"fit={stages['fit']:.1f}s ({n_ok}/{len(wf)} ok, n={np.mean(sizes):.1f}" + (
+                    f", nfev={nfev_mean:.1f})" if np.isfinite(nfev_mean) else ")"
                 )
             else:
                 fit = f"fit={stages['fit']:.2f}s (no groups)"
@@ -1238,14 +1202,9 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         donuts = [sum(len(res["catalog"]) for res in r["results"]) for r in ok]
         groups = [len(r["wf_results"]) for r in ok]
         scatters = [
-            res["scatter_arcsec"]
-            for r in ok
-            for res in r["results"]
-            if res.get("scatter_arcsec") is not None
+            res["scatter_arcsec"] for r in ok for res in r["results"] if res.get("scatter_arcsec") is not None
         ]
-        fits = [
-            g.get("fit_info", {}).get("elapsed", np.nan) for r in ok for g in r["wf_results"]
-        ]
+        fits = [g.get("fit_info", {}).get("elapsed", np.nan) for r in ok for g in r["wf_results"]]
         self.log.info(
             "Per-detector yield (n=%d): donuts=%.1f+/-%.1f  groups=%.1f+/-%.1f  "
             'scatter=%.2f+/-%.2f"  per-group fit=%.1f+/-%.1fs (max %.1fs)',
@@ -1258,17 +1217,14 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
         slowest = sorted(
             ok,
-            key=lambda r: (
-                r.get("worker_wall", 0.0) if np.isfinite(r.get("worker_wall", np.nan)) else 0.0
-            ),
+            key=lambda r: (r.get("worker_wall", 0.0) if np.isfinite(r.get("worker_wall", np.nan)) else 0.0),
             reverse=True,
         )[:_N_SLOWEST]
         self.log.info(
             "Slowest %d detector(s): %s",
             len(slowest),
             ", ".join(
-                f"{r['det_name'] or r['det_id']} {r.get('worker_wall', float('nan')):.1f}s"
-                for r in slowest
+                f"{r['det_name'] or r['det_id']} {r.get('worker_wall', float('nan')):.1f}s" for r in slowest
             ),
         )
 
@@ -1319,15 +1275,9 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             # exposures inside the worker, and one refcat load serves both, which is
             # why `refcat_run` lives on the worker instead of on each per-exposure
             # cutout result (summing it there would double-count).
-            refcat_elapsed=sum(
-                w["refcat_run"] for w in results if np.isfinite(w["refcat_run"])
-            ),
-            cutout_elapsed=sum(
-                w["cutout_run"] for w in results if np.isfinite(w["cutout_run"])
-            ),
-            danish_elapsed=sum(
-                w["fit_run"] for w in results if np.isfinite(w["fit_run"])
-            ),
+            refcat_elapsed=sum(w["refcat_run"] for w in results if np.isfinite(w["refcat_run"])),
+            cutout_elapsed=sum(w["cutout_run"] for w in results if np.isfinite(w["cutout_run"])),
+            danish_elapsed=sum(w["fit_run"] for w in results if np.isfinite(w["fit_run"])),
             photo_filter_name=photo_filter_name,
             astrom_filter_name=self.config.astromRefFilter,
             rtp_rad=rtp_rad,

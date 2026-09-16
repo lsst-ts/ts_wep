@@ -74,7 +74,7 @@ def _createDisk(diameter: float, nOffsets: int | None = None) -> np.ndarray:
     for dy in offsets:
         y2 = (yy + dy) ** 2
         for dx in offsets:
-            acc += ((xx + dx) ** 2 + y2 <= R2)
+            acc += (xx + dx) ** 2 + y2 <= R2
     acc /= (nOffsets + 1) ** 2
     return acc.astype(np.float64)
 
@@ -104,7 +104,7 @@ def _cropSame(full, imgShape, kerShape):
     """
     r0 = (kerShape[0] - 1) // 2
     c0 = (kerShape[1] - 1) // 2
-    return full[r0:r0 + imgShape[0], c0:c0 + imgShape[1]]
+    return full[r0 : r0 + imgShape[0], c0 : c0 + imgShape[1]]
 
 
 def _shiftSubtractNoise(image):
@@ -193,7 +193,7 @@ class DiskCorrelationBank:
         # Also cache the background weight A_S/A_B and the total support area
         # A_U = A_S + A_B, both needed by the energy-normalized score.
         self.annulusNorm = np.zeros(nDiam)
-        self.bgWeight = np.zeros(nDiam)     # A_S / A_B
+        self.bgWeight = np.zeros(nDiam)  # A_S / A_B
         self.supportArea = np.zeros(nDiam)  # A_U = A_S + A_B  (template-sum units)
         for i in range(nDiam):
             ii = self.innerIndex[i]
@@ -207,7 +207,7 @@ class DiskCorrelationBank:
                 continue
             # Zero-mean matched-filter template: t = signal - (A_S/A_B)*background.
             t = signal - (A_S / A_B) * background
-            self.annulusNorm[i] = np.sqrt((t ** 2).sum())
+            self.annulusNorm[i] = np.sqrt((t**2).sum())
             self.bgWeight[i] = A_S / A_B
             self.supportArea[i] = A_S + A_B
 
@@ -228,7 +228,7 @@ class DiskCorrelationBank:
             h, w = a.shape
             r0 = (H - h) // 2
             c0 = (W - w) // 2
-            out[r0:r0 + h, c0:c0 + w] = a
+            out[r0 : r0 + h, c0 : c0 + w] = a
             return out
 
         dI = centerPad(disks[i])
@@ -262,9 +262,7 @@ class DiskCorrelationBank:
         """
         image = np.asarray(image, dtype=float)
         if image.shape != self.binnedShape:
-            raise ValueError(
-                f"image shape {image.shape} != bank shape {self.binnedShape}"
-            )
+            raise ValueError(f"image shape {image.shape} != bank shape {self.binnedShape}")
         F_image = rfftn(image, self.fshape, workers=1)
         F_image2 = rfftn(image * image, self.fshape, workers=1) if secondMoment else None
 
@@ -298,7 +296,7 @@ class DonutDetectDiameterConfig(pexConfig.Config):
     dMaxFull = pexConfig.Field(
         doc="Largest donut diameter to probe, in full-res pixels.",
         dtype=float,
-        default=480.0, # ~4 x nominal
+        default=480.0,  # ~4 x nominal
     )
     innerFrac = pexConfig.Field(
         doc="Inner/outer diameter ratio (central obscuration) of the donut.",
@@ -306,32 +304,38 @@ class DonutDetectDiameterConfig(pexConfig.Config):
         default=0.61,
     )
     rootOrder = pexConfig.Field(
-        doc=("Root order k for the diameter ladder: ratio = (1/innerFrac)**(1/k). "
-             "Larger k -> finer diameter sampling at proportionally higher cost."),
+        doc=(
+            "Root order k for the diameter ladder: ratio = (1/innerFrac)**(1/k). "
+            "Larger k -> finer diameter sampling at proportionally higher cost."
+        ),
         dtype=int,
         default=5,
     )
     badPixelTypes = pexConfig.ListField(
         doc="Mask plane names treated as bad. Matching pixels are zeroed before "
-            "binning and correlation (see _prepImage).",
+        "binning and correlation (see _prepImage).",
         dtype=str,
         default=["SAT", "BAD", "NO_DATA", "INTRP"],
     )
     backgroundSteps = pexConfig.Field(
-        doc=("Number of ladder steps beyond each annulus's outer radius to "
-             "include (together with the inner hole) when estimating the local "
-             "background for the zero-mean matched filter. Larger values sample "
-             "more background (lower noise) but reach further into neighbours "
-             "in crowded fields."),
+        doc=(
+            "Number of ladder steps beyond each annulus's outer radius to "
+            "include (together with the inner hole) when estimating the local "
+            "background for the zero-mean matched filter. Larger values sample "
+            "more background (lower noise) but reach further into neighbours "
+            "in crowded fields."
+        ),
         dtype=int,
         default=2,
     )
     energyFloorFactor = pexConfig.Field(
-        doc=("Noise floor added to the local image energy in the normalized "
-             "cross-correlation denominator, as a fraction of the median local "
-             "energy across the map. Prevents flat/empty regions (tiny energy) "
-             "from producing spuriously high cosine scores. 0 disables the "
-             "floor (pure cosine similarity)."),
+        doc=(
+            "Noise floor added to the local image energy in the normalized "
+            "cross-correlation denominator, as a fraction of the median local "
+            "energy across the map. Prevents flat/empty regions (tiny energy) "
+            "from producing spuriously high cosine scores. 0 disables the "
+            "floor (pure cosine similarity)."
+        ),
         dtype=float,
         default=0.1,
     )
@@ -342,14 +346,14 @@ class DonutDetectDiameterConfig(pexConfig.Config):
     )
     peakMinSeparationFactor = pexConfig.Field(
         doc="Minimum separation between candidate peaks, in units of the "
-            "winning (per-peak) binned donut diameter. Declusters extended "
-            "features.",
+        "winning (per-peak) binned donut diameter. Declusters extended "
+        "features.",
         dtype=float,
         default=1.0,
     )
     likenessEdgeClip = pexConfig.Field(
         doc="Number of binned pixels to clip from the likeness map edges "
-            "(where the correlation is biased by zero-padding).",
+        "(where the correlation is biased by zero-padding).",
         dtype=int,
         default=10,
     )
@@ -359,15 +363,19 @@ class DonutDetectDiameterConfig(pexConfig.Config):
         default=False,
     )
     likenessThreshold = pexConfig.Field(
-        doc=("Minimum likeness (cosine shape-agreement score) for a peak to be "
-             "kept. Rejects wrong-shape features at any brightness. Set <= 0 to "
-             "disable."),
+        doc=(
+            "Minimum likeness (cosine shape-agreement score) for a peak to be "
+            "kept. Rejects wrong-shape features at any brightness. Set <= 0 to "
+            "disable."
+        ),
         dtype=float,
         default=0.6,
     )
     snrThreshold = pexConfig.Field(
-        doc=("Minimum matched-filter SNR (at the winning diameter) for a peak to "
-             "be kept. Rejects noise peaks at any shape. Set <= 0 to disable."),
+        doc=(
+            "Minimum matched-filter SNR (at the winning diameter) for a peak to "
+            "be kept. Rejects noise peaks at any shape. Set <= 0 to disable."
+        ),
         dtype=float,
         default=15.0,
     )
@@ -375,16 +383,15 @@ class DonutDetectDiameterConfig(pexConfig.Config):
     def validate(self):
         super().validate()
         if self.rootOrder < 1:
-            raise pexConfig.FieldValidationError(
-                self.__class__.rootOrder, self, "rootOrder must be >= 1"
-            )
+            raise pexConfig.FieldValidationError(self.__class__.rootOrder, self, "rootOrder must be >= 1")
         if self.dMaxFull <= self.dMinFull:
             raise pexConfig.FieldValidationError(
                 self.__class__.dMaxFull, self, "dMaxFull must exceed dMinFull"
             )
         if self.detectionBinning < 1:
             raise pexConfig.FieldValidationError(
-                self.__class__.detectionBinning, self,
+                self.__class__.detectionBinning,
+                self,
                 "detectionBinning must be >= 1",
             )
 
@@ -392,6 +399,7 @@ class DonutDetectDiameterConfig(pexConfig.Config):
 # ----------------------------------------------------------------------
 # Task
 # ----------------------------------------------------------------------
+
 
 class DonutDetectDiameterTask(pipeBase.Task):
     """Detect donuts and estimate their diameters via disk cross-correlation.
@@ -452,9 +460,7 @@ class DonutDetectDiameterTask(pipeBase.Task):
 
         self._dMinBinned = cfg.dMinFull / cfg.detectionBinning
         self._dMaxBinned = cfg.dMaxFull / cfg.detectionBinning
-        self._diameters = makeDiameterLadder(
-            self._dMinBinned, self._dMaxBinned, cfg.innerFrac, cfg.rootOrder
-        )
+        self._diameters = makeDiameterLadder(self._dMinBinned, self._dMaxBinned, cfg.innerFrac, cfg.rootOrder)
         self._bank: DiskCorrelationBank | None = None
 
     # --- helpers --------------------------------------------------------
@@ -462,7 +468,9 @@ class DonutDetectDiameterTask(pipeBase.Task):
     def _getBank(self, binnedShape):
         if self._bank is None or self._bank.binnedShape != tuple(binnedShape):
             self._bank = DiskCorrelationBank(
-                binnedShape, self._diameters, self.config.innerFrac,
+                binnedShape,
+                self._diameters,
+                self.config.innerFrac,
                 backgroundSteps=self.config.backgroundSteps,
             )
         return self._bank
@@ -569,11 +577,11 @@ class DonutDetectDiameterTask(pipeBase.Task):
             # Background sum, and the support set U = signal + background.
             if oi >= 0:
                 sumB = diskCorr[oi] - sumS
-                sumU = diskCorr[oi]        # <image,   U>
-                sumsqU = diskCorrSq[oi]    # <image^2, U>
+                sumU = diskCorr[oi]  # <image,   U>
+                sumsqU = diskCorrSq[oi]  # <image^2, U>
             else:
                 sumB = diskCorr[ii]
-                sumU = diskCorr[i]         # signal + inner hole
+                sumU = diskCorr[i]  # signal + inner hole
                 sumsqU = diskCorrSq[i]
 
             # Numerator: proper dot product with the zero-mean template t.
@@ -652,8 +660,9 @@ class DonutDetectDiameterTask(pipeBase.Task):
             rhoDiametersBinned=np.array(rhoDiametersBinned),
         )
 
-    def _selectPeaks(self, likeness, bank, snrAtWinner=None, argDiameter=None,
-                     nPeaks=None, minSeparationFactor=None):
+    def _selectPeaks(
+        self, likeness, bank, snrAtWinner=None, argDiameter=None, nPeaks=None, minSeparationFactor=None
+    ):
         """Candidate (y, x) peaks in the binned likeness map, best-first.
 
         Local maxima, declustered by a per-peak minimum separation scaled to the
@@ -766,10 +775,13 @@ class DonutDetectDiameterTask(pipeBase.Task):
 
         if nRejLike or nRejSnr:
             self.log.info(
-                "Quality cuts rejected %d candidates (%d likeness < %.2f, "
-                "%d SNR < %.1f); %d peaks selected",
-                nRejLike + nRejSnr, nRejLike, likeThresh,
-                nRejSnr, snrThresh, len(chosen),
+                "Quality cuts rejected %d candidates (%d likeness < %.2f, %d SNR < %.1f); %d peaks selected",
+                nRejLike + nRejSnr,
+                nRejLike,
+                likeThresh,
+                nRejSnr,
+                snrThresh,
+                len(chosen),
             )
 
         chosen = [(y + clip, x + clip) for y, x in chosen]
@@ -806,6 +818,7 @@ class DonutDetectDiameterTask(pipeBase.Task):
         vals : np.ndarray
             The cosine response at each diameter in `ds`.
         """
+
         def localMax(amap):
             if window <= 0:
                 return amap[y, x]
@@ -828,8 +841,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
         k = int(np.argmax(curve))
         if k == 0 or k == len(curve) - 1:
             return float(diametersBinned[k])
-        lx = np.log(diametersBinned[k - 1:k + 2])
-        ly = curve[k - 1:k + 2]
+        lx = np.log(diametersBinned[k - 1 : k + 2])
+        ly = curve[k - 1 : k + 2]
         denom = ly[0] - 2 * ly[1] + ly[2]
         if denom == 0:
             return float(diametersBinned[k])
@@ -876,9 +889,7 @@ class DonutDetectDiameterTask(pipeBase.Task):
         edgeAligned = np.zeros(nPk, dtype=bool)
         dGrid = None
         for k, (y, x) in enumerate(peaks):
-            dBin, sizing = self._sizingCurveAt(
-                y, x, rhoMaps, rhoDiametersBinned, window=1
-            )
+            dBin, sizing = self._sizingCurveAt(y, x, rhoMaps, rhoDiametersBinned, window=1)
             if len(sizing) < 3:
                 continue
             if dGrid is None:
@@ -929,15 +940,8 @@ class DonutDetectDiameterTask(pipeBase.Task):
         maps = self._likenessMap(diskCorr, diskCorrSq, bank, pixelNoise)
         likeness = maps.likeness
 
-        peaks = self._selectPeaks(
-            likeness,
-            bank,
-            snrAtWinner=maps.snrAtWinner,
-            argDiameter=maps.argDiameter
-        )
-        sizing = self._exposureDiameter(
-            peaks, maps.rhoMaps, maps.rhoDiametersBinned
-        )
+        peaks = self._selectPeaks(likeness, bank, snrAtWinner=maps.snrAtWinner, argDiameter=maps.argDiameter)
+        sizing = self._exposureDiameter(peaks, maps.rhoMaps, maps.rhoDiametersBinned)
 
         diameterFull = sizing.diameter
         scatter = sizing.scatter
@@ -945,8 +949,9 @@ class DonutDetectDiameterTask(pipeBase.Task):
         curveInfo = sizing.curveInfo
         if np.isfinite(scatter):
             self.log.info(
-                "Exposure diameter %.1f px (full); per-detection scatter "
-                "%.1f%% over %d donuts", diameterFull, scatter * 100,
+                "Exposure diameter %.1f px (full); per-detection scatter %.1f%% over %d donuts",
+                diameterFull,
+                scatter * 100,
                 len(curveInfo["peaksUsed"]),
             )
 
@@ -977,9 +982,7 @@ class DonutDetectDiameterTask(pipeBase.Task):
                 "diameter": perDetFull,
                 "likeness": np.array([likeness[y, x] for y, x in zip(ys, xs)]),
                 "snr": np.array([maps.snrAtWinner[y, x] for y, x in zip(ys, xs)]),
-                "peak_diameter": np.array(
-                    [maps.argDiameter[y, x] for y, x in zip(ys, xs)]
-                ) * binning,
+                "peak_diameter": np.array([maps.argDiameter[y, x] for y, x in zip(ys, xs)]) * binning,
                 "curve_argmax_edge": sizing.argmaxAtEdge,
             }
         )

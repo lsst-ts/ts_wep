@@ -107,10 +107,7 @@ class BlindDetect(pipeBase.Task):
         trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
         binning = config.detectionBinning
         binned_donut_radius = donutRadius / binning
-        template = _buildAnnularTemplate(
-            binned_donut_radius,
-            innerFrac=_INSTRUMENT.obscuration
-        )
+        template = _buildAnnularTemplate(binned_donut_radius, innerFrac=_INSTRUMENT.obscuration)
 
         if binning > 1:
             binnedImg = afwMath.binImage(exposure[trimmedBBox].image, binning)

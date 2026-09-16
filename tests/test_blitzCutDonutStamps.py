@@ -95,9 +95,7 @@ def _measurements(with_refcat_values: bool, d1_xy=_D1_XY) -> QTable:
         "coord_dec": np.radians(np.array([-20.0, -20.1])),
     }
     for column in _REFCAT_COLUMNS:
-        table[column] = (
-            values[column] if with_refcat_values else np.full(len(table), np.nan)
-        )
+        table[column] = values[column] if with_refcat_values else np.full(len(table), np.nan)
     return table
 
 

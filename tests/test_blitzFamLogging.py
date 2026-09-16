@@ -82,11 +82,7 @@ def _worker_result(
     with_results=True,
 ):
     """A `_fam_detector_worker` return value, as the parent sees it."""
-    results = (
-        [_cutout_result(1000, base=base), _cutout_result(1001, base=base)]
-        if with_results
-        else []
-    )
+    results = [_cutout_result(1000, base=base), _cutout_result(1001, base=base)] if with_results else []
     return {
         "det_id": det_id,
         "det_name": det_name,
@@ -209,7 +205,7 @@ class TestPerDetectorLines(FamLoggingTestCase):
         (line,) = self.detectorLines(self.logLines([_worker_result()]))
         for key in _STAGE_KEYS:
             self.assertIn(f"{key}=", line)
-        self.assertIn("scatter=0.60\"/0.60\"", line)
+        self.assertIn('scatter=0.60"/0.60"', line)
         self.assertIn("donuts=3+3", line)
         self.assertIn("pair=refcat_id", line)
         self.assertIn("2/2 ok", line)
@@ -226,9 +222,7 @@ class TestPerDetectorLines(FamLoggingTestCase):
                 skipped=True,
                 with_results=False,
             ),
-            _worker_result(
-                det_id=3, det_name="R13_S02", error="ValueError: boom", with_results=False
-            ),
+            _worker_result(det_id=3, det_name="R13_S02", error="ValueError: boom", with_results=False),
         ]
         lines = self.detectorLines(self.logLines(results))
         self.assertEqual(len(lines), 3)
@@ -240,9 +234,7 @@ class TestPerDetectorLines(FamLoggingTestCase):
     def testUnnamedDetectorFallsBackToItsId(self) -> None:
         """A worker that failed before reading the raw has no det_name."""
         (line,) = self.detectorLines(
-            self.logLines(
-                [_worker_result(det_id=42, det_name="", error="boom", with_results=False)]
-            )
+            self.logLines([_worker_result(det_id=42, det_name="", error="boom", with_results=False)])
         )
         self.assertIn("det42", line)
 
@@ -273,9 +265,7 @@ class TestAggregates(FamLoggingTestCase):
             _worker_result(det_id=1, det_name="R01_S00", base=1.0),
             _worker_result(det_id=2, det_name="R02_S11", base=3.0),
         ]
-        (timing,) = [
-            line for line in self.logLines(results) if line.startswith("Per-detector timing")
-        ]
+        (timing,) = [line for line in self.logLines(results) if line.startswith("Per-detector timing")]
         self.assertIn("(n=2)", timing)
         # isr is 2*base per detector: mean of 2 and 6 is 4, std is 2.
         self.assertIn("isr=4.00+/-2.00s", timing)
@@ -287,9 +277,7 @@ class TestAggregates(FamLoggingTestCase):
         results = [
             _worker_result(det_id=1, det_name="R01_S00", base=1.0),
             _worker_result(det_id=2, det_name="R02_S11", base=1.0),
-            _worker_result(
-                det_id=3, det_name="R13_S02", error="boom", with_results=False
-            ),
+            _worker_result(det_id=3, det_name="R13_S02", error="boom", with_results=False),
         ]
         lines = self.logLines(results)
         (timing,) = [line for line in lines if line.startswith("Per-detector timing")]
@@ -319,8 +307,7 @@ class TestAggregates(FamLoggingTestCase):
     def testNoAggregatesWhenEveryDetectorFailed(self) -> None:
         """The all-failed case: per-detector lines, no NaN-only statistics block."""
         results = [
-            _worker_result(det_id=i, det_name=f"R0{i}_S00", error="boom", with_results=False)
-            for i in (1, 2)
+            _worker_result(det_id=i, det_name=f"R0{i}_S00", error="boom", with_results=False) for i in (1, 2)
         ]
         lines = self.logLines(results)
         self.assertEqual(len(self.detectorLines(lines)), 2)

@@ -223,13 +223,15 @@ class CutDonutStampsTask(pipeBase.Task):
                 mag_box = _rc_mag[mag_col][box_mask]
                 return list(zip(dx_box.tolist(), dy_box.tolist(), mag_box.tolist()))
 
-            _fa = detector.transform(
-                [lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE
-            )[0]
+            _fa = detector.transform([lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE)[0]
 
             rejected_sat = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
-            rejected_inner_frac = bool(np.isfinite(row["inner_frac"]) and abs(row["inner_frac"]) > self.config.innerFracThreshold)
-            rejected_outer_frac = bool(np.isfinite(row["outer_frac"]) and abs(row["outer_frac"]) > self.config.outerFracThreshold)
+            rejected_inner_frac = bool(
+                np.isfinite(row["inner_frac"]) and abs(row["inner_frac"]) > self.config.innerFracThreshold
+            )
+            rejected_outer_frac = bool(
+                np.isfinite(row["outer_frac"]) and abs(row["outer_frac"]) > self.config.outerFracThreshold
+            )
             rejected_snr = bool(np.isfinite(row["snr"]) and row["snr"] < self.config.minStampSnr)
             rejected = rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr
 
@@ -267,7 +269,7 @@ class CutDonutStampsTask(pipeBase.Task):
                 rejected_inner_frac=rejected_inner_frac,
                 rejected_outer_frac=rejected_outer_frac,
                 rejected_snr=rejected_snr,
-                rejected=rejected
+                rejected=rejected,
             )
 
         max_donuts = self.config.maxDonuts
