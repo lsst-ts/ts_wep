@@ -36,7 +36,7 @@ import numpy as np
 from astropy.table import QTable
 from galsim.zernike import noll_to_zern
 
-from .dataStructures import _NULL_WF
+from .dataStructures import _NULL_WF_DONUT
 from .utils import (
     _CUTOUT_STAGE_KEYS,
     _INSTRUMENT,
@@ -470,19 +470,19 @@ def build_donut_catalog(
     zk_int_rows = []
     for d, candidate in all_donuts:
         sid = d.donut_id
-        # `_NULL_WF` carries group_id "", the "no fit claimed this donut"
+        # `_NULL_WF_DONUT` carries group_id "", the "no fit claimed this donut"
         # marker.
-        wd = wf_by_id.get((sid, d.det_name, d.visit_id), _NULL_WF)
+        wd = wf_by_id.get((sid, d.det_name, d.visit_id), _NULL_WF_DONUT)
 
         # Both are dense Noll-indexed arrays in meters of length _ZK_JMAX + 1;
         # they become the zk_*_ccs array columns after the loop.
         zk_deviation_rows.append(wd.zk_dev[: zk_deviation_jmax + 1])
-        # Deviations only exist where a fit ran, but intrinsics are a
-        # function of field position alone, so a row no fit consumed still has
-        # them -- take them off the donut rather than inheriting `_NULL_WF`'s
+        # Deviations only exist where a fit ran, but intrinsics are a function
+        # of field position alone, so a row no fit consumed still has them --
+        # take them off the donut rather than inheriting `_NULL_WF_DONUT`'s
         # all-NaN. Donuts whose intrinsic calib was missing have
         # `intrinsic_zk is None` and get zeros, as an unsupplied index does.
-        zk_int_rows.append(wd.zk_intrinsic if wd is not _NULL_WF else _dense_intrinsic(d))
+        zk_int_rows.append(wd.zk_intrinsic if wd is not _NULL_WF_DONUT else _dense_intrinsic(d))
 
         # Image columns are skipped entirely when not saving, so we do not pay
         # for float64 copies of columns that are about to be discarded.
@@ -590,7 +590,7 @@ def build_donut_catalog(
     # coefficients: [:, j] is Noll j across donuts and [i] is donut i's
     # coefficient vector. Slots below Noll 4 are carried for indexing only:
     # 0.0 for intrinsics, and for deviations 0.0 on fitted rows (`_dense_dev`)
-    # but NaN on rows no fit consumed (`_NULL_WF` is all-NaN).
+    # but NaN on rows no fit consumed (`_NULL_WF_DONUT` is all-NaN).
     zk_deviation_um = np.array(zk_deviation_rows) * 1e6
     zk_int_um = np.array(zk_int_rows) * 1e6
     # Camera coordinate system, i.e. as fit.

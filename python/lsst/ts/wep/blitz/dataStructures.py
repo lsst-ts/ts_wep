@@ -21,7 +21,7 @@
 
 """Records passed between the blitz pipeline stages."""
 
-__all__ = ["Donut", "WfResult"]
+__all__ = ["Donut", "WfDonutResult"]
 
 from dataclasses import dataclass
 
@@ -87,26 +87,27 @@ class Donut:
     rejected: bool = False
 
 
-# The complete vocabulary of `WfResult.fit_outcome`, which says which of the
-# mutually exclusive paths through `WavefrontFittingTask._run_lstsq_fit`
-# produced a result.
+# The complete vocabulary of `WfDonutResult.fit_outcome`, which says which
+# of the mutually exclusive paths through
+# `WavefrontFittingTask._run_lstsq_fit` produced a result.
 _FIT_OUTCOMES = (
     "ok",  # least_squares converged (success=True)
     "nonconvergent",  # least_squares returned but success=False
     "timeout",  # SIGALRM fired; wfFitTimeoutPerDonut * group_size exceeded
     "exception",  # the fit raised
     "x0_only",  # wfInitialGuessOnly: the model was evaluated, never fit
-    "",  # no fit consumed this donut (`_NULL_WF`)
+    "",  # no fit consumed this donut (`_NULL_WF_DONUT`)
 )
 
 
 @dataclass
-class WfResult:
+class WfDonutResult:
     """One donut's wavefront-fit outputs, produced by `_wf_worker`.
 
     Consumed by `build_donut_catalog`, keyed by ``(donut_id, det_name,
-    visit_id)``. A fit that timed out or raised still produces a WfResult with
-    ``fit_success=False`` and all-NaN Zernikes; ``fit_outcome`` says which.
+    visit_id)``. A fit that timed out or raised still produces a
+    WfDonutResult with ``fit_success=False`` and all-NaN Zernikes;
+    ``fit_outcome`` says which.
 
     ``visit_id`` is part of the key because full-array mode fits the same star
     on the same detector twice, once per side of focus, so ``(donut_id,
@@ -141,7 +142,7 @@ class WfResult:
 # Sentinel for "no fit consumed this donut". All-NaN Zernikes, empty strings,
 # fit_success=False -- so the catalog's empty group_id and empty
 # group_fit_outcome both fall out naturally.
-_NULL_WF = WfResult(
+_NULL_WF_DONUT = WfDonutResult(
     donut_id=-1,
     det_name="",
     visit_id=-1,
