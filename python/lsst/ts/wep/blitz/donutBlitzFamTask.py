@@ -21,7 +21,7 @@
 
 """The full-array-mode (FAM) blitz pipeline task.
 
-Where `DonutBlitzMonolithTask` processes one visit's 8 corner wavefront
+Where `DonutBlitzCornerTask` processes one visit's 8 corner wavefront
 sensors, this processes the 189 science detectors of an intra/extra **exposure
 pair** -- one quantum per ``group``.
 
@@ -372,7 +372,7 @@ class DonutBlitzFamTaskConnections(
         doc=(
             "Per-donut catalog for the pair, covering both exposures: selection "
             "metrics, fit results, Zernikes, and optionally stamp/model images.  "
-            "Same schema as corner mode's donutBlitzResults, but a separate "
+            "Same schema as corner mode's donutBlitzCornerResults, but a separate "
             "dataset type: a dataset type carries one dimension set and one "
             "meaning, and a future analysis of the ~3 mm donuts on the corner "
             "sensors of these same exposures would collide with a shared one."
@@ -1016,7 +1016,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
         ``num_cores`` comes from the execution environment (``pipetask
         -n/--cores-per-quantum``, default 1), never from config, matching
-        `DonutBlitzMonolithTask`.  One core runs inline with no pool at all.
+        `DonutBlitzCornerTask`.  One core runs inline with no pool at all.
         """
         t0 = time.perf_counter()
         if num_cores == 1:
@@ -1026,7 +1026,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         else:
             n_workers = min(num_cores, len(det_ids))
             self.log.info("Forking %d worker(s) over %d detector(s)", n_workers, len(det_ids))
-            # Unlike the monolith's pools these workers read from the butler,
+            # Unlike corner mode's pools these workers read from the butler,
             # so the initializer is mandatory, not defensive: children sharing
             # the parent's inherited psycopg2 SSL socket corrupt it. One fork
             # per detector with at most n_workers alive, so at most n_workers
@@ -1092,7 +1092,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     def _logWorkerSummaries(self, results: list[dict]) -> None:
         """Log one summary line per detector, then aggregates over them.
 
-        The per-detector line is modeled on `DonutBlitzMonolithTask`'s, with
+        The per-detector line is modeled on `DonutBlitzCornerTask`'s, with
         two differences that follow from FAM fusing the whole pipeline into one
         worker: it carries an ``io`` stage, because each worker does its own
         butler reads; and it carries the Danish ``fit`` result, because the fit

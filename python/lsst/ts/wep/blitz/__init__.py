@@ -29,5 +29,5 @@ from .cutoutPipeline import *
 from .wavefrontFittingTask import *
 from .famPipeline import *
 from .donutBlitzPlotTask import *
-from .donutBlitzMonolithTask import *
+from .donutBlitzCornerTask import *
 from .donutBlitzFamTask import *
