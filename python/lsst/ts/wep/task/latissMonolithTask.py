@@ -46,6 +46,8 @@ __all__ = [
     "peakNormalize",
 ]
 
+import copy
+import logging
 import warnings
 from typing import Any, cast
 
@@ -112,27 +114,32 @@ def peakNormalize(stamps: DonutStamps) -> None:
 
 class LatissMonolithTaskConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "detector", "day_obs"),  # type: ignore
+    dimensions=("instrument", "visit", "detector"),  # type: ignore
 ):
     """Connections for LatissMonolithTask.
 
-    Not dimensioned on visit: like ``CutOutDonutsScienceSensorTaskConnections``
-    this task consumes *two* exposures per fit and pairs them internally, so
-    the quantum cannot be keyed on a single visit. ``day_obs`` is included
-    because it is the temporal dimension the graph builder needs to pick the
-    calibrations valid for the night; without one the lookup is untimed, and
-    raises when more than one validity range exists. A pair never straddles a
-    night, so this costs nothing. LATISS has one detector, so in practice this
-    is one quantum per night.
+    One quantum per CWFS pair, keyed on the **extra-focal** visit, as the
+    ts_wep paired tasks and ``donutBlitzMonolith`` are. The pairing happens at
+    graph-build time in ``adjust_all_quanta``: the default graph gives every
+    exposure its own quantum holding its own raw; the intra-focal raw is then
+    moved into its partner's quantum and the intra quantum dropped. Keying on
+    visit is what makes ``_log``/``_metadata`` per pair -- with a per-night or
+    per-run quantum every pair in a long-lived output run (rapid analysis
+    reuses ``LATISS/runs/quickLook/N``) would write the same dataId and the
+    second pair would fail on the provenance datasets. ``visit`` also implies
+    ``day_obs``, so the calibration lookup is time-bounded.
     """
 
+    # Populated by pex_config; declared for adjust_all_quanta and mypy.
+    config: Any
+
     raws = ct.Input(
-        doc="Raw LATISS exposures; paired into intra/extra by focusZ.",
+        doc="Raw LATISS exposures of one CWFS pair: the extra-focal raw of this "
+        "quantum's visit plus its intra-focal partner, attached by adjust_all_quanta.",
         name="raw",
         storageClass="Exposure",
         dimensions=("instrument", "exposure", "detector"),
         multiple=True,
-        minimum=2,
         deferLoad=True,
     )
     camera = ct.PrerequisiteInput(
@@ -209,25 +216,22 @@ class LatissMonolithTaskConnections(
         minimum=0,
     )
     zernikes = ct.Output(
-        doc="Zernike coefficients per pair and averaged, with fit quality columns.",
+        doc="Zernike coefficients for the pair and an average row, with fit quality columns.",
         name="zernikes",
         storageClass="AstropyQTable",
         dimensions=("visit", "detector", "instrument"),
-        multiple=True,
     )
     donutStampsExtra = ct.Output(
         doc="Extra-focal donut postage stamps.",
         name="donutStampsExtra",
         storageClass="StampsBase",
         dimensions=("visit", "detector", "instrument"),
-        multiple=True,
     )
     donutStampsIntra = ct.Output(
-        doc="Intra-focal donut postage stamps.",
+        doc="Intra-focal donut postage stamps, stored under the extra-focal visit.",
         name="donutStampsIntra",
         storageClass="StampsBase",
         dimensions=("visit", "detector", "instrument"),
-        multiple=True,
     )
 
     def __init__(self, *, config: Any | None = None) -> None:
@@ -235,6 +239,68 @@ class LatissMonolithTaskConnections(
         if config is not None and not config.doSaveStamps:
             del self.donutStampsExtra
             del self.donutStampsIntra
+
+    def adjust_all_quanta(self, adjuster: pipeBase.QuantaAdjuster) -> None:
+        """Turn one-quantum-per-exposure into one-quantum-per-pair.
+
+        Every exposure in the data query starts with its own quantum. An
+        exposure whose ``observation_reason`` contains ``extra`` keeps its
+        quantum and receives the raw of the intra-focal exposure taken
+        immediately before it (``seq_num - 1`` on the same night, which is how
+        ``latiss_wep_align`` takes the pair). All other quanta are removed:
+        intra exposures once their raw has been re-homed, and unpaired extras
+        (whose partner was not in the query or is not marked ``intra``), with
+        a warning. This mirrors ``ReassignCwfsCutoutsFamTask`` for the LSSTCam
+        FAM pipeline. A data query naming both exposures of the pair, e.g.
+        ``exposure in (17, 18)``, is therefore all that is required; nothing
+        needs to be said about which is which.
+        """
+        log = logging.getLogger(__name__)
+        butler = adjuster.butler
+        data_ids = list(adjuster.iter_data_ids())
+        if not data_ids:
+            return
+        instrument = data_ids[0]["instrument"]
+        # LATISS visit ids equal exposure ids (one exposure per visit), and
+        # the exposure record carries the intra/extra observation_reason.
+        records = {
+            rec.id: rec
+            for rec in butler.registry.queryDimensionRecords(
+                "exposure",
+                where="instrument = :inst AND exposure IN (:ids)",
+                bind={"inst": instrument, "ids": [int(d["visit"]) for d in data_ids]},
+            )
+        }
+        by_exposure = {int(d["visit"]): d for d in data_ids}
+
+        def reason(exposure: int) -> str:
+            rec = records.get(exposure)
+            return (rec.observation_reason or "").lower() if rec is not None else ""
+
+        # First pass: give each extra-focal quantum its partner's raw. This
+        # must finish before any quantum is removed, because add_input reads
+        # the raw from the intra quantum that still holds it.
+        keep = set()
+        for exposure, data_id in by_exposure.items():
+            if "extra" not in reason(exposure):
+                continue
+            partner = exposure - 1
+            if partner not in by_exposure or "intra" not in reason(partner):
+                log.warning(
+                    "Dropping extra-focal exposure %d: intra-focal partner %d is not in the data "
+                    "query (or is not marked 'intra').",
+                    exposure,
+                    partner,
+                )
+                continue
+            for raw_data_id in adjuster.get_inputs(by_exposure[partner])["raws"]:
+                adjuster.add_input(data_id, "raws", raw_data_id)
+            keep.add(exposure)
+
+        # Second pass: everything that is not a completed pair goes.
+        for exposure, data_id in by_exposure.items():
+            if exposure not in keep:
+                adjuster.remove_quantum(data_id)
 
 
 class LatissMonolithTaskConfig(
@@ -356,6 +422,14 @@ class LatissMonolithTaskConfig(
 
         # Z4-Z22, as latiss_wep_align fits; the ts_wep default runs to Z28.
         self.estimateZernikes.nollIndices = list(range(4, 23))
+        # Scale each parameter by its Jacobian column, as the LSSTCam Danish
+        # pipelines do. The AuxTel Z4 direction (3.4 um of defocus) is badly
+        # scaled against the tens-of-nm higher orders, and with scipy's unit
+        # scaling the same stamps converge to Z4 values 40 nm apart on two
+        # conda environments (numpy 2.3 vs 2.4). With 'jac' they agree to 4 nm.
+        # The loose ftol/xtol/gtol the LSSTCam pipelines add are NOT copied:
+        # on simulated LATISS donuts they stop the fit at its starting point.
+        self.estimateZernikes.lstsqKwargs = {"x_scale": "jac"}
 
 
 class LatissMonolithTask(pipeBase.PipelineTask):
@@ -408,10 +482,12 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ) -> None:
-        """Pair the raws, then run one fit per pair.
+        """Identify the pair's two raws, run the chain, write the outputs.
 
-        The raws are deferred so that pairing -- which needs only ``visitInfo``
-        -- does not read pixels for exposures that turn out to be unpaired.
+        The quantum holds exactly the two raws of one CWFS pair (see
+        ``adjust_all_quanta``). Which is which is decided from ``focusZ`` via
+        the pairer, not from the quantum's visit, so a mislabelled
+        ``observation_reason`` cannot swap intra and extra.
         """
         camera = butlerQC.get(inputRefs.camera)
 
@@ -420,11 +496,6 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         # detection depends on `defects`: without it the LATISS bad column
         # outranks the real donut (see the connection docstring).
         isrCalibs = {}
-        # `flat` is per physical_filter while this quantum is per detector, so
-        # several resolve; keep them keyed by filter and choose per exposure.
-        flatsByFilter = {}
-        for ref in getattr(inputRefs, "flat", None) or []:
-            flatsByFilter[str(ref.dataId["physical_filter"])] = ref
         for name in ("bias", "dark", "defects", "linearizer", "crosstalk", "ptc"):
             ref = getattr(inputRefs, name, None)
             if ref is None:
@@ -435,9 +506,12 @@ class LatissMonolithTask(pipeBase.PipelineTask):
                 value = value[0] if value else None
             if value is not None:
                 isrCalibs[name] = value
-        missing = {"defects", "linearizer", "crosstalk", "ptc"} - set(isrCalibs)
-        if not flatsByFilter:
-            missing.add("flat")
+        # `flat` is per physical_filter: the quantum's visit pins one, but the
+        # connection is multiple=True, so take whichever resolved.
+        flats = butlerQC.get(getattr(inputRefs, "flat", None) or [])
+        if flats:
+            isrCalibs["flat"] = flats[0]
+        missing = {"defects", "linearizer", "crosstalk", "ptc", "flat"} - set(isrCalibs)
         if missing:
             self.log.warning("ISR calibrations not found, donut detection may suffer: %s", sorted(missing))
 
@@ -449,58 +523,29 @@ class LatissMonolithTask(pipeBase.PipelineTask):
                 butlerQC.get(inputRefs.raws),
             )
         )
+        if len(rawHandles) != 2:
+            raise pipeBase.NoWorkFound(
+                f"Expected the two raws of one CWFS pair, got {sorted(rawHandles)}; "
+                "was adjust_all_quanta applied?"
+            )
         visitInfos = {expId: handle.get(component="visitInfo") for expId, handle in rawHandles.items()}
-
         pairs = self.pairer.run(visitInfos)
-        if len(pairs) == 0:
-            raise pipeBase.NoWorkFound(f"No intra/extra pairs found among exposures {sorted(rawHandles)}.")
-        self.log.info("Found %d intra/extra pair(s) among %d exposures.", len(pairs), len(rawHandles))
+        if len(pairs) != 1:
+            raise pipeBase.NoWorkFound(
+                f"Exposures {sorted(rawHandles)} do not form an intra/extra pair by focusZ."
+            )
+        pair = pairs[0]
+        self.log.info("Fitting pair: extra=%d intra=%d", pair.extra, pair.intra)
 
-        # Outputs are keyed on the extra-focal visit, matching
-        # CutOutDonutsScienceSensorTask's paired-mode convention.
-        zernikeHandles = {ref.dataId["visit"]: ref for ref in outputRefs.zernikes}
+        outputs = self.run(
+            rawHandles[pair.extra].get(), rawHandles[pair.intra].get(), camera, isrCalibs=isrCalibs
+        )
+
+        butlerQC.put(outputs.zernikes, outputRefs.zernikes)
         if self.config.doSaveStamps:
-            extraHandles = {ref.dataId["visit"]: ref for ref in outputRefs.donutStampsExtra}
-            intraHandles = {ref.dataId["visit"]: ref for ref in outputRefs.donutStampsIntra}
-
-        nDone = 0
-        for pair in pairs:
-            self.log.info("Fitting pair: extra=%d intra=%d", pair.extra, pair.intra)
-            rawExtra = rawHandles[pair.extra].get()
-            rawIntra = rawHandles[pair.intra].get()
-
-            # One quantum can cover many pairs, so a pair that cannot be
-            # processed at all -- no donut found, donut off the boresight,
-            # cutout empty -- must not lose the pairs that can. Nothing is
-            # written for it, which is what makes it visible afterwards as a
-            # missing dataset rather than a NaN row.
-            try:
-                pairCalibs = dict(isrCalibs)
-                if flatsByFilter:
-                    # Both sides of a CWFS pair share a filter, so the
-                    # extra-focal exposure's filter selects the flat for both.
-                    extraFilter = str(rawExtra.getFilter().physicalLabel)
-                    ref = flatsByFilter.get(extraFilter)
-                    if ref is None:
-                        self.log.warning("No flat for filter %s; skipping flat correction", extraFilter)
-                    else:
-                        pairCalibs["flat"] = butlerQC.get(ref)
-                outputs = self.run(rawExtra, rawIntra, camera, isrCalibs=pairCalibs)
-            except Exception as exc:  # noqa: BLE001
-                self.log.warning("Skipping pair extra=%d intra=%d: %s", pair.extra, pair.intra, exc)
-                continue
-
-            butlerQC.put(outputs.zernikes, zernikeHandles[pair.extra])
-            if self.config.doSaveStamps:
-                butlerQC.put(outputs.donutStampsExtra, extraHandles[pair.extra])
-                # Intentionally the extra-focal id for the intra stamps, so a
-                # pair's products share one dataId.
-                butlerQC.put(outputs.donutStampsIntra, intraHandles[pair.extra])
-            nDone += 1
-
-        self.log.info("Wrote results for %d of %d pair(s).", nDone, len(pairs))
-        if nDone == 0:
-            raise pipeBase.NoWorkFound("No pair could be processed; see warnings above.")
+            butlerQC.put(outputs.donutStampsExtra, outputRefs.donutStampsExtra)
+            # The intra stamps share the pair's (extra-focal) dataId.
+            butlerQC.put(outputs.donutStampsIntra, outputRefs.donutStampsIntra)
 
     @timeMethod
     def run(
@@ -542,8 +587,18 @@ class LatissMonolithTask(pipeBase.PipelineTask):
             # withholding them is what caused QFM to centroid on a detector
             # artifact, so pass through whatever runQuantum found.
             calibs = isrCalibs or {}
-            expExtra = self.isrTask.run(rawExtra, camera=camera, **calibs).exposure
-            expIntra = self.isrTask.run(rawIntra, camera=camera, **calibs).exposure
+            # IsrTaskLSST raises if doFlat is set and no flat is supplied. Some
+            # LATISS alignment exposures use filters with no flat (e.g.
+            # 'unknown~empty'); a fit without flat-fielding beats no fit.
+            if self.isrTask.config.doFlat and "flat" not in calibs:
+                self.log.warning("No flat for this pair; running ISR without flat correction.")
+                isrConfig = copy.deepcopy(self.isrTask.config)
+                isrConfig.doFlat = False
+                isrTask = self.isrTask.__class__(config=isrConfig)
+            else:
+                isrTask = self.isrTask
+            expExtra = isrTask.run(rawExtra, camera=camera, **calibs).exposure
+            expIntra = isrTask.run(rawIntra, camera=camera, **calibs).exposure
         else:
             expExtra, expIntra = rawExtra, rawIntra
 
