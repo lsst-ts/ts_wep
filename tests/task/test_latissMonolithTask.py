@@ -100,18 +100,19 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
             peakNormalize([stamp])
 
     def testIsrAppliesTheFullCalibrationSet(self) -> None:
-        """Regression guard: ISR must apply defects, flat, linearize, crosstalk.
+        """Regression guard: ISR must apply defects, flat, linearize, crosstalk
+        (all IsrTaskLSST defaults).
 
-        An earlier version of this task ran gains + overscan only, on the premise
-        that LATISS alignment sequences have no usable calibrations. That premise
-        was false -- bias, dark, flat, defects, linearizer, crosstalk and ptc are
-        all present for LATISS in ``LATISS/defaults`` -- and disabling them broke
-        donut detection: the LATISS bad column at x=3795-3797 survived ISR at
-        ~1.2e5 ADU against an image median of ~20, and since
-        ``QuickFrameMeasurement`` ranks candidates on a 70 px aperture flux --
-        which a solid column fills more uniformly than a donut with a hole -- the
-        column outranked the donut. Enabling defects moved 38 of 60
-        previously-bad pair sides back on-axis and broke none.
+        An earlier version of this task ran gains + overscan only, on the
+        premise that LATISS alignment sequences have no usable calibrations.
+        That premise was false -- bias, dark, flat, defects, linearizer,
+        crosstalk and ptc are all present for LATISS in ``LATISS/defaults`` --
+        and disabling them broke donut detection: the LATISS bad column at
+        x=3795-3797 survived ISR at ~1.2e5 ADU against an image median of ~20,
+        and since ``QuickFrameMeasurement`` ranks candidates on a 70 px
+        aperture flux -- which a solid column fills more uniformly than a donut
+        with a hole -- the column outranked the donut. Enabling defects moved
+        38 of 60 previously-bad pair sides back on-axis and broke none.
 
         These are ``IsrTaskLSST`` defaults, so this test guards against someone
         re-disabling them rather than against a missing assignment.
@@ -161,9 +162,9 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         # validity ranges.
         self.assertEqual(set(connections.dimensions), {"instrument", "detector", "day_obs"})
         self.assertEqual(set(connections.inputs), {"raws"})
-        # The full calibration set BestEffortIsr passes on the summit. `defects`
-        # is the load-bearing one: without it the LATISS bad column at
-        # x=3795-3797 outranks the real donut in QuickFrameMeasurement's
+        # The full calibration set BestEffortIsr passes on the summit.
+        # `defects` is the load-bearing one: without it the LATISS bad column
+        # at x=3795-3797 outranks the real donut in QuickFrameMeasurement's
         # aperture flux, putting the "donut" ~2000 px off the boresight.
         self.assertEqual(
             set(connections.prerequisiteInputs),
@@ -258,6 +259,8 @@ class _FakeStamp:
     centroid_position = _Point()
     detector_name = "RXX_S00"
     cam_name = "LATISS"
+    # Assigned per test; only peakNormalize reads it.
+    wep_im: Image
 
     def calcFieldXY(self) -> tuple[float, float]:
         return (0.0, 0.0)
