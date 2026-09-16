@@ -24,6 +24,8 @@
 __all__ = []
 
 import sys
+from dataclasses import dataclass
+from typing import Any
 
 import batoid
 import galsim
@@ -31,9 +33,6 @@ import numpy as np
 
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils import binArray
-
-_CALIB_STORE: dict = {}  # populated in parent before fork; workers inherit via COW
-
 
 # Hard coding global wavefront sensor geometry for now
 _INSTRUMENT: Instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
@@ -115,12 +114,17 @@ _CUTOUT_STAGE_KEYS = {
 # top level and Detector is nested inside LSSTCamera.
 _OFFSET_OPTICS = ("Detector", "LSSTCamera", "M2")
 
+# An offset triplet: signed z shifts in meters, ordered as `_OFFSET_OPTICS`.
+_Offsets = tuple[float, float, float]
 
-def _telescope_for_offsets(offsets: tuple[float, float, float]):
-    """Return the telescope defocused by an offset triplet, memoized.
+
+def _defocused_telescope(telescope: batoid.Optic, offsets: _Offsets) -> batoid.Optic:
+    """Return ``telescope`` with each non-zero offset component applied.
 
     Parameters
     ----------
+    telescope : batoid.Optic
+        The in-focus telescope, from `CowStore.telescope`.
     offsets : tuple of float
         Signed z shifts in meters, ordered as `_OFFSET_OPTICS`
         ``(detector, camera, m2)``.
@@ -128,25 +132,22 @@ def _telescope_for_offsets(offsets: tuple[float, float, float]):
     Returns
     -------
     batoid.Optic
-        ``_CALIB_STORE["telescope"]`` with each non-zero component applied.
+        The defocused telescope.
 
     Notes
     -----
-    Callers are expected to pre-build every triplet they will need in the
-    parent process before forking, so workers inherit the built telescopes via
-    copy-on-write rather than each paying for them. A worker asking for a
-    triplet the parent did not anticipate still gets a correct answer, it just
-    builds it itself and the result does not propagate back.
+    Deliberately not memoized. Loading the base telescope from YAML costs
+    ~41 ms and is done once per quantum in the parent, but shifting an optic on
+    top of it costs only 20 µs (detector) to 134 µs (camera) -- less than one
+    of the two chief-ray traces in `_defocal_radial_scale`, and nothing at all
+    beside the danish fit that follows. An earlier version cached these per
+    triplet in the COW store, which bought no measurable time and made the
+    store's lifetime ambiguous, since the cached value silently depended on
+    which telescope had been loaded.
     """
-    store = _CALIB_STORE.setdefault("telescope_by_offsets", {})
-    key = tuple(float(o) for o in offsets)
-    telescope = store.get(key)
-    if telescope is None:
-        telescope = _CALIB_STORE["telescope"]
-        for name, dz in zip(_OFFSET_OPTICS, key):
-            if dz:
-                telescope = telescope.withGloballyShiftedOptic(name, [0.0, 0.0, dz])
-        store[key] = telescope
+    for name, dz in zip(_OFFSET_OPTICS, offsets):
+        if dz:
+            telescope = telescope.withGloballyShiftedOptic(name, [0.0, 0.0, dz])
     return telescope
 
 
@@ -157,7 +158,7 @@ def _telescope_for_offsets(offsets: tuple[float, float, float]):
 _RADIAL_SCALE_REF_THETA = np.deg2rad(1.0)
 
 
-def _defocal_radial_scale(offsets: tuple[float, float, float]) -> float:
+def _defocal_radial_scale(telescope: batoid.Optic, offsets: _Offsets) -> float:
     """Fractional radial stretch of the focal plane produced by a defocus.
 
     Shifting an optic along z moves an off-axis chief ray radially, so the
@@ -170,8 +171,15 @@ def _defocal_radial_scale(offsets: tuple[float, float, float]) -> float:
     Because the displacement is linear in field angle it is a pure scale, so
     one number per offset triplet corrects the whole focal plane.
 
+    Two chief-ray traces, ~862 µs. That is cheap once per offset triplet and
+    wasteful once per donut, so full-array mode does not call this in its
+    workers: the parent evaluates it for both sides of focus and hands the
+    answers over as `CowStore.radial_scale_by_offsets`.
+
     Parameters
     ----------
+    telescope : batoid.Optic
+        The in-focus telescope, from `CowStore.telescope`.
     offsets : tuple of float
         Signed z shifts in meters, ordered as `_OFFSET_OPTICS`.
 
@@ -181,28 +189,273 @@ def _defocal_radial_scale(offsets: tuple[float, float, float]) -> float:
         Ratio of defocused to in-focus radial position. Divide a measured field
         angle by this to recover the common frame. 1.0 for a null defocus.
     """
-    store = _CALIB_STORE.setdefault("radial_scale_by_offsets", {})
-    key = tuple(float(o) for o in offsets)
-    scale = store.get(key)
-    if scale is None:
-        wavelength = _INSTRUMENT.wavelength[_INSTRUMENT.refBand]
+    wavelength = _INSTRUMENT.wavelength[_INSTRUMENT.refBand]
 
-        def _chief_ray_x(telescope):
-            ray = batoid.RayVector.fromStop(
-                0.0,
-                0.0,
-                optic=telescope,
-                wavelength=wavelength,
-                theta_x=_RADIAL_SCALE_REF_THETA,
-                theta_y=0.0,
-            )
-            telescope.trace(ray)
-            return float(ray.x[0])
+    def _chief_ray_x(optic):
+        ray = batoid.RayVector.fromStop(
+            0.0,
+            0.0,
+            optic=optic,
+            wavelength=wavelength,
+            theta_x=_RADIAL_SCALE_REF_THETA,
+            theta_y=0.0,
+        )
+        optic.trace(ray)
+        return float(ray.x[0])
 
-        base = _chief_ray_x(_CALIB_STORE["telescope"])
-        scale = _chief_ray_x(_telescope_for_offsets(key)) / base
-        store[key] = scale
-    return scale
+    return _chief_ray_x(_defocused_telescope(telescope, offsets)) / _chief_ray_x(telescope)
+
+
+@dataclass
+class IsrCalibs:
+    """The four materialized calibrations ISR needs for one exposure.
+
+    The one detector-shaped thing both modes hand to `_cutout_one_exposure`,
+    and separate from the two store entries below because the modes build it at
+    different times: corner mode in the parent, where its calibrations are
+    already objects, and full-array mode in each worker, once it has resolved
+    its own deferred handles.
+    """
+
+    ptc: Any
+    flat: Any
+    linearizer: Any
+    crosstalk: Any
+
+
+@dataclass
+class CornerDetectorInputs:
+    """One corner sensor's raw exposure and calibrations, already read.
+
+    Corner mode does its butler I/O in the parent, so these are materialized
+    objects that the worker uses directly.
+    """
+
+    raw: Any
+    calibs: IsrCalibs
+
+
+@dataclass
+class FamDetectorInputs:
+    """One science CCD's deferred handles, one raw per exposure of the pair.
+
+    Full-array mode reads no pixels in the parent -- each worker resolves these
+    itself -- so every field here is a handle rather than an object.
+
+    ``intrinsic_zernikes`` appears here and not on `CornerDetectorInputs`
+    because of *where* each mode annotates its donuts, not because corner mode
+    lacks intrinsics: it has the same ``intrinsicZernikes`` prerequisite input,
+    but applies it in the parent once the cutout pool returns, so the
+    calibration never has to cross a fork. It is optional because a detector
+    may legitimately have no intrinsic calibration, in which case the parent
+    warns and the fit references the nominal design optics instead.
+    """
+
+    raws: dict[int, Any]  # exposure id -> deferred handle
+    ptc: Any
+    flat: Any
+    linearizer: Any
+    crosstalk: Any
+    intrinsic_zernikes: Any | None
+
+
+@dataclass
+class CowStore:
+    """Everything the parent hands to the forked workers.
+
+    Populated once before the fork and read-only afterwards, so the children
+    inherit it by copy-on-write instead of receiving it through a pickle. That
+    one direction is the whole contract: nothing here is written after the
+    fork, which is why no field has a default and why there is nothing to
+    invalidate between quanta.
+
+    Because a field without a default is not a class attribute either, reading
+    one this mode never set raises `AttributeError` -- the equivalent of the
+    `KeyError` the string-keyed dict used to give, with no ``Optional``
+    standing in for "wrong mode".
+
+    Keys are snake_case throughout, including the ones mirroring camelCase
+    config fields (``config.maxFitScatter`` becomes ``max_fit_scatter``): the
+    store is not framework-introspected, so the submodule's rule applies.
+
+    `for_corner` and `for_fam` spell every field out rather than sharing a
+    ``**kwargs`` helper. The duplication is deliberate -- the point of the
+    dataclass is that mypy checks both call sites, and ``**kwargs`` is exactly
+    the hole that would reopen.
+    """
+
+    # --- Subtasks, shared by both modes.
+    isr_task: Any
+    bkg_task: Any
+    detect_diameter_task: Any
+    blind_detect_task: Any
+    astrom_task: Any
+    donut_selector_task: Any
+    measure_candidates_task: Any
+    cut_stamps_task: Any
+    wf_fitting_task: Any
+    # --- Config scalars and the telescope, shared by both modes.
+    wf_estimation_mode: str
+    max_fit_scatter: float
+    astrom_ref_filter: str
+    photo_ref_filter: str
+    telescope: batoid.Optic
+    # --- Corner mode only.
+    corner_detectors: dict[str, CornerDetectorInputs]
+    det_refcats: dict[str, Any]
+    # --- Full-array mode only.
+    fam_detectors: dict[int, FamDetectorInputs]
+    pair_match_tolerance: float
+    save_stamps: bool
+    save_wf_images: bool
+    band: str
+    rtp_deg: float | None
+    boresight_alt_rad: float | None
+    intra_exposure: int
+    extra_exposure: int
+    offsets_by_exposure: dict[int, _Offsets]
+    radial_scale_by_offsets: dict[_Offsets, float]
+    refcat_handles: list
+    butler: Any
+
+    @classmethod
+    def uninitialized(cls) -> "CowStore":
+        """Return a store with its fields declared but none of them set.
+
+        Bypasses the generated ``__init__`` deliberately: the two per-mode
+        constructors below are the only sanctioned way to fill a store, and
+        each sets a different subset of the fields.
+        """
+        return object.__new__(cls)
+
+    @classmethod
+    def for_corner(
+        cls,
+        *,
+        isr_task: Any,
+        bkg_task: Any,
+        detect_diameter_task: Any,
+        blind_detect_task: Any,
+        astrom_task: Any,
+        donut_selector_task: Any,
+        measure_candidates_task: Any,
+        cut_stamps_task: Any,
+        wf_fitting_task: Any,
+        wf_estimation_mode: str,
+        max_fit_scatter: float,
+        astrom_ref_filter: str,
+        photo_ref_filter: str,
+        telescope: batoid.Optic,
+        corner_detectors: dict[str, CornerDetectorInputs],
+        det_refcats: dict[str, Any],
+    ) -> "CowStore":
+        """Build the store corner mode's cutout and fit workers read."""
+        store = cls.uninitialized()
+        store.isr_task = isr_task
+        store.bkg_task = bkg_task
+        store.detect_diameter_task = detect_diameter_task
+        store.blind_detect_task = blind_detect_task
+        store.astrom_task = astrom_task
+        store.donut_selector_task = donut_selector_task
+        store.measure_candidates_task = measure_candidates_task
+        store.cut_stamps_task = cut_stamps_task
+        store.wf_fitting_task = wf_fitting_task
+        store.wf_estimation_mode = wf_estimation_mode
+        store.max_fit_scatter = max_fit_scatter
+        store.astrom_ref_filter = astrom_ref_filter
+        store.photo_ref_filter = photo_ref_filter
+        store.telescope = telescope
+        store.corner_detectors = corner_detectors
+        store.det_refcats = det_refcats
+        return store
+
+    @classmethod
+    def for_fam(
+        cls,
+        *,
+        isr_task: Any,
+        bkg_task: Any,
+        detect_diameter_task: Any,
+        blind_detect_task: Any,
+        astrom_task: Any,
+        donut_selector_task: Any,
+        measure_candidates_task: Any,
+        cut_stamps_task: Any,
+        wf_fitting_task: Any,
+        wf_estimation_mode: str,
+        max_fit_scatter: float,
+        astrom_ref_filter: str,
+        photo_ref_filter: str,
+        telescope: batoid.Optic,
+        fam_detectors: dict[int, FamDetectorInputs],
+        pair_match_tolerance: float,
+        save_stamps: bool,
+        save_wf_images: bool,
+        band: str,
+        rtp_deg: float | None,
+        boresight_alt_rad: float | None,
+        intra_exposure: int,
+        extra_exposure: int,
+        offsets_by_exposure: dict[int, _Offsets],
+        refcat_handles: list,
+        butler: Any,
+    ) -> "CowStore":
+        """Build the store the full-array per-detector workers read.
+
+        ``radial_scale_by_offsets`` is derived here rather than passed in: the
+        parent knows every triplet a worker can ask about, because a donut only
+        ever carries back what ``offsets_by_exposure`` gave it.
+        """
+        store = cls.uninitialized()
+        store.isr_task = isr_task
+        store.bkg_task = bkg_task
+        store.detect_diameter_task = detect_diameter_task
+        store.blind_detect_task = blind_detect_task
+        store.astrom_task = astrom_task
+        store.donut_selector_task = donut_selector_task
+        store.measure_candidates_task = measure_candidates_task
+        store.cut_stamps_task = cut_stamps_task
+        store.wf_fitting_task = wf_fitting_task
+        store.wf_estimation_mode = wf_estimation_mode
+        store.max_fit_scatter = max_fit_scatter
+        store.astrom_ref_filter = astrom_ref_filter
+        store.photo_ref_filter = photo_ref_filter
+        store.telescope = telescope
+        store.fam_detectors = fam_detectors
+        store.pair_match_tolerance = pair_match_tolerance
+        store.save_stamps = save_stamps
+        store.save_wf_images = save_wf_images
+        store.band = band
+        store.rtp_deg = rtp_deg
+        store.boresight_alt_rad = boresight_alt_rad
+        store.intra_exposure = intra_exposure
+        store.extra_exposure = extra_exposure
+        store.offsets_by_exposure = offsets_by_exposure
+        store.radial_scale_by_offsets = {
+            tuple(float(o) for o in offsets): _defocal_radial_scale(telescope, offsets)
+            for offsets in offsets_by_exposure.values()
+        }
+        store.refcat_handles = refcat_handles
+        store.butler = butler
+        return store
+
+    def adopt(self, other: "CowStore") -> None:
+        """Become ``other`` in place, discarding whatever was here before.
+
+        Never rebind `_COW_STORE` instead of calling this: the worker modules
+        bind the name at import time, so a rebind would leave them reading the
+        previous quantum's store while the parent reads the current one.
+
+        Clearing rather than merging is also what keeps a `Task` instance safe
+        to reuse across quanta -- a field the previous mode set and this one
+        does not goes back to raising `AttributeError`.
+        """
+        self.__dict__.clear()
+        self.__dict__.update(other.__dict__)
+
+
+# Populated in the parent before the fork; workers inherit it via COW.
+_COW_STORE: CowStore = CowStore.uninitialized()
 
 
 def _resolveColorLogEnabled(colorLog: bool | None) -> bool:

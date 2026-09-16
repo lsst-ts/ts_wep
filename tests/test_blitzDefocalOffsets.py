@@ -44,7 +44,7 @@ from lsst.ts.wep.blitz.donutBlitzMonolithTask import (
     _INTRA_FOCAL_OFFSETS,
 )
 from lsst.ts.wep.blitz.utils import (
-    _CALIB_STORE,
+    _COW_STORE,
     _EXTRA_FOCAL_DET_IDS,
     _INSTRUMENT,
     _INTRA_FOCAL_DET_IDS,
@@ -52,7 +52,7 @@ from lsst.ts.wep.blitz.utils import (
     CORNER_DEFOCAL_BY_DET_NAME,
     CORNER_DET_NAMES,
     _defocal_radial_scale,
-    _telescope_for_offsets,
+    _defocused_telescope,
 )
 
 
@@ -95,11 +95,14 @@ class TestDefocalOffsets(unittest.TestCase):
     def setUp(self) -> None:
         self.band = "r"
         self.telescope = batoid.Optic.fromYaml(f"LSST_{self.band}.yaml")
-        _CALIB_STORE.clear()
-        _CALIB_STORE["telescope"] = self.telescope
+        # Only `_prep_donut_for_danish` needs the store here -- the geometry
+        # helpers take the telescope as an argument -- so poke the one field it
+        # reads rather than standing up a whole `CowStore`.
+        _COW_STORE.__dict__.clear()
+        _COW_STORE.telescope = self.telescope
 
     def tearDown(self) -> None:
-        _CALIB_STORE.clear()
+        _COW_STORE.__dict__.clear()
 
     def _zk(self, telescope: batoid.Optic, theta_deg: float) -> np.ndarray:
         """Zernikes at one field angle, the way the fitter computes them."""
@@ -154,9 +157,9 @@ class TestDefocalOffsets(unittest.TestCase):
         component would be a quiet physics bug.
         """
         dz = _INSTRUMENT.defocalOffset
-        det = self._zk(_telescope_for_offsets((dz, 0.0, 0.0)), 1.0)
-        cam = self._zk(_telescope_for_offsets((0.0, dz, 0.0)), 1.0)
-        m2 = self._zk(_telescope_for_offsets((0.0, 0.0, dz)), 1.0)
+        det = self._zk(_defocused_telescope(self.telescope, (dz, 0.0, 0.0)), 1.0)
+        cam = self._zk(_defocused_telescope(self.telescope, (0.0, dz, 0.0)), 1.0)
+        m2 = self._zk(_defocused_telescope(self.telescope, (0.0, 0.0, dz)), 1.0)
         base = self._zk(self.telescope, 1.0)
         for name, zk in (("detector", det), ("camera", cam), ("m2", m2)):
             self.assertFalse(
@@ -183,7 +186,7 @@ class TestDefocalOffsets(unittest.TestCase):
         intra = (0.0, -dz, 0.0)
 
         def traced_x(offsets, theta_deg):
-            telescope = _telescope_for_offsets(offsets)
+            telescope = _defocused_telescope(self.telescope, offsets)
             ray = batoid.RayVector.fromStop(
                 0.0,
                 0.0,
@@ -198,7 +201,13 @@ class TestDefocalOffsets(unittest.TestCase):
         for theta in (0.5, 1.0, 1.725):
             traced_px = abs(traced_x(extra, theta) - traced_x(intra, theta)) / px
             r_m = _INSTRUMENT.focalLength * np.tan(np.deg2rad(theta))
-            scaled_px = abs(r_m * _defocal_radial_scale(extra) - r_m * _defocal_radial_scale(intra)) / px
+            scaled_px = (
+                abs(
+                    r_m * _defocal_radial_scale(self.telescope, extra)
+                    - r_m * _defocal_radial_scale(self.telescope, intra)
+                )
+                / px
+            )
             self.assertAlmostEqual(
                 traced_px,
                 scaled_px,
@@ -212,8 +221,8 @@ class TestDefocalOffsets(unittest.TestCase):
     def testRadialScaleSignsAreOpposite(self) -> None:
         """Intra and extra stretch the focal plane in opposite senses."""
         dz = _INSTRUMENT.defocalOffset
-        extra = _defocal_radial_scale((0.0, dz, 0.0))
-        intra = _defocal_radial_scale((0.0, -dz, 0.0))
+        extra = _defocal_radial_scale(self.telescope, (0.0, dz, 0.0))
+        intra = _defocal_radial_scale(self.telescope, (0.0, -dz, 0.0))
         self.assertLess(extra, 1.0)
         self.assertGreater(intra, 1.0)
         self.assertAlmostEqual(extra - 1.0, -(intra - 1.0), places=6)
