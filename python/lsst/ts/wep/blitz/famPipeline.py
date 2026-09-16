@@ -28,7 +28,7 @@ with the visit.  Cutting and fitting are fused into one worker for the same
 reason: the pixels are freed as soon as the stamps are cut, instead of being
 held for the duration of Danish fitting that follow.
 
-Everything shared comes from `lsst.ts.wep.blitz.utils._CALIB_STORE`, which the
+Everything shared comes from `lsst.ts.wep.blitz.utils._COW_STORE`, which the
 parent populates before forking; workers inherit it by copy-on-write.
 """
 
@@ -47,9 +47,9 @@ from lsst.pipe.base import NoWorkFound
 from .cutoutPipeline import _cutout_one_exposure
 from .dataStructures import _WfGroup
 from .utils import (
-    _CALIB_STORE,
+    _COW_STORE,
     _INSTRUMENT,
-    _defocal_radial_scale,
+    IsrCalibs,
 )
 
 _log = logging.getLogger(__name__)
@@ -78,8 +78,11 @@ def _fam_pool_initializer() -> None:
     to be called by the child immediately after the fork;
     `mp.Pool(initializer=...)` is that hook.
     """
+    # getattr rather than a plain attribute read: this must not raise even if
+    # it somehow runs against an unpopulated store, since an initializer that
+    # throws takes the whole pool down.
     reset = getattr(
-        getattr(_CALIB_STORE.get("butler"), "registry", None),
+        getattr(getattr(_COW_STORE, "butler", None), "registry", None),
         "resetConnectionPool",
         None,
     )
@@ -97,10 +100,13 @@ def _common_frame_angles(donuts: list) -> np.ndarray:
     tolerance tight enough to be safe at the field center therefore fails at
     the edge, which presents as "the outer rafts just don't pair".
 
-    `_defocal_radial_scale` removes it exactly: the displacement is linear in
-    field angle, hence a pure scale, so one factor per offset triplet corrects
-    the whole focal plane.  Dividing by it puts both sides in a common frame
-    where the same star lands at the same place.
+    `lsst.ts.wep.blitz.utils._defocal_radial_scale` removes it exactly: the
+    displacement is linear in field angle, hence a pure scale, so one factor
+    per offset triplet corrects the whole focal plane.  Dividing by it puts
+    both sides in a common frame where the same star lands at the same place.
+    The factors are looked up rather than computed here: each costs two
+    chief-ray traces, and the parent evaluated both sides of focus for every
+    worker before forking.
 
     Returns
     -------
@@ -110,7 +116,8 @@ def _common_frame_angles(donuts: list) -> np.ndarray:
     """
     if not donuts:
         return np.empty((0, 2))
-    scales = np.array([_defocal_radial_scale(d.defocal_offsets) for d in donuts])
+    by_offsets = _COW_STORE.radial_scale_by_offsets
+    scales = np.array([by_offsets[d.defocal_offsets] for d in donuts])
     angles = np.array([(d.thx_ccs, d.thy_ccs) for d in donuts], dtype=float)
     return angles / scales[:, None]
 
@@ -291,7 +298,7 @@ def _fam_detector_worker(args: tuple) -> dict:
     ----------
     args : tuple
         ``(det_id, t_dispatch)``.  Only the detector id crosses the pickle
-        boundary; everything else is read from ``_CALIB_STORE``.
+        boundary; everything else is read from ``_COW_STORE``.
 
     Returns
     -------
@@ -333,17 +340,17 @@ def _fam_detector_worker(args: tuple) -> dict:
     }
 
     try:
-        entry = _CALIB_STORE["detectors"][det_id]
-        mode = _CALIB_STORE["wfEstimationMode"]
-        tol_frac = _CALIB_STORE["pairMatchTolerance"]
-        offsets_by_exp = _CALIB_STORE["offsets_by_exposure"]
-        intra_exp = _CALIB_STORE["intra_exposure"]
-        extra_exp = _CALIB_STORE["extra_exposure"]
+        entry = _COW_STORE.fam_detectors[det_id]
+        mode = _COW_STORE.wf_estimation_mode
+        tol_frac = _COW_STORE.pair_match_tolerance
+        offsets_by_exp = _COW_STORE.offsets_by_exposure
+        intra_exp = _COW_STORE.intra_exposure
+        extra_exp = _COW_STORE.extra_exposure
 
         # --- butler I/O, all of it, in this child ---
         t0 = time.perf_counter()
-        raws = {exp: h.get() for exp, h in entry["raws"].items()}
-        iz_handle = entry.get("intrinsicZernikes")
+        raws = {exp: h.get() for exp, h in entry.raws.items()}
+        iz_handle = entry.intrinsic_zernikes
         intrinsic_calib = iz_handle.get() if iz_handle is not None else None
         t1 = time.perf_counter()
         io_elapsed = t1 - t0
@@ -358,7 +365,7 @@ def _fam_detector_worker(args: tuple) -> dict:
         # ~2 that overlap.
         t_refcat0 = time.perf_counter()
         load_result = None
-        refcat_handles = _CALIB_STORE["refcat_handles"]
+        refcat_handles = _COW_STORE.refcat_handles
         if refcat_handles:
             ref_raw = raws[extra_exp]
             loader = ReferenceObjectLoader(
@@ -370,7 +377,7 @@ def _fam_detector_worker(args: tuple) -> dict:
                 load_result = loader.loadPixelBox(
                     bbox=ref_raw.getBBox(),
                     wcs=ref_raw.getWcs(),
-                    filterName=_CALIB_STORE["astromRefFilter"],
+                    filterName=_COW_STORE.astrom_ref_filter,
                     epoch=ref_raw.getInfo().getVisitInfo().date.toAstropy(),
                 )
             except Exception as exc:
@@ -396,10 +403,12 @@ def _fam_detector_worker(args: tuple) -> dict:
             # of seconds of fitting, and peak memory is no worse -- each is
             # freed after its own ISR.
             t_io = time.perf_counter()
-            calibs = {
-                key: entry[key].get() if entry.get(key) is not None else None
-                for key in ("ptc", "flat", "linearizer", "crosstalk")
-            }
+            calibs = IsrCalibs(
+                ptc=entry.ptc.get(),
+                flat=entry.flat.get(),
+                linearizer=entry.linearizer.get(),
+                crosstalk=entry.crosstalk.get(),
+            )
             io_elapsed += time.perf_counter() - t_io
 
             t_cut = time.perf_counter()
@@ -411,9 +420,9 @@ def _fam_detector_worker(args: tuple) -> dict:
                 calibs=calibs,
                 refcat_load_result=(copy.deepcopy(load_result) if load_result is not None else None),
                 det_name=det_name,
-                maxFitScatter=_CALIB_STORE["maxFitScatter"],
-                astromRefFilter=_CALIB_STORE["astromRefFilter"],
-                photoRefFilter=_CALIB_STORE["photoRefFilter"],
+                maxFitScatter=_COW_STORE.max_fit_scatter,
+                astromRefFilter=_COW_STORE.astrom_ref_filter,
+                photoRefFilter=_COW_STORE.photo_ref_filter,
             )
             cutout_elapsed += time.perf_counter() - t_cut
             # The exposure id, which is also the visit id for these data -- the
@@ -467,9 +476,9 @@ def _fam_detector_worker(args: tuple) -> dict:
             tol_frac=tol_frac,
             intra_source=results[0]["selection_source"],
             extra_source=results[1]["selection_source"],
-            band=_CALIB_STORE["band"],
-            rtp_deg=_CALIB_STORE["rtp_deg"],
-            alt_rad=_CALIB_STORE["boresight_alt_rad"],
+            band=_COW_STORE.band,
+            rtp_deg=_COW_STORE.rtp_deg,
+            alt_rad=_COW_STORE.boresight_alt_rad,
         )
         out["pair_path"] = path
         # Also stamp it on both of this detector's cutout results: those are
@@ -481,7 +490,7 @@ def _fam_detector_worker(args: tuple) -> dict:
         out["unmatched_donuts"] = unmatched
         out["donuts"] = by_exp[intra_exp] + by_exp[extra_exp]
 
-        wf_task = _CALIB_STORE["wf_fitting_task"]
+        wf_task = _COW_STORE.wf_fitting_task
         wf_results = []
         for group in groups:
             r = wf_task.run(group)
@@ -580,14 +589,14 @@ def _shed_images(out: dict) -> None:
     dictionary, so trimming them when possible can significantly improve
     performance.
     """
-    if not _CALIB_STORE["saveWfImages"]:
+    if not _COW_STORE.save_wf_images:
         for r in out["wf_results"]:
             for wd in r.get("donuts", []):
                 wd.img = None
                 wd.model_img = None
             r["imgs"] = []
             r["model_imgs"] = None
-    if not _CALIB_STORE["saveStamps"]:
+    if not _COW_STORE.save_stamps:
         for result in out["results"]:
             for d in result["catalog"] + result.get("rejected_catalog", []):
                 d.stamp = None

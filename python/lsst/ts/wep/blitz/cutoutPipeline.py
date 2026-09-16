@@ -21,7 +21,7 @@
 
 """Per-detector cutout pipeline run in the fork-based worker pool.
 
-All inputs come from `lsst.ts.wep.blitz.utils._CALIB_STORE`, which the parent
+All inputs come from `lsst.ts.wep.blitz.utils._COW_STORE`, which the parent
 process populates before forking; nothing here imports the subtasks it runs.
 """
 
@@ -41,8 +41,9 @@ from lsst.afw.geom import SkyWcs
 from .utils import (
     _ANSI_BOLD,
     _ANSI_YELLOW,
-    _CALIB_STORE,
+    _COW_STORE,
     _REFCAT_COLUMNS,
+    IsrCalibs,
     _colorize,
     _resolveDonutRadius,
 )
@@ -82,7 +83,7 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
 
 def _cutout_one_exposure(
     raw,
-    calibs: dict,
+    calibs: IsrCalibs,
     refcat_load_result,
     det_name: str,
     maxFitScatter: float,
@@ -93,11 +94,11 @@ def _cutout_one_exposure(
     selection, and stamp cutting on one exposure of one detector.
 
     Takes its per-exposure inputs explicitly so both modes can drive it: corner
-    mode has one exposure per detector and reads them from ``_CALIB_STORE``
+    mode has one exposure per detector and reads them from ``_COW_STORE``
     (see `_cutoutPipeline`), while full-array mode calls this twice per
     detector with the intra and extra exposures of a pair.
 
-    The *subtasks* are still read from the module-level ``_CALIB_STORE``, which
+    The *subtasks* are still read from the module-level ``_COW_STORE``, which
     the parent populates before forking. That is deliberate: they are identical
     for every call and shared by copy-on-write, so threading them through as
     arguments would buy nothing and cost a pickle.
@@ -106,9 +107,10 @@ def _cutout_one_exposure(
     ----------
     raw : lsst.afw.image.Exposure
         The raw exposure to process.
-    calibs : dict
-        Per-detector calibrations, keyed ``ptc``, ``flat``, ``linearizer``,
-        ``crosstalk``.
+    calibs : `lsst.ts.wep.blitz.utils.IsrCalibs`
+        This detector's materialized calibrations. Corner mode takes them
+        straight from the store; a full-array worker resolves its own handles
+        into one of these first.
     refcat_load_result
         Pre-loaded reference catalog for this detector, or None to skip the WCS
         refit and refcat-based selection.
@@ -147,13 +149,13 @@ def _cutout_one_exposure(
     """
     # --- ISR ---
     t0 = time.perf_counter()
-    isr_task = _CALIB_STORE["isr_task"]
+    isr_task = _COW_STORE.isr_task
     postIsr = isr_task.run(
         raw,
-        ptc=calibs["ptc"],
-        flat=calibs["flat"],
-        linearizer=calibs["linearizer"],
-        crosstalk=calibs["crosstalk"],
+        ptc=calibs.ptc,
+        flat=calibs.flat,
+        linearizer=calibs.linearizer,
+        crosstalk=calibs.crosstalk,
     ).exposure
 
     # Detector orientation, reported per detector so a consumer can undo the
@@ -164,18 +166,18 @@ def _cutout_one_exposure(
 
     # --- background subtraction ---
     t1 = time.perf_counter()
-    bkg_task = _CALIB_STORE["bkg_task"]
+    bkg_task = _COW_STORE.bkg_task
     bkg_task.run(exposure=postIsr)
 
     # --- detect diameter ---
     t2 = time.perf_counter()
-    detect_diameter_task = _CALIB_STORE["detect_diameter_task"]
+    detect_diameter_task = _COW_STORE.detect_diameter_task
     donutDiameter = detect_diameter_task.run(postIsr).diameter
     donutRadius = _resolveDonutRadius(donutDiameter / 2 if donutDiameter is not None else None)
 
     # --- blind detection ---
     t3 = time.perf_counter()
-    blind_detect_task = _CALIB_STORE["blind_detect_task"]
+    blind_detect_task = _COW_STORE.blind_detect_task
     blindDetections = blind_detect_task.run(postIsr, donutRadius=donutRadius).detections
 
     if len(blindDetections) == 0:
@@ -206,7 +208,7 @@ def _cutout_one_exposure(
 
     # --- astrometry ---
     t4 = time.perf_counter()
-    astrom_task = _CALIB_STORE["astrom_task"]
+    astrom_task = _COW_STORE.astrom_task
     detector = postIsr.getDetector()
     refcat_handle = refcat_load_result
     scatter_arcsec = None
@@ -241,7 +243,7 @@ def _cutout_one_exposure(
     refcat = None
     cat_err = ""
     selection_source = None
-    donut_selector = _CALIB_STORE["donut_selector_task"]
+    donut_selector = _COW_STORE.donut_selector_task
 
     if wcs is not None:
         try:
@@ -308,13 +310,13 @@ def _cutout_one_exposure(
 
     # --- stamp cutting ---
     t6 = time.perf_counter()
-    measure_task = _CALIB_STORE["measure_candidates_task"]
+    measure_task = _COW_STORE.measure_candidates_task
     candidates = measure_task.run(
         postIsr,
         selections,
         donutRadius=donutRadius,
     ).measurements
-    cut_stamps_task = _CALIB_STORE["cut_stamps_task"]
+    cut_stamps_task = _COW_STORE.cut_stamps_task
     cut_result = cut_stamps_task.run(postIsr, candidates, refcat, donutRadius=donutRadius)
 
     t7 = time.perf_counter()
@@ -402,13 +404,13 @@ def _cutout_one_exposure(
 
 
 def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
-    """Corner-mode entry point: one exposure per detector, from _CALIB_STORE.
+    """Corner-mode entry point: one exposure per detector, from _COW_STORE.
 
     Parameters
     ----------
     det_name : str
         Detector name; used to look up the raw and its calibrations in
-        ``_CALIB_STORE``.
+        ``_COW_STORE``.
     t_dispatch : float
         ``time.time()`` timestamp at which the task was dispatched from the
         parent, used to measure dispatch-to-arrival latency.
@@ -419,15 +421,15 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
         As `_cutout_one_exposure`, plus ``dispatch_to_arrival``.
     """
     t_arrival = time.time()
-    entry = _CALIB_STORE[det_name]
+    entry = _COW_STORE.corner_detectors[det_name]
     result = _cutout_one_exposure(
-        raw=entry["raw"],
-        calibs=entry,
-        refcat_load_result=_CALIB_STORE["det_refcats"].get(det_name),
+        raw=entry.raw,
+        calibs=entry.calibs,
+        refcat_load_result=_COW_STORE.det_refcats.get(det_name),
         det_name=det_name,
-        maxFitScatter=_CALIB_STORE["maxFitScatter"],
-        astromRefFilter=_CALIB_STORE["astromRefFilter"],
-        photoRefFilter=_CALIB_STORE["photoRefFilter"],
+        maxFitScatter=_COW_STORE.max_fit_scatter,
+        astromRefFilter=_COW_STORE.astrom_ref_filter,
+        photoRefFilter=_COW_STORE.photo_ref_filter,
     )
     result["dispatch_to_arrival"] = t_arrival - t_dispatch
     return result

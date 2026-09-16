@@ -76,13 +76,13 @@ from .utils import (
     _ANSI_BOLD,
     _ANSI_CYAN,
     _ANSI_GREEN,
-    _CALIB_STORE,
+    _COW_STORE,
     _CUTOUT_STAGE_KEYS,
     _INSTRUMENT,
+    CowStore,
+    FamDetectorInputs,
     _colorize,
-    _defocal_radial_scale,
     _resolveColorLogEnabled,
-    _telescope_for_offsets,
 )
 from .wavefrontFittingTask import WavefrontFittingTask
 
@@ -826,7 +826,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         )
 
         # --- 5. populate the store the workers inherit by copy-on-write ---
-        self._populateCalibStore(
+        self._populateCowStore(
             det_ids=det_ids,
             raw_handles=raw_handles,
             calib_handles=calib_handles,
@@ -926,7 +926,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 reasons[extra_exp],
             )
 
-    def _populateCalibStore(
+    def _populateCowStore(
         self,
         det_ids: list[int],
         raw_handles: dict,
@@ -939,10 +939,10 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         boresight_alt_rad: float | None,
         photo_filter_name: str,
     ) -> None:
-        """Fill `_CALIB_STORE` with everything the workers need.
+        """Fill `_COW_STORE` with everything the workers need.
 
-        Subtasks, handles, and the pre-built batoid telescopes all go in here
-        so the children inherit them by copy-on-write instead of receiving them
+        Subtasks, deferred handles, and the batoid telescope all go in here so
+        the children inherit them by copy-on-write instead of receiving them
         through a pickle.
         """
         # AstrometryTask.solve() calls refObjLoader.getMetadataBox()
@@ -953,61 +953,63 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         astrom_stub_loader.config.pixelMargin = 0
         self.astromTask.setRefObjLoader(astrom_stub_loader)
 
-        _CALIB_STORE.clear()
-        _CALIB_STORE["isr_task"] = self.isrTask
-        _CALIB_STORE["bkg_task"] = self.subtractBackground
-        _CALIB_STORE["detect_diameter_task"] = self.detectDiameter
-        _CALIB_STORE["blind_detect_task"] = self.blindDetect
-        _CALIB_STORE["astrom_task"] = self.astromTask
-        _CALIB_STORE["donut_selector_task"] = self.donutSelector
-        _CALIB_STORE["measure_candidates_task"] = self.measureCandidatesTask
-        _CALIB_STORE["cut_stamps_task"] = self.cutStampsTask
-        _CALIB_STORE["wf_fitting_task"] = self.wfFittingTask
-        _CALIB_STORE["wfEstimationMode"] = self.config.wfEstimationMode
-        _CALIB_STORE["maxFitScatter"] = self.config.maxFitScatter
-        _CALIB_STORE["astromRefFilter"] = self.config.astromRefFilter
-        _CALIB_STORE["photoRefFilter"] = photo_filter_name
-        _CALIB_STORE["pairMatchTolerance"] = self.config.pairMatchTolerance
-        _CALIB_STORE["saveStamps"] = self.config.saveStamps
-        _CALIB_STORE["saveWfImages"] = self.config.saveWfImages
-        _CALIB_STORE["band"] = band
-        _CALIB_STORE["rtp_deg"] = rtp_deg
-        _CALIB_STORE["boresight_alt_rad"] = boresight_alt_rad
-        _CALIB_STORE["intra_exposure"] = intra_exp
-        _CALIB_STORE["extra_exposure"] = extra_exp
-        _CALIB_STORE["offsets_by_exposure"] = {
-            intra_exp: self._intraFocalOffsets,
-            extra_exp: self._extraFocalOffsets,
-        }
-        _CALIB_STORE["refcat_handles"] = refcat_handles
-        _CALIB_STORE["detectors"] = {
-            det: {
-                "raws": raw_handles[det],
-                **{
-                    name: calib_handles[name].get(det)
-                    for name in (
-                        "ptc",
-                        "flat",
-                        "linearizer",
-                        "crosstalk",
-                        "intrinsicZernikes",
-                    )
-                },
-            }
+        # Handles, not objects: no pixels are read in this process, so each
+        # worker resolves its own detector's inputs. `intrinsic_zernikes` may
+        # legitimately be None -- runQuantum warns about those detectors and
+        # their fits fall back to the nominal design optics.
+        fam_detectors = {
+            det: FamDetectorInputs(
+                raws=raw_handles[det],
+                ptc=calib_handles["ptc"].get(det),
+                flat=calib_handles["flat"].get(det),
+                linearizer=calib_handles["linearizer"].get(det),
+                crosstalk=calib_handles["crosstalk"].get(det),
+                intrinsic_zernikes=calib_handles["intrinsicZernikes"].get(det),
+            )
             for det in det_ids
         }
-        # `QuantumContext` does not expose its butler, but a resolved deferred
-        # handle does -- and the fork pool initializer needs it to reset the
-        # inherited connection pool. See `_fam_pool_initializer`.
-        _CALIB_STORE["butler"] = getattr(raw_handles[det_ids[0]][extra_exp], "butler", None)
 
-        # Telescope is band- and quantum-fixed. Build the base and both
-        # defocused variants here so workers only ever look them up; the radial
-        # scales they need for spatial pairing memoize into the same store.
-        _CALIB_STORE["telescope"] = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
-        for offsets in (self._intraFocalOffsets, self._extraFocalOffsets):
-            _telescope_for_offsets(offsets)
-            _defocal_radial_scale(offsets)
+        # The telescope's 41 ms YAML load is band- and quantum-fixed, so it
+        # happens once here; the radial scales below cost two chief-ray traces
+        # each and are per-donut lookups in the workers, so the parent
+        # evaluates both sides of focus for them (see `CowStore.for_fam`).
+        _COW_STORE.adopt(
+            CowStore.for_fam(
+                isr_task=self.isrTask,
+                bkg_task=self.subtractBackground,
+                detect_diameter_task=self.detectDiameter,
+                blind_detect_task=self.blindDetect,
+                astrom_task=self.astromTask,
+                donut_selector_task=self.donutSelector,
+                measure_candidates_task=self.measureCandidatesTask,
+                cut_stamps_task=self.cutStampsTask,
+                wf_fitting_task=self.wfFittingTask,
+                wf_estimation_mode=self.config.wfEstimationMode,
+                max_fit_scatter=self.config.maxFitScatter,
+                astrom_ref_filter=self.config.astromRefFilter,
+                photo_ref_filter=photo_filter_name,
+                telescope=batoid.Optic.fromYaml(f"LSST_{band}.yaml"),
+                fam_detectors=fam_detectors,
+                pair_match_tolerance=self.config.pairMatchTolerance,
+                save_stamps=self.config.saveStamps,
+                save_wf_images=self.config.saveWfImages,
+                band=band,
+                rtp_deg=rtp_deg,
+                boresight_alt_rad=boresight_alt_rad,
+                intra_exposure=intra_exp,
+                extra_exposure=extra_exp,
+                offsets_by_exposure={
+                    intra_exp: self._intraFocalOffsets,
+                    extra_exp: self._extraFocalOffsets,
+                },
+                refcat_handles=refcat_handles,
+                # `QuantumContext` does not expose its butler, but a resolved
+                # deferred handle does -- and the fork pool initializer needs
+                # it to reset the inherited connection pool. See
+                # `_fam_pool_initializer`.
+                butler=getattr(raw_handles[det_ids[0]][extra_exp], "butler", None),
+            )
+        )
 
     def _runWorkers(self, det_ids: list[int], num_cores: int) -> list[dict]:
         """Run `_fam_detector_worker` over every detector, forking if asked to.

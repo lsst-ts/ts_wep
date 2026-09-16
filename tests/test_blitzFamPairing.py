@@ -46,7 +46,7 @@ from lsst.ts.wep.blitz.famPipeline import (
     _fam_group_donuts,
     _pair_donuts,
 )
-from lsst.ts.wep.blitz.utils import _CALIB_STORE, _defocal_radial_scale
+from lsst.ts.wep.blitz.utils import _COW_STORE, _defocal_radial_scale
 
 _INTRA_OFFSETS = (0.0, -1.5e-3, 0.0)
 _EXTRA_OFFSETS = (0.0, +1.5e-3, 0.0)
@@ -92,8 +92,9 @@ def _defocused_angles(thx, thy):
     -- `TestRadialScale` is what pins the scale itself, against its known px
     values.
     """
-    intra_scale = _defocal_radial_scale(_INTRA_OFFSETS)
-    extra_scale = _defocal_radial_scale(_EXTRA_OFFSETS)
+    scales = _COW_STORE.radial_scale_by_offsets
+    intra_scale = scales[_INTRA_OFFSETS]
+    extra_scale = scales[_EXTRA_OFFSETS]
     return (thx * intra_scale, thy * intra_scale), (thx * extra_scale, thy * extra_scale)
 
 
@@ -102,23 +103,29 @@ class FamPairingTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        # `_defocal_radial_scale` traces chief rays through
-        # ``_CALIB_STORE["telescope"]``, which the task populates before
-        # forking.
-        _CALIB_STORE.clear()
-        _CALIB_STORE["telescope"] = batoid.Optic.fromYaml("LSST_r.yaml")
+        # The pairing *looks up* the radial scales rather than computing
+        # them: they cost two chief-ray traces each and the parent evaluates
+        # both sides of focus before forking. So populate the two fields the
+        # code under test reads, rather than standing up a whole `CowStore`.
+        cls.telescope = batoid.Optic.fromYaml("LSST_r.yaml")
+        _COW_STORE.__dict__.clear()
+        _COW_STORE.telescope = cls.telescope
+        _COW_STORE.radial_scale_by_offsets = {
+            offsets: _defocal_radial_scale(cls.telescope, offsets)
+            for offsets in (_INTRA_OFFSETS, _EXTRA_OFFSETS)
+        }
 
     @classmethod
     def tearDownClass(cls) -> None:
-        _CALIB_STORE.clear()
+        _COW_STORE.__dict__.clear()
 
 
 class TestRadialScale(FamPairingTestCase):
     """The correction the spatial fallback depends on."""
 
     def testScaleIsOppositeEitherSideOfFocus(self) -> None:
-        intra = _defocal_radial_scale(_INTRA_OFFSETS)
-        extra = _defocal_radial_scale(_EXTRA_OFFSETS)
+        intra = _defocal_radial_scale(self.telescope, _INTRA_OFFSETS)
+        extra = _defocal_radial_scale(self.telescope, _EXTRA_OFFSETS)
         # One side stretches and the other compresses, by nearly the same
         # amount -- which is why the same star does not land at the same pixel
         # twice. A negative optic shift (intra) pushes a chief ray outward, a
@@ -129,7 +136,7 @@ class TestRadialScale(FamPairingTestCase):
         self.assertAlmostEqual(intra - 1.0, 1.0 - extra, places=4)
 
     def testNullDefocusIsUnity(self) -> None:
-        self.assertAlmostEqual(_defocal_radial_scale((0.0, 0.0, 0.0)), 1.0)
+        self.assertAlmostEqual(_defocal_radial_scale(self.telescope, (0.0, 0.0, 0.0)), 1.0)
 
     def testSeparationGrowsLinearlyToTheKnownEdgeValue(self) -> None:
         """~27 px between the sides at 1.725 deg, linear in field angle."""
@@ -195,8 +202,8 @@ class TestPairDonuts(FamPairingTestCase):
             # Paired by position, so their ids do *not* agree.
             self.assertNotEqual(e.donut_id, i.donut_id)
             np.testing.assert_allclose(
-                (e.thx_ccs / _defocal_radial_scale(_EXTRA_OFFSETS)),
-                (i.thx_ccs / _defocal_radial_scale(_INTRA_OFFSETS)),
+                (e.thx_ccs / _defocal_radial_scale(self.telescope, _EXTRA_OFFSETS)),
+                (i.thx_ccs / _defocal_radial_scale(self.telescope, _INTRA_OFFSETS)),
                 atol=1e-9,
             )
 
@@ -220,9 +227,16 @@ class TestPairDonuts(FamPairingTestCase):
         # Same donuts, but with the correction defeated by claiming both sides
         # sit at the same (null) defocus: now the 27 px shift is not removed
         # and the pair is lost. This is the regression the correction guards
-        # against.
-        intra[0].defocal_offsets = (0.0, 0.0, 0.0)
-        extra[0].defocal_offsets = (0.0, 0.0, 0.0)
+        # against.  The scale for the fabricated state has to be registered
+        # too, computed exactly as `CowStore.for_fam` would -- the pairing
+        # looks scales up rather than deriving them, so an unregistered
+        # triplet is a `KeyError` by design.
+        null_offsets = (0.0, 0.0, 0.0)
+        _COW_STORE.radial_scale_by_offsets[null_offsets] = _defocal_radial_scale(self.telescope, null_offsets)
+        # setUpClass builds that dict once for the class, so put it back.
+        self.addCleanup(_COW_STORE.radial_scale_by_offsets.pop, null_offsets)
+        intra[0].defocal_offsets = null_offsets
+        extra[0].defocal_offsets = null_offsets
         pairs, unmatched, _ = _pair_donuts(intra, extra, tol_frac, "blind", "blind")
         self.assertEqual(pairs, [])
         self.assertEqual(len(unmatched), 2)
@@ -401,23 +415,21 @@ class TestWorkerNeverDies(unittest.TestCase):
     """
 
     def setUp(self):
-        self._saved = dict(_CALIB_STORE)
+        self._saved = dict(_COW_STORE.__dict__)
 
     def tearDown(self):
-        _CALIB_STORE.clear()
-        _CALIB_STORE.update(self._saved)
+        _COW_STORE.__dict__.clear()
+        _COW_STORE.__dict__.update(self._saved)
 
     def _run_with_store_raising(self, exc):
-        """Make the worker's first ``_CALIB_STORE`` lookup raise ``exc``."""
+        """Make the worker's first ``_COW_STORE`` read raise ``exc``."""
 
-        class Raiser(dict):
-            def __getitem__(self, key):
+        class Raiser:
+            def __getattr__(self, name):
                 raise exc
 
-        _CALIB_STORE.clear()
-        _CALIB_STORE.update(Raiser())
         # Swap the module global itself: the worker reads it by name.
-        with unittest.mock.patch.object(famPipeline, "_CALIB_STORE", Raiser()):
+        with unittest.mock.patch.object(famPipeline, "_COW_STORE", Raiser()):
             return famPipeline._fam_detector_worker((42, time.time()))
 
     def testNoWorkFoundIsSkippedNotRaised(self):

@@ -64,14 +64,16 @@ from .utils import (
     _ANSI_BOLD,
     _ANSI_CYAN,
     _ANSI_GREEN,
-    _CALIB_STORE,
+    _COW_STORE,
     _CUTOUT_STAGE_KEYS,
     _INSTRUMENT,
     _INTRA_FOCAL_DET_IDS,
     CORNER_DET_NAMES,
+    CornerDetectorInputs,
+    CowStore,
+    IsrCalibs,
     _colorize,
     _resolveColorLogEnabled,
-    _telescope_for_offsets,
 )
 from .wavefrontFittingTask import (
     WavefrontFittingTask,
@@ -654,19 +656,7 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         astrom_stub_loader.config.pixelMargin = 0
         self.astromTask.setRefObjLoader(astrom_stub_loader)
 
-        _CALIB_STORE.clear()
-        _CALIB_STORE["isr_task"] = self.isrTask
-        _CALIB_STORE["bkg_task"] = self.subtractBackground
-        _CALIB_STORE["detect_diameter_task"] = self.detectDiameter
-        _CALIB_STORE["blind_detect_task"] = self.blindDetect
-        _CALIB_STORE["astrom_task"] = self.astromTask
-        _CALIB_STORE["donut_selector_task"] = self.donutSelector
-        _CALIB_STORE["measure_candidates_task"] = self.measureCandidatesTask
-        _CALIB_STORE["cut_stamps_task"] = self.cutStampsTask
-        _CALIB_STORE["maxFitScatter"] = self.config.maxFitScatter
-        _CALIB_STORE["astromRefFilter"] = self.config.astromRefFilter
-        _CALIB_STORE["photoRefFilter"] = photo_filter_name
-        _CALIB_STORE["det_refcats"] = det_refcats
+        corner_detectors = {}
         for name in detNames:
             missing_calib = [
                 k
@@ -680,15 +670,18 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
             ]
             if missing_calib:
                 raise RuntimeError(f"Missing calibration(s) for detector {name}: {missing_calib}")
-            _CALIB_STORE[name] = dict(
+            # Materialized, not deferred: corner mode does its butler I/O in
+            # the parent, so the workers use these objects directly.
+            corner_detectors[name] = CornerDetectorInputs(
                 raw=rawByName[name],
-                ptc=ptcByName[name],
-                flat=flatByName[name],
-                linearizer=linearizerByName[name],
-                crosstalk=crosstalkByName[name],
+                calibs=IsrCalibs(
+                    ptc=ptcByName[name],
+                    flat=flatByName[name],
+                    linearizer=linearizerByName[name],
+                    crosstalk=crosstalkByName[name],
+                ),
             )
 
-        # WF estimation config — populate CALIB_STORE for shared resources.
         visitInfo = next(iter(rawByName.values())).getInfo().getVisitInfo()
         boresight_rot_rad = visitInfo.boresightRotAngle.asRadians()
         boresight_par_rad = visitInfo.boresightParAngle.asRadians()
@@ -699,20 +692,30 @@ class DonutBlitzMonolithTask(pipeBase.PipelineTask):
         rtp_rad = (boresight_par_rad - boresight_rot_rad - np.pi / 2 + np.pi) % (2 * np.pi) - np.pi
         rtp_deg = np.degrees(rtp_rad) if self.wfFittingTask.config.modelSpiderShadows else None
 
-        # Store task and mode for WF worker access
-        _CALIB_STORE["wf_fitting_task"] = self.wfFittingTask
-        _CALIB_STORE["wfEstimationMode"] = self.config.wfEstimationMode
-
-        # Telescope is band- and quantum-fixed; build once here and share via
-        # COW instead of reloading "LSST_{band}.yaml" per donut in workers.
-        _telescope = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
-        _CALIB_STORE["telescope"] = _telescope
-        # Pre-build both defocused telescopes so the workers only ever look
-        # them up. Corner mode defocuses by moving the detector plane, hence
-        # the (detector, camera, m2) triplets below.
-        _CALIB_STORE.pop("telescope_by_offsets", None)
-        for _offsets in (_EXTRA_FOCAL_OFFSETS, _INTRA_FOCAL_OFFSETS):
-            _telescope_for_offsets(_offsets)
+        # Everything the cutout and fit workers read, in one place. The
+        # telescope is band- and quantum-fixed, and its 41 ms YAML load is the
+        # part worth doing once here rather than per donut in a worker;
+        # defocusing it costs 20 us, so the workers do that on demand.
+        _COW_STORE.adopt(
+            CowStore.for_corner(
+                isr_task=self.isrTask,
+                bkg_task=self.subtractBackground,
+                detect_diameter_task=self.detectDiameter,
+                blind_detect_task=self.blindDetect,
+                astrom_task=self.astromTask,
+                donut_selector_task=self.donutSelector,
+                measure_candidates_task=self.measureCandidatesTask,
+                cut_stamps_task=self.cutStampsTask,
+                wf_fitting_task=self.wfFittingTask,
+                wf_estimation_mode=self.config.wfEstimationMode,
+                max_fit_scatter=self.config.maxFitScatter,
+                astrom_ref_filter=self.config.astromRefFilter,
+                photo_ref_filter=photo_filter_name,
+                telescope=batoid.Optic.fromYaml(f"LSST_{band}.yaml"),
+                corner_detectors=corner_detectors,
+                det_refcats=det_refcats,
+            )
+        )
 
         cutout_args = detNames
 
