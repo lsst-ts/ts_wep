@@ -24,7 +24,7 @@ from .dataStructures import *
 from .catalogBuilder import *
 from .measureDonutCandidates import *
 from .cutDonutStamps import *
-from .blindDetect import *
+from .blitzDetect import *
 from .cutoutPipeline import *
 from .wavefrontFitting import *
 from .famPipeline import *

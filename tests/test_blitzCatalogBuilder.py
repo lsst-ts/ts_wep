@@ -195,7 +195,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
 
         FAM cuts the same star on the same detector once per side of focus, so
         the two donuts share a ``donut_id`` -- the same refcat source, or the
-        same ``1..N`` blind-detection slot. Only ``visit_id`` separates them,
+        same ``1..N`` blitz-detection slot. Only ``visit_id`` separates them,
         in the row key and in the wavefront-result lookup.
         """
         intra_visit, extra_visit = 2026070900036, 2026070900037
@@ -606,7 +606,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
     def testDetMetaCarriesIdProvenance(self) -> None:
         """det_meta records where the donut ids came from, and how they paired.
 
-        Without this a consumer cannot tell a Monster source id from a blind
+        Without this a consumer cannot tell a Monster source id from a blitz
         detection's 1..N slot, and a FAM run that quietly fell back to spatial
         pairing is invisible once the run's logs are gone.
         """

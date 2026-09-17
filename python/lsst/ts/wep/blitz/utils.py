@@ -74,7 +74,7 @@ _MAX_NEARBY = 5
 
 # Columns that come from the reference catalog, and so exist only on the refcat
 # selection path -- but which every table reaching `CutDonutStampsTask` carries
-# regardless, NaN-filled on the blind-detection path. The blind path is a
+# regardless, NaN-filled on the blitz-detection path. The blitz path is a
 # *data* gap, not a schema difference, so the consumer reads these
 # unconditionally instead of testing `colnames` for their presence. Filled in
 # `_cutout_one_exposure`.
@@ -288,7 +288,7 @@ class CowStore:
     isr_task: Any
     bkg_task: Any
     detect_diameter_task: Any
-    blind_detect_task: Any
+    detect_task: Any
     astrom_task: Any
     donut_selector_task: Any
     measure_candidates_task: Any
@@ -335,7 +335,7 @@ class CowStore:
         isr_task: Any,
         bkg_task: Any,
         detect_diameter_task: Any,
-        blind_detect_task: Any,
+        detect_task: Any,
         astrom_task: Any,
         donut_selector_task: Any,
         measure_candidates_task: Any,
@@ -354,7 +354,7 @@ class CowStore:
         store.isr_task = isr_task
         store.bkg_task = bkg_task
         store.detect_diameter_task = detect_diameter_task
-        store.blind_detect_task = blind_detect_task
+        store.detect_task = detect_task
         store.astrom_task = astrom_task
         store.donut_selector_task = donut_selector_task
         store.measure_candidates_task = measure_candidates_task
@@ -376,7 +376,7 @@ class CowStore:
         isr_task: Any,
         bkg_task: Any,
         detect_diameter_task: Any,
-        blind_detect_task: Any,
+        detect_task: Any,
         astrom_task: Any,
         donut_selector_task: Any,
         measure_candidates_task: Any,
@@ -410,7 +410,7 @@ class CowStore:
         store.isr_task = isr_task
         store.bkg_task = bkg_task
         store.detect_diameter_task = detect_diameter_task
-        store.blind_detect_task = blind_detect_task
+        store.detect_task = detect_task
         store.astrom_task = astrom_task
         store.donut_selector_task = donut_selector_task
         store.measure_candidates_task = measure_candidates_task

@@ -244,7 +244,7 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
             extra_donuts = sorted(results_by_det.get(sw0, []), key=lambda d: d.snr, reverse=True)
             intra_donuts = sorted(results_by_det.get(sw1, []), key=lambda d: d.snr, reverse=True)
             for extra, intra in zip(extra_donuts, intra_donuts):
-                # Qualified by corner: under blind detection the ids are
+                # Qualified by corner: under blitz detection the ids are
                 # per-detector 1..N slots, so every corner would otherwise log
                 # as group=1_1, 2_2, ...
                 gid = f"{corner}_{extra.donut_id}_{intra.donut_id}"

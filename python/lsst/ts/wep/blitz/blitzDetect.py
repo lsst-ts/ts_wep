@@ -21,7 +21,7 @@
 
 """Template cross-correlation donut detection."""
 
-__all__ = ["BlindDetectConfig", "BlindDetectTask"]
+__all__ = ["BlitzDetectConfig", "BlitzDetectTask"]
 
 import numpy as np
 from astropy.table import QTable
@@ -44,7 +44,7 @@ def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
     return np.where((r < radius) & (r >= radius * innerFrac), 1.0, 0.0)
 
 
-class BlindDetectConfig(pexConfig.Config):
+class BlitzDetectConfig(pexConfig.Config):
     edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Width of detector edge region to exclude from detection, in pixels.",
         dtype=int,
@@ -67,10 +67,10 @@ class BlindDetectConfig(pexConfig.Config):
     )
 
 
-class BlindDetectTask(pipeBase.Task):
-    ConfigClass = BlindDetectConfig
-    _DefaultName = "blindDetect"
-    config: BlindDetectConfig
+class BlitzDetectTask(pipeBase.Task):
+    ConfigClass = BlitzDetectConfig
+    _DefaultName = "blitzDetect"
+    config: BlitzDetectConfig
 
     """Detect donuts via annular template cross-correlation.
 

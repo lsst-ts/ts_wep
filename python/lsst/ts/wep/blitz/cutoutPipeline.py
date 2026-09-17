@@ -51,8 +51,8 @@ from .utils import (
 _log = logging.getLogger(__name__)
 
 
-def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
-    """Convert blind-detect QTable into a minimal afwTable.SourceCatalog
+def _buildAfwSourceCat(blitzDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
+    """Convert blitz-detect QTable into a minimal afwTable.SourceCatalog
     suitable for AstrometryTask.run().
     """
     sourceSchema = afwTable.SourceTable.makeMinimalSchema()
@@ -68,8 +68,8 @@ def _buildAfwSourceCat(blindDetections: QTable, wcs: SkyWcs) -> afwTable.SourceC
     # finished catalog contiguous -- AstrometryTask requires that. Without it,
     # addNew() spills into further blocks past ~100 records and the catalog
     # would need an explicit copy(deep=True) to compact it.
-    sourceCat.reserve(len(blindDetections))
-    for i, row in enumerate(blindDetections):
+    sourceCat.reserve(len(blitzDetections))
+    for i, row in enumerate(blitzDetections):
         x, y = row["centroid_x"], row["centroid_y"]
         sky = wcs.pixelToSky(x, y)
         src = sourceCat.addNew()
@@ -90,7 +90,7 @@ def _cutout_one_exposure(
     astromRefFilter: str,
     photoRefFilter: str,
 ) -> dict:
-    """Run ISR, background subtraction, blind detection, WCS refit, catalog
+    """Run ISR, background subtraction, blitz detection, WCS refit, catalog
     selection, and stamp cutting on one exposure of one detector.
 
     Takes its per-exposure inputs explicitly so both modes can drive it: corner
@@ -175,12 +175,12 @@ def _cutout_one_exposure(
     donutDiameter = detect_diameter_task.run(postIsr).diameter
     donutRadius = _resolveDonutRadius(donutDiameter / 2 if donutDiameter is not None else None)
 
-    # --- blind detection ---
+    # --- blitz detection ---
     t3 = time.perf_counter()
-    blind_detect_task = _COW_STORE.blind_detect_task
-    blindDetections = blind_detect_task.run(postIsr, donutRadius=donutRadius).detections
+    detect_task = _COW_STORE.detect_task
+    blitzDetections = detect_task.run(postIsr, donutRadius=donutRadius).detections
 
-    if len(blindDetections) == 0:
+    if len(blitzDetections) == 0:
         return {
             "det_name": det_name,
             "catalog": [],
@@ -196,7 +196,7 @@ def _cutout_one_exposure(
             "stamp_cut_run": float("nan"),
             "rejected_catalog": [],
             "scatter_arcsec": None,
-            "wcs_refit_error": "No blind detections",
+            "wcs_refit_error": "No blitz detections",
             "cat_select_error": "",
             # No selector ran at all on this detector, which is distinct from
             # the selector running and rejecting everything ("blind_failed").
@@ -217,7 +217,7 @@ def _cutout_one_exposure(
     try:
         astrom_result = astrom_task.solve(
             exposure=postIsr,
-            sourceCat=_buildAfwSourceCat(blindDetections, postIsr.getWcs()),
+            sourceCat=_buildAfwSourceCat(blitzDetections, postIsr.getWcs()),
             load_result=refcat_handle,
         )
         scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
@@ -229,7 +229,7 @@ def _cutout_one_exposure(
         wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
         logging.getLogger(__name__).warning(
             _colorize(
-                "Astrometry solve failed for %s; falling back to blind detections: %s",
+                "Astrometry solve failed for %s; falling back to blitz detections: %s",
                 _ANSI_BOLD,
                 _ANSI_YELLOW,
             ),
@@ -239,7 +239,7 @@ def _cutout_one_exposure(
 
     # --- catalog selection ---
     t5 = time.perf_counter()
-    selections = blindDetections
+    selections = blitzDetections
     refcat = None
     cat_err = ""
     selection_source = None
@@ -263,7 +263,7 @@ def _cutout_one_exposure(
             refcat = QTable({k: np.array(refcat[k]) for k in keys})
             # The refcat source id is the donut id from here on: it is what
             # `Donut.donut_id` and the catalog's `donut_id` column carry on the
-            # refcat path (blind detection supplies its own 1..N counter under
+            # refcat path (blitz detection supplies its own 1..N counter under
             # the same name).
             refcat.rename_column("id", "donut_id")
             refcat["photo_flux"] = refcat[f"{photoRefFilter}_flux"]
@@ -278,31 +278,31 @@ def _cutout_one_exposure(
             cat_err = str(exc)
             refcat = None  # don't leave a partially-built refcat around
 
-    # If the refcat path didn't produce a selection, run the blind detections
+    # If the refcat path didn't produce a selection, run the blitz detections
     # through the same selector.  If that also fails, then exit gracefully.
     if selection_source != "refcat":
         # Every table reaching `CutDonutStampsTask` carries the
-        # refcat-provenance columns, so that a blind-path donut is a row with
+        # refcat-provenance columns, so that a blitz-path donut is a row with
         # NaN values rather than a row the consumer has to test the schema for.
-        # Both branches below derive `selections` from `blindDetections` -- the
+        # Both branches below derive `selections` from `blitzDetections` -- the
         # selector returns a row subset, and the failure branch an empty slice
         # -- so filling them here covers both.  Mutating in place is safe:
-        # `blindDetections` is built fresh per detector, and this path is the
+        # `blitzDetections` is built fresh per detector, and this path is the
         # only one that reads it again.
         for column in _REFCAT_COLUMNS:
-            blindDetections[column] = np.full(len(blindDetections), np.nan)
+            blitzDetections[column] = np.full(len(blitzDetections), np.nan)
         try:
-            result = donut_selector.run(blindDetections, detector, "")
+            result = donut_selector.run(blitzDetections, detector, "")
             selections = result.sourceCat
             selection_source = "blind_selected"
         except Exception as exc:
             cat_err = cat_err or str(exc)
             _log.warning(
-                "Donut selector failed on blind detections for %s; dropping detector's donuts: %s",
+                "Donut selector failed on blitz detections for %s; dropping detector's donuts: %s",
                 det_name,
                 exc,
             )
-            selections = blindDetections[:0]  # empty; flows through to empty catalog
+            selections = blitzDetections[:0]  # empty; flows through to empty catalog
             selection_source = "blind_failed"
     logging.getLogger(__name__).info(
         "Donut selection path: %s (%d sources)", selection_source, len(selections)
@@ -331,7 +331,7 @@ def _cutout_one_exposure(
     # ax.set_xlim(0, postIsr.image.array.shape[1])
     # ax.set_ylim(0, postIsr.image.array.shape[0])
     # ax.scatter(refcat["centroid_x"], refcat["centroid_y"], s=20, edgecolor="cyan", facecolor="none")  # noqa: E501, W505
-    # ax.scatter(blindDetections["centroid_x"], blindDetections["centroid_y"], s=50, edgecolor="blue", facecolor="none")  # noqa: E501, W505
+    # ax.scatter(blitzDetections["centroid_x"], blitzDetections["centroid_y"], s=50, edgecolor="blue", facecolor="none")  # noqa: E501, W505
     # ax.scatter(selections["centroid_x"], selections["centroid_y"], s=80, edgecolor="red", facecolor="none")  # noqa: E501, W505
     # ax.scatter(
     #     [d.x_det for d in cut_result.donuts],
