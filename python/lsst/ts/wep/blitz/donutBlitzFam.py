@@ -82,7 +82,7 @@ from .utils import (
     CowStore,
     FamDetectorInputs,
     _colorize,
-    _resolveColorLogEnabled,
+    _resolve_color_log_enabled,
 )
 from .wavefrontFitting import WavefrontFittingTask
 
@@ -692,7 +692,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         self.makeSubtask("measureCandidates")
         self.makeSubtask("cutStamps")
         self.makeSubtask("wavefrontFit")
-        self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
+        self._colorLogEnabled = _resolve_color_log_enabled(self.config.colorLog)
 
     @property
     def _extraFocalOffsets(self) -> tuple[float, float, float]:
