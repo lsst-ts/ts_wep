@@ -316,12 +316,12 @@ class _FakeQuantumContext:
         self._values = values
         self.puts: dict = {}
 
-    def get(self, refs):  # noqa: ANN001
+    def get(self, refs: Any) -> Any:
         if isinstance(refs, list):
             return [self._values[r] for r in refs]
         return self._values[refs]
 
-    def put(self, value, ref) -> None:  # noqa: ANN001
+    def put(self, value: Any, ref: Any) -> None:
         self.puts[ref] = value
 
 
@@ -349,7 +349,9 @@ class TestLatissMonolithTaskRunQuantum(lsst.utils.tests.TestCase):
 
         seen = {}
 
-        def fakeRun(rawExtra, rawIntra, camera, doIsr=True, isrCalibs=None):  # noqa: ANN001
+        def fakeRun(rawExtra: afwImage.Exposure, rawIntra: afwImage.Exposure,
+                    camera: Camera, doIsr:bool=True,
+                    isrCalibs: dict | None = None) -> pipeBase.Struct:
             seen["extra"], seen["intra"] = rawExtra, rawIntra
             return pipeBase.Struct(zernikes="table", wfEstInfo={})
 
