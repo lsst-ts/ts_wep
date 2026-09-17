@@ -122,14 +122,14 @@ class CutDonutStampsTask(pipeBase.Task):
             ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``,
             ``snr``, ``bkg_std``, ``bkg``, plus every column in
             `lsst.ts.wep.blitz.utils._REFCAT_COLUMNS` -- present whichever
-            selection path ran, NaN-valued on the blind-detection one.
+            selection path ran, NaN-valued on the blitz-detection one.
             Photometric metrics are carried onto the Donut objects as-is; only
             geometry and the SAT flag are computed here. Row order is not
             assumed -- the table is sorted flux-descending internally before
             stamps are cut.
         refcat : QTable or None
             Full refcat with ``donut_id``, ``centroid_x``, ``centroid_y``,
-            ``photo_mag``, ``astrom_mag``, or ``None`` in the blind-detection
+            ``photo_mag``, ``astrom_mag``, or ``None`` in the blitz-detection
             fallback. Supplies the nearby-source lists; ``donut_id`` is what
             excludes each donut from its own neighbor list.
         donutRadius : float or None, optional
@@ -258,7 +258,7 @@ class CutDonutStampsTask(pipeBase.Task):
                 n_quarter=n_quarter,
                 # The donut's own refcat values ride the selections table, a
                 # row subset of the refcat on that path. `_REFCAT_COLUMNS`
-                # guarantees they are present on the blind path too,
+                # guarantees they are present on the blitz path too,
                 # NaN-filled, so there is nothing to test for here.
                 photo_mag=float(row["photo_mag"]),
                 astrom_mag=float(row["astrom_mag"]),

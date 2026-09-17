@@ -54,7 +54,7 @@ class Donut:
     bkg: float
     bkg_std: float
     n_quarter: int
-    # This donut's own refcat magnitudes, NaN on the blind-detection path where
+    # This donut's own refcat magnitudes, NaN on the blitz-detection path where
     # there is no refcat to take them from.
     photo_mag: float
     astrom_mag: float
@@ -64,7 +64,7 @@ class Donut:
     # which is what the stamp bounds were cut on.
     nearby_photo: list[tuple[float, float, float]]
     nearby_astrom: list[tuple[float, float, float]]
-    # Refcat sky position in radians, NaN on the blind-detection path. Refcat
+    # Refcat sky position in radians, NaN on the blitz-detection path. Refcat
     # truth, not a projection of (x_det, y_det) through the WCS -- so a finite
     # value here means this donut was matched to a catalog source.
     coord_ra: float = float("nan")

@@ -53,7 +53,7 @@ from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.utils.timer import timeMethod
 
-from .blindDetect import BlindDetectTask
+from .blitzDetect import BlitzDetectTask
 from .catalogBuilder import CatalogOptions, build_donut_catalog
 from .cutDonutStamps import CutDonutStampsTask
 from .cutoutPipeline import _dead_cutout_result, _run_cutout_worker
@@ -205,9 +205,9 @@ class DonutBlitzCornerConfig(
         target=DonutDetectDiameterTask,
         doc="Donut diameter detection subtask.",
     )
-    blindDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=BlindDetectTask,
-        doc=("Blind donut detection subtask run on each corner wavefront sensor exposure."),
+    blitzDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=BlitzDetectTask,
+        doc=("Blitz donut detection subtask run on each corner wavefront sensor exposure."),
     )
     astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=AstrometryTask,
@@ -392,7 +392,7 @@ class DonutBlitzCornerConfig(
 class DonutBlitzCornerTask(pipeBase.PipelineTask):
     """Blitz WEP task for the corner wavefront sensors.
 
-    Runs ISR, blind donut detection, WCS refit, catalog-based donut
+    Runs ISR, blitz donut detection, WCS refit, catalog-based donut
     selection, and stamp cutting on whichever corner detector raws are present,
     in parallel using a multiprocessing pool.  Reference catalogs are loaded in
     the parent process before forking and inherited by workers via
@@ -408,7 +408,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         self.makeSubtask("isrTask")
         self.makeSubtask("subtractBackground")
         self.makeSubtask("detectDiameter")
-        self.makeSubtask("blindDetect")
+        self.makeSubtask("blitzDetect")
         self.makeSubtask("astromTask")
         self.makeSubtask("donutSelector")
         self.makeSubtask("measureCandidatesTask")
@@ -701,7 +701,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 isr_task=self.isrTask,
                 bkg_task=self.subtractBackground,
                 detect_diameter_task=self.detectDiameter,
-                blind_detect_task=self.blindDetect,
+                detect_task=self.blitzDetect,
                 astrom_task=self.astromTask,
                 donut_selector_task=self.donutSelector,
                 measure_candidates_task=self.measureCandidatesTask,
