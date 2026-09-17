@@ -300,7 +300,7 @@ class DonutBlitzCornerConfig(
             "without being killed -- do not tune it down toward nominal.  "
             "None waits indefinitely, restoring the behaviour where only "
             "hangTimeout notices an overrun.  Note this bounds one unit and "
-            "not the pool: units run in waves of numCores, so a visit in "
+            "not the pool: units run in waves of num_cores, so a visit in "
             "which *every* unit times out can still reach hangTimeout and "
             "abort, which is the right outcome for what is by then a systemic "
             "failure rather than one bad detector."
@@ -321,7 +321,7 @@ class DonutBlitzCornerConfig(
             "kill the process.  What is left for it is a wedge outside the "
             "pools.  The default clears the worst case unitTimeout admits at "
             "its own default, so the per-unit path resolves first: 8 corner "
-            "detectors in waves of numCores is 4 waves at 2 cores, 4x30s = "
+            "detectors in waves of num_cores is 4 waves at 2 cores, 4x30s = "
             "120s < 180s.  Raise it alongside unitTimeout, never below it, and "
             "check the galactic-bulge visits since cutout time is what scales "
             "with reference density."
@@ -511,11 +511,11 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             flat=flat,
             linearizer=linearizer,
             crosstalk=crosstalk,
-            refCat=refCat,
-            intrinsicZernikes=intrinsicZernikes,
+            ref_cat=refCat,
+            intrinsic_zernikes=intrinsicZernikes,
             butler_elapsed=butler_elapsed,
             butler_times=butler_times,
-            numCores=butlerQC.resources.num_cores,
+            num_cores=butlerQC.resources.num_cores,
             exposure_group=_exposure_group(inputRefs.raws),
             instrument=str(butlerQC.quantum.dataId["instrument"]),
         )
@@ -531,11 +531,11 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         flat: list,
         linearizer: list,
         crosstalk: list,
-        refCat: list,
-        intrinsicZernikes: list | None = None,
+        ref_cat: list,
+        intrinsic_zernikes: list | None = None,
         butler_elapsed: float = 0.0,
         butler_times: dict | None = None,
-        numCores: int = 1,
+        num_cores: int = 1,
         exposure_group: str = "",
         instrument: str = "",
     ) -> pipeBase.Struct:
@@ -552,19 +552,19 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         flat : list of lsst.afw.image.ExposureF
         linearizer : list of lsst.ip.isr.Linearizer
         crosstalk : list of lsst.ip.isr.CrosstalkCalib
-        refCat : list of DeferredDatasetHandle or SimpleCatalog
+        ref_cat : list of DeferredDatasetHandle or SimpleCatalog
             Shards used for both WCS fitting and donut selection, loaded once
             per detector.  The WCS fit reads ``astromRefFilter`` (resolved as
             the load's ``fluxField``) and donut selection reads the per-band
             ``photoRefFilter``/``photoRefFilterPrefix`` column off the same
             catalog.
-        intrinsicZernikes : list of IntrinsicZernikes, optional
+        intrinsic_zernikes : list of IntrinsicZernikes, optional
             One calibration per corner detector.  None or empty when absent.
         butler_elapsed : float, optional
             Total butlerQC.get() wall time in seconds, for logging and plot.
         butler_times : dict, optional
             Per-dataset butlerQC.get() times keyed by dataset type name.
-        numCores : int
+        num_cores : int
         exposure_group : str, optional
             Butler ``group`` of the corner exposure, for output meta.
         instrument : str, optional
@@ -579,7 +579,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 _ANSI_GREEN,
                 enabled=self._colorLogEnabled,
             ),
-            numCores,
+            num_cores,
             butler_elapsed,
         )
         t_run0 = time.perf_counter()
@@ -615,11 +615,11 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 sorted(missing),
             )
 
-        if intrinsicZernikes:
-            self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsicZernikes))
+        if intrinsic_zernikes:
+            self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsic_zernikes))
         else:
             self.log.warning("No intrinsic Zernike calibrations provided.")
-        self.intrinsicZernikes = list(intrinsicZernikes) if intrinsicZernikes else []
+        self.intrinsicZernikes = list(intrinsic_zernikes) if intrinsic_zernikes else []
         # detNameById only covers the raws present, so a calibration for a
         # detector we are not processing is dropped rather than raising.
         # runQuantum already filters these, but run() is also called directly.
@@ -642,13 +642,13 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             photo_filter_name = f"{self.config.photoRefFilterPrefix}_{band}"
 
         loader = None
-        if not refCat:
+        if not ref_cat:
             self.log.warning("No reference catalog shards provided; skipping WCS refit and donut selection.")
         else:
             self.log.info("Loading reference catalog shards for WCS refit and donut selection.")
             loader = ReferenceObjectLoader(
-                dataIds=[h.dataId for h in refCat],
-                refCats=refCat,
+                dataIds=[h.dataId for h in ref_cat],
+                refCats=ref_cat,
             )
             loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
 
@@ -746,10 +746,10 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         self.log.info(
             "Running cutout workers on %d corner detectors with %d core(s)",
             len(cutout_args),
-            numCores,
+            num_cores,
         )
         t_cutout0 = time.perf_counter()
-        if numCores == 1:
+        if num_cores == 1:
             t_dispatch = time.time()
             results = [_cutout_corner_detector((arg, t_dispatch)) for arg in cutout_args]
         else:
@@ -757,7 +757,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             # Never more workers than detectors to process, matching the WF
             # pool below. cutout_args is the detectors with raws, non-empty by
             # the guard above.
-            n_cutout_workers = min(numCores, len(cutout_args))
+            n_cutout_workers = min(num_cores, len(cutout_args))
             # Bare fork workers are safe here. Everything is preloaded in
             # runQuantum and inherited via COW. _forkMap ensures that one
             # killed worker does not take down the entire pool/quantum.
@@ -859,10 +859,10 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         t_wf0 = time.perf_counter()
         if not groups:
             wf_results = []
-        elif numCores == 1 or len(groups) == 1:
+        elif num_cores == 1 or len(groups) == 1:
             wf_results = [_wf_fitting_worker(g) for g in groups]
         else:
-            n_workers = min(numCores, len(groups))
+            n_workers = min(num_cores, len(groups))
             # _forkMap again ensures that one killed worker does not take down
             # the entire pool/quantum
             with _dumpStacksOnHang(self.config.hangTimeout, "WF pool", self.log):
@@ -936,7 +936,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             self.plot.run(catalog)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
-        return pipeBase.Struct(donuts=donuts, wf_results=wf_results, cornerResults=Table(catalog))
+        return pipeBase.Struct(donuts=donuts, wfResults=wf_results, cornerResults=Table(catalog))
 
     def _catalogOptions(self) -> _CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.

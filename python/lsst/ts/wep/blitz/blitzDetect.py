@@ -81,7 +81,7 @@ class BlitzDetectTask(pipeBase.Task):
     ----------
     exposure : Exposure
         Science exposure; background is subtracted in-place.
-    donutRadius : float or None
+    donut_radius : float or None
         Donut radius in pixels.  If None, uses the instrument's configured
         donut radius.
 
@@ -98,15 +98,15 @@ class BlitzDetectTask(pipeBase.Task):
     def run(
         self,
         exposure: Exposure,
-        donutRadius: float | None = None,
+        donut_radius: float | None = None,
     ) -> pipeBase.Struct:
         config = self.config
-        if donutRadius is None:
-            donutRadius = _INSTRUMENT.donutRadius
+        if donut_radius is None:
+            donut_radius = _INSTRUMENT.donutRadius
 
         trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
         binning = config.detectionBinning
-        binned_donut_radius = donutRadius / binning
+        binned_donut_radius = donut_radius / binning
         template = _build_annular_template(binned_donut_radius, inner_frac=_INSTRUMENT.obscuration)
 
         if binning > 1:

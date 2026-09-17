@@ -290,7 +290,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # not, which would otherwise pull in the annulus circles and shrink the
         # stamp only on rows that happen to have overlays.
         #
-        # A config-derived view (e.g. donutRadius * bkgAnnulusOuterFrac) would
+        # A config-derived view (e.g. donut_radius * bkgAnnulusOuterFrac) would
         # instead couple the drawn size to stampSize: at stampSize=215 the
         # image overflows its axes by ~15%.
         _STAMP_TEXT_FONTSIZE = 3.5
