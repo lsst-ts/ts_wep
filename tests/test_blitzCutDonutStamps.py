@@ -36,7 +36,7 @@ from astropy.table import QTable
 
 import lsst.afw.image as afwImage
 from lsst.obs.lsst import LsstCam
-from lsst.ts.wep.blitz.cutDonutStampsTask import (
+from lsst.ts.wep.blitz.cutDonutStamps import (
     CutDonutStampsConfig,
     CutDonutStampsTask,
 )
@@ -240,7 +240,7 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
     def test_rounding_residual_recovers_the_stamp_grid(self):
         """Adding ``x_det - round(x_det)`` back puts the offset on the grid.
 
-        This is the property `donutBlitzPlotTask._xform` relies on to draw
+        This is the property `donutBlitzPlot._xform` relies on to draw
         refcat markers: the stamp was cut on integer bounds around the rounded
         centroid, so a neighbour sitting on an integer detector pixel must land
         exactly on a stamp pixel centre once the residual is applied. Omitting

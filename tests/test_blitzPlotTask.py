@@ -34,9 +34,9 @@ import numpy as np
 
 from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
 from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
-from lsst.ts.wep.blitz.donutBlitzPlotTask import (
+from lsst.ts.wep.blitz.donutBlitzPlot import (
+    DonutBlitzPlotConfig,
     DonutBlitzPlotTask,
-    DonutBlitzPlotTaskConfig,
 )
 from lsst.ts.wep.blitz.utils import _ZK_JMAX
 
@@ -183,7 +183,7 @@ class TestDonutBlitzPlotTask(unittest.TestCase):
 
     def testPlotsAreWrittenFromABuilderCatalog(self) -> None:
         catalog = _catalog()
-        task = DonutBlitzPlotTask(config=DonutBlitzPlotTaskConfig())
+        task = DonutBlitzPlotTask(config=DonutBlitzPlotConfig())
         cwd = os.getcwd()
         with tempfile.TemporaryDirectory() as tmp:
             try:
@@ -198,7 +198,7 @@ class TestDonutBlitzPlotTask(unittest.TestCase):
         )
 
     def testEmptyCatalogWritesNothing(self) -> None:
-        task = DonutBlitzPlotTask(config=DonutBlitzPlotTaskConfig())
+        task = DonutBlitzPlotTask(config=DonutBlitzPlotConfig())
         cwd = os.getcwd()
         with tempfile.TemporaryDirectory() as tmp:
             try:

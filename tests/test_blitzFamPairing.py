@@ -40,7 +40,7 @@ import numpy as np
 from lsst.pipe.base import NoWorkFound, UnprocessableDataError
 from lsst.ts.wep.blitz import famPipeline
 from lsst.ts.wep.blitz.dataStructures import Donut
-from lsst.ts.wep.blitz.donutBlitzFamTask import DonutBlitzFamTask, DonutBlitzFamTaskConfig
+from lsst.ts.wep.blitz.donutBlitzFam import DonutBlitzFamConfig, DonutBlitzFamTask
 from lsst.ts.wep.blitz.famPipeline import (
     _RAD_PER_PIXEL,
     _fam_group_donuts,
@@ -384,7 +384,7 @@ class TestFamOffsetSigns(unittest.TestCase):
 
     def testExtraIsPositiveAndIntraNegative(self) -> None:
         """`extra -> +offset`, as in corner mode; the likeliest sign error."""
-        config = DonutBlitzFamTaskConfig()
+        config = DonutBlitzFamConfig()
         task = DonutBlitzFamTask(config=config)
         extra, intra = task._extraFocalOffsets, task._intraFocalOffsets
         # Camera offset by default, detector and M2 unused.
@@ -393,7 +393,7 @@ class TestFamOffsetSigns(unittest.TestCase):
         self.assertGreater(extra[1], 0.0)
 
     def testAllThreeComponentsAreSigned(self) -> None:
-        config = DonutBlitzFamTaskConfig()
+        config = DonutBlitzFamConfig()
         config.detectorOffset = 1e-3
         config.cameraOffset = 2e-3
         config.m2Offset = 3e-3

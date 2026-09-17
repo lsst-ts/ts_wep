@@ -21,7 +21,7 @@
 
 """Template cross-correlation donut detection."""
 
-__all__ = ["BlindDetectConfig", "BlindDetect"]
+__all__ = ["BlindDetectConfig", "BlindDetectTask"]
 
 import numpy as np
 from astropy.table import QTable
@@ -67,9 +67,9 @@ class BlindDetectConfig(pexConfig.Config):
     )
 
 
-class BlindDetect(pipeBase.Task):
+class BlindDetectTask(pipeBase.Task):
     ConfigClass = BlindDetectConfig
-    _DefaultName = "blindDetectTask"
+    _DefaultName = "blindDetect"
     config: BlindDetectConfig
 
     """Detect donuts via annular template cross-correlation.

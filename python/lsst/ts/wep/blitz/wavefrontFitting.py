@@ -21,7 +21,7 @@
 
 """Danish wavefront fitting: donut grouping, the fit task, and its worker."""
 
-__all__ = ["WavefrontFittingTaskConfig", "WavefrontFittingTask"]
+__all__ = ["WavefrontFittingConfig", "WavefrontFittingTask"]
 
 import contextlib
 import logging
@@ -290,8 +290,8 @@ def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, bor
 # Module-level logger for the worker functions below. They are module-level
 # (not methods) so the fork-based pools can pickle them by name, which means
 # there is no `self` and so no `Task.log`. Consequence: worker output goes to
-# the `lsst.ts.wep.blitz.wavefrontFittingTask` logger rather than the task's
-# own `donutBlitzCornerTask` hierarchy, so it is not affected by that task's
+# the `lsst.ts.wep.blitz.wavefrontFitting` logger rather than the task's
+# own `donutBlitzCorner` hierarchy, so it is not affected by that task's
 # log level. Parent-process code should keep using `self.log`.
 _log = logging.getLogger(__name__)
 
@@ -344,7 +344,7 @@ def _dead_wf_result(group: "_WfGroup", reason: str, nZk: int) -> dict:
     }
 
 
-class WavefrontFittingTaskConfig(pexConfig.Config):
+class WavefrontFittingConfig(pexConfig.Config):
     """Configuration for wavefront fitting via Danish algorithm."""
 
     nollIndices: pexConfig.ListField = pexConfig.ListField(
@@ -549,9 +549,9 @@ class WavefrontFittingTask(pipeBase.Task):
     Zernike coefficients for the wavefront error.
     """
 
-    ConfigClass = WavefrontFittingTaskConfig
-    _DefaultName = "wavefrontFittingTask"
-    config: WavefrontFittingTaskConfig
+    ConfigClass = WavefrontFittingConfig
+    _DefaultName = "wavefrontFitting"
+    config: WavefrontFittingConfig
 
     def run(self, group: "_WfGroup") -> dict:
         """Fit wavefront aberrations for a group of donuts.

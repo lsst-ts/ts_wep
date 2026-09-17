@@ -22,8 +22,8 @@
 """The corner-wavefront-sensor blitz pipeline task."""
 
 __all__ = [
-    "DonutBlitzCornerTaskConnections",
-    "DonutBlitzCornerTaskConfig",
+    "DonutBlitzCornerConnections",
+    "DonutBlitzCornerConfig",
     "DonutBlitzCornerTask",
 ]
 
@@ -53,13 +53,13 @@ from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.utils.timer import timeMethod
 
-from .blindDetectTask import BlindDetect
+from .blindDetect import BlindDetectTask
 from .catalogBuilder import CatalogOptions, build_donut_catalog
-from .cutDonutStampsTask import CutDonutStampsTask
+from .cutDonutStamps import CutDonutStampsTask
 from .cutoutPipeline import _dead_cutout_result, _run_cutout_worker
-from .donutBlitzPlotTask import DonutBlitzPlotTask
+from .donutBlitzPlot import DonutBlitzPlotTask
 from .forkPool import _dumpStacksOnHang, _forkMap
-from .measureDonutCandidatesTask import MeasureDonutCandidatesTask
+from .measureDonutCandidates import MeasureDonutCandidatesTask
 from .utils import (
     _ANSI_BOLD,
     _ANSI_CYAN,
@@ -75,7 +75,7 @@ from .utils import (
     _colorize,
     _resolveColorLogEnabled,
 )
-from .wavefrontFittingTask import (
+from .wavefrontFitting import (
     WavefrontFittingTask,
     _build_wf_groups,
     _dead_wf_result,
@@ -111,7 +111,7 @@ _EXTRA_FOCAL_OFFSETS = (+_INSTRUMENT.defocalOffset, 0.0, 0.0)
 _INTRA_FOCAL_OFFSETS = (-_INSTRUMENT.defocalOffset, 0.0, 0.0)
 
 
-class DonutBlitzCornerTaskConnections(
+class DonutBlitzCornerConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),  # type: ignore
 ):
@@ -187,9 +187,9 @@ class DonutBlitzCornerTaskConnections(
     )
 
 
-class DonutBlitzCornerTaskConfig(
+class DonutBlitzCornerConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=DonutBlitzCornerTaskConnections,  # type: ignore
+    pipelineConnections=DonutBlitzCornerConnections,  # type: ignore
 ):
     """Configuration for DonutBlitzCornerTask."""
 
@@ -206,7 +206,7 @@ class DonutBlitzCornerTaskConfig(
         doc="Donut diameter detection subtask.",
     )
     blindDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=BlindDetect,
+        target=BlindDetectTask,
         doc=("Blind donut detection subtask run on each corner wavefront sensor exposure."),
     )
     astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
@@ -399,9 +399,9 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
     copy-on-write.
     """
 
-    ConfigClass = DonutBlitzCornerTaskConfig
-    _DefaultName = "donutBlitzCornerTask"
-    config: DonutBlitzCornerTaskConfig
+    ConfigClass = DonutBlitzCornerConfig
+    _DefaultName = "donutBlitzCorner"
+    config: DonutBlitzCornerConfig
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

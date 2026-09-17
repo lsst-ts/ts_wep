@@ -39,7 +39,7 @@ import unittest
 import batoid
 import numpy as np
 
-from lsst.ts.wep.blitz.donutBlitzCornerTask import (
+from lsst.ts.wep.blitz.donutBlitzCorner import (
     _EXTRA_FOCAL_OFFSETS,
     _INTRA_FOCAL_OFFSETS,
 )
@@ -229,7 +229,7 @@ class TestDefocalOffsets(unittest.TestCase):
 
     def testMissingOffsetsIsFatalNotSilent(self) -> None:
         """A donut with no offsets must raise, not guess a defocal side."""
-        from lsst.ts.wep.blitz.wavefrontFittingTask import WavefrontFittingTask
+        from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingTask
 
         task = WavefrontFittingTask()
         donut = _minimalDonut(defocal_offsets=None)
