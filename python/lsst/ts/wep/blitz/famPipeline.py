@@ -482,7 +482,7 @@ def _fam_detector_worker(args: tuple) -> dict:
         )
         out["pair_path"] = path
         # Also stamp it on both of this detector's cutout results: those are
-        # what reach build_donut_catalog, so this is what gets pairing
+        # what reach _build_donut_catalog, so this is what gets pairing
         # provenance into the persisted table instead of only the parent's log
         # line.
         for r in results:

@@ -25,7 +25,7 @@ Both modes emit the same schema, so this lives in one place rather than in each
 task.
 """
 
-__all__ = ["CatalogOptions", "build_donut_catalog", "transform_eb"]
+__all__ = []
 
 import importlib
 from dataclasses import dataclass
@@ -50,7 +50,7 @@ from .utils import (
 )
 
 
-def transform_eb(
+def _rotate_zk_to_eb(
     zk_list,
     thx,
     thy,
@@ -98,7 +98,7 @@ def transform_eb(
 
 
 @dataclass(frozen=True)
-class CatalogOptions:
+class _CatalogOptions:
     """Config-derived scalars the catalog needs, taken from the calling task.
 
     Grouped into one object rather than a dozen positional arguments because
@@ -263,13 +263,13 @@ _META_NOTES = {
 }
 
 
-def build_donut_catalog(
+def _build_donut_catalog(
     results: list,
     wf_results: list,
     donuts: list,
     unmatched_donuts: list,
     visit_id: int,
-    options: CatalogOptions,
+    options: _CatalogOptions,
     intra_visit_id: int | None = None,
     extra_visit_id: int | None = None,
     exposure_group: str = "",
@@ -308,7 +308,7 @@ def build_donut_catalog(
         Visit identifier; the visit this table is *for*, written to
         ``meta["ref_visit_id"]``.  Full-array mode passes the extra-focal visit
         of the pair.
-    options : CatalogOptions
+    options : _CatalogOptions
         Config-derived scalars from the calling task.
     intra_visit_id, extra_visit_id : int, optional
         The visits that supplied the intra- and extra-focal donuts.
@@ -573,10 +573,10 @@ def build_donut_catalog(
     # Camera coordinate system, i.e. as fit.
     table["zk_deviation_ccs"] = zk_deviation_um * u.micron
     table["zk_intrinsic_ccs"] = zk_int_um * u.micron
-    # transform_eb is unit-agnostic in the field angle -- it only ever takes
-    # an atan2 of the pair -- so hand it bare radians rather than teach it
-    # to strip units from arbitrary angle Quantities.
-    dev_eb, intrinsic_eb = transform_eb(
+    # _rotate_zk_to_eb is unit-agnostic in the field angle -- it only ever
+    # takes an atan2 of the pair -- so hand it bare radians rather than teach
+    # it to strip units from arbitrary angle Quantities.
+    dev_eb, intrinsic_eb = _rotate_zk_to_eb(
         [table["zk_deviation_ccs"], table["zk_intrinsic_ccs"]],
         table["thx_ccs"].to_value(u.rad),
         table["thy_ccs"].to_value(u.rad),

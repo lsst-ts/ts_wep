@@ -143,7 +143,7 @@ def _cutout_one_exposure(
         ``pair_path`` is not decided here -- it is the grouping stage's, and
         both modes overwrite it once they know which pairing algorithm ran.  It
         is seeded with ``"n/a"`` rather than left absent so that every result
-        reaching `build_donut_catalog` carries a meaningful string, including
+        reaching `_build_donut_catalog` carries a meaningful string, including
         the results of a full-array worker that died before it reached
         grouping.
     """
