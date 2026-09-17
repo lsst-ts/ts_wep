@@ -19,9 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""The crash isolation `_forkMap` exists to provide.
+"""The crash isolation `_fork_map` exists to provide.
 
-`_forkMap` is only worth its custom implementation if a worker killed outright
+`_fork_map` is only worth its custom implementation if a worker killed outright
 costs exactly its own work unit, so that is what these tests kill for: a child
 SIGKILLed before it writes anything, and -- the case the length-framed payload
 was designed for -- a child killed *between* its frame header and the end of
@@ -38,7 +38,7 @@ be counted as a success rather than swept into `deaths`.
 but overrunning, either because the work itself is pathologically slow or
 because the unit's pipe never reaches EOF. The second is not hypothetical --
 a worker that leaks its write end to a grandchild parks the pre-timeout
-`_forkMap` forever, which is why those tests are bounded by `_failIfSlower`
+`_fork_map` forever, which is why those tests are bounded by `_failIfSlower`
 rather than trusted to return.
 
 `TestSignalsDuringWrite` pins the reason the child's write loop needs no
@@ -47,9 +47,9 @@ loop already absorbs the short write a signal can otherwise leave behind. That
 is a property of the interpreter rather than of this module, so it is asserted
 here to keep anyone from "fixing" the loop back into complexity.
 
-Not covered: `_killChildProcesses`, which would SIGKILL every child of the
+Not covered: `_kill_child_processes`, which would SIGKILL every child of the
 process running the tests (including the test runner's own), and the firing
-path of `_dumpStacksOnHang`, which ends in `os._exit`.
+path of `_dump_stacks_on_hang`, which ends in `os._exit`.
 """
 
 import os
@@ -64,10 +64,10 @@ from contextlib import contextmanager
 from lsst.ts.wep.blitz.forkPool import (
     _INCOMPLETE,
     _RESULT_HEADER,
-    _decodeResult,
-    _describeExit,
-    _dumpStacksOnHang,
-    _forkMap,
+    _decode_result,
+    _describe_exit,
+    _dump_stacks_on_hang,
+    _fork_map,
 )
 
 # Set by `_recordInitializer` in the child only; the parent's copy stays empty,
@@ -89,7 +89,7 @@ def _returnNone(unit):
 
 
 def _suicide(unit):
-    """Die before `_forkMap` has anything to write for this unit."""
+    """Die before `_fork_map` has anything to write for this unit."""
     os.kill(os.getpid(), signal.SIGKILL)
 
 
@@ -211,7 +211,7 @@ def _killDuringWrite(afterBytes: int | None):
     -- so `afterBytes` counts payload bytes only. `None` means write the
     payload in full and *then* die, which is the "killed after finishing" case.
 
-    Only the children call `os.write` inside `_forkMap`; the parent reads. So
+    Only the children call `os.write` inside `_fork_map`; the parent reads. So
     the patch is inert in the process that installs it.
     """
     realWrite = os.write
@@ -228,7 +228,7 @@ def _killDuringWrite(afterBytes: int | None):
 
 
 def _reapStrays() -> None:
-    """Reap whatever `_forkMap` never got to, when a test cut it short.
+    """Reap whatever `_fork_map` never got to, when a test cut it short.
 
     Only the already-exited: anything still sleeping is left to finish and be
     reaped by init, which is the price of interrupting the loop mid-flight.
@@ -250,17 +250,17 @@ def _failIfSlower(seconds: float):
     pinning: the parent sits in `selector.select(timeout=_SELECT_TIMEOUT)`, so
     it wakes at least once a second and a Python-level exception can be
     delivered to it. (PEP 475 retries an `EINTR`-interrupted `select` only when
-    the handler does *not* raise.) The claim in `_dumpStacksOnHang` that "the
-    main thread is blocked in C on a futex, where no exception can be delivered
-    to it" does not hold for this call path -- if it did, this guard could not
-    work and these tests would hang the runner instead of failing it.
+    the handler does *not* raise.) The claim in `_dump_stacks_on_hang` that
+    "the main thread is blocked in C on a futex, where no exception can be
+    delivered to it" does not hold for this call path -- if it did, this guard
+    could not work and these tests would hang the runner instead of failing it.
 
     `fork` resets interval timers in the child, so no worker inherits the
     alarm.
     """
 
     def raiseTimeout(signum, frame):
-        raise TimeoutError(f"_forkMap did not return within {seconds}s")
+        raise TimeoutError(f"_fork_map did not return within {seconds}s")
 
     previous = signal.signal(signal.SIGALRM, raiseTimeout)
     signal.setitimer(signal.ITIMER_REAL, seconds)
@@ -287,33 +287,33 @@ class TestCleanRuns(unittest.TestCase):
     """The unexceptional paths, since the failure paths build on them."""
 
     def testMapsEveryUnit(self) -> None:
-        results, deaths = _forkMap(_double, [1, 2, 3, 4], 2)
+        results, deaths = _fork_map(_double, [1, 2, 3, 4], 2)
         self.assertEqual(deaths, [])
         self.assertEqual(results, [2, 4, 6, 8])
 
     def testEmptyArgs(self) -> None:
-        self.assertEqual(_forkMap(_double, [], 4), ([], []))
+        self.assertEqual(_fork_map(_double, [], 4), ([], []))
 
     def testGeneratorArgs(self) -> None:
-        results, deaths = _forkMap(_double, (i for i in range(3)), 2)
+        results, deaths = _fork_map(_double, (i for i in range(3)), 2)
         self.assertEqual(deaths, [])
         self.assertEqual(results, [0, 2, 4])
 
     def testNoneIsAResultNotADeath(self) -> None:
         """The reason `_INCOMPLETE` exists: `None` alone could not say this."""
-        results, deaths = _forkMap(_returnNone, [1, 2], 2)
+        results, deaths = _fork_map(_returnNone, [1, 2], 2)
         self.assertEqual(deaths, [])
         self.assertEqual(results, [None, None])
 
     def testPayloadLargerThanThePipeBuffer(self) -> None:
         """A result that cannot fit in the pipe at once still arrives whole."""
-        (result,), deaths = _forkMap(_bigPayload, [0], 1)
+        (result,), deaths = _fork_map(_bigPayload, [0], 1)
         self.assertEqual(deaths, [])
         self.assertEqual(len(result), 4 << 20)
         self.assertEqual(result, b"z" * (4 << 20))
 
     def testInitializerRunsInEachChildAndNotInTheParent(self) -> None:
-        results, deaths = _forkMap(_reportInitializerCalls, [0, 1, 2], 2, initializer=_recordInitializer)
+        results, deaths = _fork_map(_reportInitializerCalls, [0, 1, 2], 2, initializer=_recordInitializer)
         self.assertEqual(deaths, [])
         # Exactly once per child, and no leakage between them: unit 2 forks
         # after units 0 and 1 have run, and still sees a count of 1.
@@ -322,21 +322,21 @@ class TestCleanRuns(unittest.TestCase):
 
 
 class TestWorkerLimit(unittest.TestCase):
-    """`numWorkers` is what bounds peak memory, so it has to bind."""
+    """`num_workers` is what bounds peak memory, so it has to bind."""
 
     def testAtMostNumWorkersAlive(self) -> None:
-        results, deaths = _forkMap(_timeInterval, list(range(6)), 2)
+        results, deaths = _fork_map(_timeInterval, list(range(6)), 2)
         self.assertEqual(deaths, [])
         self.assertEqual(len(results), 6)
         self.assertEqual(_maxConcurrent(results), 2)
 
     def testClampedUpFromZero(self) -> None:
-        results, deaths = _forkMap(_timeInterval, [0, 1], 0)
+        results, deaths = _fork_map(_timeInterval, [0, 1], 0)
         self.assertEqual(deaths, [])
         self.assertEqual(_maxConcurrent(results), 1)
 
     def testClampedDownToUnitCount(self) -> None:
-        results, deaths = _forkMap(_timeInterval, [0, 1], 32)
+        results, deaths = _fork_map(_timeInterval, [0, 1], 32)
         self.assertEqual(deaths, [])
         self.assertEqual(_maxConcurrent(results), 2)
 
@@ -345,7 +345,7 @@ class TestKilledWorkers(unittest.TestCase):
     """One SIGKILL should cost exactly one unit."""
 
     def testKilledBeforeWritingAnything(self) -> None:
-        results, deaths = _forkMap(_suicide, ["R01_S00"], 1)
+        results, deaths = _fork_map(_suicide, ["R01_S00"], 1)
         self.assertEqual(results, [])
         self.assertEqual(len(deaths), 1)
         self.assertEqual(deaths[0].unit, "R01_S00")
@@ -357,7 +357,7 @@ class TestKilledWorkers(unittest.TestCase):
     def testSiblingsSurviveAndTheDeadUnitIsNamed(self) -> None:
         """The whole point: a dead detector costs its own detector only."""
         units = list(range(8))
-        results, deaths = _forkMap(_dieIfThree, units, 4)
+        results, deaths = _fork_map(_dieIfThree, units, 4)
         self.assertEqual([d.unit for d in deaths], [3])
         # Relative order of `args`, with the dead unit simply absent -- there
         # is no placeholder, which is why callers must not index `results` by
@@ -372,7 +372,7 @@ class TestKilledWorkers(unittest.TestCase):
         against the declared length names the unit as lost.
         """
         with _killDuringWrite(afterBytes=64):
-            results, deaths = _forkMap(_bigPayload, ["R22_S11"], 1)
+            results, deaths = _fork_map(_bigPayload, ["R22_S11"], 1)
         self.assertEqual(results, [])
         self.assertEqual(len(deaths), 1)
         self.assertEqual(deaths[0].unit, "R22_S11")
@@ -390,7 +390,7 @@ class TestKilledWorkers(unittest.TestCase):
         N independent failures, never one poisoned transport.
         """
         with _killDuringWrite(afterBytes=16):
-            results, deaths = _forkMap(_bigPayload, list(range(4)), 2)
+            results, deaths = _fork_map(_bigPayload, list(range(4)), 2)
         self.assertEqual(results, [])
         self.assertEqual([d.unit for d in deaths], [0, 1, 2, 3])
         for death in deaths:
@@ -399,7 +399,7 @@ class TestKilledWorkers(unittest.TestCase):
     def testKilledAfterWritingACompleteResultStillCounts(self) -> None:
         """The work was done; the exit status afterwards is not interesting."""
         with _killDuringWrite(afterBytes=None):
-            results, deaths = _forkMap(_identity, ["done"], 1)
+            results, deaths = _fork_map(_identity, ["done"], 1)
         self.assertEqual(deaths, [])
         self.assertEqual(results, ["done"])
 
@@ -409,7 +409,7 @@ class TestFailingWorkers(unittest.TestCase):
 
     def testExceptionInFunc(self) -> None:
         with _silencedStderr():
-            results, deaths = _forkMap(_raiseValueError, ["R01_S01"], 1)
+            results, deaths = _fork_map(_raiseValueError, ["R01_S01"], 1)
         self.assertEqual(results, [])
         self.assertEqual(deaths[0].unit, "R01_S01")
         self.assertEqual(deaths[0].reason, "exited 1")
@@ -417,20 +417,20 @@ class TestFailingWorkers(unittest.TestCase):
     def testBaseExceptionInFunc(self) -> None:
         """`except Exception` in the child would let this one escape."""
         with _silencedStderr():
-            results, deaths = _forkMap(_raiseBaseException, [0], 1)
+            results, deaths = _fork_map(_raiseBaseException, [0], 1)
         self.assertEqual(results, [])
         self.assertEqual(deaths[0].reason, "exited 1")
 
     def testUnpicklableResult(self) -> None:
         """A result that cannot cross the pipe is a death, not a crash."""
         with _silencedStderr():
-            results, deaths = _forkMap(_returnUnpicklable, [0], 1)
+            results, deaths = _fork_map(_returnUnpicklable, [0], 1)
         self.assertEqual(results, [])
         self.assertEqual(deaths[0].reason, "exited 1")
 
     def testOneFailureAmongSurvivors(self) -> None:
         with _silencedStderr():
-            results, deaths = _forkMap(_raiseIfOne, [0, 1, 2], 2)
+            results, deaths = _fork_map(_raiseIfOne, [0, 1, 2], 2)
         self.assertEqual(results, [0, 2])
         self.assertEqual([d.unit for d in deaths], [1])
 
@@ -439,11 +439,11 @@ class TestUnitTimeout(unittest.TestCase):
     """A unit that overruns should cost its own unit, like a killed one.
 
     Without a per-unit deadline the only thing that notices an overrun is
-    `_dumpStacksOnHang`, which fires from a side thread that cannot know which
-    unit is late and so can only `os._exit(1)` -- taking every healthy sibling,
-    and the whole quantum, with it. These tests say the pool degrades per unit
-    instead, for both shapes of overrun: a worker that is merely far too slow,
-    and one whose pipe never reaches EOF at all.
+    `_dump_stacks_on_hang`, which fires from a side thread that cannot know
+    which unit is late and so can only `os._exit(1)` -- taking every healthy
+    sibling, and the whole quantum, with it. These tests say the pool degrades
+    per unit instead, for both shapes of overrun: a worker that is merely far
+    too slow, and one whose pipe never reaches EOF at all.
 
     Every deadline here is at least 1s because `_SELECT_TIMEOUT` is 1.0: the
     sweep can only run when `select` returns, so a sub-second deadline buys no
@@ -452,7 +452,7 @@ class TestUnitTimeout(unittest.TestCase):
 
     def testSlowUnitBecomesADeathNotAHang(self) -> None:
         with _failIfSlower(20.0):
-            results, deaths = _forkMap(_sleepPastAnyDeadline, ["R40_SW1"], 1, unitTimeout=1.0)
+            results, deaths = _fork_map(_sleepPastAnyDeadline, ["R40_SW1"], 1, unit_timeout=1.0)
         self.assertEqual(results, [])
         self.assertEqual(len(deaths), 1)
         # The diagnostic the watchdog's thread dump could never give: the name
@@ -467,7 +467,7 @@ class TestUnitTimeout(unittest.TestCase):
         chasing a memory limit that was never involved.
         """
         with _failIfSlower(20.0):
-            _, deaths = _forkMap(_sleepPastAnyDeadline, [0], 1, unitTimeout=1.0)
+            _, deaths = _fork_map(_sleepPastAnyDeadline, [0], 1, unit_timeout=1.0)
         self.assertNotIn("OOM", deaths[0].reason)
 
     def testSlowUnitDoesNotDelayOrDisplaceItsSiblings(self) -> None:
@@ -478,7 +478,7 @@ class TestUnitTimeout(unittest.TestCase):
         slot rather than merely marking it dead.
         """
         with _failIfSlower(20.0):
-            results, deaths = _forkMap(_sleepIfZero, list(range(4)), 2, unitTimeout=1.0)
+            results, deaths = _fork_map(_sleepIfZero, list(range(4)), 2, unit_timeout=1.0)
         self.assertEqual([d.unit for d in deaths], [0])
         self.assertEqual(results, [10, 20, 30])
 
@@ -493,17 +493,18 @@ class TestUnitTimeout(unittest.TestCase):
         semantics.
         """
         with _failIfSlower(20.0):
-            results, deaths = _forkMap(_leakGrandchildHoldingWriteEnd, [21], 1, unitTimeout=1.0)
+            results, deaths = _fork_map(_leakGrandchildHoldingWriteEnd, [21], 1, unit_timeout=1.0)
         self.assertEqual(deaths, [])
         self.assertEqual(results, [42])
 
     def testNoDeadlineWithoutOne(self) -> None:
-        """`_forkMap` stays a pure mechanism for the callers that opt out.
+        """`_fork_map` stays a pure mechanism for the callers that opt out.
 
-        The wavefront and FAM pools pass no `unitTimeout`, so a slow unit there
-        must still be waited for rather than acquiring a deadline by default.
+        The wavefront and FAM pools pass no `unit_timeout`, so a slow unit
+        there must still be waited for rather than acquiring a deadline by
+        default.
         """
-        results, deaths = _forkMap(_timeInterval, [0], 1)
+        results, deaths = _fork_map(_timeInterval, [0], 1)
         self.assertEqual(deaths, [])
         self.assertEqual(len(results), 1)
 
@@ -513,11 +514,11 @@ class TestUnitTimeout(unittest.TestCase):
         Units 2 and 3 start only as earlier slots free up, so a deadline
         measured from the start of the *pool* would kill them for their
         predecessors' runtime. This is also why the pool as a whole can outlive
-        `unitTimeout` by a factor of the number of waves -- what has to stay
-        below `hangTimeout` is that product, not `unitTimeout` itself.
+        `unit_timeout` by a factor of the number of waves -- what has to stay
+        below `hangTimeout` is that product, not `unit_timeout` itself.
         """
         with _failIfSlower(20.0):
-            results, deaths = _forkMap(_timeInterval, list(range(4)), 2, unitTimeout=1.0)
+            results, deaths = _fork_map(_timeInterval, list(range(4)), 2, unit_timeout=1.0)
         self.assertEqual(deaths, [])
         self.assertEqual(len(results), 4)
 
@@ -541,7 +542,7 @@ class TestSignalsDuringWrite(unittest.TestCase):
         fails, the fix is an EINTR-retry helper around the child's writes --
         until then one would be dead code asserting the opposite of the truth.
         """
-        results, deaths = _forkMap(_bigPayload, [0], 1, initializer=self._armRepeatingAlarm)
+        results, deaths = _fork_map(_bigPayload, [0], 1, initializer=self._armRepeatingAlarm)
         self.assertEqual(deaths, [])
         self.assertEqual(results[0], b"z" * (4 << 20))
 
@@ -554,52 +555,52 @@ class TestDecodeResult(unittest.TestCase):
             with self.subTest(value=value):
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
                 buffer = bytearray(_RESULT_HEADER.pack(len(payload)) + payload)
-                self.assertEqual(_decodeResult(buffer), value)
+                self.assertEqual(_decode_result(buffer), value)
 
     def testEmptyBuffer(self) -> None:
-        self.assertIs(_decodeResult(bytearray()), _INCOMPLETE)
+        self.assertIs(_decode_result(bytearray()), _INCOMPLETE)
 
     def testTruncatedHeader(self) -> None:
-        self.assertIs(_decodeResult(bytearray(b"\x00" * (_RESULT_HEADER.size - 1))), _INCOMPLETE)
+        self.assertIs(_decode_result(bytearray(b"\x00" * (_RESULT_HEADER.size - 1))), _INCOMPLETE)
 
     def testHeaderOnly(self) -> None:
-        self.assertIs(_decodeResult(bytearray(_RESULT_HEADER.pack(10))), _INCOMPLETE)
+        self.assertIs(_decode_result(bytearray(_RESULT_HEADER.pack(10))), _INCOMPLETE)
 
     def testShortBody(self) -> None:
-        self.assertIs(_decodeResult(bytearray(_RESULT_HEADER.pack(10) + b"abc")), _INCOMPLETE)
+        self.assertIs(_decode_result(bytearray(_RESULT_HEADER.pack(10) + b"abc")), _INCOMPLETE)
 
     def testOverlongBody(self) -> None:
         """A body longer than declared is as untrustworthy as a short one."""
-        self.assertIs(_decodeResult(bytearray(_RESULT_HEADER.pack(2) + b"abcd")), _INCOMPLETE)
+        self.assertIs(_decode_result(bytearray(_RESULT_HEADER.pack(2) + b"abcd")), _INCOMPLETE)
 
     def testCorruptPayloadOfTheRightLength(self) -> None:
         body = b"not a pickle"
-        self.assertIs(_decodeResult(bytearray(_RESULT_HEADER.pack(len(body)) + body)), _INCOMPLETE)
+        self.assertIs(_decode_result(bytearray(_RESULT_HEADER.pack(len(body)) + body)), _INCOMPLETE)
 
 
 class TestDescribeExit(unittest.TestCase):
     """The text a human reads out of the job log to name what was lost."""
 
     def testSigkillCallsOutTheOomKiller(self) -> None:
-        reason = _describeExit(signal.SIGKILL, 0)
+        reason = _describe_exit(signal.SIGKILL, 0)
         self.assertEqual(reason, "killed by SIGKILL (typically the cgroup OOM killer)")
 
     def testOtherSignalsAreNamedWithoutTheOomHint(self) -> None:
-        reason = _describeExit(signal.SIGSEGV, 0)
+        reason = _describe_exit(signal.SIGSEGV, 0)
         self.assertEqual(reason, "killed by SIGSEGV")
 
     def testUnknownSignalNumber(self) -> None:
-        self.assertIn("signal 63", _describeExit(63, 0))
+        self.assertIn("signal 63", _describe_exit(63, 0))
 
     def testNonZeroExit(self) -> None:
-        self.assertEqual(_describeExit(3 << 8, 0), "exited 3")
+        self.assertEqual(_describe_exit(3 << 8, 0), "exited 3")
 
     def testCleanExitWithoutAResult(self) -> None:
-        self.assertEqual(_describeExit(0, 0), "exited without writing a complete result")
+        self.assertEqual(_describe_exit(0, 0), "exited without writing a complete result")
 
     def testPartialBytesAreReported(self) -> None:
         self.assertEqual(
-            _describeExit(0, 42),
+            _describe_exit(0, 42),
             "exited without writing a complete result; 42 byte(s) of a partial result discarded",
         )
 
@@ -610,12 +611,12 @@ class TestDescribeExit(unittest.TestCase):
         kill as "typically the cgroup OOM killer" -- true of the signal, wrong
         about the cause.
         """
-        reason = _describeExit(signal.SIGKILL, 0, timeout=30)
+        reason = _describe_exit(signal.SIGKILL, 0, timeout=30)
         self.assertEqual(reason, "exceeded the 30s unit timeout and was killed")
 
     def testTimeoutStillReportsPartialBytes(self) -> None:
         """A unit killed mid-write still accounts for what arrived."""
-        reason = _describeExit(signal.SIGKILL, 42, timeout=30)
+        reason = _describe_exit(signal.SIGKILL, 42, timeout=30)
         self.assertEqual(
             reason,
             "exceeded the 30s unit timeout and was killed; 42 byte(s) of a partial result discarded",
@@ -627,16 +628,16 @@ class TestDumpStacksOnHang(unittest.TestCase):
 
     def testDisabledByNone(self) -> None:
         before = len(_threadNames())
-        with _dumpStacksOnHang(None, "disabled"):
+        with _dump_stacks_on_hang(None, "disabled"):
             self.assertEqual(len(_threadNames()), before)
 
     def testDisabledByNonPositiveTimeout(self) -> None:
-        with _dumpStacksOnHang(0.0, "disabled"):
+        with _dump_stacks_on_hang(0.0, "disabled"):
             self.assertNotIn("hang-watchdog[disabled]", _threadNames())
 
     def testWatchdogIsRetiredOnCleanExit(self) -> None:
         """A watchdog that outlived its block would abort the job later on."""
-        with _dumpStacksOnHang(30.0, "armed"):
+        with _dump_stacks_on_hang(30.0, "armed"):
             self.assertIn("hang-watchdog[armed]", _threadNames())
         for _ in range(100):
             if "hang-watchdog[armed]" not in _threadNames():
@@ -646,7 +647,7 @@ class TestDumpStacksOnHang(unittest.TestCase):
 
     def testArmedMessageIsLogged(self) -> None:
         log = unittest.mock.MagicMock()
-        with _dumpStacksOnHang(30.0, "labelled", log):
+        with _dump_stacks_on_hang(30.0, "labelled", log):
             pass
         log.debug.assert_called_once()
         self.assertEqual(log.debug.call_args.args[1:], ("labelled", 30.0))
