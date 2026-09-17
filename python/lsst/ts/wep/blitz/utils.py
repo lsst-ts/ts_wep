@@ -106,7 +106,7 @@ _CUTOUT_STAGE_KEYS = {
     "isr": "isr_run",
     "bkg": "bkg_run",
     "diam": "diam_run",
-    "detect": "blind_detect_run",
+    "detect": "detect_run",
     "astrom": "wcs_refit_run",
     "select": "catalog_select_run",
     "cut": "stamp_cut_run",

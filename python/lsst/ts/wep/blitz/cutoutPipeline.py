@@ -187,7 +187,7 @@ def _cutout_one_exposure(
             "isr_run": t1 - t0,
             "bkg_run": t2 - t1,
             "diam_run": t3 - t2,
-            "blind_detect_run": time.perf_counter() - t3,
+            "detect_run": time.perf_counter() - t3,
             # NaN, not 0.0: these three never ran, and reporting them as zero
             # makes a detector that bailed out here read as one whose WCS refit
             # and selection were instantaneous.
@@ -199,7 +199,7 @@ def _cutout_one_exposure(
             "wcs_refit_error": "No blitz detections",
             "cat_select_error": "",
             # No selector ran at all on this detector, which is distinct from
-            # the selector running and rejecting everything ("blind_failed").
+            # the selector running and rejecting everything ("blitz_failed").
             "selection_source": "no_detections",
             "pair_path": "n/a",
             "n_quarter": n_quarter,
@@ -294,7 +294,7 @@ def _cutout_one_exposure(
         try:
             result = select_task.run(blitzDetections, detector, "")
             selections = result.sourceCat
-            selection_source = "blind_selected"
+            selection_source = "blitz_selected"
         except Exception as exc:
             cat_err = cat_err or str(exc)
             _log.warning(
@@ -303,7 +303,7 @@ def _cutout_one_exposure(
                 exc,
             )
             selections = blitzDetections[:0]  # empty; flows through to empty catalog
-            selection_source = "blind_failed"
+            selection_source = "blitz_failed"
     logging.getLogger(__name__).info(
         "Donut selection path: %s (%d sources)", selection_source, len(selections)
     )
@@ -387,7 +387,7 @@ def _cutout_one_exposure(
         "isr_run": t1 - t0,
         "bkg_run": t2 - t1,
         "diam_run": t3 - t2,
-        "blind_detect_run": t4 - t3,
+        "detect_run": t4 - t3,
         "wcs_refit_run": t5 - t4,
         "catalog_select_run": t6 - t5,
         "stamp_cut_run": t7 - t6,
@@ -471,7 +471,7 @@ def _dead_cutout_result(det_name: str, reason: str) -> dict:
         "isr_run": float("nan"),
         "bkg_run": float("nan"),
         "diam_run": float("nan"),
-        "blind_detect_run": float("nan"),
+        "detect_run": float("nan"),
         "wcs_refit_run": float("nan"),
         "catalog_select_run": float("nan"),
         "stamp_cut_run": float("nan"),
