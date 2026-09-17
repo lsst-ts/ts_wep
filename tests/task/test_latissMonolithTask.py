@@ -35,6 +35,7 @@ against:
 import os
 import types
 import unittest
+from typing import Any
 
 import astropy.units as u
 import numpy as np
@@ -44,7 +45,10 @@ import lsst.afw.image as afwImage
 import lsst.pipe.base as pipeBase
 import lsst.utils.tests
 from lsst.afw.cameraGeom import Camera
+from lsst.afw.coord import Observatory
+from lsst.daf.base import DateTime
 from lsst.daf.butler import Butler
+from lsst.geom import SpherePoint, degrees
 from lsst.ts.wep.image import Image
 from lsst.ts.wep.task.estimateZernikesDanishTask import EstimateZernikesDanishTask
 from lsst.ts.wep.task.latissMonolithTask import (
@@ -281,6 +285,97 @@ class _FakeStamps(list):
     """
 
     metadata: dict = {}
+
+
+def _makeVisitInfo(exposureId: int, focusZ: float, mjd: float) -> afwImage.VisitInfo:
+    """A VisitInfo with just what ExposurePairer reads."""
+    return afwImage.VisitInfo(
+        id=exposureId,
+        focusZ=focusZ,
+        date=DateTime(mjd, DateTime.MJD, DateTime.TAI),
+        boresightRaDec=SpherePoint(10.0 * degrees, -30.0 * degrees),
+        boresightRotAngle=0.0 * degrees,
+        era=0.0 * degrees,
+        observatory=Observatory(-70.75 * degrees, -30.24 * degrees, 2650.0),
+        instrumentLabel="LATISS",
+    )
+
+
+class _FakeRef:
+    """A hashable DatasetRef stand-in with the dataId runQuantum reads."""
+
+    def __init__(self, exposure: int) -> None:
+        self.dataId = {"exposure": exposure}
+
+
+class _FakeQuantumContext:
+    """Stands in for QuantumContext: hands out pre-made objects per ref."""
+
+    def __init__(self, visit: int, values: dict) -> None:
+        self.quantum = types.SimpleNamespace(dataId={"visit": visit})
+        self._values = values
+        self.puts: dict = {}
+
+    def get(self, refs):  # noqa: ANN001
+        if isinstance(refs, list):
+            return [self._values[r] for r in refs]
+        return self._values[refs]
+
+    def put(self, value, ref) -> None:  # noqa: ANN001
+        self.puts[ref] = value
+
+
+class TestLatissMonolithTaskRunQuantum(lsst.utils.tests.TestCase):
+    """runQuantum's pairing bookkeeping, with the fit itself stubbed out."""
+
+    def _runQuantum(self, quantumVisit: int, focusZ: dict) -> list[str]:
+        """Run runQuantum on two fake raws and return the WARNING messages."""
+        config = LatissMonolithTaskConfig()
+        config.doSaveStamps = False
+        task = LatissMonolithTask(config=config)
+
+        rawRefs = {e: _FakeRef(e) for e in focusZ}
+        # DeferredDatasetHandle stand-ins: only visitInfo is read before run().
+        handles = {}
+        for i, (e, fz) in enumerate(sorted(focusZ.items())):
+            vi = _makeVisitInfo(e, fz, 60000.0 + i * 40.0 / 86400.0)
+            handles[e] = types.SimpleNamespace(get=lambda component=None, vi=vi, e=e: vi if component else e)
+        values: dict[Any, Any] = {rawRefs[e]: handles[e] for e in focusZ}
+        cameraRef = _FakeRef(-1)
+        values[cameraRef] = "camera"
+        butlerQC = _FakeQuantumContext(quantumVisit, values)
+        inputRefs = types.SimpleNamespace(camera=cameraRef, raws=list(rawRefs.values()))
+        outputRefs = types.SimpleNamespace(zernikes="zernikesRef")
+
+        seen = {}
+
+        def fakeRun(rawExtra, rawIntra, camera, doIsr=True, isrCalibs=None):  # noqa: ANN001
+            seen["extra"], seen["intra"] = rawExtra, rawIntra
+            return pipeBase.Struct(zernikes="table", wfEstInfo={})
+
+        task.run = fakeRun  # type: ignore[method-assign]
+        with self.assertLogs(task.log.name, level="INFO") as logs:
+            task.runQuantum(butlerQC, inputRefs, outputRefs)  # type: ignore[arg-type]
+        self.seen = seen
+        self.puts = butlerQC.puts
+        return [m for m in logs.output if m.startswith("WARNING:")]
+
+    def testPairingFollowsFocusZ(self) -> None:
+        """AuxTel extra-focal has the SMALLER focusZ; quantum visit agrees."""
+        warnings = self._runQuantum(quantumVisit=18, focusZ={17: +0.8, 18: -0.8})
+        self.assertEqual((self.seen["extra"], self.seen["intra"]), (18, 17))
+        self.assertEqual(self.puts, {"zernikesRef": "table"})
+        self.assertFalse([w for w in warnings if "labelled extra-focal" in w], warnings)
+
+    def testWarnsWhenHeaderLabelDisagreesWithFocusZ(self) -> None:
+        """Header says 18 is extra but focusZ says 17: fit by focusZ, and warn."""
+        warnings = self._runQuantum(quantumVisit=18, focusZ={17: -0.8, 18: +0.8})
+        self.assertEqual((self.seen["extra"], self.seen["intra"]), (17, 18))
+        # Still written under the quantum's visit, and loudly.
+        self.assertEqual(self.puts, {"zernikesRef": "table"})
+        mismatch = [w for w in warnings if "labelled extra-focal" in w]
+        self.assertEqual(len(mismatch), 1, warnings)
+        self.assertIn("exposure 17 is extra-focal and 18 is intra-focal", mismatch[0])
 
 
 @pytest.mark.skipif(
