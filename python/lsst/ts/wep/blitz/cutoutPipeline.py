@@ -51,34 +51,34 @@ from .utils import (
 _log = logging.getLogger(__name__)
 
 
-def _build_afw_source_cat(blitzDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
+def _build_afw_source_cat(blitz_detections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
     """Convert blitz-detect QTable into a minimal afwTable.SourceCatalog
     suitable for AstrometryTask.run().
     """
-    sourceSchema = afwTable.SourceTable.makeMinimalSchema()
-    measBase.SingleFrameMeasurementTask(schema=sourceSchema)
+    schema = afwTable.SourceTable.makeMinimalSchema()
+    measBase.SingleFrameMeasurementTask(schema=schema)
 
-    sourceCat = afwTable.SourceCatalog(sourceSchema)
-    sourceCentroidKey = afwTable.Point2DKey(sourceSchema["slot_Centroid"])
-    sourceIdKey = sourceSchema["id"].asKey()
-    sourceRAKey = sourceSchema["coord_ra"].asKey()
-    sourceDecKey = sourceSchema["coord_dec"].asKey()
+    source_cat = afwTable.SourceCatalog(schema)
+    centroid_key = afwTable.Point2DKey(schema["slot_Centroid"])
+    id_key = schema["id"].asKey()
+    ra_key = schema["coord_ra"].asKey()
+    dec_key = schema["coord_dec"].asKey()
 
     # reserve() allocates the records as one block, which is what makes the
     # finished catalog contiguous -- AstrometryTask requires that. Without it,
     # addNew() spills into further blocks past ~100 records and the catalog
     # would need an explicit copy(deep=True) to compact it.
-    sourceCat.reserve(len(blitzDetections))
-    for i, row in enumerate(blitzDetections):
+    source_cat.reserve(len(blitz_detections))
+    for i, row in enumerate(blitz_detections):
         x, y = row["centroid_x"], row["centroid_y"]
         sky = wcs.pixelToSky(x, y)
-        src = sourceCat.addNew()
-        src.set(sourceIdKey, i)
-        src.set(sourceRAKey, sky.getRa())
-        src.set(sourceDecKey, sky.getDec())
-        src.set(sourceCentroidKey, lsst.geom.Point2D(x, y))
+        src = source_cat.addNew()
+        src.set(id_key, i)
+        src.set(ra_key, sky.getRa())
+        src.set(dec_key, sky.getDec())
+        src.set(centroid_key, lsst.geom.Point2D(x, y))
 
-    return sourceCat
+    return source_cat
 
 
 def _cutout_one_exposure(
@@ -150,7 +150,7 @@ def _cutout_one_exposure(
     # --- ISR ---
     t0 = time.perf_counter()
     isr_task = _COW_STORE.isr_task
-    postIsr = isr_task.run(
+    post_isr = isr_task.run(
         raw,
         ptc=calibs.ptc,
         flat=calibs.flat,
@@ -162,25 +162,25 @@ def _cutout_one_exposure(
     # CCS stamp rotation without loading the camera model. Read here because
     # both returns below carry it, including the one that bails out before
     # selection.
-    n_quarter = postIsr.getDetector().getOrientation().getNQuarter()
+    n_quarter = post_isr.getDetector().getOrientation().getNQuarter()
 
     # --- background subtraction ---
     t1 = time.perf_counter()
     bkg_task = _COW_STORE.bkg_task
-    bkg_task.run(exposure=postIsr)
+    bkg_task.run(exposure=post_isr)
 
     # --- detect diameter ---
     t2 = time.perf_counter()
     diam_task = _COW_STORE.diam_task
-    donutDiameter = diam_task.run(postIsr).diameter
-    donut_radius = _resolve_donut_radius(donutDiameter / 2 if donutDiameter is not None else None)
+    donut_diameter = diam_task.run(post_isr).diameter
+    donut_radius = _resolve_donut_radius(donut_diameter / 2 if donut_diameter is not None else None)
 
     # --- blitz detection ---
     t3 = time.perf_counter()
     detect_task = _COW_STORE.detect_task
-    blitzDetections = detect_task.run(postIsr, donut_radius=donut_radius).detections
+    blitz_detections = detect_task.run(post_isr, donut_radius=donut_radius).detections
 
-    if len(blitzDetections) == 0:
+    if len(blitz_detections) == 0:
         return {
             "det_name": det_name,
             "catalog": [],
@@ -209,19 +209,19 @@ def _cutout_one_exposure(
     # --- astrometry ---
     t4 = time.perf_counter()
     astrom_task = _COW_STORE.astrom_task
-    detector = postIsr.getDetector()
+    detector = post_isr.getDetector()
     scatter_arcsec = None
     wcs = None
     wcs_err = ""
     try:
         astrom_result = astrom_task.solve(
-            exposure=postIsr,
-            sourceCat=_build_afw_source_cat(blitzDetections, postIsr.getWcs()),
+            exposure=post_isr,
+            sourceCat=_build_afw_source_cat(blitz_detections, post_isr.getWcs()),
             load_result=refcat_load_result,
         )
         scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
         if scatter_arcsec < max_fit_scatter:
-            wcs = postIsr.getWcs()
+            wcs = post_isr.getWcs()
         else:
             wcs_err = f'scatter {scatter_arcsec:.2f}" >= {max_fit_scatter}"'
     except Exception as exc:
@@ -238,7 +238,7 @@ def _cutout_one_exposure(
 
     # --- catalog selection ---
     t5 = time.perf_counter()
-    selections = blitzDetections
+    selections = blitz_detections
     refcat = None
     cat_err = ""
     selection_source = None
@@ -271,7 +271,7 @@ def _cutout_one_exposure(
                 refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
                 refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
             result = select_task.run(refcat, detector, photo_ref_filter)
-            selections = result.sourceCat
+            selections = result.source_cat
             selection_source = "refcat"
         except Exception as exc:
             cat_err = str(exc)
@@ -283,16 +283,16 @@ def _cutout_one_exposure(
         # Every table reaching `CutDonutStampsTask` carries the
         # refcat-provenance columns, so that a blitz-path donut is a row with
         # NaN values rather than a row the consumer has to test the schema for.
-        # Both branches below derive `selections` from `blitzDetections` -- the
-        # selector returns a row subset, and the failure branch an empty slice
-        # -- so filling them here covers both.  Mutating in place is safe:
-        # `blitzDetections` is built fresh per detector, and this path is the
-        # only one that reads it again.
+        # Both branches below derive `selections` from `blitz_detections` --
+        # the selector returns a row subset, and the failure branch an empty
+        # slice -- so filling them here covers both.  Mutating in place is
+        # safe: `blitz_detections` is built fresh per detector, and this path
+        # is the only one that reads it again.
         for column in _REFCAT_COLUMNS:
-            blitzDetections[column] = np.full(len(blitzDetections), np.nan)
+            blitz_detections[column] = np.full(len(blitz_detections), np.nan)
         try:
-            result = select_task.run(blitzDetections, detector, "")
-            selections = result.sourceCat
+            result = select_task.run(blitz_detections, detector, "")
+            selections = result.source_cat
             selection_source = "blitz_selected"
         except Exception as exc:
             cat_err = cat_err or str(exc)
@@ -301,7 +301,7 @@ def _cutout_one_exposure(
                 det_name,
                 exc,
             )
-            selections = blitzDetections[:0]  # empty; flows through to empty catalog
+            selections = blitz_detections[:0]  # empty; flows through to empty catalog
             selection_source = "blitz_failed"
     logging.getLogger(__name__).info(
         "Donut selection path: %s (%d sources)", selection_source, len(selections)
@@ -311,12 +311,12 @@ def _cutout_one_exposure(
     t6 = time.perf_counter()
     measure_task = _COW_STORE.measure_task
     candidates = measure_task.run(
-        postIsr,
+        post_isr,
         selections,
         donut_radius=donut_radius,
     ).measurements
     cut_task = _COW_STORE.cut_task
-    cut_result = cut_task.run(postIsr, candidates, refcat, donut_radius=donut_radius)
+    cut_result = cut_task.run(post_isr, candidates, refcat, donut_radius=donut_radius)
 
     t7 = time.perf_counter()
 
@@ -325,12 +325,12 @@ def _cutout_one_exposure(
     # from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 
     # fig, ax = plt.subplots(figsize=(10, 5))
-    # vmin, vmax = np.nanquantile(postIsr.image.array, [0.01, 0.99])
-    # ax.imshow(postIsr.image.array, origin="lower", cmap="gray", vmin=vmin, vmax=vmax)  # noqa: W505
-    # ax.set_xlim(0, postIsr.image.array.shape[1])
-    # ax.set_ylim(0, postIsr.image.array.shape[0])
+    # vmin, vmax = np.nanquantile(post_isr.image.array, [0.01, 0.99])
+    # ax.imshow(post_isr.image.array, origin="lower", cmap="gray", vmin=vmin, vmax=vmax)  # noqa: W505
+    # ax.set_xlim(0, post_isr.image.array.shape[1])
+    # ax.set_ylim(0, post_isr.image.array.shape[0])
     # ax.scatter(refcat["centroid_x"], refcat["centroid_y"], s=20, edgecolor="cyan", facecolor="none")  # noqa: E501, W505
-    # ax.scatter(blitzDetections["centroid_x"], blitzDetections["centroid_y"], s=50, edgecolor="blue", facecolor="none")  # noqa: E501, W505
+    # ax.scatter(blitz_detections["centroid_x"], blitz_detections["centroid_y"], s=50, edgecolor="blue", facecolor="none")  # noqa: E501, W505
     # ax.scatter(selections["centroid_x"], selections["centroid_y"], s=80, edgecolor="red", facecolor="none")  # noqa: E501, W505
     # ax.scatter(
     #     [d.x_det for d in cut_result.donuts],
@@ -364,9 +364,9 @@ def _cutout_one_exposure(
     # y = np.deg2rad(select_task.config.maxFieldDist) * np.sin(th)
     # xyPix = mapping.applyForward(np.vstack([x, y]))
     # keep = xyPix[0] >= 0
-    # keep &= xyPix[0] < postIsr.image.array.shape[1]
+    # keep &= xyPix[0] < post_isr.image.array.shape[1]
     # keep &= xyPix[1] >= 0
-    # keep &= xyPix[1] < postIsr.image.array.shape[0]
+    # keep &= xyPix[1] < post_isr.image.array.shape[0]
     # xyPix = xyPix[:, keep]
     # radius = float(np.mean(np.hypot(xyPix[0] - cx, xyPix[1] - cy)))
     # big_radius = radius * 2

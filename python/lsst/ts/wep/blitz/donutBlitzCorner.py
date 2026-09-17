@@ -569,7 +569,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             Butler ``group`` of the corner exposure, for output meta.
         instrument : str, optional
             Butler ``instrument`` dimension, for output meta.  Taken from the
-            dataId rather than ``visitInfo.instrumentLabel`` because the
+            dataId rather than ``visit_info.instrumentLabel`` because the
             dimension is authoritative where the header field can be blank.
         """
         self.log.info(
@@ -584,33 +584,33 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         )
         t_run0 = time.perf_counter()
 
-        detNameById = {}
-        rawByName = {}
+        det_name_by_id = {}
+        raw_by_name = {}
         for exp in raws:
             det = exp.getDetector()
-            detNameById[det.getId()] = det.getName()
-            rawByName[det.getName()] = exp
-        ptcByName = {p._detectorName: p for p in ptc}
-        flatByName = {f.getDetector().getName(): f for f in flat}
-        linearizerByName = {lin._detectorName: lin for lin in linearizer}
-        crosstalkByName = {ct._detectorName: ct for ct in crosstalk}
+            det_name_by_id[det.getId()] = det.getName()
+            raw_by_name[det.getName()] = exp
+        ptc_by_name = {p._detectorName: p for p in ptc}
+        flat_by_name = {f.getDetector().getName(): f for f in flat}
+        linearizer_by_name = {lin._detectorName: lin for lin in linearizer}
+        crosstalk_by_name = {ct._detectorName: ct for ct in crosstalk}
 
         # Process whichever corner raws arrived. A partial set is normal
         # (dropped image, per-detector butler gap) and there is no reason to
         # throw away the corners that did arrive, so this is a warning rather
-        # than an abort. `detNames` -- not CORNER_DET_NAMES -- drives
+        # than an abort. `det_names` -- not CORNER_DET_NAMES -- drives
         # everything downstream.
-        unexpected = rawByName.keys() - CORNER_DET_NAMES
+        unexpected = raw_by_name.keys() - CORNER_DET_NAMES
         if unexpected:
             raise RuntimeError(f"Non-corner detector raws supplied: {sorted(unexpected)}")
-        if not rawByName:
+        if not raw_by_name:
             raise RuntimeError("No corner detector raws supplied.")
-        detNames = sorted(rawByName)
-        missing = CORNER_DET_NAMES - rawByName.keys()
+        det_names = sorted(raw_by_name)
+        missing = CORNER_DET_NAMES - raw_by_name.keys()
         if missing:
             self.log.warning(
                 "Processing %d/%d corner detectors; no raw for: %s",
-                len(detNames),
+                len(det_names),
                 len(CORNER_DET_NAMES),
                 sorted(missing),
             )
@@ -620,22 +620,22 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         else:
             self.log.warning("No intrinsic Zernike calibrations provided.")
         self.intrinsicZernikes = list(intrinsic_zernikes) if intrinsic_zernikes else []
-        # detNameById only covers the raws present, so a calibration for a
+        # det_name_by_id only covers the raws present, so a calibration for a
         # detector we are not processing is dropped rather than raising.
         # runQuantum already filters these, but run() is also called directly.
-        intrinsicZernikesByName = {}
+        intrinsic_zernikes_by_name = {}
         for iz in self.intrinsicZernikes:
             iz_det_id = iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]
-            iz_det_name = detNameById.get(iz_det_id)
+            iz_det_name = det_name_by_id.get(iz_det_id)
             if iz_det_name is None:
                 self.log.debug(
                     "Ignoring intrinsic Zernike calibration for detector %s: no raw.",
                     iz_det_id,
                 )
                 continue
-            intrinsicZernikesByName[iz_det_name] = iz
+            intrinsic_zernikes_by_name[iz_det_name] = iz
 
-        band = next(iter(rawByName.values())).filter.bandLabel
+        band = next(iter(raw_by_name.values())).filter.bandLabel
         if self.config.photoRefFilter is not None:
             photo_filter_name = self.config.photoRefFilter
         else:
@@ -654,7 +654,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
 
         t_refcat0 = time.perf_counter()
         det_refcats: dict = {}
-        for name, raw in rawByName.items():
+        for name, raw in raw_by_name.items():
             raw_wcs = raw.getWcs()
             raw_bbox = raw.getBBox()
             raw_epoch = raw.getInfo().getVisitInfo().date.toAstropy()
@@ -681,14 +681,14 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         self.astrometry.setRefObjLoader(astrom_stub_loader)
 
         corner_detectors = {}
-        for name in detNames:
+        for name in det_names:
             missing_calib = [
                 k
                 for k, d in [
-                    ("ptc", ptcByName),
-                    ("flat", flatByName),
-                    ("linearizer", linearizerByName),
-                    ("crosstalk", crosstalkByName),
+                    ("ptc", ptc_by_name),
+                    ("flat", flat_by_name),
+                    ("linearizer", linearizer_by_name),
+                    ("crosstalk", crosstalk_by_name),
                 ]
                 if name not in d
             ]
@@ -697,19 +697,19 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             # Materialized, not deferred: corner mode does its butler I/O in
             # the parent, so the workers use these objects directly.
             corner_detectors[name] = CornerDetectorInputs(
-                raw=rawByName[name],
+                raw=raw_by_name[name],
                 calibs=IsrCalibs(
-                    ptc=ptcByName[name],
-                    flat=flatByName[name],
-                    linearizer=linearizerByName[name],
-                    crosstalk=crosstalkByName[name],
+                    ptc=ptc_by_name[name],
+                    flat=flat_by_name[name],
+                    linearizer=linearizer_by_name[name],
+                    crosstalk=crosstalk_by_name[name],
                 ),
             )
 
-        visitInfo = next(iter(rawByName.values())).getInfo().getVisitInfo()
-        boresight_rot_rad = visitInfo.boresightRotAngle.asRadians()
-        boresight_par_rad = visitInfo.boresightParAngle.asRadians()
-        boresight_alt_rad = visitInfo.boresightAzAlt.getLatitude().asRadians()
+        visit_info = next(iter(raw_by_name.values())).getInfo().getVisitInfo()
+        boresight_rot_rad = visit_info.boresightRotAngle.asRadians()
+        boresight_par_rad = visit_info.boresightParAngle.asRadians()
+        boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
         # rotTelPos, wrapped to (-pi, pi]. Always computed: the CCS -> OCS
         # Zernike rotation in _buildCatalog needs it, whereas spider shadows
         # are opt-in.
@@ -741,7 +741,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             )
         )
 
-        cutout_args = detNames
+        cutout_args = det_names
 
         self.log.info(
             "Running cutout workers on %d corner detectors with %d core(s)",
@@ -831,7 +831,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         # the donut passed selection, and rejected donuts get catalog rows too.
         # Full-array mode already annotates both lists.
         for r in results:
-            calib = intrinsicZernikesByName.get(r["det_name"])
+            calib = intrinsic_zernikes_by_name.get(r["det_name"])
             for d in r["catalog"] + r.get("rejected_catalog", []):
                 if calib is not None:
                     d.intrinsic_zk = np.squeeze(
@@ -872,10 +872,10 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                     n_workers,
                     unitTimeout=self.config.unitTimeout,
                 )
-            nZk = len(self.wavefrontFit.config.nollIndices)
+            n_zk = len(self.wavefrontFit.config.nollIndices)
             for group, reason in wf_deaths:
                 self.log.error("WF worker for group %s died: %s", group.group_id, reason)
-                wf_results.append(_dead_wf_result(group, reason, nZk))
+                wf_results.append(_dead_wf_result(group, reason, n_zk))
         t_wf1 = time.perf_counter()
         n_ok = sum(r.get("success") for r in wf_results)
         elapsed_fits = [r["fit_info"].get("elapsed", float("nan")) for r in wf_results]
@@ -926,9 +926,9 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             rtp_rad=rtp_rad,
             mode="corner",
             # Corner mode has one exposure holding both sides of focus, so the
-            # single visitInfo read above for the boresight angles is also the
+            # single visit_info read above for the boresight angles is also the
             # observation record for the whole table.
-            visit_info=visitInfo,
+            visit_info=visit_info,
             instrument=instrument,
         )
 
