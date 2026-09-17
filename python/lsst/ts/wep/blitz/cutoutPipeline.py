@@ -86,9 +86,9 @@ def _cutout_one_exposure(
     calibs: IsrCalibs,
     refcat_load_result,
     det_name: str,
-    maxFitScatter: float,
-    astromRefFilter: str,
-    photoRefFilter: str,
+    max_fit_scatter: float,
+    astrom_ref_filter: str,
+    photo_ref_filter: str,
 ) -> dict:
     """Run ISR, background subtraction, blitz detection, WCS refit, catalog
     selection, and stamp cutting on one exposure of one detector.
@@ -116,12 +116,12 @@ def _cutout_one_exposure(
         refit and refcat-based selection.
     det_name : str
         Detector name, for logging and the returned record.
-    maxFitScatter : float
+    max_fit_scatter : float
         Maximum acceptable astrometric scatter, in arcseconds, for the refit
         WCS to be used.
-    astromRefFilter : str
+    astrom_ref_filter : str
         Reference catalog flux column prefix used for astrometry.
-    photoRefFilter : str
+    photo_ref_filter : str
         Reference catalog flux column prefix used for donut selection.
 
     Returns
@@ -173,12 +173,12 @@ def _cutout_one_exposure(
     t2 = time.perf_counter()
     diam_task = _COW_STORE.diam_task
     donutDiameter = diam_task.run(postIsr).diameter
-    donutRadius = _resolve_donut_radius(donutDiameter / 2 if donutDiameter is not None else None)
+    donut_radius = _resolve_donut_radius(donutDiameter / 2 if donutDiameter is not None else None)
 
     # --- blitz detection ---
     t3 = time.perf_counter()
     detect_task = _COW_STORE.detect_task
-    blitzDetections = detect_task.run(postIsr, donutRadius=donutRadius).detections
+    blitzDetections = detect_task.run(postIsr, donut_radius=donut_radius).detections
 
     if len(blitzDetections) == 0:
         return {
@@ -220,10 +220,10 @@ def _cutout_one_exposure(
             load_result=refcat_load_result,
         )
         scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
-        if scatter_arcsec < maxFitScatter:
+        if scatter_arcsec < max_fit_scatter:
             wcs = postIsr.getWcs()
         else:
-            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {maxFitScatter}"'
+            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {max_fit_scatter}"'
     except Exception as exc:
         wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
         logging.getLogger(__name__).warning(
@@ -256,8 +256,8 @@ def _cutout_one_exposure(
                 "coord_dec",
                 "centroid_x",
                 "centroid_y",
-                f"{photoRefFilter}_flux",
-                f"{astromRefFilter}_flux",
+                f"{photo_ref_filter}_flux",
+                f"{astrom_ref_filter}_flux",
             ]
             refcat = QTable({k: np.array(refcat[k]) for k in keys})
             # The refcat source id is the donut id from here on: it is what
@@ -265,12 +265,12 @@ def _cutout_one_exposure(
             # refcat path (blitz detection supplies its own 1..N counter under
             # the same name).
             refcat.rename_column("id", "donut_id")
-            refcat["photo_flux"] = refcat[f"{photoRefFilter}_flux"]
-            refcat["astrom_flux"] = refcat[f"{astromRefFilter}_flux"]
+            refcat["photo_flux"] = refcat[f"{photo_ref_filter}_flux"]
+            refcat["astrom_flux"] = refcat[f"{astrom_ref_filter}_flux"]
             with np.errstate(invalid="ignore", divide="ignore"):
                 refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
                 refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
-            result = select_task.run(refcat, detector, photoRefFilter)
+            result = select_task.run(refcat, detector, photo_ref_filter)
             selections = result.sourceCat
             selection_source = "refcat"
         except Exception as exc:
@@ -313,10 +313,10 @@ def _cutout_one_exposure(
     candidates = measure_task.run(
         postIsr,
         selections,
-        donutRadius=donutRadius,
+        donut_radius=donut_radius,
     ).measurements
     cut_task = _COW_STORE.cut_task
-    cut_result = cut_task.run(postIsr, candidates, refcat, donutRadius=donutRadius)
+    cut_result = cut_task.run(postIsr, candidates, refcat, donut_radius=donut_radius)
 
     t7 = time.perf_counter()
 
@@ -430,9 +430,9 @@ def _cutout_corner_detector(args: tuple) -> dict:
         calibs=entry.calibs,
         refcat_load_result=_COW_STORE.det_refcats.get(det_name),
         det_name=det_name,
-        maxFitScatter=_COW_STORE.max_fit_scatter,
-        astromRefFilter=_COW_STORE.astrom_ref_filter,
-        photoRefFilter=_COW_STORE.photo_ref_filter,
+        max_fit_scatter=_COW_STORE.max_fit_scatter,
+        astrom_ref_filter=_COW_STORE.astrom_ref_filter,
+        photo_ref_filter=_COW_STORE.photo_ref_filter,
     )
     result["dispatch_to_arrival"] = t_arrival - t_dispatch
     return result

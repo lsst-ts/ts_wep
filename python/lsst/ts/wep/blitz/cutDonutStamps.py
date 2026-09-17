@@ -47,7 +47,7 @@ class CutDonutStampsConfig(pexConfig.Config):
             "for binnings of 1 through 7 (167/83/55/41/33/27/23). The binning "
             "stage forces the result to be odd if needed. Must also be large "
             "enough to contain the main photometric annulus: "
-            "stampSize/2 >= donutRadius * (1 + apertureMarginFrac)."
+            "stampSize/2 >= donut_radius * (1 + apertureMarginFrac)."
         ),
         dtype=int,
         default=167,
@@ -108,7 +108,7 @@ class CutDonutStampsTask(pipeBase.Task):
         exposure: Exposure,
         measurements: QTable,
         refcat: QTable | None,
-        donutRadius: float | None = None,
+        donut_radius: float | None = None,
     ) -> pipeBase.Struct:
         """Cut stamps and split accepted vs. quality-rejected donuts.
 
@@ -132,7 +132,7 @@ class CutDonutStampsTask(pipeBase.Task):
             ``photo_mag``, ``astrom_mag``, or ``None`` in the blitz-detection
             fallback. Supplies the nearby-source lists; ``donut_id`` is what
             excludes each donut from its own neighbor list.
-        donutRadius : float or None, optional
+        donut_radius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if
             unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
 
@@ -145,8 +145,8 @@ class CutDonutStampsTask(pipeBase.Task):
                 Quality-rejected donuts, brightest-first, at most
                 ``maxRejectDonuts``.
         """
-        if donutRadius is None:
-            donutRadius = _INSTRUMENT.donutRadius
+        if donut_radius is None:
+            donut_radius = _INSTRUMENT.donutRadius
 
         detector = exposure.getDetector()
         band = exposure.filter.bandLabel
@@ -251,7 +251,7 @@ class CutDonutStampsTask(pipeBase.Task):
                 inner_frac=row["inner_frac"],
                 outer_frac=row["outer_frac"],
                 outer_sector_minmax_frac=row["outer_sector_minmax_frac"],
-                donut_radius=donutRadius,
+                donut_radius=donut_radius,
                 snr=row["snr"],
                 bkg=row["bkg"],
                 bkg_std=row["bkg_std"],
