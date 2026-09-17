@@ -1,0 +1,7 @@
+Added ``LatissMonolithTask``, a self-contained LATISS wavefront estimation task that runs ``IsrTaskLSST``, ``QuickFrameMeasurementTask``, ``CutOutDonutsScienceSensorTask`` and ``EstimateZernikesDanishTask`` in a single quantum per CWFS pair, keyed on the extra-focal visit. The intra-focal raw is attached to that quantum at graph-build time by ``adjust_all_quanta``, so a data query naming both exposures of the pair is all that is needed.
+
+LATISS alignment sequence utilizes one bright donut per exposure near the boresight, which requires custom settings for ts_wep; the Zernike fit uses Danish. 
+
+A LATISS-specific step before the fit is peak normalization of the stamps, since Danish's flux and sky-level parameters are scale dependent.
+
+The task exposes the Danish reduced chi-square, fitted ``fwhm``, ``nfev`` and ``fit_success`` as output columns, with an optional ``maxChiSquare`` cut, since with a single pair per visit there is nothing to sigma-clip against.
