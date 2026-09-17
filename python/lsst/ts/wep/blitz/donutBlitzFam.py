@@ -528,6 +528,25 @@ class DonutBlitzFamConfig(
         dtype=bool,
         default=False,
     )
+    unitTimeout: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Seconds one detector may run before its worker is killed and the "
+            "detector recorded as lost, so a single pathological detector "
+            "costs itself rather than the quantum.  Much larger than the "
+            "corner-mode equivalent because the per-detector work is: the "
+            "slowest observed run averaged ~69s per wave (620s over 189 "
+            "detectors, 21 workers), and a crowded detector or a "
+            "wfEstimationMode pooling more donuts per fit is legitimately "
+            "slower still, so tuning this down toward nominal would drop "
+            "healthy work.  One timed-out detector adds at most this to the "
+            "pool and so stays well inside hangTimeout; a run in which every "
+            "detector times out trips hangTimeout instead, which is the right "
+            "outcome for a systemic failure.  None waits indefinitely."
+        ),
+        dtype=float,
+        default=300.0,
+        optional=True,
+    )
     hangTimeout: pexConfig.Field = pexConfig.Field(
         doc=(
             "Seconds the detector pool may run before the hang watchdog dumps "
@@ -537,7 +556,10 @@ class DonutBlitzFamConfig(
             "(max 620s over 189 detectors, 21 workers on a Torino node).  "
             "Raise it for a slower configuration -- fewer cores, or a "
             "wfEstimationMode pooling more donuts per fit -- since tripping "
-            "it kills healthy work."
+            "it kills healthy work.  A backstop rather than the first line of "
+            "defence: unitTimeout bounds a single slow detector and names it, "
+            "which this cannot do from a side thread that has no idea which "
+            "detector is late."
         ),
         dtype=float,
         default=1800.0,
@@ -1039,6 +1061,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                     [(d, t_dispatch) for d in det_ids],
                     n_workers,
                     initializer=_fam_pool_initializer,
+                    unitTimeout=self.config.unitTimeout,
                 )
             for unit, reason in deaths:
                 self.log.error("FAM worker for detector %s died: %s", unit[0], reason)
