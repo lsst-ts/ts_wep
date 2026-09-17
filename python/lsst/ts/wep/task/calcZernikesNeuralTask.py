@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 import os
+import time
 from copy import deepcopy
 from typing import Any, Sequence
 
@@ -331,6 +332,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         The default excludes Z1-Z3 (piston, tip, tilt) as these are typically
         not measured in wavefront sensing.
         """
+        # Task construction happens before runQuantum, so it is invisible to
+        # the timers there; on TARTS it is dominated by the torch import and
+        # loading the model weights off disk, which is worth reporting.
+        initStart = time.perf_counter()
         super().__init__(**kwargs)
 
         # Type annotation for mypy to understand the config structure
@@ -340,20 +345,34 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.nollIndices = self.config.nollIndices
         self.log.debug("Configured Noll indices: %s", self.nollIndices)
 
-        # Deferred import of TARTS to handle cases where it's not in the build
+        # Deferred import of TARTS to handle cases where it's not in the build.
+        # This pulls in torch, so it is slow on the first quantum in a process
+        # and near-free afterwards once sys.modules has it cached.
+        importStart = time.perf_counter()
         from tarts import NeuralActiveOpticsSys
 
+        importSec = time.perf_counter() - importStart
+        self.log.info("Timing: tarts import took %.3f s", importSec)
+
         # TARTS system handles None paths by creating new models with random
-        # weights
+        # weights. Optional model paths must stay None (not expandvars) so
+        # tests can use random weights without PathLike errors.
+        def _expandOptionalPath(path: str | None) -> str | None:
+            return os.path.expandvars(path) if path is not None else None
+
+        # Reads the model weights off disk on every task construction, i.e.
+        # once per quantum -- this does not benefit from process warm-up the
+        # way the import above does.
+        modelStart = time.perf_counter()
         self.tarts = NeuralActiveOpticsSys(
             os.path.expandvars(self.config.datasetParamPath),
-            os.path.expandvars(self.config.wavenetPath),
-            os.path.expandvars(self.config.alignetPath),
-            os.path.expandvars(self.config.aggregatornetPath),
-            ood_model_path=(
-                os.path.expandvars(self.config.oodModelPath) if self.config.oodModelPath is not None else None
-            ),
+            _expandOptionalPath(self.config.wavenetPath),
+            _expandOptionalPath(self.config.alignetPath),
+            _expandOptionalPath(self.config.aggregatornetPath),
+            ood_model_path=_expandOptionalPath(self.config.oodModelPath),
         )
+        modelSec = time.perf_counter() - modelStart
+        self.log.info("Timing: TARTS model loading took %.3f s", modelSec)
         if self.config.oodModelPath is not None:
             self.log.info(
                 "OOD model enabled; path: %s",
@@ -380,6 +399,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             self.config.extraDfcDist,
         )
 
+        deviceStart = time.perf_counter()
         if self.device == "cpu":
             self.tarts = self.tarts.cpu()
 
@@ -395,6 +415,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         else:
             self.tarts.to("cuda")
             self.log.debug("Moved models to CUDA")
+        deviceSec = time.perf_counter() - deviceStart
+        self.log.info("Timing: model device placement took %.3f s (device='%s')", deviceSec, self.device)
 
         self.log.debug("TARTS crop size: %s", self.cropSize)
 
@@ -403,6 +425,15 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
 
         # Initialize cache for per-donut OOD scores
         self._lastOodScores: list[float] = []
+
+        self.log.info(
+            "Timing TOTAL for calcZernikesNeuralTask.__init__ took %.3f s "
+            "(import=%.3f, models=%.3f, device=%.3f)",
+            time.perf_counter() - initStart,
+            importSec,
+            modelSec,
+            deviceSec,
+        )
 
     def validate(self) -> None:
         """Validate configuration parameters for the neural Zernike task.
@@ -822,7 +853,10 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             emptyTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
             # Add required metadata for empty table
             emptyTable.meta["detector"] = UNKNOWN_STRING
-            emptyTable.meta["camera"] = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
+            if exposure.metadata.exists("LSST BUTLER DATAID INSTRUMENT"):
+                emptyTable.meta["camera"] = exposure.metadata["LSST BUTLER DATAID INSTRUMENT"]
+            else:
+                emptyTable.meta["camera"] = UNKNOWN_STRING
             emptyTable.meta["band"] = UNKNOWN_STRING
             try:
                 emptyTable = addVisitInfoToCatTable(exposure, emptyTable)
@@ -1048,8 +1082,14 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
           aggregation, useful for analyzing individual donut contributions
         """
         self.log.debug("Calculating Zernikes from exposure; defocalType='%s'", defocalType)
+        stageStart = time.perf_counter()
         with torch.no_grad():
             aggregatedZernikes = self.tarts.deploy_run(exposure)
+        self.log.info(
+            "Timing: tarts.deploy_run took %.3f s (defocalType='%s')",
+            time.perf_counter() - stageStart,
+            defocalType,
+        )
         # Convert PyTorch tensor to numpy array
         aggregatedZernikes = self._toNumpy(aggregatedZernikes)
         self.log.debug("TARTS Zernike coefficients prediction array shape: %s", np.shape(aggregatedZernikes))
@@ -1079,7 +1119,13 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             self.log.warning("No valid OOD scores available; using NaN placeholders")
 
         # Determine defocal type based on exposure
+        stageStart = time.perf_counter()
         donutStamps = self.createDonutStampFromTarts(exposure, croppedImageNp, defocalType, tartsInternalData)
+        self.log.info(
+            "Timing: createDonutStampFromTarts took %.3f s (%d stamp(s))",
+            time.perf_counter() - stageStart,
+            len(donutStamps),
+        )
 
         # Log number of donuts detected and processed
         self.log.info(
@@ -1135,7 +1181,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             - donutStampsNeural : astropy.table.QTable
                 Empty neural network-generated donut stamps collection.
             - zernikes : astropy.table.QTable
-                Empty Zernike coefficient table.
+                Zernike coefficient table with only the average row (NaNs),
+                matching the empty-table convention from CalcZernikesTask.
             - donutQualityTable : astropy.table.QTable
                 Either the provided quality table or an empty one.
 
@@ -1145,6 +1192,9 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         coefficients could be calculated. The quality table preserves
         information about why donuts failed, which can be useful for
         debugging.
+
+        After RSO-663, ``initZkTable()`` always includes an average row, so
+        the OOD column must have length 1 (a NaN sentinel) rather than ``[]``.
         """
         self.log.info("Producing empty results; quality table provided: %s", qualityTable is not None)
         if qualityTable is not None and len(qualityTable) > 0:
@@ -1184,7 +1234,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.stampsIntra = DonutStamps([], metadata=stampsMetadata if defocalType == "intra" else None)
         self.stampsExtra = DonutStamps([], metadata=stampsMetadata if defocalType == "extra" else None)
 
-        # Create empty Zernike table with metadata
+        # Create empty Zernike table with metadata. initZkTable() includes the
+        # average row (RSO-663), so OOD must be length-1 to match.
         emptyZkTable = self.initZkTable()
         emptyZkTable.meta = {
             "intra": {},
@@ -1195,8 +1246,8 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             "intrinsic_columns": [f"Z{j}_intrinsic" for j in self.nollIndices],
             "deviation_columns": [f"Z{j}_deviation" for j in self.nollIndices],
         }
-        # Add empty OOD score column
-        emptyZkTable["ood_score"] = []
+        emptyZkTable["used"][0] = False
+        emptyZkTable["ood_score"] = [np.nan]
 
         if exposure is None:
             emptyDonutTable = QTable({name: [] for name in EMPTY_DONUT_TABLE_COLUMNS})
@@ -1285,8 +1336,15 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         --------
         calcZernikesFromExposure : Method that processes individual exposures.
         """
+        runStart = time.perf_counter()
+        self.log.info("Starting calcZernikesNeuralTask.run")
         if exposure is None:
             self.log.info("No exposure supplied; producing empty neural Zernike outputs.")
+            totalSec = time.perf_counter() - runStart
+            self.log.info(
+                "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s (empty: no exposure)",
+                totalSec,
+            )
             return self.empty()
 
         # Check if exposure is valid
@@ -1294,15 +1352,47 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         self.log.info("Starting Zernike estimation for exposure id=%s", exposure_id)
 
         # Determine defocal type using helper function
+        stageStart = time.perf_counter()
         defocalType = self._determineDefocalType(exposure)
+        determineSec = time.perf_counter() - stageStart
+        self.log.info(
+            "Timing: _determineDefocalType took %.3f s (defocalType='%s')",
+            determineSec,
+            defocalType,
+        )
+
+        stageStart = time.perf_counter()
         aggregatedZernikes, donutStamps, zk = self.calcZernikesFromExposure(exposure, defocalType)
+        fromExposureSec = time.perf_counter() - stageStart
+        self.log.info(
+            "Timing: calcZernikesFromExposure took %.3f s (%d donut(s))",
+            fromExposureSec,
+            len(donutStamps),
+        )
         if len(donutStamps) == 0:
             self.log.info("No TARTS donut stamps were detected.")
+            totalSec = time.perf_counter() - runStart
+            self.log.info(
+                "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s "
+                "(empty: no donuts; determine=%.3f, fromExposure=%.3f)",
+                totalSec,
+                determineSec,
+                fromExposureSec,
+            )
             return self.empty(exposure=exposure, defocalType=defocalType)
         if not self._hasUsableZernikeValues(zk):
             self.log.info(
                 "TARTS returned no usable raw Zernike coefficients for %d detected donut(s); "
                 "producing empty outputs.",
+                len(donutStamps),
+            )
+            totalSec = time.perf_counter() - runStart
+            self.log.info(
+                "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s "
+                "(empty: unusable Zernikes; determine=%.3f, fromExposure=%.3f, donuts=%d)",
+                totalSec,
+                determineSec,
+                fromExposureSec,
                 len(donutStamps),
             )
             return self.empty(
@@ -1373,6 +1463,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         zkCoeffRaw = pipeBase.Struct(
             zernikes=zernikesRaw,  # 2D array of shape (numDonuts, nZernikes)
         )
+        stageStart = time.perf_counter()
         zernikesTable = self.createZkTable(zkCoeffRaw=zkCoeffRaw)
         self._updateAverageRowWithAggregatedZernikes(zernikesTable, aggregatedZernikes)
         # Add OOD scores to zernikes table as a per-donut column
@@ -1405,18 +1496,51 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         elif len(fullOodColumn) > len(zernikesTable):
             fullOodColumn = fullOodColumn[: len(zernikesTable)]
         zernikesTable["ood_score"] = fullOodColumn
+        zkTableSec = time.perf_counter() - stageStart
+        self.log.info(
+            "Timing: createZkTable+average+ood took %.3f s (%d donut(s))",
+            zkTableSec,
+            numDonuts,
+        )
 
         # Create quality table from donut stamps
+        stageStart = time.perf_counter()
         donutQualityTable = self.createDonutQualityTable(donutStamps)
+        qualitySec = time.perf_counter() - stageStart
+        self.log.info(
+            "Timing: createDonutQualityTable took %.3f s",
+            qualitySec,
+        )
 
         # Create donut table from donut stamps
+        stageStart = time.perf_counter()
         donutTable = self.createDonutTable(donutStamps, exposure, defocalType)
+        donutTableSec = time.perf_counter() - stageStart
+        self.log.info(
+            "Timing: createDonutTable took %.3f s",
+            donutTableSec,
+        )
 
         self.log.info("Estimated %d Zernike terms for exposure", zernikesAvg.shape[1])
         self.log.debug(
             "ZernikesAvg (first 5): %s", np.array2string(zernikesAvg[0, :5], precision=self.LOG_PRECISION)
         )
         self.log.info("Finished Zernike estimation; table rows: %d", len(zernikesTable))
+        totalSec = time.perf_counter() - runStart
+        self.log.info(
+            "Timing TOTAL for calcZernikesNeuralTask.run took %.3f s "
+            "(exposure=%s, defocal='%s', donuts=%d; "
+            "determine=%.3f, fromExposure=%.3f, zkTable=%.3f, quality=%.3f, donutTable=%.3f)",
+            totalSec,
+            exposure_id,
+            defocalType,
+            numDonuts,
+            determineSec,
+            fromExposureSec,
+            zkTableSec,
+            qualitySec,
+            donutTableSec,
+        )
         return pipeBase.Struct(
             outputZernikesAvg=zernikesAvg,
             outputZernikesRaw=zernikesRaw,
