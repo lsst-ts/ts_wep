@@ -42,6 +42,7 @@ from .generateDonutCatalogUtils import *
 from .generateDonutCatalogWcsTask import *
 from .generateDonutDirectDetectTask import *
 from .generateDonutFromRefitWcsTask import *
+from .latissMonolithTask import *
 from .pairTask import *
 from .reassignCwfsCutoutsTask import *
 from .refCatalogInterface import *
