@@ -349,9 +349,13 @@ class TestLatissMonolithTaskRunQuantum(lsst.utils.tests.TestCase):
 
         seen = {}
 
-        def fakeRun(rawExtra: afwImage.Exposure, rawIntra: afwImage.Exposure,
-                    camera: Camera, doIsr:bool=True,
-                    isrCalibs: dict | None = None) -> pipeBase.Struct:
+        def fakeRun(
+            rawExtra: afwImage.Exposure,
+            rawIntra: afwImage.Exposure,
+            camera: Camera,
+            doIsr: bool = True,
+            isrCalibs: dict | None = None,
+        ) -> pipeBase.Struct:
             seen["extra"], seen["intra"] = rawExtra, rawIntra
             return pipeBase.Struct(zernikes="table", wfEstInfo={})
 
@@ -371,7 +375,7 @@ class TestLatissMonolithTaskRunQuantum(lsst.utils.tests.TestCase):
 
     def testWarnsWhenHeaderLabelDisagreesWithFocusZ(self) -> None:
         """Header says 18 is extra but focusZ says 17:
-           fit by focusZ, and warn."""
+        fit by focusZ, and warn."""
         warnings = self._runQuantum(quantumVisit=18, focusZ={17: -0.8, 18: +0.8})
         self.assertEqual((self.seen["extra"], self.seen["intra"]), (17, 18))
         # Still written under the quantum's visit, and loudly.
