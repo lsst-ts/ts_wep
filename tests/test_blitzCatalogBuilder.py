@@ -620,7 +620,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
             {
                 **_result(),
                 "visit_id": 2,
-                "selection_source": "blind_selected",
+                "selection_source": "blitz_selected",
                 "pair_path": "spatial",
             },
         ]
@@ -628,7 +628,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         det_meta = table.meta["det_meta"]
         self.assertEqual(det_meta["R00_SW0_1"]["selection_source"], "refcat")
         self.assertEqual(det_meta["R00_SW0_1"]["pair_path"], "refcat_id")
-        self.assertEqual(det_meta["R00_SW0_2"]["selection_source"], "blind_selected")
+        self.assertEqual(det_meta["R00_SW0_2"]["selection_source"], "blitz_selected")
         self.assertEqual(det_meta["R00_SW0_2"]["pair_path"], "spatial")
 
     def testDetectorOrientationIsPerDetectorNotPerRow(self) -> None:

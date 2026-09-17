@@ -194,7 +194,7 @@ class TestPairDonuts(FamPairingTestCase):
             (ix, iy), (ex, ey) = _defocused_angles(thx, thy)
             intra.append(_donut(k + 1, 1, _INTRA_OFFSETS, thx=ix, thy=iy))
             extra.append(_donut(2 - k, 2, _EXTRA_OFFSETS, thx=ex, thy=ey))
-        pairs, unmatched, path = _pair_donuts(intra, extra, 0.25, "blind_selected", "blind_selected")
+        pairs, unmatched, path = _pair_donuts(intra, extra, 0.25, "blitz_selected", "blitz_selected")
         self.assertEqual(path, "spatial")
         self.assertEqual(unmatched, [])
         self.assertEqual(len(pairs), 2)
@@ -281,7 +281,7 @@ class TestPairDonuts(FamPairingTestCase):
         (ix, iy), (ex, ey) = _defocused_angles(np.deg2rad(1.0), 0.0)
         intra = [_donut(9999, 1, _INTRA_OFFSETS, thx=ix, thy=iy)]
         extra = [_donut(1, 2, _EXTRA_OFFSETS, thx=ex, thy=ey)]
-        pairs, _, path = _pair_donuts(intra, extra, 0.25, "refcat", "blind_selected")
+        pairs, _, path = _pair_donuts(intra, extra, 0.25, "refcat", "blitz_selected")
         self.assertEqual(path, "spatial")
         self.assertEqual(len(pairs), 1)
 
