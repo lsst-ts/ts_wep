@@ -95,7 +95,7 @@ def _cutout_one_exposure(
 
     Takes its per-exposure inputs explicitly so both modes can drive it: corner
     mode has one exposure per detector and reads them from ``_COW_STORE``
-    (see `_cutoutPipeline`), while full-array mode calls this twice per
+    (see `_cutout_corner_detector`), while full-array mode calls this twice per
     detector with the intra and extra exposures of a pair.
 
     The *subtasks* are still read from the module-level ``_COW_STORE``, which
@@ -210,7 +210,6 @@ def _cutout_one_exposure(
     t4 = time.perf_counter()
     astrom_task = _COW_STORE.astrom_task
     detector = postIsr.getDetector()
-    refcat_handle = refcat_load_result
     scatter_arcsec = None
     wcs = None
     wcs_err = ""
@@ -218,7 +217,7 @@ def _cutout_one_exposure(
         astrom_result = astrom_task.solve(
             exposure=postIsr,
             sourceCat=_buildAfwSourceCat(blitzDetections, postIsr.getWcs()),
-            load_result=refcat_handle,
+            load_result=refcat_load_result,
         )
         scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
         if scatter_arcsec < maxFitScatter:
@@ -247,7 +246,7 @@ def _cutout_one_exposure(
 
     if wcs is not None:
         try:
-            refcat = refcat_handle.refCat.copy(deep=True)
+            refcat = refcat_load_result.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refcat)
             # Much quicker to just copy the keys we need than convert the whole
             # table to astropy
@@ -403,23 +402,27 @@ def _cutout_one_exposure(
     }
 
 
-def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
+def _cutout_corner_detector(args: tuple) -> dict:
     """Corner-mode entry point: one exposure per detector, from _COW_STORE.
+
+    Takes its arguments as one tuple because that is what `_forkMap` hands a
+    work unit, and is a module-level function so it is picklable by name.
 
     Parameters
     ----------
-    det_name : str
-        Detector name; used to look up the raw and its calibrations in
-        ``_COW_STORE``.
-    t_dispatch : float
-        ``time.time()`` timestamp at which the task was dispatched from the
-        parent, used to measure dispatch-to-arrival latency.
+    args : tuple
+        ``(det_name, t_dispatch)``.  Only the detector name crosses the pickle
+        boundary; the raw and its calibrations are looked up in ``_COW_STORE``.
+        ``t_dispatch`` is the ``time.time()`` timestamp at which the unit was
+        dispatched from the parent, used to measure dispatch-to-arrival
+        latency.
 
     Returns
     -------
     dict
         As `_cutout_one_exposure`, plus ``dispatch_to_arrival``.
     """
+    det_name, t_dispatch = args
     t_arrival = time.time()
     entry = _COW_STORE.corner_detectors[det_name]
     result = _cutout_one_exposure(
@@ -433,11 +436,6 @@ def _cutoutPipeline(det_name: str, t_dispatch: float) -> dict:
     )
     result["dispatch_to_arrival"] = t_arrival - t_dispatch
     return result
-
-
-def _run_cutout_worker(args: tuple) -> dict:
-    det_name, t_dispatch = args
-    return _cutoutPipeline(det_name, t_dispatch)
 
 
 def _dead_cutout_result(det_name: str, reason: str) -> dict:
@@ -463,7 +461,7 @@ def _dead_cutout_result(det_name: str, reason: str) -> dict:
     Returns
     -------
     `dict`
-        Same keys as `_cutoutPipeline`.
+        Same keys as `_cutout_corner_detector`.
     """
     return {
         "det_name": det_name,

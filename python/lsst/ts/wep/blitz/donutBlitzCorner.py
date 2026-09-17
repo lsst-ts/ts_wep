@@ -56,7 +56,7 @@ from lsst.utils.timer import timeMethod
 from .blitzDetect import BlitzDetectTask
 from .catalogBuilder import CatalogOptions, build_donut_catalog
 from .cutDonutStamps import CutDonutStampsTask
-from .cutoutPipeline import _dead_cutout_result, _run_cutout_worker
+from .cutoutPipeline import _cutout_corner_detector, _dead_cutout_result
 from .donutBlitzPlot import DonutBlitzPlotTask
 from .forkPool import _dumpStacksOnHang, _forkMap
 from .measureDonutCandidates import MeasureDonutCandidatesTask
@@ -751,7 +751,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         t_cutout0 = time.perf_counter()
         if numCores == 1:
             t_dispatch = time.time()
-            results = [_run_cutout_worker((arg, t_dispatch)) for arg in cutout_args]
+            results = [_cutout_corner_detector((arg, t_dispatch)) for arg in cutout_args]
         else:
             t_pool0 = time.perf_counter()
             # Never more workers than detectors to process, matching the WF
@@ -764,7 +764,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             t_dispatch = time.time()
             with _dumpStacksOnHang(self.config.hangTimeout, "cutout pool", self.log):
                 results, deaths = _forkMap(
-                    _run_cutout_worker,
+                    _cutout_corner_detector,
                     [(arg, t_dispatch) for arg in cutout_args],
                     n_cutout_workers,
                     unitTimeout=self.config.unitTimeout,
