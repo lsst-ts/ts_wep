@@ -38,14 +38,14 @@ import unittest.mock
 
 import numpy as np
 
-from lsst.ts.wep.blitz.donutBlitzFamTask import (
+from lsst.ts.wep.blitz.donutBlitzFam import (
     _STAGE_KEYS,
+    DonutBlitzFamConfig,
     DonutBlitzFamTask,
-    DonutBlitzFamTaskConfig,
     _detector_stage_times,
     _mean_std_max,
 )
-from lsst.ts.wep.blitz.wavefrontFittingTask import WavefrontFittingTaskConfig
+from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingConfig
 
 
 def _cutout_result(visit_id, n_donuts=3, scatter=0.6, base=1.0):
@@ -107,7 +107,7 @@ class FamLoggingTestCase(unittest.TestCase):
     """Shared task instance; nothing here mutates it."""
 
     def setUp(self) -> None:
-        self.task = DonutBlitzFamTask(config=DonutBlitzFamTaskConfig())
+        self.task = DonutBlitzFamTask(config=DonutBlitzFamConfig())
         # Deterministic output regardless of whether pytest is attached to a
         # tty.
         self.task._colorLogEnabled = False
@@ -325,10 +325,10 @@ class TestPerGroupLogGating(unittest.TestCase):
     """FAM turns off the ~10k per-group WF lines; corner mode keeps them."""
 
     def testDefaultIsOnSoCornerModeIsUnchanged(self) -> None:
-        self.assertTrue(WavefrontFittingTaskConfig().logPerGroup)
+        self.assertTrue(WavefrontFittingConfig().logPerGroup)
 
     def testFamTurnsItOff(self) -> None:
-        config = DonutBlitzFamTaskConfig()
+        config = DonutBlitzFamConfig()
         config.validate()
         self.assertFalse(config.wfFittingTask.logPerGroup)
 
