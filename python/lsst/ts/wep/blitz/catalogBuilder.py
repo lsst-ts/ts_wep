@@ -181,7 +181,7 @@ def _encode_nearby(entries):
     return x, y, mag
 
 
-def _defocal_offsets(donut) -> np.ndarray:
+def _defocal_offset_array(donut) -> np.ndarray:
     """Return one donut's optic z shifts as a length-3 array of meters."""
     offsets = donut.defocal_offsets
     if offsets is None:
@@ -419,20 +419,20 @@ def _build_donut_catalog(
     # side detected more pass selection but have no partner, so they appear in
     # both lists. Keyed dedupe keeps one row per donut -- they stay candidates,
     # they just never got fitted.
-    def _key(d):
+    def donut_key(d):
         return (d.visit_id, d.det_name, d.donut_id)
 
     all_donuts = []
-    _seen = set()
+    seen = set()
     for d, candidate in (
         [(d, True) for d in donuts]
         + [(d, False) for r in results for d in r.get("rejected_catalog", [])]
         + [(d, True) for d in unmatched_donuts]
     ):
-        k = _key(d)
-        if k in _seen:
+        k = donut_key(d)
+        if k in seen:
             continue
-        _seen.add(k)
+        seen.add(k)
         all_donuts.append((d, candidate))
 
     if not all_donuts:
@@ -444,12 +444,12 @@ def _build_donut_catalog(
 
     rows = []
     zk_deviation_rows = []
-    zk_int_rows = []
+    zk_intrinsic_rows = []
     for d, candidate in all_donuts:
-        sid = d.donut_id
+        donut_id = d.donut_id
         # `_NULL_WF_DONUT` carries group_id "", the "no fit claimed this donut"
         # marker.
-        wd = wf_by_id.get((sid, d.det_name, d.visit_id), _NULL_WF_DONUT)
+        wd = wf_by_id.get((donut_id, d.det_name, d.visit_id), _NULL_WF_DONUT)
 
         # Both are dense Noll-indexed arrays in meters of length _ZK_JMAX + 1;
         # they become the zk_*_ccs array columns after the loop.
@@ -459,7 +459,7 @@ def _build_donut_catalog(
         # take them off the donut rather than inheriting `_NULL_WF_DONUT`'s
         # all-NaN. Donuts whose intrinsic calib was missing have
         # `intrinsic_zk is None` and get zeros, as an unsupplied index does.
-        zk_int_rows.append(wd.zk_intrinsic if wd is not _NULL_WF_DONUT else _dense_intrinsic(d))
+        zk_intrinsic_rows.append(wd.zk_intrinsic if wd is not _NULL_WF_DONUT else _dense_intrinsic(d))
 
         # Image columns are skipped entirely when not saving, so we do not pay
         # for float64 copies of columns that are about to be discarded.
@@ -489,14 +489,14 @@ def _build_donut_catalog(
                 else np.full((wf_img_size, wf_img_size), np.nan, dtype=float)
             )
 
-        nb_photo_dx, nb_photo_dy, nb_photo_mag = _encode_nearby(d.nearby_photo)
-        nb_astrom_dx, nb_astrom_dy, nb_astrom_mag = _encode_nearby(d.nearby_astrom)
+        nearby_photo_dx, nearby_photo_dy, nearby_photo_mag = _encode_nearby(d.nearby_photo)
+        nearby_astrom_dx, nearby_astrom_dy, nearby_astrom_mag = _encode_nearby(d.nearby_astrom)
         row = {
             # --- identity ---
             "visit_id": d.visit_id,
             "det_id": d.det_id,
             "det_name": d.det_name,
-            "donut_id": sid,
+            "donut_id": donut_id,
             "band": d.band,
             "candidate": bool(candidate),  # Passed every selection/quality cut.
             # --- geometry ---
@@ -504,7 +504,7 @@ def _build_donut_catalog(
             "y_det": d.y_det * u.pix,
             "thx_ccs": d.thx_ccs * u.rad,
             "thy_ccs": d.thy_ccs * u.rad,
-            "defocal_offsets": _defocal_offsets(d) * u.m,
+            "defocal_offsets": _defocal_offset_array(d) * u.m,
             # --- this donut's own refcat values (NaN off the refcat path) ---
             "photo_mag": d.photo_mag * u.mag,
             "astrom_mag": d.astrom_mag * u.mag,
@@ -515,12 +515,12 @@ def _build_donut_catalog(
             # --- nearby refcat sources (brightest-first, padded to
             # _MAX_NEARBY) --- Excludes this donut itself, so a count of 0
             # means genuinely isolated within the stamp box.
-            "nearby_photo_dx_det": nb_photo_dx * u.pix,
-            "nearby_photo_dy_det": nb_photo_dy * u.pix,
-            "nearby_photo_mag": nb_photo_mag * u.mag,
-            "nearby_astrom_dx_det": nb_astrom_dx * u.pix,
-            "nearby_astrom_dy_det": nb_astrom_dy * u.pix,
-            "nearby_astrom_mag": nb_astrom_mag * u.mag,
+            "nearby_photo_dx_det": nearby_photo_dx * u.pix,
+            "nearby_photo_dy_det": nearby_photo_dy * u.pix,
+            "nearby_photo_mag": nearby_photo_mag * u.mag,
+            "nearby_astrom_dx_det": nearby_astrom_dx * u.pix,
+            "nearby_astrom_dy_det": nearby_astrom_dy * u.pix,
+            "nearby_astrom_mag": nearby_astrom_mag * u.mag,
             "n_nearby_photo": len(d.nearby_photo),
             "n_nearby_astrom": len(d.nearby_astrom),
             # --- selection metrics ---
@@ -569,10 +569,10 @@ def _build_donut_catalog(
     # 0.0 for intrinsics, and for deviations 0.0 on fitted rows (`_dense_dev`)
     # but NaN on rows no fit consumed (`_NULL_WF_DONUT` is all-NaN).
     zk_deviation_um = np.array(zk_deviation_rows) * 1e6
-    zk_int_um = np.array(zk_int_rows) * 1e6
+    zk_intrinsic_um = np.array(zk_intrinsic_rows) * 1e6
     # Camera coordinate system, i.e. as fit.
     table["zk_deviation_ccs"] = zk_deviation_um * u.micron
-    table["zk_intrinsic_ccs"] = zk_int_um * u.micron
+    table["zk_intrinsic_ccs"] = zk_intrinsic_um * u.micron
     # _rotate_zk_to_eb is unit-agnostic in the field angle -- it only ever
     # takes an atan2 of the pair -- so hand it bare radians rather than teach
     # it to strip units from arbitrary angle Quantities.
@@ -589,7 +589,7 @@ def _build_donut_catalog(
     table["thx_ocs"] = np.cos(rtp_rad) * table["thx_ccs"] - np.sin(rtp_rad) * table["thy_ccs"]
     table["thy_ocs"] = np.sin(rtp_rad) * table["thx_ccs"] + np.cos(rtp_rad) * table["thy_ccs"]
     table["zk_deviation_ocs"] = _rotate_zk(zk_deviation_um, -rtp_rad) * u.micron
-    table["zk_intrinsic_ocs"] = _rotate_zk(zk_int_um, -rtp_rad) * u.micron
+    table["zk_intrinsic_ocs"] = _rotate_zk(zk_intrinsic_um, -rtp_rad) * u.micron
     # The visit this table is *for*. Full-array mode has two visits in the
     # visit_id column (one per side of focus) and this is the extra-focal one,
     # so it is deliberately not named visit_id: with group_id it forms the

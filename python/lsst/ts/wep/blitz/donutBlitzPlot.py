@@ -72,6 +72,11 @@ _COLOR_QUADRAFOIL = "#0072B2"
 _COLOR_PENTAFOIL = "#CC79A7"
 _COLOR_HEXAFOIL = "#D55E00"
 
+# Annotation text on a donut stamp: the per-donut stats block and the refcat
+# overlay labels. Small because a donut plot packs one row per detector and
+# every stamp carries its own text.
+_STAMP_TEXT_FONTSIZE = 3.5
+
 
 def _meta_value(meta: dict, key: str, unit: u.UnitBase) -> float:
     """Return one ``meta`` scalar as a bare float in ``unit``.
@@ -276,11 +281,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # "inner" radii and are easy to confuse: _bkg_inner_disc is the filled
         # disc inside the central obscuration, _bkg_inner_annulus is the inner
         # edge of the annulus outside the donut.
-        _stamp_aperture_margin_frac = catalog.meta["aperture_margin_frac"]
-        _stamp_bkg_inner_disc_frac = catalog.meta["bkg_inner_disc_frac"]
-        _stamp_bkg_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
-        _stamp_bkg_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
-        _stamp_obscuration = catalog.meta["obscuration"]
+        aperture_margin_frac = catalog.meta["aperture_margin_frac"]
+        bkg_inner_disc_frac = catalog.meta["bkg_inner_disc_frac"]
+        bkg_annulus_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
+        bkg_annulus_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
+        obscuration = catalog.meta["obscuration"]
 
         # Every stamp's view is pinned to its own pixel extent, so a stamp
         # fills its axes exactly and consumes the same figure area no matter
@@ -293,28 +298,27 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # A config-derived view (e.g. donut_radius * bkgAnnulusOuterFrac) would
         # instead couple the drawn size to stampSize: at stampSize=215 the
         # image overflows its axes by ~15%.
-        _STAMP_TEXT_FONTSIZE = 3.5
 
         # The unbinned `stamp` column is optional (see corner mode's
         # saveStamps). Without it, draw the binned `wf_img`, which is always
         # present. Every other quantity here -- aperture radii, refcat offsets,
         # text offsets -- is in unbinned pixels, so it scales by 1/binning to
         # match.
-        _has_stamp = "stamp" in catalog.colnames
-        if not _has_stamp and "wf_img" not in catalog.colnames:
+        has_stamp = "stamp" in catalog.colnames
+        if not has_stamp and "wf_img" not in catalog.colnames:
             raise RuntimeError(
                 "Catalog has neither a 'stamp' nor a 'wf_img' column, so there is "
                 "nothing to draw. Re-run with saveStamps or saveWfImages enabled "
                 "if you want these plots."
             )
-        _px_scale = 1.0 if _has_stamp else 1.0 / catalog.meta.get("binning", 1)
-        _stamp_col = "stamp" if _has_stamp else "wf_img"
+        px_scale = 1.0 if has_stamp else 1.0 / catalog.meta.get("binning", 1)
+        stamp_col = "stamp" if has_stamp else "wf_img"
 
         def _draw_stamp(ax, row, rejected=False):
-            stamp = np.array(row[_stamp_col])
+            stamp = np.array(row[stamp_col])
             h_px = stamp.shape[0] // 2
             vmin, vmax = np.nanpercentile(stamp, [1, 99])
-            _edge = h_px + 0.5
+            edge = h_px + 0.5
             ax.imshow(
                 stamp,
                 origin="lower",
@@ -322,38 +326,38 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 vmax=vmax,
                 cmap="gray",
                 aspect="equal",
-                extent=[-_edge, _edge, -_edge, _edge],
+                extent=[-edge, edge, -edge, edge],
             )
 
             # Per-detector radius off the row; obscuration is a global
             # instrument constant and so lives in meta.
             # into the drawn image's pixel units
-            dr = row["donut_radius"].to_value(u.pix) * _px_scale
-            ob = _stamp_obscuration
-            _circ_specs = [
-                (dr * ob * _stamp_bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
-                (dr * ob * (1 - _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
-                (dr * (1 + _stamp_aperture_margin_frac), _COLOR_APERTURE, "-"),
-                (dr * _stamp_bkg_inner_frac, _COLOR_BKG_ANNULUS, "--"),
-                (dr * _stamp_bkg_outer_frac, _COLOR_BKG_ANNULUS, "--"),
+            dr = row["donut_radius"].to_value(u.pix) * px_scale
+            ob = obscuration
+            circ_specs = [
+                (dr * ob * bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
+                (dr * ob * (1 - aperture_margin_frac), _COLOR_APERTURE, "-"),
+                (dr * (1 + aperture_margin_frac), _COLOR_APERTURE, "-"),
+                (dr * bkg_annulus_inner_frac, _COLOR_BKG_ANNULUS, "--"),
+                (dr * bkg_annulus_outer_frac, _COLOR_BKG_ANNULUS, "--"),
             ]
-            for _rad, _col, _ls in _circ_specs:
+            for rad, col, ls in circ_specs:
                 ax.add_patch(
                     mpatches.Circle(
                         (0, 0),
-                        _rad,
+                        rad,
                         fill=False,
-                        edgecolor=_col,
+                        edgecolor=col,
                         linewidth=1.0,
-                        linestyle=_ls,
+                        linestyle=ls,
                         alpha=0.45,
                         zorder=4,
                     )
                 )
 
             if rejected:
-                ax.plot([-_edge, _edge], [-_edge, _edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
-                ax.plot([-_edge, _edge], [_edge, -_edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
+                ax.plot([-edge, edge], [-edge, edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
+                ax.plot([-edge, edge], [edge, -edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
 
             # Detector orientation is per-detector, so it lives in det_meta
             # rather than on every row. Keyed by the row's own visit, not the
@@ -367,10 +371,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             # residual converts between the two -- sub-pixel, but the
             # difference between a marker on the source and one up to half a
             # pixel off it.
-            _x_det = row["x_det"].to_value(u.pix)
-            _y_det = row["y_det"].to_value(u.pix)
-            _res_x = _x_det - round(_x_det)
-            _res_y = _y_det - round(_y_det)
+            x_det = row["x_det"].to_value(u.pix)
+            y_det = row["y_det"].to_value(u.pix)
+            res_x = x_det - round(x_det)
+            res_y = y_det - round(y_det)
 
             def _xform(dx, dy):
                 """Map a detector-frame offset to stamp display coords.
@@ -386,11 +390,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 The rounding residual is applied here, before the rotation,
                 because it is a correction in the detector frame.
                 """
-                r, c = dy + _res_y, dx + _res_x
+                r, c = dy + res_y, dx + res_x
                 for _ in range(nq):
                     r, c = c, -r
                 # Offsets are in unbinned pixels; scale to the drawn image.
-                return r * _px_scale, c * _px_scale
+                return r * px_scale, c * px_scale
 
             n_photo = min(row["n_nearby_photo"], _MAX_NEARBY)
             px = row["nearby_photo_dx_det"][:n_photo].to_value(u.pix)
@@ -401,11 +405,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ax.plot(tx, ty, "o", ms=6, mfc="none", mec=_COLOR_PHOTO_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
                     ax.text(
-                        tx + 3 * _px_scale,
-                        ty + 3 * _px_scale,
+                        tx + 3 * px_scale,
+                        ty + 3 * px_scale,
                         f"{mag:.2f}",
                         color=_COLOR_PHOTO_REFCAT,
-                        fontsize=3.5,
+                        fontsize=_STAMP_TEXT_FONTSIZE,
                         zorder=4,
                     )
 
@@ -418,17 +422,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ax.plot(tx, ty, "+", ms=6, mec=_COLOR_ASTROM_REFCAT, mew=0.8, zorder=3)
                 if np.isfinite(mag):
                     ax.text(
-                        tx + 3 * _px_scale,
-                        ty - 5 * _px_scale,
+                        tx + 3 * px_scale,
+                        ty - 5 * px_scale,
                         f"{mag:.2f}",
                         color=_COLOR_ASTROM_REFCAT,
-                        fontsize=3.5,
+                        fontsize=_STAMP_TEXT_FONTSIZE,
                         zorder=4,
                     )
             # Pin the view to the stamp's own edges: constant figure footprint
             # regardless of pixel count, and no autoscale from the overlays.
-            ax.set_xlim(-_edge, _edge)
-            ax.set_ylim(-_edge, _edge)
+            ax.set_xlim(-edge, edge)
+            ax.set_ylim(-edge, edge)
 
             inner_frac = row["inner_frac"]
             outer_frac = row["outer_frac"]
@@ -438,11 +442,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
             osm_str = f"osm={outer_sector_minmax:.3f}" if np.isfinite(outer_sector_minmax) else "osm=?"
             snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
-            sid = row["donut_id"]
-            sid_str = f"id={sid}" if sid != 0 else ""
-            _text_color = _COLOR_REJECTED if rejected else "black"
+            donut_id = row["donut_id"]
+            donut_id_str = f"id={donut_id}" if donut_id != 0 else ""
+            text_color = _COLOR_REJECTED if rejected else "black"
 
-            _flags = [
+            flags = [
                 name
                 for name, val in (
                     ("sat", row["rejected_sat"]),
@@ -452,14 +456,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 )
                 if val
             ]
-            rej_str = f"[{'|'.join(_flags)}]" if _flags else ""
+            rej_str = f"[{'|'.join(flags)}]" if flags else ""
             # Bottom-anchored just above the axes, so the block grows upward
             # and never overlaps the stamp -- clearance is independent of stamp
             # size. (Top-anchoring inside the axes hung the text down over the
             # image; at stampSize 167 it overlapped by ~1pt, and worse for
             # larger stamps.)
             ax.annotate(
-                f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{sid_str}",
+                f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{donut_id_str}",
                 xy=(0.05, 1.00),
                 xycoords="axes fraction",
                 xytext=(0, 1.0),
@@ -467,7 +471,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 fontsize=_STAMP_TEXT_FONTSIZE,
                 va="bottom",
                 ha="left",
-                color=_text_color,
+                color=text_color,
                 bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
                 zorder=6,
                 annotation_clip=False,
@@ -696,7 +700,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             self.log.info("No WF results with model images; skipping WF diagnostic plot.")
             return
 
-        _CORNERS = list(CORNER_PAIRS)
+        corners = list(CORNER_PAIRS)
         det_id_of = _det_id_by_name(catalog)
 
         def _det_label(name):
@@ -713,7 +717,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             for s in r["det_names"]:
                 if str(s) in CORNER_BY_DET_NAME:
                     return CORNER_BY_DET_NAME[str(s)]
-            return _CORNERS[0]
+            return corners[0]
 
         # 4-stop diverging colormap: blue → white (zero) → vermillion.
         # Anchors: -vmax=blue, -vmax/10=sky blue, 0=white, +vmax=vermillion.
@@ -721,7 +725,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         def _hex_to_rgb(h):
             return tuple(int(h[i : i + 2], 16) / 255 for i in (1, 3, 5))
 
-        _cmap_bwr = LinearSegmentedColormap.from_list(
+        cmap_bwr = LinearSegmentedColormap.from_list(
             "bwr_donut",
             list(
                 zip(
@@ -738,7 +742,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 )
             ),
         )
-        _cmap_bwr_sym = LinearSegmentedColormap.from_list(
+        cmap_bwr_sym = LinearSegmentedColormap.from_list(
             "bwr_donut_sym",
             list(
                 zip(
@@ -800,11 +804,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
                 )
 
-        by_corner: dict[str, list] = {c: [] for c in _CORNERS}
+        by_corner: dict[str, list] = {c: [] for c in corners}
         for r in plottable:
             by_corner[_corner_of(r)].append(r)
 
-        unfitted_by_corner: dict[str, list] = {c: [] for c in _CORNERS}
+        unfitted_by_corner: dict[str, list] = {c: [] for c in corners}
         for r in unfitted:
             unfitted_by_corner[_corner_of(r)].append(r)
 
@@ -865,7 +869,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         )
         corner_pos = {"R00": (0, 0), "R40": (0, 1), "R04": (1, 0), "R44": (1, 1)}
 
-        for corner in _CORNERS:
+        for corner in corners:
             pairs = row_pairs[corner]
             grow, gcol = corner_pos[corner]
             inner = GridSpecFromSubplotSpec(
@@ -911,12 +915,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
                 intra_img = intra_rec["img"] if intra_rec else None
                 intra_mod = intra_rec["model_img"] if intra_rec else None
-                intra_sid = intra_rec["donut_id"] if intra_rec else None
+                intra_donut_id = intra_rec["donut_id"] if intra_rec else None
                 intra_blend = intra_rec.get("blend_frac", float("nan")) if intra_rec else float("nan")
 
                 extra_img = extra_rec["img"] if extra_rec else None
                 extra_mod = extra_rec["model_img"] if extra_rec else None
-                extra_sid = extra_rec["donut_id"] if extra_rec else None
+                extra_donut_id = extra_rec["donut_id"] if extra_rec else None
                 extra_blend = extra_rec.get("blend_frac", float("nan")) if extra_rec else float("nan")
 
                 def _bar_label(elapsed, nfev, success):
@@ -929,7 +933,15 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
 
                 def _triplet_and_bar(
-                    col_start, data, model, det_hdr, label, sid, fwhm, zk_dev, blend_frac_val=float("nan")
+                    col_start,
+                    data,
+                    model,
+                    det_hdr,
+                    label,
+                    donut_id,
+                    fwhm,
+                    zk_dev,
+                    blend_frac_val=float("nan"),
                 ):
                     if data is not None:
                         vmax = np.nanpercentile(np.abs(data), 99) or 1.0
@@ -938,9 +950,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         vmax_r = (np.nanpercentile(np.abs(resid), 99) or 1.0) if has_model else 1.0
                         for ci, (img, cmap, vmin, vmx) in enumerate(
                             [
-                                (data, _cmap_bwr, -vmax, vmax),
-                                (model if has_model else None, _cmap_bwr, -vmax, vmax),
-                                (resid, _cmap_bwr_sym, -vmax_r, vmax_r),
+                                (data, cmap_bwr, -vmax, vmax),
+                                (model if has_model else None, cmap_bwr, -vmax, vmax),
+                                (resid, cmap_bwr_sym, -vmax_r, vmax_r),
                             ]
                         ):
                             ax = fig.add_subplot(inner[row_idx, col_start + ci])
@@ -959,8 +971,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                                 ha="left",
                                 bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
                             )
-                            if ci == 0 and sid is not None:
-                                ax.text(0.02, 0.98, f"id={sid}", **ann_kw)
+                            if ci == 0 and donut_id is not None:
+                                ax.text(0.02, 0.98, f"id={donut_id}", **ann_kw)
                             if ci == 1 and np.isfinite(fwhm):
                                 ax.text(0.02, 0.98, f"blur={fwhm:.2f}arcsec", **ann_kw)
                             if ci == 2 and np.isfinite(blend_frac_val):
@@ -978,10 +990,26 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                                 ax.set_title(det_hdr, fontsize=5, pad=1)
 
                 _triplet_and_bar(
-                    0, intra_img, intra_mod, intra_hdr, intra_label, intra_sid, fwhm_i, zk_dev_i, intra_blend
+                    0,
+                    intra_img,
+                    intra_mod,
+                    intra_hdr,
+                    intra_label,
+                    intra_donut_id,
+                    fwhm_i,
+                    zk_dev_i,
+                    intra_blend,
                 )
                 _triplet_and_bar(
-                    4, extra_img, extra_mod, extra_hdr, extra_label, extra_sid, fwhm_e, zk_dev_e, extra_blend
+                    4,
+                    extra_img,
+                    extra_mod,
+                    extra_hdr,
+                    extra_label,
+                    extra_donut_id,
+                    fwhm_e,
+                    zk_dev_e,
+                    extra_blend,
                 )
 
         proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
