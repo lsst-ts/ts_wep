@@ -100,7 +100,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         self,
         exposure: Exposure,
         selections: QTable,
-        donutRadius: float | None = None,
+        donut_radius: float | None = None,
     ) -> pipeBase.Struct:
         """Measure aperture flux and quality metrics for candidate donuts.
 
@@ -112,7 +112,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         selections : QTable
             Catalog-selected (or blitz-detection) centroids with columns
             ``centroid_x``, ``centroid_y``, ``donut_id``.
-        donutRadius : float or None, optional
+        donut_radius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if
             unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
 
@@ -129,10 +129,12 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         """
         if len(selections) == 0:
             return pipeBase.Struct(measurements=selections)
-        return pipeBase.Struct(measurements=self._measureFlux(selections, exposure, donutRadius=donutRadius))
+        return pipeBase.Struct(
+            measurements=self._measureFlux(selections, exposure, donut_radius=donut_radius)
+        )
 
     def _measureFlux(
-        self, selections: QTable, exposure: Exposure, donutRadius: float | None = None
+        self, selections: QTable, exposure: Exposure, donut_radius: float | None = None
     ) -> QTable:
         """Measure aperture flux and per-pixel noise for each detected donut.
 
@@ -145,9 +147,9 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         peaks too close to the image border get ``nan`` values. The input
         table is left unmodified.
         """
-        if donutRadius is None:
-            donutRadius = _INSTRUMENT.donutRadius
-        radius = donutRadius
+        if donut_radius is None:
+            donut_radius = _INSTRUMENT.donutRadius
+        radius = donut_radius
         obscuration = _INSTRUMENT.obscuration
         cfg = self.config
 

@@ -420,9 +420,9 @@ def _fam_detector_worker(args: tuple) -> dict:
                 calibs=calibs,
                 refcat_load_result=(copy.deepcopy(load_result) if load_result is not None else None),
                 det_name=det_name,
-                maxFitScatter=_COW_STORE.max_fit_scatter,
-                astromRefFilter=_COW_STORE.astrom_ref_filter,
-                photoRefFilter=_COW_STORE.photo_ref_filter,
+                max_fit_scatter=_COW_STORE.max_fit_scatter,
+                astrom_ref_filter=_COW_STORE.astrom_ref_filter,
+                photo_ref_filter=_COW_STORE.photo_ref_filter,
             )
             cutout_elapsed += time.perf_counter() - t_cut
             # The exposure id, which is also the visit id for these data -- the

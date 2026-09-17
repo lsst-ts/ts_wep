@@ -159,7 +159,7 @@ def _blend_frac(
     return np.sum(np.abs(resid[faint_mask & sig_mask])) / total_model_flux
 
 
-def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
+def _dense_dev(zk_dev: np.ndarray, noll_indices) -> np.ndarray:
     """Return deviations in meters, dense over Noll 0..``_ZK_JMAX``.
 
     Indices that were not fitted are ``np.nan``, except Noll 0..3, which are
@@ -167,7 +167,7 @@ def _dense_dev(zk_dev: np.ndarray, nollIndices) -> np.ndarray:
     """
     out = np.full(_ZK_JMAX + 1, np.nan)
     out[0:4] = 0.0
-    for k, j in enumerate(nollIndices):
+    for k, j in enumerate(noll_indices):
         if k < len(zk_dev):
             out[j] = zk_dev[k]
     return out

@@ -116,7 +116,7 @@ def _run(measurements, refcat):
     config = CutDonutStampsConfig()
     config.stampSize = _STAMP_SIZE
     task = CutDonutStampsTask(config=config)
-    result = task.run(_exposure(), measurements, refcat, donutRadius=8.0)
+    result = task.run(_exposure(), measurements, refcat, donut_radius=8.0)
     return {d.donut_id: d for d in result.donuts}
 
 
