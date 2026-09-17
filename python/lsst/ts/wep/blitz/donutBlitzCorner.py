@@ -73,7 +73,7 @@ from .utils import (
     CowStore,
     IsrCalibs,
     _colorize,
-    _resolveColorLogEnabled,
+    _resolve_color_log_enabled,
 )
 from .wavefrontFitting import (
     WavefrontFittingTask,
@@ -439,7 +439,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         self.makeSubtask("cutStamps")
         self.makeSubtask("wavefrontFit")
         self.makeSubtask("plot")
-        self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
+        self._colorLogEnabled = _resolve_color_log_enabled(self.config.colorLog)
 
     def runQuantum(
         self,

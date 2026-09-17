@@ -48,7 +48,7 @@ from .utils import (
     CORNER_BY_DET_NAME,
     CORNER_DEFOCAL_BY_DET_NAME,
     CORNER_PAIRS,
-    _resolveColorLogEnabled,
+    _resolve_color_log_enabled,
 )
 
 # Stand-in for "this record has no Zernikes": rows the fitter never produced
@@ -73,7 +73,7 @@ _COLOR_PENTAFOIL = "#CC79A7"
 _COLOR_HEXAFOIL = "#D55E00"
 
 
-def _metaValue(meta: dict, key: str, unit: u.UnitBase) -> float:
+def _meta_value(meta: dict, key: str, unit: u.UnitBase) -> float:
     """Return one ``meta`` scalar as a bare float in ``unit``.
 
     The catalog's meta values are Quantities (see `_build_donut_catalog`), but
@@ -86,7 +86,7 @@ def _metaValue(meta: dict, key: str, unit: u.UnitBase) -> float:
     return np.nan if value is None else value.to_value(unit)
 
 
-def _detIdByName(catalog: QTable) -> dict[str, int]:
+def _det_id_by_name(catalog: QTable) -> dict[str, int]:
     """Map detector name to detector id, read off the catalog rows.
 
     Parameters
@@ -158,7 +158,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
+        self._colorLogEnabled = _resolve_color_log_enabled(self.config.colorLog)
 
     def runQuantum(
         self,
@@ -208,9 +208,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return
 
         meta = catalog.meta
-        run_elapsed = _metaValue(meta, "run_elapsed", u.s)
-        refcat_elapsed = _metaValue(meta, "refcat_elapsed", u.s)
-        butler_elapsed = _metaValue(meta, "butler_elapsed", u.s)
+        run_elapsed = _meta_value(meta, "run_elapsed", u.s)
+        refcat_elapsed = _meta_value(meta, "refcat_elapsed", u.s)
+        butler_elapsed = _meta_value(meta, "butler_elapsed", u.s)
         photo_filter_label = meta["photo_filter_name"]
         astrom_filter_label = meta["astrom_filter_name"]
         visit_id = meta["ref_visit_id"]
@@ -221,7 +221,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # that no fit consumed still shows in the accepted panel, since it
         # passed every cut this plot reports on.
         det_name_col = np.asarray(catalog["det_name"], dtype=str)
-        det_id_by_name = _detIdByName(catalog)
+        det_id_of = _det_id_by_name(catalog)
         dets_with_data = []
         for det_name in sorted(set(det_name_col.tolist())):
             det_rows = catalog[det_name_col == det_name]
@@ -477,13 +477,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             # Keyed by detector *and* visit; corner mode has just this one
             # visit. A miss degrades to the defaults below rather than raising.
             sm = det_meta.get(f"{det_name}_{visit_id}", {})
-            scatter_val = _metaValue(sm, "astrom_scatter", u.arcsec)
+            scatter_val = _meta_value(sm, "astrom_scatter", u.arcsec)
             scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
 
             ax_stats = fig.add_subplot(gs[row_idx, 0])
             ax_stats.axis("off")
             lines = [
-                f"{det_name} ({det_id_by_name[det_name]})",
+                f"{det_name} ({det_id_of[det_name]})",
                 f"donuts: {len(acc_rows)}",
             ]
             # One line per cutout stage, driven off the shared key list so this
@@ -492,7 +492,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             # hard-coded width, since this is monospace text.
             width = max(len(label) for label in _CUTOUT_STAGE_KEYS) + 2
             for label, key in _CUTOUT_STAGE_KEYS.items():
-                line = f"{label + ':':<{width}}{_metaValue(sm, key, u.s):.3f}s"
+                line = f"{label + ':':<{width}}{_meta_value(sm, key, u.s):.3f}s"
                 # Scatter belongs to the WCS refit, so it hangs off that stage.
                 lines.append(f"{line}  ({scatter_str})" if label == "astrom" else line)
             if sm.get("wcs_refit_error"):
@@ -587,11 +587,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         meta = catalog.meta
         visit_id = meta["ref_visit_id"]
-        refcat_elapsed = _metaValue(meta, "refcat_elapsed", u.s)
-        butler_elapsed = _metaValue(meta, "butler_elapsed", u.s)
+        refcat_elapsed = _meta_value(meta, "refcat_elapsed", u.s)
+        butler_elapsed = _meta_value(meta, "butler_elapsed", u.s)
         butler_times = {key: value.to_value(u.s) for key, value in meta["butler_times"].items()}
-        cutout_elapsed = _metaValue(meta, "cutout_elapsed", u.s)
-        danish_elapsed = _metaValue(meta, "danish_elapsed", u.s)
+        cutout_elapsed = _meta_value(meta, "cutout_elapsed", u.s)
+        danish_elapsed = _meta_value(meta, "danish_elapsed", u.s)
         wf_mode = meta["wf_mode"]
         ZK_MIN, ZK_MAX = 4, 28
 
@@ -697,7 +697,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return
 
         _CORNERS = list(CORNER_PAIRS)
-        det_id_by_name = _detIdByName(catalog)
+        det_id_of = _det_id_by_name(catalog)
 
         def _det_label(name):
             """Detector header, with the id only when the detector has rows.
@@ -706,7 +706,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             was not processed (or contributed no donuts) is absent from the
             catalog and so has no id to report.
             """
-            det_id = det_id_by_name.get(name)
+            det_id = det_id_of.get(name)
             return name if det_id is None else f"{name} ({det_id})"
 
         def _corner_of(r):

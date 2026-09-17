@@ -36,12 +36,12 @@ from lsst.afw.image import Exposure
 from .utils import _INSTRUMENT
 
 
-def _buildAnnularTemplate(radius: float, innerFrac: float) -> np.ndarray:
+def _build_annular_template(radius: float, inner_frac: float) -> np.ndarray:
     """Return a binary annular stamp for cross-correlation donut detection."""
     r_int = round(radius)
     cy, cx = np.mgrid[-r_int : r_int + 1, -r_int : r_int + 1]
     r = np.hypot(cx, cy)
-    return np.where((r < radius) & (r >= radius * innerFrac), 1.0, 0.0)
+    return np.where((r < radius) & (r >= radius * inner_frac), 1.0, 0.0)
 
 
 class BlitzDetectConfig(pexConfig.Config):
@@ -107,7 +107,7 @@ class BlitzDetectTask(pipeBase.Task):
         trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
         binning = config.detectionBinning
         binned_donut_radius = donutRadius / binning
-        template = _buildAnnularTemplate(binned_donut_radius, innerFrac=_INSTRUMENT.obscuration)
+        template = _build_annular_template(binned_donut_radius, inner_frac=_INSTRUMENT.obscuration)
 
         if binning > 1:
             binnedImg = afwMath.binImage(exposure[trimmedBBox].image, binning)

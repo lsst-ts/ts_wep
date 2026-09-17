@@ -45,13 +45,13 @@ from .utils import (
     _REFCAT_COLUMNS,
     IsrCalibs,
     _colorize,
-    _resolveDonutRadius,
+    _resolve_donut_radius,
 )
 
 _log = logging.getLogger(__name__)
 
 
-def _buildAfwSourceCat(blitzDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
+def _build_afw_source_cat(blitzDetections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
     """Convert blitz-detect QTable into a minimal afwTable.SourceCatalog
     suitable for AstrometryTask.run().
     """
@@ -173,7 +173,7 @@ def _cutout_one_exposure(
     t2 = time.perf_counter()
     diam_task = _COW_STORE.diam_task
     donutDiameter = diam_task.run(postIsr).diameter
-    donutRadius = _resolveDonutRadius(donutDiameter / 2 if donutDiameter is not None else None)
+    donutRadius = _resolve_donut_radius(donutDiameter / 2 if donutDiameter is not None else None)
 
     # --- blitz detection ---
     t3 = time.perf_counter()
@@ -216,7 +216,7 @@ def _cutout_one_exposure(
     try:
         astrom_result = astrom_task.solve(
             exposure=postIsr,
-            sourceCat=_buildAfwSourceCat(blitzDetections, postIsr.getWcs()),
+            sourceCat=_build_afw_source_cat(blitzDetections, postIsr.getWcs()),
             load_result=refcat_load_result,
         )
         scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
