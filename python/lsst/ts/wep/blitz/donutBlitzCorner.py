@@ -193,7 +193,7 @@ class DonutBlitzCornerConfig(
 ):
     """Configuration for DonutBlitzCornerTask."""
 
-    isrTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    isr: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
         doc="ISR subtask run on each corner wavefront sensor exposure.",
     )
@@ -201,7 +201,7 @@ class DonutBlitzCornerConfig(
         target=SubtractBackgroundTask,
         doc="Background subtraction subtask run before donut detection.",
     )
-    detectDiameter: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    measureDiameter: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutDetectDiameterTask,
         doc="Donut diameter detection subtask.",
     )
@@ -209,7 +209,7 @@ class DonutBlitzCornerConfig(
         target=BlitzDetectTask,
         doc=("Blitz donut detection subtask run on each corner wavefront sensor exposure."),
     )
-    astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    astrometry: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=AstrometryTask,
         doc="Astrometry subtask for WCS fitting.",
     )
@@ -217,11 +217,11 @@ class DonutBlitzCornerConfig(
         target=DonutSourceSelectorTask,
         doc="Donut source selector subtask.",
     )
-    measureCandidatesTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    measureCandidates: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=MeasureDonutCandidatesTask,
         doc="Donut candidate measurement subtask.",
     )
-    cutStampsTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    cutStamps: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=CutDonutStampsTask,
         doc="Donut stamp cutting subtask.",
     )
@@ -284,7 +284,7 @@ class DonutBlitzCornerConfig(
             "Generate diagnostic PNGs for each visit. "
             "Set False in production to skip plot generation and deliver "
             "Zernikes faster; plots can be generated later by calling "
-            "plotTask.run() with the in-memory results."
+            "plot.run() with the in-memory results."
         ),
         dtype=bool,
         default=False,
@@ -328,57 +328,57 @@ class DonutBlitzCornerConfig(
         },
         default="paired",
     )
-    wfFittingTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    wavefrontFit: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=WavefrontFittingTask,
         doc="Wavefront fitting subtask using Danish algorithm.",
     )
-    plotTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    plot: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutBlitzPlotTask,
         doc="Subtask that generates diagnostic plots for a blitz visit.",
     )
 
     def setDefaults(self) -> None:
         super().setDefaults()
-        self.isrTask.doAmpOffset = False
-        self.isrTask.ampOffset.doApplyAmpOffset = False
-        self.isrTask.doBrighterFatter = False
-        self.isrTask.doSaturation = True
-        self.isrTask.doStandardStatistics = False
-        self.isrTask.doInterpolate = False
-        self.isrTask.doVariance = False
-        self.isrTask.doDeferredCharge = False
-        self.isrTask.doDefect = False
-        self.isrTask.doApplyGains = True
-        self.isrTask.doBias = False
-        self.isrTask.doFlat = True
-        self.isrTask.doDark = False
-        self.isrTask.doLinearize = True
-        self.isrTask.doSuspect = False
-        self.isrTask.doSetBadRegions = False
-        self.isrTask.doBootstrap = False
-        self.isrTask.doCrosstalk = True
-        self.isrTask.crosstalk.doQuadraticCrosstalkCorrection = False
-        self.isrTask.doITLEdgeBleedMask = False
-        self.isrTask.qa.saveStats = False
+        self.isr.doAmpOffset = False
+        self.isr.ampOffset.doApplyAmpOffset = False
+        self.isr.doBrighterFatter = False
+        self.isr.doSaturation = True
+        self.isr.doStandardStatistics = False
+        self.isr.doInterpolate = False
+        self.isr.doVariance = False
+        self.isr.doDeferredCharge = False
+        self.isr.doDefect = False
+        self.isr.doApplyGains = True
+        self.isr.doBias = False
+        self.isr.doFlat = True
+        self.isr.doDark = False
+        self.isr.doLinearize = True
+        self.isr.doSuspect = False
+        self.isr.doSetBadRegions = False
+        self.isr.doBootstrap = False
+        self.isr.doCrosstalk = True
+        self.isr.crosstalk.doQuadraticCrosstalkCorrection = False
+        self.isr.doITLEdgeBleedMask = False
+        self.isr.qa.saveStats = False
 
-        self.astromTask.wcsFitter.retarget(FitAffineWcsTask)
-        self.astromTask.doMagnitudeOutlierRejection = False
-        self.astromTask.referenceSelector.doMagLimit = True
+        self.astrometry.wcsFitter.retarget(FitAffineWcsTask)
+        self.astrometry.doMagnitudeOutlierRejection = False
+        self.astrometry.referenceSelector.doMagLimit = True
         magLimit = MagnitudeLimit()
         magLimit.minimum = 1
         magLimit.maximum = 18
-        self.astromTask.referenceSelector.magLimit = magLimit
-        self.astromTask.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
-        self.astromTask.sourceSelector["science"].doRequirePrimary = False
-        self.astromTask.sourceSelector["science"].doIsolated = False
-        self.astromTask.sourceSelector["science"].doSignalToNoise = False
-        self.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
-        self.astromTask.maxIter = 5
-        self.astromTask.matcher.maxOffsetPix = 1000
+        self.astrometry.referenceSelector.magLimit = magLimit
+        self.astrometry.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
+        self.astrometry.sourceSelector["science"].doRequirePrimary = False
+        self.astrometry.sourceSelector["science"].doIsolated = False
+        self.astrometry.sourceSelector["science"].doSignalToNoise = False
+        self.astrometry.sourceSelector["science"].doCentroidErrorLimit = False
+        self.astrometry.maxIter = 5
+        self.astrometry.matcher.maxOffsetPix = 1000
 
         # Cap the references handed to the pattern matcher.  Essential for
         # keeping the cost to refit the WCS near the galactic bulge.
-        self.astromTask.matcher.maxRefObjects = 2048
+        self.astrometry.matcher.maxRefObjects = 2048
 
         # Monster refcat uses full filter names (e.g. phot_g_mean), not band
         # labels, so the default mag-limit policy lookup by band would fail.
@@ -405,16 +405,16 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.makeSubtask("isrTask")
+        self.makeSubtask("isr")
         self.makeSubtask("subtractBackground")
-        self.makeSubtask("detectDiameter")
+        self.makeSubtask("measureDiameter")
         self.makeSubtask("blitzDetect")
-        self.makeSubtask("astromTask")
+        self.makeSubtask("astrometry")
         self.makeSubtask("donutSelector")
-        self.makeSubtask("measureCandidatesTask")
-        self.makeSubtask("cutStampsTask")
-        self.makeSubtask("wfFittingTask")
-        self.makeSubtask("plotTask")
+        self.makeSubtask("measureCandidates")
+        self.makeSubtask("cutStamps")
+        self.makeSubtask("wavefrontFit")
+        self.makeSubtask("plot")
         self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
 
     def runQuantum(
@@ -654,7 +654,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         # catalog data, dataId.region, or the flux aliases.
         astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
         astrom_stub_loader.config.pixelMargin = 0
-        self.astromTask.setRefObjLoader(astrom_stub_loader)
+        self.astrometry.setRefObjLoader(astrom_stub_loader)
 
         corner_detectors = {}
         for name in detNames:
@@ -690,7 +690,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         # Zernike rotation in _buildCatalog needs it, whereas spider shadows
         # are opt-in.
         rtp_rad = (boresight_par_rad - boresight_rot_rad - np.pi / 2 + np.pi) % (2 * np.pi) - np.pi
-        rtp_deg = np.degrees(rtp_rad) if self.wfFittingTask.config.modelSpiderShadows else None
+        rtp_deg = np.degrees(rtp_rad) if self.wavefrontFit.config.modelSpiderShadows else None
 
         # Everything the cutout and fit workers read, in one place. The
         # telescope is band- and quantum-fixed, and its 41 ms YAML load is the
@@ -698,15 +698,15 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         # defocusing it costs 20 us, so the workers do that on demand.
         _COW_STORE.adopt(
             CowStore.for_corner(
-                isr_task=self.isrTask,
+                isr_task=self.isr,
                 bkg_task=self.subtractBackground,
-                detect_diameter_task=self.detectDiameter,
+                diam_task=self.measureDiameter,
                 detect_task=self.blitzDetect,
-                astrom_task=self.astromTask,
-                donut_selector_task=self.donutSelector,
-                measure_candidates_task=self.measureCandidatesTask,
-                cut_stamps_task=self.cutStampsTask,
-                wf_fitting_task=self.wfFittingTask,
+                astrom_task=self.astrometry,
+                select_task=self.donutSelector,
+                measure_task=self.measureCandidates,
+                cut_task=self.cutStamps,
+                wf_fit_task=self.wavefrontFit,
                 wf_estimation_mode=self.config.wfEstimationMode,
                 max_fit_scatter=self.config.maxFitScatter,
                 astrom_ref_filter=self.config.astromRefFilter,
@@ -777,7 +777,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             for label, key in _CUTOUT_STAGE_KEYS.items():
                 piece = f"{label}={r.get(key, float('nan')):.3f}s"
                 # Scatter belongs to the WCS refit, so it hangs off that stage.
-                pieces.append(f"{piece} (scatter={scatter_str})" if label == "wcs" else piece)
+                pieces.append(f"{piece} (scatter={scatter_str})" if label == "astrom" else piece)
             pieces.append(f"donuts={len(r['catalog'])}")
             self.log.info("  %s: %s", r["det_name"], "  ".join(pieces))
             if r["wcs_refit_error"]:
@@ -842,7 +842,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             # the entire pool/quantum
             with _dumpStacksOnHang(self.config.hangTimeout, "WF pool", self.log):
                 wf_results, wf_deaths = _forkMap(_wf_fitting_worker, groups, n_workers)
-            nZk = len(self.wfFittingTask.config.nollIndices)
+            nZk = len(self.wavefrontFit.config.nollIndices)
             for group, reason in wf_deaths:
                 self.log.error("WF worker for group %s died: %s", group.group_id, reason)
                 wf_results.append(_dead_wf_result(group, reason, nZk))
@@ -903,7 +903,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         )
 
         if self.config.savePlots:
-            self.plotTask.run(catalog)
+            self.plot.run(catalog)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
         return pipeBase.Struct(donuts=donuts, wf_results=wf_results, cornerResults=Table(catalog))
@@ -916,14 +916,14 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         them.
         """
         return CatalogOptions(
-            stamp_size=self.cutStampsTask.config.stampSize,
-            binning=self.wfFittingTask.config.binning,
-            noll_indices=tuple(self.wfFittingTask.config.nollIndices),
-            aperture_margin_frac=self.measureCandidatesTask.config.apertureMarginFrac,
-            bkg_inner_disc_frac=self.measureCandidatesTask.config.bkgInnerDiscFrac,
-            bkg_annulus_inner_frac=self.measureCandidatesTask.config.bkgAnnulusInnerFrac,
-            bkg_annulus_outer_frac=self.measureCandidatesTask.config.bkgAnnulusOuterFrac,
-            max_donuts=self.cutStampsTask.config.maxDonuts,
+            stamp_size=self.cutStamps.config.stampSize,
+            binning=self.wavefrontFit.config.binning,
+            noll_indices=tuple(self.wavefrontFit.config.nollIndices),
+            aperture_margin_frac=self.measureCandidates.config.apertureMarginFrac,
+            bkg_inner_disc_frac=self.measureCandidates.config.bkgInnerDiscFrac,
+            bkg_annulus_inner_frac=self.measureCandidates.config.bkgAnnulusInnerFrac,
+            bkg_annulus_outer_frac=self.measureCandidates.config.bkgAnnulusOuterFrac,
+            max_donuts=self.cutStamps.config.maxDonuts,
             wf_mode=self.config.wfEstimationMode,
             save_stamps=self.config.saveStamps,
             save_wf_images=True,

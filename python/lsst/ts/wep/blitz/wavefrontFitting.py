@@ -304,7 +304,7 @@ def _wf_fitting_worker(group: "_WfGroup") -> dict:
     Retrieves the WavefrontFittingTask from _COW_STORE and calls it
     on the group. Designed to be used with multiprocessing.Pool.map().
     """
-    task = _COW_STORE.wf_fitting_task
+    task = _COW_STORE.wf_fit_task
     return task.run(group)
 
 
