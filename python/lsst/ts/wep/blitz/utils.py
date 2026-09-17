@@ -471,15 +471,15 @@ class CowStore:
 _COW_STORE: CowStore = CowStore.uninitialized()
 
 
-def _resolveColorLogEnabled(colorLog: bool | None) -> bool:
+def _resolve_color_log_enabled(color_log: bool | None) -> bool:
     """Resolve the colorLog config value to a concrete enabled/disabled bool.
 
-    If ``colorLog`` is None, color is enabled only when stdout is attached
+    If ``color_log`` is None, color is enabled only when stdout is attached
     to an interactive terminal.
     """
-    if colorLog is None:
+    if color_log is None:
         return sys.stdout.isatty()
-    return colorLog
+    return color_log
 
 
 def _colorize(text: str, *codes: str, enabled: bool = True) -> str:
@@ -504,7 +504,7 @@ def _colorize(text: str, *codes: str, enabled: bool = True) -> str:
     return "".join(codes) + text + _ANSI_RESET
 
 
-def _resolveDonutRadius(donutRadius: float | None) -> float:
+def _resolve_donut_radius(donut_radius: float | None) -> float:
     """Return a usable donut radius in pixels, falling back to the nominal one.
 
     The per-exposure radius measured by `DonutDetectDiameterTask` is preferred,
@@ -514,20 +514,20 @@ def _resolveDonutRadius(donutRadius: float | None) -> float:
 
     Parameters
     ----------
-    donutRadius : float or None
+    donut_radius : float or None
         Measured donut radius in un-binned pixels, or None/NaN if unmeasured.
 
     Returns
     -------
     float
-        ``donutRadius`` if finite and positive, else
+        ``donut_radius`` if finite and positive, else
         ``_INSTRUMENT.donutRadius``.
     """
-    if donutRadius is None:
+    if donut_radius is None:
         return _INSTRUMENT.donutRadius
-    if not np.isfinite(donutRadius) or donutRadius <= 0:
+    if not np.isfinite(donut_radius) or donut_radius <= 0:
         return _INSTRUMENT.donutRadius
-    return donutRadius
+    return donut_radius
 
 
 def _dense_intrinsic(donut) -> np.ndarray:
