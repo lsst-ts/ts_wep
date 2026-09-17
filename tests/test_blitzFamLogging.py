@@ -57,7 +57,7 @@ def _cutout_result(visit_id, n_donuts=3, scatter=0.6, base=1.0):
         "isr_run": base,
         "bkg_run": base / 2,
         "diam_run": base / 4,
-        "blind_detect_run": base / 10,
+        "detect_run": base / 10,
         "wcs_refit_run": base / 5,
         "catalog_select_run": base / 20,
         "stamp_cut_run": base / 40,
