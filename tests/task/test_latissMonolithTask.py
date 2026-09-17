@@ -368,7 +368,8 @@ class TestLatissMonolithTaskRunQuantum(lsst.utils.tests.TestCase):
         self.assertFalse([w for w in warnings if "labelled extra-focal" in w], warnings)
 
     def testWarnsWhenHeaderLabelDisagreesWithFocusZ(self) -> None:
-        """Header says 18 is extra but focusZ says 17: fit by focusZ, and warn."""
+        """Header says 18 is extra but focusZ says 17:
+           fit by focusZ, and warn."""
         warnings = self._runQuantum(quantumVisit=18, focusZ={17: -0.8, 18: +0.8})
         self.assertEqual((self.seen["extra"], self.seen["intra"]), (17, 18))
         # Still written under the quantum's visit, and loudly.
