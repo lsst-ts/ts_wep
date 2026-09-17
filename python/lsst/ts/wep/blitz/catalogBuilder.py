@@ -25,7 +25,7 @@ Both modes emit the same schema, so this lives in one place rather than in each
 task.
 """
 
-__all__ = ["CatalogOptions", "build_donut_catalog", "build_noll_pairs", "transform_eb"]
+__all__ = ["CatalogOptions", "build_donut_catalog", "transform_eb"]
 
 import importlib
 from dataclasses import dataclass
@@ -34,7 +34,8 @@ from typing import Any
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable
-from galsim.zernike import noll_to_zern
+
+from lsst.ts.wep.utils import getNollPairs
 
 from .dataStructures import _NULL_WF_DONUT
 from .utils import (
@@ -47,30 +48,6 @@ from .utils import (
     _dense_intrinsic,
     _rotate_zk,
 )
-
-
-def build_noll_pairs(jmax):
-    """Return (pairs, singles) for Noll indices 1..jmax.
-
-    Assumes jmax is pair-complete (no truncated doublets).
-
-    pairs   : list of (j_cos, j_sin, n, |m|) doublets
-    singles : list of j with m==0
-    """
-    pairs, singles = [], []
-    j = 1
-    while j <= jmax:
-        n, m = noll_to_zern(j)
-        if m == 0:
-            singles.append(j)
-            j += 1
-            continue
-        if m > 0:
-            pairs.append((j, j + 1, n, m))
-        else:
-            pairs.append((j + 1, j, n, abs(m)))
-        j += 2
-    return pairs, singles
 
 
 def transform_eb(
@@ -99,7 +76,7 @@ def transform_eb(
         if zk_val.ndim != 2:
             raise ValueError(f"zk must be 2D [nrow, n_noll]; got {zk_val.shape}")
 
-        pairs, _ = build_noll_pairs(zk_val.shape[1] - 1)
+        pairs, _ = getNollPairs(zk_val.shape[1] - 1)
         out = zk_val.copy()  # m==0 slots pass through, incl. NaNs
 
         for j_cos, j_sin, _, m_abs in pairs:
