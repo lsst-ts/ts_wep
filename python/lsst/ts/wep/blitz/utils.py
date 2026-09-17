@@ -537,7 +537,7 @@ def _dense_intrinsic(donut) -> np.ndarray:
     starts at Noll 4.
 
     Lives here rather than beside its original caller in
-    `WavefrontFittingTask` because `build_donut_catalog` needs the same
+    `WavefrontFittingTask` because `_build_donut_catalog` needs the same
     conversion: intrinsics are a function of field position, so a donut no fit
     consumed still has them, and the catalog falls back to this for that row.
     """

@@ -54,7 +54,7 @@ from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.utils.timer import timeMethod
 
 from .blitzDetect import BlitzDetectTask
-from .catalogBuilder import CatalogOptions, build_donut_catalog
+from .catalogBuilder import _build_donut_catalog, _CatalogOptions
 from .cutDonutStamps import CutDonutStampsTask
 from .cutoutPipeline import _cutout_corner_detector, _dead_cutout_result
 from .donutBlitzPlot import DonutBlitzPlotTask
@@ -850,8 +850,8 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             mode, results_by_det, band, rtp_deg, boresight_alt_rad
         )
         # Stamp the pairing path on every cutout result: those are what reach
-        # build_donut_catalog, so this is what gets pairing provenance into the
-        # persisted table.  Full-array mode does the same in its worker.
+        # _build_donut_catalog, so this is what gets pairing provenance into
+        # the persisted table.  Full-array mode does the same in its worker.
         for r in results:
             r["pair_path"] = pair_path
 
@@ -905,7 +905,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         )
         visit_id = next(iter(raws)).getInfo().getVisitInfo().id
 
-        catalog = build_donut_catalog(
+        catalog = _build_donut_catalog(
             results=results,
             wf_results=wf_results,
             donuts=donuts,
@@ -938,14 +938,14 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
 
         return pipeBase.Struct(donuts=donuts, wf_results=wf_results, cornerResults=Table(catalog))
 
-    def _catalogOptions(self) -> CatalogOptions:
+    def _catalogOptions(self) -> _CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.
 
         Corner mode saves both image column sets by default: its row count is
         small enough that they cost tens of MB, and the diagnostic plots want
         them.
         """
-        return CatalogOptions(
+        return _CatalogOptions(
             stamp_size=self.cutStamps.config.stampSize,
             binning=self.wavefrontFit.config.binning,
             noll_indices=tuple(self.wavefrontFit.config.nollIndices),
