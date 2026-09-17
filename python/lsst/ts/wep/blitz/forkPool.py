@@ -50,6 +50,13 @@ transport `Pool` already uses, minus the shared lock, so a dying child can only
 ever truncate its own stream, and a length-framed payload makes a truncated
 stream unambiguous. Nothing is written to disk.
 
+A worker can also fail by never finishing, which needs its own bound: passing
+`unitTimeout` gives each unit a deadline measured from its own fork, so a
+pathologically slow unit -- or one whose pipe never reaches EOF because `func`
+leaked its write end to a grandchild -- is killed and named like any other
+loss rather than parking the drain loop. Callers with no bound on legitimate
+runtime leave it unset and wait.
+
 Forking is also load-bearing for memory here, not merely convenient: the
 calibration products, telescope models and reference catalogs the workers need
 are built once in the parent and inherited copy-on-write, which neither a
@@ -72,6 +79,7 @@ import signal
 import struct
 import sys
 import threading
+import time
 import traceback
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, NamedTuple
@@ -109,6 +117,7 @@ def _forkMap(
     numWorkers: int,
     *,
     initializer: Callable | None = None,
+    unitTimeout: float | None = None,
 ) -> tuple[list, list[_WorkerDeath]]:
     """Map `func` over `args` in forked workers, surviving a worker that dies.
 
@@ -118,6 +127,11 @@ def _forkMap(
     costs exactly its own unit: every sibling runs to completion and the lost
     unit is named in the returned `_WorkerDeath` list. See the module docstring
     for why neither standard-library pool can do that.
+
+    With `unitTimeout`, a unit that *overruns* costs its own unit too, on the
+    same terms. That is a separate failure from being killed and needs its own
+    deadline: a worker merely running long is indistinguishable from one making
+    progress, so nothing in the loop would ever notice it.
 
     Parameters
     ----------
@@ -133,6 +147,18 @@ def _forkMap(
     initializer : `Callable`, optional
         Run in each worker immediately after the fork, before `func`. Mandatory
         for workers that touch the butler; see `_fam_pool_initializer`.
+    unitTimeout : `float`, optional
+        Seconds a single unit may run, measured from its own fork, before its
+        worker is SIGKILLed and the unit recorded as a death. `None` (the
+        default) waits indefinitely, which is what a caller with no bound on
+        legitimate runtime wants.
+
+        This bounds one *unit*, not the call: units run in waves of
+        `numWorkers`, so the whole map can take up to
+        ``ceil(len(args) / numWorkers) * unitTimeout``. A caller that also arms
+        `_dumpStacksOnHang` needs that product to sit below the watchdog's
+        timeout, or the watchdog still aborts the process first and the
+        per-unit degradation never gets to happen.
 
     Returns
     -------
@@ -143,9 +169,9 @@ def _forkMap(
         death onwards. Callers identify a result from its own contents (the
         detector or group it names), not from its position.
     deaths : `list` [`_WorkerDeath`]
-        One entry per unit whose worker died. Empty on a clean run. Callers are
-        expected to fold these into whatever they already do with a failed unit
-        rather than to raise.
+        One entry per unit whose worker died or overran `unitTimeout`. Empty on
+        a clean run. Callers are expected to fold these into whatever they
+        already do with a failed unit rather than to raise.
     """
     argList = list(args)
     if not argList:
@@ -155,6 +181,11 @@ def _forkMap(
     buffers: dict[int, bytearray] = {}
     pidToIndex: dict[int, int] = {}
     fdToIndex: dict[int, int] = {}
+    # Only used by the deadline sweep: when each unit was forked, how to signal
+    # it, and which units the sweep has already given up on.
+    startedAt: dict[int, float] = {}
+    indexToPid: dict[int, int] = {}
+    timedOut: set[int] = set()
     selector = selectors.DefaultSelector()
     nextIndex = 0
     openPipes = 0
@@ -209,6 +240,10 @@ def _forkMap(
         pidToIndex[pid] = index
         fdToIndex[readFd] = index
         buffers[index] = bytearray()
+        # Each unit's clock starts at its own fork, not at the start of the
+        # map, so a unit that waited for a free slot is not charged for it.
+        startedAt[index] = time.monotonic()
+        indexToPid[index] = pid
         selector.register(readFd, selectors.EVENT_READ)
         openPipes += 1
 
@@ -231,10 +266,39 @@ def _forkMap(
                 os.close(key.fd)
                 del fdToIndex[key.fd]
                 openPipes -= 1
+        if unitTimeout is not None:
+            # `_SELECT_TIMEOUT` bounds the block above, so this runs at least
+            # once a second without any timer of its own -- which is also the
+            # granularity of the deadline.
+            now = time.monotonic()
+            for fd in list(fdToIndex):
+                index = fdToIndex[fd]
+                if now - startedAt[index] < unitTimeout:
+                    continue
+                # Kill, then drop the read end here rather than waiting for the
+                # EOF the kill ought to produce. It need not: a pipe reaches
+                # EOF only when the *last* write end closes, so a grandchild
+                # that inherited this one (the hazard the child branch above
+                # warns `func` against) keeps it open past the worker's death
+                # and would park this loop forever. Termination must not depend
+                # on who holds the write end.
+                timedOut.add(index)
+                try:
+                    os.kill(indexToPid[index], signal.SIGKILL)
+                except OSError:
+                    pass  # already exited; still reaped by the waits below
+                selector.unregister(fd)
+                os.close(fd)
+                del fdToIndex[fd]
+                openPipes -= 1
     selector.close()
 
-    # Every pipe is closed, so every child is at `_exit` or already gone; these
-    # waits do not block for meaningful time.
+    # Every pipe is closed, so every child is at `_exit`, already gone, or
+    # SIGKILLed by the sweep; these waits do not block for meaningful time.
+    # The two closure paths justify that differently: EOF implies the child is
+    # done with its write end, while a force-closed pipe implies only that we
+    # killed the child ourselves -- equally sufficient, but it stops being so
+    # if anything ever closes a pipe for a third reason.
     statuses: dict[int, int] = {}
     for pid, index in pidToIndex.items():
         try:
@@ -251,7 +315,16 @@ def _forkMap(
             # after writing it -- the work was done.
             results.append(payload)
             continue
-        deaths.append(_WorkerDeath(unit, _describeExit(statuses[index], len(buffers[index]))))
+        deaths.append(
+            _WorkerDeath(
+                unit,
+                _describeExit(
+                    statuses[index],
+                    len(buffers[index]),
+                    timeout=unitTimeout if index in timedOut else None,
+                ),
+            )
+        )
     return results, deaths
 
 
@@ -274,9 +347,19 @@ def _decodeResult(buffer: bytearray) -> Any:
         return _INCOMPLETE
 
 
-def _describeExit(status: int, received: int) -> str:
-    """Why a worker produced no usable result, in reviewable English."""
-    if os.WIFSIGNALED(status):
+def _describeExit(status: int, received: int, timeout: float | None = None) -> str:
+    """Why a worker produced no usable result, in reviewable English.
+
+    `timeout` is the deadline the unit overran, when that is what ended it. It
+    takes precedence over `status`, which would otherwise report the sweep's
+    own SIGKILL as an OOM kill and send the reader after a memory problem that
+    was never involved.
+    """
+    if timeout is not None:
+        # `:g` rather than a fixed precision: sub-second deadlines are
+        # legitimate (tests use them) and would otherwise render as "0s".
+        detail = f"exceeded the {timeout:g}s unit timeout and was killed"
+    elif os.WIFSIGNALED(status):
         signum = os.WTERMSIG(status)
         try:
             name = signal.Signals(signum).name
