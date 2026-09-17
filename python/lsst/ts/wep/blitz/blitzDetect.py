@@ -104,16 +104,16 @@ class BlitzDetectTask(pipeBase.Task):
         if donut_radius is None:
             donut_radius = _INSTRUMENT.donutRadius
 
-        trimmedBBox = exposure.getBBox().erodedBy(config.edgeMargin)
+        trimmed_bbox = exposure.getBBox().erodedBy(config.edgeMargin)
         binning = config.detectionBinning
         binned_donut_radius = donut_radius / binning
         template = _build_annular_template(binned_donut_radius, inner_frac=_INSTRUMENT.obscuration)
 
         if binning > 1:
-            binnedImg = afwMath.binImage(exposure[trimmedBBox].image, binning)
-            arr = binnedImg.array
+            binned_img = afwMath.binImage(exposure[trimmed_bbox].image, binning)
+            arr = binned_img.array
         else:
-            arr = exposure[trimmedBBox].image.array
+            arr = exposure[trimmed_bbox].image.array
 
         # Detect on the histogram equalized image
         heq = np.digitize(arr, np.nanquantile(arr, np.linspace(0, 1, 256)))
@@ -128,8 +128,8 @@ class BlitzDetectTask(pipeBase.Task):
             detections=QTable(
                 {
                     "donut_id": np.arange(1, len(peaks) + 1, dtype=np.int64),
-                    "centroid_x": peaks[:, 1] + trimmedBBox.getMinX(),
-                    "centroid_y": peaks[:, 0] + trimmedBBox.getMinY(),
+                    "centroid_x": peaks[:, 1] + trimmed_bbox.getMinX(),
+                    "centroid_y": peaks[:, 0] + trimmed_bbox.getMinY(),
                 }
             )
         )

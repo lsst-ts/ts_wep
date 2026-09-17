@@ -166,16 +166,16 @@ class CutDonutStampsTask(pipeBase.Task):
             measurements = measurements[np.argsort(measurements["flux"])[::-1]]
 
         if refcat is not None:
-            _rc_x = np.asarray(refcat["centroid_x"], dtype=float)
-            _rc_y = np.asarray(refcat["centroid_y"], dtype=float)
-            _rc_id = np.asarray(refcat["donut_id"])
-            _rc_mag = {
+            refcat_x = np.asarray(refcat["centroid_x"], dtype=float)
+            refcat_y = np.asarray(refcat["centroid_y"], dtype=float)
+            refcat_id = np.asarray(refcat["donut_id"])
+            refcat_mag = {
                 "photo_mag": np.asarray(refcat["photo_mag"], dtype=float),
                 "astrom_mag": np.asarray(refcat["astrom_mag"], dtype=float),
             }
         else:
-            _rc_x = _rc_y = _rc_id = None
-            _rc_mag = {}
+            refcat_x = refcat_y = refcat_id = None
+            refcat_mag = {}
 
         def _cut_stamp(row) -> Donut | None:
             """Cut one stamp and compute metrics; None on failure."""
@@ -196,35 +196,35 @@ class CutDonutStampsTask(pipeBase.Task):
 
             # Vectorized box query over the precomputed refcat arrays.
             # Offsets are relative to the *rounded* centroid (cx, cy).
-            if _rc_x is None:
+            if refcat_x is None:
                 box_mask = None
                 dx_box = dy_box = None
             else:
                 # Membership is against the *rounded* centroid, because that is
                 # what the stamp bounds were cut on -- these are the sources
                 # actually inside the stamp.
-                box_mask = (np.abs(_rc_x - cx) <= half_before) & (np.abs(_rc_y - cy) <= half_before)
+                box_mask = (np.abs(refcat_x - cx) <= half_before) & (np.abs(refcat_y - cy) <= half_before)
                 # Drop this donut itself: it is a refcat source too, so the box
                 # always contains it at zero offset. Matched on refcat id
                 # rather than on a distance threshold -- `refcat` is non-None
                 # only when the selections were drawn from it, so the id
                 # comparison is exact.
-                box_mask &= _rc_id != row["donut_id"]
+                box_mask &= refcat_id != row["donut_id"]
                 # Offsets are from cx_f/cy_f, not the rounded cx/cy, so that
                 # ``x_det + nearby_*_dx_det`` is the neighbor's detector x with
                 # no correction term. Anything wanting stamp-display
                 # coordinates has to add the rounding residual ``x_det -
                 # round(x_det)``; see `_xform` in donutBlitzPlot.
-                dx_box = _rc_x[box_mask] - cx_f
-                dy_box = _rc_y[box_mask] - cy_f
+                dx_box = refcat_x[box_mask] - cx_f
+                dy_box = refcat_y[box_mask] - cy_f
 
             def _nearby(mag_col):
                 if box_mask is None:
                     return []
-                mag_box = _rc_mag[mag_col][box_mask]
+                mag_box = refcat_mag[mag_col][box_mask]
                 return list(zip(dx_box.tolist(), dy_box.tolist(), mag_box.tolist()))
 
-            _fa = detector.transform([lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE)[0]
+            field_angle = detector.transform([lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE)[0]
 
             rejected_sat = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
             rejected_inner_frac = bool(
@@ -239,8 +239,8 @@ class CutDonutStampsTask(pipeBase.Task):
             return Donut(
                 det_name=detector.getName(),
                 stamp=stamp_ccs,
-                thx_ccs=_fa[1],
-                thy_ccs=_fa[0],
+                thx_ccs=field_angle[1],
+                thy_ccs=field_angle[0],
                 flux=row["flux"],
                 band=band,
                 det_id=det_id,
