@@ -33,9 +33,9 @@ from lsst.daf.base import DateTime
 from lsst.daf.butler.formatters.parquet import arrow_to_astropy, astropy_to_arrow
 from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
 from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
-from lsst.ts.wep.blitz.donutBlitzCornerTask import (
+from lsst.ts.wep.blitz.donutBlitzCorner import (
+    DonutBlitzCornerConfig,
     DonutBlitzCornerTask,
-    DonutBlitzCornerTaskConfig,
 )
 from lsst.ts.wep.blitz.utils import _ZK_JMAX
 
@@ -128,7 +128,7 @@ class TestCatalogOptions(unittest.TestCase):
         change the annulus geometry recorded in ``meta`` and drawn on the
         plots.
         """
-        config = DonutBlitzCornerTaskConfig()
+        config = DonutBlitzCornerConfig()
         config.cutStampsTask.stampSize = 215
         config.cutStampsTask.maxDonuts = 11
         config.wfFittingTask.binning = 3

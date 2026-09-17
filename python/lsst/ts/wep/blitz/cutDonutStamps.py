@@ -214,7 +214,7 @@ class CutDonutStampsTask(pipeBase.Task):
                 # ``x_det + nearby_*_dx_det`` is the neighbor's detector x with
                 # no correction term. Anything wanting stamp-display
                 # coordinates has to add the rounding residual ``x_det -
-                # round(x_det)``; see `_xform` in donutBlitzPlotTask.
+                # round(x_det)``; see `_xform` in donutBlitzPlot.
                 dx_box = _rc_x[box_mask] - cx_f
                 dy_box = _rc_y[box_mask] - cy_f
 

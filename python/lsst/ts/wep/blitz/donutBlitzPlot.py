@@ -22,8 +22,8 @@
 """Diagnostic plots regenerated from the ``donutBlitzCornerResults`` table."""
 
 __all__ = [
-    "DonutBlitzPlotTaskConnections",
-    "DonutBlitzPlotTaskConfig",
+    "DonutBlitzPlotConnections",
+    "DonutBlitzPlotConfig",
     "DonutBlitzPlotTask",
 ]
 
@@ -104,7 +104,7 @@ def _detIdByName(catalog: QTable) -> dict[str, int]:
     return {str(n): int(i) for n, i in zip(names, ids)}
 
 
-class DonutBlitzPlotTaskConnections(
+class DonutBlitzPlotConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "visit"),  # type: ignore
 ):
@@ -122,9 +122,9 @@ class DonutBlitzPlotTaskConnections(
     )
 
 
-class DonutBlitzPlotTaskConfig(
+class DonutBlitzPlotConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=DonutBlitzPlotTaskConnections,  # type: ignore
+    pipelineConnections=DonutBlitzPlotConnections,  # type: ignore
 ):
     """Configuration for DonutBlitzPlotTask."""
 
@@ -149,12 +149,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
     Runs written before that dataset type was renamed hold their catalog as
     ``donutBlitzResults``; point this task at one with
-    ``-c donutBlitzPlotTask:connections.cornerResults=donutBlitzResults``.
+    ``-c donutBlitzPlot:connections.cornerResults=donutBlitzResults``.
     """
 
-    ConfigClass = DonutBlitzPlotTaskConfig
-    _DefaultName = "donutBlitzPlotTask"
-    config: DonutBlitzPlotTaskConfig
+    ConfigClass = DonutBlitzPlotConfig
+    _DefaultName = "donutBlitzPlot"
+    config: DonutBlitzPlotConfig
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

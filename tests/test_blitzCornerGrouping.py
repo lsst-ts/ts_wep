@@ -31,7 +31,7 @@ catalog means a bug rather than "not applicable".
 import unittest
 from types import SimpleNamespace
 
-from lsst.ts.wep.blitz.wavefrontFittingTask import _build_wf_groups
+from lsst.ts.wep.blitz.wavefrontFitting import _build_wf_groups
 
 _NON_PAIRING_MODES = ("unpaired", "full_detector", "full_corner")
 

@@ -32,8 +32,8 @@ for the worker and for why children must reset the DB connection pool.
 """
 
 __all__ = [
-    "DonutBlitzFamTaskConnections",
-    "DonutBlitzFamTaskConfig",
+    "DonutBlitzFamConnections",
+    "DonutBlitzFamConfig",
     "DonutBlitzFamTask",
 ]
 
@@ -66,12 +66,12 @@ from lsst.pipe.base import (
 from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
-from .blindDetectTask import BlindDetect
+from .blindDetect import BlindDetectTask
 from .catalogBuilder import CatalogOptions, build_donut_catalog
-from .cutDonutStampsTask import CutDonutStampsTask
+from .cutDonutStamps import CutDonutStampsTask
 from .famPipeline import _dead_fam_result, _fam_detector_worker, _fam_pool_initializer
 from .forkPool import _dumpStacksOnHang, _forkMap
-from .measureDonutCandidatesTask import MeasureDonutCandidatesTask
+from .measureDonutCandidates import MeasureDonutCandidatesTask
 from .utils import (
     _ANSI_BOLD,
     _ANSI_CYAN,
@@ -84,7 +84,7 @@ from .utils import (
     _colorize,
     _resolveColorLogEnabled,
 )
-from .wavefrontFittingTask import WavefrontFittingTask
+from .wavefrontFitting import WavefrontFittingTask
 
 # Detector purpose, from the `detector` dimension record. FAM fits the science
 # array only: on a +/-1.5 mm pair the corner wavefront sensors sit at 0 and
@@ -265,7 +265,7 @@ def _lookup_refcat_shards(datasetType, registry, quantumDataId, collections):
     )
 
 
-class DonutBlitzFamTaskConnections(
+class DonutBlitzFamConnections(
     pipeBase.PipelineTaskConnections,
     dimensions=("instrument", "group", "physical_filter"),  # type: ignore
 ):
@@ -386,9 +386,9 @@ class DonutBlitzFamTaskConnections(
     )
 
 
-class DonutBlitzFamTaskConfig(
+class DonutBlitzFamConfig(
     pipeBase.PipelineTaskConfig,
-    pipelineConnections=DonutBlitzFamTaskConnections,  # type: ignore
+    pipelineConnections=DonutBlitzFamConnections,  # type: ignore
 ):
     """Configuration for DonutBlitzFamTask."""
 
@@ -405,7 +405,7 @@ class DonutBlitzFamTaskConfig(
         doc="Donut diameter detection subtask.",
     )
     blindDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=BlindDetect,
+        target=BlindDetectTask,
         doc="Blind donut detection subtask run on each exposure.",
     )
     astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
@@ -655,9 +655,9 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     extra-focal visit.
     """
 
-    ConfigClass = DonutBlitzFamTaskConfig
-    _DefaultName = "donutBlitzFamTask"
-    config: DonutBlitzFamTaskConfig
+    ConfigClass = DonutBlitzFamConfig
+    _DefaultName = "donutBlitzFam"
+    config: DonutBlitzFamConfig
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
