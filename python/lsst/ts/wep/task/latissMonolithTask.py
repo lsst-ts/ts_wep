@@ -542,7 +542,10 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         # focusZ. If they disagree the outputs land under what the header
         # calls the extra-focal exposure, but the fit itself follows focusZ.
         # Say so, because downstream code assumes the two agree.
-        quantumVisit = int(butlerQC.quantum.dataId["visit"])
+        quantumDataId = butlerQC.quantum.dataId
+        if quantumDataId is None:
+            raise RuntimeError("Quantum has no dataId; cannot determine the visit.")
+        quantumVisit = int(quantumDataId["visit"])
         if quantumVisit != pair.extra:
             self.log.warning(
                 "Quantum visit %d is labelled extra-focal in the exposure record, but by focusZ "
