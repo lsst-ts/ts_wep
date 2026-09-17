@@ -68,7 +68,7 @@ def _measurements(with_refcat_values: bool, d1_xy=_D1_XY) -> QTable:
 
     ``with_refcat_values`` distinguishes the two upstream paths, but only in
     the *values*: the refcat path carries the donut's own magnitudes and sky
-    position through from the refcat subset, while the blind-detection path has
+    position through from the refcat subset, while the blitz-detection path has
     the same columns NaN-filled (see `_REFCAT_COLUMNS`, filled in
     `_cutout_one_exposure`). The schema is the same either way, which is what
     lets `CutDonutStampsTask` read them unconditionally.
@@ -157,7 +157,7 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(np.degrees(donuts[20].coord_ra), 30.1)
         self.assertAlmostEqual(np.degrees(donuts[20].coord_dec), -20.1)
 
-    def test_blind_path_has_no_refcat_information(self):
+    def test_blitz_path_has_no_refcat_information(self):
         """No refcat: no neighbours, magnitudes or position -- NaN, not zero.
 
         The columns are still *present*: `_REFCAT_COLUMNS` is NaN-filled

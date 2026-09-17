@@ -416,7 +416,7 @@ def build_donut_catalog(
             "wcs_refit_error": r["wcs_refit_error"],
             "cat_select_error": r["cat_select_error"],
             # Where this detector's donut ids came from. "refcat" ids are
-            # refcat source ids; the blind paths number donuts 1..N per
+            # refcat source ids; the blitz paths number donuts 1..N per
             # detector per exposure, so a donut_id is only comparable across
             # exposures on the refcat path. "no_detections" when no selector
             # ran at all.

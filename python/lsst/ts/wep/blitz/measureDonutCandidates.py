@@ -110,7 +110,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
             Background-subtracted post-ISR science exposure, in un-binned
             pixel coordinates.
         selections : QTable
-            Catalog-selected (or blind-detection) centroids with columns
+            Catalog-selected (or blitz-detection) centroids with columns
             ``centroid_x``, ``centroid_y``, ``donut_id``.
         donutRadius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if

@@ -184,8 +184,8 @@ class TestPairDonuts(FamPairingTestCase):
         self.assertEqual(len(pairs), 1)
         self.assertEqual({d.donut_id for d in unmatched}, {1, 3})
 
-    def testBlindPathFallsBackToSpatial(self) -> None:
-        """Blind detection renumbers per exposure, so ids are not trusted."""
+    def testBlitzPathFallsBackToSpatial(self) -> None:
+        """Blitz detection renumbers per exposure, so ids are not trusted."""
         # Ids deliberately disagree with position: id 1 intra is at the same
         # sky position as id 2 extra. Only spatial matching gets this right.
         thetas = [(np.deg2rad(1.7), 0.0), (0.0, np.deg2rad(1.7))]
@@ -220,7 +220,7 @@ class TestPairDonuts(FamPairingTestCase):
         intra = [_donut(1, 1, _INTRA_OFFSETS, thx=ix, thy=iy)]
         extra = [_donut(1, 2, _EXTRA_OFFSETS, thx=ex, thy=ey)]
 
-        pairs, unmatched, _ = _pair_donuts(intra, extra, tol_frac, "blind", "blind")
+        pairs, unmatched, _ = _pair_donuts(intra, extra, tol_frac, "blitz", "blitz")
         self.assertEqual(len(pairs), 1, "corrected pairing must work at the edge")
         self.assertEqual(unmatched, [])
 
@@ -237,7 +237,7 @@ class TestPairDonuts(FamPairingTestCase):
         self.addCleanup(_COW_STORE.radial_scale_by_offsets.pop, null_offsets)
         intra[0].defocal_offsets = null_offsets
         extra[0].defocal_offsets = null_offsets
-        pairs, unmatched, _ = _pair_donuts(intra, extra, tol_frac, "blind", "blind")
+        pairs, unmatched, _ = _pair_donuts(intra, extra, tol_frac, "blitz", "blitz")
         self.assertEqual(pairs, [])
         self.assertEqual(len(unmatched), 2)
 
@@ -249,7 +249,7 @@ class TestPairDonuts(FamPairingTestCase):
         _, (ex, ey) = _defocused_angles(np.deg2rad(1.0) + 40 * _RAD_PER_PIXEL, 0.0)
         intra = [_donut(1, 1, _INTRA_OFFSETS, thx=ix, thy=iy)]
         extra = [_donut(1, 2, _EXTRA_OFFSETS, thx=ex, thy=ey)]
-        pairs, unmatched, path = _pair_donuts(intra, extra, 0.25, "blind", "blind")
+        pairs, unmatched, path = _pair_donuts(intra, extra, 0.25, "blitz", "blitz")
         self.assertEqual(path, "spatial")
         self.assertEqual(pairs, [])
         self.assertEqual(len(unmatched), 2)
@@ -264,7 +264,7 @@ class TestPairDonuts(FamPairingTestCase):
             # donut, but it is not that donut's closest, so it stays unmatched.
             _donut(2, 2, _EXTRA_OFFSETS, thx=ex + 5 * _RAD_PER_PIXEL, thy=ey),
         ]
-        pairs, unmatched, _ = _pair_donuts(intra, extra, 0.25, "blind", "blind")
+        pairs, unmatched, _ = _pair_donuts(intra, extra, 0.25, "blitz", "blitz")
         self.assertEqual(len(pairs), 1)
         self.assertEqual(pairs[0][0].donut_id, 1)
         self.assertEqual([d.donut_id for d in unmatched], [2])
@@ -277,7 +277,7 @@ class TestPairDonuts(FamPairingTestCase):
         self.assertEqual(len(unmatched), 2)
 
     def testMixedSelectionSourcesUseSpatial(self) -> None:
-        """One side on the refcat and one blind cannot share an id space."""
+        """One side on the refcat and one blitz cannot share an id space."""
         (ix, iy), (ex, ey) = _defocused_angles(np.deg2rad(1.0), 0.0)
         intra = [_donut(9999, 1, _INTRA_OFFSETS, thx=ix, thy=iy)]
         extra = [_donut(1, 2, _EXTRA_OFFSETS, thx=ex, thy=ey)]

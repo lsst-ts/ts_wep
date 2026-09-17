@@ -66,7 +66,7 @@ from lsst.pipe.base import (
 from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
-from .blindDetect import BlindDetectTask
+from .blitzDetect import BlitzDetectTask
 from .catalogBuilder import CatalogOptions, build_donut_catalog
 from .cutDonutStamps import CutDonutStampsTask
 from .famPipeline import _dead_fam_result, _fam_detector_worker, _fam_pool_initializer
@@ -404,9 +404,9 @@ class DonutBlitzFamConfig(
         target=DonutDetectDiameterTask,
         doc="Donut diameter detection subtask.",
     )
-    blindDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=BlindDetectTask,
-        doc="Blind donut detection subtask run on each exposure.",
+    blitzDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=BlitzDetectTask,
+        doc="Blitz donut detection subtask run on each exposure.",
     )
     astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=AstrometryTask,
@@ -664,7 +664,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         self.makeSubtask("isrTask")
         self.makeSubtask("subtractBackground")
         self.makeSubtask("detectDiameter")
-        self.makeSubtask("blindDetect")
+        self.makeSubtask("blitzDetect")
         self.makeSubtask("astromTask")
         self.makeSubtask("donutSelector")
         self.makeSubtask("measureCandidatesTask")
@@ -789,7 +789,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         if not refcat_handles:
             self.log.warning(
                 "No reference catalog shards provided; every detector will fall "
-                "back to blind detection and spatial donut pairing."
+                "back to blitz detection and spatial donut pairing."
             )
 
         band = str(butlerQC.quantum.dataId["band"])
@@ -978,7 +978,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 isr_task=self.isrTask,
                 bkg_task=self.subtractBackground,
                 detect_diameter_task=self.detectDiameter,
-                blind_detect_task=self.blindDetect,
+                detect_task=self.blitzDetect,
                 astrom_task=self.astromTask,
                 donut_selector_task=self.donutSelector,
                 measure_candidates_task=self.measureCandidatesTask,
