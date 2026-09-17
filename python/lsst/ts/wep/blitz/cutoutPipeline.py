@@ -171,8 +171,8 @@ def _cutout_one_exposure(
 
     # --- detect diameter ---
     t2 = time.perf_counter()
-    detect_diameter_task = _COW_STORE.detect_diameter_task
-    donutDiameter = detect_diameter_task.run(postIsr).diameter
+    diam_task = _COW_STORE.diam_task
+    donutDiameter = diam_task.run(postIsr).diameter
     donutRadius = _resolveDonutRadius(donutDiameter / 2 if donutDiameter is not None else None)
 
     # --- blitz detection ---
@@ -243,7 +243,7 @@ def _cutout_one_exposure(
     refcat = None
     cat_err = ""
     selection_source = None
-    donut_selector = _COW_STORE.donut_selector_task
+    select_task = _COW_STORE.select_task
 
     if wcs is not None:
         try:
@@ -271,7 +271,7 @@ def _cutout_one_exposure(
             with np.errstate(invalid="ignore", divide="ignore"):
                 refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
                 refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
-            result = donut_selector.run(refcat, detector, photoRefFilter)
+            result = select_task.run(refcat, detector, photoRefFilter)
             selections = result.sourceCat
             selection_source = "refcat"
         except Exception as exc:
@@ -292,7 +292,7 @@ def _cutout_one_exposure(
         for column in _REFCAT_COLUMNS:
             blitzDetections[column] = np.full(len(blitzDetections), np.nan)
         try:
-            result = donut_selector.run(blitzDetections, detector, "")
+            result = select_task.run(blitzDetections, detector, "")
             selections = result.sourceCat
             selection_source = "blind_selected"
         except Exception as exc:
@@ -310,14 +310,14 @@ def _cutout_one_exposure(
 
     # --- stamp cutting ---
     t6 = time.perf_counter()
-    measure_task = _COW_STORE.measure_candidates_task
+    measure_task = _COW_STORE.measure_task
     candidates = measure_task.run(
         postIsr,
         selections,
         donutRadius=donutRadius,
     ).measurements
-    cut_stamps_task = _COW_STORE.cut_stamps_task
-    cut_result = cut_stamps_task.run(postIsr, candidates, refcat, donutRadius=donutRadius)
+    cut_task = _COW_STORE.cut_task
+    cut_result = cut_task.run(postIsr, candidates, refcat, donutRadius=donutRadius)
 
     t7 = time.perf_counter()
 
@@ -361,8 +361,8 @@ def _cutout_one_exposure(
     # cy = float(center[1, 0])
     # # Find points on the circle inside the detector bounds
     # th = np.linspace(0, 2 * np.pi, 1000)
-    # x = np.deg2rad(donut_selector.config.maxFieldDist) * np.cos(th)
-    # y = np.deg2rad(donut_selector.config.maxFieldDist) * np.sin(th)
+    # x = np.deg2rad(select_task.config.maxFieldDist) * np.cos(th)
+    # y = np.deg2rad(select_task.config.maxFieldDist) * np.sin(th)
     # xyPix = mapping.applyForward(np.vstack([x, y]))
     # keep = xyPix[0] >= 0
     # keep &= xyPix[0] < postIsr.image.array.shape[1]

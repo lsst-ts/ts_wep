@@ -150,7 +150,7 @@ class TestStageTimes(unittest.TestCase):
     def testNoResultsGivesNaNNotZero(self) -> None:
         """A detector that never cut anything is absent, not instantaneous."""
         stages = _detector_stage_times(_worker_result(with_results=False))
-        for key in ("isr", "bkg", "diam", "detect", "wcs", "select", "cut"):
+        for key in ("isr", "bkg", "diam", "detect", "astrom", "select", "cut"):
             self.assertTrue(np.isnan(stages[key]), key)
 
     def testOneExposureMissingAStageIsNaN(self) -> None:
@@ -330,7 +330,7 @@ class TestPerGroupLogGating(unittest.TestCase):
     def testFamTurnsItOff(self) -> None:
         config = DonutBlitzFamConfig()
         config.validate()
-        self.assertFalse(config.wfFittingTask.logPerGroup)
+        self.assertFalse(config.wavefrontFit.logPerGroup)
 
 
 if __name__ == "__main__":

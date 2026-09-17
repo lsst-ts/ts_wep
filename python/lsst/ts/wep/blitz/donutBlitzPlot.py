@@ -494,7 +494,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             for label, key in _CUTOUT_STAGE_KEYS.items():
                 line = f"{label + ':':<{width}}{_metaValue(sm, key, u.s):.3f}s"
                 # Scatter belongs to the WCS refit, so it hangs off that stage.
-                lines.append(f"{line}  ({scatter_str})" if label == "wcs" else line)
+                lines.append(f"{line}  ({scatter_str})" if label == "astrom" else line)
             if sm.get("wcs_refit_error"):
                 lines.append(f"WCS ERR: {sm['wcs_refit_error'][:40]}")
             if sm.get("cat_select_error"):

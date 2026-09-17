@@ -490,10 +490,10 @@ def _fam_detector_worker(args: tuple) -> dict:
         out["unmatched_donuts"] = unmatched
         out["donuts"] = by_exp[intra_exp] + by_exp[extra_exp]
 
-        wf_task = _COW_STORE.wf_fitting_task
+        wf_fit_task = _COW_STORE.wf_fit_task
         wf_results = []
         for group in groups:
-            r = wf_task.run(group)
+            r = wf_fit_task.run(group)
             wf_results.append(r)
         out["wf_results"] = wf_results
         out["fit_run"] = time.perf_counter() - t2
