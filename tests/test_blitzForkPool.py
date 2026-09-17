@@ -34,6 +34,13 @@ The complement matters just as much and is easy to lose in a refactor: a worker
 that returns `None`, or that is killed *after* writing a complete payload, must
 be counted as a success rather than swept into `deaths`.
 
+`TestUnitTimeout` covers the other way a unit can fail to deliver: not dying
+but overrunning, either because the work itself is pathologically slow or
+because the unit's pipe never reaches EOF. The second is not hypothetical --
+a worker that leaks its write end to a grandchild parks the pre-timeout
+`_forkMap` forever, which is why those tests are bounded by `_failIfSlower`
+rather than trusted to return.
+
 `TestSignalsDuringWrite` pins the reason the child's write loop needs no
 EINTR-retry helper: PEP 475 makes `os.write` retry on `EINTR` itself, and the
 loop already absorbs the short write a signal can otherwise leave behind. That
@@ -131,6 +138,43 @@ def _timeInterval(unit):
     return (unit, start, time.monotonic())
 
 
+# Far past any deadline these tests set, so the timeout is what ends the unit
+# rather than the work finishing on its own. Kept short all the same: a test
+# cut short by `_failIfSlower` cannot reap what is still sleeping, so this is
+# also how long a stray can outlive a failure.
+_LONG_SLEEP = 6.0
+
+
+def _sleepPastAnyDeadline(unit):
+    """Alive, healthy and far too slow -- the hypothesis (a) failure."""
+    time.sleep(_LONG_SLEEP)
+    return unit
+
+
+def _sleepIfZero(unit):
+    if unit == 0:
+        time.sleep(_LONG_SLEEP)
+    return unit * 10
+
+
+def _leakGrandchildHoldingWriteEnd(unit):
+    """Do the work, write it in full, then leave the pipe held open anyway.
+
+    The hypothesis (b) failure, and the reason a timeout may not wait for EOF
+    after the `SIGKILL`. A pipe reaches EOF when the last *write* end closes,
+    so a grandchild that outlives the worker keeps this unit's pipe open
+    forever even though the worker exited 0 with a complete payload already
+    buffered in the parent. That is precisely what forkPool.py's fd-hygiene
+    comments warn `func` must not do -- this is the warning, executed.
+    """
+    if os.fork() == 0:
+        # Grandchild. Never returns into `func`, and exits via `os._exit` so it
+        # runs none of the test runner's teardown.
+        time.sleep(_LONG_SLEEP)
+        os._exit(0)
+    return unit * 2
+
+
 def _bigPayload(unit):
     # Comfortably more than both the 64 KiB pipe capacity and `_READ_CHUNK`, so
     # the parent has to accumulate the result over many reads while the child
@@ -181,6 +225,51 @@ def _killDuringWrite(afterBytes: int | None):
 
     with unittest.mock.patch.object(os, "write", fakeWrite):
         yield
+
+
+def _reapStrays() -> None:
+    """Reap whatever `_forkMap` never got to, when a test cut it short.
+
+    Only the already-exited: anything still sleeping is left to finish and be
+    reaped by init, which is the price of interrupting the loop mid-flight.
+    """
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if pid == 0:
+            return
+
+
+@contextmanager
+def _failIfSlower(seconds: float):
+    """Turn "this call never returns" into a failure instead of a wedged suite.
+
+    A `SIGALRM` handler that raises is enough here, and that is itself worth
+    pinning: the parent sits in `selector.select(timeout=_SELECT_TIMEOUT)`, so
+    it wakes at least once a second and a Python-level exception can be
+    delivered to it. (PEP 475 retries an `EINTR`-interrupted `select` only when
+    the handler does *not* raise.) The claim in `_dumpStacksOnHang` that "the
+    main thread is blocked in C on a futex, where no exception can be delivered
+    to it" does not hold for this call path -- if it did, this guard could not
+    work and these tests would hang the runner instead of failing it.
+
+    `fork` resets interval timers in the child, so no worker inherits the
+    alarm.
+    """
+
+    def raiseTimeout(signum, frame):
+        raise TimeoutError(f"_forkMap did not return within {seconds}s")
+
+    previous = signal.signal(signal.SIGALRM, raiseTimeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+        _reapStrays()
 
 
 def _maxConcurrent(intervals) -> int:
@@ -346,6 +435,93 @@ class TestFailingWorkers(unittest.TestCase):
         self.assertEqual([d.unit for d in deaths], [1])
 
 
+class TestUnitTimeout(unittest.TestCase):
+    """A unit that overruns should cost its own unit, like a killed one.
+
+    Without a per-unit deadline the only thing that notices an overrun is
+    `_dumpStacksOnHang`, which fires from a side thread that cannot know which
+    unit is late and so can only `os._exit(1)` -- taking every healthy sibling,
+    and the whole quantum, with it. These tests say the pool degrades per unit
+    instead, for both shapes of overrun: a worker that is merely far too slow,
+    and one whose pipe never reaches EOF at all.
+
+    Every deadline here is at least 1s because `_SELECT_TIMEOUT` is 1.0: the
+    sweep can only run when `select` returns, so a sub-second deadline buys no
+    sharpness and only makes the timings look tighter than they are.
+    """
+
+    def testSlowUnitBecomesADeathNotAHang(self) -> None:
+        with _failIfSlower(20.0):
+            results, deaths = _forkMap(_sleepPastAnyDeadline, ["R40_SW1"], 1, unitTimeout=1.0)
+        self.assertEqual(results, [])
+        self.assertEqual(len(deaths), 1)
+        # The diagnostic the watchdog's thread dump could never give: the name
+        # of the late detector.
+        self.assertEqual(deaths[0].unit, "R40_SW1")
+        self.assertIn("unit timeout", deaths[0].reason)
+
+    def testTimeoutIsNotReportedAsAnOomKill(self) -> None:
+        """A timed-out worker is `SIGKILL`ed, but it is not an OOM kill.
+
+        Reading the plain `WIFSIGNALED` text here would send the next person
+        chasing a memory limit that was never involved.
+        """
+        with _failIfSlower(20.0):
+            _, deaths = _forkMap(_sleepPastAnyDeadline, [0], 1, unitTimeout=1.0)
+        self.assertNotIn("OOM", deaths[0].reason)
+
+    def testSlowUnitDoesNotDelayOrDisplaceItsSiblings(self) -> None:
+        """The one that matters in production: 1 late detector, 7 delivered.
+
+        Also that the timed-out slot is genuinely freed -- with 4 units and 2
+        workers, units 2 and 3 only run if the deadline hands back unit 0's
+        slot rather than merely marking it dead.
+        """
+        with _failIfSlower(20.0):
+            results, deaths = _forkMap(_sleepIfZero, list(range(4)), 2, unitTimeout=1.0)
+        self.assertEqual([d.unit for d in deaths], [0])
+        self.assertEqual(results, [10, 20, 30])
+
+    def testGrandchildHoldingTheWriteEndCannotParkTheLoop(self) -> None:
+        """Termination must not depend on who holds the write end.
+
+        Verified to hang forever against the pre-timeout implementation, which
+        is the failure this whole change exists to bound. Note what the right
+        answer is: the payload arrived *complete* before the deadline, so this
+        is a result and not a death. A timeout that simply declared the unit
+        dead on the way out would regress the existing "the work was done"
+        semantics.
+        """
+        with _failIfSlower(20.0):
+            results, deaths = _forkMap(_leakGrandchildHoldingWriteEnd, [21], 1, unitTimeout=1.0)
+        self.assertEqual(deaths, [])
+        self.assertEqual(results, [42])
+
+    def testNoDeadlineWithoutOne(self) -> None:
+        """`_forkMap` stays a pure mechanism for the callers that opt out.
+
+        The wavefront and FAM pools pass no `unitTimeout`, so a slow unit there
+        must still be waited for rather than acquiring a deadline by default.
+        """
+        results, deaths = _forkMap(_timeInterval, [0], 1)
+        self.assertEqual(deaths, [])
+        self.assertEqual(len(results), 1)
+
+    def testDeadlineIsPerUnitNotPerPool(self) -> None:
+        """Each unit gets the full deadline, measured from its own spawn.
+
+        Units 2 and 3 start only as earlier slots free up, so a deadline
+        measured from the start of the *pool* would kill them for their
+        predecessors' runtime. This is also why the pool as a whole can outlive
+        `unitTimeout` by a factor of the number of waves -- what has to stay
+        below `hangTimeout` is that product, not `unitTimeout` itself.
+        """
+        with _failIfSlower(20.0):
+            results, deaths = _forkMap(_timeInterval, list(range(4)), 2, unitTimeout=1.0)
+        self.assertEqual(deaths, [])
+        self.assertEqual(len(results), 4)
+
+
 class TestSignalsDuringWrite(unittest.TestCase):
     """Why the child's write loop needs no EINTR-retry helper."""
 
@@ -425,6 +601,24 @@ class TestDescribeExit(unittest.TestCase):
         self.assertEqual(
             _describeExit(0, 42),
             "exited without writing a complete result; 42 byte(s) of a partial result discarded",
+        )
+
+    def testTimeoutOutranksTheSignalItWasKilledWith(self) -> None:
+        """The timeout is the cause; the `SIGKILL` is only how it was enforced.
+
+        Falling through to the `WIFSIGNALED` branch would report the deliberate
+        kill as "typically the cgroup OOM killer" -- true of the signal, wrong
+        about the cause.
+        """
+        reason = _describeExit(signal.SIGKILL, 0, timeout=30)
+        self.assertEqual(reason, "exceeded the 30s unit timeout and was killed")
+
+    def testTimeoutStillReportsPartialBytes(self) -> None:
+        """A unit killed mid-write still accounts for what arrived."""
+        reason = _describeExit(signal.SIGKILL, 42, timeout=30)
+        self.assertEqual(
+            reason,
+            "exceeded the 30s unit timeout and was killed; 42 byte(s) of a partial result discarded",
         )
 
 

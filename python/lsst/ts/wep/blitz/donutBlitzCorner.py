@@ -289,21 +289,45 @@ class DonutBlitzCornerConfig(
         dtype=bool,
         default=False,
     )
+    unitTimeout: pexConfig.Field = pexConfig.Field(
+        doc=(
+            "Seconds one detector's cutout, or one wavefront group's fit, may "
+            "run before that worker is killed and its unit recorded as lost, "
+            "so a single pathological unit costs its own detector or group "
+            "instead of the whole quantum.  Cutout median is 1.9s and "
+            "wavefront median 3.1s, and neither pool passed 26s across ~2900 "
+            "visits, so the default leaves a crowded field room to be slow "
+            "without being killed -- do not tune it down toward nominal.  "
+            "None waits indefinitely, restoring the behaviour where only "
+            "hangTimeout notices an overrun.  Note this bounds one unit and "
+            "not the pool: units run in waves of numCores, so a visit in "
+            "which *every* unit times out can still reach hangTimeout and "
+            "abort, which is the right outcome for what is by then a systemic "
+            "failure rather than one bad detector."
+        ),
+        dtype=float,
+        default=30.0,
+        optional=True,
+    )
     hangTimeout: pexConfig.Field = pexConfig.Field(
         doc=(
             "Seconds either the cutout or the wavefront pool may run before "
             "the hang watchdog dumps stacks and aborts the quantum, so that a "
             "pool blocked forever fails loudly and gets retried instead of "
-            "burning its walltime.  Both pools finish in a few seconds over a "
-            "large run -- cutout median 1.9s, wavefront median 3.1s, neither "
-            "past 26s across ~2900 visits -- so the default is a wide enough "
-            "margin that tripping it means a wedge rather than slow work.  "
-            "Raise it if a crowded field pushes either pool past it; cutout "
-            "time is the one that scales with reference density, so the "
-            "galactic-bulge visits are where to check."
+            "burning its walltime.  This is a backstop: unitTimeout is what "
+            "bounds a single slow unit, and it is the only one of the two that "
+            "can degrade gracefully, since the watchdog fires from a side "
+            "thread with no way to know which unit is late and so can only "
+            "kill the process.  What is left for it is a wedge outside the "
+            "pools.  The default clears the worst case unitTimeout admits at "
+            "its own default, so the per-unit path resolves first: 8 corner "
+            "detectors in waves of numCores is 4 waves at 2 cores, 4x30s = "
+            "120s < 180s.  Raise it alongside unitTimeout, never below it, and "
+            "check the galactic-bulge visits since cutout time is what scales "
+            "with reference density."
         ),
         dtype=float,
-        default=60.0,
+        default=180.0,
     )
     colorLog: pexConfig.Field = pexConfig.Field(
         doc=(
@@ -743,6 +767,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                     _run_cutout_worker,
                     [(arg, t_dispatch) for arg in cutout_args],
                     n_cutout_workers,
+                    unitTimeout=self.config.unitTimeout,
                 )
             for unit, reason in deaths:
                 # A killed worker is a real fault, not a routine per-detector
@@ -841,7 +866,12 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             # _forkMap again ensures that one killed worker does not take down
             # the entire pool/quantum
             with _dumpStacksOnHang(self.config.hangTimeout, "WF pool", self.log):
-                wf_results, wf_deaths = _forkMap(_wf_fitting_worker, groups, n_workers)
+                wf_results, wf_deaths = _forkMap(
+                    _wf_fitting_worker,
+                    groups,
+                    n_workers,
+                    unitTimeout=self.config.unitTimeout,
+                )
             nZk = len(self.wavefrontFit.config.nollIndices)
             for group, reason in wf_deaths:
                 self.log.error("WF worker for group %s died: %s", group.group_id, reason)
