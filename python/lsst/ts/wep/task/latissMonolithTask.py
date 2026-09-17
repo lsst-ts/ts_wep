@@ -537,6 +537,23 @@ class LatissMonolithTask(pipeBase.PipelineTask):
         pair = pairs[0]
         self.log.info("Fitting pair: extra=%d intra=%d", pair.extra, pair.intra)
 
+        # The quantum's visit is the exposure adjust_all_quanta took to be
+        # extra-focal from its observation_reason; the pairer decides from
+        # focusZ. If they disagree the outputs land under what the header
+        # calls the extra-focal exposure, but the fit itself follows focusZ.
+        # Say so, because downstream code assumes the two agree.
+        quantumVisit = int(butlerQC.quantum.dataId["visit"])
+        if quantumVisit != pair.extra:
+            self.log.warning(
+                "Quantum visit %d is labelled extra-focal in the exposure record, but by focusZ "
+                "exposure %d is extra-focal and %d is intra-focal. Fitting by focusZ; the "
+                "outputs are stored under visit %d.",
+                quantumVisit,
+                pair.extra,
+                pair.intra,
+                quantumVisit,
+            )
+
         outputs = self.run(
             rawHandles[pair.extra].get(), rawHandles[pair.intra].get(), camera, isrCalibs=isrCalibs
         )
