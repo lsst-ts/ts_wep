@@ -124,17 +124,37 @@ class TestIoUtils(unittest.TestCase):
             f.write(content)
             path = f.name
         try:
-            # Matching checksum: no exception.
-            verifyModelChecksum(path, expected)
+            # Matching checksum: no exception, returns the actual digest.
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, expected), expected)
 
-            # Empty/None expected checksum: check is skipped (no exception,
-            # even for a path that does not exist).
-            verifyModelChecksum(path, "")
-            verifyModelChecksum("/does/not/exist.pt", None)
+            # Empty/None expected checksum: comparison skipped, but the digest
+            # is still computed and returned.
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, ""), expected)
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, None), expected)
 
-            # Mismatched checksum: RuntimeError.
+            # Expected digest is normalised (case-insensitive, whitespace,
+            # and an optional "sha256:" prefix).
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, f"  {expected.upper()} "), expected)
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, f"sha256:{expected}"), expected)
+
+            # Malformed expected digest (not 64 hex chars): ValueError naming
+            # the config field.
+            with self.assertRaises(ValueError) as valueError:
+                verifyModelChecksum("wavenetPath", path, "not-a-real-digest")
+            self.assertIn("config.wavenetPath", str(valueError.exception))
+
+            # Mismatched checksum: RuntimeError naming the config field.
+            with self.assertRaises(RuntimeError) as mismatchError:
+                verifyModelChecksum("wavenetPath", path, "0" * 64)
+            self.assertIn("config.wavenetPath", str(mismatchError.exception))
+
+            # Unreadable file (missing / a directory): RuntimeError naming the
+            # config field, regardless of whether a checksum was pinned.
+            with self.assertRaises(RuntimeError) as unreadableError:
+                verifyModelChecksum("alignetPath", "/does/not/exist.pt", "")
+            self.assertIn("config.alignetPath", str(unreadableError.exception))
             with self.assertRaises(RuntimeError):
-                verifyModelChecksum(path, "0" * 64)
+                verifyModelChecksum("oodModelPath", os.path.dirname(path), expected)
         finally:
             os.remove(path)
 

@@ -189,6 +189,14 @@ class TestCalcZernikesAiDonutTaskCwfs(lsst.utils.tests.TestCase):
         expected = f"{os.path.basename(TEST_MODEL_PATH)}={computeSha256(TEST_MODEL_PATH)}"
         self.assertEqual(aiDonutTask.metadata["modelChecksums"], expected)
 
+    def testMissingModelPathRaises(self) -> None:
+        """A configured modelPath that does not exist raises at construction."""
+        config = CalcZernikesTaskConfig()
+        config.estimateZernikes.retarget(EstimateZernikesAiDonutTask)
+        config.estimateZernikes.modelPath = "/does/not/exist/aidonut_model.pt"
+        with self.assertRaises(RuntimeError):
+            CalcZernikesTask(config=config, name="Missing Model Task")
+
     def testTableMetadata(self) -> None:
         # First estimate without pairs
         emptyStamps = DonutStamps([], metadata=self.donutStampsExtra.metadata)

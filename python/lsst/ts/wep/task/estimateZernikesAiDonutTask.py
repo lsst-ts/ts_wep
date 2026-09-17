@@ -25,7 +25,6 @@ import os
 from typing import Any, Callable, Iterable
 
 import lsst.pex.config as pexConfig
-import lsst.pipe.base as pipeBase
 from lsst.ts.wep.task.estimateZernikesBase import (
     EstimateZernikesBaseConfig,
     EstimateZernikesBaseTask,
@@ -69,6 +68,10 @@ class EstimateZernikesAiDonutTask(EstimateZernikesBaseTask):
 
     ConfigClass = EstimateZernikesAiDonutConfig
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._recordModelChecksum()
+
     @property
     def wfAlgoName(self) -> WfAlgorithmName:
         """Return the WfAlgorithmName enum."""
@@ -88,18 +91,8 @@ class EstimateZernikesAiDonutTask(EstimateZernikesBaseTask):
             return
         modelPath = os.path.expandvars(self.config.modelPath)
         if not os.path.isfile(modelPath):
-            return
+            raise RuntimeError(f"AiDonut model file not found at {modelPath}")
         self.metadata["modelChecksums"] = f"{os.path.basename(modelPath)}={computeSha256(modelPath)}"
-
-    def run(
-        self,
-        donutStampsExtra: Any,
-        donutStampsIntra: Any,
-        numCores: int = 1,
-    ) -> pipeBase.Struct:
-        """Record model provenance, then estimate Zernikes via base task."""
-        self._recordModelChecksum()
-        return super().run(donutStampsExtra, donutStampsIntra, numCores=numCores)
 
     def _applyToList(self, fun: Callable, args: Iterable, numCores: int) -> list:
         """Apply a function to a list of arguments, optionally in parallel.

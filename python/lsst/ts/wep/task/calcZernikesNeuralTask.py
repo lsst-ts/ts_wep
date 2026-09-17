@@ -46,7 +46,7 @@ from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTask
 from lsst.ts.wep.task.donutStamp import DonutStamp
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.ts.wep.task.generateDonutCatalogUtils import addVisitInfoToCatTable
-from lsst.ts.wep.utils import computeSha256
+from lsst.ts.wep.utils import verifyModelChecksum
 from lsst.ts.wep.utils.zernikeUtils import checkNollIndices
 from lsst.utils.timer import timeMethod
 
@@ -179,7 +179,7 @@ class CalcZernikesNeuralTaskConfig(
         Model weights path for aggregatornet. If None, TARTS will create a new
         model with random weights (useful for testing).
     oodModelPath : str or None
-        Directory path for the OOD model to be used by TARTS for out-of-
+        Model weights path for the OOD model to be used by TARTS for out-of-
         distribution detection. If None, OOD checks are disabled.
     datasetParamPath : str
         Path to TARTS dataset parameters YAML file containing normalization
@@ -232,7 +232,7 @@ class CalcZernikesNeuralTaskConfig(
         doc="Expected SHA-256 hex digest of the aggregatornet model file.", dtype=str, default=""
     )
     oodModelPath: pexConfig.Field = pexConfig.Field(
-        doc="Directory path for OOD model used by TARTS (optional)",
+        doc="Model weights path for OOD model used by TARTS (optional)",
         dtype=str,
         default=None,
         optional=True,
@@ -460,22 +460,18 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
             "aggregatornetPath": (self.config.aggregatornetPath, self.config.aggregatornetSha256),
             "oodModelPath": (self.config.oodModelPath, self.config.oodModelSha256),
         }
-        self.modelHashes: dict[str, str] = {}
-        for path, expectedSha256 in modelFields.values():
+        # Provenance entries "<configField>:<basename>=<sha256>", one per
+        # loaded model file, so the metadata identifies which model type, file,
+        # and checksum go together. Only configured (non-None) files appear.
+        self.modelHashes: list[str] = []
+        for key, (path, expectedSha256) in modelFields.items():
             if path is None:
                 continue
             expandedPath = os.path.expandvars(path)
-            # Hash the file once, then reuse the digest for both verification
-            # and provenance recording.
-            digest = computeSha256(expandedPath)
-            if expectedSha256 and digest != expectedSha256:
-                raise RuntimeError(
-                    f"Model checksum mismatch for {expandedPath}: expected "
-                    f"{expectedSha256}, got {digest}. This usually means the wrong "
-                    f"model version is installed, or git-lfs did not fetch the file "
-                    f"(you may have a pointer stub instead of the real weights)."
-                )
-            self.modelHashes[os.path.basename(expandedPath)] = digest
+            # verifyModelChecksum hashes the file once, verifies it against the
+            # expected digest (if any), and returns the digest for provenance.
+            digest = verifyModelChecksum(key, expandedPath, expectedSha256)
+            self.modelHashes.append(f"{key}:{os.path.basename(expandedPath)}={digest}")
 
     def validate(self) -> None:
         """Validate configuration parameters for the neural Zernike task.
@@ -1362,9 +1358,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         # on-sky run can be traced back to the exact model version used (via
         # the ts_aos_ai model_history.yaml ledger).
         if self.modelHashes:
-            self.metadata["modelChecksums"] = "; ".join(
-                f"{name}={digest}" for name, digest in self.modelHashes.items()
-            )
+            self.metadata["modelChecksums"] = "; ".join(self.modelHashes)
 
         if exposure is None:
             self.log.info("No exposure supplied; producing empty neural Zernike outputs.")

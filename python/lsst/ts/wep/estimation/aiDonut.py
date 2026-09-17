@@ -172,7 +172,10 @@ class AiDonutAlgorithm(WfAlgorithm):
             Path to the PyTorch model file.
         """
         try:
-            verifyModelChecksum(value, self.modelSha256)
+            # Only verify when a checksum is pinned; otherwise let torch.load
+            # raise the FileNotFoundError for a missing model file.
+            if self.modelSha256:
+                verifyModelChecksum("modelPath", value, self.modelSha256)
             self.model = torch.load(value, map_location=self.device, weights_only=False)
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Model file not found: {value}") from e

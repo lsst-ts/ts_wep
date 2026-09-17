@@ -242,15 +242,16 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         config.wavenetPath = modelPath
         stub = SimpleNamespace(config=config)
 
-        # A matching wavenetSha256 verifies and records the hash.
+        # A matching wavenetSha256 verifies and records the hash, tagged with
+        # the config field and file basename.
         config.wavenetSha256 = expected
         CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
-        self.assertEqual(stub.modelHashes, {basename: expected})
+        self.assertEqual(stub.modelHashes, [f"wavenetPath:{basename}={expected}"])
 
         # An empty digest skips verification but still records the hash.
         config.wavenetSha256 = ""
         CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
-        self.assertEqual(stub.modelHashes, {basename: expected})
+        self.assertEqual(stub.modelHashes, [f"wavenetPath:{basename}={expected}"])
 
         # A mismatched digest raises.
         config.wavenetSha256 = "0" * 64
@@ -261,7 +262,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         config.wavenetPath = None
         config.wavenetSha256 = ""
         CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
-        self.assertEqual(stub.modelHashes, {})
+        self.assertEqual(stub.modelHashes, [])
 
     def testModelSha256MismatchRaises(self) -> None:
         """A file not matching its configured Sha256 raises RuntimeError."""
