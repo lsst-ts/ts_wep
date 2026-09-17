@@ -129,16 +129,16 @@ class TestCatalogOptions(unittest.TestCase):
         plots.
         """
         config = DonutBlitzCornerConfig()
-        config.cutStampsTask.stampSize = 215
-        config.cutStampsTask.maxDonuts = 11
-        config.wfFittingTask.binning = 3
+        config.cutStamps.stampSize = 215
+        config.cutStamps.maxDonuts = 11
+        config.wavefrontFit.binning = 3
         # Must be pair-complete: the config rejects a truncated +/-m doublet
         # because the coefficients could not then be rotated between frames.
-        config.wfFittingTask.nollIndices = [4, 5, 6, 7, 8]
-        config.measureCandidatesTask.apertureMarginFrac = 0.11
-        config.measureCandidatesTask.bkgInnerDiscFrac = 0.22
-        config.measureCandidatesTask.bkgAnnulusInnerFrac = 1.33
-        config.measureCandidatesTask.bkgAnnulusOuterFrac = 1.44
+        config.wavefrontFit.nollIndices = [4, 5, 6, 7, 8]
+        config.measureCandidates.apertureMarginFrac = 0.11
+        config.measureCandidates.bkgInnerDiscFrac = 0.22
+        config.measureCandidates.bkgAnnulusInnerFrac = 1.33
+        config.measureCandidates.bkgAnnulusOuterFrac = 1.44
         config.wfEstimationMode = "unpaired"
         config.saveStamps = False
 

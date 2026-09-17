@@ -392,7 +392,7 @@ class DonutBlitzFamConfig(
 ):
     """Configuration for DonutBlitzFamTask."""
 
-    isrTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    isr: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=IsrTaskLSST,
         doc="ISR subtask run on each science sensor exposure.",
     )
@@ -400,7 +400,7 @@ class DonutBlitzFamConfig(
         target=SubtractBackgroundTask,
         doc="Background subtraction subtask run before donut detection.",
     )
-    detectDiameter: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    measureDiameter: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=DonutDetectDiameterTask,
         doc="Donut diameter detection subtask.",
     )
@@ -408,7 +408,7 @@ class DonutBlitzFamConfig(
         target=BlitzDetectTask,
         doc="Blitz donut detection subtask run on each exposure.",
     )
-    astromTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    astrometry: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=AstrometryTask,
         doc="Astrometry subtask for WCS fitting.",
     )
@@ -416,15 +416,15 @@ class DonutBlitzFamConfig(
         target=DonutSourceSelectorTask,
         doc="Donut source selector subtask.",
     )
-    measureCandidatesTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    measureCandidates: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=MeasureDonutCandidatesTask,
         doc="Donut candidate measurement subtask.",
     )
-    cutStampsTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    cutStamps: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=CutDonutStampsTask,
         doc="Donut stamp cutting subtask.",
     )
-    wfFittingTask: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+    wavefrontFit: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
         target=WavefrontFittingTask,
         doc="Wavefront fitting subtask using Danish algorithm.",
     )
@@ -580,46 +580,46 @@ class DonutBlitzFamConfig(
 
     def setDefaults(self) -> None:
         super().setDefaults()
-        self.isrTask.doAmpOffset = False
-        self.isrTask.ampOffset.doApplyAmpOffset = False
-        self.isrTask.doBrighterFatter = False
-        self.isrTask.doSaturation = True
-        self.isrTask.doStandardStatistics = False
-        self.isrTask.doInterpolate = False
-        self.isrTask.doVariance = False
-        self.isrTask.doDeferredCharge = False
-        self.isrTask.doDefect = False
-        self.isrTask.doApplyGains = True
-        self.isrTask.doBias = False
-        self.isrTask.doFlat = True
-        self.isrTask.doDark = False
-        self.isrTask.doLinearize = True
-        self.isrTask.doSuspect = False
-        self.isrTask.doSetBadRegions = False
-        self.isrTask.doBootstrap = False
-        self.isrTask.doCrosstalk = True
-        self.isrTask.crosstalk.doQuadraticCrosstalkCorrection = False
-        self.isrTask.doITLEdgeBleedMask = False
-        self.isrTask.qa.saveStats = False
+        self.isr.doAmpOffset = False
+        self.isr.ampOffset.doApplyAmpOffset = False
+        self.isr.doBrighterFatter = False
+        self.isr.doSaturation = True
+        self.isr.doStandardStatistics = False
+        self.isr.doInterpolate = False
+        self.isr.doVariance = False
+        self.isr.doDeferredCharge = False
+        self.isr.doDefect = False
+        self.isr.doApplyGains = True
+        self.isr.doBias = False
+        self.isr.doFlat = True
+        self.isr.doDark = False
+        self.isr.doLinearize = True
+        self.isr.doSuspect = False
+        self.isr.doSetBadRegions = False
+        self.isr.doBootstrap = False
+        self.isr.doCrosstalk = True
+        self.isr.crosstalk.doQuadraticCrosstalkCorrection = False
+        self.isr.doITLEdgeBleedMask = False
+        self.isr.qa.saveStats = False
 
-        self.astromTask.wcsFitter.retarget(FitAffineWcsTask)
-        self.astromTask.doMagnitudeOutlierRejection = False
-        self.astromTask.referenceSelector.doMagLimit = True
+        self.astrometry.wcsFitter.retarget(FitAffineWcsTask)
+        self.astrometry.doMagnitudeOutlierRejection = False
+        self.astrometry.referenceSelector.doMagLimit = True
         magLimit = MagnitudeLimit()
         magLimit.minimum = 1
         magLimit.maximum = 18
-        self.astromTask.referenceSelector.magLimit = magLimit
-        self.astromTask.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
-        self.astromTask.sourceSelector["science"].doRequirePrimary = False
-        self.astromTask.sourceSelector["science"].doIsolated = False
-        self.astromTask.sourceSelector["science"].doSignalToNoise = False
-        self.astromTask.sourceSelector["science"].doCentroidErrorLimit = False
-        self.astromTask.maxIter = 5
-        self.astromTask.matcher.maxOffsetPix = 1000
+        self.astrometry.referenceSelector.magLimit = magLimit
+        self.astrometry.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
+        self.astrometry.sourceSelector["science"].doRequirePrimary = False
+        self.astrometry.sourceSelector["science"].doIsolated = False
+        self.astrometry.sourceSelector["science"].doSignalToNoise = False
+        self.astrometry.sourceSelector["science"].doCentroidErrorLimit = False
+        self.astrometry.maxIter = 5
+        self.astrometry.matcher.maxOffsetPix = 1000
 
         # Cap the references handed to the pattern matcher.  Essential for
         # keeping the cost to refit the WCS near the galactic bulge.
-        self.astromTask.matcher.maxRefObjects = 2048
+        self.astrometry.matcher.maxRefObjects = 2048
 
         # Monster refcat uses full filter names (e.g. phot_g_mean), not band
         # labels, so the default mag-limit policy lookup by band would fail.
@@ -635,13 +635,13 @@ class DonutBlitzFamConfig(
 
         # A science detector is ~2x the area of a corner sensor, plus we're
         # less constrained for time here.
-        self.cutStampsTask.maxDonuts = 20
+        self.cutStamps.maxDonuts = 20
 
         # 189 detectors x up to 40 groups each is ~10k lines of per-group
         # narration, which buries the per-detector summaries `_runWorkers` logs
         # instead. Those carry the same information in aggregate; failures and
         # timeouts still warn.
-        self.wfFittingTask.logPerGroup = False
+        self.wavefrontFit.logPerGroup = False
 
 
 class DonutBlitzFamTask(pipeBase.PipelineTask):
@@ -661,15 +661,15 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.makeSubtask("isrTask")
+        self.makeSubtask("isr")
         self.makeSubtask("subtractBackground")
-        self.makeSubtask("detectDiameter")
+        self.makeSubtask("measureDiameter")
         self.makeSubtask("blitzDetect")
-        self.makeSubtask("astromTask")
+        self.makeSubtask("astrometry")
         self.makeSubtask("donutSelector")
-        self.makeSubtask("measureCandidatesTask")
-        self.makeSubtask("cutStampsTask")
-        self.makeSubtask("wfFittingTask")
+        self.makeSubtask("measureCandidates")
+        self.makeSubtask("cutStamps")
+        self.makeSubtask("wavefrontFit")
         self._colorLogEnabled = _resolveColorLogEnabled(self.config.colorLog)
 
     @property
@@ -816,7 +816,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             - np.pi / 2
             + np.pi
         ) % (2 * np.pi) - np.pi
-        rtp_deg = np.degrees(rtp_rad) if self.wfFittingTask.config.modelSpiderShadows else None
+        rtp_deg = np.degrees(rtp_rad) if self.wavefrontFit.config.modelSpiderShadows else None
         boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
 
         photo_filter_name = (
@@ -951,7 +951,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         # satisfies it, and each worker builds its own real loader.
         astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
         astrom_stub_loader.config.pixelMargin = 0
-        self.astromTask.setRefObjLoader(astrom_stub_loader)
+        self.astrometry.setRefObjLoader(astrom_stub_loader)
 
         # Handles, not objects: no pixels are read in this process, so each
         # worker resolves its own detector's inputs. `intrinsic_zernikes` may
@@ -975,15 +975,15 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         # evaluates both sides of focus for them (see `CowStore.for_fam`).
         _COW_STORE.adopt(
             CowStore.for_fam(
-                isr_task=self.isrTask,
+                isr_task=self.isr,
                 bkg_task=self.subtractBackground,
-                detect_diameter_task=self.detectDiameter,
+                diam_task=self.measureDiameter,
                 detect_task=self.blitzDetect,
-                astrom_task=self.astromTask,
-                donut_selector_task=self.donutSelector,
-                measure_candidates_task=self.measureCandidatesTask,
-                cut_stamps_task=self.cutStampsTask,
-                wf_fitting_task=self.wfFittingTask,
+                astrom_task=self.astrometry,
+                select_task=self.donutSelector,
+                measure_task=self.measureCandidates,
+                cut_task=self.cutStamps,
+                wf_fit_task=self.wavefrontFit,
                 wf_estimation_mode=self.config.wfEstimationMode,
                 max_fit_scatter=self.config.maxFitScatter,
                 astrom_ref_filter=self.config.astromRefFilter,
@@ -1161,7 +1161,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 piece = f"{key}={stages[key]:.2f}s"
                 # Scatter belongs to the WCS refit, so it hangs off that stage
                 # rather than standing as its own column, as in corner mode.
-                pieces.append(f"{piece} (scatter={scatter})" if key == "wcs" else piece)
+                pieces.append(f"{piece} (scatter={scatter})" if key == "astrom" else piece)
             pieces += [
                 f"donuts={donuts}",
                 f"pair={r['pair_path']}",
@@ -1303,14 +1303,14 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         mode has ~10k rows per pair, where they would dominate the file.
         """
         return CatalogOptions(
-            stamp_size=self.cutStampsTask.config.stampSize,
-            binning=self.wfFittingTask.config.binning,
-            noll_indices=tuple(self.wfFittingTask.config.nollIndices),
-            aperture_margin_frac=self.measureCandidatesTask.config.apertureMarginFrac,
-            bkg_inner_disc_frac=self.measureCandidatesTask.config.bkgInnerDiscFrac,
-            bkg_annulus_inner_frac=self.measureCandidatesTask.config.bkgAnnulusInnerFrac,
-            bkg_annulus_outer_frac=self.measureCandidatesTask.config.bkgAnnulusOuterFrac,
-            max_donuts=self.cutStampsTask.config.maxDonuts,
+            stamp_size=self.cutStamps.config.stampSize,
+            binning=self.wavefrontFit.config.binning,
+            noll_indices=tuple(self.wavefrontFit.config.nollIndices),
+            aperture_margin_frac=self.measureCandidates.config.apertureMarginFrac,
+            bkg_inner_disc_frac=self.measureCandidates.config.bkgInnerDiscFrac,
+            bkg_annulus_inner_frac=self.measureCandidates.config.bkgAnnulusInnerFrac,
+            bkg_annulus_outer_frac=self.measureCandidates.config.bkgAnnulusOuterFrac,
+            max_donuts=self.cutStamps.config.maxDonuts,
             wf_mode=self.config.wfEstimationMode,
             save_stamps=self.config.saveStamps,
             save_wf_images=self.config.saveWfImages,

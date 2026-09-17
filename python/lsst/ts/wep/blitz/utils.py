@@ -96,12 +96,18 @@ _ZK_JMAX = 66
 # plot task's per-detector panel, and the `det_meta` block of the output
 # catalog -- and a stage added to the cutout pipeline should not be able to
 # show up in some of them and silently not others.
+#
+# Each label is also the stem of the `CowStore` field holding the subtask that
+# runs that stage (`isr` -> `isr_task`, `astrom` -> `astrom_task`, ...), so the
+# two vocabularies are one vocabulary.  `measure_task` and `wf_fit_task` are
+# the only store subtasks with no label here, because neither is a timed
+# cutout stage.
 _CUTOUT_STAGE_KEYS = {
     "isr": "isr_run",
     "bkg": "bkg_run",
     "diam": "diam_run",
     "detect": "blind_detect_run",
-    "wcs": "wcs_refit_run",
+    "astrom": "wcs_refit_run",
     "select": "catalog_select_run",
     "cut": "stamp_cut_run",
 }
@@ -274,9 +280,16 @@ class CowStore:
     `KeyError` the string-keyed dict used to give, with no ``Optional``
     standing in for "wrong mode".
 
-    Keys are snake_case throughout, including the ones mirroring camelCase
-    config fields (``config.maxFitScatter`` becomes ``max_fit_scatter``): the
-    store is not framework-introspected, so the submodule's rule applies.
+    Keys are snake_case throughout: the store is not framework-introspected,
+    so the submodule's rule applies.  Scalars mirror their camelCase config
+    field directly (``config.maxFitScatter`` becomes ``max_fit_scatter``), but
+    **the subtask fields deliberately do not.**  Each is ``<stage>_task``,
+    where the stage is the short label `_CUTOUT_STAGE_KEYS` already uses, so
+    ``config.subtractBackground`` arrives as ``bkg_task`` and
+    ``config.donutSelector`` as ``select_task``.  `wf_fit_task` is the only
+    three-word name.  Do not "fix" these to track the config field names --
+    the point is that the seven cutout stages, their timing keys, and the
+    subtasks that run them all share one vocabulary.
 
     `for_corner` and `for_fam` spell every field out rather than sharing a
     ``**kwargs`` helper. The duplication is deliberate -- the point of the
@@ -287,13 +300,13 @@ class CowStore:
     # --- Subtasks, shared by both modes.
     isr_task: Any
     bkg_task: Any
-    detect_diameter_task: Any
+    diam_task: Any
     detect_task: Any
     astrom_task: Any
-    donut_selector_task: Any
-    measure_candidates_task: Any
-    cut_stamps_task: Any
-    wf_fitting_task: Any
+    select_task: Any
+    measure_task: Any
+    cut_task: Any
+    wf_fit_task: Any
     # --- Config scalars and the telescope, shared by both modes.
     wf_estimation_mode: str
     max_fit_scatter: float
@@ -334,13 +347,13 @@ class CowStore:
         *,
         isr_task: Any,
         bkg_task: Any,
-        detect_diameter_task: Any,
+        diam_task: Any,
         detect_task: Any,
         astrom_task: Any,
-        donut_selector_task: Any,
-        measure_candidates_task: Any,
-        cut_stamps_task: Any,
-        wf_fitting_task: Any,
+        select_task: Any,
+        measure_task: Any,
+        cut_task: Any,
+        wf_fit_task: Any,
         wf_estimation_mode: str,
         max_fit_scatter: float,
         astrom_ref_filter: str,
@@ -353,13 +366,13 @@ class CowStore:
         store = cls.uninitialized()
         store.isr_task = isr_task
         store.bkg_task = bkg_task
-        store.detect_diameter_task = detect_diameter_task
+        store.diam_task = diam_task
         store.detect_task = detect_task
         store.astrom_task = astrom_task
-        store.donut_selector_task = donut_selector_task
-        store.measure_candidates_task = measure_candidates_task
-        store.cut_stamps_task = cut_stamps_task
-        store.wf_fitting_task = wf_fitting_task
+        store.select_task = select_task
+        store.measure_task = measure_task
+        store.cut_task = cut_task
+        store.wf_fit_task = wf_fit_task
         store.wf_estimation_mode = wf_estimation_mode
         store.max_fit_scatter = max_fit_scatter
         store.astrom_ref_filter = astrom_ref_filter
@@ -375,13 +388,13 @@ class CowStore:
         *,
         isr_task: Any,
         bkg_task: Any,
-        detect_diameter_task: Any,
+        diam_task: Any,
         detect_task: Any,
         astrom_task: Any,
-        donut_selector_task: Any,
-        measure_candidates_task: Any,
-        cut_stamps_task: Any,
-        wf_fitting_task: Any,
+        select_task: Any,
+        measure_task: Any,
+        cut_task: Any,
+        wf_fit_task: Any,
         wf_estimation_mode: str,
         max_fit_scatter: float,
         astrom_ref_filter: str,
@@ -409,13 +422,13 @@ class CowStore:
         store = cls.uninitialized()
         store.isr_task = isr_task
         store.bkg_task = bkg_task
-        store.detect_diameter_task = detect_diameter_task
+        store.diam_task = diam_task
         store.detect_task = detect_task
         store.astrom_task = astrom_task
-        store.donut_selector_task = donut_selector_task
-        store.measure_candidates_task = measure_candidates_task
-        store.cut_stamps_task = cut_stamps_task
-        store.wf_fitting_task = wf_fitting_task
+        store.select_task = select_task
+        store.measure_task = measure_task
+        store.cut_task = cut_task
+        store.wf_fit_task = wf_fit_task
         store.wf_estimation_mode = wf_estimation_mode
         store.max_fit_scatter = max_fit_scatter
         store.astrom_ref_filter = astrom_ref_filter
