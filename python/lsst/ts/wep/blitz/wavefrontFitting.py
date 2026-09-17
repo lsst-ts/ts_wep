@@ -308,7 +308,7 @@ def _wf_fitting_worker(group: "_WfGroup") -> dict:
     return task.run(group)
 
 
-def _dead_wf_result(group: "_WfGroup", reason: str, nZk: int) -> dict:
+def _dead_wf_result(group: "_WfGroup", reason: str, n_zk: int) -> dict:
     """Stand-in result for a fit group whose worker was killed outright.
 
     Mirrors the empty-group return in `WavefrontFittingTask.run`: no Python
@@ -322,7 +322,7 @@ def _dead_wf_result(group: "_WfGroup", reason: str, nZk: int) -> dict:
         The group that was lost.
     reason : `str`
         Cause, from `_forkMap`'s `_WorkerDeath`.
-    nZk : `int`
+    n_zk : `int`
         Length of the Zernike vector, so the NaN row matches its siblings and
         the output table stays rectangular.
 
@@ -334,7 +334,7 @@ def _dead_wf_result(group: "_WfGroup", reason: str, nZk: int) -> dict:
     return {
         "group_id": group.group_id,
         "group_size": len(group.donuts),
-        "zk_dev": np.full(nZk, np.nan),
+        "zk_dev": np.full(n_zk, np.nan),
         "success": False,
         "fit_info": {"error": f"worker died: {reason}"},
         "donuts": group.donuts,
@@ -576,7 +576,7 @@ class WavefrontFittingTask(pipeBase.Task):
             - imgs: list
             - det_names: list of str
         """
-        nollIndices = self.config.nollIndices
+        noll_indices = self.config.nollIndices
         all_donuts = group.donuts
         n = len(all_donuts)
 
@@ -584,7 +584,7 @@ class WavefrontFittingTask(pipeBase.Task):
             return {
                 "group_id": group.group_id,
                 "group_size": 0,
-                "zk_dev": np.full(len(nollIndices), np.nan),
+                "zk_dev": np.full(len(noll_indices), np.nan),
                 "success": False,
                 "fit_info": {},
                 "donuts": [],
@@ -601,7 +601,7 @@ class WavefrontFittingTask(pipeBase.Task):
         thys = [p[1][1] for p in preps]
         zk_refs = [p[2] for p in preps]
         sky_lvl = [p[3] for p in preps]
-        dz_terms = [(1, j) for j in nollIndices]
+        dz_terms = [(1, j) for j in noll_indices]
 
         npix = min(img.shape[0] for img in imgs)
         imgs = [img[:npix, :npix] for img in imgs]
@@ -643,7 +643,7 @@ class WavefrontFittingTask(pipeBase.Task):
             self.log.info("WF %s setup=%.2fs", label, _setup_elapsed)
 
         fit_result = self._run_lstsq_fit(model, x0, bounds, imgs, sky_lvl, timeout, label)
-        zk_dev_dense = _dense_dev(fit_result.zk_dev, nollIndices)
+        zk_dev_dense = _dense_dev(fit_result.zk_dev, noll_indices)
 
         donuts_out = []
         for i, d in enumerate(all_donuts):
@@ -863,14 +863,14 @@ class WavefrontFittingTask(pipeBase.Task):
         _LstsqFitResult
             All fit outputs as first-class typed fields; see `_LstsqFitResult`.
         """
-        nollIndices = list(self.config.nollIndices)
+        noll_indices = list(self.config.nollIndices)
         n = len(imgs)
         _nan_blends = [float("nan")] * n
         t0 = time.perf_counter()
         if self.config.wfInitialGuessOnly:
             try:
                 params = model.unpack_params(x0)
-                zk_dev = np.zeros(len(nollIndices))
+                zk_dev = np.zeros(len(noll_indices))
                 model_imgs = model.model(**{k: params[k] for k in _DZ_MODEL_KEYS})
                 bkg_stds = [np.sqrt(v) for v in variances]
                 blend_fracs = [
@@ -906,7 +906,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 elapsed = time.perf_counter() - t0
                 self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
                 return _LstsqFitResult(
-                    zk_dev=np.full(len(nollIndices), np.nan),
+                    zk_dev=np.full(len(noll_indices), np.nan),
                     model_imgs=[None] * n,
                     blend_fracs=_nan_blends,
                     success=False,
@@ -974,7 +974,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 elapsed = time.perf_counter() - t0
                 self.log.warning("WF %s TIMED OUT after %.1fs", label, elapsed)
                 return _LstsqFitResult(
-                    zk_dev=np.full(len(nollIndices), np.nan),
+                    zk_dev=np.full(len(noll_indices), np.nan),
                     model_imgs=[None] * n,
                     blend_fracs=_nan_blends,
                     success=False,
@@ -990,7 +990,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 elapsed = time.perf_counter() - t0
                 self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
                 return _LstsqFitResult(
-                    zk_dev=np.full(len(nollIndices), np.nan),
+                    zk_dev=np.full(len(noll_indices), np.nan),
                     model_imgs=[None] * n,
                     blend_fracs=_nan_blends,
                     success=False,
