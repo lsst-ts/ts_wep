@@ -637,17 +637,17 @@ class WavefrontFittingTask(pipeBase.Task):
         bounds = [list(b) for b in zip(*bounds)]
         x0 = np.clip(x0, bounds[0], bounds[1])
         timeout = self.config.wfFitTimeoutPerDonut * n
-        _setup_elapsed = time.perf_counter() - t_setup0
+        setup_elapsed = time.perf_counter() - t_setup0
         label = f"group={group.group_id} n={n}"
         if self.config.logPerGroup:
-            self.log.info("WF %s setup=%.2fs", label, _setup_elapsed)
+            self.log.info("WF %s setup=%.2fs", label, setup_elapsed)
 
         fit_result = self._run_lstsq_fit(model, x0, bounds, imgs, sky_lvl, timeout, label)
         zk_dev_dense = _dense_dev(fit_result.zk_dev, noll_indices)
 
         donuts_out = []
         for i, d in enumerate(all_donuts):
-            _img = imgs[i] if i < len(imgs) else None
+            img_i = imgs[i] if i < len(imgs) else None
             donuts_out.append(
                 WfDonutResult(
                     donut_id=int(d.donut_id),
@@ -655,11 +655,11 @@ class WavefrontFittingTask(pipeBase.Task):
                     visit_id=int(d.visit_id),
                     zk_dev=zk_dev_dense,
                     zk_intrinsic=_dense_intrinsic(d),
-                    img=_img,
+                    img=img_i,
                     model_img=fit_result.model_imgs[i],
                     fit_success=fit_result.success,
                     fit_elapsed=fit_result.elapsed,
-                    setup_elapsed=_setup_elapsed,
+                    setup_elapsed=setup_elapsed,
                     fit_nfev=fit_result.nfev,
                     fit_cost=fit_result.cost,
                     fit_optimality=fit_result.optimality,
@@ -865,7 +865,7 @@ class WavefrontFittingTask(pipeBase.Task):
         """
         noll_indices = list(self.config.nollIndices)
         n = len(imgs)
-        _nan_blends = [float("nan")] * n
+        nan_blends = [float("nan")] * n
         t0 = time.perf_counter()
         if self.config.wfInitialGuessOnly:
             try:
@@ -908,7 +908,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 return _LstsqFitResult(
                     zk_dev=np.full(len(noll_indices), np.nan),
                     model_imgs=[None] * n,
-                    blend_fracs=_nan_blends,
+                    blend_fracs=nan_blends,
                     success=False,
                     elapsed=elapsed,
                     fluxes=[float("nan")] * n,
@@ -976,7 +976,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 return _LstsqFitResult(
                     zk_dev=np.full(len(noll_indices), np.nan),
                     model_imgs=[None] * n,
-                    blend_fracs=_nan_blends,
+                    blend_fracs=nan_blends,
                     success=False,
                     elapsed=elapsed,
                     fluxes=[float("nan")] * n,
@@ -992,7 +992,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 return _LstsqFitResult(
                     zk_dev=np.full(len(noll_indices), np.nan),
                     model_imgs=[None] * n,
-                    blend_fracs=_nan_blends,
+                    blend_fracs=nan_blends,
                     success=False,
                     elapsed=elapsed,
                     fluxes=[float("nan")] * n,
