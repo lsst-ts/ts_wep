@@ -321,7 +321,7 @@ def _dead_wf_result(group: "_WfGroup", reason: str, n_zk: int) -> dict:
     group : `_WfGroup`
         The group that was lost.
     reason : `str`
-        Cause, from `_forkMap`'s `_WorkerDeath`.
+        Cause, from `_fork_map`'s `_WorkerDeath`.
     n_zk : `int`
         Length of the Zernike vector, so the NaN row matches its siblings and
         the output table stays rectangular.

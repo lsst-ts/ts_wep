@@ -58,7 +58,7 @@ from .catalogBuilder import _build_donut_catalog, _CatalogOptions
 from .cutDonutStamps import CutDonutStampsTask
 from .cutoutPipeline import _cutout_corner_detector, _dead_cutout_result
 from .donutBlitzPlot import DonutBlitzPlotTask
-from .forkPool import _dumpStacksOnHang, _forkMap
+from .forkPool import _dump_stacks_on_hang, _fork_map
 from .measureDonutCandidates import MeasureDonutCandidatesTask
 from .utils import (
     _ANSI_BOLD,
@@ -759,15 +759,15 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             # the guard above.
             n_cutout_workers = min(num_cores, len(cutout_args))
             # Bare fork workers are safe here. Everything is preloaded in
-            # runQuantum and inherited via COW. _forkMap ensures that one
+            # runQuantum and inherited via COW. _fork_map ensures that one
             # killed worker does not take down the entire pool/quantum.
             t_dispatch = time.time()
-            with _dumpStacksOnHang(self.config.hangTimeout, "cutout pool", self.log):
-                results, deaths = _forkMap(
+            with _dump_stacks_on_hang(self.config.hangTimeout, "cutout pool", self.log):
+                results, deaths = _fork_map(
                     _cutout_corner_detector,
                     [(arg, t_dispatch) for arg in cutout_args],
                     n_cutout_workers,
-                    unitTimeout=self.config.unitTimeout,
+                    unit_timeout=self.config.unitTimeout,
                 )
             for unit, reason in deaths:
                 # A killed worker is a real fault, not a routine per-detector
@@ -863,14 +863,14 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             wf_results = [_wf_fitting_worker(g) for g in groups]
         else:
             n_workers = min(num_cores, len(groups))
-            # _forkMap again ensures that one killed worker does not take down
+            # _fork_map again ensures that one killed worker does not take down
             # the entire pool/quantum
-            with _dumpStacksOnHang(self.config.hangTimeout, "WF pool", self.log):
-                wf_results, wf_deaths = _forkMap(
+            with _dump_stacks_on_hang(self.config.hangTimeout, "WF pool", self.log):
+                wf_results, wf_deaths = _fork_map(
                     _wf_fitting_worker,
                     groups,
                     n_workers,
-                    unitTimeout=self.config.unitTimeout,
+                    unit_timeout=self.config.unitTimeout,
                 )
             n_zk = len(self.wavefrontFit.config.nollIndices)
             for group, reason in wf_deaths:

@@ -70,7 +70,7 @@ from .blitzDetect import BlitzDetectTask
 from .catalogBuilder import _build_donut_catalog, _CatalogOptions
 from .cutDonutStamps import CutDonutStampsTask
 from .famPipeline import _dead_fam_result, _fam_detector_worker, _fam_pool_initializer
-from .forkPool import _dumpStacksOnHang, _forkMap
+from .forkPool import _dump_stacks_on_hang, _fork_map
 from .measureDonutCandidates import MeasureDonutCandidatesTask
 from .utils import (
     _ANSI_BOLD,
@@ -1052,16 +1052,16 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             # so the initializer is mandatory, not defensive: children sharing
             # the parent's inherited psycopg2 SSL socket corrupt it. One fork
             # per detector with at most n_workers alive, so at most n_workers
-            # detectors' pixels are resident at once. _forkMap ensures that one
-            # killed worker does not take down the entire pool/quantum.
+            # detectors' pixels are resident at once. _fork_map ensures that
+            # one killed worker does not take down the entire pool/quantum.
             t_dispatch = time.time()
-            with _dumpStacksOnHang(self.config.hangTimeout, "FAM detector pool", self.log):
-                results, deaths = _forkMap(
+            with _dump_stacks_on_hang(self.config.hangTimeout, "FAM detector pool", self.log):
+                results, deaths = _fork_map(
                     _fam_detector_worker,
                     [(d, t_dispatch) for d in det_ids],
                     n_workers,
                     initializer=_fam_pool_initializer,
-                    unitTimeout=self.config.unitTimeout,
+                    unit_timeout=self.config.unitTimeout,
                 )
             for unit, reason in deaths:
                 self.log.error("FAM worker for detector %s died: %s", unit[0], reason)

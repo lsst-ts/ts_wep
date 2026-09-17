@@ -555,7 +555,7 @@ def _dead_fam_result(det_id: int, reason: str) -> dict:
     det_id : `int`
         Detector whose worker died.
     reason : `str`
-        Cause, from `_forkMap`'s `_WorkerDeath`.
+        Cause, from `_fork_map`'s `_WorkerDeath`.
 
     Returns
     -------

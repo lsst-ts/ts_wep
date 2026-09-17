@@ -405,7 +405,7 @@ def _cutout_one_exposure(
 def _cutout_corner_detector(args: tuple) -> dict:
     """Corner-mode entry point: one exposure per detector, from _COW_STORE.
 
-    Takes its arguments as one tuple because that is what `_forkMap` hands a
+    Takes its arguments as one tuple because that is what `_fork_map` hands a
     work unit, and is a module-level function so it is picklable by name.
 
     Parameters
@@ -456,7 +456,7 @@ def _dead_cutout_result(det_name: str, reason: str) -> dict:
     det_name : `str`
         Detector whose worker died.
     reason : `str`
-        Cause, from `_forkMap`'s `_WorkerDeath`.
+        Cause, from `_fork_map`'s `_WorkerDeath`.
 
     Returns
     -------

@@ -45,13 +45,13 @@ Neither pool in the standard library can do that:
   survived. Since the cutout pool runs 8 detectors concurrently in ~1.6 s, that
   is nothing -- one dead detector would lose the whole visit.
 
-`_forkMap` gives each work unit its own anonymous pipe. That is the same
+`_fork_map` gives each work unit its own anonymous pipe. That is the same
 transport `Pool` already uses, minus the shared lock, so a dying child can only
 ever truncate its own stream, and a length-framed payload makes a truncated
 stream unambiguous. Nothing is written to disk.
 
 A worker can also fail by never finishing, which needs its own bound: passing
-`unitTimeout` gives each unit a deadline measured from its own fork, so a
+`unit_timeout` gives each unit a deadline measured from its own fork, so a
 pathologically slow unit -- or one whose pipe never reaches EOF because `func`
 leaked its write end to a grandchild -- is killed and named like any other
 loss rather than parking the drain loop. Callers with no bound on legitimate
@@ -62,9 +62,19 @@ calibration products, telescope models and reference catalogs the workers need
 are built once in the parent and inherited copy-on-write, which neither a
 spawn-based pool nor a thread pool (the GIL aside) would give.
 
-`_dumpStacksOnHang` remains as a backstop for hangs that come from somewhere
+`_dump_stacks_on_hang` remains as a backstop for hangs that come from somewhere
 other than the pool, and turns the next one from something that has to be
 caught live with `py-spy` into something the job log already explains.
+
+Everything here stays private to the subpackage deliberately, despite reading
+like a reusable utility. Two reasons. `_fork_map`'s contract is blitz-shaped:
+`results` omits dead units rather than leaving a placeholder, so ``results[i]``
+stops corresponding to ``args[i]`` from the first death onwards, which is right
+only for callers whose results name their own detector or group. And publishing
+it would invite a caller with no `utils.CowStore`, for whom inheriting the
+parent's memory copy-on-write is a liability rather than the entire point. If
+it ever does need to be reusable, the move is to `lsst.ts.wep.utils` -- with
+camelCase names, as the rest of that package uses -- not a rename in place.
 """
 
 __all__ = []
@@ -111,24 +121,24 @@ _READ_CHUNK = 1 << 16
 _SELECT_TIMEOUT = 1.0
 
 
-def _forkMap(
+def _fork_map(
     func: Callable,
     args: Iterable,
-    numWorkers: int,
+    num_workers: int,
     *,
     initializer: Callable | None = None,
-    unitTimeout: float | None = None,
+    unit_timeout: float | None = None,
 ) -> tuple[list, list[_WorkerDeath]]:
     """Map `func` over `args` in forked workers, surviving a worker that dies.
 
-    One fork per work unit, at most `numWorkers` alive at a time, each
+    One fork per work unit, at most `num_workers` alive at a time, each
     returning its result over its own anonymous pipe. A worker killed outright
     -- an OOM kill by the enclosing cgroup, a segfault, an external SIGKILL --
     costs exactly its own unit: every sibling runs to completion and the lost
     unit is named in the returned `_WorkerDeath` list. See the module docstring
     for why neither standard-library pool can do that.
 
-    With `unitTimeout`, a unit that *overruns* costs its own unit too, on the
+    With `unit_timeout`, a unit that *overruns* costs its own unit too, on the
     same terms. That is a separate failure from being killed and needs its own
     deadline: a worker merely running long is indistinguishable from one making
     progress, so nothing in the loop would ever notice it.
@@ -140,25 +150,25 @@ def _forkMap(
         be picklable.
     args : `Iterable`
         Work units. Materialized into a list, so a generator is fine.
-    numWorkers : `int`
+    num_workers : `int`
         Maximum number of workers alive at once. Clamped to ``[1, len(args)]``.
         Peak worker-side memory follows this rather than the number of units,
         which is the property `Pool.imap_unordered(chunksize=1)` was used for.
     initializer : `Callable`, optional
         Run in each worker immediately after the fork, before `func`. Mandatory
         for workers that touch the butler; see `_fam_pool_initializer`.
-    unitTimeout : `float`, optional
+    unit_timeout : `float`, optional
         Seconds a single unit may run, measured from its own fork, before its
         worker is SIGKILLed and the unit recorded as a death. `None` (the
         default) waits indefinitely, which is what a caller with no bound on
         legitimate runtime wants.
 
         This bounds one *unit*, not the call: units run in waves of
-        `numWorkers`, so the whole map can take up to
-        ``ceil(len(args) / numWorkers) * unitTimeout``. A caller that also arms
-        `_dumpStacksOnHang` needs that product to sit below the watchdog's
-        timeout, or the watchdog still aborts the process first and the
-        per-unit degradation never gets to happen.
+        `num_workers`, so the whole map can take up to
+        ``ceil(len(args) / num_workers) * unit_timeout``. A caller that also
+        arms `_dump_stacks_on_hang` needs that product to sit below the
+        watchdog's timeout, or the watchdog still aborts the process first and
+        the per-unit degradation never gets to happen.
 
     Returns
     -------
@@ -169,63 +179,63 @@ def _forkMap(
         death onwards. Callers identify a result from its own contents (the
         detector or group it names), not from its position.
     deaths : `list` [`_WorkerDeath`]
-        One entry per unit whose worker died or overran `unitTimeout`. Empty on
-        a clean run. Callers are expected to fold these into whatever they
+        One entry per unit whose worker died or overran `unit_timeout`. Empty
+        on a clean run. Callers are expected to fold these into whatever they
         already do with a failed unit rather than to raise.
     """
-    argList = list(args)
-    if not argList:
+    arg_list = list(args)
+    if not arg_list:
         return [], []
-    numWorkers = max(1, min(numWorkers, len(argList)))
+    num_workers = max(1, min(num_workers, len(arg_list)))
 
     buffers: dict[int, bytearray] = {}
-    pidToIndex: dict[int, int] = {}
-    fdToIndex: dict[int, int] = {}
+    pid_to_index: dict[int, int] = {}
+    fd_to_index: dict[int, int] = {}
     # Only used by the deadline sweep: when each unit was forked, how to signal
     # it, and which units the sweep has already given up on.
-    startedAt: dict[int, float] = {}
-    indexToPid: dict[int, int] = {}
-    timedOut: set[int] = set()
+    started_at: dict[int, float] = {}
+    index_to_pid: dict[int, int] = {}
+    timed_out: set[int] = set()
     selector = selectors.DefaultSelector()
-    nextIndex = 0
-    openPipes = 0
+    next_index = 0
+    open_pipes = 0
 
     def spawn(index: int) -> None:
-        nonlocal openPipes
-        readFd, writeFd = os.pipe()
+        nonlocal open_pipes
+        read_fd, write_fd = os.pipe()
         pid = os.fork()
         if pid == 0:
             # ---------------- child ----------------
             # Exit via os._exit throughout: the parent's `finally` blocks,
             # atexit handlers and buffered streams are not ours to run.
             try:
-                os.close(readFd)
+                os.close(read_fd)
                 # Siblings' read ends come across the fork; close them so a
-                # child does not accumulate up to numWorkers-1 stale
+                # child does not accumulate up to num_workers-1 stale
                 # descriptors. Hygiene only -- a pipe reaches EOF when the last
                 # *write* end closes, so a held read end delays nothing
                 # (verified). The invariant that does matter is below in the
-                # parent: writeFd is closed before the next fork, so no child
+                # parent: write_fd is closed before the next fork, so no child
                 # ever inherits a sibling's write end and no sibling's pipe can
                 # be held open by an unrelated child.
                 #
                 # The same reasoning binds anything `func` itself starts: EOF
-                # arrives only when the *last* copy of writeFd closes, so a
+                # arrives only when the *last* copy of write_fd closes, so a
                 # grandchild (a fork or a subprocess outliving the worker)
                 # would inherit it and park the parent in `select` forever.
-                # `func` must not leave one behind; `_dumpStacksOnHang` is the
-                # only thing that would catch it if it did.
-                for inherited in fdToIndex:
+                # `func` must not leave one behind; `_dump_stacks_on_hang` is
+                # the only thing that would catch it if it did.
+                for inherited in fd_to_index:
                     os.close(inherited)
                 selector.close()
                 if initializer is not None:
                     initializer()
-                payload = pickle.dumps(func(argList[index]), protocol=pickle.HIGHEST_PROTOCOL)
-                os.write(writeFd, _RESULT_HEADER.pack(len(payload)))
+                payload = pickle.dumps(func(arg_list[index]), protocol=pickle.HIGHEST_PROTOCOL)
+                os.write(write_fd, _RESULT_HEADER.pack(len(payload)))
                 sent = 0
                 while sent < len(payload):
-                    sent += os.write(writeFd, payload[sent:])
-                os.close(writeFd)
+                    sent += os.write(write_fd, payload[sent:])
+                os.close(write_fd)
             except BaseException:
                 # The workers each mean to return their own errors as data;
                 # reaching here means one did not, so report it and let the
@@ -236,23 +246,23 @@ def _forkMap(
         # ---------------- parent ----------------
         # Before the next fork, so no child inherits this write end: EOF on
         # this pipe then means *this* child and nothing else. See child's note.
-        os.close(writeFd)
-        pidToIndex[pid] = index
-        fdToIndex[readFd] = index
+        os.close(write_fd)
+        pid_to_index[pid] = index
+        fd_to_index[read_fd] = index
         buffers[index] = bytearray()
         # Each unit's clock starts at its own fork, not at the start of the
         # map, so a unit that waited for a free slot is not charged for it.
-        startedAt[index] = time.monotonic()
-        indexToPid[index] = pid
-        selector.register(readFd, selectors.EVENT_READ)
-        openPipes += 1
+        started_at[index] = time.monotonic()
+        index_to_pid[index] = pid
+        selector.register(read_fd, selectors.EVENT_READ)
+        open_pipes += 1
 
-    while nextIndex < len(argList) or openPipes:
-        while openPipes < numWorkers and nextIndex < len(argList):
-            spawn(nextIndex)
-            nextIndex += 1
+    while next_index < len(arg_list) or open_pipes:
+        while open_pipes < num_workers and next_index < len(arg_list):
+            spawn(next_index)
+            next_index += 1
         for key, _ in selector.select(timeout=_SELECT_TIMEOUT):
-            index = fdToIndex[key.fd]
+            index = fd_to_index[key.fd]
             try:
                 chunk = os.read(key.fd, _READ_CHUNK)
             except OSError:
@@ -264,16 +274,16 @@ def _forkMap(
                 # its slot is free, so the next unit can start.
                 selector.unregister(key.fd)
                 os.close(key.fd)
-                del fdToIndex[key.fd]
-                openPipes -= 1
-        if unitTimeout is not None:
+                del fd_to_index[key.fd]
+                open_pipes -= 1
+        if unit_timeout is not None:
             # `_SELECT_TIMEOUT` bounds the block above, so this runs at least
             # once a second without any timer of its own -- which is also the
             # granularity of the deadline.
             now = time.monotonic()
-            for fd in list(fdToIndex):
-                index = fdToIndex[fd]
-                if now - startedAt[index] < unitTimeout:
+            for fd in list(fd_to_index):
+                index = fd_to_index[fd]
+                if now - started_at[index] < unit_timeout:
                     continue
                 # Kill, then drop the read end here rather than waiting for the
                 # EOF the kill ought to produce. It need not: a pipe reaches
@@ -282,15 +292,15 @@ def _forkMap(
                 # warns `func` against) keeps it open past the worker's death
                 # and would park this loop forever. Termination must not depend
                 # on who holds the write end.
-                timedOut.add(index)
+                timed_out.add(index)
                 try:
-                    os.kill(indexToPid[index], signal.SIGKILL)
+                    os.kill(index_to_pid[index], signal.SIGKILL)
                 except OSError:
                     pass  # already exited; still reaped by the waits below
                 selector.unregister(fd)
                 os.close(fd)
-                del fdToIndex[fd]
-                openPipes -= 1
+                del fd_to_index[fd]
+                open_pipes -= 1
     selector.close()
 
     # Every pipe is closed, so every child is at `_exit`, already gone, or
@@ -300,7 +310,7 @@ def _forkMap(
     # killed the child ourselves -- equally sufficient, but it stops being so
     # if anything ever closes a pipe for a third reason.
     statuses: dict[int, int] = {}
-    for pid, index in pidToIndex.items():
+    for pid, index in pid_to_index.items():
         try:
             statuses[index] = os.waitpid(pid, 0)[1]
         except ChildProcessError:
@@ -308,8 +318,8 @@ def _forkMap(
 
     results: list = []
     deaths: list[_WorkerDeath] = []
-    for index, unit in enumerate(argList):
-        payload = _decodeResult(buffers[index])
+    for index, unit in enumerate(arg_list):
+        payload = _decode_result(buffers[index])
         if payload is not _INCOMPLETE:
             # A complete payload counts even if the child was killed straight
             # after writing it -- the work was done.
@@ -318,10 +328,10 @@ def _forkMap(
         deaths.append(
             _WorkerDeath(
                 unit,
-                _describeExit(
+                _describe_exit(
                     statuses[index],
                     len(buffers[index]),
-                    timeout=unitTimeout if index in timedOut else None,
+                    timeout=unit_timeout if index in timed_out else None,
                 ),
             )
         )
@@ -333,7 +343,7 @@ def _forkMap(
 _INCOMPLETE = object()
 
 
-def _decodeResult(buffer: bytearray) -> Any:
+def _decode_result(buffer: bytearray) -> Any:
     """Unpickle one framed result, or `_INCOMPLETE` if it is not all there."""
     if len(buffer) < _RESULT_HEADER.size:
         return _INCOMPLETE
@@ -347,7 +357,7 @@ def _decodeResult(buffer: bytearray) -> Any:
         return _INCOMPLETE
 
 
-def _describeExit(status: int, received: int, timeout: float | None = None) -> str:
+def _describe_exit(status: int, received: int, timeout: float | None = None) -> str:
     """Why a worker produced no usable result, in reviewable English.
 
     `timeout` is the deadline the unit overran, when that is what ended it. It
@@ -376,7 +386,7 @@ def _describeExit(status: int, received: int, timeout: float | None = None) -> s
     return detail
 
 
-def _killChildProcesses() -> None:
+def _kill_child_processes() -> None:
     """SIGKILL every direct child of this process. Best effort.
 
     Called just before `os._exit`, which runs no `finally`, no `atexit` and no
@@ -405,7 +415,7 @@ def _killChildProcesses() -> None:
 
 
 @contextlib.contextmanager
-def _dumpStacksOnHang(timeout: float | None, label: str, log: Any = None) -> Iterator[None]:
+def _dump_stacks_on_hang(timeout: float | None, label: str, log: Any = None) -> Iterator[None]:
     """Dump every thread's stack and exit if the block outlives `timeout`.
 
     A backstop for hangs this process cannot otherwise detect, and a way to
@@ -442,7 +452,7 @@ def _dumpStacksOnHang(timeout: float | None, label: str, log: Any = None) -> Ite
             flush=True,
         )
         faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
-        _killChildProcesses()
+        _kill_child_processes()
         sys.stderr.flush()
         # Aborting is the only option left: the main thread is blocked in C on
         # a futex, where no exception can be delivered to it.
