@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""The diagnostic plot task, driven from a real `build_donut_catalog` table.
+"""The diagnostic plot task, driven from a real `_build_donut_catalog` table.
 
 The plot task is the only in-tree consumer of the output catalog, so it is what
 breaks when a column is renamed.  These tests build the catalog through the
@@ -32,7 +32,7 @@ import unittest
 
 import numpy as np
 
-from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
+from lsst.ts.wep.blitz.catalogBuilder import _build_donut_catalog, _CatalogOptions
 from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
 from lsst.ts.wep.blitz.donutBlitzPlot import (
     DonutBlitzPlotConfig,
@@ -132,7 +132,7 @@ def _wf_result(donuts, group_id):
 
 
 def _options():
-    return CatalogOptions(
+    return _CatalogOptions(
         stamp_size=_STAMP_SIZE,
         binning=_BINNING,
         noll_indices=tuple(range(4, 23)),
@@ -161,7 +161,7 @@ def _catalog():
     intra = _donut("R00_SW1", 2, defocal_offsets=_INTRA_OFFSETS)
     surplus = _donut("R00_SW0", 3, defocal_offsets=_EXTRA_OFFSETS)
     rejected = _donut("R00_SW0", 4, rejected=True, rejected_snr=True, defocal_offsets=_EXTRA_OFFSETS)
-    return build_donut_catalog(
+    return _build_donut_catalog(
         [_result("R00_SW0", rejected=[rejected]), _result("R00_SW1")],
         [_wf_result([extra, intra], "R00_1_2")],
         [extra, intra, surplus],
@@ -203,7 +203,7 @@ class TestDonutBlitzPlotTask(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 os.chdir(tmp)
-                task.run(build_donut_catalog([], [], [], [], _VISIT_ID, _options()))
+                task.run(_build_donut_catalog([], [], [], [], _VISIT_ID, _options()))
                 self.assertEqual(os.listdir(tmp), [])
             finally:
                 os.chdir(cwd)

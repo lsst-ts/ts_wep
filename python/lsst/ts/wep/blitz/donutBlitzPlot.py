@@ -76,7 +76,7 @@ _COLOR_HEXAFOIL = "#D55E00"
 def _metaValue(meta: dict, key: str, unit: u.UnitBase) -> float:
     """Return one ``meta`` scalar as a bare float in ``unit``.
 
-    The catalog's meta values are Quantities (see `build_donut_catalog`), but
+    The catalog's meta values are Quantities (see `_build_donut_catalog`), but
     every use here is a format string that already carries its own unit suffix
     ("run=%.1fs"), so they are stripped at the read the same way the column
     Quantities are.  A missing key degrades to NaN, which the callers already

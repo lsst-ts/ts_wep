@@ -67,7 +67,7 @@ from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
 from .blitzDetect import BlitzDetectTask
-from .catalogBuilder import CatalogOptions, build_donut_catalog
+from .catalogBuilder import _build_donut_catalog, _CatalogOptions
 from .cutDonutStamps import CutDonutStampsTask
 from .famPipeline import _dead_fam_result, _fam_detector_worker, _fam_pool_initializer
 from .forkPool import _dumpStacksOnHang, _forkMap
@@ -1287,7 +1287,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             len(wf_results),
         )
 
-        return build_donut_catalog(
+        return _build_donut_catalog(
             results=cutout_results,
             wf_results=wf_results,
             donuts=donuts,
@@ -1301,7 +1301,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             butler_elapsed=butler_elapsed,
             # Summed across workers, which run in parallel, so these are CPU
             # time and not the wall clock corner mode reports -- documented on
-            # the timing keys in `build_donut_catalog`, and keyed off
+            # the timing keys in `_build_donut_catalog`, and keyed off
             # meta["mode"].  Each term is per detector: `cutout_run` is already
             # accumulated over the two exposures inside the worker, and one
             # refcat load serves both, which is why `refcat_run` lives on the
@@ -1318,14 +1318,14 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             instrument=instrument,
         )
 
-    def _catalogOptions(self) -> CatalogOptions:
+    def _catalogOptions(self) -> _CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.
 
         Same function corner mode calls, deliberately: one schema for both
         modes rather than two that drift.  The image flags differ -- full-array
         mode has ~10k rows per pair, where they would dominate the file.
         """
-        return CatalogOptions(
+        return _CatalogOptions(
             stamp_size=self.cutStamps.config.stampSize,
             binning=self.wavefrontFit.config.binning,
             noll_indices=tuple(self.wavefrontFit.config.nollIndices),

@@ -104,7 +104,7 @@ _FIT_OUTCOMES = (
 class WfDonutResult:
     """One donut's wavefront-fit outputs, produced by `_wf_worker`.
 
-    Consumed by `build_donut_catalog`, keyed by ``(donut_id, det_name,
+    Consumed by `_build_donut_catalog`, keyed by ``(donut_id, det_name,
     visit_id)``. A fit that timed out or raised still produces a
     WfDonutResult with ``fit_success=False`` and all-NaN Zernikes;
     ``fit_outcome`` says which.

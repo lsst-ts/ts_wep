@@ -31,7 +31,11 @@ import lsst.geom as geom
 from lsst.afw.image import VisitInfo
 from lsst.daf.base import DateTime
 from lsst.daf.butler.formatters.parquet import arrow_to_astropy, astropy_to_arrow
-from lsst.ts.wep.blitz.catalogBuilder import CatalogOptions, build_donut_catalog
+from lsst.ts.wep.blitz.catalogBuilder import (
+    _build_donut_catalog,
+    _CatalogOptions,
+    _rotate_zk_to_eb,
+)
 from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
 from lsst.ts.wep.blitz.donutBlitzCorner import (
     DonutBlitzCornerConfig,
@@ -93,7 +97,7 @@ def _result(det_name="R00_SW0", rejected=()):
     }
 
 
-def _options(**overrides) -> CatalogOptions:
+def _options(**overrides) -> _CatalogOptions:
     kwargs = dict(
         stamp_size=167,
         binning=2,
@@ -106,7 +110,7 @@ def _options(**overrides) -> CatalogOptions:
         wf_mode="paired",
     )
     kwargs.update(overrides)
-    return CatalogOptions(**kwargs)
+    return _CatalogOptions(**kwargs)
 
 
 class TestCatalogOptions(unittest.TestCase):
@@ -158,17 +162,126 @@ class TestCatalogOptions(unittest.TestCase):
         self.assertTrue(options.save_wf_images)
 
 
+class TestRotateZkToEb(unittest.TestCase):
+    """The E/B (aligned/cross) rotation applied to the catalog's Zernikes.
+
+    Noll 1..11, so `getNollPairs` yields the doublets (2, 3), (6, 5),
+    (8, 7), (10, 9) and the m == 0 singles 1, 4, 11. Note slots 5 and 9
+    hold the *cosine* member: which of a doublet's two consecutive indices
+    carries the positive m alternates.
+    """
+
+    def _zk(self, **slots) -> np.ndarray:
+        """One row over Noll 0..11, zero except the given slots."""
+        row = np.zeros((1, 12))
+        for j, value in slots.items():
+            row[0, int(j)] = value
+        return row
+
+    def testZeroAngleIsIdentity(self) -> None:
+        # phi = atan2(0, 1) = 0, so every doublet rotates by 0.
+        zk = self._zk(**{"2": 3.0, "3": -4.0, "6": 5.0, "4": 9.0})
+        (out,) = _rotate_zk_to_eb([zk], np.array([1.0]), np.array([0.0]))
+        np.testing.assert_allclose(out, zk)
+
+    def testDoubletRotatesByMPhi(self) -> None:
+        """Power moves into E at the angle that aligns the doublet.
+
+        The rotation angle is m * phi, not phi, so the |m| = 2 doublet
+        aligns at half the phi the |m| = 1 doublet needs. Getting the
+        factor of m wrong would leave residual B power here.
+        """
+        # |m| = 1 doublet (j_cos=2, j_sin=3): all power in the sine slot,
+        # phi = pi/2, so a = pi/2 and it rotates entirely into cosine.
+        zk = self._zk(**{"3": 1.0})
+        (out,) = _rotate_zk_to_eb([zk], np.array([0.0]), np.array([1.0]))
+        self.assertAlmostEqual(out[0, 2], 1.0)
+        self.assertAlmostEqual(out[0, 3], 0.0)
+
+        # |m| = 2 doublet (j_cos=6, j_sin=5): same alignment at phi = pi/4.
+        zk = self._zk(**{"5": 1.0})
+        (out,) = _rotate_zk_to_eb([zk], np.array([1.0]), np.array([1.0]))
+        self.assertAlmostEqual(out[0, 6], 1.0)
+        self.assertAlmostEqual(out[0, 5], 0.0)
+
+    def testEbAmplitudeIsRotationInvariant(self) -> None:
+        """A doublet's E/B split does not depend on the field azimuth.
+
+        This is the property the ``_eb`` columns exist for: unlike the
+        ``_ccs`` coefficients, they are comparable across field positions.
+        """
+        zk = self._zk(**{"2": 0.3, "3": -0.4})
+        for phi in (0.0, 0.7, 1.9, -2.5):
+            (out,) = _rotate_zk_to_eb([zk], np.array([np.cos(phi)]), np.array([np.sin(phi)]))
+            self.assertAlmostEqual(np.hypot(out[0, 2], out[0, 3]), 0.5)
+
+    def testMZeroSlotsPassThrough(self) -> None:
+        # Singles have no partner to mix with, so they are copied verbatim --
+        # NaN included, which is how an unfit donut's rows stay NaN.
+        zk = self._zk(**{"4": 7.0, "11": -2.0})
+        zk[0, 1] = np.nan
+        (out,) = _rotate_zk_to_eb([zk], np.array([0.3]), np.array([0.9]))
+        self.assertAlmostEqual(out[0, 4], 7.0)
+        self.assertAlmostEqual(out[0, 11], -2.0)
+        self.assertTrue(np.isnan(out[0, 1]))
+
+    def testHalfNaNDoubletGivesTwoNaNs(self) -> None:
+        """One non-finite member NaNs *both* slots, not just its own.
+
+        E and B are each a combination of both members, so a doublet with
+        one member missing has no defined E/B split; carrying the finite
+        member through would silently pass off a ``_ccs`` value as an
+        ``_eb`` one.
+        """
+        zk = self._zk(**{"2": np.nan, "3": 1.0, "6": 2.0, "5": np.inf})
+        (out,) = _rotate_zk_to_eb([zk], np.array([0.3]), np.array([0.9]))
+        self.assertTrue(np.isnan(out[0, 2]))
+        self.assertTrue(np.isnan(out[0, 3]))
+        self.assertTrue(np.isnan(out[0, 6]))
+        self.assertTrue(np.isnan(out[0, 5]))
+
+    def testUndefinedAngleNaNsEveryDoublet(self) -> None:
+        # phi is meaningless at the field center, so no doublet is defined,
+        # but the m == 0 terms do not depend on it and survive.
+        zk = self._zk(**{"2": 1.0, "3": 2.0, "6": 3.0, "5": 4.0, "4": 7.0})
+        (out,) = _rotate_zk_to_eb([zk], np.array([0.0]), np.array([0.0]))
+        self.assertTrue(np.all(np.isnan(out[0, [2, 3, 5, 6]])))
+        self.assertAlmostEqual(out[0, 4], 7.0)
+
+    def testPerRowAngles(self) -> None:
+        # thx/thy are per-row: each donut rotates by its own field azimuth.
+        zk = np.vstack([self._zk(**{"3": 1.0}), self._zk(**{"3": 1.0})])
+        (out,) = _rotate_zk_to_eb([zk], np.array([1.0, 0.0]), np.array([0.0, 1.0]))
+        # Row 0 at phi = 0 is untouched; row 1 at phi = pi/2 rotates.
+        self.assertAlmostEqual(out[0, 3], 1.0)
+        self.assertAlmostEqual(out[1, 2], 1.0)
+
+    def testUnitsPreservedOnlyWhereGiven(self) -> None:
+        # The catalog hands in Quantities and expects Quantities back; the
+        # helper is also called on bare arrays in tests like these.
+        zk = self._zk(**{"2": 1.0})
+        quantity, bare = _rotate_zk_to_eb([zk * u.micron, zk], np.array([1.0]), np.array([0.0]))
+        self.assertEqual(quantity.unit, u.micron)
+        self.assertFalse(isinstance(bare, u.Quantity))
+
+    def testRejectsNon2DInput(self) -> None:
+        # A single donut's coefficient vector is a common thing to pass by
+        # mistake, and would broadcast into nonsense rather than raise.
+        with self.assertRaises(ValueError):
+            _rotate_zk_to_eb([np.zeros(12)], np.array([1.0]), np.array([0.0]))
+
+
 class TestBuildDonutCatalog(unittest.TestCase):
     """Row content and the optional image columns."""
 
     def testEmptyInputGivesEmptyTable(self) -> None:
-        table = build_donut_catalog([], [], [], [], 1, _options())
+        table = _build_donut_catalog([], [], [], [], 1, _options())
         self.assertEqual(len(table), 0)
 
     def testOneRowPerDonutIncludingRejected(self) -> None:
         accepted = _donut(donut_id=1)
         rejected = _donut(donut_id=2, rejected=True, rejected_snr=True)
-        table = build_donut_catalog([_result(rejected=[rejected])], [], [accepted], [], 42, _options())
+        table = _build_donut_catalog([_result(rejected=[rejected])], [], [accepted], [], 42, _options())
         self.assertEqual(len(table), 2)
         by_id = {int(r["donut_id"]): r for r in table}
         self.assertTrue(bool(by_id[1]["candidate"]))
@@ -186,7 +299,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
     def testDedupeKeepsSurplusDonutsOnce(self) -> None:
         """A donut in both `donuts` and `unmatched_donuts` yields one row."""
         d = _donut(donut_id=7)
-        table = build_donut_catalog([_result()], [], [d], [d], 42, _options())
+        table = _build_donut_catalog([_result()], [], [d], [d], 42, _options())
         self.assertEqual(len(table), 1)
         self.assertTrue(bool(table[0]["candidate"]))
 
@@ -234,7 +347,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
             for visit, value in ((intra_visit, 1e-6), (extra_visit, 2e-6))
         ]
         results = [{**_result(), "visit_id": visit} for visit in (intra_visit, extra_visit)]
-        table = build_donut_catalog(
+        table = _build_donut_catalog(
             results,
             wf_results,
             [intra, extra],
@@ -306,7 +419,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
                 ]
             }
         ]
-        table = build_donut_catalog(
+        table = _build_donut_catalog(
             [_result()],
             wf_results,
             paired + [surplus],
@@ -355,7 +468,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         """
         extra = _donut(donut_id=1, defocal_offsets=(+1.5e-3, 0.0, 0.0))
         intra = _donut(donut_id=2, defocal_offsets=(-1.5e-3, 0.0, 0.0))
-        table = build_donut_catalog([_result()], [], [extra, intra], [], 42, _options())
+        table = _build_donut_catalog([_result()], [], [extra, intra], [], 42, _options())
         by_id = {int(r["donut_id"]): r for r in table}
         self.assertEqual(table["defocal_offsets"].unit, u.m)
         np.testing.assert_allclose(by_id[1]["defocal_offsets"].to_value(u.m), [1.5e-3, 0.0, 0.0])
@@ -363,7 +476,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
 
     def testDefocalOffsetsAreNaNWhenUnannotated(self) -> None:
         """A donut that never reached the fitter gets a well-shaped row."""
-        table = build_donut_catalog([_result()], [], [_donut(defocal_offsets=None)], [], 42, _options())
+        table = _build_donut_catalog([_result()], [], [_donut(defocal_offsets=None)], [], 42, _options())
         offsets = table["defocal_offsets"].to_value(u.m)
         self.assertEqual(offsets.shape, (1, 3))
         self.assertTrue(np.all(np.isnan(offsets)))
@@ -374,7 +487,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         This is what any cross-visit or cross-detector match needs; the field
         angle plus the boresight meta only gets there approximately.
         """
-        table = build_donut_catalog([_result()], [], [_donut()], [], 42, _options())
+        table = _build_donut_catalog([_result()], [], [_donut()], [], 42, _options())
         self.assertEqual(table["coord_ra"].unit, u.deg)
         self.assertEqual(table["coord_dec"].unit, u.deg)
         self.assertAlmostEqual(table["coord_ra"][0].to_value(u.deg), 30.0)
@@ -386,7 +499,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         Mixing refcat truth and a projected centroid into one column would
         reproduce the mixed provenance that `donut_id` already carries.
         """
-        table = build_donut_catalog(
+        table = _build_donut_catalog(
             [_result()],
             [],
             [_donut(coord_ra=float("nan"), coord_dec=float("nan"))],
@@ -407,7 +520,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         }
         for (save_stamps, save_wf), expected in cases.items():
             options = _options(save_stamps=save_stamps, save_wf_images=save_wf)
-            table = build_donut_catalog(*args, options)
+            table = _build_donut_catalog(*args, options)
             present = tuple(c for c in _IMAGE_COLUMNS if c in table.colnames)
             self.assertEqual(
                 present,
@@ -421,7 +534,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
 
     def testMetaCarriesOptionsAndGeometry(self) -> None:
         options = _options(binning=4, max_donuts=3, wf_mode="full_detector")
-        table = build_donut_catalog([_result()], [], [_donut()], [], 99, options, rtp_rad=0.25)
+        table = _build_donut_catalog([_result()], [], [_donut()], [], 99, options, rtp_rad=0.25)
         self.assertEqual(table.meta["ref_visit_id"], 99)
         # Corner mode has one exposure holding both sides of focus, so the two
         # side keys default to it rather than being left out for FAM to add.
@@ -455,7 +568,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         """
         d = _donut(donut_id=1)
         d.intrinsic_zk = np.full(_ZK_JMAX + 1 - 4, 2.0)  # µm, Noll 4.._ZK_JMAX
-        table = build_donut_catalog([_result()], [], [d], [], 42, _options())
+        table = _build_donut_catalog([_result()], [], [d], [], 42, _options())
 
         self.assertEqual(str(table["group_id"][0]), "")  # nothing fitted it
         intrinsic = table["zk_intrinsic_ccs"][0].to_value(u.micron)
@@ -470,7 +583,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         """No calibration is 0.0, which is distinct from "no fit" being NaN."""
         d = _donut(donut_id=1)
         d.intrinsic_zk = None
-        table = build_donut_catalog([_result()], [], [d], [], 42, _options())
+        table = _build_donut_catalog([_result()], [], [d], [], 42, _options())
         intrinsic = table["zk_intrinsic_ccs"][0].to_value(u.micron)
         self.assertFalse(np.any(np.isnan(intrinsic)))
         np.testing.assert_array_equal(intrinsic, np.zeros_like(intrinsic))
@@ -486,7 +599,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         hold NaN and a masked one will not serialize; the rest are NaN
         Quantities that still declare what they would have measured.
         """
-        table = build_donut_catalog([_result()], [], [_donut()], [], 42, _options())
+        table = _build_donut_catalog([_result()], [], [_donut()], [], 42, _options())
         self.assertIn("date", table.meta)
         self.assertIsNone(table.meta["date"])
         for key, physical_type in (
@@ -519,7 +632,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
             boresightAzAlt=geom.SpherePoint(120.0 * geom.degrees, 65.0 * geom.degrees),
             boresightRotAngle=30.0 * geom.degrees,
         )
-        table = build_donut_catalog(
+        table = _build_donut_catalog(
             [_result()],
             [],
             [_donut()],
@@ -563,7 +676,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
             boresightAzAlt=geom.SpherePoint(120.0 * geom.degrees, 65.0 * geom.degrees),
             boresightRotAngle=30.0 * geom.degrees,
         )
-        table = build_donut_catalog(
+        table = _build_donut_catalog(
             [{**_result(), "isr_run": 1.25}],
             [],
             [_donut()],
@@ -598,7 +711,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         the yaml dump as well, or the empty case would be the one that breaks
         in production.
         """
-        table = build_donut_catalog([_result()], [], [_donut()], [], 42, _options())
+        table = _build_donut_catalog([_result()], [], [_donut()], [], 42, _options())
         meta = arrow_to_astropy(astropy_to_arrow(Table(table))).meta
         self.assertIsNone(meta["date"])
         self.assertTrue(np.isnan(meta["boresight_alt"].to_value(u.deg)))
@@ -624,7 +737,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
                 "pair_path": "spatial",
             },
         ]
-        table = build_donut_catalog(results, [], [_donut()], [], 42, _options())
+        table = _build_donut_catalog(results, [], [_donut()], [], 42, _options())
         det_meta = table.meta["det_meta"]
         self.assertEqual(det_meta["R00_SW0_1"]["selection_source"], "refcat")
         self.assertEqual(det_meta["R00_SW0_1"]["pair_path"], "refcat_id")
@@ -643,7 +756,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
             {**_result(), "visit_id": 1, "n_quarter": 1},
             {**_result(), "visit_id": 2, "n_quarter": 3},
         ]
-        table = build_donut_catalog(results, [], [_donut()], [], 42, _options())
+        table = _build_donut_catalog(results, [], [_donut()], [], 42, _options())
         self.assertNotIn("n_quarter", table.colnames)
         det_meta = table.meta["det_meta"]
         self.assertEqual(det_meta["R00_SW0_1"]["n_quarter"], 1)
@@ -659,7 +772,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         "not applicable".
         """
         results = [{**_result(), "selection_source": "no_detections", "pair_path": "n/a"}]
-        table = build_donut_catalog(results, [], [_donut()], [], 42, _options())
+        table = _build_donut_catalog(results, [], [_donut()], [], 42, _options())
         entry = table.meta["det_meta"]["R00_SW0_42"]
         self.assertEqual(entry["selection_source"], "no_detections")
         self.assertEqual(entry["pair_path"], "n/a")
