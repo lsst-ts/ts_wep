@@ -28,6 +28,7 @@ __all__ = [
 ]
 
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import batoid
@@ -133,6 +134,43 @@ _BUTLER_INPUTS = (
 # `PrerequisiteInput` dimensioned on htm7 shards rather than on detector and so
 # carrying no per-detector refs to filter.
 _PER_DETECTOR_INPUTS = tuple(name for name in _BUTLER_INPUTS if name not in ("raws", "refCat"))
+
+
+@dataclass(frozen=True)
+class _CornerInputs:
+    """The per-detector inputs of one corner visit, indexed by detector.
+
+    Built by `DonutBlitzCornerTask._indexInputs` from the flat lists `run()`
+    receives, and valid by construction: every detector named here is a corner
+    detector with a raw and a complete set of the four ISR calibrations.
+
+    Deliberately **not** in `dataStructures.py`, unlike `CutoutResult` and its
+    two siblings.  Those cross a fork boundary by design and are public; this
+    one holds materialized `Exposure` objects and is only ever read in the
+    parent process, so it stays module-private and out of ``__all__``.  It is
+    the same distinction `cutDonutStamps._ExposureContext` draws.
+
+    Attributes
+    ----------
+    det_names : tuple of str
+        The detectors to process, sorted.  Drives everything downstream --
+        `CORNER_DET_NAMES` is only ever the set this is checked *against*,
+        since a partial corner set is a normal outcome.
+    det_name_by_id : dict
+        Detector id to name, covering exactly the raws supplied.  Only the
+        intrinsic Zernike lookup needs it, calibrations being name-keyed.
+    raw_by_name : dict
+        The raw exposures.  Kept because three later stages read the band, the
+        visit info and the visit id back off one of them.
+    corner_detectors : dict
+        What the cutout workers inherit, one `CornerDetectorInputs` per
+        detector.
+    """
+
+    det_names: tuple[str, ...]
+    det_name_by_id: dict[int, str]
+    raw_by_name: dict[str, Any]
+    corner_detectors: dict[str, CornerDetectorInputs]
 
 
 class DonutBlitzCornerConnections(
@@ -585,6 +623,121 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         )
         t_run0 = time.perf_counter()
 
+        inputs = self._indexInputs(raws, ptc, flat, linearizer, crosstalk)
+        intrinsic_zernikes_by_name = self._indexIntrinsics(intrinsic_zernikes, inputs.det_name_by_id)
+
+        band = next(iter(inputs.raw_by_name.values())).filter.bandLabel
+        if self.config.photoRefFilter is not None:
+            photo_filter_name = self.config.photoRefFilter
+        else:
+            photo_filter_name = f"{self.config.photoRefFilterPrefix}_{band}"
+
+        t_stage0 = time.perf_counter()
+        det_refcats = self._loadRefcats(ref_cat, inputs.raw_by_name)
+        refcat_elapsed = time.perf_counter() - t_stage0
+
+        visit_info = next(iter(inputs.raw_by_name.values())).getInfo().getVisitInfo()
+        boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
+        rtp_rad = _rot_tel_pos_rad(visit_info)
+        rtp_deg = np.degrees(rtp_rad) if self.wavefrontFit.config.modelSpiderShadows else None
+
+        self._populateCowStore(inputs, det_refcats, band, photo_filter_name)
+
+        t_stage0 = time.perf_counter()
+        results = self._runCutoutPool(inputs.det_names, num_cores)
+        cutout_elapsed = time.perf_counter() - t_stage0
+        donuts = self._logCutoutSummaries(results)
+        self._annotateDonuts(results, intrinsic_zernikes_by_name)
+
+        mode = self.config.wfEstimationMode
+        results_by_det = {r.det_name: r.catalog for r in results}
+        groups, unmatched_donuts, pair_path = _build_wf_groups(
+            mode, results_by_det, band, rtp_deg, boresight_alt_rad
+        )
+        # Stamp the pairing path on every cutout result: those are what reach
+        # _build_donut_catalog, so this is what gets pairing provenance into
+        # the persisted table.  Full-array mode does the same in its worker.
+        for r in results:
+            r.pair_path = pair_path
+
+        t_stage0 = time.perf_counter()
+        wf_results = self._runWfPool(groups, num_cores)
+        danish_elapsed = time.perf_counter() - t_stage0
+
+        t_plot0 = time.perf_counter()
+        run_elapsed = t_plot0 - t_run0
+        self.log.info(
+            _colorize(
+                "Timing summary: butler=%.1fs  refcat=%.1fs  cutout=%.1fs  danish=%.1fs  total=%.1fs",
+                _ANSI_BOLD,
+                _ANSI_CYAN,
+                enabled=self._colorLogEnabled,
+            ),
+            butler_elapsed,
+            refcat_elapsed,
+            cutout_elapsed,
+            danish_elapsed,
+            run_elapsed,
+        )
+        visit_id = next(iter(raws)).getInfo().getVisitInfo().id
+
+        catalog = _build_donut_catalog(
+            results=results,
+            wf_results=wf_results,
+            donuts=donuts,
+            unmatched_donuts=unmatched_donuts,
+            visit_id=visit_id,
+            options=self._catalogOptions(),
+            intra_visit_id=visit_id,
+            extra_visit_id=visit_id,
+            exposure_group=exposure_group,
+            timings=_CatalogTimings(
+                run_elapsed=run_elapsed,
+                refcat_elapsed=refcat_elapsed,
+                butler_elapsed=butler_elapsed,
+                butler_times=butler_times or {},
+                cutout_elapsed=cutout_elapsed,
+                danish_elapsed=danish_elapsed,
+            ),
+            photo_filter_name=photo_filter_name,
+            astrom_filter_name=self.config.astromRefFilter,
+            rtp_rad=rtp_rad,
+            mode="corner",
+            # Corner mode has one exposure holding both sides of focus, so the
+            # single visit_info read above for the boresight angles is also the
+            # observation record for the whole table.
+            visit_info=visit_info,
+            instrument=instrument,
+        )
+
+        if self.config.savePlots:
+            self.plot.run(catalog)
+            self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
+
+        return pipeBase.Struct(donuts=donuts, wfResults=wf_results, cornerResults=Table(catalog))
+
+    def _indexInputs(
+        self,
+        raws: list,
+        ptc: list,
+        flat: list,
+        linearizer: list,
+        crosstalk: list,
+    ) -> _CornerInputs:
+        """Index the flat input lists by detector name and validate them.
+
+        Corner mode's counterpart to full-array mode's handle resolution, and
+        necessarily a different shape: this task's butler I/O all happens in
+        the parent, so what there is to index here is materialized exposures
+        and calibrations rather than deferred handles.
+
+        Raises
+        ------
+        RuntimeError
+            If a non-corner raw is supplied, if no raws are, or if any detector
+            with a raw is missing one of the four ISR calibrations.  A
+            *partial* corner set is not an error -- see below.
+        """
         det_name_by_id = {}
         raw_by_name = {}
         for exp in raws:
@@ -606,7 +759,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             raise RuntimeError(f"Non-corner detector raws supplied: {sorted(unexpected)}")
         if not raw_by_name:
             raise RuntimeError("No corner detector raws supplied.")
-        det_names = sorted(raw_by_name)
+        det_names = tuple(sorted(raw_by_name))
         missing = CORNER_DET_NAMES - raw_by_name.keys()
         if missing:
             self.log.warning(
@@ -615,71 +768,6 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 len(CORNER_DET_NAMES),
                 sorted(missing),
             )
-
-        if intrinsic_zernikes:
-            self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsic_zernikes))
-        else:
-            self.log.warning("No intrinsic Zernike calibrations provided.")
-        self.intrinsicZernikes = list(intrinsic_zernikes) if intrinsic_zernikes else []
-        # det_name_by_id only covers the raws present, so a calibration for a
-        # detector we are not processing is dropped rather than raising.
-        # runQuantum already filters these, but run() is also called directly.
-        intrinsic_zernikes_by_name = {}
-        for iz in self.intrinsicZernikes:
-            iz_det_id = iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]
-            iz_det_name = det_name_by_id.get(iz_det_id)
-            if iz_det_name is None:
-                self.log.debug(
-                    "Ignoring intrinsic Zernike calibration for detector %s: no raw.",
-                    iz_det_id,
-                )
-                continue
-            intrinsic_zernikes_by_name[iz_det_name] = iz
-
-        band = next(iter(raw_by_name.values())).filter.bandLabel
-        if self.config.photoRefFilter is not None:
-            photo_filter_name = self.config.photoRefFilter
-        else:
-            photo_filter_name = f"{self.config.photoRefFilterPrefix}_{band}"
-
-        loader = None
-        if not ref_cat:
-            self.log.warning("No reference catalog shards provided; skipping WCS refit and donut selection.")
-        else:
-            self.log.info("Loading reference catalog shards for WCS refit and donut selection.")
-            loader = ReferenceObjectLoader(
-                dataIds=[h.dataId for h in ref_cat],
-                refCats=ref_cat,
-            )
-            loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
-
-        t_refcat0 = time.perf_counter()
-        det_refcats: dict = {}
-        for name, raw in raw_by_name.items():
-            raw_wcs = raw.getWcs()
-            raw_bbox = raw.getBBox()
-            raw_epoch = raw.getInfo().getVisitInfo().date.toAstropy()
-            load_result = None
-            if loader is not None:
-                try:
-                    load_result = loader.loadPixelBox(
-                        bbox=raw_bbox,
-                        wcs=raw_wcs,
-                        filterName=self.config.astromRefFilter,
-                        epoch=raw_epoch,
-                    )
-                except Exception as exc:
-                    self.log.warning("Failed to load refcat for %s: %s", name, exc)
-            det_refcats[name] = load_result
-        t_refcat_elapsed = time.perf_counter() - t_refcat0
-
-        # Stub loader: AstrometryTask.solve() calls
-        # refObjLoader.getMetadataBox() unconditionally even when load_result
-        # is pre-supplied. That method is pure geometry -- it never accesses
-        # catalog data, dataId.region, or the flux aliases.
-        astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
-        astrom_stub_loader.config.pixelMargin = 0
-        self.astrometry.setRefObjLoader(astrom_stub_loader)
 
         corner_detectors = {}
         for name in det_names:
@@ -707,14 +795,105 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 ),
             )
 
-        visit_info = next(iter(raw_by_name.values())).getInfo().getVisitInfo()
-        boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
-        rtp_rad = _rot_tel_pos_rad(visit_info)
-        rtp_deg = np.degrees(rtp_rad) if self.wavefrontFit.config.modelSpiderShadows else None
+        return _CornerInputs(
+            det_names=det_names,
+            det_name_by_id=det_name_by_id,
+            raw_by_name=raw_by_name,
+            corner_detectors=corner_detectors,
+        )
 
-        # Everything the cutout and fit workers read, in one place. The
-        # telescope is band- and quantum-fixed, and its 41 ms YAML load is the
-        # part worth doing once here rather than per donut in a worker;
+    def _indexIntrinsics(self, intrinsic_zernikes: list | None, det_name_by_id: dict[int, str]) -> dict:
+        """Index the intrinsic Zernike calibrations by detector name.
+
+        The calibrations are the one input arriving keyed by detector *id*
+        rather than name, which is why they are indexed apart from the rest.
+        """
+        if intrinsic_zernikes:
+            self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsic_zernikes))
+        else:
+            self.log.warning("No intrinsic Zernike calibrations provided.")
+        # det_name_by_id only covers the raws present, so a calibration for a
+        # detector we are not processing is dropped rather than raising.
+        # runQuantum already filters these, but run() is also called directly.
+        by_name = {}
+        for iz in intrinsic_zernikes or []:
+            iz_det_id = iz.getMetadata()["LSST BUTLER DATAID DETECTOR"]
+            iz_det_name = det_name_by_id.get(iz_det_id)
+            if iz_det_name is None:
+                self.log.debug(
+                    "Ignoring intrinsic Zernike calibration for detector %s: no raw.",
+                    iz_det_id,
+                )
+                continue
+            by_name[iz_det_name] = iz
+        return by_name
+
+    def _loadRefcats(self, ref_cat: list, raw_by_name: dict) -> dict:
+        """Load one refcat per detector, and stub the astrometry task.
+
+        Done in the parent so the shards are loaded once and inherited by the
+        cutout workers copy-on-write, which is the whole reason corner mode's
+        workers need no butler.  A shard load that fails is a warning and a
+        ``None`` entry, not an abort: that detector falls back to blitz
+        detection, the same as when no refcat was supplied at all.
+        """
+        loader = None
+        if not ref_cat:
+            self.log.warning("No reference catalog shards provided; skipping WCS refit and donut selection.")
+        else:
+            self.log.info("Loading reference catalog shards for WCS refit and donut selection.")
+            loader = ReferenceObjectLoader(
+                dataIds=[h.dataId for h in ref_cat],
+                refCats=ref_cat,
+            )
+            loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
+
+        det_refcats: dict = {}
+        for name, raw in raw_by_name.items():
+            raw_wcs = raw.getWcs()
+            raw_bbox = raw.getBBox()
+            raw_epoch = raw.getInfo().getVisitInfo().date.toAstropy()
+            load_result = None
+            if loader is not None:
+                try:
+                    load_result = loader.loadPixelBox(
+                        bbox=raw_bbox,
+                        wcs=raw_wcs,
+                        filterName=self.config.astromRefFilter,
+                        epoch=raw_epoch,
+                    )
+                except Exception as exc:
+                    self.log.warning("Failed to load refcat for %s: %s", name, exc)
+            det_refcats[name] = load_result
+
+        # Stub loader: AstrometryTask.solve() calls
+        # refObjLoader.getMetadataBox() unconditionally even when load_result
+        # is pre-supplied. That method is pure geometry -- it never accesses
+        # catalog data, dataId.region, or the flux aliases.  Installed here
+        # rather than with the store because it is the other half of handing
+        # solve() a pre-loaded result.
+        astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
+        astrom_stub_loader.config.pixelMargin = 0
+        self.astrometry.setRefObjLoader(astrom_stub_loader)
+
+        return det_refcats
+
+    def _populateCowStore(
+        self,
+        inputs: _CornerInputs,
+        det_refcats: dict,
+        band: str,
+        photo_filter_name: str,
+    ) -> None:
+        """Fill `_COW_STORE` with everything the workers read.
+
+        Named to match `DonutBlitzFamTask._populateCowStore` so the two modes'
+        store population can be diffed.  Corner mode's is far shorter, because
+        its workers inherit materialized exposures rather than handles and both
+        its pools read the same store.
+        """
+        # The telescope is band- and quantum-fixed, and its 41 ms YAML load is
+        # the part worth doing once here rather than per donut in a worker;
         # defocusing it costs 20 us, so the workers do that on demand.
         _COW_STORE.adopt(
             CowStore.for_corner(
@@ -732,61 +911,74 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 astrom_ref_filter=self.config.astromRefFilter,
                 photo_ref_filter=photo_filter_name,
                 telescope=batoid.Optic.fromYaml(f"LSST_{band}.yaml"),
-                corner_detectors=corner_detectors,
+                corner_detectors=inputs.corner_detectors,
                 det_refcats=det_refcats,
             )
         )
 
-        cutout_args = det_names
+    def _runCutoutPool(self, det_names: tuple[str, ...], num_cores: int) -> list[CutoutResult]:
+        """Cut stamps on every detector, forking if asked to.
 
+        One work unit per detector.  A killed worker costs its detector and
+        nothing else: `_fork_map` returns it under ``deaths`` and it becomes a
+        `CutoutResult.dead` here, so the result list still covers every
+        detector asked for.
+        """
         self.log.info(
             "Running cutout workers on %d corner detectors with %d core(s)",
-            len(cutout_args),
+            len(det_names),
             num_cores,
         )
-        t_cutout0 = time.perf_counter()
         if num_cores == 1:
             t_dispatch = time.time()
-            results = [_cutout_corner_detector((arg, t_dispatch)) for arg in cutout_args]
-        else:
-            t_pool0 = time.perf_counter()
-            # Never more workers than detectors to process, matching the WF
-            # pool below. cutout_args is the detectors with raws, non-empty by
-            # the guard above.
-            n_cutout_workers = min(num_cores, len(cutout_args))
-            # Bare fork workers are safe here. Everything is preloaded in
-            # runQuantum and inherited via COW. _fork_map ensures that one
-            # killed worker does not take down the entire pool/quantum.
-            t_dispatch = time.time()
-            with _dump_stacks_on_hang(self.config.hangTimeout, "cutout pool", self.log):
-                results, deaths = _fork_map(
-                    _cutout_corner_detector,
-                    [(arg, t_dispatch) for arg in cutout_args],
-                    n_cutout_workers,
-                    unit_timeout=self.config.unitTimeout,
-                )
-            for unit, reason in deaths:
-                # A killed worker is a real fault, not a routine per-detector
-                # failure, so it is logged at error level even though the visit
-                # goes on without it.
-                self.log.error("Cutout worker for detector %s died: %s", unit[0], reason)
-                results.append(CutoutResult.dead(unit[0], reason))
-            # One fork per detector, started as slots free up, so there is no
-            # separate pool-creation phase left to time.
-            self.log.info(
-                _colorize(
-                    "Cutout pipeline: %d worker(s), %d/%d detector(s) returned, map: %.3fs",
-                    _ANSI_BOLD,
-                    _ANSI_CYAN,
-                    enabled=self._colorLogEnabled,
-                ),
-                n_cutout_workers,
-                len(cutout_args) - len(deaths),
-                len(cutout_args),
-                time.perf_counter() - t_pool0,
-            )
-        t_cutout1 = time.perf_counter()
+            return [_cutout_corner_detector((name, t_dispatch)) for name in det_names]
 
+        t_pool0 = time.perf_counter()
+        # Never more workers than detectors to process, matching the WF pool.
+        # det_names is the detectors with raws, non-empty by _indexInputs.
+        n_cutout_workers = min(num_cores, len(det_names))
+        # Bare fork workers are safe here. Everything is preloaded in
+        # runQuantum and inherited via COW. _fork_map ensures that one
+        # killed worker does not take down the entire pool/quantum.
+        t_dispatch = time.time()
+        with _dump_stacks_on_hang(self.config.hangTimeout, "cutout pool", self.log):
+            results, deaths = _fork_map(
+                _cutout_corner_detector,
+                [(name, t_dispatch) for name in det_names],
+                n_cutout_workers,
+                unit_timeout=self.config.unitTimeout,
+            )
+        for unit, reason in deaths:
+            # A killed worker is a real fault, not a routine per-detector
+            # failure, so it is logged at error level even though the visit
+            # goes on without it.
+            self.log.error("Cutout worker for detector %s died: %s", unit[0], reason)
+            results.append(CutoutResult.dead(unit[0], reason))
+        # One fork per detector, started as slots free up, so there is no
+        # separate pool-creation phase left to time.
+        self.log.info(
+            _colorize(
+                "Cutout pipeline: %d worker(s), %d/%d detector(s) returned, map: %.3fs",
+                _ANSI_BOLD,
+                _ANSI_CYAN,
+                enabled=self._colorLogEnabled,
+            ),
+            n_cutout_workers,
+            len(det_names) - len(deaths),
+            len(det_names),
+            time.perf_counter() - t_pool0,
+        )
+        return results
+
+    def _logCutoutSummaries(self, results: list[CutoutResult]) -> list:
+        """Log one stage-timing line per detector, **and** flatten the donuts.
+
+        Not a pure logging method, unlike full-array mode's
+        `DonutBlitzFamTask._logWorkerSummaries`: it returns the concatenated
+        selected-donut list, because it is already walking every result in the
+        order the catalog wants them.  Splitting the two apart would mean two
+        walks and a reader hunting for where `donuts` is built.
+        """
         donuts = []
         for r in results:
             scatter_str = f'{r.scatter_arcsec:.3f}"' if r.scatter_arcsec is not None else "N/A"
@@ -810,25 +1002,27 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                     r.cat_select_error,
                 )
             donuts.extend(r.catalog)
+        return donuts
 
-        # Annotate the optic shifts that put each donut off focus. In corner
-        # mode this follows from the detector: SW0 is extra-focal, SW1
-        # intra-focal. Rejected donuts are annotated too -- they get a row in
-        # the output catalog, and _prep_donut_for_danish requires the offsets
-        # of anything it is handed.
-        for r in results:
-            for d in r.catalog + r.rejected_catalog:
-                d.defocal_offsets = (
-                    _INTRA_FOCAL_OFFSETS if d.det_id in _INTRA_FOCAL_DET_IDS else _EXTRA_FOCAL_OFFSETS
-                )
+    def _annotateDonuts(self, results: list[CutoutResult], intrinsic_zernikes_by_name: dict) -> None:
+        """Annotate each donut with its defocal offsets and intrinsics.
 
-        # Annotate every donut with realized intrinsic Zernikes, rejected ones
-        # included: intrinsics are a function of field position, not of whether
-        # the donut passed selection, and rejected donuts get catalog rows too.
-        # Full-array mode already annotates both lists.
+        Rejected donuts are annotated alongside the selected ones in both
+        cases, and for the same reason: they get a row in the output catalog
+        too.  The offsets are additionally required by
+        `WavefrontFittingTask._prep_donut_for_danish` for anything it is
+        handed, and the intrinsics are a function of field position rather than
+        of whether a donut passed selection.  Full-array mode likewise
+        annotates both lists.
+        """
         for r in results:
             calib = intrinsic_zernikes_by_name.get(r.det_name)
             for d in r.catalog + r.rejected_catalog:
+                # In corner mode the side of focus follows from the detector:
+                # SW0 is extra-focal, SW1 intra-focal.
+                d.defocal_offsets = (
+                    _INTRA_FOCAL_OFFSETS if d.det_id in _INTRA_FOCAL_DET_IDS else _EXTRA_FOCAL_OFFSETS
+                )
                 if calib is not None:
                     d.intrinsic_zk = np.squeeze(
                         calib.getIntrinsicZernikes(
@@ -839,18 +1033,14 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 else:
                     d.intrinsic_zk = None
 
-        # WF dispatch
-        mode = self.config.wfEstimationMode
-        results_by_det = {r.det_name: r.catalog for r in results}
-        groups, unmatched_donuts, pair_path = _build_wf_groups(
-            mode, results_by_det, band, rtp_deg, boresight_alt_rad
-        )
-        # Stamp the pairing path on every cutout result: those are what reach
-        # _build_donut_catalog, so this is what gets pairing provenance into
-        # the persisted table.  Full-array mode does the same in its worker.
-        for r in results:
-            r.pair_path = pair_path
+    def _runWfPool(self, groups: list, num_cores: int) -> list[WfGroupResult]:
+        """Fit every wavefront group, forking if asked to.
 
+        A single group runs inline even on many cores: the fork would cost more
+        than it saves.  As in the cutout pool a killed worker becomes a dead
+        record rather than taking the quantum with it.
+        """
+        mode = self.config.wfEstimationMode
         self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
         t_wf0 = time.perf_counter()
         if not groups:
@@ -872,69 +1062,17 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             for group, reason in wf_deaths:
                 self.log.error("WF worker for group %s died: %s", group.group_id, reason)
                 wf_results.append(WfGroupResult.dead(group, reason, n_zk))
-        t_wf1 = time.perf_counter()
-        n_ok = sum(r.success for r in wf_results)
         elapsed_fits = [r.fit_elapsed for r in wf_results]
         self.log.info(
             "WF results (%s): %d/%d succeeded  wall=%.1fs  fit_total=%.1fs  fit_mean=%.1fs",
             mode,
-            n_ok,
+            sum(r.success for r in wf_results),
             len(wf_results),
-            t_wf1 - t_wf0,
+            time.perf_counter() - t_wf0,
             sum(e for e in elapsed_fits if not np.isnan(e)),
             np.nanmean(elapsed_fits) if elapsed_fits else float("nan"),
         )
-
-        t_plot0 = time.perf_counter()
-        self.log.info(
-            _colorize(
-                "Timing summary: butler=%.1fs  refcat=%.1fs  cutout=%.1fs  danish=%.1fs  total=%.1fs",
-                _ANSI_BOLD,
-                _ANSI_CYAN,
-                enabled=self._colorLogEnabled,
-            ),
-            butler_elapsed,
-            t_refcat_elapsed,
-            t_cutout1 - t_cutout0,
-            t_wf1 - t_wf0,
-            t_plot0 - t_run0,
-        )
-        visit_id = next(iter(raws)).getInfo().getVisitInfo().id
-
-        catalog = _build_donut_catalog(
-            results=results,
-            wf_results=wf_results,
-            donuts=donuts,
-            unmatched_donuts=unmatched_donuts,
-            visit_id=visit_id,
-            options=self._catalogOptions(),
-            intra_visit_id=visit_id,
-            extra_visit_id=visit_id,
-            exposure_group=exposure_group,
-            timings=_CatalogTimings(
-                run_elapsed=t_plot0 - t_run0,
-                refcat_elapsed=t_refcat_elapsed,
-                butler_elapsed=butler_elapsed,
-                butler_times=butler_times or {},
-                cutout_elapsed=t_cutout1 - t_cutout0,
-                danish_elapsed=t_wf1 - t_wf0,
-            ),
-            photo_filter_name=photo_filter_name,
-            astrom_filter_name=self.config.astromRefFilter,
-            rtp_rad=rtp_rad,
-            mode="corner",
-            # Corner mode has one exposure holding both sides of focus, so the
-            # single visit_info read above for the boresight angles is also the
-            # observation record for the whole table.
-            visit_info=visit_info,
-            instrument=instrument,
-        )
-
-        if self.config.savePlots:
-            self.plot.run(catalog)
-            self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
-
-        return pipeBase.Struct(donuts=donuts, wfResults=wf_results, cornerResults=Table(catalog))
+        return wf_results
 
     def _catalogOptions(self) -> _CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.
