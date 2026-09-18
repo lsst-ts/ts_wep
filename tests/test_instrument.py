@@ -262,21 +262,33 @@ class TestInstrument(unittest.TestCase):
         inst.maskParamsFile = None
         self.assertEqual(list(inst.maskParams.keys()), ["Pupil"])
 
-    def testMaskParamsFromFile(self) -> None:
-        # LsstCam loads the Rubin mask parameters from danish.
+    def testPolicyFilesPinInlineMaskParams(self) -> None:
+        # The policy files pin their mask parameters inline (RSO-856):
+        # maskParamsFile is commented out until we switch to the updated
+        # danish mask models, so the inline maskParams block is used directly
+        # and no file is loaded.
         inst = Instrument()
-        self.assertEqual(inst.maskParamsFile, "RubinObsc.yaml")
+        self.assertIsNone(inst.maskParamsFile)
         self.assertIn("M1", inst.maskParams)
         self.assertIn("Spider_3D", inst.maskParams)
 
-        # ComCam and AuxTel load their respective danish files.
         comcam = Instrument(configFile="policy:instruments/ComCam.yaml")
-        self.assertEqual(comcam.maskParamsFile, "ComCamObsc.yaml")
+        self.assertIsNone(comcam.maskParamsFile)
         self.assertIn("M1", comcam.maskParams)
 
         auxtel = Instrument(configFile="policy:instruments/AuxTel.yaml")
-        self.assertEqual(auxtel.maskParamsFile, "AuxTelObsc.yaml")
+        self.assertIsNone(auxtel.maskParamsFile)
         self.assertIn("Baffle_M1", auxtel.maskParams)
+
+    def testMaskParamsFromFile(self) -> None:
+        # When maskParamsFile is set and no explicit maskParams are provided,
+        # the mask parameters are loaded from that file via danish.
+        inst = Instrument()
+        inst.maskParams = None
+        inst.maskParamsFile = "RubinObsc.yaml"
+        self.assertEqual(inst.maskParamsFile, "RubinObsc.yaml")
+        self.assertIn("M1", inst.maskParams)
+        self.assertIn("Spider_3D", inst.maskParams)
 
     def testExplicitMaskParamsOverridesFile(self) -> None:
         # Explicitly-set maskParams take precedence over maskParamsFile.
@@ -380,8 +392,8 @@ class TestInstrument(unittest.TestCase):
         # defocalOffset is derived from batoidOffsetOptic, which ComCam
         # overrides, so it is transitively overridden and will not match.
         keys.remove("defocalOffset")
-        # maskParams is derived from maskParamsFile, which ComCam overrides,
-        # so it should not be compared either
+        # ComCam defines its own inline maskParams, so it is already removed
+        # by the loop above; guard against comparing it in case that changes.
         if "maskParams" in keys:
             keys.remove("maskParams")
 
