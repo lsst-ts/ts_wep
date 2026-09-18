@@ -212,6 +212,40 @@ def _defocal_radial_scale(telescope: batoid.Optic, offsets: _Offsets) -> float:
     return _chief_ray_x(_defocused_telescope(telescope, offsets)) / _chief_ray_x(telescope)
 
 
+def _rot_tel_pos_rad(visit_info) -> float:
+    """Rotator angle relative to the telescope, wrapped to [-pi, pi).
+
+    Both blitz tasks need this and neither can avoid computing it: the
+    CCS -> OCS Zernike rotation the output catalog applies is a function of it,
+    whereas modeling spider shadows -- the other consumer -- is opt-in.  So it
+    is always evaluated, and each caller decides separately whether to hand the
+    degrees form to the fitter.
+
+    The interval is closed at ``-pi``, not at ``+pi``: ``(x + pi) % 2pi - pi``
+    sends both ends to ``-pi``.  Both call sites' comments used to claim
+    ``(-pi, pi]``, which is the opposite, and nothing depends on the endpoint
+    -- a rotator exactly anti-aligned with the telescope is reported as -180
+    deg rather than +180, and the Zernike rotation is periodic either way.
+
+    Parameters
+    ----------
+    visit_info : lsst.afw.image.VisitInfo
+        The exposure's observation record.  Full-array mode reads this as a
+        component off a deferred raw handle, so no pixels are needed.
+
+    Returns
+    -------
+    float
+        rotTelPos in radians, in [-pi, pi).
+    """
+    return (
+        visit_info.boresightParAngle.asRadians()
+        - visit_info.boresightRotAngle.asRadians()
+        - np.pi / 2
+        + np.pi
+    ) % (2 * np.pi) - np.pi
+
+
 @dataclass
 class IsrCalibs:
     """The four materialized calibrations ISR needs for one exposure.
