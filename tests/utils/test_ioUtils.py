@@ -19,11 +19,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import hashlib
 import os
+import tempfile
 import unittest
 from typing import Union
 
 from lsst.ts.wep.utils import (
+    computeSha256,
     configClass,
     getConfigDir,
     getModulePath,
@@ -31,6 +34,7 @@ from lsst.ts.wep.utils import (
     mergeConfigWithFile,
     readConfigYaml,
     resolveRelativeConfigPath,
+    verifyModelChecksum,
 )
 
 
@@ -102,6 +106,57 @@ class TestIoUtils(unittest.TestCase):
         # If first argument is none of these, should raise error
         with self.assertRaises(TypeError):
             configClass(123, dict)
+
+    def testComputeSha256(self) -> None:
+        content = b"hello ts_wep model bytes"
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            self.assertEqual(computeSha256(path), hashlib.sha256(content).hexdigest())
+        finally:
+            os.remove(path)
+
+    def testVerifyModelChecksum(self) -> None:
+        content = b"some model weights"
+        expected = hashlib.sha256(content).hexdigest()
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            # Matching checksum: no exception, returns the actual digest.
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, expected), expected)
+
+            # Empty/None expected checksum: comparison skipped, but the digest
+            # is still computed and returned.
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, ""), expected)
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, None), expected)
+
+            # Expected digest is normalised (case-insensitive, whitespace,
+            # and an optional "sha256:" prefix).
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, f"  {expected.upper()} "), expected)
+            self.assertEqual(verifyModelChecksum("wavenetPath", path, f"sha256:{expected}"), expected)
+
+            # Malformed expected digest (not 64 hex chars): ValueError naming
+            # the config field.
+            with self.assertRaises(ValueError) as valueError:
+                verifyModelChecksum("wavenetPath", path, "not-a-real-digest")
+            self.assertIn("config.wavenetPath", str(valueError.exception))
+
+            # Mismatched checksum: RuntimeError naming the config field.
+            with self.assertRaises(RuntimeError) as mismatchError:
+                verifyModelChecksum("wavenetPath", path, "0" * 64)
+            self.assertIn("config.wavenetPath", str(mismatchError.exception))
+
+            # Unreadable file (missing / a directory): RuntimeError naming the
+            # config field, regardless of whether a checksum was pinned.
+            with self.assertRaises(RuntimeError) as unreadableError:
+                verifyModelChecksum("alignetPath", "/does/not/exist.pt", "")
+            self.assertIn("config.alignetPath", str(unreadableError.exception))
+            with self.assertRaises(RuntimeError):
+                verifyModelChecksum("oodModelPath", os.path.dirname(path), expected)
+        finally:
+            os.remove(path)
 
     def testGetObsLsstCmdTaskConfigDir(self) -> None:
         obsLsstCmdTaskConfirDir = getObsLsstCmdTaskConfigDir()

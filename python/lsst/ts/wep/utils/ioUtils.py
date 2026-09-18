@@ -29,10 +29,14 @@ __all__ = [
     "getObsLsstCmdTaskConfigDir",
     "writeFile",
     "readPhoSimSettingData",
+    "computeSha256",
+    "verifyModelChecksum",
 ]
 
+import hashlib
 import inspect
 import os
+import re
 from functools import lru_cache
 from typing import Any, Union
 
@@ -64,6 +68,92 @@ def getModulePath() -> str:
         # ioUtils.py lives at <root>/python/lsst/ts/wep/utils/ioUtils.py, so
         # the package root is five directories up from this file.
         return os.path.normpath(os.path.join(os.path.dirname(__file__), *([os.pardir] * 5)))
+
+
+def computeSha256(path: str, chunkSize: int = 1 << 20) -> str:
+    """Compute the SHA-256 hex digest of a file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the file to hash.
+    chunkSize : int, optional
+        Number of bytes read per chunk while streaming the file.
+        Default is 1 MiB.
+
+    Returns
+    -------
+    str
+        The hexadecimal SHA-256 digest of the file contents.
+    """
+    hasher = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunkSize), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def verifyModelChecksum(key: str, path: str, expectedSha256: str) -> str:
+    """Compute a model file's SHA-256 and verify it against an expected value.
+
+    Parameters
+    ----------
+    key : str
+        Name of the config field the file comes from (e.g. ``"wavenetPath"``),
+        used to make error messages identify which model is at fault.
+    path : str
+        Path to the model file to hash and verify.
+    expectedSha256 : str
+        Expected SHA-256 hex digest. Case-insensitive, may be whitespace-padded
+        and may carry a leading ``sha256:``. If empty or ``None`` skip the
+        comparison (the digest is still computed and returned), so local or
+        experimental runs that do not pin a checksum are unaffected.
+
+    Returns
+    -------
+    str
+        The actual SHA-256 hex digest of the file. Returning it lets callers
+        hash the file once and reuse the digest for provenance recording.
+
+    Raises
+    ------
+    ValueError
+        If ``expectedSha256`` is set but is not a 64-character hex digest.
+    RuntimeError
+        If the file cannot be read (e.g. a directory or missing file), or if
+        its SHA-256 digest does not match ``expectedSha256``.
+
+    Notes
+    -----
+    This guards against loading the wrong model version and against loading a
+    git-lfs pointer stub that was never fetched (which hashes to something
+    other than the real weights).
+    """
+    try:
+        actual = computeSha256(path)
+    except OSError as e:
+        raise RuntimeError(
+            f"Could not read model file for config.{key} at {path}: {e}. "
+            f"This field must point to a model weights file."
+        ) from e
+    if expectedSha256:
+        # Normalise the expected digest here so callers never compare raw
+        # strings: hex digests are case-insensitive, may be whitespace-padded,
+        # and may carry a leading "sha256:" (e.g. copied from a git-lfs
+        # pointer).
+        expected = expectedSha256.strip().lower().removeprefix("sha256:")
+        if not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise ValueError(
+                f"Expected SHA-256 for config.{key} is not a 64-character hex digest: {expectedSha256!r}"
+            )
+        if actual != expected:
+            raise RuntimeError(
+                f"Model checksum mismatch for config.{key} at {path}: expected "
+                f"{expected}, got {actual}. This usually means the wrong "
+                f"model version is installed, or git-lfs did not fetch the file "
+                f"(you may have a pointer stub instead of the real weights)."
+            )
+    return actual
 
 
 def getConfigDir() -> str:
