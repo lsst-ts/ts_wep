@@ -23,17 +23,135 @@
 
 __all__ = ["CutDonutStampsConfig", "CutDonutStampsTask"]
 
+from dataclasses import dataclass
+
 import numpy as np
+import numpy.typing as npt
 from astropy.table import QTable
 
 import lsst.geom
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Detector
 from lsst.afw.image import Exposure
 
 from .dataStructures import Donut
 from .utils import _INSTRUMENT
+
+
+@dataclass(frozen=True)
+class _ExposureContext:
+    """Per-exposure values every stamp in one `run` call shares.
+
+    Extracted from the exposure once, so `CutDonutStampsTask._cut_stamp` can be
+    a method taking explicit inputs rather than a closure over `run`'s locals.
+    Frozen because nothing downstream of the extraction may rebind any of it;
+    the two arrays are views into the exposure's pixels and are only read.
+    """
+
+    detector: Detector
+    band: str
+    visit_id: int
+    det_id: int
+    n_quarter: int
+    # Image and mask pixels, and the bit `rejected_sat` tests for.
+    image: npt.NDArray[np.float64]
+    mask: npt.NDArray[np.integer]
+    sat_bit: int
+
+    @classmethod
+    def from_exposure(cls, exposure: Exposure) -> "_ExposureContext":
+        """Read the per-exposure values off a post-ISR exposure."""
+        detector = exposure.getDetector()
+        return cls(
+            detector=detector,
+            band=exposure.filter.bandLabel,
+            visit_id=exposure.getInfo().getVisitInfo().id,
+            det_id=detector.getId(),
+            n_quarter=detector.getOrientation().getNQuarter(),
+            image=exposure.image.array,
+            mask=exposure.mask.array,
+            sat_bit=exposure.mask.getPlaneBitMask("SAT"),
+        )
+
+
+@dataclass(frozen=True)
+class _RefcatArrays:
+    """The refcat columns the nearby-source box query needs, as plain arrays.
+
+    Pulled out of the `QTable` once per `run` call rather than per donut: the
+    query is a vectorized comparison against all of them, and column access on
+    a `QTable` is not free.
+
+    `None` on the blitz-detection path, where there is no refcat at all -- so a
+    caller holding `None` skips the query entirely and every donut gets empty
+    neighbor lists.
+    """
+
+    x: npt.NDArray[np.float64]
+    y: npt.NDArray[np.float64]
+    donut_id: npt.NDArray
+    photo_mag: npt.NDArray[np.float64]
+    astrom_mag: npt.NDArray[np.float64]
+
+    @classmethod
+    def from_table(cls, refcat: QTable | None) -> "_RefcatArrays | None":
+        """Extract the arrays, or `None` if there is no refcat."""
+        if refcat is None:
+            return None
+        return cls(
+            x=np.asarray(refcat["centroid_x"], dtype=float),
+            y=np.asarray(refcat["centroid_y"], dtype=float),
+            donut_id=np.asarray(refcat["donut_id"]),
+            photo_mag=np.asarray(refcat["photo_mag"], dtype=float),
+            astrom_mag=np.asarray(refcat["astrom_mag"], dtype=float),
+        )
+
+    def nearby(
+        self,
+        donut_id,
+        x_det: float,
+        y_det: float,
+        half: int,
+    ) -> tuple[list[tuple[float, float, float]], list[tuple[float, float, float]]]:
+        """Both nearby-source lists for one donut's stamp box.
+
+        Parameters
+        ----------
+        donut_id
+            The donut's own refcat id, excluded from its own neighbor lists.
+        x_det, y_det : float
+            The donut's un-rounded centroid, in detector pixels.
+        half : int
+            Half the stamp side, ``stampSize // 2``.
+
+        Returns
+        -------
+        nearby_photo, nearby_astrom : list of (float, float, float)
+            ``(dx, dy, mag)`` per neighbor, the two lists differing only in
+            which magnitude they carry. The box query is shared.
+        """
+        # Membership is against the *rounded* centroid, because that is what
+        # the stamp bounds were cut on -- these are the sources actually
+        # inside the stamp.
+        cx, cy = round(x_det), round(y_det)
+        box_mask = (np.abs(self.x - cx) <= half) & (np.abs(self.y - cy) <= half)
+        # Drop this donut itself: it is a refcat source too, so the box always
+        # contains it at zero offset. Matched on refcat id rather than on a
+        # distance threshold -- this object exists only when the selections
+        # were drawn from the refcat, so the id comparison is exact.
+        box_mask &= self.donut_id != donut_id
+        # Offsets are from x_det/y_det, not the rounded cx/cy, so that
+        # ``x_det + nearby_*_dx_det`` is the neighbor's detector x with no
+        # correction term. Anything wanting stamp-display coordinates has to
+        # add the rounding residual ``x_det - round(x_det)``; see `_xform` in
+        # donutBlitzPlot.
+        dx_box = (self.x[box_mask] - x_det).tolist()
+        dy_box = (self.y[box_mask] - y_det).tolist()
+        return (
+            list(zip(dx_box, dy_box, self.photo_mag[box_mask].tolist())),
+            list(zip(dx_box, dy_box, self.astrom_mag[box_mask].tolist())),
+        )
 
 
 class CutDonutStampsConfig(pexConfig.Config):
@@ -148,130 +266,14 @@ class CutDonutStampsTask(pipeBase.Task):
         if donut_radius is None:
             donut_radius = _INSTRUMENT.donutRadius
 
-        detector = exposure.getDetector()
-        band = exposure.filter.bandLabel
-        visit_id = exposure.getInfo().getVisitInfo().id
-        det_id = detector.getId()
-        n_quarter = detector.getOrientation().getNQuarter()
-        half = self.config.stampSize // 2
-
-        arr = exposure.image.array
-        mask_arr = exposure.mask.array
-        sat_bit = exposure.mask.getPlaneBitMask("SAT")
+        context = _ExposureContext.from_exposure(exposure)
+        refcat_arrays = _RefcatArrays.from_table(refcat)
 
         # Sort candidates flux-descending up front so the fill loop below keeps
         # brightest-first and can early-exit once both buckets are full,
         # without depending on the upstream measurement task's row order.
         if len(measurements) > 1:
             measurements = measurements[np.argsort(measurements["flux"])[::-1]]
-
-        if refcat is not None:
-            refcat_x = np.asarray(refcat["centroid_x"], dtype=float)
-            refcat_y = np.asarray(refcat["centroid_y"], dtype=float)
-            refcat_id = np.asarray(refcat["donut_id"])
-            refcat_mag = {
-                "photo_mag": np.asarray(refcat["photo_mag"], dtype=float),
-                "astrom_mag": np.asarray(refcat["astrom_mag"], dtype=float),
-            }
-        else:
-            refcat_x = refcat_y = refcat_id = None
-            refcat_mag = {}
-
-        def _cut_stamp(row) -> Donut | None:
-            """Cut one stamp and compute metrics; None on failure."""
-            # Cut a stamp of configured size, centered on the rounded centroid.
-            # Odd-size preference is enforced during binning in
-            # _prep_donut_for_danish.
-            cx_f = row["centroid_x"]
-            cy_f = row["centroid_y"]
-            cx, cy = round(cx_f), round(cy_f)
-            half_before = half
-            half_after = self.config.stampSize - half_before - 1
-            rmin, rmax = cy - half_before, cy + half_after + 1
-            cmin, cmax = cx - half_before, cx + half_after + 1
-            if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
-                return None
-            stamp = np.array(arr[rmin:rmax, cmin:cmax])
-            stamp_ccs = np.rot90(stamp, k=-n_quarter).T
-
-            # Vectorized box query over the precomputed refcat arrays.
-            # Offsets are relative to the *rounded* centroid (cx, cy).
-            if refcat_x is None:
-                box_mask = None
-                dx_box = dy_box = None
-            else:
-                # Membership is against the *rounded* centroid, because that is
-                # what the stamp bounds were cut on -- these are the sources
-                # actually inside the stamp.
-                box_mask = (np.abs(refcat_x - cx) <= half_before) & (np.abs(refcat_y - cy) <= half_before)
-                # Drop this donut itself: it is a refcat source too, so the box
-                # always contains it at zero offset. Matched on refcat id
-                # rather than on a distance threshold -- `refcat` is non-None
-                # only when the selections were drawn from it, so the id
-                # comparison is exact.
-                box_mask &= refcat_id != row["donut_id"]
-                # Offsets are from cx_f/cy_f, not the rounded cx/cy, so that
-                # ``x_det + nearby_*_dx_det`` is the neighbor's detector x with
-                # no correction term. Anything wanting stamp-display
-                # coordinates has to add the rounding residual ``x_det -
-                # round(x_det)``; see `_xform` in donutBlitzPlot.
-                dx_box = refcat_x[box_mask] - cx_f
-                dy_box = refcat_y[box_mask] - cy_f
-
-            def _nearby(mag_col):
-                if box_mask is None:
-                    return []
-                mag_box = refcat_mag[mag_col][box_mask]
-                return list(zip(dx_box.tolist(), dy_box.tolist(), mag_box.tolist()))
-
-            field_angle = detector.transform([lsst.geom.Point2D(cx_f, cy_f)], PIXELS, FIELD_ANGLE)[0]
-
-            rejected_sat = bool(np.any(mask_arr[rmin:rmax, cmin:cmax] & sat_bit))
-            rejected_inner_frac = bool(
-                np.isfinite(row["inner_frac"]) and abs(row["inner_frac"]) > self.config.innerFracThreshold
-            )
-            rejected_outer_frac = bool(
-                np.isfinite(row["outer_frac"]) and abs(row["outer_frac"]) > self.config.outerFracThreshold
-            )
-            rejected_snr = bool(np.isfinite(row["snr"]) and row["snr"] < self.config.minStampSnr)
-            rejected = rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr
-
-            return Donut(
-                det_name=detector.getName(),
-                stamp=stamp_ccs,
-                thx_ccs=field_angle[1],
-                thy_ccs=field_angle[0],
-                flux=row["flux"],
-                band=band,
-                det_id=det_id,
-                visit_id=visit_id,
-                x_det=cx_f,
-                y_det=cy_f,
-                donut_id=row["donut_id"],
-                inner_frac=row["inner_frac"],
-                outer_frac=row["outer_frac"],
-                outer_sector_minmax_frac=row["outer_sector_minmax_frac"],
-                donut_radius=donut_radius,
-                snr=row["snr"],
-                bkg=row["bkg"],
-                bkg_std=row["bkg_std"],
-                n_quarter=n_quarter,
-                # The donut's own refcat values ride the selections table, a
-                # row subset of the refcat on that path. `_REFCAT_COLUMNS`
-                # guarantees they are present on the blitz path too,
-                # NaN-filled, so there is nothing to test for here.
-                photo_mag=float(row["photo_mag"]),
-                astrom_mag=float(row["astrom_mag"]),
-                coord_ra=float(row["coord_ra"]),
-                coord_dec=float(row["coord_dec"]),
-                nearby_photo=_nearby("photo_mag"),
-                nearby_astrom=_nearby("astrom_mag"),
-                rejected_sat=rejected_sat,
-                rejected_inner_frac=rejected_inner_frac,
-                rejected_outer_frac=rejected_outer_frac,
-                rejected_snr=rejected_snr,
-                rejected=rejected,
-            )
 
         max_donuts = self.config.maxDonuts
         max_reject = self.config.maxRejectDonuts
@@ -285,7 +287,7 @@ class CutDonutStampsTask(pipeBase.Task):
         for row in measurements:
             if len(donuts) >= max_donuts and len(rejected_donuts) >= max_reject:
                 break
-            d = _cut_stamp(row)
+            d = self._cut_stamp(row, context, refcat_arrays, donut_radius)
             if d is None:
                 continue
             if d.rejected:
@@ -296,3 +298,100 @@ class CutDonutStampsTask(pipeBase.Task):
                 donuts.append(d)
 
         return pipeBase.Struct(donuts=donuts, rejected_donuts=rejected_donuts)
+
+    def _cut_stamp(
+        self,
+        row,
+        context: _ExposureContext,
+        refcat_arrays: _RefcatArrays | None,
+        donut_radius: float,
+    ) -> Donut | None:
+        """Cut one stamp and compute its metrics; None if it runs off the edge.
+
+        Parameters
+        ----------
+        row
+            One row of the measurements table; see `run`.
+        context : _ExposureContext
+            The per-exposure values shared by every stamp in this call.
+        refcat_arrays : _RefcatArrays or None
+            The refcat columns for the nearby-source query, or None on the
+            blitz-detection path, where the neighbor lists come back empty.
+        donut_radius : float
+            Measured donut radius in un-binned pixels, carried onto the Donut.
+
+        Returns
+        -------
+        Donut or None
+            None if the stamp box falls outside the image, in which case the
+            candidate is dropped.
+        """
+        # Cut a stamp of configured size, centered on the rounded centroid.
+        # Odd-size preference is enforced during binning in
+        # _prep_donut_for_danish.
+        x_det = row["centroid_x"]
+        y_det = row["centroid_y"]
+        cx, cy = round(x_det), round(y_det)
+        half_before = self.config.stampSize // 2
+        half_after = self.config.stampSize - half_before - 1
+        rmin, rmax = cy - half_before, cy + half_after + 1
+        cmin, cmax = cx - half_before, cx + half_after + 1
+        image = context.image
+        if rmin < 0 or rmax > image.shape[0] or cmin < 0 or cmax > image.shape[1]:
+            return None
+        stamp = np.array(image[rmin:rmax, cmin:cmax])
+        stamp_ccs = np.rot90(stamp, k=-context.n_quarter).T
+
+        if refcat_arrays is None:
+            nearby_photo, nearby_astrom = [], []
+        else:
+            nearby_photo, nearby_astrom = refcat_arrays.nearby(row["donut_id"], x_det, y_det, half_before)
+
+        field_angle = context.detector.transform([lsst.geom.Point2D(x_det, y_det)], PIXELS, FIELD_ANGLE)[0]
+
+        rejected_sat = bool(np.any(context.mask[rmin:rmax, cmin:cmax] & context.sat_bit))
+        rejected_inner_frac = bool(
+            np.isfinite(row["inner_frac"]) and abs(row["inner_frac"]) > self.config.innerFracThreshold
+        )
+        rejected_outer_frac = bool(
+            np.isfinite(row["outer_frac"]) and abs(row["outer_frac"]) > self.config.outerFracThreshold
+        )
+        rejected_snr = bool(np.isfinite(row["snr"]) and row["snr"] < self.config.minStampSnr)
+        rejected = rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr
+
+        return Donut(
+            det_name=context.detector.getName(),
+            stamp=stamp_ccs,
+            thx_ccs=field_angle[1],
+            thy_ccs=field_angle[0],
+            flux=row["flux"],
+            band=context.band,
+            det_id=context.det_id,
+            visit_id=context.visit_id,
+            x_det=x_det,
+            y_det=y_det,
+            donut_id=row["donut_id"],
+            inner_frac=row["inner_frac"],
+            outer_frac=row["outer_frac"],
+            outer_sector_minmax_frac=row["outer_sector_minmax_frac"],
+            donut_radius=donut_radius,
+            snr=row["snr"],
+            bkg=row["bkg"],
+            bkg_std=row["bkg_std"],
+            n_quarter=context.n_quarter,
+            # The donut's own refcat values ride the selections table, a row
+            # subset of the refcat on that path. `_REFCAT_COLUMNS` guarantees
+            # they are present on the blitz path too, NaN-filled, so there is
+            # nothing to test for here.
+            photo_mag=float(row["photo_mag"]),
+            astrom_mag=float(row["astrom_mag"]),
+            coord_ra=float(row["coord_ra"]),
+            coord_dec=float(row["coord_dec"]),
+            nearby_photo=nearby_photo,
+            nearby_astrom=nearby_astrom,
+            rejected_sat=rejected_sat,
+            rejected_inner_frac=rejected_inner_frac,
+            rejected_outer_frac=rejected_outer_frac,
+            rejected_snr=rejected_snr,
+            rejected=rejected,
+        )
