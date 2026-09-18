@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.12.1 (2026-09-18)
+=====================
+
+Other Changes and Additions
+---------------------------
+
+- Override exposure pairer rotation threshold. (`RSO-944 <https://rubinobs.atlassian.net//browse/RSO-944>`_)
+
+
 v17.12.0 (2026-09-17)
 =====================
 
