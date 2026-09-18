@@ -46,6 +46,7 @@ from lsst.ts.wep.blitz.dataStructures import (
 from lsst.ts.wep.blitz.donutBlitzPlot import (
     DonutBlitzPlotConfig,
     DonutBlitzPlotTask,
+    _wf_groups_from_catalog,
 )
 from lsst.ts.wep.blitz.utils import _ZK_JMAX
 
@@ -230,6 +231,76 @@ class TestDonutBlitzPlotTask(unittest.TestCase):
                 self.assertEqual(os.listdir(tmp), [])
             finally:
                 os.chdir(cwd)
+
+
+class TestWfGroupsFromCatalog(unittest.TestCase):
+    """The catalog -> per-fit inversion the WF plot draws from.
+
+    Pinned directly rather than through a rendered figure: a PNG proves the
+    records were usable, not that they carried the right values.
+    """
+
+    def testFittedGroupCarriesItsFitScalars(self) -> None:
+        plottable, _ = _wf_groups_from_catalog(_catalog())
+        self.assertEqual(len(plottable), 1)
+        group = plottable[0]
+        # Both detectors of the corner, in catalog order.
+        self.assertEqual([str(n) for n in group.det_names], ["R00_SW0", "R00_SW1"])
+        self.assertTrue(group.success)
+        # The values `_wf_result` sets, stripped of their units.
+        self.assertEqual(group.fit_info.nfev, 40)
+        self.assertAlmostEqual(group.fit_info.fwhm, 0.9)
+        self.assertAlmostEqual(group.fit_info.elapsed, 12.5)
+        self.assertEqual(len(group.donuts), 2)
+        self.assertEqual(
+            sorted(d.defocal for d in group.donuts),
+            ["extra", "intra"],
+        )
+        for donut in group.donuts:
+            self.assertIsNotNone(donut.model_img)
+
+    def testUnfittedSurplusDonutIsDataOnly(self) -> None:
+        """The surplus candidate: a stamp to draw, but nothing fit it."""
+        _, unfitted = _wf_groups_from_catalog(_catalog())
+        self.assertEqual(len(unfitted), 1)
+        group = unfitted[0]
+        self.assertFalse(group.success)
+        self.assertIsNone(group.donuts[0].model_img)
+        self.assertEqual(len(group.zk_dev), 0)
+        # nfev=0 is what makes the bar label read "x0" instead of "fail".
+        self.assertEqual(group.fit_info.nfev, 0)
+        self.assertTrue(np.isnan(group.fit_info.elapsed))
+        self.assertTrue(np.isnan(group.fit_info.fwhm))
+
+    def testRejectedDonutsAreNotDrawn(self) -> None:
+        """A donut rejected on SNR is neither fitted nor a candidate."""
+        plottable, unfitted = _wf_groups_from_catalog(_catalog())
+        drawn = {int(d.donut_id) for g in plottable + unfitted for d in g.donuts}
+        self.assertEqual(drawn, {1, 2, 3})
+
+    def testExplodedKeepsTheGroupScalarsPerDonut(self) -> None:
+        """The non-paired layout path, which the fixture's mode does not use.
+
+        ``_saveWfDiagnosticPlot`` calls this for every mode whose groups do not
+        pair intra with extra, so it is worth pinning even though a paired
+        fixture never reaches it.
+        """
+        group = _wf_groups_from_catalog(_catalog())[0][0]
+        singles = group.exploded()
+        self.assertEqual(len(singles), len(group.donuts))
+        for single, donut in zip(singles, group.donuts):
+            self.assertEqual(len(single.donuts), 1)
+            self.assertEqual(single.donuts[0].donut_id, donut.donut_id)
+            # The scalars are the group's, shared by each copy.
+            self.assertEqual(single.fit_info, group.fit_info)
+            self.assertEqual(single.success, group.success)
+            np.testing.assert_array_equal(single.zk_dev, group.zk_dev)
+        # Exploding must not disturb the group it came from.
+        self.assertEqual(len(group.donuts), 2)
+
+    def testEmptyCatalogYieldsNoGroups(self) -> None:
+        catalog = _build_donut_catalog([], [], [], [], _VISIT_ID, _options())
+        self.assertEqual(_wf_groups_from_catalog(catalog), ([], []))
 
 
 if __name__ == "__main__":
