@@ -238,8 +238,9 @@ def _cutout_one_exposure(
             with np.errstate(invalid="ignore", divide="ignore"):
                 refcat["photo_mag"] = -2.5 * np.log10(refcat["photo_flux"]) + 31.4
                 refcat["astrom_mag"] = -2.5 * np.log10(refcat["astrom_flux"]) + 31.4
-            result = select_task.run(refcat, detector, photo_ref_filter)
-            selections = result.source_cat
+            # `sourceCat` stays camelCase: it is `DonutSourceSelectorTask`'s
+            # own Struct field, not a blitz name to convert.
+            selections = select_task.run(refcat, detector, photo_ref_filter).sourceCat
             selection_source = "refcat"
         except Exception as exc:
             cat_err = str(exc)
@@ -259,8 +260,7 @@ def _cutout_one_exposure(
         for column in _REFCAT_COLUMNS:
             blitz_detections[column] = np.full(len(blitz_detections), np.nan)
         try:
-            result = select_task.run(blitz_detections, detector, "")
-            selections = result.source_cat
+            selections = select_task.run(blitz_detections, detector, "").sourceCat
             selection_source = "blitz_selected"
         except Exception as exc:
             cat_err = cat_err or str(exc)
