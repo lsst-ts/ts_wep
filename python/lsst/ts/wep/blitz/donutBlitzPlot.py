@@ -27,6 +27,7 @@ __all__ = [
     "DonutBlitzPlotTask",
 ]
 
+from dataclasses import dataclass, replace
 from typing import Any
 
 import astropy.units as u
@@ -78,6 +79,138 @@ _COLOR_HEXAFOIL = "#D55E00"
 _STAMP_TEXT_FONTSIZE = 3.5
 
 
+@dataclass(frozen=True)
+class _DonutLayout:
+    """Figure geometry for the donut diagnostic plot, in inches and columns.
+
+    One record per plot rather than a flat block of module constants, because
+    both plots have a ``row_h`` and they are unrelated numbers -- see
+    `_WfLayout`.  Grid *indices* derived from these (the accepted/rejected
+    column offsets) stay local to the method that builds the GridSpec: they
+    are not tunable, they are consequences.
+    """
+
+    stamps_per_row: int
+    rejected_per_row: int
+    stamp_col_w: float
+    stats_col_w: float
+    row_h: float
+    legend_h: float
+    spacer_w: float
+    suptitle_h: float
+
+    @property
+    def n_cols(self) -> int:
+        """Grid columns: stats, accepted stamps, spacer, rejected stamps."""
+        return 1 + self.stamps_per_row + 1 + self.rejected_per_row
+
+
+@dataclass(frozen=True)
+class _WfLayout:
+    """Figure geometry for the wavefront diagnostic plot, in inches.
+
+    ``row_h`` here is the height of one *donut* row within a corner block, of
+    which a corner stacks ``max_rows``; the donut plot's ``row_h`` is the
+    height of a whole *detector* section.  Same name, different unit of work.
+    """
+
+    cell: float
+    row_h: float
+    hpad: float
+
+
+# One row per detector, so the row height is set small enough that all eight
+# corner sensors fit a printable page.
+_DONUT_LAYOUT = _DonutLayout(
+    stamps_per_row=8,
+    rejected_per_row=2,
+    stamp_col_w=1.8 * 1.05,
+    stats_col_w=2.8,
+    row_h=1.7 * 1.05,
+    legend_h=0.35,
+    spacer_w=0.15,
+    suptitle_h=0.55,
+)
+
+# Four corner blocks in a 2x2, each of which is a square grid of unit cells,
+# so `cell` and `row_h` are equal by intent and not by coincidence.
+_WF_LAYOUT = _WfLayout(cell=1.0, row_h=1.0, hpad=0.08)
+
+
+@dataclass(frozen=True)
+class _WfFitInfo:
+    """One fit's scalars, as bare floats in the units the labels state.
+
+    Stripped of their Quantities at construction because every use is a format
+    string carrying its own suffix ("t=%.1fs", "blur=%.2farcsec").  A record
+    that no fit produced (an unfitted surplus donut) still carries one of
+    these, filled with the not-fitted values, so the drawing code needs no
+    special case: see `not_fitted`.
+    """
+
+    elapsed: float
+    nfev: int
+    fwhm: float
+
+    @classmethod
+    def not_fitted(cls) -> "_WfFitInfo":
+        """The stand-in for a donut no fit consumed.
+
+        ``nfev=0`` is what the bar label tests to print "x0" rather than
+        "ok"/"fail", so it is load-bearing, not merely an empty default.
+        """
+        return cls(elapsed=float("nan"), nfev=0, fwhm=float("nan"))
+
+
+@dataclass(frozen=True)
+class _WfDonut:
+    """One donut's images and identity within a `_WfGroup`.
+
+    ``model_img`` is None when the fitter produced none, which the drawing
+    code distinguishes from an all-NaN array: None means "draw nothing here",
+    and it is also what makes the residual panel and Zernike bar drop out.
+    """
+
+    donut_id: int
+    det_name: str
+    # Layout only (intra left, extra right); see `_pair_up`.
+    defocal: str
+    img: np.ndarray
+    model_img: np.ndarray | None
+    blend_frac: float
+
+
+@dataclass(frozen=True)
+class _WfGroup:
+    """One plot row's worth of fit output, rebuilt from the flat catalog.
+
+    This is the shape `_saveWfDiagnosticPlot`'s drawing code was written
+    against -- one fit, its donuts, and the Zernike deviations it produced.
+    `_wf_groups_from_catalog` inverts `_buildCatalog` to recover it.
+
+    Both a real fit and an unfitted surplus donut are represented as one of
+    these; the latter has ``success=False``, a `_WfFitInfo.not_fitted`, one
+    donut with no model, and no Zernikes.
+    """
+
+    det_names: list[str]
+    success: bool
+    fit_info: _WfFitInfo
+    donuts: list[_WfDonut]
+    # Noll-indexed deviations in µm, element j being Noll j, truncated at the
+    # highest fitted index -- so this may be shorter than the drawn range, or
+    # empty (`_NO_ZK`) for a record with no fit.
+    zk_dev: np.ndarray
+
+    def exploded(self) -> list["_WfGroup"]:
+        """One single-donut copy of this group per donut it holds.
+
+        For modes whose groups do not pair intra with extra: the group's
+        scalars are shared by every donut in it, so each copy keeps them.
+        """
+        return [replace(self, donuts=[donut]) for donut in self.donuts]
+
+
 def _meta_value(meta: dict, key: str, unit: u.UnitBase) -> float:
     """Return one ``meta`` scalar as a bare float in ``unit``.
 
@@ -107,6 +240,106 @@ def _det_id_by_name(catalog: QTable) -> dict[str, int]:
     names = np.asarray(catalog["det_name"], dtype=str)
     ids = np.asarray(catalog["det_id"], dtype=int)
     return {str(n): int(i) for n, i in zip(names, ids)}
+
+
+def _wf_groups_from_catalog(catalog: QTable) -> tuple[list[_WfGroup], list[_WfGroup]]:
+    """Invert `_buildCatalog`, recovering the WF plot's per-fit records.
+
+    The catalog is one flat row per donut; the WF plot draws one row per fit,
+    so this regroups on ``group_id`` and re-nests.  Pure function of the
+    catalog: it touches no figure state, which is what makes it testable
+    without rendering anything.
+
+    Parameters
+    ----------
+    catalog : QTable
+        Per-donut table from ``_buildCatalog``.
+
+    Returns
+    -------
+    plottable : list [`_WfGroup`]
+        Fits that produced a model, ordered by ``group_id``.
+    unfitted : list [`_WfGroup`]
+        Candidate donuts no fit consumed, each alone in its own group, in
+        catalog order.  Kept separate because the layout places them below
+        the fitted rows rather than interleaved.
+    """
+    # Group rows a fit claimed; an empty `group_id` means none did.
+    groups: dict[str, list] = {}
+    for row in catalog:
+        group_id = str(row["group_id"])
+        if not group_id:
+            continue
+        groups.setdefault(group_id, []).append(row)
+
+    plottable = []
+    for _, rows in sorted(groups.items()):
+        first = rows[0]
+        # A group whose every model is NaN was never really fit, so it has
+        # nothing to draw in the model or residual panels.
+        if all(np.all(np.isnan(np.array(r["model_img"]))) for r in rows):
+            continue
+        # group_* columns are replicated across the group, so the first row
+        # carries the whole fit's values.
+        fit_info = _WfFitInfo(
+            elapsed=first["group_fit_elapsed"].to_value(u.s),
+            nfev=first["group_fit_nfev"],
+            fwhm=first["group_fwhm"].to_value(u.arcsec),
+        )
+        donuts = []
+        for r in rows:
+            model_arr = np.array(r["model_img"])
+            donuts.append(
+                _WfDonut(
+                    donut_id=r["donut_id"],
+                    det_name=r["det_name"],
+                    defocal=CORNER_DEFOCAL_BY_DET_NAME.get(str(r["det_name"]), ""),
+                    img=np.array(r["wf_img"]),
+                    model_img=model_arr if not np.all(np.isnan(model_arr)) else None,
+                    blend_frac=r["blend_frac"],
+                )
+            )
+        plottable.append(
+            _WfGroup(
+                det_names=list(dict.fromkeys(r["det_name"] for r in rows)),
+                success=bool(first["group_fit_success"]),
+                fit_info=fit_info,
+                donuts=donuts,
+                zk_dev=np.asarray(first["zk_deviation_ccs"].to_value(u.micron), dtype=float),
+            )
+        )
+
+    # Candidate donuts that no fit consumed (paired-mode surplus: no partner
+    # on the other detector, so ``group_id`` is empty). They have no model or
+    # Zernikes, but their binned stamp is still worth seeing, so carry them as
+    # data-only single-donut records.
+    unfitted = []
+    for row in catalog:
+        if str(row["group_id"]) or not row["candidate"]:
+            continue
+        img = np.array(row["wf_img"])
+        if np.all(np.isnan(img)):
+            continue
+        unfitted.append(
+            _WfGroup(
+                det_names=[row["det_name"]],
+                success=False,
+                fit_info=_WfFitInfo.not_fitted(),
+                donuts=[
+                    _WfDonut(
+                        donut_id=row["donut_id"],
+                        det_name=row["det_name"],
+                        defocal=CORNER_DEFOCAL_BY_DET_NAME.get(str(row["det_name"]), ""),
+                        img=img,
+                        model_img=None,
+                        blend_frac=row["blend_frac"],
+                    )
+                ],
+                zk_dev=_NO_ZK,
+            )
+        )
+
+    return plottable, unfitted
 
 
 class DonutBlitzPlotConnections(
@@ -239,18 +472,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         if n_dets == 0:
             return
 
-        STAMPS_PER_ROW = 8
-        REJECTED_PER_ROW = 2
-        STAMP_COL_W = 1.8 * 1.05
-        STATS_COL_W = 2.8
-        ROW_H = 1.7 * 1.05
-        LEGEND_H = 0.35
-        SPACER_W = 0.15
-        SUPTITLE_H = 0.55
-
-        N_COLS = 1 + STAMPS_PER_ROW + 1 + REJECTED_PER_ROW
-        fig_w = STATS_COL_W + (STAMPS_PER_ROW + REJECTED_PER_ROW) * STAMP_COL_W + SPACER_W
-        fig_h = n_dets * ROW_H + LEGEND_H + SUPTITLE_H
+        layout = _DONUT_LAYOUT
+        fig_w = (
+            layout.stats_col_w
+            + (layout.stamps_per_row + layout.rejected_per_row) * layout.stamp_col_w
+            + layout.spacer_w
+        )
+        fig_h = n_dets * layout.row_h + layout.legend_h + layout.suptitle_h
 
         fig = Figure(figsize=(fig_w, fig_h), layout="constrained")
         fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
@@ -261,17 +489,19 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             fontsize=9,
         )
 
-        w_stats = STATS_COL_W / STAMP_COL_W
-        w_spacer = SPACER_W / STAMP_COL_W
+        w_stats = layout.stats_col_w / layout.stamp_col_w
+        w_spacer = layout.spacer_w / layout.stamp_col_w
         gs = GridSpec(
             n_dets + 1,
-            N_COLS,
+            layout.n_cols,
             figure=fig,
-            height_ratios=[ROW_H] * n_dets + [LEGEND_H],
-            width_ratios=[w_stats] + [1] * STAMPS_PER_ROW + [w_spacer] + [1] * REJECTED_PER_ROW,
+            height_ratios=[layout.row_h] * n_dets + [layout.legend_h],
+            width_ratios=(
+                [w_stats] + [1] * layout.stamps_per_row + [w_spacer] + [1] * layout.rejected_per_row
+            ),
         )
         COL_ACCEPTED_START = 1
-        COL_SPACER = 1 + STAMPS_PER_ROW
+        COL_SPACER = 1 + layout.stamps_per_row
         COL_REJECTED_START = COL_SPACER + 1
 
         # The per-detector radius rides each donut row (from
@@ -314,7 +544,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         px_scale = 1.0 if has_stamp else 1.0 / catalog.meta.get("binning", 1)
         stamp_col = "stamp" if has_stamp else "wf_img"
 
-        def _draw_stamp(ax, row, rejected=False):
+        def _draw_donut_stamp(ax, row, rejected=False):
+            """One catalog row's cutout, with aperture and refcat overlays.
+
+            Reads the stamp out of ``row`` (whichever of the two stamp columns
+            `stamp_col` resolved to) and annotates it in unbinned pixel units
+            scaled by `px_scale`.  Distinct from the wavefront plot's
+            `_draw_wf_image`, which draws an already-extracted array.
+            """
             stamp = np.array(row[stamp_col])
             h_px = stamp.shape[0] // 2
             vmin, vmax = np.nanpercentile(stamp, [1, 99])
@@ -513,22 +750,22 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 family="monospace",
             )
 
-            for col_idx in range(STAMPS_PER_ROW):
+            for col_idx in range(layout.stamps_per_row):
                 ax = fig.add_subplot(gs[row_idx, COL_ACCEPTED_START + col_idx])
                 ax.axis("off")
                 if col_idx >= len(acc_rows):
                     continue
-                _draw_stamp(ax, acc_rows[col_idx])
+                _draw_donut_stamp(ax, acc_rows[col_idx])
 
             ax_sp = fig.add_subplot(gs[row_idx, COL_SPACER])
             ax_sp.axis("off")
 
-            for col_idx in range(REJECTED_PER_ROW):
+            for col_idx in range(layout.rejected_per_row):
                 ax = fig.add_subplot(gs[row_idx, COL_REJECTED_START + col_idx])
                 ax.axis("off")
                 if col_idx >= len(rej_rows):
                     continue
-                _draw_stamp(ax, rej_rows[col_idx], rejected=True)
+                _draw_donut_stamp(ax, rej_rows[col_idx], rejected=True)
 
         ax_legend = fig.add_subplot(gs[n_dets, :])
         ax_legend.axis("off")
@@ -599,102 +836,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         wf_mode = meta["wf_mode"]
         ZK_MIN, ZK_MAX = 4, 28
 
-        # Reconstruct wf_results-like list from QTable by grouping on
-        # "group_id". Include only rows a fit claimed; an empty group_id means
-        # none did.
-        groups: dict[str, list] = {}
-        for row in catalog:
-            grp = str(row["group_id"])
-            if not grp:
-                continue
-            if grp not in groups:
-                groups[grp] = []
-            groups[grp].append(row)
-
-        plottable = []
-        for group_id, rows in sorted(groups.items()):
-            first = rows[0]
-            # Determine if this group has a real model (any non-NaN model_img).
-            has_model = any(not np.all(np.isnan(np.array(r["model_img"]))) for r in rows)
-            if not has_model:
-                continue
-            det_names = list(dict.fromkeys(r["det_name"] for r in rows))
-            # group_* columns are replicated across the group, so the first row
-            # carries the whole fit's values.
-            success = bool(first["group_fit_success"])
-            # Stripped to bare floats: these flow into format strings that
-            # already carry their own unit suffix ("t=%.1fs", "blur=...").
-            elapsed = first["group_fit_elapsed"].to_value(u.s)
-            nfev = first["group_fit_nfev"]
-            fwhm = first["group_fwhm"].to_value(u.arcsec)
-            # Noll-indexed deviations in µm; element j is Noll j (see
-            # _buildCatalog), truncated at the highest fitted Noll index.
-            zk_dev = np.asarray(first["zk_deviation_ccs"].to_value(u.micron), dtype=float)
-
-            donuts_out = []
-            for r in rows:
-                model_arr = np.array(r["model_img"])
-                donuts_out.append(
-                    {
-                        "donut_id": r["donut_id"],
-                        "det_name": r["det_name"],
-                        # Layout only (intra left, extra right); see _pair_up
-                        # below.
-                        "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(r["det_name"]), ""),
-                        "img": np.array(r["wf_img"]),
-                        "model_img": model_arr if not np.all(np.isnan(model_arr)) else None,
-                        "blend_frac": r["blend_frac"],
-                        "elapsed": elapsed,
-                        "nfev": nfev,
-                        "fwhm": fwhm,
-                        "success": success,
-                    }
-                )
-            plottable.append(
-                {
-                    "mode": wf_mode,
-                    "det_names": det_names,
-                    "success": success,
-                    "fit_info": {"elapsed": elapsed, "nfev": nfev, "fwhm": fwhm},
-                    "donuts": donuts_out,
-                    "zk_dev": zk_dev,
-                }
-            )
-
-        # Candidate donuts that no fit consumed (paired-mode surplus: no
-        # partner on the other detector, so ``group_id`` is empty). They have
-        # no model or Zernikes, but their binned stamp is still worth seeing,
-        # so carry them as data-only single-donut records.
-        unfitted = []
-        for row in catalog:
-            if str(row["group_id"]) or not row["candidate"]:
-                continue
-            img = np.array(row["wf_img"])
-            if np.all(np.isnan(img)):
-                continue
-            unfitted.append(
-                {
-                    "mode": wf_mode,
-                    "det_names": [row["det_name"]],
-                    "success": False,
-                    "fit_info": {
-                        "elapsed": float("nan"),
-                        "nfev": 0,
-                        "fwhm": float("nan"),
-                    },
-                    "donuts": [
-                        {
-                            "donut_id": row["donut_id"],
-                            "det_name": row["det_name"],
-                            "defocal": CORNER_DEFOCAL_BY_DET_NAME.get(str(row["det_name"]), ""),
-                            "img": img,
-                            "model_img": None,
-                            "blend_frac": row["blend_frac"],
-                        }
-                    ],
-                    "zk_dev": _NO_ZK,
-                }
-            )
+        plottable, unfitted = _wf_groups_from_catalog(catalog)
 
         if not plottable and not unfitted:
             self.log.info("No WF results with model images; skipping WF diagnostic plot.")
@@ -714,7 +856,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             return name if det_id is None else f"{name} ({det_id})"
 
         def _corner_of(r):
-            for s in r["det_names"]:
+            for s in r.det_names:
                 if str(s) in CORNER_BY_DET_NAME:
                     return CORNER_BY_DET_NAME[str(s)]
             return corners[0]
@@ -752,7 +894,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ),
         )
 
-        def _draw_stamp(ax, img, cmap, vmin, vmax, label=""):
+        def _draw_wf_image(ax, img, cmap, vmin, vmax, label=""):
+            """One binned image or fitted model under a caller-chosen colormap.
+
+            Takes the array and its scaling from the caller, since a row draws
+            image, model and residual with shared limits.  Distinct from the
+            donut plot's `_draw_donut_stamp`, which reads a catalog row.
+            """
             ax.imshow(
                 img, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax, interpolation="nearest", aspect="equal"
             )
@@ -812,10 +960,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         for r in unfitted:
             unfitted_by_corner[_corner_of(r)].append(r)
 
-        def _explode(r):
-            """One record per donut, each keeping the group's fields."""
-            return [{**r, "donuts": [d]} for d in r.get("donuts", [])]
-
         def _pair_up(records):
             """Lay single-donut records out as (intra, extra) plot rows.
 
@@ -823,8 +967,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             own: the pairing here is cosmetic, so rows are matched by position
             and the shorter side padded with None to keep every donut visible.
             """
-            intras = [r for r in records if r["donuts"][0].get("defocal") == "intra"]
-            extras = [r for r in records if r["donuts"][0].get("defocal") == "extra"]
+            intras = [r for r in records if r.donuts[0].defocal == "intra"]
+            extras = [r for r in records if r.donuts[0].defocal == "extra"]
             return [
                 (intras[i] if i < len(intras) else None, extras[i] if i < len(extras) else None)
                 for i in range(max(len(intras), len(extras)))
@@ -841,14 +985,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 # These groups don't pair donuts, so flatten to one record per
                 # donut and pair for layout only. Exploding is a no-op for
                 # "unpaired" (one donut per group already).
-                fit_rows = _pair_up([s for r in corner_results for s in _explode(r)])
+                fit_rows = _pair_up([s for r in corner_results for s in r.exploded()])
             # Surplus donuts have no partner by construction, so they lay out
             # positionally below the fitted rows, one side of each row blank.
             row_pairs[corner] = fit_rows + _pair_up(unfitted_by_corner[corner])
 
-        CELL = 1.0
-        ROW_H = 1.0
-        HPAD = 0.08
+        layout = _WF_LAYOUT
         # Always lay out maxDonuts rows per corner, padding short corners with
         # blank rows, so figure dimensions and axes positions depend only on
         # config -- not on how many donuts a given mode happened to fit. This
@@ -859,13 +1001,21 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         for corner, pairs in row_pairs.items():
             row_pairs[corner] = pairs + [(None, None)] * (max_rows - len(pairs))
 
-        corner_w = 10 * CELL
+        corner_w = 10 * layout.cell
         fig_w = 2 * corner_w + 0.3
-        fig_h = 2 * max_rows * ROW_H + 0.4
+        fig_h = 2 * max_rows * layout.row_h + 0.4
 
         fig = Figure(figsize=(fig_w, fig_h))
         outer = GridSpec(
-            2, 2, figure=fig, hspace=HPAD, wspace=0.06, left=0.01, right=0.99, top=0.94, bottom=0.01
+            2,
+            2,
+            figure=fig,
+            hspace=layout.hpad,
+            wspace=0.06,
+            left=0.01,
+            right=0.99,
+            top=0.94,
+            bottom=0.01,
         )
         corner_pos = {"R00": (0, 0), "R40": (0, 1), "R04": (1, 0), "R44": (1, 1)}
 
@@ -884,51 +1034,51 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             sw0 = _det_label(f"{corner}_SW0")
 
             def _rec_info(r):
+                """A row half's fit scalars, with the blank-row defaults.
+
+                ``r`` is None for a padded layout row, which reports the same
+                not-fitted values a record with no fit carries.
+                """
                 if r is None:
-                    return float("nan"), 0, False, float("nan")
-                fi = r.get("fit_info", {})
-                return (
-                    fi.get("elapsed", float("nan")),
-                    fi.get("nfev", 0),
-                    r.get("success", False),
-                    fi.get("fwhm", float("nan")),
-                )
+                    return _WfFitInfo.not_fitted(), False
+                return r.fit_info, r.success
+
+            def _donut_of(r, defocal):
+                """The donut of one defocal type, or None if the half is blank.
+
+                A paired group holds both types and each half picks out its
+                own; an exploded or unfitted group holds a single donut, which
+                matches only the side it belongs to.
+                """
+                if r is None:
+                    return None
+                return next((d for d in r.donuts if d.defocal == defocal), None)
 
             for row_idx, (r_intra, r_extra) in enumerate(pairs):
-                if r_intra is not None:
-                    intra_rec = next((d for d in r_intra.get("donuts", []) if d["defocal"] == "intra"), None)
-                    elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(r_intra)
-                    zk_dev_i = r_intra.get("zk_dev", _NO_ZK)
-                else:
-                    intra_rec = None
-                    elapsed_i, nfev_i, success_i, fwhm_i = _rec_info(None)
-                    zk_dev_i = _NO_ZK
+                intra_rec = _donut_of(r_intra, "intra")
+                fit_i, success_i = _rec_info(r_intra)
+                zk_dev_i = r_intra.zk_dev if r_intra is not None else _NO_ZK
 
-                if r_extra is not None:
-                    extra_rec = next((d for d in r_extra.get("donuts", []) if d["defocal"] == "extra"), None)
-                    elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(r_extra)
-                    zk_dev_e = r_extra.get("zk_dev", _NO_ZK)
-                else:
-                    extra_rec = None
-                    elapsed_e, nfev_e, success_e, fwhm_e = _rec_info(None)
-                    zk_dev_e = _NO_ZK
+                extra_rec = _donut_of(r_extra, "extra")
+                fit_e, success_e = _rec_info(r_extra)
+                zk_dev_e = r_extra.zk_dev if r_extra is not None else _NO_ZK
 
-                intra_img = intra_rec["img"] if intra_rec else None
-                intra_mod = intra_rec["model_img"] if intra_rec else None
-                intra_donut_id = intra_rec["donut_id"] if intra_rec else None
-                intra_blend = intra_rec.get("blend_frac", float("nan")) if intra_rec else float("nan")
+                intra_img = intra_rec.img if intra_rec else None
+                intra_mod = intra_rec.model_img if intra_rec else None
+                intra_donut_id = intra_rec.donut_id if intra_rec else None
+                intra_blend = intra_rec.blend_frac if intra_rec else float("nan")
 
-                extra_img = extra_rec["img"] if extra_rec else None
-                extra_mod = extra_rec["model_img"] if extra_rec else None
-                extra_donut_id = extra_rec["donut_id"] if extra_rec else None
-                extra_blend = extra_rec.get("blend_frac", float("nan")) if extra_rec else float("nan")
+                extra_img = extra_rec.img if extra_rec else None
+                extra_mod = extra_rec.model_img if extra_rec else None
+                extra_donut_id = extra_rec.donut_id if extra_rec else None
+                extra_blend = extra_rec.blend_frac if extra_rec else float("nan")
 
-                def _bar_label(elapsed, nfev, success):
-                    status = "x0" if nfev == 0 else ("ok" if success else "fail")
-                    return f"t={elapsed:.1f}s {status} nfev={nfev}"
+                def _bar_label(fit, success):
+                    status = "x0" if fit.nfev == 0 else ("ok" if success else "fail")
+                    return f"t={fit.elapsed:.1f}s {status} nfev={fit.nfev}"
 
-                intra_label = _bar_label(elapsed_i, nfev_i, success_i)
-                extra_label = _bar_label(elapsed_e, nfev_e, success_e)
+                intra_label = _bar_label(fit_i, success_i)
+                extra_label = _bar_label(fit_e, success_e)
                 intra_hdr = f"intra {sw1}" if row_idx == 0 else ""
                 extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
 
@@ -962,7 +1112,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                                 if lbl:
                                     ax.set_title(lbl, fontsize=5, pad=1)
                                 continue
-                            _draw_stamp(ax, img, cmap, vmin, vmx, label=lbl)
+                            _draw_wf_image(ax, img, cmap, vmin, vmx, label=lbl)
                             ann_kw = dict(
                                 transform=ax.transAxes,
                                 fontsize=4,
@@ -996,7 +1146,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     intra_hdr,
                     intra_label,
                     intra_donut_id,
-                    fwhm_i,
+                    fit_i.fwhm,
                     zk_dev_i,
                     intra_blend,
                 )
@@ -1007,7 +1157,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                     extra_hdr,
                     extra_label,
                     extra_donut_id,
-                    fwhm_e,
+                    fit_e.fwhm,
                     zk_dev_e,
                     extra_blend,
                 )
