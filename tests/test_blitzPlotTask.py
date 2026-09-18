@@ -32,8 +32,17 @@ import unittest
 
 import numpy as np
 
-from lsst.ts.wep.blitz.catalogBuilder import _build_donut_catalog, _CatalogOptions
-from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
+from lsst.ts.wep.blitz.catalogBuilder import (
+    _build_donut_catalog,
+    _CatalogOptions,
+    _CatalogTimings,
+)
+from lsst.ts.wep.blitz.dataStructures import (
+    CutoutResult,
+    Donut,
+    WfDonutResult,
+    WfGroupResult,
+)
 from lsst.ts.wep.blitz.donutBlitzPlot import (
     DonutBlitzPlotConfig,
     DonutBlitzPlotTask,
@@ -83,52 +92,64 @@ def _donut(det_name, donut_id, **overrides):
 
 
 def _result(det_name, rejected=()):
-    return {
-        "det_name": det_name,
-        "scatter_arcsec": 0.3,
-        "wcs_refit_error": "",
-        "cat_select_error": "",
-        "rejected_catalog": list(rejected),
-        "selection_source": "refcat",
+    return CutoutResult(
+        det_name=det_name,
+        catalog=[],
+        rejected_catalog=list(rejected),
+        isr_run=0.0,
+        bkg_run=0.0,
+        diam_run=0.0,
+        detect_run=0.0,
+        wcs_refit_run=0.0,
+        catalog_select_run=0.0,
+        stamp_cut_run=0.0,
+        scatter_arcsec=0.3,
+        wcs_refit_error="",
+        cat_select_error="",
+        selection_source="refcat",
         # Matches the Donut's own n_quarter: the stamps were rotated by it, and
         # the plot reads it back from det_meta to place the refcat overlays.
-        "n_quarter": 1,
-        "pair_path": "snr_rank",
-    }
+        n_quarter=1,
+        pair_path="snr_rank",
+        wcs=None,
+    )
 
 
 def _wf_result(donuts, group_id):
     """One joint fit over ``donuts``, with images the plot task can draw."""
     rng = np.random.default_rng(0)
-    return {
-        "donuts": [
-            WfDonutResult(
-                donut_id=d.donut_id,
-                det_name=d.det_name,
-                visit_id=d.visit_id,
-                zk_dev=np.full(_ZK_JMAX + 1, 1e-7),
-                zk_intrinsic=np.zeros(_ZK_JMAX + 1),
-                img=rng.normal(100.0, 5.0, (_WF_IMG_SIZE, _WF_IMG_SIZE)),
-                model_img=rng.normal(100.0, 5.0, (_WF_IMG_SIZE, _WF_IMG_SIZE)),
-                fit_success=True,
-                fit_elapsed=12.5,
-                setup_elapsed=0.75,
-                fit_nfev=40,
-                fit_cost=3.5,
-                fit_optimality=2.5e-9,
-                fit_njev=38,
-                fit_outcome="ok",
-                fit_dx=0.1 * i,
-                fit_dy=0.2 * i,
-                fit_flux=1e5,
-                fit_fwhm=0.9,
-                blend_frac=0.01 * i,
-                group_id=group_id,
-                group_size=len(donuts),
-            )
-            for i, d in enumerate(donuts)
-        ]
-    }
+    out = WfGroupResult.empty(group_id, n_zk=_ZK_JMAX + 1)
+    out.group_size = len(donuts)
+    out.success = True
+    out.det_names = [d.det_name for d in donuts]
+    out.donuts = [
+        WfDonutResult(
+            donut_id=d.donut_id,
+            det_name=d.det_name,
+            visit_id=d.visit_id,
+            zk_dev=np.full(_ZK_JMAX + 1, 1e-7),
+            zk_intrinsic=np.zeros(_ZK_JMAX + 1),
+            img=rng.normal(100.0, 5.0, (_WF_IMG_SIZE, _WF_IMG_SIZE)),
+            model_img=rng.normal(100.0, 5.0, (_WF_IMG_SIZE, _WF_IMG_SIZE)),
+            fit_success=True,
+            fit_elapsed=12.5,
+            setup_elapsed=0.75,
+            fit_nfev=40,
+            fit_cost=3.5,
+            fit_optimality=2.5e-9,
+            fit_njev=38,
+            fit_outcome="ok",
+            fit_dx=0.1 * i,
+            fit_dy=0.2 * i,
+            fit_flux=1e5,
+            fit_fwhm=0.9,
+            blend_frac=0.01 * i,
+            group_id=group_id,
+            group_size=len(donuts),
+        )
+        for i, d in enumerate(donuts)
+    ]
+    return out
 
 
 def _options():
@@ -169,12 +190,14 @@ def _catalog():
         _VISIT_ID,
         _options(),
         rtp_rad=0.25,
-        run_elapsed=30.0,
-        refcat_elapsed=1.5,
-        butler_elapsed=4.0,
-        butler_times={"raw": 3.0, "bias": 1.0},
-        cutout_elapsed=6.0,
-        danish_elapsed=12.0,
+        timings=_CatalogTimings(
+            run_elapsed=30.0,
+            refcat_elapsed=1.5,
+            butler_elapsed=4.0,
+            butler_times={"raw": 3.0, "bias": 1.0},
+            cutout_elapsed=6.0,
+            danish_elapsed=12.0,
+        ),
     )
 
 

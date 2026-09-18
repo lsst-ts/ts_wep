@@ -54,9 +54,10 @@ from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.utils.timer import timeMethod
 
 from .blitzDetect import BlitzDetectTask
-from .catalogBuilder import _build_donut_catalog, _CatalogOptions
+from .catalogBuilder import _build_donut_catalog, _CatalogOptions, _CatalogTimings
 from .cutDonutStamps import CutDonutStampsTask
-from .cutoutPipeline import _cutout_corner_detector, _dead_cutout_result
+from .cutoutPipeline import _cutout_corner_detector
+from .dataStructures import CutoutResult, WfGroupResult
 from .donutBlitzPlot import DonutBlitzPlotTask
 from .forkPool import _dump_stacks_on_hang, _fork_map
 from .measureDonutCandidates import MeasureDonutCandidatesTask
@@ -78,7 +79,6 @@ from .utils import (
 from .wavefrontFitting import (
     WavefrontFittingTask,
     _build_wf_groups,
-    _dead_wf_result,
     _wf_fitting_worker,
 )
 
@@ -774,7 +774,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 # failure, so it is logged at error level even though the visit
                 # goes on without it.
                 self.log.error("Cutout worker for detector %s died: %s", unit[0], reason)
-                results.append(_dead_cutout_result(unit[0], reason))
+                results.append(CutoutResult.dead(unit[0], reason))
             # One fork per detector, started as slots free up, so there is no
             # separate pool-creation phase left to time.
             self.log.info(
@@ -793,27 +793,27 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
 
         donuts = []
         for r in results:
-            scatter_str = f'{r["scatter_arcsec"]:.3f}"' if r["scatter_arcsec"] is not None else "N/A"
+            scatter_str = f'{r.scatter_arcsec:.3f}"' if r.scatter_arcsec is not None else "N/A"
             # Stage columns come off `_CUTOUT_STAGE_KEYS` rather than being
             # spelled out, so a stage added to the cutout pipeline reaches this
             # line for free.  A stage the worker never reached prints as `nan`
             # by design: a missing stage should not read as a fast one.
-            pieces = [f"dispatch={r['dispatch_to_arrival']:.3f}s"]
+            pieces = [f"dispatch={r.dispatch_to_arrival:.3f}s"]
             for label, key in _CUTOUT_STAGE_KEYS.items():
-                piece = f"{label}={r.get(key, float('nan')):.3f}s"
+                piece = f"{label}={getattr(r, key):.3f}s"
                 # Scatter belongs to the WCS refit, so it hangs off that stage.
                 pieces.append(f"{piece} (scatter={scatter_str})" if label == "astrom" else piece)
-            pieces.append(f"donuts={len(r['catalog'])}")
-            self.log.info("  %s: %s", r["det_name"], "  ".join(pieces))
-            if r["wcs_refit_error"]:
-                self.log.warning("  %s: WCS refit failed: %s", r["det_name"], r["wcs_refit_error"])
-            if r["cat_select_error"]:
+            pieces.append(f"donuts={len(r.catalog)}")
+            self.log.info("  %s: %s", r.det_name, "  ".join(pieces))
+            if r.wcs_refit_error:
+                self.log.warning("  %s: WCS refit failed: %s", r.det_name, r.wcs_refit_error)
+            if r.cat_select_error:
                 self.log.warning(
                     "  %s: catalog selection failed: %s",
-                    r["det_name"],
-                    r["cat_select_error"],
+                    r.det_name,
+                    r.cat_select_error,
                 )
-            donuts.extend(r["catalog"])
+            donuts.extend(r.catalog)
 
         # Annotate the optic shifts that put each donut off focus. In corner
         # mode this follows from the detector: SW0 is extra-focal, SW1
@@ -821,7 +821,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         # the output catalog, and _prep_donut_for_danish requires the offsets
         # of anything it is handed.
         for r in results:
-            for d in r["catalog"] + r.get("rejected_catalog", []):
+            for d in r.catalog + r.rejected_catalog:
                 d.defocal_offsets = (
                     _INTRA_FOCAL_OFFSETS if d.det_id in _INTRA_FOCAL_DET_IDS else _EXTRA_FOCAL_OFFSETS
                 )
@@ -831,8 +831,8 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         # the donut passed selection, and rejected donuts get catalog rows too.
         # Full-array mode already annotates both lists.
         for r in results:
-            calib = intrinsic_zernikes_by_name.get(r["det_name"])
-            for d in r["catalog"] + r.get("rejected_catalog", []):
+            calib = intrinsic_zernikes_by_name.get(r.det_name)
+            for d in r.catalog + r.rejected_catalog:
                 if calib is not None:
                     d.intrinsic_zk = np.squeeze(
                         calib.getIntrinsicZernikes(
@@ -845,7 +845,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
 
         # WF dispatch
         mode = self.config.wfEstimationMode
-        results_by_det = {r["det_name"]: r["catalog"] for r in results}
+        results_by_det = {r.det_name: r.catalog for r in results}
         groups, unmatched_donuts, pair_path = _build_wf_groups(
             mode, results_by_det, band, rtp_deg, boresight_alt_rad
         )
@@ -853,7 +853,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         # _build_donut_catalog, so this is what gets pairing provenance into
         # the persisted table.  Full-array mode does the same in its worker.
         for r in results:
-            r["pair_path"] = pair_path
+            r.pair_path = pair_path
 
         self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
         t_wf0 = time.perf_counter()
@@ -875,10 +875,10 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             n_zk = len(self.wavefrontFit.config.nollIndices)
             for group, reason in wf_deaths:
                 self.log.error("WF worker for group %s died: %s", group.group_id, reason)
-                wf_results.append(_dead_wf_result(group, reason, n_zk))
+                wf_results.append(WfGroupResult.dead(group, reason, n_zk))
         t_wf1 = time.perf_counter()
-        n_ok = sum(r.get("success") for r in wf_results)
-        elapsed_fits = [r["fit_info"].get("elapsed", float("nan")) for r in wf_results]
+        n_ok = sum(r.success for r in wf_results)
+        elapsed_fits = [r.fit_elapsed for r in wf_results]
         self.log.info(
             "WF results (%s): %d/%d succeeded  wall=%.1fs  fit_total=%.1fs  fit_mean=%.1fs",
             mode,
@@ -915,12 +915,14 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             intra_visit_id=visit_id,
             extra_visit_id=visit_id,
             exposure_group=exposure_group,
-            run_elapsed=t_plot0 - t_run0,
-            refcat_elapsed=t_refcat_elapsed,
-            butler_elapsed=butler_elapsed,
-            butler_times=butler_times or {},
-            cutout_elapsed=t_cutout1 - t_cutout0,
-            danish_elapsed=t_wf1 - t_wf0,
+            timings=_CatalogTimings(
+                run_elapsed=t_plot0 - t_run0,
+                refcat_elapsed=t_refcat_elapsed,
+                butler_elapsed=butler_elapsed,
+                butler_times=butler_times or {},
+                cutout_elapsed=t_cutout1 - t_cutout0,
+                danish_elapsed=t_wf1 - t_wf0,
+            ),
             photo_filter_name=photo_filter_name,
             astrom_filter_name=self.config.astromRefFilter,
             rtp_rad=rtp_rad,

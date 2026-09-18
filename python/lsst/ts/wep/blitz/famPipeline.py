@@ -36,7 +36,6 @@ __all__ = []
 
 import copy
 import logging
-import os
 import time
 
 import numpy as np
@@ -45,7 +44,7 @@ from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.pipe.base import NoWorkFound
 
 from .cutoutPipeline import _cutout_one_exposure
-from .dataStructures import _WfGroup
+from .dataStructures import _ERROR_MAX_CHARS, FamDetectorResult, _WfGroup
 from .utils import (
     _COW_STORE,
     _INSTRUMENT,
@@ -285,7 +284,7 @@ def _fam_group_donuts(
     raise ValueError(f"Unknown FAM WF mode {mode!r}")
 
 
-def _fam_detector_worker(args: tuple) -> dict:
+def _fam_detector_worker(args: tuple) -> FamDetectorResult:
     """Cut and fit one detector across both exposures of a FAM pair.
 
     Never raises, for any ``BaseException`` short of ``KeyboardInterrupt`` or
@@ -302,42 +301,14 @@ def _fam_detector_worker(args: tuple) -> dict:
 
     Returns
     -------
-    dict
-        Keys ``det_id``, ``det_name``, ``results`` (the two per-exposure cutout
-        dicts, each tagged with its ``visit_id``), ``wf_results``,
-        ``donuts`` (accepted, both sides), ``unmatched_donuts``, ``pair_path``,
-        ``error``, and timings ``dispatch_to_arrival``, ``io_run``,
-        ``refcat_run``, ``cutout_run``, ``fit_run``, ``worker_wall``, plus
-        ``pid``.
-
-        ``refcat_run`` is per *detector*, not per exposure: one refcat load
-        covers both sides of focus (see below).  It therefore belongs here and
-        not on the two entries of ``results``, where summing it across the
-        quantum would double-count every detector.
+    `lsst.ts.wep.blitz.dataStructures.FamDetectorResult`
+        This detector's donuts, fits, pairing provenance and per-phase timings.
+        See that class for what each field means.
     """
     det_id, t_dispatch = args
     t_arrival = time.time()
     t_wall0 = time.perf_counter()
-    out: dict = {
-        "det_id": det_id,
-        "det_name": "",
-        "results": [],
-        "wf_results": [],
-        "donuts": [],
-        "unmatched_donuts": [],
-        # Overwritten once grouping runs; stays "n/a" for a detector that
-        # failed or was skipped before it got that far.
-        "pair_path": "n/a",
-        "error": "",
-        "skipped": False,
-        "dispatch_to_arrival": t_arrival - t_dispatch,
-        "io_run": float("nan"),
-        "refcat_run": float("nan"),
-        "cutout_run": float("nan"),
-        "fit_run": float("nan"),
-        "worker_wall": float("nan"),
-        "pid": os.getpid(),
-    }
+    out = FamDetectorResult.started(det_id, t_arrival - t_dispatch)
 
     try:
         entry = _COW_STORE.fam_detectors[det_id]
@@ -356,7 +327,7 @@ def _fam_detector_worker(args: tuple) -> dict:
         io_elapsed = t1 - t0
 
         det_name = next(iter(raws.values())).getDetector().getName()
-        out["det_name"] = det_name
+        out.det_name = det_name
 
         # One refcat load covers both exposures: either WCS plus
         # pixelMargin=300 spans the few-arcsecond difference between them, and
@@ -389,7 +360,7 @@ def _fam_detector_worker(args: tuple) -> dict:
         # Recorded even when no shards were supplied (then it is ~0), so the
         # key distinguishes "no refcat" from "the worker died before this
         # point", which stays NaN.
-        out["refcat_run"] = time.perf_counter() - t_refcat0
+        out.refcat_run = time.perf_counter() - t_refcat0
 
         # --- cutouts, one call per exposure ---
         cutout_elapsed = 0.0
@@ -429,16 +400,16 @@ def _fam_detector_worker(args: tuple) -> dict:
             # parent checks that and warns if it ever stops being true.
             # Two cutout results share a det_name here, so this is also what
             # separates them in the catalog's per-detector metadata.
-            result["visit_id"] = exp
+            result.visit_id = exp
             results.append(result)
 
             # Free this exposure's pixels before moving to the next one.
             del raws[exp], calibs
 
         t2 = time.perf_counter()
-        out["io_run"] = io_elapsed
-        out["cutout_run"] = cutout_elapsed
-        out["results"] = results
+        out.io_run = io_elapsed
+        out.cutout_run = cutout_elapsed
+        out.results = results
 
         # Free the remaining pixels before fitting. This is what makes fusing
         # cut and fit into one worker safe: ~850 MB is transient during the I/O
@@ -454,10 +425,10 @@ def _fam_detector_worker(args: tuple) -> dict:
         # from visit_id.
         by_exp = {}
         for result in results:
-            exp = result["visit_id"]
+            exp = result.visit_id
             offsets = offsets_by_exp[exp]
-            accepted = result["catalog"]
-            for d in accepted + result.get("rejected_catalog", []):
+            accepted = result.catalog
+            for d in accepted + result.rejected_catalog:
                 d.defocal_offsets = offsets
                 if intrinsic_calib is not None:
                     d.intrinsic_zk = np.squeeze(
@@ -474,29 +445,29 @@ def _fam_detector_worker(args: tuple) -> dict:
             intra=by_exp[intra_exp],
             extra=by_exp[extra_exp],
             tol_frac=tol_frac,
-            intra_source=results[0]["selection_source"],
-            extra_source=results[1]["selection_source"],
+            intra_source=results[0].selection_source,
+            extra_source=results[1].selection_source,
             band=_COW_STORE.band,
             rtp_deg=_COW_STORE.rtp_deg,
             alt_rad=_COW_STORE.boresight_alt_rad,
         )
-        out["pair_path"] = path
+        out.pair_path = path
         # Also stamp it on both of this detector's cutout results: those are
         # what reach _build_donut_catalog, so this is what gets pairing
         # provenance into the persisted table instead of only the parent's log
         # line.
         for r in results:
-            r["pair_path"] = path
-        out["unmatched_donuts"] = unmatched
-        out["donuts"] = by_exp[intra_exp] + by_exp[extra_exp]
+            r.pair_path = path
+        out.unmatched_donuts = unmatched
+        out.donuts = by_exp[intra_exp] + by_exp[extra_exp]
 
         wf_fit_task = _COW_STORE.wf_fit_task
         wf_results = []
         for group in groups:
             r = wf_fit_task.run(group)
             wf_results.append(r)
-        out["wf_results"] = wf_results
-        out["fit_run"] = time.perf_counter() - t2
+        out.wf_results = wf_results
+        out.fit_run = time.perf_counter() - t2
 
         _shed_images(out)
     except NoWorkFound as exc:
@@ -512,13 +483,13 @@ def _fam_detector_worker(args: tuple) -> dict:
         # voltage is off, and between one and six CCDs have been dead at every
         # point in the observatory's life. Catch it first, and by base class:
         # a dead CCD is an expected outcome, not an error.
-        out["error"] = f"{type(exc).__name__}: {exc}"[:400]
-        out["skipped"] = True
+        out.error = f"{type(exc).__name__}: {exc}"[:_ERROR_MAX_CHARS]
+        out.skipped = True
         _log.info(
             "FAM worker skipping detector %s (%s): %s",
             det_id,
-            out["det_name"] or "?",
-            out["error"],
+            out.det_name or "?",
+            out.error,
         )
     except (KeyboardInterrupt, SystemExit):
         raise
@@ -526,77 +497,32 @@ def _fam_detector_worker(args: tuple) -> dict:
         # BaseException rather than Exception for the same reason as above: a
         # worker that dies instead of returning hangs the whole quantum, so the
         # contract here is that this function always returns its dict.
-        out["error"] = f"{type(exc).__name__}: {exc}"[:400]
+        out.error = f"{type(exc).__name__}: {exc}"[:_ERROR_MAX_CHARS]
         _log.warning(
             "FAM worker failed on detector %s (%s): %s",
             det_id,
-            out["det_name"] or "?",
-            out["error"],
+            out.det_name or "?",
+            out.error,
         )
     finally:
-        out["worker_wall"] = time.perf_counter() - t_wall0
+        out.worker_wall = time.perf_counter() - t_wall0
     return out
 
 
-def _dead_fam_result(det_id: int, reason: str) -> dict:
-    """Stand-in result for a detector whose worker was killed outright.
-
-    `_fam_detector_worker` catches `BaseException` so that "this function
-    always returns its dict", but that cannot cover a SIGKILL: no Python runs
-    in a process the kernel has already destroyed. The parent fills in the same
-    shape so one dead detector costs one detector, not the other 180 and the
-    hours already spent on them.
-
-    Recorded as an error rather than a skip: `skipped` means an expected
-    no-work outcome such as a dead CCD, whereas a killed worker is a fault.
-
-    Parameters
-    ----------
-    det_id : `int`
-        Detector whose worker died.
-    reason : `str`
-        Cause, from `_fork_map`'s `_WorkerDeath`.
-
-    Returns
-    -------
-    `dict`
-        Same keys as `_fam_detector_worker`.
-    """
-    return {
-        "det_id": det_id,
-        "det_name": "",
-        "results": [],
-        "wf_results": [],
-        "donuts": [],
-        "unmatched_donuts": [],
-        "pair_path": "n/a",
-        "error": f"worker died: {reason}"[:400],
-        "skipped": False,
-        "dispatch_to_arrival": float("nan"),
-        "io_run": float("nan"),
-        "refcat_run": float("nan"),
-        "cutout_run": float("nan"),
-        "fit_run": float("nan"),
-        "worker_wall": float("nan"),
-        "pid": -1,
-    }
-
-
-def _shed_images(out: dict) -> None:
+def _shed_images(out: FamDetectorResult) -> None:
     """Drop image arrays the output catalog will not use, before pickling back.
 
-    The images are the dominant contributors to the size of the output
-    dictionary, so trimming them when possible can significantly improve
-    performance.
+    The images are the dominant contributors to the size of the result, so
+    trimming them when possible can significantly improve performance.
     """
     if not _COW_STORE.save_wf_images:
-        for r in out["wf_results"]:
-            for wd in r.get("donuts", []):
+        for r in out.wf_results:
+            for wd in r.donuts:
                 wd.img = None
                 wd.model_img = None
-            r["imgs"] = []
-            r["model_imgs"] = None
+            r.imgs = []
+            r.model_imgs = None
     if not _COW_STORE.save_stamps:
-        for result in out["results"]:
-            for d in result["catalog"] + result.get("rejected_catalog", []):
+        for result in out.results:
+            for d in result.catalog + result.rejected_catalog:
                 d.stamp = None

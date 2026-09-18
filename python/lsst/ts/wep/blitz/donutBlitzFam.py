@@ -67,9 +67,10 @@ from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 
 from .blitzDetect import BlitzDetectTask
-from .catalogBuilder import _build_donut_catalog, _CatalogOptions
+from .catalogBuilder import _build_donut_catalog, _CatalogOptions, _CatalogTimings
 from .cutDonutStamps import CutDonutStampsTask
-from .famPipeline import _dead_fam_result, _fam_detector_worker, _fam_pool_initializer
+from .dataStructures import FamDetectorResult
+from .famPipeline import _fam_detector_worker, _fam_pool_initializer
 from .forkPool import _dump_stacks_on_hang, _fork_map
 from .measureDonutCandidates import MeasureDonutCandidatesTask
 from .utils import (
@@ -129,8 +130,13 @@ _STAGE_KEYS = (
 # pool was starved at the end or one CCD was pathological.
 _N_SLOWEST = 5
 
+# How much of a failed worker's `error` to put on its one-line summary. The
+# full string is up to `_ERROR_MAX_CHARS` and reaches the reader through the
+# separate per-failure warning above; this line has to stay one line.
+_ERROR_LOG_CHARS = 120
 
-def _detector_stage_times(r: dict) -> dict[str, float]:
+
+def _detector_stage_times(r: FamDetectorResult) -> dict[str, float]:
     """Per-stage elapsed times for one detector, in `_STAGE_KEYS` order.
 
     A FAM worker runs the cutout pipeline once per exposure, so the seven
@@ -145,7 +151,7 @@ def _detector_stage_times(r: dict) -> dict[str, float]:
 
     Parameters
     ----------
-    r : dict
+    r : `lsst.ts.wep.blitz.dataStructures.FamDetectorResult`
         One `_fam_detector_worker` result.
 
     Returns
@@ -153,18 +159,18 @@ def _detector_stage_times(r: dict) -> dict[str, float]:
     dict [str, float]
         Seconds per stage, NaN for anything the worker never reached.
     """
-    results = r.get("results") or []
+    results = r.results
     stages = {
-        "dispatch": r.get("dispatch_to_arrival", float("nan")),
-        "io": r.get("io_run", float("nan")),
+        "dispatch": r.dispatch_to_arrival,
+        "io": r.io_run,
         # Per detector, not per exposure: one refcat load serves both sides of
         # focus, so unlike the cutout stages below there is nothing to sum.
-        "refcat": r.get("refcat_run", float("nan")),
-        "fit": r.get("fit_run", float("nan")),
-        "wall": r.get("worker_wall", float("nan")),
+        "refcat": r.refcat_run,
+        "fit": r.fit_run,
+        "wall": r.worker_wall,
     }
     for label, key in _CUTOUT_STAGE_KEYS.items():
-        stages[label] = np.sum([res.get(key, float("nan")) for res in results]) if results else float("nan")
+        stages[label] = np.sum([getattr(res, key) for res in results]) if results else float("nan")
     return {key: stages[key] for key in _STAGE_KEYS}
 
 
@@ -1033,7 +1039,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             )
         )
 
-    def _runWorkers(self, det_ids: list[int], num_cores: int) -> list[dict]:
+    def _runWorkers(self, det_ids: list[int], num_cores: int) -> list[FamDetectorResult]:
         """Run `_fam_detector_worker` over every detector, forking if asked to.
 
         ``num_cores`` comes from the execution environment (``pipetask
@@ -1065,33 +1071,33 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 )
             for unit, reason in deaths:
                 self.log.error("FAM worker for detector %s died: %s", unit[0], reason)
-                results.append(_dead_fam_result(unit[0], reason))
+                results.append(FamDetectorResult.dead(unit[0], reason))
         elapsed = time.perf_counter() - t0
 
         # A skip is an expected outcome (a dead CCD), a failure is not; keeping
         # them apart stops the routine ones from training the eye to ignore the
         # log line that matters.
-        skipped = [r for r in results if r.get("skipped")]
-        failures = [r for r in results if r["error"] and not r.get("skipped")]
+        skipped = [r for r in results if r.skipped]
+        failures = [r for r in results if r.error and not r.skipped]
         if skipped:
             self.log.info(
                 "%d detector(s) skipped with no work: %s",
                 len(skipped),
-                ", ".join(f"{r['det_name'] or r['det_id']}" for r in skipped),
+                ", ".join(f"{r.det_name or r.det_id}" for r in skipped),
             )
         for r in failures:
             self.log.warning(
                 "detector %s (%s) failed: %s",
-                r["det_id"],
-                r["det_name"] or "?",
-                r["error"],
+                r.det_id,
+                r.det_name or "?",
+                r.error,
             )
         # A pairing path silently falling back to spatial matching across the
         # whole focal plane is a real condition worth seeing in the logs, not
         # something to discover later in the Zernikes.
         self._logWorkerSummaries(results)
 
-        paths = Counter(r["pair_path"] for r in results if not r["error"])
+        paths = Counter(r.pair_path for r in results if not r.error)
         self.log.info(
             _colorize(
                 "Workers done in %.1fs: %d/%d detectors ok (%d skipped), %d donut(s), "
@@ -1106,13 +1112,13 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             len(results) - len(failures) - len(skipped),
             len(results),
             len(skipped),
-            sum(len(r["donuts"]) for r in results),
-            sum(len(r["wf_results"]) for r in results),
+            sum(len(r.donuts) for r in results),
+            sum(len(r.wf_results) for r in results),
             dict(paths),
         )
         return results
 
-    def _logWorkerSummaries(self, results: list[dict]) -> None:
+    def _logWorkerSummaries(self, results: list[FamDetectorResult]) -> None:
         """Log one summary line per detector, then aggregates over them.
 
         The per-detector line is modeled on `DonutBlitzCornerTask`'s, with
@@ -1136,20 +1142,20 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             return
 
         def name_of(r: dict) -> str:
-            return r["det_name"] or f"det{r['det_id']}"
+            return r.det_name or f"det{r.det_id}"
 
         ok = []
         for r in sorted(results, key=name_of):
             name = name_of(r)
             stages = _detector_stage_times(r)
 
-            if r.get("skipped") or r["error"]:
+            if r.skipped or r.error:
                 self.log.info(
                     "  %s: %s wall=%.2fs -- %s",
                     name,
-                    "SKIPPED" if r.get("skipped") else "FAILED",
+                    "SKIPPED" if r.skipped else "FAILED",
                     stages["wall"],
-                    r["error"][:120],
+                    r.error[:_ERROR_LOG_CHARS],
                 )
                 continue
             ok.append(r)
@@ -1157,20 +1163,17 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             # Cutout results are appended intra-first by the worker, so both of
             # these read intra/extra.
             scatter = "/".join(
-                "N/A" if res.get("scatter_arcsec") is None else f'{res["scatter_arcsec"]:.2f}"'
-                for res in r["results"]
+                "N/A" if res.scatter_arcsec is None else f'{res.scatter_arcsec:.2f}"' for res in r.results
             )
-            donuts = "+".join(str(len(res["catalog"])) for res in r["results"])
+            donuts = "+".join(str(len(res.catalog)) for res in r.results)
 
-            wf = r["wf_results"]
+            wf = r.wf_results
             if wf:
-                n_ok = sum(bool(g.get("success")) for g in wf)
-                sizes = [g.get("group_size", 0) for g in wf]
-                # A timed-out or failed group has an empty fit_info, so nfev is
-                # missing rather than zero.
-                nfev_mean = _mean_std_max([g.get("fit_info", {}).get("nfev", np.nan) or np.nan for g in wf])[
-                    0
-                ]
+                n_ok = sum(bool(g.success) for g in wf)
+                sizes = [g.group_size for g in wf]
+                # A group that never fit reports nfev=0, which is absent rather
+                # than a measurement of zero evaluations.
+                nfev_mean = _mean_std_max([g.fit_nfev or np.nan for g in wf])[0]
                 fit = f"fit={stages['fit']:.1f}s ({n_ok}/{len(wf)} ok, n={np.mean(sizes):.1f}" + (
                     f", nfev={nfev_mean:.1f})" if np.isfinite(nfev_mean) else ")"
                 )
@@ -1187,7 +1190,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 pieces.append(f"{piece} (scatter={scatter})" if key == "astrom" else piece)
             pieces += [
                 f"donuts={donuts}",
-                f"pair={r['pair_path']}",
+                f"pair={r.pair_path}",
                 fit,
                 f"wall={stages['wall']:.2f}s",
             ]
@@ -1197,7 +1200,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             return
         self._logWorkerAggregates(ok)
 
-    def _logWorkerAggregates(self, ok: list[dict]) -> None:
+    def _logWorkerAggregates(self, ok: list[FamDetectorResult]) -> None:
         """Log mean/std of every per-detector quantity over detectors that ran.
 
         Split out from `_logWorkerSummaries` only for length; it is called with
@@ -1230,12 +1233,10 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             ),
         )
 
-        donuts = [sum(len(res["catalog"]) for res in r["results"]) for r in ok]
-        groups = [len(r["wf_results"]) for r in ok]
-        scatters = [
-            res["scatter_arcsec"] for r in ok for res in r["results"] if res.get("scatter_arcsec") is not None
-        ]
-        fits = [g.get("fit_info", {}).get("elapsed", np.nan) for r in ok for g in r["wf_results"]]
+        donuts = [sum(len(res.catalog) for res in r.results) for r in ok]
+        groups = [len(r.wf_results) for r in ok]
+        scatters = [res.scatter_arcsec for r in ok for res in r.results if res.scatter_arcsec is not None]
+        fits = [g.fit_elapsed for r in ok for g in r.wf_results]
         self.log.info(
             "Per-detector yield (n=%d): donuts=%.1f+/-%.1f  groups=%.1f+/-%.1f  "
             'scatter=%.2f+/-%.2f"  per-group fit=%.1f+/-%.1fs (max %.1fs)',
@@ -1248,20 +1249,18 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
         slowest = sorted(
             ok,
-            key=lambda r: (r.get("worker_wall", 0.0) if np.isfinite(r.get("worker_wall", np.nan)) else 0.0),
+            key=lambda r: (r.worker_wall if np.isfinite(r.worker_wall) else 0.0),
             reverse=True,
         )[:_N_SLOWEST]
         self.log.info(
             "Slowest %d detector(s): %s",
             len(slowest),
-            ", ".join(
-                f"{r['det_name'] or r['det_id']} {r.get('worker_wall', float('nan')):.1f}s" for r in slowest
-            ),
+            ", ".join(f"{r.det_name or r.det_id} {r.worker_wall:.1f}s" for r in slowest),
         )
 
     def _buildCatalog(
         self,
-        results: list[dict],
+        results: list[FamDetectorResult],
         visit_id: int,
         intra_visit_id: int,
         extra_visit_id: int,
@@ -1274,12 +1273,12 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         instrument: str = "",
     ) -> Any:
         """Flatten per-detector worker results into the catalog schema."""
-        cutout_results = [r for w in results for r in w["results"]]
-        wf_results = [r for w in results for r in w["wf_results"]]
-        donuts = [d for w in results for d in w["donuts"]]
-        unmatched = [d for w in results for d in w["unmatched_donuts"]]
+        cutout_results = [r for w in results for r in w.results]
+        wf_results = [r for w in results for r in w.wf_results]
+        donuts = [d for w in results for d in w.donuts]
+        unmatched = [d for w in results for d in w.unmatched_donuts]
 
-        n_ok = sum(r.get("success", False) for r in wf_results)
+        n_ok = sum(r.success for r in wf_results)
         self.log.info(
             "WF results (%s): %d/%d group(s) succeeded",
             self.config.wfEstimationMode,
@@ -1297,19 +1296,21 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             intra_visit_id=intra_visit_id,
             extra_visit_id=extra_visit_id,
             exposure_group=exposure_group,
-            run_elapsed=run_elapsed,
-            butler_elapsed=butler_elapsed,
-            # Summed across workers, which run in parallel, so these are CPU
-            # time and not the wall clock corner mode reports -- documented on
-            # the timing keys in `_build_donut_catalog`, and keyed off
-            # meta["mode"].  Each term is per detector: `cutout_run` is already
-            # accumulated over the two exposures inside the worker, and one
-            # refcat load serves both, which is why `refcat_run` lives on the
-            # worker instead of on each per-exposure cutout result (summing it
-            # there would double-count).
-            refcat_elapsed=sum(w["refcat_run"] for w in results if np.isfinite(w["refcat_run"])),
-            cutout_elapsed=sum(w["cutout_run"] for w in results if np.isfinite(w["cutout_run"])),
-            danish_elapsed=sum(w["fit_run"] for w in results if np.isfinite(w["fit_run"])),
+            timings=_CatalogTimings(
+                run_elapsed=run_elapsed,
+                butler_elapsed=butler_elapsed,
+                # Summed across workers, which run in parallel, so these
+                # are CPU time and not the wall clock corner mode reports
+                # -- documented on `_CatalogTimings` itself, and keyed off
+                # meta["mode"].  Each term is per detector: `cutout_run` is
+                # already accumulated over the two exposures inside the
+                # worker, and one refcat load serves both, which is why
+                # `refcat_run` lives on the worker instead of on each
+                # per-exposure cutout result (summing it would double-count).
+                refcat_elapsed=sum(w.refcat_run for w in results if np.isfinite(w.refcat_run)),
+                cutout_elapsed=sum(w.cutout_run for w in results if np.isfinite(w.cutout_run)),
+                danish_elapsed=sum(w.fit_run for w in results if np.isfinite(w.fit_run)),
+            ),
             photo_filter_name=photo_filter_name,
             astrom_filter_name=self.config.astromRefFilter,
             rtp_rad=rtp_rad,
