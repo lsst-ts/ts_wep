@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.13.0 (2026-09-18)
+=====================
+
+New Features
+------------
+
+- Added model checksum verification and provenance for the AiDonut and TARTS Zernike estimators. AiDonut gains a `modelSha256` config field and TARTS gains per-file `wavenetSha256`/`alignetSha256`/`aggregatornetSha256`/`oodModelSha256` fields, each verified against the model file before it is loaded (catching wrong versions and unfetched git-lfs pointer stubs). Both tasks record the loaded model checksums in the task metadata (`modelChecksums`) so an on-sky run can be traced back to the exact model version via the ts_aos_ai `model_history.yaml` ledger. (`RSO-821 <https://rubinobs.atlassian.net//browse/RSO-821>`_)
+
+
 v17.12.1 (2026-09-18)
 =====================
 
