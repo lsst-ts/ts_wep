@@ -38,6 +38,7 @@ import lsst.geom
 import lsst.meas.base as measBase
 from lsst.afw.geom import SkyWcs
 
+from .dataStructures import CutoutResult
 from .utils import (
     _ANSI_BOLD,
     _ANSI_YELLOW,
@@ -89,7 +90,7 @@ def _cutout_one_exposure(
     max_fit_scatter: float,
     astrom_ref_filter: str,
     photo_ref_filter: str,
-) -> dict:
+) -> CutoutResult:
     """Run ISR, background subtraction, blitz detection, WCS refit, catalog
     selection, and stamp cutting on one exposure of one detector.
 
@@ -126,26 +127,9 @@ def _cutout_one_exposure(
 
     Returns
     -------
-    dict
-        Keys: ``det_name``, ``catalog`` (accepted donuts),
-        ``rejected_catalog``, ``scatter_arcsec``, ``wcs_refit_error``,
-        ``cat_select_error``, ``selection_source``, ``pair_path``,
-        ``n_quarter`` (detector orientation), ``wcs`` (the WCS actually used,
-        or None), and one timing float per stage, keyed as
-        `lsst.ts.wep.blitz.utils._CUTOUT_STAGE_KEYS` lists -- this function is
-        where those keys are defined, and everything that reports them takes
-        the order from there.  A stage that never ran is NaN, not 0.0.
-
-        ``selection_source`` and ``wcs`` exist because full-array mode has to
-        decide how to pair donuts between the two exposures: an exact refcat-id
-        match is only available when both exposures selected from the refcat.
-
-        ``pair_path`` is not decided here -- it is the grouping stage's, and
-        both modes overwrite it once they know which pairing algorithm ran.  It
-        is seeded with ``"n/a"`` rather than left absent so that every result
-        reaching `_build_donut_catalog` carries a meaningful string, including
-        the results of a full-array worker that died before it reached
-        grouping.
+    `lsst.ts.wep.blitz.dataStructures.CutoutResult`
+        This detector's donuts, provenance and per-stage timings.  See that
+        class for what each field means.
     """
     # --- ISR ---
     t0 = time.perf_counter()
@@ -181,30 +165,14 @@ def _cutout_one_exposure(
     blitz_detections = detect_task.run(post_isr, donut_radius=donut_radius).detections
 
     if len(blitz_detections) == 0:
-        return {
-            "det_name": det_name,
-            "catalog": [],
-            "isr_run": t1 - t0,
-            "bkg_run": t2 - t1,
-            "diam_run": t3 - t2,
-            "detect_run": time.perf_counter() - t3,
-            # NaN, not 0.0: these three never ran, and reporting them as zero
-            # makes a detector that bailed out here read as one whose WCS refit
-            # and selection were instantaneous.
-            "wcs_refit_run": float("nan"),
-            "catalog_select_run": float("nan"),
-            "stamp_cut_run": float("nan"),
-            "rejected_catalog": [],
-            "scatter_arcsec": None,
-            "wcs_refit_error": "No blitz detections",
-            "cat_select_error": "",
-            # No selector ran at all on this detector, which is distinct from
-            # the selector running and rejecting everything ("blitz_failed").
-            "selection_source": "no_detections",
-            "pair_path": "n/a",
-            "n_quarter": n_quarter,
-            "wcs": None,
-        }
+        return CutoutResult.no_detections(
+            det_name=det_name,
+            n_quarter=n_quarter,
+            isr_run=t1 - t0,
+            bkg_run=t2 - t1,
+            diam_run=t3 - t2,
+            detect_run=time.perf_counter() - t3,
+        )
 
     # --- astrometry ---
     t4 = time.perf_counter()
@@ -380,29 +348,28 @@ def _cutout_one_exposure(
     # fig.suptitle(f"Detector: {det_name}")
     # plt.show()
 
-    return {
-        "det_name": det_name,
-        "catalog": cut_result.donuts,
-        "isr_run": t1 - t0,
-        "bkg_run": t2 - t1,
-        "diam_run": t3 - t2,
-        "detect_run": t4 - t3,
-        "wcs_refit_run": t5 - t4,
-        "catalog_select_run": t6 - t5,
-        "stamp_cut_run": t7 - t6,
-        "rejected_catalog": cut_result.rejected_donuts,
-        "scatter_arcsec": scatter_arcsec,
-        "wcs_refit_error": wcs_err,
-        "cat_select_error": cat_err,
-        "selection_source": selection_source,
-        # Overwritten by the grouping stage; see the Returns note above.
-        "pair_path": "n/a",
-        "n_quarter": n_quarter,
-        "wcs": wcs,
-    }
+    return CutoutResult(
+        det_name=det_name,
+        catalog=cut_result.donuts,
+        rejected_catalog=cut_result.rejected_donuts,
+        isr_run=t1 - t0,
+        bkg_run=t2 - t1,
+        diam_run=t3 - t2,
+        detect_run=t4 - t3,
+        wcs_refit_run=t5 - t4,
+        catalog_select_run=t6 - t5,
+        stamp_cut_run=t7 - t6,
+        scatter_arcsec=scatter_arcsec,
+        wcs_refit_error=wcs_err,
+        cat_select_error=cat_err,
+        selection_source=selection_source,
+        n_quarter=n_quarter,
+        wcs=wcs,
+        # `pair_path` keeps its default; the grouping stage overwrites it.
+    )
 
 
-def _cutout_corner_detector(args: tuple) -> dict:
+def _cutout_corner_detector(args: tuple) -> CutoutResult:
     """Corner-mode entry point: one exposure per detector, from _COW_STORE.
 
     Takes its arguments as one tuple because that is what `_fork_map` hands a
@@ -419,8 +386,8 @@ def _cutout_corner_detector(args: tuple) -> dict:
 
     Returns
     -------
-    dict
-        As `_cutout_one_exposure`, plus ``dispatch_to_arrival``.
+    `lsst.ts.wep.blitz.dataStructures.CutoutResult`
+        As `_cutout_one_exposure`, with ``dispatch_to_arrival`` filled in.
     """
     det_name, t_dispatch = args
     t_arrival = time.time()
@@ -434,54 +401,5 @@ def _cutout_corner_detector(args: tuple) -> dict:
         astrom_ref_filter=_COW_STORE.astrom_ref_filter,
         photo_ref_filter=_COW_STORE.photo_ref_filter,
     )
-    result["dispatch_to_arrival"] = t_arrival - t_dispatch
+    result.dispatch_to_arrival = t_arrival - t_dispatch
     return result
-
-
-def _dead_cutout_result(det_name: str, reason: str) -> dict:
-    """Stand-in result for a detector whose worker was killed outright.
-
-    `_cutout_one_exposure` reports its own failures in ``wcs_refit_error`` /
-    ``cat_select_error`` and always returns a dict, but it cannot report a
-    SIGKILL -- no Python runs in a process the kernel has already destroyed. So
-    the parent synthesizes the same shape on the worker's behalf, letting the
-    visit proceed on the surviving detectors instead of being lost entirely.
-
-    Every timing is NaN and the catalogs empty, matching the convention of the
-    early-bailout return above: a stage that never ran must not read as one
-    that was instantaneous.
-
-    Parameters
-    ----------
-    det_name : `str`
-        Detector whose worker died.
-    reason : `str`
-        Cause, from `_fork_map`'s `_WorkerDeath`.
-
-    Returns
-    -------
-    `dict`
-        Same keys as `_cutout_corner_detector`.
-    """
-    return {
-        "det_name": det_name,
-        "catalog": [],
-        "isr_run": float("nan"),
-        "bkg_run": float("nan"),
-        "diam_run": float("nan"),
-        "detect_run": float("nan"),
-        "wcs_refit_run": float("nan"),
-        "catalog_select_run": float("nan"),
-        "stamp_cut_run": float("nan"),
-        "rejected_catalog": [],
-        "scatter_arcsec": None,
-        "wcs_refit_error": f"worker died: {reason}",
-        "cat_select_error": "",
-        "selection_source": "worker_died",
-        "pair_path": "n/a",
-        # Unknown: the orientation is read off the post-ISR exposure, which
-        # this worker never got far enough to produce.
-        "n_quarter": 0,
-        "wcs": None,
-        "dispatch_to_arrival": float("nan"),
-    }

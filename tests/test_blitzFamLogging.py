@@ -38,6 +38,11 @@ import unittest.mock
 
 import numpy as np
 
+from lsst.ts.wep.blitz.dataStructures import (
+    CutoutResult,
+    FamDetectorResult,
+    WfGroupResult,
+)
 from lsst.ts.wep.blitz.donutBlitzFam import (
     _STAGE_KEYS,
     DonutBlitzFamConfig,
@@ -49,27 +54,36 @@ from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingConfig
 
 
 def _cutout_result(visit_id, n_donuts=3, scatter=0.6, base=1.0):
-    """One exposure's cutout result, only the keys the summary reads."""
-    return {
-        "visit_id": visit_id,
-        "catalog": [object()] * n_donuts,
-        "scatter_arcsec": scatter,
-        "isr_run": base,
-        "bkg_run": base / 2,
-        "diam_run": base / 4,
-        "detect_run": base / 10,
-        "wcs_refit_run": base / 5,
-        "catalog_select_run": base / 20,
-        "stamp_cut_run": base / 40,
-    }
+    """One exposure's cutout result, with the fields the summary reads."""
+    return CutoutResult(
+        visit_id=visit_id,
+        det_name="R01_S00",
+        catalog=[object()] * n_donuts,
+        rejected_catalog=[],
+        scatter_arcsec=scatter,
+        isr_run=base,
+        bkg_run=base / 2,
+        diam_run=base / 4,
+        detect_run=base / 10,
+        wcs_refit_run=base / 5,
+        catalog_select_run=base / 20,
+        stamp_cut_run=base / 40,
+        wcs_refit_error="",
+        cat_select_error="",
+        selection_source="refcat",
+        n_quarter=0,
+        wcs=None,
+    )
 
 
 def _wf_result(success=True, group_size=2, nfev=6, elapsed=5.0):
-    return {
-        "group_size": group_size,
-        "success": success,
-        "fit_info": {"nfev": nfev, "elapsed": elapsed},
-    }
+    """One fit group's result, with the fields the summary reads."""
+    out = WfGroupResult.empty("g", n_zk=19)
+    out.group_size = group_size
+    out.success = success
+    out.fit_nfev = nfev
+    out.fit_elapsed = elapsed
+    return out
 
 
 def _worker_result(
@@ -83,24 +97,24 @@ def _worker_result(
 ):
     """A `_fam_detector_worker` return value, as the parent sees it."""
     results = [_cutout_result(1000, base=base), _cutout_result(1001, base=base)] if with_results else []
-    return {
-        "det_id": det_id,
-        "det_name": det_name,
-        "results": results,
-        "wf_results": [_wf_result() for _ in range(n_groups)],
-        "donuts": [],
-        "unmatched_donuts": [],
-        "pair_path": "refcat_id",
-        "error": error,
-        "skipped": skipped,
-        "dispatch_to_arrival": 0.25,
-        "io_run": 3.0 * base,
-        "refcat_run": 1.5 * base,
-        "cutout_run": 2.0 * base,
-        "fit_run": 40.0 * base,
-        "worker_wall": 50.0 * base,
-        "pid": 1234,
-    }
+    return FamDetectorResult(
+        det_id=det_id,
+        det_name=det_name,
+        results=results,
+        wf_results=[_wf_result() for _ in range(n_groups)],
+        donuts=[],
+        unmatched_donuts=[],
+        pair_path="refcat_id",
+        error=error,
+        skipped=skipped,
+        dispatch_to_arrival=0.25,
+        io_run=3.0 * base,
+        refcat_run=1.5 * base,
+        cutout_run=2.0 * base,
+        fit_run=40.0 * base,
+        worker_wall=50.0 * base,
+        pid=1234,
+    )
 
 
 class FamLoggingTestCase(unittest.TestCase):
@@ -153,10 +167,10 @@ class TestStageTimes(unittest.TestCase):
         for key in ("isr", "bkg", "diam", "detect", "astrom", "select", "cut"):
             self.assertTrue(np.isnan(stages[key]), key)
 
-    def testOneExposureMissingAStageIsNaN(self) -> None:
+    def testOneExposureNotReachingAStageIsNaN(self) -> None:
         """Half a pair is not a stage total, so NaN propagates deliberately."""
         r = _worker_result()
-        del r["results"][1]["isr_run"]
+        r.results[1].isr_run = float("nan")
         self.assertTrue(np.isnan(_detector_stage_times(r)["isr"]))
 
 
@@ -182,7 +196,7 @@ class TestMeanStdMax(unittest.TestCase):
                 self.assertTrue(np.isnan(maximum))
 
     def testNoneIsTreatedAsAbsent(self) -> None:
-        """fit_info values can be None when a fit never produced them."""
+        """A fit metric can be None when the fit never produced it."""
         self.assertAlmostEqual(_mean_std_max([2.0, None])[0], 2.0)
 
 
@@ -241,7 +255,7 @@ class TestPerDetectorLines(FamLoggingTestCase):
 
     def testMissingScatterIsNotAvailableNotZero(self) -> None:
         r = _worker_result()
-        r["results"][0]["scatter_arcsec"] = None
+        r.results[0].scatter_arcsec = None
         (line,) = self.detectorLines(self.logLines([r]))
         self.assertIn('scatter=N/A/0.60"', line)
 
@@ -249,10 +263,10 @@ class TestPerDetectorLines(FamLoggingTestCase):
         (line,) = self.detectorLines(self.logLines([_worker_result(n_groups=0)]))
         self.assertIn("no groups", line)
 
-    def testGroupWithoutFitInfoOmitsNfev(self) -> None:
-        """A timed-out group has an empty fit_info; that is not nfev=0."""
+    def testGroupThatNeverFitOmitsNfev(self) -> None:
+        """A timed-out group reports nfev=0, which is absent, not zero."""
         r = _worker_result(n_groups=1)
-        r["wf_results"][0] = {"group_size": 2, "success": False, "fit_info": {}}
+        r.wf_results[0] = _wf_result(success=False, nfev=0)
         (line,) = self.detectorLines(self.logLines([r]))
         self.assertIn("0/1 ok", line)
         self.assertNotIn("nfev=", line)

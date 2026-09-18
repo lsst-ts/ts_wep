@@ -34,9 +34,15 @@ from lsst.daf.butler.formatters.parquet import arrow_to_astropy, astropy_to_arro
 from lsst.ts.wep.blitz.catalogBuilder import (
     _build_donut_catalog,
     _CatalogOptions,
+    _CatalogTimings,
     _rotate_zk_to_eb,
 )
-from lsst.ts.wep.blitz.dataStructures import Donut, WfDonutResult
+from lsst.ts.wep.blitz.dataStructures import (
+    CutoutResult,
+    Donut,
+    WfDonutResult,
+    WfGroupResult,
+)
 from lsst.ts.wep.blitz.donutBlitzCorner import (
     DonutBlitzCornerConfig,
     DonutBlitzCornerTask,
@@ -80,21 +86,52 @@ def _donut(det_name="R00_SW0", det_id=191, donut_id=1, **overrides):
     return Donut(**kwargs)
 
 
-def _result(det_name="R00_SW0", rejected=()):
-    """A per-detector cutout result dict, as the workers return."""
-    return {
-        "det_name": det_name,
-        "scatter_arcsec": 0.3,
-        "wcs_refit_error": "",
-        "cat_select_error": "",
-        "rejected_catalog": list(rejected),
+def _result(det_name="R00_SW0", rejected=(), **overrides):
+    """A per-detector cutout result, as the workers return.
+
+    Every stage timing is 0.0 rather than NaN so that a test overriding one
+    reads a plain number back; the NaN conventions are `CutoutResult`'s own
+    classmethods' business, not this fixture's.
+    """
+    kwargs = dict(
+        det_name=det_name,
+        catalog=[],
+        rejected_catalog=list(rejected),
+        isr_run=0.0,
+        bkg_run=0.0,
+        diam_run=0.0,
+        detect_run=0.0,
+        wcs_refit_run=0.0,
+        catalog_select_run=0.0,
+        stamp_cut_run=0.0,
+        scatter_arcsec=0.3,
+        wcs_refit_error="",
+        cat_select_error="",
         # Both provenance fields are unconditional in the real results: the
         # cutout pipeline always sets a selection_source, and it seeds
         # pair_path with "n/a" for the grouping stage to overwrite.
-        "selection_source": "refcat",
-        "n_quarter": 0,
-        "pair_path": "n/a",
-    }
+        selection_source="refcat",
+        n_quarter=0,
+        pair_path="n/a",
+        wcs=None,
+    )
+    kwargs.update(overrides)
+    return CutoutResult(**kwargs)
+
+
+def _wf_group(donuts, group_id="g", success=True):
+    """A `WfGroupResult` carrying ``donuts``.
+
+    Only ``donuts`` is read by `_build_donut_catalog` -- the group's own
+    scalars reach the table through each `WfDonutResult`'s replicated copy --
+    so the rest take their no-fit values from `WfGroupResult.empty`.
+    """
+    out = WfGroupResult.empty(group_id, n_zk=len(_options().noll_indices))
+    out.group_size = len(donuts)
+    out.donuts = list(donuts)
+    out.det_names = [d.det_name for d in donuts]
+    out.success = success
+    return out
 
 
 def _options(**overrides) -> _CatalogOptions:
@@ -316,8 +353,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         extra = _donut(donut_id=7, visit_id=extra_visit)
         # Distinguishable fits, one per side, so a mixed-up lookup is visible.
         wf_results = [
-            {
-                "donuts": [
+            _wf_group(
+                [
                     WfDonutResult(
                         donut_id=7,
                         det_name="R00_SW0",
@@ -343,10 +380,10 @@ class TestBuildDonutCatalog(unittest.TestCase):
                         group_size=2,
                     )
                 ]
-            }
+            )
             for visit, value in ((intra_visit, 1e-6), (extra_visit, 2e-6))
         ]
-        results = [{**_result(), "visit_id": visit} for visit in (intra_visit, extra_visit)]
+        results = [_result(visit_id=visit) for visit in (intra_visit, extra_visit)]
         table = _build_donut_catalog(
             results,
             wf_results,
@@ -388,8 +425,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         surplus = _donut(donut_id=3)
         gid = "R00_SW0_6222323257218103680_6219321315596159872"
         wf_results = [
-            {
-                "donuts": [
+            _wf_group(
+                [
                     WfDonutResult(
                         donut_id=d.donut_id,
                         det_name=d.det_name,
@@ -416,8 +453,9 @@ class TestBuildDonutCatalog(unittest.TestCase):
                         group_size=2,
                     )
                     for i, d in enumerate(paired)
-                ]
-            }
+                ],
+                group_id=gid,
+            )
         ]
         table = _build_donut_catalog(
             [_result()],
@@ -677,15 +715,14 @@ class TestBuildDonutCatalog(unittest.TestCase):
             boresightRotAngle=30.0 * geom.degrees,
         )
         table = _build_donut_catalog(
-            [{**_result(), "isr_run": 1.25}],
+            [_result(isr_run=1.25)],
             [],
             [_donut()],
             [],
             42,
             _options(),
             visit_info=visit_info,
-            run_elapsed=12.5,
-            butler_times={"raw": 2.0},
+            timings=_CatalogTimings(run_elapsed=12.5, butler_times={"raw": 2.0}),
             rtp_rad=np.deg2rad(12.5),
         )
 
@@ -724,18 +761,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         pairing is invisible once the run's logs are gone.
         """
         results = [
-            {
-                **_result(),
-                "visit_id": 1,
-                "selection_source": "refcat",
-                "pair_path": "refcat_id",
-            },
-            {
-                **_result(),
-                "visit_id": 2,
-                "selection_source": "blitz_selected",
-                "pair_path": "spatial",
-            },
+            _result(visit_id=1, selection_source="refcat", pair_path="refcat_id"),
+            _result(visit_id=2, selection_source="blitz_selected", pair_path="spatial"),
         ]
         table = _build_donut_catalog(results, [], [_donut()], [], 42, _options())
         det_meta = table.meta["det_meta"]
@@ -753,8 +780,8 @@ class TestBuildDonutCatalog(unittest.TestCase):
         row.
         """
         results = [
-            {**_result(), "visit_id": 1, "n_quarter": 1},
-            {**_result(), "visit_id": 2, "n_quarter": 3},
+            _result(visit_id=1, n_quarter=1),
+            _result(visit_id=2, n_quarter=3),
         ]
         table = _build_donut_catalog(results, [], [_donut()], [], 42, _options())
         self.assertNotIn("n_quarter", table.colnames)
@@ -771,7 +798,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         or a missing key reaching ``det_meta`` would therefore be a bug, not
         "not applicable".
         """
-        results = [{**_result(), "selection_source": "no_detections", "pair_path": "n/a"}]
+        results = [_result(selection_source="no_detections", pair_path="n/a")]
         table = _build_donut_catalog(results, [], [_donut()], [], 42, _options())
         entry = table.meta["det_meta"]["R00_SW0_42"]
         self.assertEqual(entry["selection_source"], "no_detections")
