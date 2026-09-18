@@ -75,6 +75,7 @@ from .utils import (
     IsrCalibs,
     _colorize,
     _resolve_color_log_enabled,
+    _rot_tel_pos_rad,
 )
 from .wavefrontFitting import (
     WavefrontFittingTask,
@@ -707,13 +708,8 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             )
 
         visit_info = next(iter(raw_by_name.values())).getInfo().getVisitInfo()
-        boresight_rot_rad = visit_info.boresightRotAngle.asRadians()
-        boresight_par_rad = visit_info.boresightParAngle.asRadians()
         boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
-        # rotTelPos, wrapped to (-pi, pi]. Always computed: the CCS -> OCS
-        # Zernike rotation in _buildCatalog needs it, whereas spider shadows
-        # are opt-in.
-        rtp_rad = (boresight_par_rad - boresight_rot_rad - np.pi / 2 + np.pi) % (2 * np.pi) - np.pi
+        rtp_rad = _rot_tel_pos_rad(visit_info)
         rtp_deg = np.degrees(rtp_rad) if self.wavefrontFit.config.modelSpiderShadows else None
 
         # Everything the cutout and fit workers read, in one place. The

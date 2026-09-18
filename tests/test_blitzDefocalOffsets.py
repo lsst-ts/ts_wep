@@ -31,14 +31,18 @@ distinct optics, and that the SW0/SW1 convention is pinned in
 `CORNER_DEFOCAL_BY_DET_NAME` -- its only home, since donuts carry no
 intra/extra label at all.
 
-Also covers `_defocal_radial_scale`, which full-array donut pairing depends on.
+Also covers `_defocal_radial_scale`, which full-array donut pairing depends on,
+and `_rot_tel_pos_rad`, the rotator angle both tasks feed to the CCS -> OCS
+Zernike rotation.
 """
 
 import unittest
+from types import SimpleNamespace
 
 import batoid
 import numpy as np
 
+import lsst.geom as geom
 from lsst.ts.wep.blitz.donutBlitzCorner import (
     _EXTRA_FOCAL_OFFSETS,
     _INTRA_FOCAL_OFFSETS,
@@ -53,6 +57,7 @@ from lsst.ts.wep.blitz.utils import (
     CORNER_DET_NAMES,
     _defocal_radial_scale,
     _defocused_telescope,
+    _rot_tel_pos_rad,
 )
 
 
@@ -235,6 +240,63 @@ class TestDefocalOffsets(unittest.TestCase):
         donut = _minimalDonut(defocal_offsets=None)
         with self.assertRaisesRegex(RuntimeError, "defocal_offsets"):
             task._prep_donut_for_danish(donut)
+
+
+class TestRotTelPos(unittest.TestCase):
+    """`_rot_tel_pos_rad` wraps to [-pi, pi) rather than to [0, 2pi)."""
+
+    def _visitInfo(self, par_deg: float, rot_deg: float):
+        """A stand-in carrying only the two angles the helper reads.
+
+        Real `lsst.geom.Angle` objects rather than floats, so the test
+        exercises the same ``asRadians()`` calls the helper makes on a butler
+        `VisitInfo` -- which is the part of the contract worth pinning.
+        """
+        return SimpleNamespace(
+            boresightParAngle=geom.Angle(np.deg2rad(par_deg), geom.radians),
+            boresightRotAngle=geom.Angle(np.deg2rad(rot_deg), geom.radians),
+        )
+
+    def testWrapsToHalfOpenIntervalStartingAtMinusPi(self) -> None:
+        """Every branch of the wrap lands in [-pi, pi), including both edges.
+
+        Which end is closed is the one thing a reader is likely to get wrong --
+        both call sites' comments claimed ``(-pi, pi]`` before this helper
+        existed -- so the two cases worth pinning are those landing exactly on
+        a half turn from either side: ``(x + pi) % 2pi - pi`` sends both to
+        ``-pi``.  Nothing downstream depends on the endpoint, but the
+        distinction between this and a plain ``% (2 * np.pi)``, which returns
+        [0, 2pi) and so gets the sign wrong for every angle in the lower half,
+        very much matters.
+        """
+        # (par_deg, rot_deg) -> expected rotTelPos in degrees. Each is
+        # par - rot - 90, wrapped.
+        cases = [
+            (90.0, 0.0, 0.0),
+            (0.0, 0.0, -90.0),
+            (180.0, 0.0, 90.0),
+            (0.0, 90.0, -180.0),  # unwrapped -180, stays -180
+            (0.0, -90.0, 0.0),
+            (270.0, 0.0, -180.0),  # unwrapped +180, comes back as -180
+            (359.0, 0.0, -91.0),  # unwrapped +269
+        ]
+        for par_deg, rot_deg, expected_deg in cases:
+            with self.subTest(par=par_deg, rot=rot_deg):
+                rtp = _rot_tel_pos_rad(self._visitInfo(par_deg, rot_deg))
+                self.assertGreaterEqual(rtp, -np.pi)
+                self.assertLess(rtp, np.pi)
+                self.assertAlmostEqual(np.degrees(rtp), expected_deg, places=9)
+
+    def testFullTurnsAreEquivalent(self) -> None:
+        """Adding a whole turn to either angle changes nothing."""
+        plain = _rot_tel_pos_rad(self._visitInfo(30.0, 15.0))
+        for par_deg, rot_deg in [(390.0, 15.0), (30.0, 375.0), (-330.0, 15.0)]:
+            with self.subTest(par=par_deg, rot=rot_deg):
+                self.assertAlmostEqual(
+                    _rot_tel_pos_rad(self._visitInfo(par_deg, rot_deg)),
+                    plain,
+                    places=9,
+                )
 
 
 if __name__ == "__main__":
