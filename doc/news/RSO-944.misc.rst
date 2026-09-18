@@ -1,0 +1,1 @@
+Override exposure pairer rotation threshold.
