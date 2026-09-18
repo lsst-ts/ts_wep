@@ -420,6 +420,10 @@ class LatissMonolithTaskConfig(
         self.pairer.doOverrideSeparation = True
         self.pairer.overrideSeparation = -0.8
 
+        # High elevation limit for AuxTel is 86.5 deg;
+        # difference in rtp between two succesive exposures at high elevation
+        # may exceed the default 1 degree
+        self.pairer.rotationThreshold = 1.5
         # Z4-Z22, as latiss_wep_align fits; the ts_wep default runs to Z28.
         self.estimateZernikes.nollIndices = list(range(4, 23))
         # Scale each parameter by its Jacobian column, as the LSSTCam Danish
