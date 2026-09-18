@@ -162,6 +162,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
             selected=result.selected,
             blendCentersX=result.blendCentersX,
             blendCentersY=result.blendCentersY,
+            blendMags=result.blendMags,
+            blendSeparations=result.blendSeparations,
+            blendMagDiffs=result.blendMagDiffs,
         )
 
     @timeMethod
@@ -207,6 +210,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 selected=selected,
                 blendCentersX=None,
                 blendCentersY=None,
+                blendMags=None,
+                blendSeparations=None,
+                blendMagDiffs=None,
             )
 
         fluxField = f"{filterName}_flux"
@@ -235,6 +241,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 selected=selected,
                 blendCentersX=None,
                 blendCentersY=None,
+                blendMags=None,
+                blendSeparations=None,
+                blendMagDiffs=None,
             )
         xCoord = _getFieldFromCatalog(sourceCat[magSelected], self.config.xCoordField)
         yCoord = _getFieldFromCatalog(sourceCat[magSelected], self.config.yCoordField)
@@ -269,6 +278,10 @@ class DonutSourceSelectorTask(pipeBase.Task):
         maxBlended = self.config.maxBlended
         blendCentersX: list = [list() for _ in range(len(magSortedDf))]
         blendCentersY: list = [list() for _ in range(len(magSortedDf))]
+        # Per-blend metadata: magnitude, separation (px), and mag difference
+        blendMags: list = [list() for _ in range(len(magSortedDf))]
+        blendSeparations: list = [list() for _ in range(len(magSortedDf))]
+        blendMagDiffs: list = [list() for _ in range(len(magSortedDf))]
         sourcesKept = 0
         # Go through catalog with nearest neighbor information
         # and keep sources that match our configuration settings
@@ -304,8 +317,10 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 magTooClose = magDiff.values < minMagDiff
 
                 # Measure distances to overlapping objects
-                blendSeparations = nbrDist[1:]
-                blendTooClose = blendSeparations < minBlendedSeparation
+                # Renamed to avoid collision with the per-source
+                # blendSeparations list
+                blendSeparations_arr = nbrDist[1:]
+                blendTooClose = blendSeparations_arr < minBlendedSeparation
 
                 # If this is the fainter source of the overlaps move on
                 if np.min(magDiff) < 0.0:
@@ -332,8 +347,12 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # when deblending. Add one to index because
                     # magDiff is all sources in magSortedDf after index=0.
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
+                    blendRawIdx = blendMagIdx - 1  # indices into magDiff / blendSeparations_arr
                     blendCentersX[groupIndices[srcOn]] = magSortedDf["x"].iloc[idxList[blendMagIdx]].values
                     blendCentersY[groupIndices[srcOn]] = magSortedDf["y"].iloc[idxList[blendMagIdx]].values
+                    blendMags[groupIndices[srcOn]] = magSortedDf["mag"].iloc[idxList[blendMagIdx]].values
+                    blendSeparations[groupIndices[srcOn]] = blendSeparations_arr[blendRawIdx]
+                    blendMagDiffs[groupIndices[srcOn]] = magDiff.values[blendRawIdx]
                     sourcesKept += 1
                 # Keep the source if it is blended with up to maxBlended
                 # number of sources. To check this we look at the maxBlended+1
@@ -346,8 +365,12 @@ class DonutSourceSelectorTask(pipeBase.Task):
                     # Same process as above to make sure we only get
                     # the blend centers we care about
                     blendMagIdx = np.where(magDiff < minMagDiff)[0] + 1
+                    blendRawIdx = blendMagIdx - 1  # indices into magDiff / blendSeparations_arr
                     blendCentersX[groupIndices[srcOn]] = magSortedDf["x"].iloc[idxList[blendMagIdx]].values
                     blendCentersY[groupIndices[srcOn]] = magSortedDf["y"].iloc[idxList[blendMagIdx]].values
+                    blendMags[groupIndices[srcOn]] = magSortedDf["mag"].iloc[idxList[blendMagIdx]].values
+                    blendSeparations[groupIndices[srcOn]] = blendSeparations_arr[blendRawIdx]
+                    blendMagDiffs[groupIndices[srcOn]] = magDiff.values[blendRawIdx]
                     sourcesKept += 1
                 else:
                     continue
@@ -363,6 +386,9 @@ class DonutSourceSelectorTask(pipeBase.Task):
         sortedIndex = np.sort(index)
         selectedBlendCentersX = [blendCentersX[idx] for idx in sortedIndex]
         selectedBlendCentersY = [blendCentersY[idx] for idx in sortedIndex]
+        selectedBlendMags = [blendMags[idx] for idx in sortedIndex]
+        selectedBlendSeparations = [blendSeparations[idx] for idx in sortedIndex]
+        selectedBlendMagDiffs = [blendMagDiffs[idx] for idx in sortedIndex]
 
         self.log.info("Selected %d/%d references", selected.sum(), len(sourceCat))
 
@@ -370,4 +396,7 @@ class DonutSourceSelectorTask(pipeBase.Task):
             selected=selected,
             blendCentersX=selectedBlendCentersX,
             blendCentersY=selectedBlendCentersY,
+            blendMags=selectedBlendMags,
+            blendSeparations=selectedBlendSeparations,
+            blendMagDiffs=selectedBlendMagDiffs,
         )

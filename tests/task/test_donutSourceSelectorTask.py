@@ -28,6 +28,7 @@ import pandas as pd
 
 from lsst.daf.butler import Butler
 from lsst.pex.config import FieldValidationError
+from lsst.pipe.base import Struct
 from lsst.ts.wep.task.donutSourceSelectorTask import (
     DonutSourceSelectorTask,
     DonutSourceSelectorTaskConfig,
@@ -78,6 +79,24 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         )
         detector = camera["R22_S11"]
         return minimalCat, detector
+
+    def _assertBlendFieldLengths(self, struct: Struct, expectedLengths: list) -> None:
+        """Assert that blendMags, blendSeparations, blendMagDiffs have
+        the expected number of entries per selected source, and that
+        separations and magDiffs are non-negative."""
+        for fieldName in ("blendMags", "blendSeparations", "blendMagDiffs"):
+            field = getattr(struct, fieldName)
+            self.assertEqual(len(field), len(expectedLengths))
+            for sublist, expected in zip(field, expectedLengths):
+                self.assertEqual(len(sublist), expected)
+        # Separations should be non-negative
+        for sublist in struct.blendSeparations:
+            for val in sublist:
+                self.assertGreaterEqual(val, 0.0)
+        # MagDiffs should be non-negative (blend is fainter than primary)
+        for sublist in struct.blendMagDiffs:
+            for val in sublist:
+                self.assertGreaterEqual(val, 0.0)
 
     def testValidateConfigs(self) -> None:
         # Check default configuration
@@ -145,6 +164,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]] * 4)
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendMags), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendSeparations), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendMagDiffs), [[]] * 4)
 
         # The first three donuts overlap but none are more than
         # isolatedMagDiff brighter than the rest so none are chosen
@@ -156,6 +178,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]])
+        self.assertListEqual(list(testCatStruct.blendMags), [[]])
+        self.assertListEqual(list(testCatStruct.blendSeparations), [[]])
+        self.assertListEqual(list(testCatStruct.blendMagDiffs), [[]])
 
         # Will now take the brightest of the three donuts
         # for a total of 2 selected donuts
@@ -167,6 +192,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[], []])
+        self.assertListEqual(list(testCatStruct.blendMags), [[], []])
+        self.assertListEqual(list(testCatStruct.blendSeparations), [[], []])
+        self.assertListEqual(list(testCatStruct.blendMagDiffs), [[], []])
 
         # Test that number of sources in catalog limited by sourceLimit
         # and that the brightest of the allowed donuts is chosen
@@ -217,6 +245,12 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], [140.0], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [100.0], []])
+        # Source 0 (x=100) blended with source 1 (x=140): sep=40px
+        # Source 2 (x=190) blended with source 1 (x=140): sep=50px
+        np.testing.assert_allclose(testCatStruct.blendSeparations[0], [40.0])
+        np.testing.assert_allclose(testCatStruct.blendSeparations[1], [50.0])
+        self.assertListEqual(list(testCatStruct.blendSeparations[2]), [])
+        self._assertBlendFieldLengths(testCatStruct, [1, 1, 0])
 
         # Lower unblendedSeparation so that the first two donuts
         # are the only blended ones. Test that the brighter of the
@@ -234,6 +268,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[140.0], [], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], [], []])
+        # Source 0 (x=100) blended with source 1 (x=140): sep=40px
+        np.testing.assert_allclose(testCatStruct.blendSeparations[0], [40.0])
+        self._assertBlendFieldLengths(testCatStruct, [1, 0, 0])
 
         # If we increase unblendedSeparation back to 100 then our group of
         # 3 donuts should all be overlapping and blended. Therefore,
@@ -248,6 +285,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, False, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]])
+        self.assertListEqual(list(testCatStruct.blendMags), [[]])
+        self.assertListEqual(list(testCatStruct.blendSeparations), [[]])
+        self.assertListEqual(list(testCatStruct.blendMagDiffs), [[]])
 
         # Decrease isolatedMagDiff so that only one of the donuts
         # blended with the brightest donut falls within the range.
@@ -267,6 +307,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
+        # Source 2 (x=190) blended with source 0 (x=100): sep=90px
+        np.testing.assert_allclose(testCatStruct.blendSeparations[0], [90.0])
+        self._assertBlendFieldLengths(testCatStruct, [1, 0])
 
         # If we increase isolatedMagDiff to once again include
         # both sources overlapping the brightest donut as blended
@@ -288,6 +331,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             self.assertListEqual(list(bX), trueBX)
         for bY, trueBY in zip(blendCentersY, [[100.0, 100.0], []]):
             self.assertListEqual(list(bY), trueBY)
+        # Source 2 (x=190) blends at x=140 (sep=50) and x=100 (sep=90)
+        np.testing.assert_allclose(testCatStruct.blendSeparations[0], [50.0, 90.0])
+        self._assertBlendFieldLengths(testCatStruct, [2, 0])
 
         # Donut furthest from center is over 0.15 degrees from field center
         # and should get cut out when setting maxFieldDist to 0.15
@@ -328,6 +374,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [])
         self.assertEqual(testCatStruct.blendCentersX, None)
         self.assertEqual(testCatStruct.blendCentersY, None)
+        self.assertIsNone(testCatStruct.blendMags)
+        self.assertIsNone(testCatStruct.blendSeparations)
+        self.assertIsNone(testCatStruct.blendMagDiffs)
 
         # Test that when there are multiple blends but not all are within
         # isolatedMagDiff that the donut centers for only the blended
@@ -343,6 +392,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[100.0], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[100.0], []])
+        # Source 2 (x=190) blended with source 0 (x=100): sep=90px
+        np.testing.assert_allclose(testCatStruct.blendSeparations[0], [90.0])
+        self._assertBlendFieldLengths(testCatStruct, [1, 0])
 
         # Test same as above but with multiple donuts kept and one donut that
         # should not appear.
@@ -360,6 +412,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
             self.assertListEqual(list(bX), trueBX)
         for bY, trueBY in zip(testCatStruct.blendCentersY, [[200.0, 200.0]]):
             self.assertListEqual(list(bY), trueBY)
+        # Source 2 (x=290) blends at x=200 (sep=90) and x=460 (sep=170)
+        np.testing.assert_allclose(testCatStruct.blendSeparations[0], [90.0, 170.0])
+        self._assertBlendFieldLengths(testCatStruct, [2])
 
     def testTaskRun(self) -> None:
         minimalCat, detector = self._createTestCat()
@@ -375,6 +430,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [True, True, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[]] * 4)
         self.assertListEqual(list(testCatStruct.blendCentersY), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendMags), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendSeparations), [[]] * 4)
+        self.assertListEqual(list(testCatStruct.blendMagDiffs), [[]] * 4)
 
         # Will now take the brightest of the three donuts that overlap
         # for a total of 2 selected donuts
@@ -388,6 +446,9 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [False, False, True, True])
         self.assertListEqual(list(testCatStruct.blendCentersX), [[], []])
         self.assertListEqual(list(testCatStruct.blendCentersY), [[], []])
+        self.assertListEqual(list(testCatStruct.blendMags), [[], []])
+        self.assertListEqual(list(testCatStruct.blendSeparations), [[], []])
+        self.assertListEqual(list(testCatStruct.blendMagDiffs), [[], []])
 
         # Test output if we have an empty catalog. Make sure that
         # all parts of the Struct are returned as expected.
@@ -397,3 +458,6 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         self.assertListEqual(list(testCatSelected), [])
         self.assertEqual(testCatStruct.blendCentersX, None)
         self.assertEqual(testCatStruct.blendCentersY, None)
+        self.assertIsNone(testCatStruct.blendMags)
+        self.assertIsNone(testCatStruct.blendSeparations)
+        self.assertIsNone(testCatStruct.blendMagDiffs)
