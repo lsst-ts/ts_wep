@@ -171,6 +171,8 @@ class TestGetObsConditions(unittest.TestCase):
         inst = MagicMock()
         inst.maskParamsFile = maskParamsFile
         inst._maskParams = maskParams
+        inst.name = "LsstCam"
+        inst.configFile = "policy:instruments/LsstCam.yaml"
         inst.batoidModelName = "LSST_{band}"
         return inst
 
@@ -184,6 +186,12 @@ class TestGetObsConditions(unittest.TestCase):
         self.assertTrue(any("Batoid model: batoid" in msg for msg in cm.output))
         self.assertTrue(any("LSST_{band}" in msg for msg in cm.output))
 
+        # The mask and Batoid models are also recorded in the task metadata.
+        # The danish file is resolved (following the version symlink), so the
+        # stored value starts with the danish prefix and the resolved name.
+        self.assertTrue(self.task.metadata["maskModel"].startswith("danish:"))
+        self.assertEqual(self.task.metadata["batoidModel"], "batoid:LSST_{band}")
+
     def testLogMaskVersionsExplicitOverride(self) -> None:
         # Explicit maskParams override any danish file.
         inst = self._makeInstrument("RubinObsc.yaml", maskParams={"M1": {}})
@@ -193,6 +201,11 @@ class TestGetObsConditions(unittest.TestCase):
         self.assertTrue(any("overrides any danish file" in msg for msg in cm.output))
         self.assertFalse(any("resolved to" in msg for msg in cm.output))
 
+        # Explicit maskParams are recorded as coming from the policy instrument
+        # config file.
+        self.assertEqual(self.task.metadata["maskModel"], "policy:instruments/LsstCam.yaml")
+        self.assertEqual(self.task.metadata["batoidModel"], "batoid:LSST_{band}")
+
     def testLogMaskVersionsNoDanishFile(self) -> None:
         inst = self._makeInstrument(None)
         with self.assertLogs(level="INFO") as cm:
@@ -200,6 +213,11 @@ class TestGetObsConditions(unittest.TestCase):
 
         self.assertTrue(any("no danish file" in msg for msg in cm.output))
         self.assertTrue(any("Batoid model: batoid" in msg for msg in cm.output))
+
+        # With no danish file, the mask model is recorded as the policy
+        # instrument config file.
+        self.assertEqual(self.task.metadata["maskModel"], "policy:instruments/LsstCam.yaml")
+        self.assertEqual(self.task.metadata["batoidModel"], "batoid:LSST_{band}")
 
 
 if __name__ == "__main__":

@@ -363,6 +363,14 @@ class TestInstrument(unittest.TestCase):
         self.assertTrue(np.isclose(inst.focalLength, lsst.focalLength, rtol=1e-3))
         self.assertTrue(np.isclose(inst.defocalOffset, lsst.defocalOffset, rtol=1e-3))
 
+    def testConfigFile(self) -> None:
+        # The instrument remembers the config file it was loaded from.
+        inst = Instrument("policy:instruments/AuxTel.yaml")
+        self.assertEqual(inst.configFile, "policy:instruments/AuxTel.yaml")
+
+        # An instrument built without a config file (e.g. via copy) has none.
+        self.assertIsNone(inst.copy().configFile)
+
     def testDefocalOffsetCalculation(self) -> None:
         inst = Instrument("policy:instruments/AuxTel.yaml")
         inst.batoidOffsetValue = 0.8e-3

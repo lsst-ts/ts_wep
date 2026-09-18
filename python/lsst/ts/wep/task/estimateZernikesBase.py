@@ -349,10 +349,17 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         # over maskParamsFile (mirroring Instrument.maskParams), so report that
         # case rather than the danish file that is being overridden.
         maskParamsFile = instrument.maskParamsFile
+        # Record the config file the mask model came from. The config file path
+        # already carries its own "policy:" scheme; fall back to "policy:name"
+        # label if the path is unknown (e.g. an instrument built directly from
+        # parameters rather than a file).
+        maskModel = instrument.configFile or f"policy:{instrument.name}"
         if getattr(instrument, "_maskParams", None) is not None:
             self.log.info("Mask model: instrument-provided maskParams (overrides any danish file)")
+            self.metadata["maskModel"] = maskModel
         elif maskParamsFile is None:
             self.log.info("Mask model: instrument-provided maskParams (no danish file)")
+            self.metadata["maskModel"] = maskModel
         else:
             try:
                 import danish
@@ -371,6 +378,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
                 maskParamsFile,
                 resolvedFile,
             )
+            self.metadata["maskModel"] = f"danish:{resolvedFile}"
 
         # Log the Batoid optical model the mask is paired with.
         try:
@@ -385,6 +393,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             batoidVersion,
             instrument.batoidModelName,
         )
+        self.metadata["batoidModel"] = f"batoid:{instrument.batoidModelName}"
 
     def run(
         self,

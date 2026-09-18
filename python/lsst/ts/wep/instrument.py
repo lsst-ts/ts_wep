@@ -179,6 +179,10 @@ class Instrument:
             maskParamsFile=maskParamsFile,
         )
 
+        # Remember the config file this instrument was loaded from (if any) so
+        # that downstream code can record the provenance of the mask model.
+        self._configFile = str(configFile) if configFile is not None else None
+
         # Set each parameter
         for key, value in params.items():
             setattr(self, key, value)
@@ -199,6 +203,7 @@ class Instrument:
         # resolved value, so defocalOffset and the batoid offset parameters
         # are never both set at once.
         return Instrument(
+            configFile=None,
             name=self.name,
             diameter=self.diameter,
             obscuration=self.obscuration,
@@ -255,6 +260,11 @@ class Instrument:
         self._getIntrinsicZernikesTACached.cache_clear()
         self._focalLengthBatoid = None
         self._defocalOffsetBatoid = None
+
+    @property
+    def configFile(self) -> str | None:
+        """The config file this instrument was loaded from, if any."""
+        return getattr(self, "_configFile", None)
 
     @property
     def name(self) -> str:
