@@ -89,8 +89,8 @@ _REFCAT_COLUMNS = (
 # _ZK_JMAX + 1: index j holds Zernike j, and indices 0-3 are always 0.
 _ZK_JMAX = 66
 
-# Short stage label -> the key `_cutout_one_exposure` returns its elapsed time
-# under, in the order the stages run.  That function defines the keys; this is
+# Short stage label -> the `CutoutResult` field holding that stage's elapsed
+# time, in the order the stages run.  The dataclass defines the fields; this is
 # the one ordered list of them, because four separate places report the same
 # seven stages -- the corner-mode and full-array per-detector log lines, the
 # plot task's per-detector panel, and the `det_meta` block of the output

@@ -160,6 +160,46 @@ class _CatalogOptions:
         return binned if binned % 2 == 1 else binned - 1
 
 
+@dataclass(frozen=True)
+class _CatalogTimings:
+    """The visit-level wall-clock numbers written to ``table.meta``.
+
+    A sibling of `_CatalogOptions`, and grouped for the same reason: six
+    same-typed floats in a row is six chances for a caller to transpose two and
+    get a plausible-looking table out. Every field is seconds, and every one
+    defaults to 0.0 so a caller that does not time a phase simply omits it.
+
+    The two modes measure these differently, and the difference is recorded in
+    ``meta["notes"]`` rather than here: corner mode reports wall clock, while
+    full-array mode sums over parallel per-detector workers and so reports CPU
+    time, which can exceed ``run_elapsed``. See `_META_NOTES`.
+
+    Attributes
+    ----------
+    run_elapsed : float
+        The whole ``run()`` call, and so the number the others are a breakdown
+        of.
+    refcat_elapsed : float
+        Reference catalog loading.
+    butler_elapsed : float
+        Butler I/O total. ``butler_times`` breaks it down per dataset type.
+    butler_times : dict [str, float]
+        Per-dataset-type butler I/O, e.g. ``{"raw": 3.0, "bias": 1.0}``. Empty
+        when the caller did not break it down.
+    cutout_elapsed : float
+        The cutout pipeline: ISR through stamp cutting.
+    danish_elapsed : float
+        Wavefront fitting.
+    """
+
+    run_elapsed: float = 0.0
+    refcat_elapsed: float = 0.0
+    butler_elapsed: float = 0.0
+    butler_times: dict | None = None
+    cutout_elapsed: float = 0.0
+    danish_elapsed: float = 0.0
+
+
 def _encode_nearby(entries):
     """Return (dx, dy, mag) arrays of length ``_MAX_NEARBY`` for one donut.
 
@@ -273,12 +313,7 @@ def _build_donut_catalog(
     intra_visit_id: int | None = None,
     extra_visit_id: int | None = None,
     exposure_group: str = "",
-    run_elapsed: float = 0.0,
-    refcat_elapsed: float = 0.0,
-    butler_elapsed: float = 0.0,
-    butler_times: dict | None = None,
-    cutout_elapsed: float = 0.0,
-    danish_elapsed: float = 0.0,
+    timings: _CatalogTimings | None = None,
     photo_filter_name: str = "",
     astrom_filter_name: str = "",
     rtp_rad: float = 0.0,
@@ -290,15 +325,15 @@ def _build_donut_catalog(
 
     Parameters
     ----------
-    results : list
-        Per-detector cutout dicts (supplies rejected donuts and per-detector
+    results : list [`lsst.ts.wep.blitz.dataStructures.CutoutResult`]
+        Per-detector cutout results (supply rejected donuts and per-detector
         metadata).  Full-array mode passes two per detector, one per exposure
         of the pair, each tagged with its own ``visit_id``; corner mode passes
-        one per detector and omits ``visit_id``, defaulting to the ``visit_id``
-        argument.  Either way the metadata is keyed by
+        one per detector and leaves ``visit_id`` None, defaulting to the
+        ``visit_id`` argument.  Either way the metadata is keyed by
         ``f"{det_name}_{visit_id}"`` (see ``table.meta["det_meta"]``).
-    wf_results : list
-        Per-fit WF result dicts from the WF worker pool.
+    wf_results : list [`lsst.ts.wep.blitz.dataStructures.WfGroupResult`]
+        Per-fit WF results from the WF worker pool.
     donuts : list
         Donut records that passed selection.
     unmatched_donuts : list
@@ -314,6 +349,9 @@ def _build_donut_catalog(
         The visits that supplied the intra- and extra-focal donuts.
     exposure_group : str, optional
         The butler ``group`` dimension of the exposure(s) this table covers.
+    timings : `_CatalogTimings`, optional
+        Visit-level wall-clock numbers for ``meta``. Defaults to all-zero, so a
+        caller that times nothing still produces a schema-complete table.
     rtp_rad : float
         Camera rotator angle on sky (rotTelPos) in radians, used to rotate the
         Zernikes from the camera into the optical coordinate system.  Written
@@ -375,10 +413,14 @@ def _build_donut_catalog(
         Further descriptions of meta values are present in ``meta["notes"]``,
         keyed by the meta key being annotated (see `_META_NOTES`).
     """
+    # All-zero rather than None, so the meta writes below need no guard and an
+    # untimed caller still gets every timing key.
+    timings = timings or _CatalogTimings()
+
     # Build lookup: (donut_id, det_name, visit_id) -> wf donut entry.
     wf_by_id: dict = {}
     for r in wf_results:
-        for wd in r.get("donuts", []):
+        for wd in r.donuts:
             wf_by_id[(wd.donut_id, wd.det_name, wd.visit_id)] = wd
 
     # Build lookup: "{det_name}_{visit_id}" -> per-detector metadata from
@@ -387,28 +429,28 @@ def _build_donut_catalog(
     # would collide and drop half the metadata.
     det_meta: dict = {}
     for r in results:
-        det_key = f"{r['det_name']}_{r.get('visit_id', visit_id)}"
+        det_key = f"{r.det_name}_{r.visit_id if r.visit_id is not None else visit_id}"
         det_meta[det_key] = {
-            "astrom_scatter": (r["scatter_arcsec"] if r["scatter_arcsec"] is not None else np.nan) * u.arcsec,
-            "wcs_refit_error": r["wcs_refit_error"],
-            "cat_select_error": r["cat_select_error"],
+            "astrom_scatter": (r.scatter_arcsec if r.scatter_arcsec is not None else np.nan) * u.arcsec,
+            "wcs_refit_error": r.wcs_refit_error,
+            "cat_select_error": r.cat_select_error,
             # Where this detector's donut ids came from. "refcat" ids are
             # refcat source ids; the blitz paths number donuts 1..N per
             # detector per exposure, so a donut_id is only comparable across
             # exposures on the refcat path. "no_detections" when no selector
             # ran at all.
-            "selection_source": r["selection_source"],
+            "selection_source": r.selection_source,
             # Detector orientation: the `k` in the `np.rot90(stamp,
             # k=-n_quarter).T` that put the stamps in CCS. Per-detector, and
             # only meaningful alongside x_det/y_det, so it lives here rather
             # than replicated onto every row -- but recorded, so undoing the
             # transform does not mean loading the camera model.
-            "n_quarter": r["n_quarter"],
+            "n_quarter": r.n_quarter,
             # Which pairing algorithm ran: "refcat_id", "spatial" or "empty" in
             # full-array mode, "snr_rank" in corner mode, "n/a" in the modes
             # that do not pair.
-            "pair_path": r["pair_path"],
-            **{key: r.get(key, np.nan) * u.s for key in _CUTOUT_STAGE_KEYS.values()},
+            "pair_path": r.pair_path,
+            **{key: getattr(r, key) * u.s for key in _CUTOUT_STAGE_KEYS.values()},
         }
 
     # Collect every donut exactly once, tagged with whether it passed selection
@@ -426,7 +468,7 @@ def _build_donut_catalog(
     seen = set()
     for d, candidate in (
         [(d, True) for d in donuts]
-        + [(d, False) for r in results for d in r.get("rejected_catalog", [])]
+        + [(d, False) for r in results for d in r.rejected_catalog]
         + [(d, True) for d in unmatched_donuts]
     ):
         k = donut_key(d)
@@ -604,12 +646,12 @@ def _build_donut_catalog(
     # Which mode produced this table. Also the key to reading the elapsed
     # values below; see meta["notes"].
     table.meta["mode"] = str(mode)
-    table.meta["run_elapsed"] = run_elapsed * u.s
-    table.meta["refcat_elapsed"] = refcat_elapsed * u.s
-    table.meta["butler_elapsed"] = butler_elapsed * u.s
-    table.meta["butler_times"] = {key: value * u.s for key, value in (butler_times or {}).items()}
-    table.meta["cutout_elapsed"] = cutout_elapsed * u.s
-    table.meta["danish_elapsed"] = danish_elapsed * u.s
+    table.meta["run_elapsed"] = timings.run_elapsed * u.s
+    table.meta["refcat_elapsed"] = timings.refcat_elapsed * u.s
+    table.meta["butler_elapsed"] = timings.butler_elapsed * u.s
+    table.meta["butler_times"] = {key: value * u.s for key, value in (timings.butler_times or {}).items()}
+    table.meta["cutout_elapsed"] = timings.cutout_elapsed * u.s
+    table.meta["danish_elapsed"] = timings.danish_elapsed * u.s
     table.meta["photo_filter_name"] = photo_filter_name
     table.meta["astrom_filter_name"] = astrom_filter_name
     table.meta["noll_indices"] = list(options.noll_indices)

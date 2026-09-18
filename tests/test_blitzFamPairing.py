@@ -436,21 +436,21 @@ class TestWorkerNeverDies(unittest.TestCase):
         out = self._run_with_store_raising(
             UnprocessableDataError("Back-side bias voltage is turned off for R20_S20")
         )
-        self.assertTrue(out["skipped"])
-        self.assertIn("UnprocessableDataError", out["error"])
-        self.assertEqual(out["det_id"], 42)
+        self.assertTrue(out.skipped)
+        self.assertIn("UnprocessableDataError", out.error)
+        self.assertEqual(out.det_id, 42)
 
     def testOrdinaryExceptionIsAFailureNotASkip(self):
         out = self._run_with_store_raising(RuntimeError("boom"))
-        self.assertFalse(out["skipped"])
-        self.assertIn("RuntimeError", out["error"])
+        self.assertFalse(out.skipped)
+        self.assertIn("RuntimeError", out.error)
 
     def testBareBaseExceptionStillReturns(self):
-        # Anything that is not KeyboardInterrupt/SystemExit must come back as a
-        # dict rather than killing the child.
+        # Anything that is not KeyboardInterrupt/SystemExit must come back as
+        # a result rather than killing the child.
         out = self._run_with_store_raising(BaseException("naked"))
-        self.assertFalse(out["skipped"])
-        self.assertIn("BaseException", out["error"])
+        self.assertFalse(out.skipped)
+        self.assertIn("BaseException", out.error)
 
     def testKeyboardInterruptStillPropagates(self):
         with self.assertRaises(KeyboardInterrupt):
