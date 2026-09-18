@@ -110,6 +110,29 @@ def _exposure_group(refs) -> str:
 _EXTRA_FOCAL_OFFSETS = (+_INSTRUMENT.defocalOffset, 0.0, 0.0)
 _INTRA_FOCAL_OFFSETS = (-_INSTRUMENT.defocalOffset, 0.0, 0.0)
 
+# The connection names `runQuantum` fetches, in the order it fetches them.
+# These strings are three things at once, which is why the tuple is shared
+# rather than written out per use: the `inputRefs` attributes to read, the keys
+# of the ``butler_times`` breakdown that reaches the output catalog's meta (and
+# so the plot's label), and the order of the timing log.  They stay camelCase
+# because the connections are framework-named.
+_BUTLER_INPUTS = (
+    "raws",
+    "ptc",
+    "flat",
+    "linearizer",
+    "crosstalk",
+    "refCat",
+    "intrinsicZernikes",
+)
+
+# The calibrations narrowed to the detectors the raws actually cover, so a
+# missing raw does not drag its calibrations through the fetch.  Excludes
+# `raws`, which is what the detector set is read *from*, and `refCat`, a
+# `PrerequisiteInput` dimensioned on htm7 shards rather than on detector and so
+# carrying no per-detector refs to filter.
+_PER_DETECTOR_INPUTS = tuple(name for name in _BUTLER_INPUTS if name not in ("raws", "refCat"))
+
 
 class DonutBlitzCornerConnections(
     pipeBase.PipelineTaskConnections,
@@ -457,70 +480,47 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             inputRefs.raws[0].dataId["exposure"],
         )
         raw_det_ids = {ref.dataId["detector"] for ref in inputRefs.raws}
-        for attr in ("ptc", "flat", "linearizer", "crosstalk", "intrinsicZernikes"):
+        for attr in _PER_DETECTOR_INPUTS:
             refs = getattr(inputRefs, attr)
             setattr(inputRefs, attr, [r for r in refs if r.dataId["detector"] in raw_det_ids])
 
-        # Time each input type separately to find I/O bottleneck.
-        t0 = time.perf_counter()
-        raws = butlerQC.get(inputRefs.raws)
-        t1 = time.perf_counter()
-        ptc = butlerQC.get(inputRefs.ptc)
-        t2 = time.perf_counter()
-        flat = butlerQC.get(inputRefs.flat)
-        t3 = time.perf_counter()
-        linearizer = butlerQC.get(inputRefs.linearizer)
-        t4 = time.perf_counter()
-        crosstalk = butlerQC.get(inputRefs.crosstalk)
-        t5 = time.perf_counter()
-        refCat = butlerQC.get(inputRefs.refCat)
-        t6 = time.perf_counter()
-        intrinsicZernikes = butlerQC.get(inputRefs.intrinsicZernikes)
-        t7 = time.perf_counter()
+        # Fetched one dataset type at a time, and timed that way, because which
+        # input dominates the I/O is the thing worth knowing: a slow refcat
+        # shard load and a slow raw read call for different fixes.
+        fetched = {}
+        butler_times = {}
+        for name in _BUTLER_INPUTS:
+            t_start = time.perf_counter()
+            fetched[name] = butlerQC.get(getattr(inputRefs, name))
+            butler_times[name] = time.perf_counter() - t_start
+        butler_elapsed = sum(butler_times.values())
+
         self.log.info(
             _colorize(
-                "butlerQC.get timing: raws=%.3fs ptc=%.3fs flat=%.3fs"
-                " linearizer=%.3fs crosstalk=%.3fs refCat=%.3fs"
-                " intrinsicZernikes=%.3fs total=%.3fs",
+                "butlerQC.get timing: %s total=%.3fs",
                 _ANSI_BOLD,
                 _ANSI_CYAN,
                 enabled=self._colorLogEnabled,
             ),
-            t1 - t0,
-            t2 - t1,
-            t3 - t2,
-            t4 - t3,
-            t5 - t4,
-            t6 - t5,
-            t7 - t6,
-            t7 - t0,
+            " ".join(f"{name}={butler_times[name]:.3f}s" for name in _BUTLER_INPUTS),
+            butler_elapsed,
         )
-        butler_elapsed = t7 - t0
-        butler_times = dict(
-            raws=t1 - t0,
-            ptc=t2 - t1,
-            flat=t3 - t2,
-            linearizer=t4 - t3,
-            crosstalk=t5 - t4,
-            refCat=t6 - t5,
-            intrinsicZernikes=t7 - t6,
-        )
+        t_run0 = time.perf_counter()
         outputs = self.run(
-            raws=raws,
-            ptc=ptc,
-            flat=flat,
-            linearizer=linearizer,
-            crosstalk=crosstalk,
-            ref_cat=refCat,
-            intrinsic_zernikes=intrinsicZernikes,
+            raws=fetched["raws"],
+            ptc=fetched["ptc"],
+            flat=fetched["flat"],
+            linearizer=fetched["linearizer"],
+            crosstalk=fetched["crosstalk"],
+            ref_cat=fetched["refCat"],
+            intrinsic_zernikes=fetched["intrinsicZernikes"],
             butler_elapsed=butler_elapsed,
             butler_times=butler_times,
             num_cores=butlerQC.resources.num_cores,
             exposure_group=_exposure_group(inputRefs.raws),
             instrument=str(butlerQC.quantum.dataId["instrument"]),
         )
-        t8 = time.perf_counter()
-        self.log.info("run() execution: %.3fs", t8 - t7)
+        self.log.info("run() execution: %.3fs", time.perf_counter() - t_run0)
         butlerQC.put(outputs.cornerResults, outputRefs.cornerResults)
 
     @timeMethod
