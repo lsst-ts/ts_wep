@@ -78,6 +78,12 @@ _COLOR_HEXAFOIL = "#D55E00"
 # every stamp carries its own text.
 _STAMP_TEXT_FONTSIZE = 3.5
 
+# How much of a stage error to show in a detector's stats panel. The panel is
+# one narrow column of monospace text, so the full message (up to
+# `dataStructures._ERROR_MAX_CHARS`) would overrun its neighbours; the
+# untrimmed string is in the catalog's det_meta for anyone who needs it.
+_PANEL_ERROR_CHARS = 40
+
 
 @dataclass(frozen=True)
 class _DonutLayout:
@@ -135,6 +141,95 @@ _DONUT_LAYOUT = _DonutLayout(
 # Four corner blocks in a 2x2, each of which is a square grid of unit cells,
 # so `cell` and `row_h` are equal by intent and not by coincidence.
 _WF_LAYOUT = _WfLayout(cell=1.0, row_h=1.0, hpad=0.08)
+
+
+@dataclass(frozen=True)
+class _StampStyle:
+    """What every donut stamp needs from the catalog's visit-level meta.
+
+    The eight values `_drawDonutStamp` used to capture as closure variables.
+    Visit-level by nature: the aperture and annulus fractions are config, the
+    obscuration an instrument constant, and which stamp column exists a
+    property of how the catalog was written.  Only the *radius* is per donut,
+    and that rides each row.
+
+    Module-private and built per call, like `cutDonutStamps._ExposureContext`
+    and for the same reason: it is a bundle of arguments for one call tree, not
+    a data product.
+
+    Attributes
+    ----------
+    stamp_col : str
+        Which column holds the pixels -- see `from_catalog`.
+    px_scale : float
+        Multiplier taking unbinned pixel quantities (aperture radii, refcat
+        offsets, text offsets) into the drawn image's pixels.  1.0 for an
+        unbinned ``stamp``.
+    obscuration : float
+        Central obscuration as a fraction of the donut radius.
+    aperture_margin_frac, bkg_inner_disc_frac : float
+        The photometry aperture's fractional margin, and the filled disc inside
+        the central obscuration.
+    bkg_annulus_inner_frac, bkg_annulus_outer_frac : float
+        Inner and outer edges of the background annulus outside the donut.
+        Note `bkg_inner_disc_frac` above is a *different* inner radius -- the
+        two are easy to confuse, which is why they keep their meta spellings.
+    """
+
+    stamp_col: str
+    px_scale: float
+    obscuration: float
+    aperture_margin_frac: float
+    bkg_inner_disc_frac: float
+    bkg_annulus_inner_frac: float
+    bkg_annulus_outer_frac: float
+
+    @classmethod
+    def from_catalog(cls, catalog: QTable) -> "_StampStyle":
+        """Resolve the stamp column and read the visit-level scalars.
+
+        The unbinned ``stamp`` column is optional (see corner mode's
+        ``saveStamps``).  Without it the binned ``wf_img`` is drawn instead,
+        which is why `px_scale` exists: every other quantity here is in
+        unbinned pixels and has to scale by 1/binning to match.
+
+        Raises
+        ------
+        RuntimeError
+            If the catalog carries neither column, so there is nothing to draw.
+        """
+        has_stamp = "stamp" in catalog.colnames
+        if not has_stamp and "wf_img" not in catalog.colnames:
+            raise RuntimeError(
+                "Catalog has neither a 'stamp' nor a 'wf_img' column, so there is "
+                "nothing to draw. Re-run with saveStamps or saveWfImages enabled "
+                "if you want these plots."
+            )
+        meta = catalog.meta
+        return cls(
+            stamp_col="stamp" if has_stamp else "wf_img",
+            px_scale=1.0 if has_stamp else 1.0 / meta.get("binning", 1),
+            obscuration=meta["obscuration"],
+            aperture_margin_frac=meta["aperture_margin_frac"],
+            bkg_inner_disc_frac=meta["bkg_inner_disc_frac"],
+            bkg_annulus_inner_frac=meta["bkg_annulus_inner_frac"],
+            bkg_annulus_outer_frac=meta["bkg_annulus_outer_frac"],
+        )
+
+    def circle_radii(self, donut_radius: float) -> list[tuple[float, str, str]]:
+        """The five aperture/annulus circles, as ``(radius, color, style)``.
+
+        ``donut_radius`` is the row's own measured radius, already scaled into
+        the drawn image's pixels.
+        """
+        inside = donut_radius * self.obscuration
+        return [
+            (inside * self.bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
+            (inside * (1 - self.aperture_margin_frac), _COLOR_APERTURE, "-"),
+            (donut_radius * (1 + self.aperture_margin_frac), _COLOR_APERTURE, "-"),
+            (donut_radius * self.bkg_annulus_inner_frac, _COLOR_BKG_ANNULUS, "--"),
+            (donut_radius * self.bkg_annulus_outer_frac, _COLOR_BKG_ANNULUS, "--"),
+        ]
 
 
 @dataclass(frozen=True)
@@ -240,6 +335,145 @@ def _det_id_by_name(catalog: QTable) -> dict[str, int]:
     names = np.asarray(catalog["det_name"], dtype=str)
     ids = np.asarray(catalog["det_id"], dtype=int)
     return {str(n): int(i) for n, i in zip(names, ids)}
+
+
+def _donut_rows_by_detector(catalog: QTable) -> list[tuple[str, QTable, QTable]]:
+    """Split the catalog per detector into accepted and rejected rows.
+
+    Splits on ``candidate`` rather than on whether a fit consumed the donut:
+    this plot is about donut *selection*, so a candidate no fit used still
+    belongs in the accepted panel, having passed every cut the plot reports.
+
+    Returns
+    -------
+    list of tuple
+        ``(det_name, accepted, rejected)`` per detector with at least one row,
+        sorted by detector name.  Detectors absent from the catalog are absent
+        here -- the caller sizes the figure from this list.
+    """
+    det_name_col = np.asarray(catalog["det_name"], dtype=str)
+    dets_with_data = []
+    for det_name in sorted(set(det_name_col.tolist())):
+        det_rows = catalog[det_name_col == det_name]
+        accepted = det_rows[det_rows["candidate"]]
+        rejected = det_rows[~det_rows["candidate"]]
+        if len(accepted) > 0 or len(rejected) > 0:
+            dets_with_data.append((det_name, accepted, rejected))
+    return dets_with_data
+
+
+def _detector_stats_lines(det_name: str, det_id: int, n_donuts: int, det_stats: dict) -> list[str]:
+    """The monospace stats block for one detector's panel, one line per entry.
+
+    Returns strings rather than drawing, so the formatting is testable without
+    a figure.
+
+    Parameters
+    ----------
+    det_name, det_id : str, int
+        Detector identity, for the header line.
+    n_donuts : int
+        Accepted donut count.
+    det_stats : dict
+        One ``catalog.meta["det_meta"]`` entry, or ``{}`` for a detector with
+        no entry -- every read below tolerates the absence, reporting NaN or
+        omitting the line.
+    """
+    scatter_val = _meta_value(det_stats, "astrom_scatter", u.arcsec)
+    scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
+    lines = [f"{det_name} ({det_id})", f"donuts: {n_donuts}"]
+    # One line per cutout stage, driven off the shared key list so this panel
+    # cannot fall behind the log lines reporting the same stages. The label
+    # column is padded to the longest label rather than to a hard-coded width,
+    # since this is monospace text.
+    width = max(len(label) for label in _CUTOUT_STAGE_KEYS) + 2
+    for label, key in _CUTOUT_STAGE_KEYS.items():
+        line = f"{label + ':':<{width}}{_meta_value(det_stats, key, u.s):.3f}s"
+        # Scatter belongs to the WCS refit, so it hangs off that stage.
+        lines.append(f"{line}  ({scatter_str})" if label == "astrom" else line)
+    if det_stats.get("wcs_refit_error"):
+        lines.append(f"WCS ERR: {det_stats['wcs_refit_error'][:_PANEL_ERROR_CHARS]}")
+    if det_stats.get("cat_select_error"):
+        lines.append(f"CAT ERR: {det_stats['cat_select_error'][:_PANEL_ERROR_CHARS]}")
+    return lines
+
+
+def _donut_annotation(row, rejected: bool) -> str:
+    """The three-line stats caption drawn above one donut stamp.
+
+    A ``?`` in place of a number means the value is non-finite, which is how a
+    measurement the cutout never made reads -- distinct from a real measurement
+    that happens to be zero.  Returns the string rather than drawing it, so it
+    is testable without a figure.
+
+    ``rejected`` is unused in the text itself: the rejection *flags* come off
+    the row's own ``rejected_*`` columns, which an accepted row simply has none
+    of.  It stays in the signature because the caller's colour choice pairs
+    with this caption, and a future change here is likely to want it.
+    """
+    values = [
+        ("snr", row["snr"], 0),
+        ("if", row["inner_frac"], 3),
+        ("of", row["outer_frac"], 3),
+        ("osm", row["outer_sector_minmax_frac"], 3),
+    ]
+    parts = {
+        name: (f"{name}={value:.{places}f}" if np.isfinite(value) else f"{name}=?")
+        for name, value, places in values
+    }
+    flags = [
+        name
+        for name, flagged in (
+            ("sat", row["rejected_sat"]),
+            ("inner", row["rejected_inner_frac"]),
+            ("outer", row["rejected_outer_frac"]),
+            ("snr", row["rejected_snr"]),
+        )
+        if flagged
+    ]
+    rej_str = f"[{'|'.join(flags)}]" if flags else ""
+    donut_id = row["donut_id"]
+    donut_id_str = f"id={donut_id}" if donut_id != 0 else ""
+    return f"{parts['snr']}  {rej_str}\n{parts['if']}  {parts['of']}  {parts['osm']}\n{donut_id_str}"
+
+
+def _stamp_transform(row, style: _StampStyle, det_meta: dict):
+    """Build the detector-frame to stamp-display-coordinate mapping for a row.
+
+    Returns a function of ``(dx, dy)`` in unbinned detector pixels, giving
+    ``(x, y)`` in the drawn stamp's coordinates.
+
+    It must mirror the stamp transform in `_cut_and_evaluate_stamps`,
+    ``np.rot90(stamp, k=-n_quarter).T`` -- **including the transpose**.  The
+    loop applies the rot90 in (row, col) space; returning ``(r, c)`` rather
+    than ``(c, r)`` is what applies the ``.T``.  Under ``origin="lower"`` the
+    displayed x axis is the column index and y the row index, so the returned
+    pair is ``(x, y)`` after transposition.
+
+    The stamp was cut on integer bounds around the *rounded* centroid, so
+    display coordinate (0, 0) is that rounded position while the ``nearby_*``
+    offsets are measured from ``x_det``/``y_det``.  The rounding residual
+    converts between the two, and is applied before the rotation because it is
+    a correction in the detector frame.  Sub-pixel, but it is the difference
+    between a marker on the source and one up to half a pixel off it.
+    """
+    # Orientation is per detector, and keyed by the row's own visit rather
+    # than the table's: full-array mode has one entry per detector per side of
+    # focus.
+    n_quarter = det_meta.get(f"{row['det_name']}_{row['visit_id']}", {}).get("n_quarter", 0) % 4
+    x_det = row["x_det"].to_value(u.pix)
+    y_det = row["y_det"].to_value(u.pix)
+    res_x = x_det - round(x_det)
+    res_y = y_det - round(y_det)
+
+    def to_display(dx, dy):
+        r, c = dy + res_y, dx + res_x
+        for _ in range(n_quarter):
+            r, c = c, -r
+        # Offsets are in unbinned pixels; scale to the drawn image.
+        return r * style.px_scale, c * style.px_scale
+
+    return to_display
 
 
 def _wf_groups_from_catalog(catalog: QTable) -> tuple[list[_WfGroup], list[_WfGroup]]:
@@ -438,7 +672,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ``f"{det_name}_{visit_id}"``; visit-level scalars are in
             ``catalog.meta``.
         """
-        import matplotlib.patches as mpatches
         from matplotlib.figure import Figure
         from matplotlib.gridspec import GridSpec
 
@@ -454,19 +687,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         visit_id = meta["ref_visit_id"]
         det_meta = meta["det_meta"]
 
-        # Group rows by detector; split on selection outcome. This plot is
-        # about donut *selection*, so it splits on "candidate" -- a candidate
-        # that no fit consumed still shows in the accepted panel, since it
-        # passed every cut this plot reports on.
-        det_name_col = np.asarray(catalog["det_name"], dtype=str)
         det_id_of = _det_id_by_name(catalog)
-        dets_with_data = []
-        for det_name in sorted(set(det_name_col.tolist())):
-            det_rows = catalog[det_name_col == det_name]
-            acc = det_rows[det_rows["candidate"]]
-            rej = det_rows[~det_rows["candidate"]]
-            if len(acc) > 0 or len(rej) > 0:
-                dets_with_data.append((det_name, acc, rej))
+        dets_with_data = _donut_rows_by_detector(catalog)
 
         n_dets = len(dets_with_data)
         if n_dets == 0:
@@ -504,246 +726,25 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         COL_SPACER = 1 + layout.stamps_per_row
         COL_REJECTED_START = COL_SPACER + 1
 
-        # The per-detector radius rides each donut row (from
-        # Donut.donut_radius), so a detector's aperture/annulus circles match
-        # its own detected donut size. Everything else that shapes those
-        # circles is a visit-level meta scalar. Two of these are background
-        # "inner" radii and are easy to confuse: _bkg_inner_disc is the filled
-        # disc inside the central obscuration, _bkg_inner_annulus is the inner
-        # edge of the annulus outside the donut.
-        aperture_margin_frac = catalog.meta["aperture_margin_frac"]
-        bkg_inner_disc_frac = catalog.meta["bkg_inner_disc_frac"]
-        bkg_annulus_inner_frac = catalog.meta["bkg_annulus_inner_frac"]
-        bkg_annulus_outer_frac = catalog.meta["bkg_annulus_outer_frac"]
-        obscuration = catalog.meta["obscuration"]
-
-        # Every stamp's view is pinned to its own pixel extent, so a stamp
-        # fills its axes exactly and consumes the same figure area no matter
-        # how many pixels it contains. Setting the limits explicitly (rather
-        # than leaving them to autoscale) is also required because ax.plot of
-        # the refcat overlays triggers autoscale where add_patch alone does
-        # not, which would otherwise pull in the annulus circles and shrink the
-        # stamp only on rows that happen to have overlays.
-        #
-        # A config-derived view (e.g. donut_radius * bkgAnnulusOuterFrac) would
-        # instead couple the drawn size to stampSize: at stampSize=215 the
-        # image overflows its axes by ~15%.
-
-        # The unbinned `stamp` column is optional (see corner mode's
-        # saveStamps). Without it, draw the binned `wf_img`, which is always
-        # present. Every other quantity here -- aperture radii, refcat offsets,
-        # text offsets -- is in unbinned pixels, so it scales by 1/binning to
-        # match.
-        has_stamp = "stamp" in catalog.colnames
-        if not has_stamp and "wf_img" not in catalog.colnames:
-            raise RuntimeError(
-                "Catalog has neither a 'stamp' nor a 'wf_img' column, so there is "
-                "nothing to draw. Re-run with saveStamps or saveWfImages enabled "
-                "if you want these plots."
-            )
-        px_scale = 1.0 if has_stamp else 1.0 / catalog.meta.get("binning", 1)
-        stamp_col = "stamp" if has_stamp else "wf_img"
-
-        def _draw_donut_stamp(ax, row, rejected=False):
-            """One catalog row's cutout, with aperture and refcat overlays.
-
-            Reads the stamp out of ``row`` (whichever of the two stamp columns
-            `stamp_col` resolved to) and annotates it in unbinned pixel units
-            scaled by `px_scale`.  Distinct from the wavefront plot's
-            `_draw_wf_image`, which draws an already-extracted array.
-            """
-            stamp = np.array(row[stamp_col])
-            h_px = stamp.shape[0] // 2
-            vmin, vmax = np.nanpercentile(stamp, [1, 99])
-            edge = h_px + 0.5
-            ax.imshow(
-                stamp,
-                origin="lower",
-                vmin=vmin,
-                vmax=vmax,
-                cmap="gray",
-                aspect="equal",
-                extent=[-edge, edge, -edge, edge],
-            )
-
-            # Per-detector radius off the row; obscuration is a global
-            # instrument constant and so lives in meta.
-            # into the drawn image's pixel units
-            dr = row["donut_radius"].to_value(u.pix) * px_scale
-            ob = obscuration
-            circ_specs = [
-                (dr * ob * bkg_inner_disc_frac, _COLOR_BKG_ANNULUS, "--"),
-                (dr * ob * (1 - aperture_margin_frac), _COLOR_APERTURE, "-"),
-                (dr * (1 + aperture_margin_frac), _COLOR_APERTURE, "-"),
-                (dr * bkg_annulus_inner_frac, _COLOR_BKG_ANNULUS, "--"),
-                (dr * bkg_annulus_outer_frac, _COLOR_BKG_ANNULUS, "--"),
-            ]
-            for rad, col, ls in circ_specs:
-                ax.add_patch(
-                    mpatches.Circle(
-                        (0, 0),
-                        rad,
-                        fill=False,
-                        edgecolor=col,
-                        linewidth=1.0,
-                        linestyle=ls,
-                        alpha=0.45,
-                        zorder=4,
-                    )
-                )
-
-            if rejected:
-                ax.plot([-edge, edge], [-edge, edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
-                ax.plot([-edge, edge], [edge, -edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
-
-            # Detector orientation is per-detector, so it lives in det_meta
-            # rather than on every row. Keyed by the row's own visit, not the
-            # table's: full-array mode has one entry per detector per side of
-            # focus.
-            nq = det_meta.get(f"{row['det_name']}_{row['visit_id']}", {}).get("n_quarter", 0) % 4
-
-            # The stamp was cut on integer bounds around the rounded centroid,
-            # so display coordinate (0, 0) is that rounded position, while the
-            # nearby_* offsets are measured from x_det/y_det. The rounding
-            # residual converts between the two -- sub-pixel, but the
-            # difference between a marker on the source and one up to half a
-            # pixel off it.
-            x_det = row["x_det"].to_value(u.pix)
-            y_det = row["y_det"].to_value(u.pix)
-            res_x = x_det - round(x_det)
-            res_y = y_det - round(y_det)
-
-            def _xform(dx, dy):
-                """Map a detector-frame offset to stamp display coords.
-
-                Must mirror the stamp transform in `_cut_and_evaluate_stamps`,
-                ``np.rot90(stamp, k=-n_quarter).T`` -- including the transpose.
-                The loop applies the rot90 in (row, col) space; returning
-                ``(r, c)`` rather than ``(c, r)`` is what applies the ``.T``.
-                Under ``origin="lower"`` the displayed x axis is the column
-                index and y is the row index, so the returned pair is
-                ``(x, y)`` after transposition.
-
-                The rounding residual is applied here, before the rotation,
-                because it is a correction in the detector frame.
-                """
-                r, c = dy + res_y, dx + res_x
-                for _ in range(nq):
-                    r, c = c, -r
-                # Offsets are in unbinned pixels; scale to the drawn image.
-                return r * px_scale, c * px_scale
-
-            n_photo = min(row["n_nearby_photo"], _MAX_NEARBY)
-            px = row["nearby_photo_dx_det"][:n_photo].to_value(u.pix)
-            py = row["nearby_photo_dy_det"][:n_photo].to_value(u.pix)
-            pm = row["nearby_photo_mag"][:n_photo].to_value(u.mag)
-            for dx, dy, mag in zip(px, py, pm):
-                tx, ty = _xform(dx, dy)
-                ax.plot(tx, ty, "o", ms=6, mfc="none", mec=_COLOR_PHOTO_REFCAT, mew=0.8, zorder=3)
-                if np.isfinite(mag):
-                    ax.text(
-                        tx + 3 * px_scale,
-                        ty + 3 * px_scale,
-                        f"{mag:.2f}",
-                        color=_COLOR_PHOTO_REFCAT,
-                        fontsize=_STAMP_TEXT_FONTSIZE,
-                        zorder=4,
-                    )
-
-            n_astrom = min(row["n_nearby_astrom"], _MAX_NEARBY)
-            ax_ = row["nearby_astrom_dx_det"][:n_astrom].to_value(u.pix)
-            ay_ = row["nearby_astrom_dy_det"][:n_astrom].to_value(u.pix)
-            am_ = row["nearby_astrom_mag"][:n_astrom].to_value(u.mag)
-            for dx, dy, mag in zip(ax_, ay_, am_):
-                tx, ty = _xform(dx, dy)
-                ax.plot(tx, ty, "+", ms=6, mec=_COLOR_ASTROM_REFCAT, mew=0.8, zorder=3)
-                if np.isfinite(mag):
-                    ax.text(
-                        tx + 3 * px_scale,
-                        ty - 5 * px_scale,
-                        f"{mag:.2f}",
-                        color=_COLOR_ASTROM_REFCAT,
-                        fontsize=_STAMP_TEXT_FONTSIZE,
-                        zorder=4,
-                    )
-            # Pin the view to the stamp's own edges: constant figure footprint
-            # regardless of pixel count, and no autoscale from the overlays.
-            ax.set_xlim(-edge, edge)
-            ax.set_ylim(-edge, edge)
-
-            inner_frac = row["inner_frac"]
-            outer_frac = row["outer_frac"]
-            outer_sector_minmax = row["outer_sector_minmax_frac"]
-            snr = row["snr"]
-            if_str = f"if={inner_frac:.3f}" if np.isfinite(inner_frac) else "if=?"
-            of_str = f"of={outer_frac:.3f}" if np.isfinite(outer_frac) else "of=?"
-            osm_str = f"osm={outer_sector_minmax:.3f}" if np.isfinite(outer_sector_minmax) else "osm=?"
-            snr_str = f"snr={snr:.0f}" if np.isfinite(snr) else "snr=?"
-            donut_id = row["donut_id"]
-            donut_id_str = f"id={donut_id}" if donut_id != 0 else ""
-            text_color = _COLOR_REJECTED if rejected else "black"
-
-            flags = [
-                name
-                for name, val in (
-                    ("sat", row["rejected_sat"]),
-                    ("inner", row["rejected_inner_frac"]),
-                    ("outer", row["rejected_outer_frac"]),
-                    ("snr", row["rejected_snr"]),
-                )
-                if val
-            ]
-            rej_str = f"[{'|'.join(flags)}]" if flags else ""
-            # Bottom-anchored just above the axes, so the block grows upward
-            # and never overlaps the stamp -- clearance is independent of stamp
-            # size. (Top-anchoring inside the axes hung the text down over the
-            # image; at stampSize 167 it overlapped by ~1pt, and worse for
-            # larger stamps.)
-            ax.annotate(
-                f"{snr_str}  {rej_str}\n{if_str}  {of_str}  {osm_str}\n{donut_id_str}",
-                xy=(0.05, 1.00),
-                xycoords="axes fraction",
-                xytext=(0, 1.0),
-                textcoords="offset points",
-                fontsize=_STAMP_TEXT_FONTSIZE,
-                va="bottom",
-                ha="left",
-                color=text_color,
-                bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
-                zorder=6,
-                annotation_clip=False,
-            )
+        style = _StampStyle.from_catalog(catalog)
 
         for row_idx, (det_name, acc_rows, rej_rows) in enumerate(dets_with_data):
-            # Keyed by detector *and* visit; corner mode has just this one
-            # visit. A miss degrades to the defaults below rather than raising.
-            sm = det_meta.get(f"{det_name}_{visit_id}", {})
-            scatter_val = _meta_value(sm, "astrom_scatter", u.arcsec)
-            scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
-
             ax_stats = fig.add_subplot(gs[row_idx, 0])
             ax_stats.axis("off")
-            lines = [
-                f"{det_name} ({det_id_of[det_name]})",
-                f"donuts: {len(acc_rows)}",
-            ]
-            # One line per cutout stage, driven off the shared key list so this
-            # panel cannot fall behind the log lines reporting the same stages.
-            # The label column is padded to the longest label rather than to a
-            # hard-coded width, since this is monospace text.
-            width = max(len(label) for label in _CUTOUT_STAGE_KEYS) + 2
-            for label, key in _CUTOUT_STAGE_KEYS.items():
-                line = f"{label + ':':<{width}}{_meta_value(sm, key, u.s):.3f}s"
-                # Scatter belongs to the WCS refit, so it hangs off that stage.
-                lines.append(f"{line}  ({scatter_str})" if label == "astrom" else line)
-            if sm.get("wcs_refit_error"):
-                lines.append(f"WCS ERR: {sm['wcs_refit_error'][:40]}")
-            if sm.get("cat_select_error"):
-                lines.append(f"CAT ERR: {sm['cat_select_error'][:40]}")
             ax_stats.text(
                 0.05,
                 0.95,
-                "\n".join(lines),
+                "\n".join(
+                    _detector_stats_lines(
+                        det_name=det_name,
+                        det_id=det_id_of[det_name],
+                        n_donuts=len(acc_rows),
+                        # Keyed by detector *and* visit; corner mode has just
+                        # this one visit. A miss degrades to the not-reached
+                        # defaults rather than raising.
+                        det_stats=det_meta.get(f"{det_name}_{visit_id}", {}),
+                    )
+                ),
                 transform=ax_stats.transAxes,
                 fontsize=6,
                 va="top",
@@ -755,7 +756,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ax.axis("off")
                 if col_idx >= len(acc_rows):
                     continue
-                _draw_donut_stamp(ax, acc_rows[col_idx])
+                self._drawDonutStamp(ax, acc_rows[col_idx], style, det_meta)
 
             ax_sp = fig.add_subplot(gs[row_idx, COL_SPACER])
             ax_sp.axis("off")
@@ -765,7 +766,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ax.axis("off")
                 if col_idx >= len(rej_rows):
                     continue
-                _draw_donut_stamp(ax, rej_rows[col_idx], rejected=True)
+                self._drawDonutStamp(ax, rej_rows[col_idx], style, det_meta, rejected=True)
 
         ax_legend = fig.add_subplot(gs[n_dets, :])
         ax_legend.axis("off")
@@ -805,6 +806,133 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         fname = f"donut_diag_{visit_id}.png"
         fig.savefig(fname, dpi=200, bbox_inches="tight")
         self.log.info("Saved diagnostic plot: %s", fname)
+
+    def _drawDonutStamp(self, ax, row, style: _StampStyle, det_meta: dict, rejected=False) -> None:
+        """One catalog row's cutout, with aperture and refcat overlays.
+
+        Reads the stamp out of ``row`` (whichever of the two stamp columns
+        `_StampStyle.from_catalog` resolved to) and annotates it in unbinned
+        pixel units scaled by ``style.px_scale``.  Distinct from the wavefront
+        plot's `_drawWfImage`, which draws an already-extracted array.
+
+        Was a closure over eight values before it became a method; those are
+        now `_StampStyle`, on the same reasoning that made
+        `cutDonutStamps._ExposureContext` a record.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes to draw into, already turned off by the caller.
+        row : astropy.table.Row
+            One catalog row.
+        style : `_StampStyle`
+            Visit-level drawing parameters.
+        det_meta : dict
+            ``catalog.meta["det_meta"]``, read for this detector's
+            ``n_quarter`` orientation -- which is per detector rather than per
+            row, so it cannot come off ``row``.
+        rejected : bool, optional
+            Draw the rejection cross and colour the caption.
+        """
+        import matplotlib.patches as mpatches
+
+        stamp = np.array(row[style.stamp_col])
+        vmin, vmax = np.nanpercentile(stamp, [1, 99])
+        edge = stamp.shape[0] // 2 + 0.5
+        ax.imshow(
+            stamp,
+            origin="lower",
+            vmin=vmin,
+            vmax=vmax,
+            cmap="gray",
+            aspect="equal",
+            extent=[-edge, edge, -edge, edge],
+        )
+
+        # The radius is per donut, so it rides the row; everything else shaping
+        # these circles is visit-level and lives on `style`.
+        donut_radius = row["donut_radius"].to_value(u.pix) * style.px_scale
+        for radius, color, linestyle in style.circle_radii(donut_radius):
+            ax.add_patch(
+                mpatches.Circle(
+                    (0, 0),
+                    radius,
+                    fill=False,
+                    edgecolor=color,
+                    linewidth=1.0,
+                    linestyle=linestyle,
+                    alpha=0.45,
+                    zorder=4,
+                )
+            )
+
+        if rejected:
+            ax.plot([-edge, edge], [-edge, edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
+            ax.plot([-edge, edge], [edge, -edge], color=_COLOR_REJECTED, lw=1.5, zorder=5)
+
+        self._drawRefcatOverlays(ax, row, style, det_meta)
+
+        # Pin the view to the stamp's own edges. Two reasons, and both bite:
+        # a stamp then fills its axes exactly and consumes the same figure area
+        # whatever its pixel count; and ax.plot of the refcat overlays triggers
+        # autoscale where add_patch alone does not, which would otherwise pull
+        # in the annulus circles and shrink the stamp only on rows that happen
+        # to carry overlays. A config-derived view (donut_radius *
+        # bkgAnnulusOuterFrac, say) would instead couple the drawn size to
+        # stampSize: at stampSize=215 the image overflows its axes by ~15%.
+        ax.set_xlim(-edge, edge)
+        ax.set_ylim(-edge, edge)
+
+        # Bottom-anchored just above the axes, so the block grows upward and
+        # never overlaps the stamp -- clearance is independent of stamp size.
+        # (Top-anchoring inside the axes hung the text down over the image; at
+        # stampSize 167 it overlapped by ~1pt, and worse for larger stamps.)
+        ax.annotate(
+            _donut_annotation(row, rejected),
+            xy=(0.05, 1.00),
+            xycoords="axes fraction",
+            xytext=(0, 1.0),
+            textcoords="offset points",
+            fontsize=_STAMP_TEXT_FONTSIZE,
+            va="bottom",
+            ha="left",
+            color=_COLOR_REJECTED if rejected else "black",
+            bbox=dict(boxstyle="square,pad=0", fc="none", ec="none"),
+            zorder=6,
+            annotation_clip=False,
+        )
+
+    def _drawRefcatOverlays(self, ax, row, style: _StampStyle, det_meta: dict) -> None:
+        """Mark the nearby photometric and astrometric refcat sources.
+
+        Both overlays are drawn in the stamp's rotated display frame, which is
+        what `_stamp_transform` builds; the two differ only in marker, colour
+        and label offset.
+        """
+        to_display = _stamp_transform(row, style, det_meta)
+        # The label y offsets differ in sign so a photometric and an
+        # astrometric label on one source do not land on top of each other.
+        overlays = (
+            ("photo", _COLOR_PHOTO_REFCAT, dict(marker="o", mfc="none"), 3, 3),
+            ("astrom", _COLOR_ASTROM_REFCAT, dict(marker="+"), 3, -5),
+        )
+        for kind, color, marker_kw, label_dx, label_dy in overlays:
+            count = min(row[f"n_nearby_{kind}"], _MAX_NEARBY)
+            dxs = row[f"nearby_{kind}_dx_det"][:count].to_value(u.pix)
+            dys = row[f"nearby_{kind}_dy_det"][:count].to_value(u.pix)
+            mags = row[f"nearby_{kind}_mag"][:count].to_value(u.mag)
+            for dx, dy, mag in zip(dxs, dys, mags):
+                tx, ty = to_display(dx, dy)
+                ax.plot(tx, ty, ms=6, mec=color, mew=0.8, zorder=3, **marker_kw)
+                if np.isfinite(mag):
+                    ax.text(
+                        tx + label_dx * style.px_scale,
+                        ty + label_dy * style.px_scale,
+                        f"{mag:.2f}",
+                        color=color,
+                        fontsize=_STAMP_TEXT_FONTSIZE,
+                        zorder=4,
+                    )
 
     def _saveWfDiagnosticPlot(self, catalog: QTable) -> None:
         """Save a WF diagnostic PNG modeled on the AOS donut-fits layout.
