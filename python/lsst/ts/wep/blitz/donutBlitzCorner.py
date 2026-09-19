@@ -744,10 +744,12 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             det = exp.getDetector()
             det_name_by_id[det.getId()] = det.getName()
             raw_by_name[det.getName()] = exp
-        ptc_by_name = {p._detectorName: p for p in ptc}
         flat_by_name = {f.getDetector().getName(): f for f in flat}
-        linearizer_by_name = {lin._detectorName: lin for lin in linearizer}
-        crosstalk_by_name = {ct._detectorName: ct for ct in crosstalk}
+        # `metadata["DET_NAME"]` is the only public way to ask an `IsrCalib`
+        # which detector it belongs to -- there is no `getDetectorName()`.
+        ptc_by_name = {p.metadata["DET_NAME"]: p for p in ptc}
+        linearizer_by_name = {lin.metadata["DET_NAME"]: lin for lin in linearizer}
+        crosstalk_by_name = {ct.metadata["DET_NAME"]: ct for ct in crosstalk}
 
         # Process whichever corner raws arrived. A partial set is normal
         # (dropped image, per-detector butler gap) and there is no reason to

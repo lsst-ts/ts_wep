@@ -45,6 +45,8 @@ def _build_annular_template(radius: float, inner_frac: float) -> np.ndarray:
 
 
 class BlitzDetectConfig(pexConfig.Config):
+    """Config for template cross-correlation donut detection."""
+
     edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Width of detector edge region to exclude from detection, in pixels.",
         dtype=int,
@@ -68,38 +70,46 @@ class BlitzDetectConfig(pexConfig.Config):
 
 
 class BlitzDetectTask(pipeBase.Task):
+    """Detect donuts via annular template cross-correlation.
+
+    Erodes the exposure border by ``edgeMargin`` pixels, bins the remainder by
+    ``detectionBinning``, and cross-correlates a binary annular template
+    against the histogram-equalized image. Peaks of the correlation are the
+    detections; no flux, shape or quality cut is applied here.
+
+    The template's central hole comes from the module-level instrument
+    (`_INSTRUMENT.obscuration`), not config -- it is fixed geometry, not
+    tunable.
+    """
+
     ConfigClass = BlitzDetectConfig
     _DefaultName = "blitzDetect"
     config: BlitzDetectConfig
-
-    """Detect donuts via annular template cross-correlation.
-
-    Erodes the post-ISR exposure border by ``edgeMargin`` pixels, then calls
-    `_detectPeaks`.
-
-    Parameters
-    ----------
-    exposure : Exposure
-        Science exposure; background is subtracted in-place.
-    donut_radius : float or None
-        Donut radius in pixels.  If None, uses the instrument's configured
-        donut radius.
-
-    Returns
-    -------
-    QTable
-        Columns ``donut_id``, ``centroid_x``, ``centroid_y`` in full-exposure
-        pixel coordinates.  Empty table if no peaks are found.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     def run(
         self,
         exposure: Exposure,
         donut_radius: float | None = None,
     ) -> pipeBase.Struct:
+        """Detect donut candidates by annular template cross-correlation.
+
+        Parameters
+        ----------
+        exposure : Exposure
+            Background-subtracted post-ISR science exposure, in un-binned
+            pixel coordinates. Not modified.
+        donut_radius : float or None, optional
+            Measured donut radius in un-binned pixels. If None, the nominal
+            `_INSTRUMENT.donutRadius` is used.
+
+        Returns
+        -------
+        pipeBase.Struct
+            ``detections`` : QTable
+                Columns ``donut_id`` (1-based), ``centroid_x``,
+                ``centroid_y``, in full-exposure un-binned pixel coordinates.
+                Empty table if no peaks are found.
+        """
         config = self.config
         if donut_radius is None:
             donut_radius = _INSTRUMENT.donutRadius

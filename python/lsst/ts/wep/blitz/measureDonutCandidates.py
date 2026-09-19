@@ -81,12 +81,18 @@ class MeasureDonutCandidatesConfig(pexConfig.Config):
 
 
 class MeasureDonutCandidatesTask(pipeBase.Task):
-    """Measure aperture flux and apply quality cuts to candidate donuts.
+    """Measure aperture flux and quality metrics for candidate donuts.
 
     For each candidate centroid, measures aperture flux and per-pixel noise
-    over precomputed annular masks, then keeps only donuts passing the
-    inner-fraction, outer-fraction, and SNR cuts. Survivors are returned
-    brightest-first, truncated to ``maxDonuts``.
+    over annular masks built once per call, then derives the ``inner_frac``,
+    ``outer_frac``, ``outer_sector_minmax_frac`` and ``snr`` metrics from
+    them.
+
+    Measurement only: no row is dropped, no ordering is imposed, and no
+    threshold is applied. `CutDonutStampsTask` is what cuts on these metrics
+    and truncates to its own ``maxDonuts``; a candidate too close to the
+    detector edge to cut a background annulus gets ``nan`` metrics and is
+    left in place for it to reject.
 
     The donut radius and obscuration come from the module-level instrument
     (`_INSTRUMENT`), not config -- they are fixed geometry, not tunable.

@@ -194,7 +194,7 @@ def _cutout_one_exposure(
             wcs_err = f'scatter {scatter_arcsec:.2f}" >= {max_fit_scatter}"'
     except Exception as exc:
         wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
-        logging.getLogger(__name__).warning(
+        _log.warning(
             _colorize(
                 "Astrometry solve failed for %s; falling back to blitz detections: %s",
                 _ANSI_BOLD,
@@ -271,9 +271,7 @@ def _cutout_one_exposure(
             )
             selections = blitz_detections[:0]  # empty; flows through to empty catalog
             selection_source = "blitz_failed"
-    logging.getLogger(__name__).info(
-        "Donut selection path: %s (%d sources)", selection_source, len(selections)
-    )
+    _log.info("Donut selection path: %s (%d sources)", selection_source, len(selections))
 
     # --- stamp cutting ---
     t6 = time.perf_counter()
