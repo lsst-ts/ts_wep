@@ -362,7 +362,7 @@ class CutDonutStampsTask(pipeBase.Task):
         return Donut(
             det_name=context.detector.getName(),
             stamp=stamp_ccs,
-            thx_ccs=field_angle[1],
+            thx_ccs=field_angle[1],  # DVCS -> CCS (sitcomtn-003)
             thy_ccs=field_angle[0],
             flux=row["flux"],
             band=context.band,

@@ -373,7 +373,8 @@ def _build_donut_catalog(
         Exactly one row per donut, keyed by ``(visit_id, det_name, donut_id)``.
 
         ``candidate`` is the one selection flag: the donut passed every
-        selection and quality cut.  The ``rejected_*`` booleans say why not
+        selection and quality cut.  The ``rejected_*`` booleans say why not.
+
         Whether a fit actually consumed the donut takes two columns:
 
         ``group_id`` empty
