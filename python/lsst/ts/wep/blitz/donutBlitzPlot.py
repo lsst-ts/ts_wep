@@ -142,6 +142,60 @@ _DONUT_LAYOUT = _DonutLayout(
 # so `cell` and `row_h` are equal by intent and not by coincidence.
 _WF_LAYOUT = _WfLayout(cell=1.0, row_h=1.0, hpad=0.08)
 
+# The Noll range every Zernike bar chart spans, regardless of the configured
+# `nollIndices`, so plots stay comparable across configs.
+_ZK_BAR_MIN, _ZK_BAR_MAX = 4, 28
+
+# Zernike families shaded behind the bars, as
+# ``(first Noll indices, color, alpha, indices spanned)``. An (n, |m|) doublet
+# occupies two adjacent Noll indices and so spans 2; the m=0 spherical terms
+# are single and span 1.
+#
+# Data rather than the run of `axvspan` calls this replaces, because that run
+# wrote two of the seven bands as raw axis coordinates (19.5-21.5 is j=20,
+# 26.5-28.5 is j=27) and the other five as `j - 0.5, j + 1.5` -- the same thing
+# spelled two ways, which is how one gets edited out of step with the other.
+_ZK_FAMILY_BANDS = (
+    ((4, 11, 22), "#000000", 0.15, 1),  # spherical, m=0
+    ((7, 16), _COLOR_COMA, 0.35, 2),  # coma, m=1
+    ((5, 12, 23), _COLOR_ASTIGMATISM, 0.25, 2),  # astigmatism, m=2
+    ((9, 18), _COLOR_TREFOIL, 0.25, 2),  # trefoil, m=3
+    ((14, 25), _COLOR_QUADRAFOIL, 0.25, 2),  # quadrafoil, m=4
+    ((20,), _COLOR_PENTAFOIL, 0.25, 2),  # pentafoil, m=5
+    ((27,), _COLOR_HEXAFOIL, 0.25, 2),  # hexafoil, m=6
+)
+
+
+def _hex_to_rgb(color: str) -> tuple[float, float, float]:
+    """A ``#rrggbb`` string as an RGB triple in 0-1."""
+    return tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))  # type: ignore[return-value]
+
+
+def _diverging_cmap(name: str, stops: tuple, colors: tuple):
+    """A `LinearSegmentedColormap` from normalized stops and hex colors."""
+    from matplotlib.colors import LinearSegmentedColormap
+
+    return LinearSegmentedColormap.from_list(name, list(zip(stops, [_hex_to_rgb(c) for c in colors])))
+
+
+# Diverging colormaps for the WF image panels, built once rather than per call.
+#
+# `_CMAP_DONUT` is deliberately *asymmetric*: its white point sits at 0.5 but a
+# sky-blue anchor sits at 0.45, just below it, which lifts the near-zero
+# negatives clear of the background so a faint donut edge stays visible.
+# `_CMAP_DONUT_SYM` is the plain symmetric version, used for residuals where an
+# asymmetry would read as structure that is not there.
+_CMAP_DONUT = _diverging_cmap(
+    "bwr_donut",
+    (0.0, 0.45, 0.5, 1.0),
+    (_COLOR_CMAP_NEG, _COLOR_CMAP_MID, "#FFFFFF", _COLOR_CMAP_POS),
+)
+_CMAP_DONUT_SYM = _diverging_cmap(
+    "bwr_donut_sym",
+    (0.0, 0.5, 1.0),
+    (_COLOR_CMAP_NEG, "#FFFFFF", _COLOR_CMAP_POS),
+)
+
 
 @dataclass(frozen=True)
 class _StampStyle:
@@ -304,6 +358,74 @@ class _WfGroup:
         scalars are shared by every donut in it, so each copy keeps them.
         """
         return [replace(self, donuts=[donut]) for donut in self.donuts]
+
+
+@dataclass(frozen=True)
+class _RowHalf:
+    """One side of focus on one WF plot row: four panels' worth of inputs.
+
+    A row is an intra half and an extra half, each drawing image, model,
+    residual and Zernike bar.  This is what the drawing code used to unpack
+    into two parallel sets of ``intra_*``/``extra_*`` locals before passing
+    nine positional arguments per side; `from_group` builds one instead.
+
+    A blank half -- padding, or a side whose group has no donut of that defocal
+    type -- is a `_RowHalf` with ``img=None``, not a `None`.  That is what lets
+    the drawing code ask one question (``half.img is None``) instead of
+    threading `None` checks through every field.
+
+    Attributes
+    ----------
+    img, model : np.ndarray or None
+        The binned donut and the fitted model.  ``img`` None means a blank
+        half; ``model`` None means there was no fit, which drops the residual
+        panel and the Zernike bar.
+    det_hdr : str
+        Column header, non-empty only on a corner's first row.
+    donut_id : int or None
+        Annotated on the image panel.
+    fwhm, blend_frac : float
+        Annotated on the model and residual panels; NaN to omit.
+    zk_dev : np.ndarray
+        Noll-indexed deviations for the bar chart, `_NO_ZK` if unfitted.
+    bar_label : str
+        The fit's timing/status inset on the bar.
+    """
+
+    img: np.ndarray | None
+    model: np.ndarray | None
+    det_hdr: str
+    donut_id: int | None
+    fwhm: float
+    blend_frac: float
+    zk_dev: np.ndarray
+    bar_label: str
+
+    @classmethod
+    def from_group(cls, group: "_WfGroup | None", defocal: str, det_hdr: str) -> "_RowHalf":
+        """Pick the ``defocal`` donut out of ``group``, flat for drawing.
+
+        ``group`` is None for a padded layout row.  A paired group holds both
+        defocal types and each half picks out its own; an exploded or unfitted
+        group holds a single donut, matching only the side it belongs to -- so
+        a miss is normal and yields a blank half, not an error.
+        """
+        fit_info = group.fit_info if group is not None else _WfFitInfo.not_fitted()
+        success = group.success if group is not None else False
+        # nfev == 0 means the fit never iterated, which reads as "x0" rather
+        # than as a failure: see `_WfFitInfo.not_fitted`.
+        status = "x0" if fit_info.nfev == 0 else ("ok" if success else "fail")
+        donut = next((d for d in group.donuts if d.defocal == defocal), None) if group is not None else None
+        return cls(
+            img=donut.img if donut else None,
+            model=donut.model_img if donut else None,
+            det_hdr=det_hdr,
+            donut_id=donut.donut_id if donut else None,
+            fwhm=fit_info.fwhm,
+            blend_frac=donut.blend_frac if donut else float("nan"),
+            zk_dev=group.zk_dev if group is not None else _NO_ZK,
+            bar_label=f"t={fit_info.elapsed:.1f}s {status} nfev={fit_info.nfev}",
+        )
 
 
 def _meta_value(meta: dict, key: str, unit: u.UnitBase) -> float:
@@ -574,6 +696,99 @@ def _wf_groups_from_catalog(catalog: QTable) -> tuple[list[_WfGroup], list[_WfGr
         )
 
     return plottable, unfitted
+
+
+def _corner_of(group: _WfGroup) -> str:
+    """Which corner raft a group belongs to, by its first recognized detector.
+
+    Falls back to the first corner rather than raising: the 2x2 grid has to be
+    drawn regardless, and a group whose detectors are all unrecognized is a
+    catalog problem this plot should not die on.
+    """
+    for name in group.det_names:
+        if str(name) in CORNER_BY_DET_NAME:
+            return CORNER_BY_DET_NAME[str(name)]
+    # `CORNER_PAIRS` is keyed by corner name, so take its first *key*.
+    return next(iter(CORNER_PAIRS))
+
+
+def _pair_up(groups: list[_WfGroup]) -> list[tuple]:
+    """Lay single-donut groups out as ``(intra, extra)`` plot rows.
+
+    Only for modes whose groups carry no intra/extra pairing of their own: the
+    pairing here is cosmetic, so rows are matched by position and the shorter
+    side padded with ``None`` to keep every donut visible.
+    """
+    intras = [g for g in groups if g.donuts[0].defocal == "intra"]
+    extras = [g for g in groups if g.donuts[0].defocal == "extra"]
+    return [
+        (intras[i] if i < len(intras) else None, extras[i] if i < len(extras) else None)
+        for i in range(max(len(intras), len(extras)))
+    ]
+
+
+def _wf_row_pairs(
+    plottable: list[_WfGroup],
+    unfitted: list[_WfGroup],
+    wf_mode: str,
+    max_donuts: int,
+) -> dict[str, list[tuple]]:
+    """Assign every group to a corner and a plot row, padded to a fixed height.
+
+    Pure layout, and the one part of the WF plot where a real bug could hide,
+    which is why it is a function rather than three blocks inside the drawing
+    loop.
+
+    Every corner comes back with the *same* number of rows: ``max_donuts``, or
+    more if some corner exceeded it.  Padding to a config-derived height rather
+    than to the tallest corner is what makes two plots of one exposure
+    blinkable across fitting modes -- figure dimensions and axes positions then
+    depend only on config, not on how many donuts a mode happened to fit.  The
+    ``or more`` half matters too: a corner with more fits than ``maxDonuts``
+    grows the layout instead of losing rows.
+
+    Parameters
+    ----------
+    plottable, unfitted : list of `_WfGroup`
+        Fitted groups, and surplus donuts no fit claimed.
+    wf_mode : str
+        ``"paired"`` groups already hold both sides of focus, so each supplies
+        a whole row; any other mode's groups are exploded to one donut each and
+        paired for layout only.
+    max_donuts : int
+        ``meta["max_donuts"]``, the per-corner row count to pad to.
+
+    Returns
+    -------
+    dict [str, list of tuple]
+        Corner name to a list of ``(intra, extra)`` halves, either of which may
+        be ``None`` for a blank.  One key per corner in `CORNER_PAIRS`, always.
+    """
+    by_corner: dict[str, list[_WfGroup]] = {c: [] for c in CORNER_PAIRS}
+    for group in plottable:
+        by_corner[_corner_of(group)].append(group)
+
+    unfitted_by_corner: dict[str, list[_WfGroup]] = {c: [] for c in CORNER_PAIRS}
+    for group in unfitted:
+        unfitted_by_corner[_corner_of(group)].append(group)
+
+    row_pairs: dict[str, list[tuple]] = {}
+    for corner, groups in by_corner.items():
+        if wf_mode == "paired":
+            # The group *is* an intra/extra pair, so it supplies both halves of
+            # the row; the donut of each defocal type is picked out when drawn.
+            fit_rows = [(g, g) for g in groups]
+        else:
+            # These groups don't pair donuts, so flatten to one record per
+            # donut and pair for layout only. Exploding is a no-op for
+            # "unpaired" (one donut per group already).
+            fit_rows = _pair_up([s for g in groups for s in g.exploded()])
+        # Surplus donuts have no partner by construction, so they lay out
+        # positionally below the fitted rows, one side of each row blank.
+        row_pairs[corner] = fit_rows + _pair_up(unfitted_by_corner[corner])
+
+    max_rows = max([max_donuts, 1] + [len(v) for v in row_pairs.values()])
+    return {c: pairs + [(None, None)] * (max_rows - len(pairs)) for c, pairs in row_pairs.items()}
 
 
 class DonutBlitzPlotConnections(
@@ -934,6 +1149,135 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         zorder=4,
                     )
 
+    def _drawWfImage(self, ax, img, cmap, vmin, vmax, label="") -> None:
+        """One binned image or fitted model under a caller-chosen colormap.
+
+        Takes the array and its scaling from the caller, since a row draws
+        image, model and residual with shared limits.  Distinct from
+        `_drawDonutStamp`, which reads a catalog row.
+        """
+        ax.imshow(
+            img,
+            origin="lower",
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            interpolation="nearest",
+            aspect="equal",
+        )
+        ax.set_xticks([])
+        ax.set_yticks([])
+        if label:
+            ax.set_title(label, fontsize=5, pad=1)
+
+    def _drawZkBar(self, ax, zk_dev, inset_label="") -> None:
+        """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels.
+
+        ``zk_dev`` is Noll-indexed (element j is Noll j) and in µm; it may be
+        shorter than `_ZK_BAR_MAX` (or empty) since it stops at the highest
+        fitted Noll index.
+
+        Always spans `_ZK_BAR_MIN`..`_ZK_BAR_MAX` regardless of the configured
+        ``nollIndices`` so plots stay comparable across configs; indices that
+        were not fitted plot as zero rather than dropping out.
+        """
+        bar_noll = list(range(_ZK_BAR_MIN, _ZK_BAR_MAX + 1))
+        values = [zk_dev[j] if j < len(zk_dev) and np.isfinite(zk_dev[j]) else 0.0 for j in bar_noll]
+        ax.bar(bar_noll, values, color="k", width=0.8)
+        ax.axhline(0, color="k", linewidth=0.4)
+        ax.set_ylim(-1.0, 1.0)
+        ax.set_xlim(_ZK_BAR_MIN - 0.5, _ZK_BAR_MAX + 0.5)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for indices, color, alpha, spanned in _ZK_FAMILY_BANDS:
+            for j in indices:
+                ax.axvspan(j - 0.5, j + spanned - 0.5, color=color, alpha=alpha, ec="none")
+        if inset_label:
+            ax.text(
+                0.03,
+                0.97,
+                inset_label,
+                transform=ax.transAxes,
+                fontsize=4,
+                va="top",
+                ha="left",
+                bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
+            )
+
+    def _drawWfRowHalf(self, fig, inner, row_idx: int, col_start: int, half: _RowHalf) -> None:
+        """Draw one side of focus on one row: image, model, residual, bar.
+
+        Four grid columns starting at ``col_start``.  A blank half still claims
+        all four axes and turns them off, because the corner grid is padded to
+        a fixed height and the axes positions have to stay put -- see
+        `_wf_row_pairs`.
+
+        The image and model share one colour scale so they are visually
+        comparable; the residual gets its own, and a symmetric colormap, since
+        its scale is unrelated and usually much smaller.
+        """
+        if half.img is None:
+            for offset in range(4):
+                ax = fig.add_subplot(inner[row_idx, col_start + offset])
+                ax.axis("off")
+                if offset == 0 and half.det_hdr:
+                    ax.set_title(half.det_hdr, fontsize=5, pad=1)
+            return
+
+        has_model = half.model is not None
+        # `or 1.0` catches an all-zero or all-NaN percentile, which would
+        # otherwise make vmin == vmax and render a uniform panel.
+        vmax = np.nanpercentile(np.abs(half.img), 99) or 1.0
+        resid = (half.img - half.model) if has_model else None
+        vmax_resid = (np.nanpercentile(np.abs(resid), 99) or 1.0) if has_model else 1.0
+
+        # The annotation each panel carries, if its value is finite: the
+        # donut's id on the image, the fitted blur on the model, the blend
+        # fraction on the residual.
+        panels = (
+            (half.img, _CMAP_DONUT, vmax, f"id={half.donut_id}" if half.donut_id is not None else ""),
+            (
+                half.model,
+                _CMAP_DONUT,
+                vmax,
+                f"blur={half.fwhm:.2f}arcsec" if np.isfinite(half.fwhm) else "",
+            ),
+            (
+                resid,
+                _CMAP_DONUT_SYM,
+                vmax_resid,
+                f"blend={half.blend_frac:.3f}" if np.isfinite(half.blend_frac) else "",
+            ),
+        )
+        for offset, (img, cmap, limit, annotation) in enumerate(panels):
+            ax = fig.add_subplot(inner[row_idx, col_start + offset])
+            # Only the leftmost panel of a row carries the column header.
+            label = half.det_hdr if offset == 0 else ""
+            if img is None:
+                ax.axis("off")
+                if label:
+                    ax.set_title(label, fontsize=5, pad=1)
+                continue
+            self._drawWfImage(ax, img, cmap, -limit, limit, label=label)
+            if annotation:
+                ax.text(
+                    0.02,
+                    0.98,
+                    annotation,
+                    transform=ax.transAxes,
+                    fontsize=4,
+                    color="k",
+                    va="top",
+                    ha="left",
+                    bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
+                )
+
+        ax_bar = fig.add_subplot(inner[row_idx, col_start + 3])
+        if has_model:
+            self._drawZkBar(ax_bar, half.zk_dev, inset_label=half.bar_label)
+        else:
+            ax_bar.axis("off")
+
     def _saveWfDiagnosticPlot(self, catalog: QTable) -> None:
         """Save a WF diagnostic PNG modeled on the AOS donut-fits layout.
 
@@ -947,7 +1291,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         catalog : QTable
             Per-donut table from ``_buildCatalog``.
         """
-        from matplotlib.colors import LinearSegmentedColormap
         from matplotlib.figure import Figure
         from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
@@ -962,7 +1305,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         cutout_elapsed = _meta_value(meta, "cutout_elapsed", u.s)
         danish_elapsed = _meta_value(meta, "danish_elapsed", u.s)
         wf_mode = meta["wf_mode"]
-        ZK_MIN, ZK_MAX = 4, 28
 
         plottable, unfitted = _wf_groups_from_catalog(catalog)
 
@@ -983,151 +1325,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             det_id = det_id_of.get(name)
             return name if det_id is None else f"{name} ({det_id})"
 
-        def _corner_of(r):
-            for s in r.det_names:
-                if str(s) in CORNER_BY_DET_NAME:
-                    return CORNER_BY_DET_NAME[str(s)]
-            return corners[0]
-
-        # 4-stop diverging colormap: blue → white (zero) → vermillion.
-        # Anchors: -vmax=blue, -vmax/10=sky blue, 0=white, +vmax=vermillion.
-        # Normalized positions over [-vmax, vmax]: 0.0, 0.45, 0.5, 1.0.
-        def _hex_to_rgb(h):
-            return tuple(int(h[i : i + 2], 16) / 255 for i in (1, 3, 5))
-
-        cmap_bwr = LinearSegmentedColormap.from_list(
-            "bwr_donut",
-            list(
-                zip(
-                    [0.0, 0.45, 0.5, 1.0],
-                    [
-                        _hex_to_rgb(h)
-                        for h in (
-                            _COLOR_CMAP_NEG,
-                            _COLOR_CMAP_MID,
-                            "#FFFFFF",
-                            _COLOR_CMAP_POS,
-                        )
-                    ],
-                )
-            ),
-        )
-        cmap_bwr_sym = LinearSegmentedColormap.from_list(
-            "bwr_donut_sym",
-            list(
-                zip(
-                    [0.0, 0.5, 1.0],
-                    [_hex_to_rgb(h) for h in (_COLOR_CMAP_NEG, "#FFFFFF", _COLOR_CMAP_POS)],
-                )
-            ),
-        )
-
-        def _draw_wf_image(ax, img, cmap, vmin, vmax, label=""):
-            """One binned image or fitted model under a caller-chosen colormap.
-
-            Takes the array and its scaling from the caller, since a row draws
-            image, model and residual with shared limits.  Distinct from the
-            donut plot's `_draw_donut_stamp`, which reads a catalog row.
-            """
-            ax.imshow(
-                img, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax, interpolation="nearest", aspect="equal"
-            )
-            ax.set_xticks([])
-            ax.set_yticks([])
-            if label:
-                ax.set_title(label, fontsize=5, pad=1)
-
-        def _draw_bar(ax, zk_dev, inset_label=""):
-            """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels.
-
-            ``zk_dev`` is Noll-indexed (element j is Noll j) and in µm; it may
-            be shorter than ``ZK_MAX`` (or empty) since it stops at the highest
-            fitted Noll index.
-
-            Always spans ZK_MIN..ZK_MAX regardless of the configured
-            ``nollIndices`` so plots stay comparable across configs; indices
-            that were not fitted plot as zero rather than dropping out.
-            """
-            bar_noll = [j for j in range(ZK_MIN, ZK_MAX + 1)]
-            vals = [zk_dev[j] if j < len(zk_dev) and np.isfinite(zk_dev[j]) else 0.0 for j in bar_noll]
-            ax.bar(bar_noll, vals, color="k", width=0.8)
-            ax.axhline(0, color="k", linewidth=0.4)
-            ax.set_ylim(-1.0, 1.0)
-            ax.set_xlim(ZK_MIN - 0.5, ZK_MAX + 0.5)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            for j in [4, 11, 22]:  # spherical (m=0)
-                ax.axvspan(j - 0.5, j + 0.5, color="#000000", alpha=0.15, ec="none")
-            for j in [7, 16]:  # coma (m=1)
-                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_COMA, alpha=0.35, ec="none")
-            for j in [5, 12, 23]:  # astigmatism (m=2)
-                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_ASTIGMATISM, alpha=0.25, ec="none")
-            for j in [9, 18]:  # trefoil (m=3)
-                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_TREFOIL, alpha=0.25, ec="none")
-            for j in [14, 25]:  # quadrafoil (m=4)
-                ax.axvspan(j - 0.5, j + 1.5, color=_COLOR_QUADRAFOIL, alpha=0.25, ec="none")
-            ax.axvspan(19.5, 21.5, color=_COLOR_PENTAFOIL, alpha=0.25, ec="none")  # pentafoil (m=5)
-            ax.axvspan(26.5, 28.5, color=_COLOR_HEXAFOIL, alpha=0.25, ec="none")  # hexafoil (m=6)
-            if inset_label:
-                ax.text(
-                    0.03,
-                    0.97,
-                    inset_label,
-                    transform=ax.transAxes,
-                    fontsize=4,
-                    va="top",
-                    ha="left",
-                    bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
-                )
-
-        by_corner: dict[str, list] = {c: [] for c in corners}
-        for r in plottable:
-            by_corner[_corner_of(r)].append(r)
-
-        unfitted_by_corner: dict[str, list] = {c: [] for c in corners}
-        for r in unfitted:
-            unfitted_by_corner[_corner_of(r)].append(r)
-
-        def _pair_up(records):
-            """Lay single-donut records out as (intra, extra) plot rows.
-
-            Only for modes whose groups carry no intra/extra pairing of their
-            own: the pairing here is cosmetic, so rows are matched by position
-            and the shorter side padded with None to keep every donut visible.
-            """
-            intras = [r for r in records if r.donuts[0].defocal == "intra"]
-            extras = [r for r in records if r.donuts[0].defocal == "extra"]
-            return [
-                (intras[i] if i < len(intras) else None, extras[i] if i < len(extras) else None)
-                for i in range(max(len(intras), len(extras)))
-            ]
-
-        row_pairs: dict[str, list[tuple]] = {}
-        for corner, corner_results in by_corner.items():
-            if wf_mode == "paired":
-                # The group *is* an intra/extra pair, so it supplies both
-                # halves of the row; the donut of each defocal type is picked
-                # out below.
-                fit_rows = [(r, r) for r in corner_results]
-            else:
-                # These groups don't pair donuts, so flatten to one record per
-                # donut and pair for layout only. Exploding is a no-op for
-                # "unpaired" (one donut per group already).
-                fit_rows = _pair_up([s for r in corner_results for s in r.exploded()])
-            # Surplus donuts have no partner by construction, so they lay out
-            # positionally below the fitted rows, one side of each row blank.
-            row_pairs[corner] = fit_rows + _pair_up(unfitted_by_corner[corner])
+        row_pairs = _wf_row_pairs(plottable, unfitted, wf_mode, meta["max_donuts"])
+        max_rows = len(next(iter(row_pairs.values())))
 
         layout = _WF_LAYOUT
-        # Always lay out maxDonuts rows per corner, padding short corners with
-        # blank rows, so figure dimensions and axes positions depend only on
-        # config -- not on how many donuts a given mode happened to fit. This
-        # makes plots for the same exposure blinkable across fitting modes.
-        # Never fewer rows than any corner actually has, so a corner with more
-        # fits than maxDonuts grows the layout rather than losing rows.
-        max_rows = max([meta["max_donuts"], 1] + [len(v) for v in row_pairs.values()])
-        for corner, pairs in row_pairs.items():
-            row_pairs[corner] = pairs + [(None, None)] * (max_rows - len(pairs))
 
         corner_w = 10 * layout.cell
         fig_w = 2 * corner_w + 0.3
@@ -1158,137 +1359,20 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 wspace=0.0,
                 width_ratios=[1, 1, 1, 2, 1, 1, 1, 2],
             )
-            sw1 = _det_label(f"{corner}_SW1")
-            sw0 = _det_label(f"{corner}_SW0")
+            # Only the first row of a corner carries the detector headers.
+            headers = {
+                "intra": f"intra {_det_label(f'{corner}_SW1')}",
+                "extra": f"extra {_det_label(f'{corner}_SW0')}",
+            }
 
-            def _rec_info(r):
-                """A row half's fit scalars, with the blank-row defaults.
-
-                ``r`` is None for a padded layout row, which reports the same
-                not-fitted values a record with no fit carries.
-                """
-                if r is None:
-                    return _WfFitInfo.not_fitted(), False
-                return r.fit_info, r.success
-
-            def _donut_of(r, defocal):
-                """The donut of one defocal type, or None if the half is blank.
-
-                A paired group holds both types and each half picks out its
-                own; an exploded or unfitted group holds a single donut, which
-                matches only the side it belongs to.
-                """
-                if r is None:
-                    return None
-                return next((d for d in r.donuts if d.defocal == defocal), None)
-
-            for row_idx, (r_intra, r_extra) in enumerate(pairs):
-                intra_rec = _donut_of(r_intra, "intra")
-                fit_i, success_i = _rec_info(r_intra)
-                zk_dev_i = r_intra.zk_dev if r_intra is not None else _NO_ZK
-
-                extra_rec = _donut_of(r_extra, "extra")
-                fit_e, success_e = _rec_info(r_extra)
-                zk_dev_e = r_extra.zk_dev if r_extra is not None else _NO_ZK
-
-                intra_img = intra_rec.img if intra_rec else None
-                intra_mod = intra_rec.model_img if intra_rec else None
-                intra_donut_id = intra_rec.donut_id if intra_rec else None
-                intra_blend = intra_rec.blend_frac if intra_rec else float("nan")
-
-                extra_img = extra_rec.img if extra_rec else None
-                extra_mod = extra_rec.model_img if extra_rec else None
-                extra_donut_id = extra_rec.donut_id if extra_rec else None
-                extra_blend = extra_rec.blend_frac if extra_rec else float("nan")
-
-                def _bar_label(fit, success):
-                    status = "x0" if fit.nfev == 0 else ("ok" if success else "fail")
-                    return f"t={fit.elapsed:.1f}s {status} nfev={fit.nfev}"
-
-                intra_label = _bar_label(fit_i, success_i)
-                extra_label = _bar_label(fit_e, success_e)
-                intra_hdr = f"intra {sw1}" if row_idx == 0 else ""
-                extra_hdr = f"extra {sw0}" if row_idx == 0 else ""
-
-                def _triplet_and_bar(
-                    col_start,
-                    data,
-                    model,
-                    det_hdr,
-                    label,
-                    donut_id,
-                    fwhm,
-                    zk_dev,
-                    blend_frac_val=float("nan"),
-                ):
-                    if data is not None:
-                        vmax = np.nanpercentile(np.abs(data), 99) or 1.0
-                        has_model = model is not None
-                        resid = (data - model) if has_model else None
-                        vmax_r = (np.nanpercentile(np.abs(resid), 99) or 1.0) if has_model else 1.0
-                        for ci, (img, cmap, vmin, vmx) in enumerate(
-                            [
-                                (data, cmap_bwr, -vmax, vmax),
-                                (model if has_model else None, cmap_bwr, -vmax, vmax),
-                                (resid, cmap_bwr_sym, -vmax_r, vmax_r),
-                            ]
-                        ):
-                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
-                            lbl = det_hdr if ci == 0 else ""
-                            if img is None:
-                                ax.axis("off")
-                                if lbl:
-                                    ax.set_title(lbl, fontsize=5, pad=1)
-                                continue
-                            _draw_wf_image(ax, img, cmap, vmin, vmx, label=lbl)
-                            ann_kw = dict(
-                                transform=ax.transAxes,
-                                fontsize=4,
-                                color="k",
-                                va="top",
-                                ha="left",
-                                bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
-                            )
-                            if ci == 0 and donut_id is not None:
-                                ax.text(0.02, 0.98, f"id={donut_id}", **ann_kw)
-                            if ci == 1 and np.isfinite(fwhm):
-                                ax.text(0.02, 0.98, f"blur={fwhm:.2f}arcsec", **ann_kw)
-                            if ci == 2 and np.isfinite(blend_frac_val):
-                                ax.text(0.02, 0.98, f"blend={blend_frac_val:.3f}", **ann_kw)
-                        ax_bar = fig.add_subplot(inner[row_idx, col_start + 3])
-                        if has_model:
-                            _draw_bar(ax_bar, zk_dev, inset_label=label)
-                        else:
-                            ax_bar.axis("off")
-                    else:
-                        for ci in range(4):
-                            ax = fig.add_subplot(inner[row_idx, col_start + ci])
-                            ax.axis("off")
-                            if ci == 0 and det_hdr:
-                                ax.set_title(det_hdr, fontsize=5, pad=1)
-
-                _triplet_and_bar(
-                    0,
-                    intra_img,
-                    intra_mod,
-                    intra_hdr,
-                    intra_label,
-                    intra_donut_id,
-                    fit_i.fwhm,
-                    zk_dev_i,
-                    intra_blend,
-                )
-                _triplet_and_bar(
-                    4,
-                    extra_img,
-                    extra_mod,
-                    extra_hdr,
-                    extra_label,
-                    extra_donut_id,
-                    fit_e.fwhm,
-                    zk_dev_e,
-                    extra_blend,
-                )
+            for row_idx, (group_intra, group_extra) in enumerate(pairs):
+                for col_start, defocal, group in ((0, "intra", group_intra), (4, "extra", group_extra)):
+                    half = _RowHalf.from_group(
+                        group,
+                        defocal,
+                        det_hdr=headers[defocal] if row_idx == 0 else "",
+                    )
+                    self._drawWfRowHalf(fig, inner, row_idx, col_start, half)
 
         proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
         bt = butler_times or {}
