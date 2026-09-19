@@ -29,6 +29,7 @@ builder rather than by hand, so the two stay pinned to the same schema.
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 
 import numpy as np
 
@@ -47,12 +48,15 @@ from lsst.ts.wep.blitz.donutBlitzPlot import (
     _PANEL_ERROR_CHARS,
     DonutBlitzPlotConfig,
     DonutBlitzPlotTask,
+    _corner_of,
     _detector_stats_lines,
     _donut_annotation,
     _donut_rows_by_detector,
+    _RowHalf,
     _wf_groups_from_catalog,
+    _wf_row_pairs,
 )
-from lsst.ts.wep.blitz.utils import _CUTOUT_STAGE_KEYS, _ZK_JMAX
+from lsst.ts.wep.blitz.utils import _CUTOUT_STAGE_KEYS, _ZK_JMAX, CORNER_PAIRS
 
 _VISIT_ID = 2026070900036
 _STAMP_SIZE = 167
@@ -356,6 +360,107 @@ class TestDonutAnnotation(unittest.TestCase):
         row = self._row()
         row["donut_id"] = 0
         self.assertEqual(_donut_annotation(row, rejected=False).split("\n")[2], "")
+
+
+class TestWfRowPairs(unittest.TestCase):
+    """Corner assignment and row padding for the WF plot's 2x2 grid.
+
+    Pure layout, and the one part of that plot where a real bug could hide, so
+    it is pinned directly rather than through a rendered figure.
+    """
+
+    def testEveryCornerGetsTheSameRowCount(self) -> None:
+        """Equal heights are what make two modes' plots blinkable.
+
+        Padding to a config-derived height rather than to the tallest corner is
+        the property: figure dimensions and axes positions then depend only on
+        config, not on how many donuts a mode happened to fit.
+        """
+        plottable, unfitted = _wf_groups_from_catalog(_catalog())
+        row_pairs = _wf_row_pairs(plottable, unfitted, "paired", max_donuts=8)
+        self.assertEqual(sorted(row_pairs), sorted(CORNER_PAIRS))
+        self.assertEqual({len(v) for v in row_pairs.values()}, {8})
+
+    def testACornerExceedingMaxDonutsGrowsTheLayout(self) -> None:
+        """More fits than maxDonuts must grow the grid, not lose rows."""
+        plottable, unfitted = _wf_groups_from_catalog(_catalog())
+        # One real group in R00; ask for fewer rows than that.
+        row_pairs = _wf_row_pairs(plottable, unfitted, "paired", max_donuts=0)
+        # max_donuts=0 floors at 1, and R00 has a fitted row plus a surplus.
+        self.assertEqual({len(v) for v in row_pairs.values()}, {2})
+        populated = [p for p in row_pairs["R00"] if p != (None, None)]
+        self.assertEqual(len(populated), 2)
+
+    def testPairedModeGivesOneGroupBothHalvesOfARow(self) -> None:
+        plottable, _ = _wf_groups_from_catalog(_catalog())
+        row_pairs = _wf_row_pairs(plottable, [], "paired", max_donuts=1)
+        intra, extra = row_pairs["R00"][0]
+        self.assertIs(intra, extra)
+
+    def testUnpairedModeExplodesAndPairsByPosition(self) -> None:
+        """A non-paired mode's groups are split per donut, then laid out.
+
+        The pairing is cosmetic in that case, so the two halves must be
+        *different* single-donut records -- the opposite of paired mode above.
+        """
+        plottable, _ = _wf_groups_from_catalog(_catalog())
+        row_pairs = _wf_row_pairs(plottable, [], "unpaired", max_donuts=1)
+        intra, extra = row_pairs["R00"][0]
+        self.assertIsNot(intra, extra)
+        self.assertEqual(len(intra.donuts), 1)
+        self.assertEqual(len(extra.donuts), 1)
+        self.assertEqual(intra.donuts[0].defocal, "intra")
+        self.assertEqual(extra.donuts[0].defocal, "extra")
+
+    def testUnrecognizedDetectorFallsBackRatherThanRaising(self) -> None:
+        """The grid has to be drawn whatever the catalog names.
+
+        `_corner_of` falling back is deliberate: a group whose detectors are
+        all unrecognized is a catalog problem the plot should survive.
+        """
+        plottable, _ = _wf_groups_from_catalog(_catalog())
+        stray = replace(plottable[0], det_names=["NOT_A_CORNER"])
+        row_pairs = _wf_row_pairs([stray], [], "paired", max_donuts=1)
+        self.assertEqual(_corner_of(stray), next(iter(CORNER_PAIRS)))
+        self.assertNotEqual(row_pairs[next(iter(CORNER_PAIRS))][0], (None, None))
+
+
+class TestRowHalf(unittest.TestCase):
+    """The per-side flattening the WF drawing code consumes."""
+
+    def _group(self):
+        plottable, _ = _wf_groups_from_catalog(_catalog())
+        return plottable[0]
+
+    def testBlankHalfIsARecordNotNone(self) -> None:
+        """A padded row still yields a `_RowHalf`, with img None.
+
+        That is what lets the drawing code ask one question instead of
+        threading None checks through every field.
+        """
+        half = _RowHalf.from_group(None, "intra", det_hdr="hdr")
+        self.assertIsNone(half.img)
+        self.assertIsNone(half.model)
+        self.assertIsNone(half.donut_id)
+        self.assertEqual(half.det_hdr, "hdr")
+        self.assertEqual(len(half.zk_dev), 0)
+        # nfev=0 on a never-fitted half, so the label reads x0.
+        self.assertIn("x0", half.bar_label)
+
+    def testAGroupWithNoDonutOfThatSideIsAlsoBlank(self) -> None:
+        """An exploded or unfitted group matches only its own side."""
+        single = replace(self._group(), donuts=[self._group().donuts[0]])
+        wrong_side = "extra" if single.donuts[0].defocal == "intra" else "intra"
+        self.assertIsNone(_RowHalf.from_group(single, wrong_side, "").img)
+        self.assertIsNotNone(_RowHalf.from_group(single, single.donuts[0].defocal, "").img)
+
+    def testBarLabelReportsStatusAndNfev(self) -> None:
+        group = self._group()
+        half = _RowHalf.from_group(group, "intra", "")
+        self.assertRegex(half.bar_label, r"^t=[\d.]+s (ok|fail|x0) nfev=\d+$")
+        # A fit that ran but failed says so, rather than reading as x0.
+        failed = replace(group, success=False)
+        self.assertIn("fail", _RowHalf.from_group(failed, "intra", "").bar_label)
 
 
 class TestWfGroupsFromCatalog(unittest.TestCase):
