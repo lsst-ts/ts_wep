@@ -44,11 +44,15 @@ from lsst.ts.wep.blitz.dataStructures import (
     WfGroupResult,
 )
 from lsst.ts.wep.blitz.donutBlitzPlot import (
+    _PANEL_ERROR_CHARS,
     DonutBlitzPlotConfig,
     DonutBlitzPlotTask,
+    _detector_stats_lines,
+    _donut_annotation,
+    _donut_rows_by_detector,
     _wf_groups_from_catalog,
 )
-from lsst.ts.wep.blitz.utils import _ZK_JMAX
+from lsst.ts.wep.blitz.utils import _CUTOUT_STAGE_KEYS, _ZK_JMAX
 
 _VISIT_ID = 2026070900036
 _STAMP_SIZE = 167
@@ -231,6 +235,127 @@ class TestDonutBlitzPlotTask(unittest.TestCase):
                 self.assertEqual(os.listdir(tmp), [])
             finally:
                 os.chdir(cwd)
+
+
+class TestDonutRowsByDetector(unittest.TestCase):
+    """The per-detector accepted/rejected split the donut plot lays out."""
+
+    def testSplitsOnCandidateNotOnWhetherAFitUsedTheDonut(self) -> None:
+        """A candidate no fit claimed still belongs in the accepted panel.
+
+        `_catalog` gives R00_SW0 two fit-consumed donuts' worth of rows plus a
+        paired-mode surplus candidate and one SNR-rejected donut, so this pins
+        the distinction that makes the split "candidate" rather than "fitted".
+        """
+        by_det = _donut_rows_by_detector(_catalog())
+        self.assertEqual([name for name, _, _ in by_det], ["R00_SW0", "R00_SW1"])
+        accepted = {name: acc for name, acc, _ in by_det}
+        rejected = {name: rej for name, _, rej in by_det}
+        # SW0 carries donut 1 (fitted) and donut 3 (surplus, never fitted).
+        self.assertEqual(sorted(accepted["R00_SW0"]["donut_id"].tolist()), [1, 3])
+        self.assertEqual(rejected["R00_SW0"]["donut_id"].tolist(), [4])
+        self.assertEqual(rejected["R00_SW1"]["donut_id"].tolist(), [])
+
+    def testDetectorsAreSortedAndEmptyOnesAbsent(self) -> None:
+        by_det = _donut_rows_by_detector(_catalog())
+        names = [name for name, _, _ in by_det]
+        self.assertEqual(names, sorted(names))
+        for _, acc, rej in by_det:
+            self.assertGreater(len(acc) + len(rej), 0)
+
+
+class TestDetectorStatsLines(unittest.TestCase):
+    """The monospace stats block for one detector's panel."""
+
+    def _stats(self):
+        return _catalog().meta["det_meta"][f"R00_SW0_{_VISIT_ID}"]
+
+    def testEveryCutoutStageGetsALineAndScatterHangsOffAstrom(self) -> None:
+        """The panel is driven off `_CUTOUT_STAGE_KEYS`, so it cannot drift.
+
+        The scatter annotation is the one stage-specific detail, and nothing
+        renders it but this function, so it is worth pinning here rather than
+        trusting a PNG.
+        """
+        lines = _detector_stats_lines("R00_SW0", 191, 8, self._stats())
+        self.assertEqual(lines[0], "R00_SW0 (191)")
+        self.assertEqual(lines[1], "donuts: 8")
+        stage_lines = lines[2:]
+        self.assertEqual(len(stage_lines), len(_CUTOUT_STAGE_KEYS))
+        for label, line in zip(_CUTOUT_STAGE_KEYS, stage_lines):
+            self.assertTrue(line.startswith(f"{label}:"), line)
+            # One scatter annotation, on astrom and nowhere else.
+            self.assertEqual('"' in line, label == "astrom")
+
+    def testAbsentDetectorReportsNaNRatherThanRaising(self) -> None:
+        """A detector with no det_meta entry still gets a full block.
+
+        The plot draws the 2x2 corner grid regardless of which detectors ran,
+        so an empty dict has to be survivable -- and has to read as unknown,
+        not as a fast zero.
+        """
+        lines = _detector_stats_lines("R44_SW1", 204, 0, {})
+        self.assertEqual(lines[0], "R44_SW1 (204)")
+        self.assertIn("N/A", " ".join(lines))
+        self.assertIn("nan", " ".join(lines))
+        # No error lines, since an absent entry has no error strings.
+        self.assertFalse([ln for ln in lines if "ERR" in ln])
+
+    def testStageErrorsAreTruncatedToTheColumnWidth(self) -> None:
+        stats = dict(self._stats())
+        stats["wcs_refit_error"] = "E" * 200
+        stats["cat_select_error"] = "C" * 200
+        lines = _detector_stats_lines("R00_SW0", 191, 8, stats)
+        wcs_line = next(ln for ln in lines if ln.startswith("WCS ERR:"))
+        cat_line = next(ln for ln in lines if ln.startswith("CAT ERR:"))
+        self.assertEqual(wcs_line, f"WCS ERR: {'E' * _PANEL_ERROR_CHARS}")
+        self.assertEqual(cat_line, f"CAT ERR: {'C' * _PANEL_ERROR_CHARS}")
+
+
+class TestDonutAnnotation(unittest.TestCase):
+    """The three-line caption above one donut stamp."""
+
+    def _row(self, det_name="R00_SW0", donut_id=1):
+        catalog = _catalog()
+        names = np.asarray(catalog["det_name"], dtype=str)
+        rows = catalog[(names == det_name) & (catalog["donut_id"] == donut_id)]
+        return rows[0]
+
+    def testFiniteMeasurementsAreFormattedToTheirPlaces(self) -> None:
+        text = _donut_annotation(self._row(), rejected=False)
+        snr_line, frac_line, id_line = text.split("\n")
+        # _donut() builds snr=500, inner=0.01, outer=0.02, osm=0.03.
+        self.assertEqual(snr_line.strip(), "snr=500")
+        self.assertEqual(frac_line.split(), ["if=0.010", "of=0.020", "osm=0.030"])
+        self.assertEqual(id_line, "id=1")
+
+    def testNonFiniteReadsAsQuestionMarkNotZero(self) -> None:
+        """`?` distinguishes "never measured" from a real zero.
+
+        This is the whole reason the formatting is conditional, so it is the
+        part worth a test.
+        """
+        row = self._row()
+        row["snr"] = float("nan")
+        row["inner_frac"] = float("nan")
+        text = _donut_annotation(row, rejected=False)
+        self.assertIn("snr=?", text)
+        self.assertIn("if=?", text)
+        self.assertNotIn("snr=0", text)
+
+    def testRejectionFlagsAreListedInOrder(self) -> None:
+        row = self._row(donut_id=4)
+        # _catalog's donut 4 is rejected on SNR alone.
+        self.assertIn("[snr]", _donut_annotation(row, rejected=True))
+        row["rejected_sat"] = True
+        row["rejected_outer_frac"] = True
+        self.assertIn("[sat|outer|snr]", _donut_annotation(row, rejected=True))
+
+    def testDonutIdZeroIsOmitted(self) -> None:
+        """id=0 means "no id assigned", so the line is left blank."""
+        row = self._row()
+        row["donut_id"] = 0
+        self.assertEqual(_donut_annotation(row, rejected=False).split("\n")[2], "")
 
 
 class TestWfGroupsFromCatalog(unittest.TestCase):
