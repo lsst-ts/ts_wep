@@ -435,78 +435,70 @@ class DonutBlitzFamConfig(
         target=WavefrontFittingTask,
         doc="Wavefront fitting subtask using Danish algorithm.",
     )
-    instConfigFile: pexConfig.Field = pexConfig.Field(
+    instConfigFile: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Path to an instrument configuration file to override the default. "
             "If begins with 'policy:' the path is relative to the ts_wep policy "
             "directory. If not provided, the default instrument for the camera "
             "will be loaded."
         ),
-        dtype=str,
         optional=True,
     )
-    maxFitScatter: pexConfig.Field = pexConfig.Field(
+    maxFitScatter: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Maximum allowed on-sky scatter (arcsec) for WCS refit to be accepted.",
-        dtype=float,
         default=1.0,
     )
-    astromRefFilter: pexConfig.Field = pexConfig.Field(
+    astromRefFilter: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Filter name to read from the reference catalog when fitting the "
             "WCS. Aliased over every filter via anyFilterMapsToThis, so it is "
             "what AstrometryTask resolves as its reference flux field."
         ),
-        dtype=str,
         default="phot_g_mean",
     )
-    photoRefFilter: pexConfig.Field = pexConfig.Field(
+    photoRefFilter: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Explicit filter name to read from the reference catalog for donut "
             "selection (e.g. 'phot_g_mean'). Overrides photoRefFilterPrefix "
             "when set."
         ),
-        dtype=str,
         optional=True,
     )
-    photoRefFilterPrefix: pexConfig.Field = pexConfig.Field(
+    photoRefFilterPrefix: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Filter prefix used for donut selection, combined with the exposure "
             "band label as '{prefix}_{band}'. Used when photoRefFilter is not "
             "set."
         ),
-        dtype=str,
         default="monster_ComCam",
     )
-    detectorOffset: pexConfig.Field = pexConfig.Field(
+    detectorOffset: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Magnitude of the detector-plane z shift that defocuses each "
             "exposure, in meters.  Signed per exposure: +offset extra-focal, "
             "-offset intra-focal.  Zero by default -- full-array mode defocuses "
             "by moving the whole camera, see cameraOffset."
         ),
-        dtype=float,
         default=0.0,
     )
-    cameraOffset: pexConfig.Field = pexConfig.Field(
+    cameraOffset: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Magnitude of the camera z shift that defocuses each exposure, in "
             "meters.  Signed per exposure as detectorOffset is.  This is the "
             "full-array default; the nested detector moves with the camera, so "
             "the sign convention agrees with corner mode's."
         ),
-        dtype=float,
         default=_INSTRUMENT.defocalOffset,
     )
-    m2Offset: pexConfig.Field = pexConfig.Field(
+    m2Offset: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Magnitude of the M2 z shift that defocuses each exposure, in "
             "meters.  Signed per exposure as detectorOffset is.  For data taken "
             "by moving M2 rather than the camera."
         ),
-        dtype=float,
         default=0.0,
     )
-    pairMatchTolerance: pexConfig.Field = pexConfig.Field(
+    pairMatchTolerance: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Spatial donut pairing tolerance, as a fraction of the donut radius. "
             "Only used on the fallback path -- when both exposures selected from "
@@ -514,28 +506,25 @@ class DonutBlitzFamConfig(
             "exactly.  Applied after the radial defocus shift is divided out, so "
             "one value is valid across the whole focal plane."
         ),
-        dtype=float,
         default=0.25,
     )
-    saveStamps: pexConfig.Field = pexConfig.Field(
+    saveStamps: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
             "Include the un-binned `stamp` image column in the output catalog. "
             "Off by default: at ~10k rows per pair it is the difference between "
             "a ~30 MB table and a multi-GB one.  Turn it on for pilot runs."
         ),
-        dtype=bool,
         default=False,
     )
-    saveWfImages: pexConfig.Field = pexConfig.Field(
+    saveWfImages: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
             "Include the binned `wf_img` and `model_img` columns.  Off by "
             "default for the same reason as saveStamps.  With this on and "
             "saveStamps off, donuts that no fit consumed get a NaN wf_img."
         ),
-        dtype=bool,
         default=False,
     )
-    unitTimeout: pexConfig.Field = pexConfig.Field(
+    unitTimeout: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Seconds one detector may run before its worker is killed and the "
             "detector recorded as lost, so a single pathological detector "
@@ -550,11 +539,10 @@ class DonutBlitzFamConfig(
             "detector times out trips hangTimeout instead, which is the right "
             "outcome for a systemic failure.  None waits indefinitely."
         ),
-        dtype=float,
         default=300.0,
         optional=True,
     )
-    hangTimeout: pexConfig.Field = pexConfig.Field(
+    hangTimeout: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Seconds the detector pool may run before the hang watchdog dumps "
             "stacks and aborts the quantum, so that a pool blocked forever "
@@ -568,25 +556,22 @@ class DonutBlitzFamConfig(
             "which this cannot do from a side thread that has no idea which "
             "detector is late."
         ),
-        dtype=float,
         default=1800.0,
     )
-    colorLog: pexConfig.Field = pexConfig.Field(
+    colorLog: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
             "Colorize select log messages with ANSI escape codes. If None "
             "(the default), color is enabled only when stdout is an "
             "interactive terminal."
         ),
-        dtype=bool,
         default=None,
         optional=True,
     )
-    wfEstimationMode: pexConfig.ChoiceField = pexConfig.ChoiceField(
+    wfEstimationMode: pexConfig.ChoiceField[str] = pexConfig.ChoiceField[str](
         doc=(
             "Wavefront estimation dispatch mode.  Every work unit lives on one "
             "detector, so all four are computed inside that detector's worker."
         ),
-        dtype=str,
         allowed={
             "paired": (
                 "One star, both sides of focus.  The only mode that associates "

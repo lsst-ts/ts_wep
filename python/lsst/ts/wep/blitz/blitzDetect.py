@@ -47,24 +47,20 @@ def _build_annular_template(radius: float, inner_frac: float) -> np.ndarray:
 class BlitzDetectConfig(pexConfig.Config):
     """Config for template cross-correlation donut detection."""
 
-    edgeMargin: pexConfig.Field = pexConfig.Field(
+    edgeMargin: pexConfig.Field[int] = pexConfig.Field[int](
         doc="Width of detector edge region to exclude from detection, in pixels.",
-        dtype=int,
         default=80,
     )
-    detectionBinning: pexConfig.Field = pexConfig.Field(
+    detectionBinning: pexConfig.Field[int] = pexConfig.Field[int](
         doc=("Integer factor by which to bin the image before running the cross-correlation detection step."),
-        dtype=int,
         default=8,
     )
-    peakMinDistanceFactor: pexConfig.Field = pexConfig.Field(
+    peakMinDistanceFactor: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Multiplier applied to the binned donut radius to set min_distance in peak_local_max.",
-        dtype=float,
         default=1.6,
     )
-    peakExcludeBorderFactor: pexConfig.Field = pexConfig.Field(
+    peakExcludeBorderFactor: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Multiplier applied to the binned donut radius to set exclude_border in peak_local_max.",
-        dtype=float,
         default=1.15,
     )
 

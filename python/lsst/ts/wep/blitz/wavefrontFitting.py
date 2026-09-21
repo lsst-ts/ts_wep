@@ -46,6 +46,7 @@ from .dataStructures import (
     _FIT_OUTCOMES,
     _FIT_STATUS_ABSENT,
     Donut,
+    FitOutcome,
     WfDonutResult,
     WfGroupResult,
     _WfGroup,
@@ -320,13 +321,11 @@ def _wf_fitting_worker(group: "_WfGroup") -> WfGroupResult:
 class WavefrontFittingConfig(pexConfig.Config):
     """Configuration for wavefront fitting via Danish algorithm."""
 
-    nollIndices: pexConfig.ListField = pexConfig.ListField(
-        dtype=int,
+    nollIndices: pexConfig.ListField[int] = pexConfig.ListField[int](
         doc="Noll indices to fit with Danish.",
         default=list(range(4, 20)) + list(range(22, 27)),
     )
-    lstsqKwargs: pexConfig.DictField = pexConfig.DictField(
-        keytype=str,
+    lstsqKwargs: pexConfig.DictField[str, Any] = pexConfig.DictField[str, None](
         doc=(
             "Keyword arguments for scipy.optimize.least_squares passed to the Danish "
             "WF workers, e.g. {'method': 'trf', 'max_nfev': 200}. `fun`, `x0`, `jac`, "
@@ -345,38 +344,31 @@ class WavefrontFittingConfig(pexConfig.Config):
             "tr_solver": "lsmr",
         },
     )
-    binning: pexConfig.Field = pexConfig.Field(
-        dtype=int,
+    binning: pexConfig.Field[int] = pexConfig.Field[int](
         default=2,
         doc="Binning factor applied to donut stamps before Danish fitting.",
     )
-    modelSpiderShadows: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
+    modelSpiderShadows: pexConfig.Field[bool] = pexConfig.Field[bool](
         default=False,
         doc="Include spider shadow modeling in Danish forward model.",
     )
-    bkgOrder: pexConfig.Field = pexConfig.Field(
-        dtype=int,
+    bkgOrder: pexConfig.Field[int] = pexConfig.Field[int](
         default=0,
         doc="Background polynomial order for Danish (-1=none, 0=constant).",
     )
-    doAoiThroughput: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
+    doAoiThroughput: pexConfig.Field[bool] = pexConfig.Field[bool](
         default=False,
         doc="Apply angle-of-incidence throughput correction in Danish forward model.",
     )
-    systematicLossAlpha: pexConfig.Field = pexConfig.Field(
-        dtype=float,
+    systematicLossAlpha: pexConfig.Field[float] = pexConfig.Field[float](
         default=0.0,
         doc="Fractional systematic uncertainty for Danish loss function (0=chi2).",
     )
-    triangleMode: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
+    triangleMode: pexConfig.Field[bool] = pexConfig.Field[bool](
         default=True,
         doc="Use DonutTriangleFactory instead of DonutFactory.",
     )
-    jacobianFormat: pexConfig.ChoiceField = pexConfig.ChoiceField(
-        dtype=str,
+    jacobianFormat: pexConfig.ChoiceField[str] = pexConfig.ChoiceField[str](
         default="dense",
         optional=False,
         # There is some weak evidence that one or the other sparse formats may
@@ -395,8 +387,7 @@ class WavefrontFittingConfig(pexConfig.Config):
             "csc": "model.jac_sparse in CSC.",
         },
     )
-    logPerGroup: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
+    logPerGroup: pexConfig.Field[bool] = pexConfig.Field[bool](
         default=True,
         doc=(
             "Log a setup line and a result line per fit group at INFO.  Useful when "
@@ -407,8 +398,7 @@ class WavefrontFittingConfig(pexConfig.Config):
             "silences narration, not problems."
         ),
     )
-    wfFitTimeoutPerDonut: pexConfig.Field = pexConfig.Field(
-        dtype=float,
+    wfFitTimeoutPerDonut: pexConfig.Field[float] = pexConfig.Field[float](
         default=10.0,
         doc=(
             "Timeout in seconds per donut for a single WF fit. "
@@ -418,8 +408,7 @@ class WavefrontFittingConfig(pexConfig.Config):
             "Fits exceeding the limit are killed and return NaN Zernikes."
         ),
     )
-    wfInitialGuessOnly: pexConfig.Field = pexConfig.Field(
-        dtype=bool,
+    wfInitialGuessOnly: pexConfig.Field[bool] = pexConfig.Field[bool](
         default=False,
         doc=(
             "Skip the least-squares fit and return the initial-guess (x0) model only. "
@@ -511,13 +500,13 @@ class _DanishDonutInputs(NamedTuple):
 class _LstsqFitResult:
     # All outputs from _run_lstsq_fit as first-class typed fields.
     zk_dev: npt.NDArray[np.float64]
-    model_imgs: list
-    blend_fracs: list
+    model_imgs: list[npt.NDArray[np.float64] | None]
+    blend_fracs: list[float]
     success: bool
     elapsed: float
-    fluxes: list
-    dxs: list
-    dys: list
+    fluxes: list[float]
+    dxs: list[float]
+    dys: list[float]
     fwhm: float
     nfev: int = 0
     cost: float = float("nan")
@@ -527,7 +516,7 @@ class _LstsqFitResult:
     message: str = ""
     error: str = ""
     # Which of the mutually exclusive fit paths produced this result.
-    outcome: str = ""
+    outcome: FitOutcome = ""
 
     def __post_init__(self):
         if not self.outcome or self.outcome not in _FIT_OUTCOMES:
@@ -542,7 +531,7 @@ class _LstsqFitResult:
         n_donuts: int,
         elapsed: float,
         error: str,
-        outcome: str,
+        outcome: FitOutcome,
     ) -> "_LstsqFitResult":
         """Result for a fit that did not produce a wavefront.
 
@@ -563,8 +552,8 @@ class _LstsqFitResult:
             Seconds spent before failing.
         error : `str`
             What went wrong, for the catalog and the log.
-        outcome : `str`
-            One of `_FIT_OUTCOMES`; says which path failed.
+        outcome : `FitOutcome`
+            Says which path failed.
         """
         return cls(
             zk_dev=np.full(n_zk, np.nan),
@@ -704,7 +693,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 group_size=n,
                 zk_dev=fit_result.zk_dev,
                 success=fit_result.success,
-                donuts=donuts_out,
+                donut_results=donuts_out,
                 det_names=[d.det_name for d in all_donuts],
                 imgs=imgs,
                 model_imgs=fit_result.model_imgs,
@@ -774,6 +763,11 @@ class WavefrontFittingTask(pipeBase.Task):
         """
         binning = self.config.binning
 
+        if donut.stamp is None:
+            raise RuntimeError(
+                f"donut {donut.donut_id} on {donut.det_name} has no stamp; cannot fit a "
+                "donut whose stamp has already been shed"
+            )
         img = _bin_stamp_odd(donut.stamp, binning)
         diff = (img[1:] - img[:-1]).ravel()
         bkg_std = median_abs_deviation(diff, scale="normal") / np.sqrt(2.0)

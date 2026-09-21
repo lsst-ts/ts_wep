@@ -157,7 +157,7 @@ class _RefcatArrays:
 class CutDonutStampsConfig(pexConfig.Config):
     """Config for cutting donut stamps and evaluating rejection criteria."""
 
-    stampSize: pexConfig.Field = pexConfig.Field(
+    stampSize: pexConfig.Field[int] = pexConfig.Field[int](
         doc=(
             "Side length in pixels of the square stamp cut around each donut "
             "centroid. The binned size (stampSize // binning) must be odd for "
@@ -167,35 +167,29 @@ class CutDonutStampsConfig(pexConfig.Config):
             "enough to contain the main photometric annulus: "
             "stampSize/2 >= donut_radius * (1 + apertureMarginFrac)."
         ),
-        dtype=int,
         default=167,
     )
-    innerFracThreshold: pexConfig.Field = pexConfig.Field(
+    innerFracThreshold: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Reject a donut if |inner_frac| exceeds this.",
-        dtype=float,
         default=0.1,
     )
-    outerFracThreshold: pexConfig.Field = pexConfig.Field(
+    outerFracThreshold: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Reject a donut if |outer_frac| exceeds this.",
-        dtype=float,
         default=0.1,
     )
-    minStampSnr: pexConfig.Field = pexConfig.Field(
+    minStampSnr: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Reject a donut if its per-stamp SNR falls below this.",
-        dtype=float,
         default=100.0,
     )
-    maxDonuts: pexConfig.Field = pexConfig.Field(
+    maxDonuts: pexConfig.Field[int] = pexConfig.Field[int](
         doc="Maximum number of accepted donuts to keep per detector, brightest-first.",
-        dtype=int,
         default=8,
     )
-    maxRejectDonuts: pexConfig.Field = pexConfig.Field(
+    maxRejectDonuts: pexConfig.Field[int] = pexConfig.Field[int](
         doc=(
             "Maximum number of quality-rejected donuts to keep per detector "
             "(brightest-first) for downstream diagnostics."
         ),
-        dtype=int,
         default=8,
     )
 

@@ -30,13 +30,13 @@ __all__ = [
 ]
 
 import os
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, replace
+from typing import Any, Literal, get_args
 
 import numpy as np
 import numpy.typing as npt
 
-from .utils import _ZK_JMAX
+from .utils import _ZK_JMAX, _dense_intrinsic
 
 # Cap on a worker's `error` string. A traceback-derived message can run to
 # kilobytes, and 189 of them cross a pickle boundary; the first few hundred
@@ -54,7 +54,7 @@ class Donut:
     """One cut donut stamp with its selection/quality metrics."""
 
     det_name: str
-    stamp: np.ndarray  #  CCS
+    stamp: npt.NDArray[np.float64] | None  #  CCS
     thx_ccs: float
     thy_ccs: float
     flux: float
@@ -123,8 +123,8 @@ class CutoutResult:
     """
 
     det_name: str
-    catalog: list  # accepted `Donut`s
-    rejected_catalog: list  # `Donut`s that failed a selection or quality cut
+    catalog: list[Donut]  # accepted `Donut`s
+    rejected_catalog: list[Donut]  # `Donut`s that failed a selection or quality cut
     isr_run: float
     bkg_run: float
     diam_run: float
@@ -238,6 +238,213 @@ class CutoutResult:
         )
 
 
+# The complete vocabulary of `WfDonutResult.fit_outcome`, which says which
+# of the mutually exclusive paths through
+# `WavefrontFittingTask._run_lstsq_fit` produced a result.
+FitOutcome = Literal[
+    "ok",  # least_squares converged (success=True)
+    "nonconvergent",  # least_squares returned but success=False
+    "timeout",  # SIGALRM fired; wfFitTimeoutPerDonut * group_size exceeded
+    "exception",  # the fit raised
+    "x0_only",  # wfInitialGuessOnly: the model was evaluated, never fit
+    "",  # no fit consumed this donut (`_NULL_WF_DONUT`)
+]
+
+_FIT_OUTCOMES = get_args(FitOutcome)
+
+
+@dataclass
+class WfDonutResult:
+    """One donut's wavefront-fit outputs, produced by `_wf_worker`.
+
+    Consumed by `_build_donut_catalog`, keyed by ``(donut_id, det_name,
+    visit_id)``. A fit that timed out or raised still produces a
+    WfDonutResult with ``fit_success=False`` and all-NaN Zernikes;
+    ``fit_outcome`` says which.
+
+    ``visit_id`` is part of the key because full-array mode fits the same star
+    on the same detector twice, once per side of focus, so ``(donut_id,
+    det_name)`` alone is ambiguous there. Corner mode has one visit per
+    quantum, so including it changes nothing.
+    """
+
+    donut_id: int
+    det_name: str
+    visit_id: int
+    zk_dev: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, meters, NaN where unfit
+    zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, meters
+    img: np.ndarray | None
+    model_img: np.ndarray | None
+    fit_success: bool
+    fit_elapsed: float
+    setup_elapsed: float
+    fit_nfev: int
+    fit_cost: float
+    fit_optimality: float
+    fit_njev: int
+    fit_outcome: FitOutcome
+    fit_dx: float
+    fit_dy: float
+    fit_flux: float
+    fit_fwhm: float
+    blend_frac: float
+    group_id: str
+    group_size: int
+
+
+# Sentinel for "no fit consumed this donut". All-NaN Zernikes, empty strings,
+# fit_success=False -- so the catalog's empty group_id and empty
+# group_fit_outcome both fall out naturally.
+_NULL_WF_DONUT = WfDonutResult(
+    donut_id=-1,
+    det_name="",
+    visit_id=-1,
+    zk_dev=np.full(_ZK_JMAX + 1, np.nan),
+    zk_intrinsic=np.full(_ZK_JMAX + 1, np.nan),
+    img=None,
+    model_img=None,
+    fit_success=False,
+    fit_elapsed=float("nan"),
+    setup_elapsed=float("nan"),
+    fit_nfev=0,
+    fit_cost=float("nan"),
+    fit_optimality=float("nan"),
+    fit_njev=0,
+    fit_outcome="",
+    fit_dx=float("nan"),
+    fit_dy=float("nan"),
+    fit_flux=float("nan"),
+    fit_fwhm=float("nan"),
+    blend_frac=float("nan"),
+    group_id="",
+    group_size=0,
+)
+
+
+@dataclass
+class _WfGroup:
+    donuts: list[Donut]  # donut dicts, ordered; each carries its own "det_name" key
+    group_id: str
+    band: str
+    rtp: float | None  # Boresight rotation (spider angle), degrees or None
+    alt: float | None  # Boresight altitude, radians or None
+
+
+@dataclass
+class WfGroupResult:
+    """One fit group's outputs, produced by `WavefrontFittingTask.run`.
+
+    A group is what gets fit jointly -- a pair in paired mode, one donut
+    unpaired, a whole corner in ``corner_group`` mode -- so everything here is
+    a property of the *fit*, not of a donut.  The per-donut half of the same
+    fit is the `WfDonutResult` list in ``donut_results``, one per member, each
+    carrying its own copy of the group's values for the output catalog's
+    ``group_*`` columns.
+
+    The ``fit_*`` fields are flattened from what used to be a nested
+    ``fit_info`` dict, so a group that never fit reports typed NaN/0/``""``
+    rather than a missing key.  ``fit_outcome`` is one of `_FIT_OUTCOMES` and
+    says which of the mutually exclusive paths ran; it subsumes ``success``.
+
+    ``imgs`` and ``model_imgs`` are dropped by `_shed_images` in full-array
+    mode when the config says not to save them, since they dominate the size of
+    what a worker pickles home.
+    """
+
+    group_id: str
+    group_size: int
+    # Sparse, one entry per fitted Noll index -- not the dense Noll-indexed
+    # array `WfDonutResult.zk_dev` carries. Meters.
+    zk_dev: npt.NDArray[np.float64]
+    success: bool
+    donut_results: list[WfDonutResult]  # one `WfDonutResult` per group member
+    det_names: list[str]  # each member's detector, in the same order as `donut_results`
+    imgs: list[npt.NDArray[np.float64]]
+    model_imgs: list[npt.NDArray[np.float64] | None] | None
+    fit_elapsed: float
+    fit_nfev: int
+    fit_cost: float
+    fit_optimality: float
+    fit_njev: int
+    fit_status: int
+    fit_message: str
+    fit_error: str
+    fit_outcome: FitOutcome
+
+    @classmethod
+    def empty(cls, group_id: str, n_zk: int) -> "WfGroupResult":
+        """Result for a group with no donuts in it.
+
+        Nothing was fit, so every fit field takes its no-fit value and
+        ``fit_outcome`` is ``""`` -- the same spelling `_NULL_WF_DONUT` uses
+        for "no fit consumed this".
+        """
+        return cls(
+            group_id=group_id,
+            group_size=0,
+            zk_dev=np.full(n_zk, np.nan),
+            success=False,
+            donut_results=[],
+            det_names=[],
+            imgs=[],
+            model_imgs=None,
+            fit_elapsed=float("nan"),
+            fit_nfev=0,
+            fit_cost=float("nan"),
+            fit_optimality=float("nan"),
+            fit_njev=0,
+            fit_status=_FIT_STATUS_ABSENT,
+            fit_message="",
+            fit_error="",
+            fit_outcome="",
+        )
+
+    @classmethod
+    def dead(cls, group: _WfGroup, reason: str, n_zk: int) -> "WfGroupResult":
+        """Stand-in for a fit group whose worker was killed outright.
+
+        No Python runs in a process the kernel has already destroyed, so the
+        parent reports the group as failed on its behalf and the surviving
+        groups' Zernikes still reach the output.
+
+        The group's donuts are carried through even though none was fit: they
+        still get catalog rows, and dropping them here would lose them
+        silently.  They arrive as `_NULL_WF_DONUT` copies rather than the
+        `Donut`s themselves, since that is what `_build_donut_catalog` reads --
+        identity and intrinsics survive, and everything the lost fit would have
+        measured is NaN.  ``fit_outcome`` is ``"exception"`` and not ``""``,
+        which would claim no group ever took the donut.
+
+        Parameters
+        ----------
+        group : `_WfGroup`
+            The group that was lost.
+        reason : `str`
+            Cause, from `_fork_map`'s `_WorkerDeath`.
+        n_zk : `int`
+            Length of the Zernike vector, so the NaN row matches its siblings
+            and the output table stays rectangular.
+        """
+        out = cls.empty(group.group_id, n_zk)
+        out.group_size = len(group.donuts)
+        out.donut_results = [
+            replace(
+                _NULL_WF_DONUT,
+                donut_id=d.donut_id,
+                det_name=d.det_name,
+                visit_id=d.visit_id,
+                zk_intrinsic=_dense_intrinsic(d),
+                fit_outcome="exception",
+                group_id=group.group_id,
+                group_size=len(group.donuts),
+            )
+            for d in group.donuts
+        ]
+        out.det_names = [d.det_name for d in group.donuts]
+        out.fit_error = f"worker died: {reason}"[:_ERROR_MAX_CHARS]
+        return out
+
+
 @dataclass
 class FamDetectorResult:
     """One full-array detector, as `_fam_detector_worker` returns it.
@@ -266,10 +473,10 @@ class FamDetectorResult:
     # Empty until the worker has read a raw, so a detector that died in butler
     # I/O has an id but no name; the parent's log lines fall back to the id.
     det_name: str
-    results: list  # the pair of `CutoutResult`s, intra first, each tagged with its visit
-    wf_results: list  # one per fit group
-    donuts: list  # accepted `Donut`s, both sides of focus
-    unmatched_donuts: list  # `Donut`s with no partner on the other side
+    results: list[CutoutResult]  # the pair of `CutoutResult`s, intra first
+    wf_results: list[WfGroupResult]  # one per fit group
+    donuts: list[Donut]  # accepted `Donut`s, both sides of focus
+    unmatched_donuts: list[Donut]  # `Donut`s with no partner on the other side
     error: str
     skipped: bool
     pid: int
@@ -334,193 +541,4 @@ class FamDetectorResult:
         # The parent is filling this in, so its own pid would be a lie; -1 says
         # no worker process owns this record.
         out.pid = -1
-        return out
-
-
-# The complete vocabulary of `WfDonutResult.fit_outcome`, which says which
-# of the mutually exclusive paths through
-# `WavefrontFittingTask._run_lstsq_fit` produced a result.
-_FIT_OUTCOMES = (
-    "ok",  # least_squares converged (success=True)
-    "nonconvergent",  # least_squares returned but success=False
-    "timeout",  # SIGALRM fired; wfFitTimeoutPerDonut * group_size exceeded
-    "exception",  # the fit raised
-    "x0_only",  # wfInitialGuessOnly: the model was evaluated, never fit
-    "",  # no fit consumed this donut (`_NULL_WF_DONUT`)
-)
-
-
-@dataclass
-class WfDonutResult:
-    """One donut's wavefront-fit outputs, produced by `_wf_worker`.
-
-    Consumed by `_build_donut_catalog`, keyed by ``(donut_id, det_name,
-    visit_id)``. A fit that timed out or raised still produces a
-    WfDonutResult with ``fit_success=False`` and all-NaN Zernikes;
-    ``fit_outcome`` says which.
-
-    ``visit_id`` is part of the key because full-array mode fits the same star
-    on the same detector twice, once per side of focus, so ``(donut_id,
-    det_name)`` alone is ambiguous there. Corner mode has one visit per
-    quantum, so including it changes nothing.
-    """
-
-    donut_id: int
-    det_name: str
-    visit_id: int
-    zk_dev: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, meters, NaN where unfit
-    zk_intrinsic: npt.NDArray[np.float64]  # dense Noll 0.._ZK_JMAX, meters
-    img: np.ndarray | None
-    model_img: np.ndarray | None
-    fit_success: bool
-    fit_elapsed: float
-    setup_elapsed: float
-    fit_nfev: int
-    fit_cost: float
-    fit_optimality: float
-    fit_njev: int
-    fit_outcome: str  # one of _FIT_OUTCOMES
-    fit_dx: float
-    fit_dy: float
-    fit_flux: float
-    fit_fwhm: float
-    blend_frac: float
-    group_id: str
-    group_size: int
-
-
-# Sentinel for "no fit consumed this donut". All-NaN Zernikes, empty strings,
-# fit_success=False -- so the catalog's empty group_id and empty
-# group_fit_outcome both fall out naturally.
-_NULL_WF_DONUT = WfDonutResult(
-    donut_id=-1,
-    det_name="",
-    visit_id=-1,
-    zk_dev=np.full(_ZK_JMAX + 1, np.nan),
-    zk_intrinsic=np.full(_ZK_JMAX + 1, np.nan),
-    img=None,
-    model_img=None,
-    fit_success=False,
-    fit_elapsed=float("nan"),
-    setup_elapsed=float("nan"),
-    fit_nfev=0,
-    fit_cost=float("nan"),
-    fit_optimality=float("nan"),
-    fit_njev=0,
-    fit_outcome="",
-    fit_dx=float("nan"),
-    fit_dy=float("nan"),
-    fit_flux=float("nan"),
-    fit_fwhm=float("nan"),
-    blend_frac=float("nan"),
-    group_id="",
-    group_size=0,
-)
-
-
-@dataclass
-class _WfGroup:
-    donuts: list  # donut dicts, ordered; each carries its own "det_name" key
-    group_id: str
-    band: str
-    rtp: float | None  # Boresight rotation (spider angle), degrees or None
-    alt: float | None  # Boresight altitude, radians or None
-
-
-@dataclass
-class WfGroupResult:
-    """One fit group's outputs, produced by `WavefrontFittingTask.run`.
-
-    A group is what gets fit jointly -- a pair in paired mode, one donut
-    unpaired, a whole corner in ``corner_group`` mode -- so everything here is
-    a property of the *fit*, not of a donut.  The per-donut half of the same
-    fit is the `WfDonutResult` list in ``donuts``, one per member, each
-    carrying its own copy of the group's values for the output catalog's
-    ``group_*`` columns.
-
-    The ``fit_*`` fields are flattened from what used to be a nested
-    ``fit_info`` dict, so a group that never fit reports typed NaN/0/``""``
-    rather than a missing key.  ``fit_outcome`` is one of `_FIT_OUTCOMES` and
-    says which of the mutually exclusive paths ran; it subsumes ``success``.
-
-    ``imgs`` and ``model_imgs`` are dropped by `_shed_images` in full-array
-    mode when the config says not to save them, since they dominate the size of
-    what a worker pickles home.
-    """
-
-    group_id: str
-    group_size: int
-    # Sparse, one entry per fitted Noll index -- not the dense Noll-indexed
-    # array `WfDonutResult.zk_dev` carries. Meters.
-    zk_dev: npt.NDArray[np.float64]
-    success: bool
-    donuts: list  # one `WfDonutResult` per group member
-    det_names: list  # each member's detector, in the same order as `donuts`
-    imgs: list
-    model_imgs: list | None
-    fit_elapsed: float
-    fit_nfev: int
-    fit_cost: float
-    fit_optimality: float
-    fit_njev: int
-    fit_status: int
-    fit_message: str
-    fit_error: str
-    fit_outcome: str  # one of _FIT_OUTCOMES
-
-    @classmethod
-    def empty(cls, group_id: str, n_zk: int) -> "WfGroupResult":
-        """Result for a group with no donuts in it.
-
-        Nothing was fit, so every fit field takes its no-fit value and
-        ``fit_outcome`` is ``""`` -- the same spelling `_NULL_WF_DONUT` uses
-        for "no fit consumed this".
-        """
-        return cls(
-            group_id=group_id,
-            group_size=0,
-            zk_dev=np.full(n_zk, np.nan),
-            success=False,
-            donuts=[],
-            det_names=[],
-            imgs=[],
-            model_imgs=None,
-            fit_elapsed=float("nan"),
-            fit_nfev=0,
-            fit_cost=float("nan"),
-            fit_optimality=float("nan"),
-            fit_njev=0,
-            fit_status=_FIT_STATUS_ABSENT,
-            fit_message="",
-            fit_error="",
-            fit_outcome="",
-        )
-
-    @classmethod
-    def dead(cls, group: _WfGroup, reason: str, n_zk: int) -> "WfGroupResult":
-        """Stand-in for a fit group whose worker was killed outright.
-
-        No Python runs in a process the kernel has already destroyed, so the
-        parent reports the group as failed on its behalf and the surviving
-        groups' Zernikes still reach the output.
-
-        The group's donuts are carried through even though none was fit: they
-        still get catalog rows, and dropping them here would lose them
-        silently.
-
-        Parameters
-        ----------
-        group : `_WfGroup`
-            The group that was lost.
-        reason : `str`
-            Cause, from `_fork_map`'s `_WorkerDeath`.
-        n_zk : `int`
-            Length of the Zernike vector, so the NaN row matches its siblings
-            and the output table stays rectangular.
-        """
-        out = cls.empty(group.group_id, n_zk)
-        out.group_size = len(group.donuts)
-        out.donuts = group.donuts
-        out.det_names = [d.det_name for d in group.donuts]
-        out.fit_error = f"worker died: {reason}"[:_ERROR_MAX_CHARS]
         return out

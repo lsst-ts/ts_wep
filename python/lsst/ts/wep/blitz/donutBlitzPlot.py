@@ -815,13 +815,12 @@ class DonutBlitzPlotConfig(
 ):
     """Configuration for DonutBlitzPlotTask."""
 
-    colorLog: pexConfig.Field = pexConfig.Field(
+    colorLog: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
             "Colorize select log messages with ANSI escape codes. If None "
             "(the default), color is enabled only when stdout is an "
             "interactive terminal."
         ),
-        dtype=bool,
         default=None,
         optional=True,
     )
