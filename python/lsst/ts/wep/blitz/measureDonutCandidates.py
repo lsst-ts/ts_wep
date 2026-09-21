@@ -158,7 +158,8 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         arr = exposure.image.array
         half = round(radius * cfg.bkgAnnulusOuterFrac)
 
-        gy, gx = np.mgrid[-half : half + 1, -half : half + 1]
+        coords = np.arange(-half, half + 1, dtype=float)
+        gy, gx = coords[:, None], coords[None, :]
         r = np.hypot(gx, gy)
         sector_angle = np.arctan2(gy, gx)
 
