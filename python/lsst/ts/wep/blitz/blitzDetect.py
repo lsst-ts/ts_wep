@@ -39,8 +39,8 @@ from .utils import _INSTRUMENT
 def _build_annular_template(radius: float, inner_frac: float) -> np.ndarray:
     """Return a binary annular stamp for cross-correlation donut detection."""
     r_int = round(radius)
-    cy, cx = np.mgrid[-r_int : r_int + 1, -r_int : r_int + 1]
-    r = np.hypot(cx, cy)
+    coords = np.arange(-r_int, r_int + 1, dtype=float)
+    r = np.hypot(coords[None, :], coords[:, None])
     return np.where((r < radius) & (r >= radius * inner_frac), 1.0, 0.0)
 
 
