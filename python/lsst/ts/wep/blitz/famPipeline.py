@@ -517,7 +517,7 @@ def _shed_images(out: FamDetectorResult) -> None:
     """
     if not _COW_STORE.save_wf_images:
         for r in out.wf_results:
-            for wd in r.donuts:
+            for wd in r.donut_results:
                 wd.img = None
                 wd.model_img = None
             r.imgs = []

@@ -131,7 +131,7 @@ def _wf_result(donuts, group_id):
     out.group_size = len(donuts)
     out.success = True
     out.det_names = [d.det_name for d in donuts]
-    out.donuts = [
+    out.donut_results = [
         WfDonutResult(
             donut_id=d.donut_id,
             det_name=d.det_name,

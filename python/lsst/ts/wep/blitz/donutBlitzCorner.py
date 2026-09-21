@@ -287,40 +287,44 @@ class DonutBlitzCornerConfig(
         target=CutDonutStampsTask,
         doc="Donut stamp cutting subtask.",
     )
-    instConfigFile: pexConfig.Field = pexConfig.Field(
+    wavefrontFit: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=WavefrontFittingTask,
+        doc="Wavefront fitting subtask using Danish algorithm.",
+    )
+    plot: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=DonutBlitzPlotTask,
+        doc="Subtask that generates diagnostic plots for a blitz visit.",
+    )
+    instConfigFile: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Path to an instrument configuration file to override the default. "
             "If begins with 'policy:' the path is relative to the ts_wep policy "
             "directory. If not provided, the default instrument for the camera "
             "will be loaded."
         ),
-        dtype=str,
         optional=True,
     )
-    maxFitScatter: pexConfig.Field = pexConfig.Field(
+    maxFitScatter: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Maximum allowed on-sky scatter (arcsec) for WCS refit to be accepted.",
-        dtype=float,
         default=1.0,
     )
-    astromRefFilter: pexConfig.Field = pexConfig.Field(
+    astromRefFilter: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Filter name to read from the reference catalog when fitting the "
             "WCS. Aliased over every filter via anyFilterMapsToThis, so it is "
             "what AstrometryTask resolves as its reference flux field."
         ),
-        dtype=str,
         default="phot_g_mean",
     )
-    photoRefFilter: pexConfig.Field = pexConfig.Field(
+    photoRefFilter: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Explicit filter name to read from the reference catalog for donut "
             "selection (e.g. 'phot_g_mean'). Overrides photoRefFilterPrefix "
             "when set."
         ),
-        dtype=str,
         optional=True,
     )
-    photoRefFilterPrefix: pexConfig.Field = pexConfig.Field(
+    photoRefFilterPrefix: pexConfig.Field[str] = pexConfig.Field[str](
         doc=(
             "Filter prefix used for donut selection, combined with the exposure "
             "band label as '{prefix}_{band}'. Used when photoRefFilter is not "
@@ -329,29 +333,26 @@ class DonutBlitzCornerConfig(
             "are no monster_LSSTCam_* columns in any released refcat version, "
             "so override this once a matching set exists."
         ),
-        dtype=str,
         default="monster_ComCam",
     )
-    saveStamps: pexConfig.Field = pexConfig.Field(
+    saveStamps: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
             "Include the unbinned `stamp` image column in the output catalog. "
             "The diagnostic plots use it when present and fall back to the "
             "binned `wf_img` when not."
         ),
-        dtype=bool,
         default=True,
     )
-    savePlots: pexConfig.Field = pexConfig.Field(
+    savePlots: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
             "Generate diagnostic PNGs for each visit. "
             "Set False in production to skip plot generation and deliver "
             "Zernikes faster; plots can be generated later by calling "
             "plot.run() with the in-memory results."
         ),
-        dtype=bool,
         default=False,
     )
-    unitTimeout: pexConfig.Field = pexConfig.Field(
+    unitTimeout: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Seconds one detector's cutout, or one wavefront group's fit, may "
             "run before that worker is killed and its unit recorded as lost, "
@@ -367,11 +368,10 @@ class DonutBlitzCornerConfig(
             "abort, which is the right outcome for what is by then a systemic "
             "failure rather than one bad detector."
         ),
-        dtype=float,
         default=30.0,
         optional=True,
     )
-    hangTimeout: pexConfig.Field = pexConfig.Field(
+    hangTimeout: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Seconds either the cutout or the wavefront pool may run before "
             "the hang watchdog dumps stacks and aborts the quantum, so that a "
@@ -388,22 +388,19 @@ class DonutBlitzCornerConfig(
             "check the galactic-bulge visits since cutout time is what scales "
             "with reference density."
         ),
-        dtype=float,
         default=180.0,
     )
-    colorLog: pexConfig.Field = pexConfig.Field(
+    colorLog: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
             "Colorize select log messages with ANSI escape codes. If None "
             "(the default), color is enabled only when stdout is an "
             "interactive terminal."
         ),
-        dtype=bool,
         default=None,
         optional=True,
     )
-    wfEstimationMode: pexConfig.ChoiceField = pexConfig.ChoiceField(
+    wfEstimationMode: pexConfig.ChoiceField[str] = pexConfig.ChoiceField[str](
         doc="Wavefront estimation dispatch mode.",
-        dtype=str,
         allowed={
             "paired": "Pair donuts from SW0/SW1 by SNR rank and dispatch as intra/extra pairs.",
             "unpaired": "Dispatch individual donuts independently.",
@@ -413,14 +410,6 @@ class DonutBlitzCornerConfig(
             "full_detector": "Dispatch all donuts on each detector as one work unit (8 fits per visit).",
         },
         default="paired",
-    )
-    wavefrontFit: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=WavefrontFittingTask,
-        doc="Wavefront fitting subtask using Danish algorithm.",
-    )
-    plot: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
-        target=DonutBlitzPlotTask,
-        doc="Subtask that generates diagnostic plots for a blitz visit.",
     )
 
     def setDefaults(self) -> None:

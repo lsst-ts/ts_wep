@@ -122,13 +122,13 @@ def _result(det_name="R00_SW0", rejected=(), **overrides):
 def _wf_group(donuts, group_id="g", success=True):
     """A `WfGroupResult` carrying ``donuts``.
 
-    Only ``donuts`` is read by `_build_donut_catalog` -- the group's own
+    Only ``donut_results`` is read by `_build_donut_catalog` -- the group's own
     scalars reach the table through each `WfDonutResult`'s replicated copy --
     so the rest take their no-fit values from `WfGroupResult.empty`.
     """
     out = WfGroupResult.empty(group_id, n_zk=len(_options().noll_indices))
     out.group_size = len(donuts)
-    out.donuts = list(donuts)
+    out.donut_results = list(donuts)
     out.det_names = [d.det_name for d in donuts]
     out.success = success
     return out

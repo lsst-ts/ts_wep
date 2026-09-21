@@ -36,7 +36,7 @@ from .utils import _INSTRUMENT
 class MeasureDonutCandidatesConfig(pexConfig.Config):
     """Config for donut candidate flux measurement and quality selection."""
 
-    apertureMarginFrac: pexConfig.Field = pexConfig.Field(
+    apertureMarginFrac: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Fractional margin added to both edges of the main photometric "
             "annulus, to tolerate PSF blur and centroiding error: the outer "
@@ -45,37 +45,33 @@ class MeasureDonutCandidatesConfig(pexConfig.Config):
             "Unlike the bkg*Frac fields below, this is the margin itself, not "
             "an absolute multiple of the nominal donut radius."
         ),
-        dtype=float,
         default=0.05,
     )
     # Two background regions are sampled, and each has an "inner" radius, so
     # keep the names apart: this one bounds the filled disc inside the central
     # obscuration, bkgAnnulusInnerFrac bounds the annulus outside the donut.
-    bkgInnerDiscFrac: pexConfig.Field = pexConfig.Field(
+    bkgInnerDiscFrac: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Outer edge of the inner background/blend-check disc, which sits "
             "inside the central obscuration, as a multiple of "
             "``radius * obscuration``. Held back from the obscuration edge so "
             "background is not sampled right against the donut's inner rim."
         ),
-        dtype=float,
         default=0.67,
     )
-    bkgAnnulusInnerFrac: pexConfig.Field = pexConfig.Field(
+    bkgAnnulusInnerFrac: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Inner edge of the outer background/blend-check annulus, as a "
             "multiple of the nominal donut radius."
         ),
-        dtype=float,
         default=1.25,
     )
-    bkgAnnulusOuterFrac: pexConfig.Field = pexConfig.Field(
+    bkgAnnulusOuterFrac: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(
             "Outer edge of the outer background/blend-check annulus, as a "
             "multiple of the nominal donut radius. Also sets the half-width "
             "of the photometry/quality-metric cutout window."
         ),
-        dtype=float,
         default=1.4,
     )
 
