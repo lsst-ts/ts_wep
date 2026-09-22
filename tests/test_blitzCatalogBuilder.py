@@ -119,6 +119,36 @@ def _result(det_name="R00_SW0", rejected=(), **overrides):
     return CutoutResult(**kwargs)
 
 
+def _wf_donut(donut, group_id="g", **overrides):
+    """A successful `WfDonutResult` for ``donut``, keyed to match it."""
+    kwargs = dict(
+        donut_id=donut.donut_id,
+        det_name=donut.det_name,
+        visit_id=donut.visit_id,
+        zk_dev=np.full(_ZK_JMAX + 1, 1e-6),
+        zk_intrinsic=np.zeros(_ZK_JMAX + 1),
+        img=None,
+        model_img=None,
+        fit_success=True,
+        fit_elapsed=12.5,
+        setup_elapsed=0.75,
+        fit_nfev=40,
+        fit_cost=3.5,
+        fit_optimality=2.5e-9,
+        fit_njev=38,
+        fit_outcome="ok",
+        fit_dx=0.1,
+        fit_dy=0.2,
+        fit_flux=1e5,
+        fit_fwhm=0.9,
+        blend_frac=0.01,
+        group_id=group_id,
+        group_size=1,
+    )
+    kwargs.update(overrides)
+    return WfDonutResult(**kwargs)
+
+
 def _wf_group(donuts, group_id="g", success=True):
     """A `WfGroupResult` carrying ``donuts``.
 
@@ -161,6 +191,19 @@ class TestCatalogOptions(unittest.TestCase):
         self.assertEqual(_options(stamp_size=168).wf_img_size, 83)
         self.assertEqual(_options(noll_indices=(4, 11, 22)).zk_deviation_jmax, 22)
 
+    def testBkgWidthFollowsDanishsPolynomial(self) -> None:
+        """nbkg is danish's (order+1)(order+2)/2, clamped to 0 below zero.
+
+        The 0 is what drops the column: a zero-width array column writes to
+        parquet and then cannot be read back, so it must never be emitted.
+        """
+        self.assertEqual(_options(bkg_order=-1).nbkg, 0)
+        self.assertEqual(_options(bkg_order=0).nbkg, 1)
+        self.assertEqual(_options(bkg_order=1).nbkg, 3)
+        self.assertEqual(_options(bkg_order=2).nbkg, 6)
+        # Matches the config's own default of a constant background.
+        self.assertEqual(_options().nbkg, 1)
+
     def testCornerWiresEveryFieldFromConfig(self) -> None:
         """Corner mode's options come from the config fields they claim to.
 
@@ -182,6 +225,7 @@ class TestCatalogOptions(unittest.TestCase):
         config.measureCandidates.bkgAnnulusOuterFrac = 1.44
         config.wfEstimationMode = "unpaired"
         config.saveStamps = False
+        config.wavefrontFit.bkgOrder = 1
 
         options = DonutBlitzCornerTask(config=config)._catalogOptions()
 
@@ -197,6 +241,7 @@ class TestCatalogOptions(unittest.TestCase):
         self.assertFalse(options.save_stamps)
         # Corner mode's tables are small, so the WF images always come along.
         self.assertTrue(options.save_wf_images)
+        self.assertEqual(options.bkg_order, 1)
 
 
 class TestRotateZkToEb(unittest.TestCase):
@@ -569,6 +614,99 @@ class TestBuildDonutCatalog(unittest.TestCase):
             self.assertIn("zk_deviation_ccs", table.colnames)
             self.assertIn("snr", table.colnames)
             self.assertEqual(len(table), 1)
+
+    def testFitBkgCarriesDanishsFittedBackground(self) -> None:
+        """The fitted background reaches the table at its configured width.
+
+        Every other free parameter of the danish fit is reported (fit_dx,
+        fit_dy, fit_flux, group_fwhm, the Zernikes); this is the last one, and
+        the only quantity the table's own `bkg` column can be checked against.
+        """
+        for bkg_order, width in ((0, 1), (1, 3), (2, 6)):
+            fitted = np.arange(width, dtype=float) + 10.0
+            donut = _donut(donut_id=1)
+            wf_results = [_wf_group([_wf_donut(donut, fit_bkg=fitted)])]
+            table = _build_donut_catalog(
+                [_result()],
+                wf_results,
+                [donut],
+                [],
+                42,
+                _options(bkg_order=bkg_order),
+            )
+            self.assertEqual(table["fit_bkg"].shape, (1, width), msg=f"bkgOrder={bkg_order}")
+            np.testing.assert_allclose(table["fit_bkg"][0], fitted)
+            # Unitless, like the `bkg` column it is meant to be compared with.
+            self.assertIsNone(table["fit_bkg"].unit)
+
+    def testFitBkgIsAbsentWhenDanishModelsNoBackground(self) -> None:
+        """bkgOrder=-1 drops the column rather than emitting a zero-width one.
+
+        A ``(n, 0)`` array column writes to parquet happily and then raises on
+        read, which would break ``butler.get`` for the *whole* results table --
+        and that table is the plot task's input.  So the empty case must be no
+        column at all.
+        """
+        table = _build_donut_catalog([_result()], [], [_donut()], [], 42, _options(bkg_order=-1))
+        self.assertNotIn("fit_bkg", table.colnames)
+        # Dropping it must not disturb the neighboring fit columns.
+        self.assertIn("fit_flux", table.colnames)
+        self.assertIn("bkg", table.colnames)
+
+    def testFitBkgIsNaNFilledToWidthWhenNoFitRan(self) -> None:
+        """A donut no fit claimed still needs a row of the common width.
+
+        Rows come from a list of dicts, so a short vector on one row would make
+        the column ragged and object-dtype -- unpersistable.  The width comes
+        from config, not from the data, because a run whose every fit failed
+        has no fitted vector to take it from.
+        """
+        fitted = _donut(donut_id=1)
+        surplus = _donut(donut_id=2)
+        wf_results = [_wf_group([_wf_donut(fitted, fit_bkg=np.array([7.0, 8.0, 9.0]))])]
+        table = _build_donut_catalog(
+            [_result()],
+            wf_results,
+            [fitted, surplus],
+            [surplus],
+            42,
+            _options(bkg_order=1),
+        )
+        self.assertEqual(table["fit_bkg"].shape, (2, 3))
+        by_id = {int(r["donut_id"]): r for r in table}
+        np.testing.assert_allclose(by_id[1]["fit_bkg"], [7.0, 8.0, 9.0])
+        self.assertTrue(np.all(np.isnan(by_id[2]["fit_bkg"])))
+
+    def testFitBkgWidthIsTakenFromConfigNotTheFit(self) -> None:
+        """A stale vector of the wrong width is discarded, not emitted ragged.
+
+        `bkg_order` and the fitter's `bkgOrder` are wired from the same config
+        field, so a mismatch means something is already inconsistent; falling
+        back to NaN keeps the column well-shaped rather than unpersistable.
+        """
+        donut = _donut(donut_id=1)
+        wf_results = [_wf_group([_wf_donut(donut, fit_bkg=np.arange(6, dtype=float))])]
+        table = _build_donut_catalog([_result()], wf_results, [donut], [], 42, _options(bkg_order=0))
+        self.assertEqual(table["fit_bkg"].shape, (1, 1))
+        self.assertTrue(np.all(np.isnan(table["fit_bkg"][0])))
+
+    def testFitBkgSurvivesTheArrowRoundTrip(self) -> None:
+        """The column has to survive the way the catalog is persisted.
+
+        The zero-width case proved that an array column can pass every
+        in-memory check and still fail on read, so each width is round-tripped
+        here rather than trusted.
+        """
+        for bkg_order, width in ((0, 1), (1, 3), (2, 6)):
+            donut = _donut(donut_id=1)
+            fitted = np.arange(width, dtype=float) + 3.0
+            wf_results = [_wf_group([_wf_donut(donut, fit_bkg=fitted)])]
+            table = _build_donut_catalog(
+                [_result()], wf_results, [donut], [], 42, _options(bkg_order=bkg_order)
+            )
+            back = arrow_to_astropy(astropy_to_arrow(Table(table)))
+            self.assertEqual(back["fit_bkg"].shape, (1, width), msg=f"bkgOrder={bkg_order}")
+            np.testing.assert_allclose(back["fit_bkg"][0], fitted)
 
     def testMetaCarriesOptionsAndGeometry(self) -> None:
         options = _options(binning=4, max_donuts=3, wf_mode="full_detector")

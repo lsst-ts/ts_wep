@@ -290,6 +290,9 @@ class WfDonutResult:
     blend_frac: float
     group_id: str
     group_size: int
+    # Danish's fitted background coefficients, length `model.nbkg`; None where
+    # no fit produced them, and empty at bkgOrder=-1.
+    fit_bkg: npt.NDArray[np.float64] | None = None
 
 
 # Sentinel for "no fit consumed this donut". All-NaN Zernikes, empty strings,
@@ -318,6 +321,7 @@ _NULL_WF_DONUT = WfDonutResult(
     blend_frac=float("nan"),
     group_id="",
     group_size=0,
+    fit_bkg=None,
 )
 
 
