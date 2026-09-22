@@ -1316,4 +1316,5 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             wf_mode=self.config.wfEstimationMode,
             save_stamps=self.config.saveStamps,
             save_wf_images=self.config.saveWfImages,
+            bkg_order=self.wavefrontFit.config.bkgOrder,
         )

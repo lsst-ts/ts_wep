@@ -129,6 +129,10 @@ class _CatalogOptions:
         Per-detector accepted-donut cap.
     wf_mode : str
         WF dispatch mode label.
+    bkg_order : int
+        Danish's background polynomial order, from the fitting subtask. Sets
+        the width of the ``fit_bkg`` column via ``nbkg``; at -1 danish models
+        no background and the column is dropped.
     save_stamps : bool
         Include the un-binned ``stamp`` column. Much the largest column.
     save_wf_images : bool
@@ -147,6 +151,17 @@ class _CatalogOptions:
     wf_mode: str
     save_stamps: bool = True
     save_wf_images: bool = True
+    bkg_order: int = 0
+
+    @property
+    def nbkg(self) -> int:
+        """Number of danish background coefficients.
+
+        The ``fit_bkg`` column's width; 0 means no column at all.
+        """
+        if self.bkg_order < 0:
+            return 0
+        return (self.bkg_order + 1) * (self.bkg_order + 2) // 2
 
     @property
     def zk_deviation_jmax(self) -> int:
@@ -300,6 +315,13 @@ _META_NOTES = {
         " on-sky scatter, NaN where no refit ran; n_quarter is the detector"
         " orientation needed to relate the CCS stamp to x_det/y_det"
     ),
+    "fit_bkg": (
+        "danish's fitted background, as galsim Zernike coefficients over the"
+        " *binned* stamp with R_outer=(npix-1)/2, so element 0 is the mean level"
+        " in ADU/pixel; absent when bkgOrder=-1. Distinct from the bkg column,"
+        " which is a local median over the inner-disc + outer-annulus mask of"
+        " the un-binned exposure *after* background subtraction"
+    ),
 }
 
 
@@ -391,7 +413,14 @@ def _build_donut_catalog(
 
         Every column named ``group_*`` is a property of the joint fit, not of
         the donut, and is replicated verbatim onto each row of the group; only
-        ``fit_dx``, ``fit_dy``, ``fit_flux`` and ``blend_frac`` are per-donut.
+        ``fit_dx``, ``fit_dy``, ``fit_flux``, ``fit_bkg`` and ``blend_frac``
+        are per-donut.
+
+        ``fit_bkg`` holds danish's fitted background coefficients, width
+        ``options.nbkg``, and is absent entirely at ``bkgOrder=-1`` where
+        danish models no background.  Do not confuse it with ``bkg``, which is
+        a local median measured by `MeasureDonutCandidatesTask` rather than a
+        fit output; see ``meta["notes"]``.
 
         ``defocal_offsets`` is the donut's defocal state: the optic z shifts in
         meters that put it off focus, ordered ``_OFFSET_OPTICS`` = (detector,
@@ -484,6 +513,7 @@ def _build_donut_catalog(
     stamp_size = options.stamp_size
     wf_img_size = options.wf_img_size
     zk_deviation_jmax = options.zk_deviation_jmax
+    nbkg = options.nbkg
 
     rows = []
     zk_deviation_rows = []
@@ -531,6 +561,12 @@ def _build_donut_catalog(
                 if wd.model_img is not None
                 else np.full((wf_img_size, wf_img_size), np.nan, dtype=float)
             )
+
+        fit_bkg = (
+            np.asarray(wd.fit_bkg, dtype=float)
+            if wd.fit_bkg is not None and len(wd.fit_bkg) == nbkg
+            else np.full(nbkg, np.nan, dtype=float)
+        )
 
         nearby_photo_dx, nearby_photo_dy, nearby_photo_mag = _encode_nearby(d.nearby_photo)
         nearby_astrom_dx, nearby_astrom_dy, nearby_astrom_mag = _encode_nearby(d.nearby_astrom)
@@ -598,6 +634,7 @@ def _build_donut_catalog(
             "fit_dy": wd.fit_dy * u.arcsec,
             "fit_flux": wd.fit_flux,
             "blend_frac": wd.blend_frac,
+            **({"fit_bkg": fit_bkg} if nbkg else {}),
             # Zernikes are attached after construction.
             # --- embedded images, both optional ---
             **({"stamp": stamp} if options.save_stamps else {}),

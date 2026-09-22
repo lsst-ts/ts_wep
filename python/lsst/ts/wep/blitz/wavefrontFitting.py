@@ -507,6 +507,7 @@ class _LstsqFitResult:
     fluxes: list[float]
     dxs: list[float]
     dys: list[float]
+    bkgs: list[npt.NDArray[np.float64] | None]
     fwhm: float
     nfev: int = 0
     cost: float = float("nan")
@@ -564,6 +565,7 @@ class _LstsqFitResult:
             fluxes=[float("nan")] * n_donuts,
             dxs=[float("nan")] * n_donuts,
             dys=[float("nan")] * n_donuts,
+            bkgs=[None] * n_donuts,
             fwhm=float("nan"),
             error=error,
             outcome=outcome,
@@ -682,6 +684,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     fit_dy=float(fit_result.dys[i]),
                     fit_flux=float(fit_result.fluxes[i]),
                     fit_fwhm=fit_result.fwhm,
+                    fit_bkg=fit_result.bkgs[i],
                     blend_frac=fit_result.blend_fracs[i],
                     group_id=group.group_id,
                     group_size=n,
@@ -906,6 +909,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     fluxes=params["fluxes"],
                     dxs=params["dxs"],
                     dys=params["dys"],
+                    bkgs=[np.asarray(b, dtype=float) for b in params["bkgs"]],
                     fwhm=params["fwhm"],
                     nfev=0,
                     cost=float("nan"),
@@ -968,6 +972,7 @@ class WavefrontFittingTask(pipeBase.Task):
                     fluxes=params["fluxes"],
                     dxs=params["dxs"],
                     dys=params["dys"],
+                    bkgs=[np.asarray(b, dtype=float) for b in params["bkgs"]],
                     fwhm=params["fwhm"],
                     nfev=result.nfev,
                     cost=result.cost,
