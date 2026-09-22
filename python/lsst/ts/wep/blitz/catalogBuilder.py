@@ -289,11 +289,12 @@ def _software_versions() -> dict:
     return out
 
 
-# Written verbatim to ``meta["notes"]``, keyed by the meta key each line is
-# about. This is for what a unit cannot carry: every value in ``meta`` says
-# what it is measured in, but not which instant, which visit or which clock it
-# refers to. Deliberately short -- one line each, not a substitute for the
-# docstrings.
+# Written verbatim to ``meta["notes"]``, keyed by the meta key or column each
+# line is about. This is for what a unit cannot carry: every value says what it
+# is measured in, but not which instant, which visit, which clock or which axis
+# it refers to. Columns are here too because astropy column descriptions do not
+# survive the ArrowAstropy round trip on numeric columns. Deliberately short --
+# one line each, not a substitute for the docstrings.
 _META_NOTES = {
     "date": "mid-exposure, as VisitInfo defines every date",
     "*_elapsed": (
@@ -322,6 +323,11 @@ _META_NOTES = {
         " which is a local median over the inner-disc + outer-annulus mask of"
         " the un-binned exposure *after* background subtraction"
     ),
+    "defocal_offsets": (
+        "signed optic z shifts in meters, one per offset_optics entry; positive"
+        " is extra-focal and negative intra-focal"
+    ),
+    "noll_indices": ("which Noll indices were fitted (distinct from the layout of the zk_* columns)"),
 }
 
 
@@ -422,9 +428,11 @@ def _build_donut_catalog(
         a local median measured by `MeasureDonutCandidatesTask` rather than a
         fit output; see ``meta["notes"]``.
 
-        ``defocal_offsets`` is the donut's defocal state: the optic z shifts in
-        meters that put it off focus, ordered ``_OFFSET_OPTICS`` = (detector,
-        camera, m2).
+        ``defocal_offsets`` is the donut's defocal state: the signed optic z
+        shifts in meters that put it off focus, ordered ``_OFFSET_OPTICS`` =
+        (detector, camera, m2) and labelled by ``meta["offset_optics"]``.
+        Positive is extra-focal, negative intra-focal, in both modes; see
+        ``meta["notes"]``.
 
         Zernikes are Noll-indexed array columns: ``zk_deviation_ccs`` and
         ``zk_intrinsic_ccs`` in the camera coordinate system (as fit), plus
@@ -440,8 +448,8 @@ def _build_donut_catalog(
 
         Visit-level scalars are stored in ``table.meta``; per-detector scalars
         in ``table.meta["det_meta"]``, keyed by ``f"{det_name}_{visit_id}"``.
-        Further descriptions of meta values are present in ``meta["notes"]``,
-        keyed by the meta key being annotated (see `_META_NOTES`).
+        Further descriptions are present in ``meta["notes"]``, keyed by the
+        meta key or column being annotated (see `_META_NOTES`).
     """
     # All-zero rather than None, so the meta writes below need no guard and an
     # untimed caller still gets every timing key.
@@ -710,6 +718,7 @@ def _build_donut_catalog(
     table.meta["stamp_size"] = options.stamp_size
     # The nearby_* array length, otherwise a hardcoded 5 consumers must guess.
     table.meta["max_nearby"] = _MAX_NEARBY
+    table.meta["offset_optics"] = list(_OFFSET_OPTICS)
     table.meta["zk_deviation_jmax"] = zk_deviation_jmax
     table.meta["zk_intrinsic_jmax"] = _ZK_JMAX
     # rotTelPos: the *derived* angle the _ocs columns were rotated by. The two
