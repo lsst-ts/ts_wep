@@ -47,7 +47,8 @@ from lsst.ts.wep.blitz.donutBlitzCorner import (
     DonutBlitzCornerConfig,
     DonutBlitzCornerTask,
 )
-from lsst.ts.wep.blitz.utils import _ZK_JMAX
+from lsst.ts.wep.blitz.utils import _OFFSET_OPTICS, _ZK_JMAX
+from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingConfig
 
 _IMAGE_COLUMNS = ("stamp", "wf_img", "model_img")
 
@@ -556,6 +557,46 @@ class TestBuildDonutCatalog(unittest.TestCase):
         self.assertEqual(table["defocal_offsets"].unit, u.m)
         np.testing.assert_allclose(by_id[1]["defocal_offsets"].to_value(u.m), [1.5e-3, 0.0, 0.0])
         np.testing.assert_allclose(by_id[2]["defocal_offsets"].to_value(u.m), [-1.5e-3, 0.0, 0.0])
+
+    def testDefocalOffsetsAxisIsLabelledInMeta(self) -> None:
+        """The column is a bare length-3 array, so meta must name the axis.
+
+        Nothing in the column itself says which optic each slot moves, and an
+        astropy column description cannot carry it: the ArrowAstropy round trip
+        drops descriptions on numeric columns, so it would read back as None.
+        `offset_optics` is the batoid optic names, `notes` the sign convention.
+        """
+        table = _build_donut_catalog([_result()], [], [_donut()], [], 42, _options())
+
+        meta = arrow_to_astropy(astropy_to_arrow(Table(table))).meta
+
+        self.assertEqual(meta["offset_optics"], list(_OFFSET_OPTICS))
+        self.assertEqual(len(meta["offset_optics"]), table["defocal_offsets"].shape[1])
+        # The sign is the side of focus, which no unit or label can express.
+        self.assertIn("extra-focal", meta["notes"]["defocal_offsets"])
+
+    def testNollIndicesNoteDisownsTheDenseLayout(self) -> None:
+        """`noll_indices` is the fitted set, not the zk_* column layout.
+
+        The dense arrays are indexed by Noll j directly, so a consumer that
+        reads `noll_indices` as the axis labelling silently mis-indexes -- the
+        default set skips 20 and 21, leaving those slots NaN inside the array
+        rather than absent from it.  Asserted on the real default rather than
+        this module's contiguous `_options`, since the gap is the whole point.
+        """
+        noll_indices = WavefrontFittingConfig().nollIndices
+        self.assertNotIn(20, noll_indices)
+        self.assertNotIn(21, noll_indices)
+
+        table = _build_donut_catalog(
+            [_result()], [], [_donut()], [], 42, _options(noll_indices=tuple(noll_indices))
+        )
+
+        # Slot 20 exists in the array despite never being fitted, which is what
+        # makes the distinction observable.
+        self.assertGreater(table["zk_deviation_ccs"].shape[1], 21)
+        self.assertEqual(table.meta["noll_indices"], list(noll_indices))
+        self.assertIn("distinct", table.meta["notes"]["noll_indices"])
 
     def testDefocalOffsetsAreNaNWhenUnannotated(self) -> None:
         """A donut that never reached the fitter gets a well-shaped row."""
