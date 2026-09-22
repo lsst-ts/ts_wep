@@ -50,6 +50,7 @@ from lsst.pipe.base import (
     OutputQuantizedConnection,
     QuantumContext,
 )
+from lsst.ts.wep.task.combineZernikesSigmaClipTask import CombineZernikesSigmaClipTask
 from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
 from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.utils.timer import timeMethod
@@ -83,6 +84,7 @@ from .wavefrontFitting import (
     _build_wf_groups,
     _wf_fitting_worker,
 )
+from .zernikesTable import build_zernikes_tables
 
 
 def _exposure_group(refs) -> str:
@@ -247,6 +249,24 @@ class DonutBlitzCornerConnections(
         storageClass="ArrowAstropy",
         dimensions=("instrument", "visit"),
     )
+    zernikes = connectionTypes.Output(
+        doc=(
+            "Per-corner Zernike table in the schema CalcZernikesTask emits, for "
+            "consumers written against the non-blitz corner pipeline. One per corner, "
+            "keyed on the extra-focal (SW0) detector. Carries only the deviation "
+            "Zernikes; see lsst.ts.wep.blitz.zernikesTable."
+        ),
+        name="zernikes",
+        storageClass="AstropyQTable",
+        dimensions=("visit", "detector", "instrument"),
+        # Only the extra-focal visits are ever written...h
+        multiple=True,
+    )
+
+    def __init__(self, *, config: Any = None) -> None:
+        super().__init__(config=config)
+        if config is not None and not config.doZernikesOutput:
+            del self.zernikes
 
 
 class DonutBlitzCornerConfig(
@@ -399,6 +419,39 @@ class DonutBlitzCornerConfig(
         default=None,
         optional=True,
     )
+    doZernikesOutput: pexConfig.Field[bool] = pexConfig.Field[bool](
+        doc=(
+            "Also emit the per-corner `zernikes` table for legacy consumers. "
+            "Off by default: the per-donut `donutBlitzCornerResults` catalog "
+            "is the primary output and carries strictly more information."
+        ),
+        default=False,
+    )
+    combineZernikes: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=CombineZernikesSigmaClipTask,
+        doc=(
+            "How to combine the per-group Zernikes into the `average` row of "
+            "the `zernikes` table. Only used when doZernikesOutput is True."
+        ),
+    )
+    doBlurClip: pexConfig.Field[bool] = pexConfig.Field[bool](
+        doc=(
+            "Sigma clip donuts whose fitted blur (fwhm) is an outlier from the "
+            "`zernikes` average. See blurClipMinRows."
+        ),
+        default=True,
+    )
+    blurClipMinRows: pexConfig.Field[int] = pexConfig.Field[int](
+        doc=(
+            "Minimum number of data rows for blur clipping to run. Below this "
+            "it is skipped, because mad_std over one or two samples cannot flag "
+            "anything and the clip would still replace the configured "
+            "combineZernikes average with an unweighted mean. Relevant for the "
+            "joint-fit modes, which yield one row per corner (full_corner) or "
+            "two (full_detector)."
+        ),
+        default=3,
+    )
     wfEstimationMode: pexConfig.ChoiceField[str] = pexConfig.ChoiceField[str](
         doc="Wavefront estimation dispatch mode.",
         allowed={
@@ -490,6 +543,8 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         self.makeSubtask("cutStamps")
         self.makeSubtask("wavefrontFit")
         self.makeSubtask("plot")
+        if self.config.doZernikesOutput:
+            self.makeSubtask("combineZernikes")
         self._colorLogEnabled = _resolve_color_log_enabled(self.config.colorLog)
 
     def runQuantum(
@@ -550,6 +605,21 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         )
         self.log.info("run() execution: %.3fs", time.perf_counter() - t_run0)
         butlerQC.put(outputs.cornerResults, outputRefs.cornerResults)
+
+        if self.config.doZernikesOutput:
+            # A ref is predicted for every corner detector the query
+            # covers, but only the extra-focal ones are keys here: the
+            # intra-focal refs and any corner that contributed no fits
+            # are deliberately left unwritten.
+            refs = {ref.dataId["detector"]: ref for ref in outputRefs.zernikes}
+            for det_id, table in outputs.zernikes.items():
+                ref = refs.get(det_id)
+                if ref is None:
+                    self.log.warning(
+                        "No predicted output ref for zernikes on detector %d; not written.", det_id
+                    )
+                    continue
+                butlerQC.put(table, ref)
 
     @timeMethod
     def run(
@@ -703,7 +773,29 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             self.plot.run(catalog)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
-        return pipeBase.Struct(donuts=donuts, wfResults=wf_results, cornerResults=Table(catalog))
+        # Built from the finished catalog rather than from wf_results, so the
+        # two outputs cannot disagree about what was fit.
+        zernikes = {}
+        if self.config.doZernikesOutput:
+            zernikes = build_zernikes_tables(
+                catalog,
+                noll_indices=self.wavefrontFit.config.nollIndices,
+                wf_mode=mode,
+                combine_zernikes=self.combineZernikes,
+                visit_id=visit_id,
+                cam_name=instrument,
+                visit_info=visit_info,
+                do_blur_clip=self.config.doBlurClip,
+                blur_clip_min_rows=self.config.blurClipMinRows,
+                log=self.log,
+            )
+
+        return pipeBase.Struct(
+            donuts=donuts,
+            wfResults=wf_results,
+            cornerResults=Table(catalog),
+            zernikes=zernikes,
+        )
 
     def _indexInputs(
         self,

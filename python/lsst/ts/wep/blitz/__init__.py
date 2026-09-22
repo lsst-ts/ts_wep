@@ -27,6 +27,7 @@ from .cutDonutStamps import *
 from .blitzDetect import *
 from .cutoutPipeline import *
 from .wavefrontFitting import *
+from .zernikesTable import *
 from .famPipeline import *
 from .donutBlitzPlot import *
 from .donutBlitzCorner import *
