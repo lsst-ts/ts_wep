@@ -72,6 +72,36 @@ _COLOR_TREFOIL = "#009E73"
 _COLOR_QUADRAFOIL = "#0072B2"
 _COLOR_PENTAFOIL = "#CC79A7"
 _COLOR_HEXAFOIL = "#D55E00"
+# The focal-plane plot's selection funnel, from widest to narrowest stage.
+# `_COLOR_PHOTO_REFCAT` is reused for the refcat overlay: it already means
+# exactly that on the donut stamps, so the two plots agree. The rest stay
+# within the Okabe-Ito palette.
+_COLOR_DETECTION = "#0072B2"
+_COLOR_SELECTION = "#CC79A7"
+_COLOR_ACCEPTED = "#009E73"
+# Deliberately *not* `_COLOR_PHOTO_REFCAT`, which the refcat overlay already
+# uses: a link drawn in that color is invisible among the hundreds of refcat
+# circles it crosses. Yellow is the palette's most distinct remaining entry and
+# reads against both the grey image and the other overlays.
+_COLOR_PAIR_LINK = "#F0E442"
+_COLOR_FIELD_LIMIT = "#E69F00"
+
+# The funnel's marker style per stage, as
+# ``(kind, color, marker, size, alpha, linewidth)``, widest stage first so the
+# narrow ones draw on top. Size grows along the funnel so the stages nest as
+# visibly concentric rings rather than competing at one scale.
+_FP_FUNNEL_STYLES = (
+    ("refcat", _COLOR_PHOTO_REFCAT, "o", 15.0, 0.55, 0.9),
+    ("detection", _COLOR_DETECTION, "o", 46.0, 0.85, 0.7),
+    ("selection", _COLOR_SELECTION, "o", 78.0, 0.95, 0.9),
+)
+
+# How a donut that survived the quality cut is marked, as
+# ``(marker, size, linewidth)``.
+#
+# A diamond rather than another circle, and larger than the widest funnel
+# stage.
+_FP_ACCEPTED_MARKER = ("D", 165.0, 1.4)
 
 # Annotation text on a donut stamp: the per-donut stats block and the refcat
 # overlay labels. Small because a donut plot packs one row per detector and
@@ -141,6 +171,80 @@ _DONUT_LAYOUT = _DonutLayout(
 # Four corner blocks in a 2x2, each of which is a square grid of unit cells,
 # so `cell` and `row_h` are equal by intent and not by coincidence.
 _WF_LAYOUT = _WfLayout(cell=1.0, row_h=1.0, hpad=0.08)
+
+
+@dataclass(frozen=True)
+class _FpLayout:
+    """Figure geometry for the focal-plane selection plot, in inches.
+
+    A third sibling of `_DonutLayout` and `_WfLayout`.  Square because the plot
+    is a 2x2 of corners whose cells are each two detectors of 2:1 aspect.
+
+    Attributes
+    ----------
+    fig_side : float
+        Side of the square figure.
+    margin : float
+        Outer border on all four sides.
+    suptitle_h : float
+        Extra height reserved at the top for the suptitle.
+    legend_h : float
+        Extra height reserved at the bottom for the legend.
+    gap_intra : float
+        Seam between the two detectors of one corner.  The wavefront sensor's
+        two halves are physically 3.27 mm apart, so this is what decides
+        whether the vignetting arc reads as continuous across the seam.
+    gap_inter : float
+        Gap between adjacent corners.  One value for both directions, so the
+        focal plane reads as evenly spaced whichever way each corner falls.
+    max_sources : int
+        Per detector, per kind, the most markers drawn.  The *dataset* is
+        uncapped; this only bounds the ink.  A galactic-bulge field can put
+        ~10^4 reference sources on one detector, and eight panels of that is a
+        slow figure made of solid circles.  Brightest-first, so the cap drops
+        the faint tail rather than an arbitrary slice.
+    """
+
+    fig_side: float
+    margin: float
+    suptitle_h: float
+    legend_h: float
+    gap_intra: float
+    gap_inter: float
+    max_sources: int
+
+
+_FP_LAYOUT = _FpLayout(
+    fig_side=13.0,
+    margin=0.26,
+    suptitle_h=0.52,
+    legend_h=0.39,
+    gap_intra=0.44,
+    gap_inter=0.30,
+    max_sources=2000,
+)
+
+# Aspect forced on each panel: the sensors are 4072x2000, which is 2.036:1, but
+# they are *drawn* 2:1 and so stretched by 1.8% along their long axis.
+# Deliberate to let the four corner blocks tile a square with no residual
+# slack, which is what makes the gaps below exactly settable.
+_FP_PANEL_ASPECT = 2.0
+
+# How the 2x2 of corners is built, as
+# ``(corner, grid row, grid col, first detector, second detector)``.
+#
+# The detector *order* within a corner is tabulated rather than derived from
+# intra/extra.
+#
+# Which *way* a corner's two detectors stack is not here: it follows from their
+# displayed aspect, which follows from `n_quarter`, which is read off the data.
+# See `_focal_plane_axes_rects`.
+_FP_MOSAIC = (
+    ("R00", 0, 0, "R00_SW1", "R00_SW0"),
+    ("R40", 0, 1, "R40_SW1", "R40_SW0"),
+    ("R04", 1, 0, "R04_SW0", "R04_SW1"),
+    ("R44", 1, 1, "R44_SW0", "R44_SW1"),
+)
 
 # The Noll range every Zernike bar chart spans, regardless of the configured
 # `nollIndices`, so plots stay comparable across configs.
@@ -559,6 +663,270 @@ def _donut_annotation(row, rejected: bool) -> str:
     return f"{parts['snr']}  {rej_str}\n{parts['if']}  {parts['of']}  {parts['osm']}\n{donut_id_str}"
 
 
+def _rot90_display(row_idx, col_idx, height: int, width: int, n_quarter: int):
+    """Map array indices through to display coords.
+
+    The whole-detector counterpart of `_stamp_transform`, which applies the
+    same rotation to *offsets* within a stamp.  The two are deliberately
+    separate: that one rotates about an origin and so needs no extent, and it
+    carries a centroid rounding residual that has no analogue here.  Changing
+    the rotation convention means changing both.
+
+    Works elementwise, so it takes whole arrays of coordinates, and in floats,
+    so a sub-pixel source position stays sub-pixel.
+
+    Parameters
+    ----------
+    row_idx, col_idx : array_like
+        Indices into the *un-rotated* array -- i.e. ``(y, x)`` in the detector
+        frame, already scaled into the binned image (see `_binned_coord`).
+    height, width : int
+        The un-rotated array's shape, needed because each quarter turn reflects
+        one axis about the array's extent.
+    n_quarter : int
+        Quarter turns, as `lsst.afw.cameraGeom.Orientation.getNQuarter` reports
+        them; taken mod 4.
+
+    Returns
+    -------
+    tuple
+        ``(x_display, y_display)``.  The pair is the rotated ``(row, col)``
+        *in that order*, which is what applies the transpose -- returning
+        ``(col, row)`` would silently mirror every overlay about the diagonal.
+    """
+    r = np.asarray(row_idx, dtype=float)
+    c = np.asarray(col_idx, dtype=float)
+    h, w = height, width
+    for _ in range(n_quarter % 4):
+        # One clockwise quarter turn: the new row is the old column, and the
+        # new column counts back from the old array's height.
+        r, c, h, w = c, (h - 1) - r, w, h
+    return r, c
+
+
+def _binned_coord(x_det, y_det, row):
+    """Scale detector-frame coordinates into one row's binned image indices.
+
+    Returns ``(row_idx, col_idx)`` -- numpy order, ready for `_rot90_display`.
+
+    The ``(b - 1) / 2`` term is not cosmetic.  `lsst.afw.math.binImage`
+    averages the block ``[b*j, b*j + b - 1]``, whose center sits at
+    ``b*j + (b - 1)/2``, so binned pixel ``j`` is centered on that un-binned
+    coordinate rather than on ``b*j``.  Dividing by ``b`` alone therefore
+    offsets every marker by ``(b - 1) / (2b)`` binned pixels -- at ``b=4`` that
+    is 0.375, which put a marker in the *wrong binned pixel* for half of a
+    64-row test sweep.
+
+    Binning and origin are read off the row rather than assumed, so a plot
+    regenerated from a run with different settings still lands correctly.
+    """
+    b = int(row["binning"])
+    offset = (b - 1) / 2
+    x0 = float(row["bbox_min_x"])
+    y0 = float(row["bbox_min_y"])
+    return (
+        (np.asarray(y_det, dtype=float) - y0 - offset) / b,
+        (np.asarray(x_det, dtype=float) - x0 - offset) / b,
+    )
+
+
+def _focal_plane_axes_rects(
+    n_quarter_by_det: dict[str, int], layout: _FpLayout
+) -> dict[str, tuple[float, float, float, float]]:
+    """Explicit ``add_axes`` rectangles for the eight corner panels.
+
+    Each corner owns one quadrant holding its two detectors.  *How* they split
+    that quadrant depends on how they display: a detector whose ``n_quarter``
+    is even comes out tall (2000x4072 displayed for a corner sensor), so the
+    pair sits side by side; an odd one comes out wide and the pair stacks.
+    Reading that off the data rather than hardcoding it per corner means the
+    layout cannot disagree with the images it is laying out.
+
+    Every panel is ``short`` x ``long`` with ``long = 2 * short``, so a pair
+    plus its seam spans ``2 * short + gap_intra`` across and ``long`` along.
+    Because ``long`` and ``2 * short`` differ only by ``gap_intra``, each row
+    and each column of the 2x2 sums to the same total -- the blocks tile the
+    content box with nothing left over, which is exactly why both inter-corner
+    gaps come out equal and the intra-corner seam comes out at its requested
+    width.  Forcing 2:1 (see `_FP_PANEL_ASPECT`) is what buys that.
+
+    Detectors absent from ``n_quarter_by_det`` still get their rectangles --
+    the grid is always the full focal plane, and the caller turns the empty
+    axes off, so a missing corner reads as missing rather than silently
+    reflowing its neighbors.
+
+    Parameters
+    ----------
+    n_quarter_by_det : dict [`str`, `int`]
+        Detector name to quarter turns, for the detectors that have an image.
+    layout : `_FpLayout`
+        Figure geometry.
+
+    Returns
+    -------
+    dict [`str`, `tuple`]
+        Detector name to ``(left, bottom, width, height)`` in figure fractions,
+        as `matplotlib.figure.Figure.add_axes` takes.
+    """
+    side = layout.fig_side
+    # The content box, in inches, once the borders and the title/legend bands
+    # are taken out. Made square by giving the surplus on the wider axis back
+    # as extra centred border: a non-square content box would otherwise dump
+    # its excess into the seams, which is the larger half of the bug this
+    # replaces.
+    avail_w = side - 2 * layout.margin
+    avail_h = side - 2 * layout.margin - layout.suptitle_h - layout.legend_h
+    content = min(avail_w, avail_h)
+    x0 = (side - content) / 2
+    # Not centred vertically in the figure but within what the bands leave, so
+    # the plot does not drift up into the suptitle.
+    y0 = layout.margin + layout.legend_h + (avail_h - content) / 2
+
+    # content = (2 * short + gap_intra) + gap_inter + long, with
+    # long = 2 * short.
+    short = (content - layout.gap_intra - layout.gap_inter) / 4
+    long = _FP_PANEL_ASPECT * short
+    # The across-extent of a pair box. Differs from `long` by gap_intra, which
+    # is why the quadrant origins below cannot use a single stride.
+    pair = 2 * short + layout.gap_intra
+
+    rects: dict[str, tuple[float, float, float, float]] = {}
+    for _, quad_row, quad_col, first, second in _FP_MOSAIC:
+        # Either detector's orientation answers for the pair: the two sensors
+        # of a corner are mounted together and so display the same way round.
+        # Default 0 (tall, side by side) when neither has an image, which only
+        # affects how a pair of blank panels is carved up.
+        n_quarter = n_quarter_by_det.get(first, n_quarter_by_det.get(second, 0))
+        tall = n_quarter % 2 == 0
+        block_w, block_h = (pair, long) if tall else (long, pair)
+
+        # Left edge of this quadrant: the left column starts at x0, the right
+        # column starts past the left block's own width plus the inter gap. The
+        # left block's width depends on how *it* falls, so measure it rather
+        # than assuming a uniform stride.
+        if quad_col == 0:
+            bx = x0
+        else:
+            left_first, left_second = next(
+                (f, s) for _, qr, qc, f, s in _FP_MOSAIC if qr == quad_row and qc == 0
+            )
+            left_nq = n_quarter_by_det.get(left_first, n_quarter_by_det.get(left_second, 0))
+            bx = x0 + (pair if left_nq % 2 == 0 else long) + layout.gap_inter
+        # Grid row 0 is the *top*, so its bottom edge sits a block-height below
+        # the content top; row 1 sits at the content bottom.
+        if quad_row == 0:
+            by = y0 + content - block_h
+        else:
+            by = y0
+
+        if tall:
+            # Side by side, `first` on the left.
+            rects[first] = (bx, by, short, long)
+            rects[second] = (bx + short + layout.gap_intra, by, short, long)
+        else:
+            # Stacked, `first` on top.
+            rects[first] = (bx, by + short + layout.gap_intra, long, short)
+            rects[second] = (bx, by, long, short)
+
+    # Into figure fractions, which is what `add_axes` wants.
+    return {
+        name: (rx / side, ry / side, rw / side, rh / side) for name, (rx, ry, rw, rh) in rects.items()
+    }
+
+
+def _pair_links(catalog: QTable) -> list[tuple[tuple[str, float, float], tuple[str, float, float]]]:
+    """Intra/extra donut pairs to join.
+
+    Only meaningful in ``paired`` mode, where `_build_wf_groups` makes one
+    group per intra/extra pair and so ``group_id`` names exactly two donuts on
+    the two detectors of one corner.  Every other mode either groups a single
+    donut (``unpaired``) or a whole detector or corner at once
+    (``full_detector``, ``full_corner``), where one ``group_id`` covers many
+    donuts and "the pair" is not a thing the id identifies -- so those return
+    nothing rather than a combinatorial tangle.
+
+    Not filtered on fit success: pairing happens before fitting, so a pair
+    whose fit failed was still a pair, and seeing it is the point of the plot.
+
+    Returns
+    -------
+    list of tuple
+        ``((det_name, x_det, y_det), (det_name, x_det, y_det))`` per pair.
+    """
+    if str(catalog.meta.get("wf_mode", "")) != "paired":
+        return []
+    by_group: dict[str, list] = {}
+    for row in catalog:
+        group_id = str(row["group_id"])
+        if not group_id:
+            continue
+        by_group.setdefault(group_id, []).append(row)
+    links = []
+    for _, rows in sorted(by_group.items()):
+        # A paired group is exactly two donuts on two distinct detectors.
+        # Anything else is not a pair, whatever mode claims.
+        if len(rows) != 2:
+            continue
+        first, second = rows
+        if str(first["det_name"]) == str(second["det_name"]):
+            continue
+        links.append(
+            (
+                (str(first["det_name"]), first["x_det"].to_value(u.pix), first["y_det"].to_value(u.pix)),
+                (str(second["det_name"]), second["x_det"].to_value(u.pix), second["y_det"].to_value(u.pix)),
+            )
+        )
+    return links
+
+
+def _overlay_points(overlays: QTable | None, det_name: str) -> dict[str, tuple]:
+    """One detector's overlay sources, grouped by ``kind``.
+
+    A ``kind`` with no rows is *absent* from the result rather than present and
+    empty, so the caller draws nothing for it without a length check.  Absence
+    here does not distinguish a stage that never ran from one that ran and
+    found nothing -- read ``has_refcat`` on the image table for that.
+
+    Returns
+    -------
+    dict [`str`, tuple]
+        ``kind`` to ``(x_det, y_det, mag)`` arrays, brightest first so a caller
+        capping the count keeps the brightest.
+    """
+    if overlays is None or len(overlays) == 0:
+        return {}
+    det_col = np.asarray(overlays["det_name"], dtype=str)
+    kind_col = np.asarray(overlays["kind"], dtype=str)
+    out = {}
+    for kind in np.unique(kind_col):
+        mask = (det_col == det_name) & (kind_col == kind)
+        if not mask.any():
+            continue
+        rows = overlays[mask]
+        mag = rows["mag"].to_value(u.mag)
+        # NaN magnitudes (blitz detections have no photometry) sort last, so a
+        # capped draw keeps real measurements over unknowns.
+        order = np.argsort(np.where(np.isnan(mag), np.inf, mag))
+        out[str(kind)] = (
+            rows["x_det"].to_value(u.pix)[order],
+            rows["y_det"].to_value(u.pix)[order],
+            mag[order],
+        )
+    return out
+
+
+def _detector_image_rows(detector_images: QTable | None) -> dict[str, Any]:
+    """Index the per-detector image table by detector name.
+
+    The inversion of `_build_detector_image_table`, in the spirit of
+    `_wf_groups_from_catalog`: the table is the transport, this is the shape
+    the drawing code wants.
+    """
+    if detector_images is None or len(detector_images) == 0:
+        return {}
+    return {str(row["det_name"]): row for row in detector_images}
+
+
 def _stamp_transform(row, style: _StampStyle, det_meta: dict):
     """Build the detector-frame to stamp-display-coordinate mapping for a row.
 
@@ -571,6 +939,12 @@ def _stamp_transform(row, style: _StampStyle, det_meta: dict):
     than ``(c, r)`` is what applies the ``.T``.  Under ``origin="lower"`` the
     displayed x axis is the column index and y the row index, so the returned
     pair is ``(x, y)`` after transposition.
+
+    `_rot90_display` applies the same rotation to whole-detector coordinates
+    for the focal-plane plot.  Kept separate because these are *offsets* about
+    a centroid, so no array extent enters, and because of the rounding residual
+    below, which has no counterpart there -- but the rotation convention is
+    shared, so a change to one belongs in both.
 
     The stamp was cut on integer bounds around the *rounded* centroid, so
     display coordinate (0, 0) is that rounded position while the ``nearby_*``
@@ -807,6 +1181,30 @@ class DonutBlitzPlotConnections(
         dimensions=("instrument", "visit"),
         deferLoad=True,
     )
+    detectorImages = connectionTypes.Input(
+        doc=(
+            "Per-detector binned post-ISR images for the focal-plane selection "
+            "plot. Optional: written only when DonutBlitzCornerTask ran with "
+            "doSelectionOutput, and that plot is simply skipped without it."
+        ),
+        name="donutBlitzCornerDetectorImages",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit"),
+        deferLoad=True,
+        minimum=0,
+    )
+    selectionOverlays = connectionTypes.Input(
+        doc=(
+            "Long-form per-source selection overlays matching detectorImages. "
+            "Optional on the same terms; without it the focal-plane plot draws "
+            "images and donuts but no selection-funnel markers."
+        ),
+        name="donutBlitzCornerSelectionOverlays",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit"),
+        deferLoad=True,
+        minimum=0,
+    )
 
 
 class DonutBlitzPlotConfig(
@@ -853,11 +1251,38 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         outputRefs: OutputQuantizedConnection,
     ) -> None:
         inputs = butlerQC.get(inputRefs)
-        catalog = inputs["cornerResults"].get(parameters={"strip_astropy_meta_yaml": False})
-        self.run(catalog)
+        # Meta carries the visit-level scalars every plot labels itself with,
+        # so it must survive the read.
+        load = dict(parameters={"strip_astropy_meta_yaml": False})
+        catalog = inputs["cornerResults"].get(**load)
 
-    def run(self, catalog: Table) -> None:
-        """Generate donut and WF plots from the ``cornerResults`` catalog.
+        # `minimum=0` means these may not have been produced at all, in which
+        # case they are absent from `inputs` rather than None -- so ask the
+        # dict, not the attribute.
+        def _optional(name):
+            handle = inputs.get(name)
+            return None if handle is None else handle.get(**load)
+
+        self.run(
+            catalog,
+            detector_images=_optional("detectorImages"),
+            selection_overlays=_optional("selectionOverlays"),
+        )
+
+    def run(
+        self,
+        catalog: Table,
+        detector_images: Table | None = None,
+        selection_overlays: Table | None = None,
+    ) -> None:
+        """Generate the diagnostic plots for one blitz visit.
+
+        The two optional tables are what the focal-plane selection plot needs.
+        Both paths into this method supply them the same way: as a subtask,
+        `DonutBlitzCornerTask` passes the in-memory tables it just built,
+        regardless of whether it also persisted them; standalone, `runQuantum`
+        passes whatever the butler had.  Absent either way, that one plot is
+        skipped and the other two are unaffected.
 
         Parameters
         ----------
@@ -865,10 +1290,19 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             Per-donut table as produced by
             ``DonutBlitzCornerTask._buildCatalog``.  Visit-level and
             per-detector metadata are in ``catalog.meta``.
+        detector_images : QTable, optional
+            Per-detector binned images, from ``_build_detector_image_table``.
+        selection_overlays : QTable, optional
+            Long-form selection sources, from ``_build_overlay_table``.
         """
         catalog = QTable(catalog)
         self._saveDonutDiagnosticPlot(catalog)
         self._saveWfDiagnosticPlot(catalog)
+        self._saveFocalPlanePlot(
+            catalog,
+            None if detector_images is None else QTable(detector_images),
+            None if selection_overlays is None else QTable(selection_overlays),
+        )
 
     def _saveDonutDiagnosticPlot(self, catalog: QTable) -> None:
         """Save a single diagnostic PNG with one section per detector.
@@ -1392,3 +1826,367 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # a given config pixel-comparable.
         fig.savefig(fname, dpi=300)
         self.log.info("Saved WF diagnostic plot: %s", fname)
+
+    def _saveFocalPlanePlot(
+        self,
+        catalog: QTable,
+        detector_images: QTable | None,
+        overlays: QTable | None,
+    ) -> None:
+        """Save the focal-plane selection plot per detector.
+
+        One panel per corner sensor, each rotated by its own ``n_quarter`` so
+        the eight panels together read as the focal plane, arranged as a 2x2 of
+        corners.  Over each image go the three stages of the selection funnel
+        and the donuts that survived, plus the ``maxFieldDist`` boundary; in
+        ``paired`` mode, lines join each intra/extra pair across its corner.
+
+        Skipped with one log line when the image table is absent -- the case
+        where `DonutBlitzCornerTask` ran without ``doSelectionOutput`` and this
+        task was pointed at the catalog alone.
+
+        Parameters
+        ----------
+        catalog : QTable
+            Per-donut table, read for the accepted/rejected donuts and pairing.
+        detector_images : QTable or None
+            Per-detector binned images.  None or empty skips the plot.
+        overlays : QTable or None
+            Long-form selection sources.  None draws images and donuts only.
+        """
+        from matplotlib.figure import Figure
+
+        image_rows = _detector_image_rows(detector_images)
+        if not image_rows:
+            self.log.info("No detector images supplied; skipping focal-plane selection plot.")
+            return
+
+        # This plot's own meta, not the catalog's: the catalog is empty (and so
+        # meta-less) exactly when every donut was rejected, which is a case
+        # worth plotting.
+        meta = detector_images.meta if detector_images is not None else {}
+        visit_id = meta.get("ref_visit_id") or catalog.meta.get("ref_visit_id", 0)
+
+        n_quarter_by_det = {name: int(row["n_quarter"]) for name, row in image_rows.items()}
+
+        layout = _FP_LAYOUT
+        fig = Figure(figsize=(layout.fig_side, layout.fig_side))
+        axs = {
+            name: fig.add_axes(rect)
+            for name, rect in _focal_plane_axes_rects(n_quarter_by_det, layout).items()
+        }
+
+        det_name_col = np.asarray(catalog["det_name"], dtype=str) if len(catalog) else np.empty(0, dtype=str)
+        for det_name, ax in axs.items():
+            row = image_rows.get(det_name)
+            if row is None:
+                # A detector with no image still holds its cells, so the focal
+                # plane keeps its shape and the gap is visible as a gap.
+                ax.axis("off")
+                ax.set_title(det_name, fontsize=6, color="0.5")
+                continue
+            det_rows = catalog[det_name_col == det_name] if len(catalog) else catalog
+            self._drawFocalPlanePanel(ax, row, det_rows, _overlay_points(overlays, det_name), layout)
+
+        fig.suptitle(
+            f"Donut selection  visit={visit_id}  "
+            f"binning={int(next(iter(image_rows.values()))['binning'])}",
+            fontsize=11,
+        )
+        # The axes are already at their final rectangles from `add_axes`, so
+        # there is nothing to adjust before drawing the links -- which matters,
+        # because a `ConnectionPatch` resolves its endpoints against the two
+        # axes' transforms and moving an axes afterwards would leave the line
+        # where the panel was.
+        self._drawPairLinks(fig, axs, image_rows, _pair_links(catalog))
+        self._drawFocalPlaneLegend(fig, overlays)
+
+        fname = f"selection_diag_{visit_id}.png"
+        fig.savefig(fname, dpi=200)
+        self.log.info("Saved focal-plane selection plot: %s", fname)
+
+    def _drawFocalPlanePanel(self, ax, row, det_rows: QTable, points: dict, layout: _FpLayout) -> None:
+        """One detector: its rotated image, the selection overlays, the donuts.
+
+        Everything is drawn in the *displayed* frame, which is the binned image
+        rotated by ``n_quarter``, so every overlay goes through
+        `_binned_coord` then `_rot90_display`.
+        """
+        image = np.asarray(row["image"], dtype=float)
+        n_quarter = int(row["n_quarter"])
+        height, width = image.shape
+        display = np.rot90(image, -n_quarter).T
+
+        # nanpercentile because post-ISR saturation leaves NaNs. The fallback
+        # covers a uniform or all-NaN panel, where vmin == vmax renders flat.
+        finite = display[np.isfinite(display)]
+        if finite.size:
+            vmin, vmax = np.nanpercentile(finite, [1, 99])
+        else:
+            vmin, vmax = 0.0, 1.0
+        if not vmax > vmin:
+            vmin, vmax = float(vmin), float(vmin) + 1.0
+        # origin="upper", and it is load-bearing rather than a default left in
+        # place. The display transform is `rot90(arr, -n_quarter).T`, and that
+        # transpose is a *reflection*, not a rotation -- it inverts handedness.
+        # Drawing the result with y increasing upward leaves the inversion in,
+        # so every panel comes out mirrored: the most-vignetted corner points
+        # toward the focal-plane center instead of away from it, on all eight
+        # sensors. Row-downward display supplies the compensating flip.
+        # Verified against the camera: under "upper" the maximum-field cell of
+        # all 8 corner sensors lands in the panel corner farthest from the
+        # figure center, and under "lower" none of them do. The stamp plots
+        # above are unaffected -- they draw an already-CCS stamp about its own
+        # center, with no absolute detector frame to be handed-ness relative
+        # to. aspect="auto", so the image fills the rectangle
+        # `_focal_plane_axes_rects` assigned it. "equal" would re-derive the
+        # box from the data's 2.036:1 and shrink the axes inside its rectangle,
+        # putting the leftover back into the seams -- which is the bug being
+        # fixed. The 1.8% stretch that buys exact tiling is deliberate; see
+        # `_FP_PANEL_ASPECT`.
+        ax.imshow(display, origin="upper", cmap="gray", vmin=vmin, vmax=vmax, aspect="auto")
+
+        def to_display(x_det, y_det):
+            """Detector-frame coordinates to panel's display coordinates."""
+            r, c = _binned_coord(x_det, y_det, row)
+            return _rot90_display(r, c, height, width, n_quarter)
+
+        # The selection funnel, widest stage first so the narrow ones draw on
+        # top. The refcat is by far the most numerous, so it stays the
+        # smallest and faintest: it is context, and it should not bury the
+        # stages that matter.
+        for kind, color, marker, size, alpha, lw in _FP_FUNNEL_STYLES:
+            entry = points.get(kind)
+            if entry is None:
+                continue
+            xs, ys, _ = entry
+            # Brightest-first from `_overlay_points`, so this keeps the bright
+            # end.
+            xs, ys = xs[: layout.max_sources], ys[: layout.max_sources]
+            tx, ty = to_display(xs, ys)
+            ax.scatter(
+                tx,
+                ty,
+                s=size,
+                marker=marker,
+                facecolors="none",
+                edgecolors=color,
+                linewidths=lw,
+                alpha=alpha,
+            )
+
+        # The donuts that survived, and those a quality cut rejected, from the
+        # catalog rather than the overlay table -- it is the one that carries
+        # their metrics.
+        if len(det_rows):
+            candidate = np.asarray(det_rows["candidate"], dtype=bool)
+            accepted_marker, accepted_size, accepted_lw = _FP_ACCEPTED_MARKER
+            # The accepted marker is hollow so the donut inside it stays
+            # visible; the rejected one is an "x", which matplotlib treats as
+            # an unfilled marker and colours from `color` rather than
+            # `edgecolors` (passing the latter earns a warning and the wrong
+            # color). So the two need different keyword sets, not a shared one.
+            # The rejected marker keeps the old size: an "x" is already
+            # unmistakable against the funnel's rings, so it does not need the
+            # accepted marker's extra room.
+            for mask, color, marker, size, lw, kwargs in (
+                (
+                    candidate,
+                    _COLOR_ACCEPTED,
+                    accepted_marker,
+                    accepted_size,
+                    accepted_lw,
+                    dict(facecolors="none", edgecolors=_COLOR_ACCEPTED),
+                ),
+                (~candidate, _COLOR_REJECTED, "x", 110.0, 1.2, dict(color=_COLOR_REJECTED)),
+            ):
+                if not mask.any():
+                    continue
+                sub = det_rows[mask]
+                tx, ty = to_display(sub["x_det"].to_value(u.pix), sub["y_det"].to_value(u.pix))
+                ax.scatter(tx, ty, s=size, linewidths=lw, marker=marker, alpha=0.9, **kwargs)
+                for x, y, snr in zip(tx, ty, np.asarray(sub["snr"], dtype=float)):
+                    if not np.isfinite(snr):
+                        continue
+                    ax.annotate(
+                        f"{snr:.0f}",
+                        (x, y),
+                        xytext=(4, 4),
+                        textcoords="offset points",
+                        color=color,
+                        fontsize=4.5,
+                        annotation_clip=True,
+                    )
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+        # Before the field-limit patch: `ax.plot`/`add_patch` interact badly
+        # with autoscale (see `_drawDonutStamp`), and this curve runs far
+        # outside the detector, so an autoscaled panel would shrink the image
+        # to nothing.
+        ax.set_xlim(-0.5, display.shape[1] - 0.5)
+        # Descending, matching origin="upper": row 0 at the top. Setting this
+        # ascending would undo the flip the `imshow` above depends on, which is
+        # how the mirrored version of this plot came about.
+        ax.set_ylim(display.shape[0] - 0.5, -0.5)
+        excluded_frac = self._drawFieldLimit(ax, row, n_quarter)
+
+        det_name = str(row["det_name"])
+        defocal = CORNER_DEFOCAL_BY_DET_NAME.get(det_name, "")
+        det_id = int(row["det_id"])
+        # det_id is -1 for a detector that produced no donuts, since the table
+        # reads it off one of them; omit it rather than print the placeholder.
+        label = f"{det_name} ({det_id}) {defocal}" if det_id >= 0 else f"{det_name} {defocal}"
+        # How much of this sensor the vignetting cut removes. Worth stating as
+        # a number: it is ~53% on an intra-focal sensor against ~5% on an
+        # extra-focal one, which is a big asymmetry to leave to the eye.
+        if np.isfinite(excluded_frac) and excluded_frac > 0:
+            label += f"  [{100 * excluded_frac:.0f}% vignetted]"
+        ax.text(
+            0.02,
+            0.98,
+            label,
+            transform=ax.transAxes,
+            color="w",
+            fontsize=6,
+            va="top",
+            ha="left",
+        )
+        if not bool(row["has_refcat"]):
+            # Says *why* there is no refcat overlay, which its mere absence
+            # cannot: this detector fell back to blitz detection.
+            ax.text(
+                0.02,
+                0.02,
+                f"no refcat ({row['selection_source']})",
+                transform=ax.transAxes,
+                color=_COLOR_REJECTED,
+                fontsize=5,
+                va="bottom",
+                ha="left",
+            )
+
+    def _drawFieldLimit(self, ax, row, n_quarter: int) -> float:
+        """Shade and outline the region the vignetting cut excludes.
+
+        ``field_dist`` is a grid on the same pixel grid as the image, so it
+        takes the same rotation and needs no coordinate transform of its own.
+        Shading it rather than outlining a boundary curve is what makes the
+        cut legible: the boundary is an arc of ~31000 px radius across a 4072
+        px sensor, so as a line it is an unremarkable near-straight chord,
+        while as a shaded region it shows at a glance that over half of each
+        intra-focal sensor is unusable.
+
+        Returns
+        -------
+        float
+            Fraction of the detector excluded, for the panel's label.  NaN when
+            the grid is unavailable.
+        """
+        field_dist = np.asarray(row["field_dist"].to_value(u.deg), dtype=float)
+        limit = float(row["max_field_dist"].to_value(u.deg))
+        if not np.isfinite(field_dist).any():
+            return float("nan")
+
+        excluded = np.rot90(field_dist, -n_quarter).T > limit
+        if not excluded.any():
+            return 0.0
+
+        # Hatched overlay rather than a flat tint: the underlying pixels stay
+        # readable, which matters because donuts do land in this region and get
+        # cut, and seeing them is the point.
+        ax.contourf(
+            excluded.astype(float),
+            levels=[0.5, 1.5],
+            colors="none",
+            hatches=["////"],
+            extend="neither",
+        )
+        ax.contour(
+            excluded.astype(float),
+            levels=[0.5],
+            colors=[_COLOR_FIELD_LIMIT],
+            linewidths=1.2,
+            linestyles="--",
+        )
+        return float(excluded.mean())
+
+    def _drawPairLinks(self, fig, axs: dict, image_rows: dict, links: list) -> None:
+        """Join each intra/extra donut pair with a line across the two panels.
+
+        Empty outside ``paired`` mode -- see `_pair_links`.  A link whose
+        either end is on a detector with no panel is skipped rather than
+        half-drawn.
+        """
+        from matplotlib.patches import ConnectionPatch
+
+        def _xy(det_name, x_det, y_det):
+            """One donut's position in its own panel's display coordinates."""
+            row = image_rows[det_name]
+            image = np.asarray(row["image"])
+            r, c = _binned_coord(x_det, y_det, row)
+            return _rot90_display(r, c, image.shape[0], image.shape[1], int(row["n_quarter"]))
+
+        for (det_a, x_a, y_a), (det_b, x_b, y_b) in links:
+            if det_a not in axs or det_b not in axs:
+                continue
+            if det_a not in image_rows or det_b not in image_rows:
+                continue
+            fig.add_artist(
+                ConnectionPatch(
+                    xyA=_xy(det_a, x_a, y_a),
+                    xyB=_xy(det_b, x_b, y_b),
+                    coordsA=axs[det_a].transData,
+                    coordsB=axs[det_b].transData,
+                    arrowstyle="-",
+                    color=_COLOR_PAIR_LINK,
+                    linestyle=":",
+                    linewidth=1.1,
+                    alpha=0.9,
+                    # Without this the line is clipped at each axes' edge,
+                    # which is exactly the span it exists to cross.
+                    clip_on=False,
+                )
+            )
+
+    def _drawFocalPlaneLegend(self, fig, overlays: QTable | None) -> None:
+        """One shared legend for the selection funnel and the donut markers."""
+        from matplotlib.lines import Line2D
+
+        def marker(color, label, marker="o"):
+            return Line2D(
+                [0],
+                [0],
+                marker=marker,
+                color="w",
+                markerfacecolor="none",
+                markeredgecolor=color,
+                markersize=6,
+                label=label,
+            )
+
+        handles = []
+        if overlays is not None and len(overlays):
+            # Straight off the style table the panels draw from, so the legend
+            # cannot disagree with the markers it is labelling.
+            handles += [
+                marker(color, label, marker=mk)
+                for (_, color, mk, _, _, _), label in zip(
+                    _FP_FUNNEL_STYLES, ("refcat", "blitz detection", "selected")
+                )
+            ]
+        handles += [
+            marker(_COLOR_ACCEPTED, "donut (candidate)", marker=_FP_ACCEPTED_MARKER[0]),
+            marker(_COLOR_REJECTED, "donut (rejected)", marker="x"),
+            Line2D([0], [0], color=_COLOR_FIELD_LIMIT, linestyle="--", label="maxFieldDist"),
+            Line2D([0], [0], color=_COLOR_PAIR_LINK, linestyle=":", label="intra/extra pair"),
+        ]
+        fig.legend(
+            handles=handles,
+            loc="lower center",
+            ncol=len(handles),
+            fontsize=7,
+            frameon=False,
+            handletextpad=0.4,
+            columnspacing=1.4,
+        )

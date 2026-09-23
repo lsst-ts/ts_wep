@@ -23,8 +23,10 @@
 
 __all__ = [
     "CutoutResult",
+    "DetectorView",
     "Donut",
     "FamDetectorResult",
+    "SourceSet",
     "WfDonutResult",
     "WfGroupResult",
 ]
@@ -105,6 +107,85 @@ class Donut:
     rejected: bool = False
 
 
+@dataclass(frozen=True)
+class SourceSet:
+    """One stage's source positions on one detector, for the overlay plot.
+
+    Three of these ride each `DetectorView`, one per stage of the selection
+    funnel (reference catalog, blitz detection, selector output), so the plot
+    can show what each stage did rather than only the donuts that survived all
+    three.
+
+    Attributes
+    ----------
+    x_det, y_det : ndarray
+        Un-binned detector pixel coordinates.
+    donut_id : ndarray
+        The stage's own ids -- refcat source ids on the refcat path, a
+        per-detector 1..N counter on the blitz-detection path, exactly as
+        `Donut.donut_id` carries them.
+    mag : ndarray
+        Photometric magnitude, float32, and all-NaN for a stage that has none
+        (blitz detections never do).
+    """
+
+    x_det: npt.NDArray[np.float64]
+    y_det: npt.NDArray[np.float64]
+    donut_id: npt.NDArray
+    mag: npt.NDArray[np.float32]
+
+    def __len__(self) -> int:
+        return len(self.x_det)
+
+
+@dataclass(frozen=True)
+class DetectorView:
+    """One detector's binned image and overlay sources, for the plot task.
+
+    What the focal-plane selection plot needs and the output catalog cannot
+    supply: the catalog is one row per *surviving* donut, whereas this plot is
+    about everything that was considered. Built in the cutout worker, since the
+    post-ISR image only exists there, and carried home on `CutoutResult`.
+
+    Binned and float32 deliberately for speed.
+
+    ``binning`` and the two bbox fields are recorded rather than assumed, so a
+    plot regenerated from an older run cannot mis-scale its overlays
+    against a differently-binned image.
+
+    Attributes
+    ----------
+    image : ndarray
+        The background-subtracted post-ISR image.
+    binning : int
+        Factor `image` was binned by.
+    bbox_min : tuple of int
+        The exposure bbox's ``(x, y)`` origin, subtracted before scaling a
+        detector-frame coordinate into `image`.
+    bbox_shape : tuple of int
+        The un-binned ``(height, width)``, i.e. numpy order.
+    refcat, detections, selections : `SourceSet` or None
+        The three stages' sources. **None means the stage did not run**, which
+        is distinct from a stage that ran and found nothing.
+    field_dist : ndarray
+        Each binned pixel's distance from the field center, in **degrees**,
+        same shape as `image`. float32; all-NaN if the transform failed.
+    max_field_dist_deg : float
+        The selector's configured ``maxFieldDist``, read from the live subtask
+        config rather than assumed -- corner mode overrides the class default.
+    """
+
+    image: npt.NDArray[np.float32]
+    binning: int
+    bbox_min: tuple[int, int]
+    bbox_shape: tuple[int, int]
+    refcat: SourceSet | None
+    detections: SourceSet | None
+    selections: SourceSet | None
+    field_dist: npt.NDArray[np.float32]
+    max_field_dist_deg: float
+
+
 @dataclass
 class CutoutResult:
     """One exposure of one detector, as `_cutout_one_exposure` returns it.
@@ -157,6 +238,11 @@ class CutoutResult:
     # Dispatch-to-arrival latency of the work unit that produced this, set by
     # the corner-mode pool entry point only.
     dispatch_to_arrival: float = float("nan")
+    # The binned image and overlay sources the focal-plane selection plot
+    # draws, or None where they were not built. Defaulted so the two
+    # classmethods below, which both construct results for detectors that
+    # produced nothing, do not have to name it.
+    view: "DetectorView | None" = None
 
     @classmethod
     def no_detections(

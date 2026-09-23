@@ -33,12 +33,14 @@ import time
 import numpy as np
 from astropy.table import QTable
 
+import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
 import lsst.geom
 import lsst.meas.base as measBase
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
 from lsst.afw.geom import SkyWcs
 
-from .dataStructures import CutoutResult
+from .dataStructures import CutoutResult, DetectorView, SourceSet
 from .utils import (
     _ANSI_BOLD,
     _ANSI_YELLOW,
@@ -50,6 +52,9 @@ from .utils import (
 )
 
 _log = logging.getLogger(__name__)
+
+# Factor the `DetectorView` image is binned by.
+_VIEW_BINNING = 4
 
 
 def _build_afw_source_cat(blitz_detections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
@@ -80,6 +85,89 @@ def _build_afw_source_cat(blitz_detections: QTable, wcs: SkyWcs) -> afwTable.Sou
         src.set(centroid_key, lsst.geom.Point2D(x, y))
 
     return source_cat
+
+
+def _source_set(table: QTable | None, mag_column: str) -> SourceSet | None:
+    """One stage's centroids as a `SourceSet`, or None if the stage never ran.
+
+    Parameters
+    ----------
+    table : QTable or None
+        A stage's output, carrying ``centroid_x``, ``centroid_y`` and
+        ``donut_id``.  None propagates to None: that is what distinguishes a
+        stage that did not run from one that ran and selected nothing.
+    mag_column : str
+        Magnitude column to carry, or ``""`` for a stage that has none (blitz
+        detection), which yields all-NaN.  A named column that is absent also
+        yields all-NaN rather than raising, since the blitz path NaN-fills the
+        refcat columns anyway (see `_REFCAT_COLUMNS`).
+    """
+    if table is None:
+        return None
+    n = len(table)
+    if mag_column and mag_column in table.colnames:
+        mag = np.asarray(table[mag_column], dtype=np.float32)
+    else:
+        mag = np.full(n, np.nan, dtype=np.float32)
+    return SourceSet(
+        x_det=np.asarray(table["centroid_x"], dtype=float),
+        y_det=np.asarray(table["centroid_y"], dtype=float),
+        donut_id=np.asarray(table["donut_id"]),
+        mag=mag,
+    )
+
+
+def _field_distance_grid(detector, bbox, binning: int, shape: tuple[int, int]) -> np.ndarray:
+    """Field distance [deg] at binned pixel centers, shaped like `shape`."""
+    try:
+        mapping = detector.getTransform(PIXELS, FIELD_ANGLE).getMapping()
+        # Binned pixel j covers un-binned [b*j, b*j + b - 1], so its center is
+        # at b*j + (b - 1)/2 -- the same half-pixel offset the plot's overlays
+        # use.
+        offset = (binning - 1) / 2
+        ys = np.arange(shape[0]) * binning + offset + bbox.getMinY()
+        xs = np.arange(shape[1]) * binning + offset + bbox.getMinX()
+        grid_x, grid_y = np.meshgrid(xs, ys)
+        field = mapping.applyForward(np.vstack([grid_x.ravel(), grid_y.ravel()]))
+        return np.degrees(np.hypot(field[0], field[1])).reshape(shape).astype(np.float32)
+    except Exception as exc:  # noqa: BLE001 - decoration only; never fail a cutout
+        _log.warning("Field-distance grid unavailable for %s: %s", detector.getName(), exc)
+        return np.full(shape, np.nan, dtype=np.float32)
+
+
+def _detector_view(
+    post_isr,
+    refcat: QTable | None,
+    blitz_detections: QTable | None,
+    selections: QTable | None,
+) -> DetectorView:
+    """Bundle one detector's binned pixels and overlay sources for the plot.
+
+    Called at every return of `_cutout_one_exposure` that has an image to
+    bundle, including the no-detections one -- a detector that found nothing is
+    exactly the one worth looking at.
+
+    The ``.copy()`` matters: without it the array is a view onto the binned
+    image's buffer, whose base would be pickled along with it.
+    """
+    bbox = post_isr.getBBox()
+    binned = afwMath.binImage(post_isr.image, _VIEW_BINNING)
+    image = binned.getArray().astype(np.float32, copy=True)
+    return DetectorView(
+        image=image,
+        binning=_VIEW_BINNING,
+        bbox_min=(bbox.getMinX(), bbox.getMinY()),
+        bbox_shape=(bbox.getHeight(), bbox.getWidth()),
+        # The refcat is None off the refcat path, and `_source_set` keeps it
+        # that way -- an empty overlay would imply a catalog was consulted.
+        refcat=_source_set(refcat, "photo_mag"),
+        detections=_source_set(blitz_detections, ""),
+        selections=_source_set(selections, "photo_mag"),
+        field_dist=_field_distance_grid(post_isr.getDetector(), bbox, _VIEW_BINNING, image.shape),
+        # Off the live subtask config, not the class default: corner mode
+        # overrides maxFieldDist, so the two differ.
+        max_field_dist_deg=float(_COW_STORE.select_task.config.maxFieldDist),
+    )
 
 
 def _cutout_one_exposure(
@@ -165,7 +253,7 @@ def _cutout_one_exposure(
     blitz_detections = detect_task.run(post_isr, donut_radius=donut_radius).detections
 
     if len(blitz_detections) == 0:
-        return CutoutResult.no_detections(
+        result = CutoutResult.no_detections(
             det_name=det_name,
             n_quarter=n_quarter,
             isr_run=t1 - t0,
@@ -173,6 +261,12 @@ def _cutout_one_exposure(
             diam_run=t3 - t2,
             detect_run=time.perf_counter() - t3,
         )
+        # Built even here: a detector that detected nothing is the one a reader
+        # most wants to see the image of. No selection ran, so only the image
+        # and the (empty) detections are meaningful.
+        if _COW_STORE.build_detector_view:
+            result.view = _detector_view(post_isr, None, blitz_detections, None)
+        return result
 
     # --- astrometry ---
     t4 = time.perf_counter()
@@ -286,66 +380,6 @@ def _cutout_one_exposure(
 
     t7 = time.perf_counter()
 
-    # import matplotlib.pyplot as plt
-    # from matplotlib.patches import Annulus
-    # from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
-
-    # fig, ax = plt.subplots(figsize=(10, 5))
-    # vmin, vmax = np.nanquantile(post_isr.image.array, [0.01, 0.99])
-    # ax.imshow(post_isr.image.array, origin="lower", cmap="gray", vmin=vmin, vmax=vmax)  # noqa: W505
-    # ax.set_xlim(0, post_isr.image.array.shape[1])
-    # ax.set_ylim(0, post_isr.image.array.shape[0])
-    # ax.scatter(refcat["centroid_x"], refcat["centroid_y"], s=20, edgecolor="cyan", facecolor="none")  # noqa: E501, W505
-    # ax.scatter(blitz_detections["centroid_x"], blitz_detections["centroid_y"], s=50, edgecolor="blue", facecolor="none")  # noqa: E501, W505
-    # ax.scatter(selections["centroid_x"], selections["centroid_y"], s=80, edgecolor="red", facecolor="none")  # noqa: E501, W505
-    # ax.scatter(
-    #     [d.x_det for d in cut_result.donuts],
-    #     [d.y_det for d in cut_result.donuts],
-    #     s=110, edgecolor="yellow", facecolor="none"
-    # )
-    # for d in cut_result.donuts:
-    #     ax.annotate(
-    #         f"{d.snr:.1f}",
-    #         (d.x_det, d.y_det),
-    #         xytext=(10, 10),
-    #         textcoords="offset points", color="yellow", fontsize=10,
-    #         annotation_clip=True,
-    #     )
-    # for d in cut_result.rejected_donuts:
-    #     ax.annotate(
-    #         f"{d.snr:.1f}",
-    #         (d.x_det, d.y_det),
-    #         xytext=(10, 10),
-    #         textcoords="offset points", color="red", fontsize=10,
-    #         annotation_clip=True,
-    #     )
-    # xform = detector.getTransform(FIELD_ANGLE, PIXELS)
-    # mapping = xform.getMapping()
-    # center = mapping.applyForward(np.array([[0.0], [0.0]]))
-    # cx = float(center[0, 0])
-    # cy = float(center[1, 0])
-    # # Find points on the circle inside the detector bounds
-    # th = np.linspace(0, 2 * np.pi, 1000)
-    # x = np.deg2rad(select_task.config.maxFieldDist) * np.cos(th)
-    # y = np.deg2rad(select_task.config.maxFieldDist) * np.sin(th)
-    # xyPix = mapping.applyForward(np.vstack([x, y]))
-    # keep = xyPix[0] >= 0
-    # keep &= xyPix[0] < post_isr.image.array.shape[1]
-    # keep &= xyPix[1] >= 0
-    # keep &= xyPix[1] < post_isr.image.array.shape[0]
-    # xyPix = xyPix[:, keep]
-    # radius = float(np.mean(np.hypot(xyPix[0] - cx, xyPix[1] - cy)))
-    # big_radius = radius * 2
-    # ann = Annulus(
-    #     (cx, cy), big_radius, big_radius - radius,
-    #     facecolor="purple", alpha=0.2, edgecolor="none"
-    # )
-    # ax.add_patch(ann)
-    # ax.set_xticks([])
-    # ax.set_yticks([])
-    # fig.suptitle(f"Detector: {det_name}")
-    # plt.show()
-
     return CutoutResult(
         det_name=det_name,
         catalog=cut_result.donuts,
@@ -364,6 +398,13 @@ def _cutout_one_exposure(
         n_quarter=n_quarter,
         wcs=wcs,
         # `pair_path` keeps its default; the grouping stage overwrites it.
+        # `refcat` is None wherever the refcat path did not produce a
+        # selection, which is what makes that overlay absent rather than empty.
+        view=(
+            _detector_view(post_isr, refcat, blitz_detections, selections)
+            if _COW_STORE.build_detector_view
+            else None
+        ),
     )
 
 
