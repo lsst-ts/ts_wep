@@ -250,10 +250,72 @@ class TestInstrument(unittest.TestCase):
         with self.assertRaises(TypeError):
             Instrument(maskParams="bad")
 
+    def testBadMaskParamsFile(self) -> None:
+        with self.assertRaises(TypeError):
+            Instrument(maskParamsFile=42)
+
     def testDefaultMaskParams(self) -> None:
+        # With no maskParams and no maskParamsFile, fall back to the simple
+        # pupil mask built from the primary inner and outer radii.
         inst = Instrument()
         inst.maskParams = None
-        self.assertEqual(inst.maskParams, dict())
+        inst.maskParamsFile = None
+        self.assertEqual(list(inst.maskParams.keys()), ["Pupil"])
+
+    def testPolicyFilesPinInlineMaskParams(self) -> None:
+        # The policy files pin their mask parameters inline (RSO-856):
+        # maskParamsFile is commented out until we switch to the updated
+        # danish mask models, so the inline maskParams block is used directly
+        # and no file is loaded.
+        inst = Instrument()
+        self.assertIsNone(inst.maskParamsFile)
+        self.assertIn("M1", inst.maskParams)
+        self.assertIn("Spider_3D", inst.maskParams)
+
+        comcam = Instrument(configFile="policy:instruments/ComCam.yaml")
+        self.assertIsNone(comcam.maskParamsFile)
+        self.assertIn("M1", comcam.maskParams)
+
+        auxtel = Instrument(configFile="policy:instruments/AuxTel.yaml")
+        self.assertIsNone(auxtel.maskParamsFile)
+        self.assertIn("Baffle_M1", auxtel.maskParams)
+
+    def testMaskParamsFromFile(self) -> None:
+        # When maskParamsFile is set and no explicit maskParams are provided,
+        # the mask parameters are loaded from that file via danish.
+        inst = Instrument()
+        inst.maskParams = None
+        inst.maskParamsFile = "RubinObsc.yaml"
+        self.assertEqual(inst.maskParamsFile, "RubinObsc.yaml")
+        self.assertIn("M1", inst.maskParams)
+        self.assertIn("Spider_3D", inst.maskParams)
+
+    def testExplicitMaskParamsOverridesFile(self) -> None:
+        # Explicitly-set maskParams take precedence over maskParamsFile.
+        override = {"Foo": {"outer": {"clear": True}}}
+        inst = Instrument(maskParams=override)
+        self.assertEqual(inst.maskParams, override)
+
+    def testCopyPreservesMaskParamsFile(self) -> None:
+        # When maskParams is not explicitly set, copy() must preserve the
+        # "not set" state so the copy resolves masks from maskParamsFile
+        # rather than promoting the resolved dict to explicit maskParams.
+        inst = Instrument()
+        inst.maskParams = None
+        inst.maskParamsFile = "RubinObsc.yaml"
+        copy = inst.copy()
+        self.assertIsNone(copy._maskParams)
+        self.assertEqual(copy.maskParamsFile, "RubinObsc.yaml")
+        self.assertEqual(copy.maskParams, inst.maskParams)
+
+    def testCopyPreservesExplicitMaskParams(self) -> None:
+        # Explicitly-set maskParams are carried over to the copy and continue
+        # to take precedence over any maskParamsFile.
+        override = {"Foo": {"outer": {"clear": True}}}
+        inst = Instrument(maskParams=override)
+        copy = inst.copy()
+        self.assertEqual(copy._maskParams, override)
+        self.assertEqual(copy.maskParams, override)
 
     def testCreatePupilGrid(self) -> None:
         uImage, vImage = Instrument().createPupilGrid()
@@ -322,6 +384,14 @@ class TestInstrument(unittest.TestCase):
         self.assertTrue(np.isclose(inst.focalLength, lsst.focalLength, rtol=1e-3))
         self.assertTrue(np.isclose(inst.defocalOffset, lsst.defocalOffset, rtol=1e-3))
 
+    def testConfigFile(self) -> None:
+        # The instrument remembers the config file it was loaded from.
+        inst = Instrument("policy:instruments/AuxTel.yaml")
+        self.assertEqual(inst.configFile, "policy:instruments/AuxTel.yaml")
+
+        # An instrument built without a config file (e.g. via copy) has none.
+        self.assertIsNone(inst.copy().configFile)
+
     def testDefocalOffsetCalculation(self) -> None:
         inst = Instrument("policy:instruments/AuxTel.yaml")
         inst.batoidOffsetValue = 0.8e-3
@@ -351,6 +421,10 @@ class TestInstrument(unittest.TestCase):
         # defocalOffset is derived from batoidOffsetOptic, which ComCam
         # overrides, so it is transitively overridden and will not match.
         keys.remove("defocalOffset")
+        # ComCam defines its own inline maskParams, so it is already removed
+        # by the loop above; guard against comparing it in case that changes.
+        if "maskParams" in keys:
+            keys.remove("maskParams")
 
         # Iterate through the keys and make sure values are the same
         for key in keys:

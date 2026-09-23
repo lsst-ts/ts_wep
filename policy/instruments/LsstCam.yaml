@@ -18,9 +18,22 @@ wavelength:
   i: 753.9e-9
   z: 866.8e-9
   y: 973.9e-9
+# NOTE (RSO-856): The Batoid model is pinned to LSST_{band} to preserve the
+# legacy optical model that the inline maskParams below were derived against,
+# keeping wep estimation output unchanged. Switch to Rubin_v1000_{band} at the
+# same time we switch to the updated danish mask models (see maskParams note).
+# batoidModelName: Rubin_v1000_{band} # name used to load the Batoid model
 batoidModelName: LSST_{band} # name used to load the Batoid model
 batoidOffsetOptic: Detector
 batoidOffsetValue: 1.5e-3 # amount Detector is offset in the Batoid model, in meters
+
+# NOTE (RSO-856): The mask parameters below are hard coded here to preserve
+# the legacy pupil mask model and keep wep estimation output unchanged. Once
+# we switch to the updated danish mask models, uncomment the maskParamsFile
+# line below (which will then take over as the default) and remove the inline
+# maskParams block. maskParamsFile is loaded from the danish package's data
+# directory and is only used when no explicit maskParams are provided.
+# maskParamsFile: RubinObsc_v1000_r_rtpp0_azp45_pp0d0.yaml
 
 maskParams: # center and radius are in meters, theta in degrees
   M1:
