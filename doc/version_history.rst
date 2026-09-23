@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v17.14.0 (2026-09-23)
+=====================
+
+New Features
+------------
+
+- Added a new ``maskParamsFile`` field to ``Instrument`` which names a mask parameter file shipped in danish's data directory; when set, and no explicit ``maskParams`` are provided, ``Instrument.maskParams`` is loaded from that file via danish.
+  The instrument policy YAMLs (``LsstCam.yaml``, ``ComCam.yaml``, and ``AuxTel.yaml``) still pin their mask parameters inline to preserve the legacy pupil mask model and keep wep estimation output unchanged; each carries a commented-out ``maskParamsFile`` line documenting the danish file to switch to once the updated danish mask models become the default (at which point the inline ``maskParams`` blocks should be removed). (`RSO-856 <https://rubinobs.atlassian.net//browse/RSO-856>`_)
+
+
 v17.13.0 (2026-09-18)
 =====================
 
