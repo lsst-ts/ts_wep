@@ -347,6 +347,10 @@ class CowStore:
     astrom_ref_filter: str
     photo_ref_filter: str
     telescope: batoid.Optic
+    # Whether the cutout workers build a `DetectorView` for the focal-plane
+    # selection plot. True in corner mode, where it's cheap and False in
+    # full-array mode where it's expensive.
+    build_detector_view: bool
     # --- Corner mode only.
     corner_detectors: dict[str, CornerDetectorInputs]
     det_refcats: dict[str, Any]
@@ -395,8 +399,14 @@ class CowStore:
         telescope: batoid.Optic,
         corner_detectors: dict[str, CornerDetectorInputs],
         det_refcats: dict[str, Any],
+        build_detector_view: bool = True,
     ) -> "CowStore":
-        """Build the store corner mode's cutout and fit workers read."""
+        """Build the store corner modes cutout and fit workers read.
+
+        ``build_detector_view`` defaults True here and is required in
+        `for_fam`: the focal-plane selection plot is a corner-mode feature, so
+        this is the mode that wants it.
+        """
         store = cls.uninitialized()
         store.isr_task = isr_task
         store.bkg_task = bkg_task
@@ -412,6 +422,7 @@ class CowStore:
         store.astrom_ref_filter = astrom_ref_filter
         store.photo_ref_filter = photo_ref_filter
         store.telescope = telescope
+        store.build_detector_view = build_detector_view
         store.corner_detectors = corner_detectors
         store.det_refcats = det_refcats
         return store
@@ -468,6 +479,11 @@ class CowStore:
         store.astrom_ref_filter = astrom_ref_filter
         store.photo_ref_filter = photo_ref_filter
         store.telescope = telescope
+        # Never in full-array mode: `_cutout_one_exposure` is shared with
+        # corner mode, and here it runs twice per detector over 189 science
+        # CCDs whose results the parent all retains. At 4 MB per binned CCD
+        # image that is ~1.5 GB of pixels no full-array plot reads.
+        store.build_detector_view = False
         store.fam_detectors = fam_detectors
         store.pair_match_tolerance = pair_match_tolerance
         store.save_stamps = save_stamps

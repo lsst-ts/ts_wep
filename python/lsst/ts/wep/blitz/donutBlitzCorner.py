@@ -56,7 +56,13 @@ from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
 from lsst.utils.timer import timeMethod
 
 from .blitzDetect import BlitzDetectTask
-from .catalogBuilder import _build_donut_catalog, _CatalogOptions, _CatalogTimings
+from .catalogBuilder import (
+    _build_detector_image_table,
+    _build_donut_catalog,
+    _build_overlay_table,
+    _CatalogOptions,
+    _CatalogTimings,
+)
 from .cutDonutStamps import CutDonutStampsTask
 from .cutoutPipeline import _cutout_corner_detector
 from .dataStructures import CutoutResult, WfGroupResult
@@ -262,11 +268,34 @@ class DonutBlitzCornerConnections(
         # Only the extra-focal visits are ever written...h
         multiple=True,
     )
+    detectorImages = connectionTypes.Output(
+        doc=(
+            "Per-detector binned post-ISR images plus the maxFieldDist boundary, "
+            "for the focal-plane selection plot. One row per detector processed. "
+            "See lsst.ts.wep.blitz.dataStructures.DetectorView."
+        ),
+        name="donutBlitzCornerDetectorImages",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit"),
+    )
+    selectionOverlays = connectionTypes.Output(
+        doc=(
+            "Long-form table of the sources each selection stage saw -- reference "
+            "catalog, blitz detections, selector output -- one row per source, "
+            "tagged by `kind`. Companion to donutBlitzCornerDetectorImages."
+        ),
+        name="donutBlitzCornerSelectionOverlays",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit"),
+    )
 
     def __init__(self, *, config: Any = None) -> None:
         super().__init__(config=config)
         if config is not None and not config.doZernikesOutput:
             del self.zernikes
+        if config is not None and not config.doSelectionOutput:
+            del self.detectorImages
+            del self.selectionOverlays
 
 
 class DonutBlitzCornerConfig(
@@ -424,6 +453,19 @@ class DonutBlitzCornerConfig(
             "Also emit the per-corner `zernikes` table for legacy consumers. "
             "Off by default: the per-donut `donutBlitzCornerResults` catalog "
             "is the primary output and carries strictly more information."
+        ),
+        default=False,
+    )
+    doSelectionOutput: pexConfig.Field[bool] = pexConfig.Field[bool](
+        doc=(
+            "Persist the `donutBlitzCornerDetectorImages` and "
+            "`donutBlitzCornerSelectionOverlays` datasets, which let "
+            "DonutBlitzPlotTask regenerate the focal-plane selection plot after "
+            "the fact. Off by default: ~17MB per visit, and the plot is already "
+            "available in the same run via savePlots, which reads the same data "
+            "in memory. This governs *persistence only* -- the cutout workers "
+            "build the payload either way, since binning it costs under 1% of "
+            "the cutout pool."
         ),
         default=False,
     )
@@ -606,6 +648,10 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         self.log.info("run() execution: %.3fs", time.perf_counter() - t_run0)
         butlerQC.put(outputs.cornerResults, outputRefs.cornerResults)
 
+        if self.config.doSelectionOutput:
+            butlerQC.put(outputs.detectorImages, outputRefs.detectorImages)
+            butlerQC.put(outputs.selectionOverlays, outputRefs.selectionOverlays)
+
         if self.config.doZernikesOutput:
             # A ref is predicted for every corner detector the query
             # covers, but only the extra-focal ones are keys here: the
@@ -769,8 +815,14 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             instrument=instrument,
         )
 
+        # Always built, whatever `doSelectionOutput` says: the plot below reads
+        # them straight from memory, so the config governs only whether they
+        # are also persisted for a later standalone replot.
+        detector_images = _build_detector_image_table(results, visit_id, instrument)
+        selection_overlays = _build_overlay_table(results, visit_id, instrument)
+
         if self.config.savePlots:
-            self.plot.run(catalog)
+            self.plot.run(catalog, detector_images, selection_overlays)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
         # Built from the finished catalog rather than from wf_results, so the
@@ -795,6 +847,8 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             wfResults=wf_results,
             cornerResults=Table(catalog),
             zernikes=zernikes,
+            detectorImages=Table(detector_images),
+            selectionOverlays=Table(selection_overlays),
         )
 
     def _indexInputs(

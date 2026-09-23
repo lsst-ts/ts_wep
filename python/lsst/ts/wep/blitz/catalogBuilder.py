@@ -28,6 +28,8 @@ task.
 __all__ = []
 
 import importlib
+import logging
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -47,6 +49,20 @@ from .utils import (
     _bin_stamp_odd,
     _dense_intrinsic,
     _rotate_zk,
+)
+
+_log = logging.getLogger(__name__)
+
+# The overlay table's `kind` values paired with the `DetectorView` field each
+# reads, in the order the selection funnel applies them: every reference
+# source, the donuts blitz detection found, and what the selector kept. A
+# reader comparing the three is comparing successive stages, so the order is
+# meaningful and the plot's legend follows it. The two names differ because
+# `kind` is singular per row while the view's fields are plural collections.
+_OVERLAY_KINDS = (
+    ("refcat", "refcat"),
+    ("detection", "detections"),
+    ("selection", "selections"),
 )
 
 
@@ -743,4 +759,184 @@ def _build_donut_catalog(
     # The values above carry their own units; these are the few facts a unit
     # cannot express, keyed by the meta key they annotate.
     table.meta["notes"] = dict(_META_NOTES)
+    return table
+
+
+def _build_detector_image_table(
+    results: list,
+    visit_id: int,
+    instrument: str = "",
+) -> QTable:
+    """Build the per-detector binned-image table for the focal-plane plot.
+
+    One row per detector that produced a `DetectorView`; detectors whose worker
+    died have none and are simply absent.
+
+    ``ref_visit_id`` and ``instrument`` are mirrored into this table's own
+    ``meta`` rather than read from the donut catalog, because the case this
+    plot is most wanted in -- every donut rejected -- is exactly the one where
+    `_build_donut_catalog` returns a bare table with no meta at all.
+
+    Parameters
+    ----------
+    results : list [`lsst.ts.wep.blitz.dataStructures.CutoutResult`]
+        Per-detector cutout results.  Those with ``view`` None are skipped.
+    visit_id : int
+        The visit this table covers.
+    instrument : str, optional
+        Instrument name, e.g. ``"LSSTCam"``.
+
+    Returns
+    -------
+    QTable
+        One row per detector, with a fixed-shape ``image`` column.  Empty (and
+        column-less) when no result carried a view, which is what the plot task
+        tests before drawing.
+    """
+    views = [(r, r.view) for r in results if r.view is not None]
+    if not views:
+        return QTable()
+
+    # The `image` column is fixed-shape, so every row must agree. They do by
+    # construction, but a mixed-geometry input would otherwise raise deep
+    # inside astropy.
+    shapes = Counter(view.image.shape for _, view in views)
+    modal_shape, _ = shapes.most_common(1)[0]
+    if len(shapes) > 1:
+        odd = sorted(r.det_name for r, view in views if view.image.shape != modal_shape)
+        _log.warning(
+            "Detector image shapes disagree (%s); keeping %s and dropping %s.",
+            dict(shapes),
+            modal_shape,
+            odd,
+        )
+        views = [(r, view) for r, view in views if view.image.shape == modal_shape]
+
+    table = QTable(
+        {
+            "det_name": [r.det_name for r, _ in views],
+            "det_id": np.array([r.catalog[0].det_id if r.catalog else -1 for r, _ in views], dtype=int),
+            "n_quarter": np.array([r.n_quarter for r, _ in views], dtype=int),
+            "binning": np.array([view.binning for _, view in views], dtype=int),
+            "bbox_min_x": np.array([view.bbox_min[0] for _, view in views], dtype=int),
+            "bbox_min_y": np.array([view.bbox_min[1] for _, view in views], dtype=int),
+            "bbox_height": np.array([view.bbox_shape[0] for _, view in views], dtype=int),
+            "bbox_width": np.array([view.bbox_shape[1] for _, view in views], dtype=int),
+            "selection_source": [r.selection_source for r, _ in views],
+            # Whether a reference catalog was consulted at all.
+            "has_refcat": np.array([view.refcat is not None for _, view in views], dtype=bool),
+            "max_field_dist": np.array([view.max_field_dist_deg for _, view in views], dtype=float)
+            * u.deg,
+            # Same shape as `image`, so it rotates with it: each binned pixel's
+            # field distance, which compared against `max_field_dist` is the
+            # selector's vignetting cut evaluated over the detector.
+            "field_dist": np.stack([view.field_dist for _, view in views]) * u.deg,
+            "image": np.stack([view.image for _, view in views]),
+        }
+    )
+    table.meta["ref_visit_id"] = visit_id
+    table.meta["instrument"] = str(instrument)
+    table.meta["notes"] = {
+        "image": (
+            "background-subtracted post-ISR pixels, binned by `binning` with"
+            " lsst.afw.math.binImage, which *averages* -- so this keeps the"
+            " un-binned surface brightness. Scaling a detector-frame coordinate"
+            " into it is (u - bbox_min - (binning - 1) / 2) / binning; the"
+            " half-pixel term is the offset between the block's first pixel and"
+            " its center, and dropping it misplaces markers by up to a pixel"
+        ),
+        "field_dist": (
+            "field distance in degrees at each binned pixel center, same shape as"
+            " `image`; all-NaN where the transform failed. Greater than"
+            " `max_field_dist` marks the region the donut selector's vignetting"
+            " cut excludes."
+        ),
+        "has_refcat": (
+            "whether a reference catalog was consulted; distinguishes no refcat"
+            " from a refcat with no sources on this detector, which the overlay"
+            " table renders identically"
+        ),
+    }
+    return table
+
+
+def _build_overlay_table(results: list, visit_id: int, instrument: str = "") -> QTable:
+    """Build the long-form overlay-source table for the focal-plane plot.
+
+    Long form -- one row per source, tagged by ``kind`` -- rather than three
+    fixed-width array columns, because the three stages have unrelated and
+    field-dependent lengths, and variable-length array columns do not survive
+    the ArrowAstropy round trip.
+
+    Deliberately carries no accepted/rejected donut rows, which are already
+    available in the donut catalog.
+
+    Parameters
+    ----------
+    results : list [`lsst.ts.wep.blitz.dataStructures.CutoutResult`]
+        Per-detector cutout results.  Those with ``view`` None are skipped.
+    visit_id : int
+        The visit this table covers.
+    instrument : str, optional
+        Instrument name.
+
+    Returns
+    -------
+    QTable
+        Columns ``det_name``, ``kind``, ``x_det``, ``y_det``, ``donut_id``,
+        ``mag``.  Empty when nothing carried sources -- a stage that did not
+        run contributes no rows, so read ``has_refcat`` on the image table to
+        tell that from a stage that ran and found nothing.
+    """
+    det_names: list[str] = []
+    kinds: list[str] = []
+    xs: list[float] = []
+    ys: list[float] = []
+    ids: list[int] = []
+    mags: list[float] = []
+    for r in results:
+        if r.view is None:
+            continue
+        for kind, field in _OVERLAY_KINDS:
+            sources = getattr(r.view, field)
+            if sources is None or len(sources) == 0:
+                continue
+            det_names.extend([r.det_name] * len(sources))
+            kinds.extend([kind] * len(sources))
+            xs.extend(sources.x_det.tolist())
+            ys.extend(sources.y_det.tolist())
+            ids.extend(np.asarray(sources.donut_id, dtype=int).tolist())
+            mags.extend(sources.mag.tolist())
+
+    if not det_names:
+        return QTable()
+
+    table = QTable(
+        {
+            "det_name": det_names,
+            "kind": kinds,
+            "x_det": np.array(xs, dtype=float) * u.pix,
+            "y_det": np.array(ys, dtype=float) * u.pix,
+            "donut_id": np.array(ids, dtype=int),
+            "mag": np.array(mags, dtype=float) * u.mag,
+        }
+    )
+    table.meta["ref_visit_id"] = visit_id
+    table.meta["instrument"] = str(instrument)
+    table.meta["kinds"] = [kind for kind, _ in _OVERLAY_KINDS]
+    table.meta["notes"] = {
+        "kind": (
+            "which stage of the selection funnel the source comes from, in order:"
+            " 'refcat' every reference source loaded for the detector,"
+            " 'detection' what blitz detection found, 'selection' what the donut"
+            " selector kept. Accepted and rejected donuts are deliberately absent"
+            " -- they are rows of the donut catalog, which carries their metrics"
+        ),
+        "donut_id": (
+            "the stage's own id: a refcat source id on the refcat path, a"
+            " per-detector 1..N counter on the blitz-detection path, matching"
+            " the donut catalog's donut_id column"
+        ),
+        "mag": "NaN for blitz detections, which have no photometry",
+    }
     return table

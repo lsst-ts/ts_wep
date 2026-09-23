@@ -32,14 +32,18 @@ from lsst.afw.image import VisitInfo
 from lsst.daf.base import DateTime
 from lsst.daf.butler.formatters.parquet import arrow_to_astropy, astropy_to_arrow
 from lsst.ts.wep.blitz.catalogBuilder import (
+    _build_detector_image_table,
     _build_donut_catalog,
+    _build_overlay_table,
     _CatalogOptions,
     _CatalogTimings,
     _rotate_zk_to_eb,
 )
 from lsst.ts.wep.blitz.dataStructures import (
     CutoutResult,
+    DetectorView,
     Donut,
+    SourceSet,
     WfDonutResult,
     WfGroupResult,
 )
@@ -982,6 +986,156 @@ class TestBuildDonutCatalog(unittest.TestCase):
         entry = table.meta["det_meta"]["R00_SW0_42"]
         self.assertEqual(entry["selection_source"], "no_detections")
         self.assertEqual(entry["pair_path"], "n/a")
+
+
+_VIEW_BINNING = 4
+# Corner-sensor proportions, small enough to keep the fixtures cheap.
+_VIEW_SHAPE = (200, 408)
+
+
+def _source_set(n, seed, with_mag=True):
+    rng = np.random.default_rng(seed)
+    height, width = _VIEW_SHAPE
+    return SourceSet(
+        x_det=rng.uniform(0, width, n),
+        y_det=rng.uniform(0, height, n),
+        donut_id=np.arange(1, n + 1, dtype=np.int64),
+        mag=(rng.uniform(13.0, 20.0, n) if with_mag else np.full(n, np.nan)).astype(np.float32),
+    )
+
+
+def _view(shape=None, refcat=_source_set(6, 1), detections=None, selections=None):
+    height, width = shape or _VIEW_SHAPE
+    hb, wb = height // _VIEW_BINNING, width // _VIEW_BINNING
+    return DetectorView(
+        image=np.random.default_rng(0).normal(12.0, 2.0, (hb, wb)).astype(np.float32),
+        binning=_VIEW_BINNING,
+        bbox_min=(0, 0),
+        bbox_shape=(height, width),
+        refcat=refcat,
+        detections=_source_set(4, 2, with_mag=False) if detections is None else detections,
+        selections=_source_set(3, 3) if selections is None else selections,
+        field_dist=np.linspace(1.0, 2.0, hb * wb, dtype=np.float32).reshape(hb, wb),
+        max_field_dist_deg=1.725,
+    )
+
+
+def _result_with_view(det_name="R00_SW0", view=None, **overrides):
+    result = _result(det_name=det_name, **overrides)
+    result.view = _view() if view is None else view
+    return result
+
+
+class TestBuildDetectorImageTable(unittest.TestCase):
+    """The per-detector binned-image table the focal-plane plot reads."""
+
+    def testNoViewsGivesAnEmptyTable(self) -> None:
+        """What the plot task tests before drawing."""
+        table = _build_detector_image_table([_result()], 42, "LSSTCam")
+        self.assertEqual(len(table), 0)
+        self.assertEqual(list(table.columns), [])
+
+    def testDetectorsWithoutAViewAreAbsentNotPlaceheld(self) -> None:
+        """A dead worker's detector has no image, and no row either."""
+        table = _build_detector_image_table(
+            [_result_with_view("R00_SW0"), _result("R00_SW1")], 42, "LSSTCam"
+        )
+        self.assertEqual(table["det_name"].tolist(), ["R00_SW0"])
+
+    def testRoundTripsThroughArrowWithDtypesIntact(self) -> None:
+        """Fixed-shape 2-D columns survive where variable-length ones do not.
+
+        The reason the overlay sources went into a long-form table instead of
+        array columns, so it is worth pinning that these two *do* survive.
+        """
+        table = _build_detector_image_table([_result_with_view()], 42, "LSSTCam")
+        back = arrow_to_astropy(astropy_to_arrow(Table(table)))
+        hb, wb = (d // _VIEW_BINNING for d in _VIEW_SHAPE)
+        self.assertEqual(back["image"].shape, (1, hb, wb))
+        self.assertEqual(back["image"].dtype, np.float32)
+        self.assertEqual(back["field_dist"].shape, (1, hb, wb))
+        np.testing.assert_allclose(back["image"][0], table["image"][0])
+
+    def testHasRefcatDistinguishesNoRefcatFromAnEmptyOne(self) -> None:
+        """Overlay table renders both as zero rows, so column carries it."""
+        table = _build_detector_image_table(
+            [
+                _result_with_view("R00_SW0", view=_view(refcat=None)),
+                _result_with_view("R00_SW1", view=_view(refcat=_source_set(0, 4))),
+            ],
+            42,
+            "LSSTCam",
+        )
+        by_det = dict(zip(table["det_name"].tolist(), table["has_refcat"].tolist()))
+        self.assertFalse(by_det["R00_SW0"])
+        self.assertTrue(by_det["R00_SW1"])
+
+    def testMismatchedImageShapesWarnRatherThanRaise(self) -> None:
+        """A fixed-shape column cannot hold both, so the minority is dropped.
+
+        Raising deep inside astropy would lose the whole plot over one odd
+        detector; keeping the majority and saying what went is the better
+        failure.
+        """
+        results = [
+            _result_with_view("R00_SW0"),
+            _result_with_view("R00_SW1"),
+            _result_with_view("R04_SW0", view=_view(shape=(200, 200))),
+        ]
+        with self.assertLogs(level="WARNING") as captured:
+            table = _build_detector_image_table(results, 42, "LSSTCam")
+        self.assertEqual(sorted(table["det_name"].tolist()), ["R00_SW0", "R00_SW1"])
+        self.assertIn("R04_SW0", "\n".join(captured.output))
+
+
+class TestBuildOverlayTable(unittest.TestCase):
+    """The long-form selection-source table."""
+
+    def testOneRowPerSourceTaggedByStage(self) -> None:
+        table = _build_overlay_table([_result_with_view()], 42, "LSSTCam")
+        kinds = table["kind"].tolist()
+        self.assertEqual(kinds.count("refcat"), 6)
+        self.assertEqual(kinds.count("detection"), 4)
+        self.assertEqual(kinds.count("selection"), 3)
+        self.assertEqual(len(table), 13)
+
+    def testNoRefcatEmitsNoRefcatRows(self) -> None:
+        table = _build_overlay_table(
+            [_result_with_view(view=_view(refcat=None))], 42, "LSSTCam"
+        )
+        self.assertNotIn("refcat", set(table["kind"].tolist()))
+        self.assertEqual({"detection", "selection"}, set(table["kind"].tolist()))
+
+    def testAcceptedAndRejectedDonutsAreDeliberatelyAbsent(self) -> None:
+        """They are donut-catalog rows; duplicating would let the two drift."""
+        table = _build_overlay_table([_result_with_view()], 42, "LSSTCam")
+        self.assertEqual(set(table["kind"].tolist()), {"refcat", "detection", "selection"})
+        self.assertNotIn("candidate", table.columns)
+        self.assertNotIn("snr", table.columns)
+
+    def testRoundTripsThroughArrowWithUnitsAndValuesIntact(self) -> None:
+        """Long form is what makes this survivable at all.
+
+        The three stages have unrelated lengths, and variable-length array
+        columns do not round trip -- one row per source sidesteps that
+        entirely. The builder widens `SourceSet.mag` from float32 to float64 on
+        the way in, so the units and values are what there is to pin here, not
+        the dtype.
+        """
+        table = _build_overlay_table([_result_with_view()], 42, "LSSTCam")
+        back = arrow_to_astropy(astropy_to_arrow(Table(table)))
+        self.assertEqual(len(back), len(table))
+        self.assertEqual(back["x_det"].unit, u.pix)
+        self.assertEqual(back["mag"].unit, u.mag)
+        self.assertEqual(back["kind"].tolist(), table["kind"].tolist())
+        np.testing.assert_allclose(
+            np.asarray(back["x_det"], dtype=float), np.asarray(table["x_det"], dtype=float)
+        )
+
+    def testNoSourcesAtAllGivesAnEmptyTable(self) -> None:
+        empty = _view(refcat=None, detections=_source_set(0, 5), selections=_source_set(0, 6))
+        table = _build_overlay_table([_result_with_view(view=empty)], 42, "LSSTCam")
+        self.assertEqual(len(table), 0)
 
 
 if __name__ == "__main__":
