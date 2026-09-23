@@ -296,6 +296,27 @@ class TestInstrument(unittest.TestCase):
         inst = Instrument(maskParams=override)
         self.assertEqual(inst.maskParams, override)
 
+    def testCopyPreservesMaskParamsFile(self) -> None:
+        # When maskParams is not explicitly set, copy() must preserve the
+        # "not set" state so the copy resolves masks from maskParamsFile
+        # rather than promoting the resolved dict to explicit maskParams.
+        inst = Instrument()
+        inst.maskParams = None
+        inst.maskParamsFile = "RubinObsc.yaml"
+        copy = inst.copy()
+        self.assertIsNone(copy._maskParams)
+        self.assertEqual(copy.maskParamsFile, "RubinObsc.yaml")
+        self.assertEqual(copy.maskParams, inst.maskParams)
+
+    def testCopyPreservesExplicitMaskParams(self) -> None:
+        # Explicitly-set maskParams are carried over to the copy and continue
+        # to take precedence over any maskParamsFile.
+        override = {"Foo": {"outer": {"clear": True}}}
+        inst = Instrument(maskParams=override)
+        copy = inst.copy()
+        self.assertEqual(copy._maskParams, override)
+        self.assertEqual(copy.maskParams, override)
+
     def testCreatePupilGrid(self) -> None:
         uImage, vImage = Instrument().createPupilGrid()
         self.assertEqual(uImage.shape, vImage.shape)

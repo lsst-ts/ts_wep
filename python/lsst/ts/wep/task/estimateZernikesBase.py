@@ -378,6 +378,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
                 maskParamsFile,
                 resolvedFile,
             )
+            self.metadata["danishVersion"] = f"{danishVersion}"
             self.metadata["maskModel"] = f"danish:{resolvedFile}"
 
         # Log the Batoid optical model the mask is paired with.
@@ -393,6 +394,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
             batoidVersion,
             instrument.batoidModelName,
         )
+        self.metadata["batoidVersion"] = f"{batoidVersion}"
         self.metadata["batoidModel"] = f"batoid:{instrument.batoidModelName}"
 
     def run(

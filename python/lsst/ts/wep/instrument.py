@@ -122,7 +122,8 @@ class Instrument:
             - radius: list of polynomial coeffs (in meters) for np.polyval()
             to determine the radius of the circle
         If this is not None, it overrides any values set by maskParamsFile.
-        None defaults to an empty dictionary.
+        If None, then will use the maskParamsFile. If no maskParamsFile is
+        specified, will use the primary inner and outer radii.
     maskParamsFile : str, optional
         Name of a mask parameter file shipped in the danish package's data
         directory (e.g. "RubinObsc.yaml"). When set, and maskParams is not
@@ -215,7 +216,11 @@ class Instrument:
             batoidModelName=self.batoidModelName,
             batoidOffsetOptic=self.batoidOffsetOptic,
             batoidOffsetValue=self.batoidOffsetValue,
-            maskParams=self.maskParams,
+            # If maskParams was not explicitly set,
+            # it will be None and the copy will use the maskParamsFile instead.
+            # Set explicitly to raw stored value here so that the behavior
+            # is consistent with the original instrument.
+            maskParams=getattr(self, "_maskParams", None),
             maskParamsFile=self.maskParamsFile,
         )
 
