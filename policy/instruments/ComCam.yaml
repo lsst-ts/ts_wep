@@ -9,6 +9,14 @@ name: LsstComCam
 batoidModelName: ComCam_{band}
 batoidOffsetOptic: ComCam
 
+# NOTE (RSO-856): The mask parameters below are hard coded here to preserve
+# the legacy pupil mask model and keep wep estimation output unchanged. Once
+# we switch to the updated danish mask models, uncomment the maskParamsFile
+# line below (which will then take over as the default) and remove the inline
+# maskParams block. maskParamsFile is loaded from the danish package's data
+# directory and is only used when no explicit maskParams are provided.
+# maskParamsFile: ComCamObsc.yaml
+
 maskParams:
   M1:
     outer:
