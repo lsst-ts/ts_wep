@@ -50,7 +50,8 @@ from astropy.table import QTable
 
 from lsst.ts.wep.task.calcZernikesTask import blurClipZkTable, pos2f_dtype
 
-from .utils import _INSTRUMENT, CORNER_BY_DET_NAME, CORNER_DEFOCAL_BY_DET_NAME, CORNER_PAIRS
+from .lsstCam import _LSSTCAM
+from .utils import CORNER_BY_DET_NAME, CORNER_DEFOCAL_BY_DET_NAME, CORNER_PAIRS
 
 # Label prefix per `wfEstimationMode`. A row is only a "pair" in paired
 # mode; in the others it is one donut or a joint fit, and calling those
@@ -172,7 +173,7 @@ def _table_metadata(noll_indices, det_names_by_side, visit_id, cam_name, band, v
     `CombineZernikesSigmaClipTask` selects one of them by config.
     """
     meta: dict = {}
-    dfc_dist = _INSTRUMENT.defocalOffset * 1e3
+    dfc_dist = _LSSTCAM.defocal_offset * 1e3
     for side in _SIDES:
         det_name = det_names_by_side[side]
         if det_name is None:

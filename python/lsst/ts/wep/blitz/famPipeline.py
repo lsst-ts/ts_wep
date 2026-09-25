@@ -45,9 +45,9 @@ from lsst.pipe.base import NoWorkFound
 
 from .cutoutPipeline import _cutout_one_exposure
 from .dataStructures import _ERROR_MAX_CHARS, FamDetectorResult, _WfGroup
+from .lsstCam import _LSSTCAM
 from .utils import (
     _COW_STORE,
-    _INSTRUMENT,
     IsrCalibs,
 )
 
@@ -56,7 +56,7 @@ _log = logging.getLogger(__name__)
 # Radians of field angle per un-binned pixel. Used to express the pairing
 # tolerance -- naturally a fraction of the donut radius, i.e. pixels -- in the
 # field-angle space the radial defocus correction works in.
-_RAD_PER_PIXEL = _INSTRUMENT.pixelSize / _INSTRUMENT.focalLength
+_RAD_PER_PIXEL = _LSSTCAM.pixel_size / _LSSTCAM.focal_length
 
 
 def _fam_pool_initializer() -> None:

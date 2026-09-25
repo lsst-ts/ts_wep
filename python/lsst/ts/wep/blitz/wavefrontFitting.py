@@ -41,6 +41,7 @@ from scipy.stats import median_abs_deviation
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
+from lsst.ts.wep.utils.ioUtils import readConfigYaml
 
 from .dataStructures import (
     _FIT_OUTCOMES,
@@ -51,9 +52,9 @@ from .dataStructures import (
     WfGroupResult,
     _WfGroup,
 )
+from .lsstCam import _LSSTCAM
 from .utils import (
     _COW_STORE,
-    _INSTRUMENT,
     _ZK_JMAX,
     CORNER_PAIRS,
     _bin_stamp_odd,
@@ -65,6 +66,11 @@ from .utils import (
 # field-dependent optics term), so any value works; set to roughly the Rubin
 # field of view for a physically sensible default.
 _DANISH_FIELD_RADIUS_RAD = np.deg2rad(1.85)
+
+# Pupil mask model, as a nested obscuration dict danish understands.  Read
+# straight from the policy YAML via the lru_cached `readConfigYaml`, so the
+# geometry blitz fits with is the geometry that file declares.
+_MASK_PARAMS = readConfigYaml("policy:instruments/LsstCam.yaml")["maskParams"]
 
 
 def _jacobian_callable(model, jacobian_format: str):
@@ -717,7 +723,7 @@ class WavefrontFittingTask(pipeBase.Task):
         factory_class = danish.DonutTriangleFactory if self.config.triangleMode else danish.DonutFactory
         factory_kwargs = {}
         if self.config.doAoiThroughput and group.band:
-            wavelength = _INSTRUMENT.wavelength.get(group.band)
+            wavelength = _LSSTCAM.wavelength.get(group.band)
             if wavelength:
                 factory_kwargs["bandpass_filter"] = wavelength
             if group.alt is not None and np.isfinite(group.alt) and group.alt > 0:
@@ -726,11 +732,11 @@ class WavefrontFittingTask(pipeBase.Task):
             else:
                 factory_kwargs["airmass"] = 1.2
         return factory_class(
-            R_outer=_INSTRUMENT.radius,
-            R_inner=_INSTRUMENT.radius * _INSTRUMENT.obscuration,
-            mask_params=_INSTRUMENT.maskParams,
-            focal_length=_INSTRUMENT.focalLength,
-            pixel_scale=_INSTRUMENT.pixelSize * self.config.binning,
+            R_outer=_LSSTCAM.zk_r_outer,
+            R_inner=_LSSTCAM.zk_r_inner,
+            mask_params=_MASK_PARAMS,
+            focal_length=_LSSTCAM.focal_length,
+            pixel_scale=_LSSTCAM.pixel_size * self.config.binning,
             spider_angle=group.rtp,
             **factory_kwargs,
         )
@@ -776,14 +782,13 @@ class WavefrontFittingTask(pipeBase.Task):
         bkg_std = median_abs_deviation(diff, scale="normal") / np.sqrt(2.0)
 
         band = donut.band
-        wavelength_by_band = {bl.value: wl for bl, wl in _INSTRUMENT.wavelength.items()}
-        if band not in wavelength_by_band:
+        if band not in _LSSTCAM.wavelength:
             raise RuntimeError(
                 f"No wavelength configured for band {band!r}; the instrument supplies "
-                f"{sorted(wavelength_by_band)}. Fitting with a wrong wavelength would "
+                f"{sorted(_LSSTCAM.wavelength)}. Fitting with a wrong wavelength would "
                 "bias the whole wavefront, so this is fatal rather than defaulted."
             )
-        wavelength = wavelength_by_band[band]
+        wavelength = _LSSTCAM.wavelength[band]
         telescope = _COW_STORE.telescope
         # The defocused telescope comes from the donut's own offset triplet, so
         # the fitter never needs to know which detectors sit on which side of
@@ -800,7 +805,7 @@ class WavefrontFittingTask(pipeBase.Task):
         zernikeTA_kwargs = dict(
             jmax=_ZK_JMAX,
             eps=eps,
-            focal_length=_INSTRUMENT.focalLength,
+            focal_length=_LSSTCAM.focal_length,
             nrad=nrad,
             naz=int(2 * np.pi * nrad / (1 - eps)),
         )

@@ -30,7 +30,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.afw.image import Exposure
 
-from .utils import _INSTRUMENT
+from .lsstCam import _LSSTCAM
 
 
 class MeasureDonutCandidatesConfig(pexConfig.Config):
@@ -91,7 +91,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
     left in place for it to reject.
 
     The donut radius and obscuration come from the module-level instrument
-    (`_INSTRUMENT`), not config -- they are fixed geometry, not tunable.
+    (`_LSSTCAM`), not config -- they are fixed geometry, not tunable.
     """
 
     ConfigClass = MeasureDonutCandidatesConfig
@@ -116,7 +116,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
             ``centroid_x``, ``centroid_y``, ``donut_id``.
         donut_radius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if
-            unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
+            unmeasured. If None, the nominal `_LSSTCAM.donut_radius` is used.
 
         Returns
         -------
@@ -150,9 +150,9 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         table is left unmodified.
         """
         if donut_radius is None:
-            donut_radius = _INSTRUMENT.donutRadius
+            donut_radius = _LSSTCAM.donut_radius
         radius = donut_radius
-        obscuration = _INSTRUMENT.obscuration
+        obscuration = _LSSTCAM.obscuration
         cfg = self.config
 
         arr = exposure.image.array

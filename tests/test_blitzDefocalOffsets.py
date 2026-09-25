@@ -47,11 +47,12 @@ from lsst.ts.wep.blitz.donutBlitzCorner import (
     _EXTRA_FOCAL_OFFSETS,
     _INTRA_FOCAL_OFFSETS,
 )
+from lsst.ts.wep.blitz.lsstCam import _LSSTCAM
 from lsst.ts.wep.blitz.utils import (
     _COW_STORE,
     _EXTRA_FOCAL_DET_IDS,
-    _INSTRUMENT,
     _INTRA_FOCAL_DET_IDS,
+    _RADIAL_SCALE_WAVELENGTH,
     _ZK_JMAX,
     CORNER_DEFOCAL_BY_DET_NAME,
     CORNER_DET_NAMES,
@@ -117,10 +118,10 @@ class TestDefocalOffsets(unittest.TestCase):
             telescope,
             np.deg2rad(theta_deg),
             0.0,
-            _INSTRUMENT.wavelength[_INSTRUMENT.refBand],
+            _RADIAL_SCALE_WAVELENGTH,
             jmax=_ZK_JMAX,
             eps=eps,
-            focal_length=_INSTRUMENT.focalLength,
+            focal_length=_LSSTCAM.focal_length,
             nrad=nrad,
             naz=int(2 * np.pi * nrad / (1 - eps)),
         )
@@ -161,7 +162,7 @@ class TestDefocalOffsets(unittest.TestCase):
         instead move M2, so a triplet that silently applied only the detector
         component would be a quiet physics bug.
         """
-        dz = _INSTRUMENT.defocalOffset
+        dz = _LSSTCAM.defocal_offset
         det = self._zk(_defocused_telescope(self.telescope, (dz, 0.0, 0.0)), 1.0)
         cam = self._zk(_defocused_telescope(self.telescope, (0.0, dz, 0.0)), 1.0)
         m2 = self._zk(_defocused_telescope(self.telescope, (0.0, 0.0, dz)), 1.0)
@@ -184,9 +185,9 @@ class TestDefocalOffsets(unittest.TestCase):
         the edge -- so this asserts the scale against an independent per-angle
         trace.
         """
-        dz = _INSTRUMENT.defocalOffset
-        px = _INSTRUMENT.pixelSize
-        wavelength = _INSTRUMENT.wavelength[_INSTRUMENT.refBand]
+        dz = _LSSTCAM.defocal_offset
+        px = _LSSTCAM.pixel_size
+        wavelength = _RADIAL_SCALE_WAVELENGTH
         extra = (0.0, dz, 0.0)
         intra = (0.0, -dz, 0.0)
 
@@ -205,7 +206,7 @@ class TestDefocalOffsets(unittest.TestCase):
 
         for theta in (0.5, 1.0, 1.725):
             traced_px = abs(traced_x(extra, theta) - traced_x(intra, theta)) / px
-            r_m = _INSTRUMENT.focalLength * np.tan(np.deg2rad(theta))
+            r_m = _LSSTCAM.focal_length * np.tan(np.deg2rad(theta))
             scaled_px = (
                 abs(
                     r_m * _defocal_radial_scale(self.telescope, extra)
@@ -225,7 +226,7 @@ class TestDefocalOffsets(unittest.TestCase):
 
     def testRadialScaleSignsAreOpposite(self) -> None:
         """Intra and extra stretch the focal plane in opposite senses."""
-        dz = _INSTRUMENT.defocalOffset
+        dz = _LSSTCAM.defocal_offset
         extra = _defocal_radial_scale(self.telescope, (0.0, dz, 0.0))
         intra = _defocal_radial_scale(self.telescope, (0.0, -dz, 0.0))
         self.assertLess(extra, 1.0)
