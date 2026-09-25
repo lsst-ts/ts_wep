@@ -68,6 +68,7 @@ from .cutoutPipeline import _cutout_corner_detector
 from .dataStructures import CutoutResult, WfGroupResult
 from .donutBlitzPlot import DonutBlitzPlotTask
 from .forkPool import _dump_stacks_on_hang, _fork_map
+from .lsstCam import _LSSTCAM
 from .measureDonutCandidates import MeasureDonutCandidatesTask
 from .utils import (
     _ANSI_BOLD,
@@ -75,7 +76,6 @@ from .utils import (
     _ANSI_GREEN,
     _COW_STORE,
     _CUTOUT_STAGE_KEYS,
-    _INSTRUMENT,
     _INTRA_FOCAL_DET_IDS,
     CORNER_DET_NAMES,
     CornerDetectorInputs,
@@ -117,8 +117,8 @@ def _exposure_group(refs) -> str:
 # Ordered as `_OFFSET_OPTICS`: (detector, camera, m2). Full-array mode shifts
 # the whole camera instead, which is why the offsets ride on each Donut rather
 # than being assumed by the fitter.
-_EXTRA_FOCAL_OFFSETS = (+_INSTRUMENT.defocalOffset, 0.0, 0.0)
-_INTRA_FOCAL_OFFSETS = (-_INSTRUMENT.defocalOffset, 0.0, 0.0)
+_EXTRA_FOCAL_OFFSETS = (+_LSSTCAM.defocal_offset, 0.0, 0.0)
+_INTRA_FOCAL_OFFSETS = (-_LSSTCAM.defocal_offset, 0.0, 0.0)
 
 # The connection names `runQuantum` fetches, in the order it fetches them.
 # These strings are three things at once, which is why the tuple is shared

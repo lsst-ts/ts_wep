@@ -72,6 +72,7 @@ from .cutDonutStamps import CutDonutStampsTask
 from .dataStructures import FamDetectorResult
 from .famPipeline import _fam_detector_worker, _fam_pool_initializer
 from .forkPool import _dump_stacks_on_hang, _fork_map
+from .lsstCam import _LSSTCAM
 from .measureDonutCandidates import MeasureDonutCandidatesTask
 from .utils import (
     _ANSI_BOLD,
@@ -79,7 +80,6 @@ from .utils import (
     _ANSI_GREEN,
     _COW_STORE,
     _CUTOUT_STAGE_KEYS,
-    _INSTRUMENT,
     CowStore,
     FamDetectorInputs,
     _colorize,
@@ -488,7 +488,7 @@ class DonutBlitzFamConfig(
             "full-array default; the nested detector moves with the camera, so "
             "the sign convention agrees with corner mode's."
         ),
-        default=_INSTRUMENT.defocalOffset,
+        default=_LSSTCAM.defocal_offset,
     )
     m2Offset: pexConfig.Field[float] = pexConfig.Field[float](
         doc=(

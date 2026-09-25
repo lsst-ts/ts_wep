@@ -40,9 +40,9 @@ from astropy.table import QTable
 from lsst.ts.wep.utils import getNollPairs
 
 from .dataStructures import _NULL_WF_DONUT
+from .lsstCam import _LSSTCAM
 from .utils import (
     _CUTOUT_STAGE_KEYS,
-    _INSTRUMENT,
     _MAX_NEARBY,
     _OFFSET_OPTICS,
     _ZK_JMAX,
@@ -753,7 +753,7 @@ def _build_donut_catalog(
     table.meta["bkg_annulus_inner_frac"] = options.bkg_annulus_inner_frac
     table.meta["bkg_annulus_outer_frac"] = options.bkg_annulus_outer_frac
     # Global instrument constant, so it lives in meta.
-    table.meta["obscuration"] = _INSTRUMENT.obscuration
+    table.meta["obscuration"] = _LSSTCAM.obscuration
     table.meta["max_donuts"] = options.max_donuts
     table.meta["wf_mode"] = options.wf_mode
     # The values above carry their own units; these are the few facts a unit
@@ -825,8 +825,7 @@ def _build_detector_image_table(
             "selection_source": [r.selection_source for r, _ in views],
             # Whether a reference catalog was consulted at all.
             "has_refcat": np.array([view.refcat is not None for _, view in views], dtype=bool),
-            "max_field_dist": np.array([view.max_field_dist_deg for _, view in views], dtype=float)
-            * u.deg,
+            "max_field_dist": np.array([view.max_field_dist_deg for _, view in views], dtype=float) * u.deg,
             # Same shape as `image`, so it rotates with it: each binned pixel's
             # field distance, which compared against `max_field_dist` is the
             # selector's vignetting cut evaluated over the detector.

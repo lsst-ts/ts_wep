@@ -33,7 +33,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 from lsst.afw.image import Exposure
 
-from .utils import _INSTRUMENT
+from .lsstCam import _LSSTCAM
 
 
 def _build_annular_template(radius: float, inner_frac: float) -> np.ndarray:
@@ -74,7 +74,7 @@ class BlitzDetectTask(pipeBase.Task):
     detections; no flux, shape or quality cut is applied here.
 
     The template's central hole comes from the module-level instrument
-    (`_INSTRUMENT.obscuration`), not config -- it is fixed geometry, not
+    (`_LSSTCAM.obscuration`), not config -- it is fixed geometry, not
     tunable.
     """
 
@@ -96,7 +96,7 @@ class BlitzDetectTask(pipeBase.Task):
             pixel coordinates. Not modified.
         donut_radius : float or None, optional
             Measured donut radius in un-binned pixels. If None, the nominal
-            `_INSTRUMENT.donutRadius` is used.
+            `_LSSTCAM.donut_radius` is used.
 
         Returns
         -------
@@ -108,12 +108,12 @@ class BlitzDetectTask(pipeBase.Task):
         """
         config = self.config
         if donut_radius is None:
-            donut_radius = _INSTRUMENT.donutRadius
+            donut_radius = _LSSTCAM.donut_radius
 
         trimmed_bbox = exposure.getBBox().erodedBy(config.edgeMargin)
         binning = config.detectionBinning
         binned_donut_radius = donut_radius / binning
-        template = _build_annular_template(binned_donut_radius, inner_frac=_INSTRUMENT.obscuration)
+        template = _build_annular_template(binned_donut_radius, inner_frac=_LSSTCAM.obscuration)
 
         if binning > 1:
             binned_img = afwMath.binImage(exposure[trimmed_bbox].image, binning)

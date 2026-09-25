@@ -42,6 +42,11 @@ import numpy as np
 
 from lsst.ts.wep.blitz.famPipeline import _RAD_PER_PIXEL
 from lsst.ts.wep.blitz.lsstCam import _LSSTCAM, _rescale_zk_domain
+from lsst.ts.wep.blitz.utils import (
+    _RADIAL_SCALE_REF_THETA,
+    _RADIAL_SCALE_WAVELENGTH,
+    _defocused_telescope,
+)
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.ioUtils import readConfigYaml
 
@@ -50,6 +55,29 @@ _POLICY_FILE = "policy:instruments/LsstCam.yaml"
 # Every band LSSTCam observes in. Spelled out rather than taken from
 # `_LSSTCAM.wavelength` so a band silently going missing is a failure.
 _BANDS = ("u", "g", "r", "i", "z", "y")
+
+
+def _radial_scale_at(telescope, offsets, wavelength: float) -> float:
+    """`_defocal_radial_scale`, but at a caller-chosen wavelength.
+
+    Reproduced here rather than adding a parameter to the real function, which
+    has no use for one: the whole point is that the choice does not matter, so
+    production code pins it and only this test varies it.
+    """
+
+    def chief_ray_x(optic):
+        ray = batoid.RayVector.fromStop(
+            0.0,
+            0.0,
+            optic=optic,
+            wavelength=wavelength,
+            theta_x=_RADIAL_SCALE_REF_THETA,
+            theta_y=0.0,
+        )
+        optic.trace(ray)
+        return float(ray.x[0])
+
+    return chief_ray_x(_defocused_telescope(telescope, offsets)) / chief_ray_x(telescope)
 
 
 class TestHolderMatchesInstrument(unittest.TestCase):
@@ -151,6 +179,33 @@ class TestDerivedConstants(unittest.TestCase):
             _RAD_PER_PIXEL,
             self.instrument.pixelSize / self.instrument.focalLength,
         )
+
+    def testRadialScaleWavelengthIsTheReferenceBandValue(self) -> None:
+        """`_defocal_radial_scale` traces at the reference band's wavelength.
+
+        The chief-ray trace needs *a* wavelength and the scale barely depends
+        on which, so the constant is arbitrary in principle. Pinning it anyway
+        keeps the radial correction reproducible rather than merely close.
+        """
+        self.assertEqual(
+            _RADIAL_SCALE_WAVELENGTH,
+            self.instrument.wavelength[self.instrument.refBand],
+        )
+        self.assertIn(_RADIAL_SCALE_WAVELENGTH, set(_LSSTCAM.wavelength.values()))
+
+    def testRadialScaleIsInsensitiveToTheChosenWavelength(self) -> None:
+        """Which band the scale is traced at cannot matter at the pixel level.
+
+        This is what makes pinning one wavelength honest rather than a hidden
+        approximation: across u to y the scale moves 6.5e-6 relative, while the
+        tolerance it feeds is measured in pixels.
+        """
+        telescope = batoid.Optic.fromYaml("LSST_r.yaml")
+        offsets = (_LSSTCAM.defocal_offset, 0.0, 0.0)
+        scales = [
+            _radial_scale_at(telescope, offsets, wavelength) for wavelength in _LSSTCAM.wavelength.values()
+        ]
+        self.assertLess((max(scales) - min(scales)) / min(scales), 1e-5)
 
 
 class TestRescaleZkDomain(unittest.TestCase):

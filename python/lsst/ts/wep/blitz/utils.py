@@ -31,11 +31,9 @@ import batoid
 import galsim
 import numpy as np
 
-from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils import binArray
 
-# Hard coding global wavefront sensor geometry for now
-_INSTRUMENT: Instrument = Instrument(configFile="policy:instruments/LsstCam.yaml")
+from .lsstCam import _LSSTCAM
 
 _EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
 _INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
@@ -163,6 +161,12 @@ def _defocused_telescope(telescope: batoid.Optic, offsets: _Offsets) -> batoid.O
 # non-zero reference angle gives the same answer.
 _RADIAL_SCALE_REF_THETA = np.deg2rad(1.0)
 
+# Wavelength the radial scale's chief rays are traced at. Like the reference
+# angle above, any value works: the scale moves 6.5e-6 relative across the full
+# u-to-y range (0.99943885 to 0.99944537), against a pairing tolerance measured
+# in pixels. So one band is picked rather than threading the donut's own.
+_RADIAL_SCALE_WAVELENGTH = _LSSTCAM.wavelength["r"]
+
 
 def _defocal_radial_scale(telescope: batoid.Optic, offsets: _Offsets) -> float:
     """Fractional radial stretch of the focal plane produced by a defocus.
@@ -195,7 +199,7 @@ def _defocal_radial_scale(telescope: batoid.Optic, offsets: _Offsets) -> float:
         Ratio of defocused to in-focus radial position. Divide a measured field
         angle by this to recover the common frame. 1.0 for a null defocus.
     """
-    wavelength = _INSTRUMENT.wavelength[_INSTRUMENT.refBand]
+    wavelength = _RADIAL_SCALE_WAVELENGTH
 
     def _chief_ray_x(optic):
         ray = batoid.RayVector.fromStop(
@@ -560,7 +564,7 @@ def _resolve_donut_radius(donut_radius: float | None) -> float:
     The per-exposure radius measured by `DonutDetectDiameterTask` is preferred,
     but it is NaN whenever the sizing curve could not be formed (no surviving
     peaks, monotonic curve). Rather than propagate NaN into every mask radius
-    downstream, fall back to the nominal `_INSTRUMENT.donutRadius`.
+    downstream, fall back to the nominal `_LSSTCAM.donut_radius`.
 
     Parameters
     ----------
@@ -571,12 +575,12 @@ def _resolve_donut_radius(donut_radius: float | None) -> float:
     -------
     float
         ``donut_radius`` if finite and positive, else
-        ``_INSTRUMENT.donutRadius``.
+        ``_LSSTCAM.donut_radius``.
     """
     if donut_radius is None:
-        return _INSTRUMENT.donutRadius
+        return _LSSTCAM.donut_radius
     if not np.isfinite(donut_radius) or donut_radius <= 0:
-        return _INSTRUMENT.donutRadius
+        return _LSSTCAM.donut_radius
     return donut_radius
 
 

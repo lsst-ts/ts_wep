@@ -36,7 +36,7 @@ from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Detector
 from lsst.afw.image import Exposure
 
 from .dataStructures import Donut
-from .utils import _INSTRUMENT
+from .lsstCam import _LSSTCAM
 
 
 @dataclass(frozen=True)
@@ -207,7 +207,7 @@ class CutDonutStampsTask(pipeBase.Task):
     (``maxDonuts``) and rejected (``maxRejectDonuts``) buckets are full --
     avoiding stamp cuts on the faint tail that would be discarded anyway.
 
-    Donut radius comes from the module-level instrument (`_INSTRUMENT`), not
+    Donut radius comes from the module-level instrument (`_LSSTCAM`), not
     config.
     """
 
@@ -246,7 +246,7 @@ class CutDonutStampsTask(pipeBase.Task):
             excludes each donut from its own neighbor list.
         donut_radius : float or None, optional
             Measured donut radius in un-binned pixels, or None/NaN if
-            unmeasured. If None, the nominal `_INSTRUMENT.donutRadius` is used.
+            unmeasured. If None, the nominal `_LSSTCAM.donut_radius` is used.
 
         Returns
         -------
@@ -258,7 +258,7 @@ class CutDonutStampsTask(pipeBase.Task):
                 ``maxRejectDonuts``.
         """
         if donut_radius is None:
-            donut_radius = _INSTRUMENT.donutRadius
+            donut_radius = _LSSTCAM.donut_radius
 
         context = _ExposureContext.from_exposure(exposure)
         refcat_arrays = _RefcatArrays.from_table(refcat)
