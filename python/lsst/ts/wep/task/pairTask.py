@@ -190,7 +190,10 @@ class ExposurePairer(pipeBase.Task):
                 nearby = np.ones(len(intraTable), dtype=bool)
             else:
                 nearby = np.abs(intraTable["mjd"] - row["mjd"]) * 86400 < self.config.timeThreshold
-                nearby &= np.abs(intraTable["rtp"] - row["rtp"]) < self.config.rotationThreshold
+                # Shortest-arc difference: LATISS headers report the rotator
+                # at 360 deg on one exposure and 0 deg on the next.
+                drtp = ((intraTable["rtp"] - row["rtp"]) + 180.0) % 360.0 - 180.0
+                nearby &= np.abs(drtp) < self.config.rotationThreshold
                 nearby &= row["radec"].separation(intraTable["radec"]).arcsec < self.config.pointingThreshold
             if np.any(nearby):
                 nearbyTable = intraTable[nearby]
