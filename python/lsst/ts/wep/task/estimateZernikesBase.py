@@ -44,6 +44,28 @@ from lsst.ts.wep.utils import (
 )
 
 
+def _failedZkResult(wfEstimator: WfEstimator) -> tuple[np.array, dict, dict]:
+    """Build the fallback result for a donut whose Zernike estimation failed.
+
+    Returns NaN Zernikes (one per Noll index) flagged with
+    ``fit_success=False`` and an empty history. Marking the fit as
+    unsuccessful lets the downstream ``CalcZernikesTask`` drop the donut
+    (its Zernikes are already NaN) rather than failing the whole task.
+
+    Parameters
+    ----------
+    wfEstimator : WfEstimator
+        The wavefront estimator, used to determine the number of Noll indices.
+
+    Returns
+    -------
+    tuple
+        NaN Zernike array, metadata dict flagging the failure, empty history.
+    """
+    zk = np.full(len(wfEstimator.nollIndices), np.nan)
+    return zk, {"fit_success": False}, {}
+
+
 def estimate_zk_pair(
     args: tuple[DonutStamp, DonutStamp, ObservingConditions, WfEstimator],
 ) -> tuple[np.array, dict, dict]:
@@ -51,7 +73,19 @@ def estimate_zk_pair(
     donutExtra, donutIntra, obs, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Extra Donut {donutExtra.donut_id}, Intra Donut {donutIntra.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, obs)
+    try:
+        zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, obs)
+    except Exception:
+        # Don't let a single bad donut pair abort the whole task. Log the
+        # failure with a full traceback and return NaN Zernikes flagged as a
+        # fit failure so this pair is dropped downstream.
+        log.exception(
+            "Zernike estimation failed for Extra Donut %s, Intra Donut %s; "
+            "flagging pair as a fit failure and continuing.",
+            donutExtra.donut_id,
+            donutIntra.donut_id,
+        )
+        return _failedZkResult(wfEstimator)
     log.info(
         f"Zernike estimation completed for Extra Donut {donutExtra.donut_id}, "
         f"Intra Donut {donutIntra.donut_id}"
@@ -72,7 +106,17 @@ def estimate_zk_single(
     donut, obs, wfEstimator = args
     log = logging.getLogger(__name__)
     log.info(f"Calculating Zernikes for Donut {donut.donut_id}")
-    zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, obs)
+    try:
+        zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, obs)
+    except Exception:
+        # Don't let a single bad donut abort the whole task. Log the failure
+        # with a full traceback and return NaN Zernikes flagged as a fit
+        # failure so this donut is dropped downstream.
+        log.exception(
+            "Zernike estimation failed for Donut %s; flagging as a fit failure and continuing.",
+            donut.donut_id,
+        )
+        return _failedZkResult(wfEstimator)
     log.info(f"Zernike estimation completed for Donut {donut.donut_id}")
     # Log number of function evaluations if available (currently only danish)
     if (nfev := zkMeta.get("lstsq_nfev")) is not None:
@@ -187,6 +231,38 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
 
         return results
 
+    @staticmethod
+    def _collateZkMeta(zkMetaList: Iterable[dict]) -> dict:
+        """Collate per-donut metadata dicts into a dict of per-key lists.
+
+        Different donuts can contribute different keys: a donut whose
+        estimation failed returns only ``fit_success=False`` (see
+        ``estimate_zk_pair``/``estimate_zk_single``), while successful donuts
+        return the algorithm's full metadata. We therefore take the union of
+        all keys and fill any value a given donut did not provide, so every
+        list stays aligned with the donut order. ``fit_success`` defaults to
+        ``True`` (a donut that did not report the flag did not hit the failure
+        path); all other missing values default to NaN.
+
+        Parameters
+        ----------
+        zkMetaList : Iterable[dict]
+            Per-donut metadata dicts, in donut order.
+
+        Returns
+        -------
+        dict
+            Mapping of metadata key to a list of per-donut values.
+        """
+        zkMetaList = list(zkMetaList)
+        keys = list(dict.fromkeys(key for meta in zkMetaList for key in meta))
+        zkMeta: dict = {key: [] for key in keys}
+        for meta in zkMetaList:
+            for key in keys:
+                default = True if key == "fit_success" else np.nan
+                zkMeta[key].append(meta.get(key, default))
+        return zkMeta
+
     def _get_obs_conditions(self, donutStamps: DonutStamps | None) -> ObservingConditions:
         """Extract per-observation pointing state from stamp metadata.
 
@@ -260,10 +336,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         results = self._applyToList(estimate_zk_pair, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
-        zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}
-        for zkMetaSingle in zkMetaList:
-            for key, value in zkMetaSingle.items():
-                zkMeta[key].append(value)
+        zkMeta = self._collateZkMeta(zkMetaList)
 
         zkArray = np.array(zkList)
 
@@ -314,10 +387,7 @@ class EstimateZernikesBaseTask(pipeBase.Task, metaclass=abc.ABCMeta):
         results = self._applyToList(estimate_zk_single, args, numCores)
 
         zkList, zkMetaList, histories = zip(*results)
-        zkMeta: dict = {key: [] for key in zkMetaList[0].keys()}
-        for zkMetaSingle in zkMetaList:
-            for key, value in zkMetaSingle.items():
-                zkMeta[key].append(value)
+        zkMeta = self._collateZkMeta(zkMetaList)
 
         zkArray = np.array(zkList)
 
