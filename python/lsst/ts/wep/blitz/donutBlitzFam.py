@@ -636,11 +636,8 @@ class DonutBlitzFamConfig(
         # Monster refcat uses full filter names (e.g. phot_g_mean), not band
         # labels, so the default mag-limit policy lookup by band would fail.
         self.donutSelector.useCustomMagLimit = True
-        # Load-bearing, not a tuning knob: this is what keeps every selected
-        # donut inside the LsstCam.yaml maskParams validity domain (thetaMax:
-        # 1.85 deg) even though science detector corners reach 2.05 deg.  Eight
-        # detectors lie entirely outside it and yield nothing by design -- 189
-        # detectors are read, 181 produce donuts.
+        # Note that eight detectors lie entirely outside 1.725 and yield
+        # nothing by design -- 189 detectors are read, 181 produce donuts.
         self.donutSelector.maxFieldDist = 1.725
         self.donutSelector.sourceLimit = 40
         self.donutSelector.allowFluxless = True
