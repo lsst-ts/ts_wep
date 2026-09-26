@@ -1,0 +1,343 @@
+# This file is part of ts_wep.
+#
+# Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""Defocus is selected by optic-offset triplet rather than by detector id.
+
+The fitter reads a signed ``(detector, camera, m2)`` offset triplet off each
+`Donut` rather than inferring a hardcoded detector-plane shift from the
+detector id, which lets full-array mode put the same detector on both sides of
+focus. For corner mode the two formulations must agree bit-for-bit, so the
+things worth asserting are that the telescope lookup reproduces a plain
+detector-plane shift exactly, that the camera and M2 components are wired to
+distinct optics, and that the SW0/SW1 convention is pinned in
+`CORNER_DEFOCAL_BY_DET_NAME` -- its only home, since donuts carry no
+intra/extra label at all.
+
+Also covers `_defocal_radial_scale`, which full-array donut pairing depends on,
+and `_rot_tel_pos_rad`, the rotator angle both tasks feed to the CCS -> OCS
+Zernike rotation.
+"""
+
+import copy
+import unittest
+from types import SimpleNamespace
+
+import batoid
+import numpy as np
+
+import lsst.geom as geom
+from lsst.ts.wep.blitz.donutBlitzCorner import (
+    _EXTRA_FOCAL_OFFSETS,
+    _INTRA_FOCAL_OFFSETS,
+)
+from lsst.ts.wep.blitz.lsstCam import _LSSTCAM
+from lsst.ts.wep.blitz.utils import (
+    _COW_STORE,
+    _EXTRA_FOCAL_DET_IDS,
+    _INTRA_FOCAL_DET_IDS,
+    _RADIAL_SCALE_WAVELENGTH,
+    _ZK_JMAX,
+    CORNER_DEFOCAL_BY_DET_NAME,
+    CORNER_DET_NAMES,
+    _defocal_radial_scale,
+    _defocused_telescope,
+    _rot_tel_pos_rad,
+)
+
+
+def _minimalDonut(**overrides):
+    """A Donut carrying just enough to reach the defocal-offset lookup."""
+    from lsst.ts.wep.blitz.dataStructures import Donut
+
+    kwargs = dict(
+        det_name="R00_SW0",
+        stamp=np.ones((167, 167), dtype=float),
+        thx_ccs=0.0,
+        thy_ccs=0.0,
+        flux=1.0,
+        band="r",
+        det_id=191,
+        visit_id=1,
+        x_det=0.0,
+        y_det=0.0,
+        donut_id=1,
+        inner_frac=0.0,
+        outer_frac=0.0,
+        outer_sector_minmax_frac=0.0,
+        donut_radius=60.0,
+        snr=100.0,
+        bkg=0.0,
+        bkg_std=1.0,
+        n_quarter=0,
+        photo_mag=float("nan"),
+        astrom_mag=float("nan"),
+        nearby_photo=[],
+        nearby_astrom=[],
+    )
+    kwargs.update(overrides)
+    return Donut(**kwargs)
+
+
+class TestDefocalOffsets(unittest.TestCase):
+    """Offset-triplet telescope lookup and corner-mode neutrality."""
+
+    def setUp(self) -> None:
+        self.band = "r"
+        self.telescope = batoid.Optic.fromYaml(f"LSST_{self.band}.yaml")
+        # Only `_prep_donut_for_danish` needs the store here -- the geometry
+        # helpers take the telescope as an argument -- so poke the one field it
+        # reads rather than standing up a whole `CowStore`.
+        _COW_STORE.__dict__.clear()
+        _COW_STORE.telescope = self.telescope
+
+    def tearDown(self) -> None:
+        _COW_STORE.__dict__.clear()
+
+    def _zk(self, telescope: batoid.Optic, theta_deg: float) -> np.ndarray:
+        """Zernikes at one field angle, the way the fitter computes them."""
+        eps = self.telescope.pupilObscuration
+        nrad = 10
+        return batoid.zernikeTA(
+            telescope,
+            np.deg2rad(theta_deg),
+            0.0,
+            _RADIAL_SCALE_WAVELENGTH,
+            jmax=_ZK_JMAX,
+            eps=eps,
+            focal_length=_LSSTCAM.focal_length,
+            nrad=nrad,
+            naz=int(2 * np.pi * nrad / (1 - eps)),
+        )
+
+    def testCornerDefocalLookupEncodesTheSw0Sw1Convention(self) -> None:
+        """`CORNER_DEFOCAL_BY_DET_NAME` is the only home of SW0/SW1 -> side.
+
+        Donuts carry no intra/extra label -- only their optic offsets -- so the
+        plot task derives the label from the detector name via
+        this lookup. That makes it the single point where "SW0 is extra-focal,
+        SW1 is intra-focal" is written down, and worth pinning.
+
+        The name-based lookup and the id-based `_INTRA/_EXTRA_FOCAL_DET_IDS`
+        used to pick offsets are two encodings of the same convention. Linking
+        them detector-by-detector would need camera geometry; this checks that
+        they agree in structure and count, which is what would break if one
+        were edited without the other.
+        """
+        self.assertEqual(set(CORNER_DEFOCAL_BY_DET_NAME), set(CORNER_DET_NAMES))
+        for name, side in CORNER_DEFOCAL_BY_DET_NAME.items():
+            self.assertEqual(side, "extra" if name.endswith("SW0") else "intra")
+
+        by_side: dict[str, set[str]] = {"intra": set(), "extra": set()}
+        for name, side in CORNER_DEFOCAL_BY_DET_NAME.items():
+            by_side[side].add(name)
+        self.assertEqual(len(by_side["intra"]), len(_INTRA_FOCAL_DET_IDS))
+        self.assertEqual(len(by_side["extra"]), len(_EXTRA_FOCAL_DET_IDS))
+
+        # And the offsets chosen for each side carry the matching sign, so a
+        # plot label can never contradict the telescope the fit actually used.
+        self.assertLess(_INTRA_FOCAL_OFFSETS[0], 0)
+        self.assertGreater(_EXTRA_FOCAL_OFFSETS[0], 0)
+
+    def testCameraAndM2ShiftsAreDistinctAndApplied(self) -> None:
+        """The camera and M2 components are wired to different optics.
+
+        Full-array mode defocuses by moving the whole camera, and some data may
+        instead move M2, so a triplet that silently applied only the detector
+        component would be a quiet physics bug.
+        """
+        dz = _LSSTCAM.defocal_offset
+        det = self._zk(_defocused_telescope(self.telescope, (dz, 0.0, 0.0)), 1.0)
+        cam = self._zk(_defocused_telescope(self.telescope, (0.0, dz, 0.0)), 1.0)
+        m2 = self._zk(_defocused_telescope(self.telescope, (0.0, 0.0, dz)), 1.0)
+        base = self._zk(self.telescope, 1.0)
+        for name, zk in (("detector", det), ("camera", cam), ("m2", m2)):
+            self.assertFalse(
+                np.allclose(zk, base),
+                msg=f"{name} offset had no effect on the wavefront",
+            )
+        # Moving the camera is not the same as moving the detector within it.
+        self.assertFalse(np.allclose(det, cam))
+        self.assertFalse(np.allclose(cam, m2))
+
+    def testRadialScaleMatchesDirectChiefRayTrace(self) -> None:
+        """The pure-scale model reproduces a direct trace across the field.
+
+        Full-array donut pairing relies on the intra/extra radial displacement
+        being a pure scale, so one factor corrects every detector. If it were
+        instead field-dependent, pairing would work at the centre and fail at
+        the edge -- so this asserts the scale against an independent per-angle
+        trace.
+        """
+        dz = _LSSTCAM.defocal_offset
+        px = _LSSTCAM.pixel_size
+        wavelength = _RADIAL_SCALE_WAVELENGTH
+        extra = (0.0, dz, 0.0)
+        intra = (0.0, -dz, 0.0)
+
+        def traced_x(offsets, theta_deg):
+            telescope = _defocused_telescope(self.telescope, offsets)
+            ray = batoid.RayVector.fromStop(
+                0.0,
+                0.0,
+                optic=telescope,
+                wavelength=wavelength,
+                theta_x=np.deg2rad(theta_deg),
+                theta_y=0.0,
+            )
+            telescope.trace(ray)
+            return float(ray.x[0])
+
+        for theta in (0.5, 1.0, 1.725):
+            traced_px = abs(traced_x(extra, theta) - traced_x(intra, theta)) / px
+            r_m = _LSSTCAM.focal_length * np.tan(np.deg2rad(theta))
+            scaled_px = (
+                abs(
+                    r_m * _defocal_radial_scale(self.telescope, extra)
+                    - r_m * _defocal_radial_scale(self.telescope, intra)
+                )
+                / px
+            )
+            self.assertAlmostEqual(
+                traced_px,
+                scaled_px,
+                delta=0.2,
+                msg=f"scale model diverges from a direct trace at {theta} deg",
+            )
+            # And the effect is real: tens of pixels away from the axis.
+            if theta >= 1.0:
+                self.assertGreater(traced_px, 10.0)
+
+    def testRadialScaleSignsAreOpposite(self) -> None:
+        """Intra and extra stretch the focal plane in opposite senses."""
+        dz = _LSSTCAM.defocal_offset
+        extra = _defocal_radial_scale(self.telescope, (0.0, dz, 0.0))
+        intra = _defocal_radial_scale(self.telescope, (0.0, -dz, 0.0))
+        self.assertLess(extra, 1.0)
+        self.assertGreater(intra, 1.0)
+        self.assertAlmostEqual(extra - 1.0, -(intra - 1.0), places=6)
+
+    def testMissingOffsetsIsFatalNotSilent(self) -> None:
+        """A donut with no offsets must raise, not guess a defocal side."""
+        from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingTask
+
+        task = WavefrontFittingTask()
+        donut = _minimalDonut(defocal_offsets=None)
+        with self.assertRaisesRegex(RuntimeError, "defocal_offsets"):
+            task._prep_donut_for_danish(donut)
+
+    def testZkRefIsIndependentOfTheModelsPupilRadius(self) -> None:
+        """A pupil-only change must not move the reference wavefront.
+
+        `zernikeTA` normalizes on the traced model's own pupil, while the
+        danish factory is built on blitz's fixed radii, so an optics model
+        declaring a different `pupilSize` would otherwise have its coefficients
+        interpreted against the wrong domain -- ~183 nm of spurious Z4 for the
+        0.36% difference between 8.36 and 8.33, and constant with field angle,
+        so no amount of inspecting the aberration field would reveal it.
+
+        Forcing `pupilSize` on an otherwise identical telescope changes only
+        the fitting domain, so the correct answer is that nothing moves. Runs
+        through `_prep_donut_for_danish` rather than calling the rescale
+        directly, so it fails if either `zernikeTA` call site stops rescaling.
+        """
+        from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingTask
+
+        task = WavefrontFittingTask()
+        # Well off axis, so the aberration field is rich rather than near-pure
+        # defocus and a domain error cannot hide in a single coefficient.
+        donut = _minimalDonut(
+            thx_ccs=0.018,
+            thy_ccs=0.009,
+            defocal_offsets=_EXTRA_FOCAL_OFFSETS,
+        )
+
+        def zk_ref_with(telescope):
+            _COW_STORE.__dict__.clear()
+            _COW_STORE.telescope = telescope
+            return task._prep_donut_for_danish(donut).zk_ref
+
+        mismatched = copy.copy(self.telescope)
+        mismatched.pupilSize = 8.33
+
+        expected = zk_ref_with(self.telescope)
+        actual = zk_ref_with(mismatched)
+        np.testing.assert_allclose(actual[4:], expected[4:], atol=1e-9, rtol=0.0)
+
+
+class TestRotTelPos(unittest.TestCase):
+    """`_rot_tel_pos_rad` wraps to [-pi, pi) rather than to [0, 2pi)."""
+
+    def _visitInfo(self, par_deg: float, rot_deg: float):
+        """A stand-in carrying only the two angles the helper reads.
+
+        Real `lsst.geom.Angle` objects rather than floats, so the test
+        exercises the same ``asRadians()`` calls the helper makes on a butler
+        `VisitInfo` -- which is the part of the contract worth pinning.
+        """
+        return SimpleNamespace(
+            boresightParAngle=geom.Angle(np.deg2rad(par_deg), geom.radians),
+            boresightRotAngle=geom.Angle(np.deg2rad(rot_deg), geom.radians),
+        )
+
+    def testWrapsToHalfOpenIntervalStartingAtMinusPi(self) -> None:
+        """Every branch of the wrap lands in [-pi, pi), including both edges.
+
+        Which end is closed is the one thing a reader is likely to get wrong --
+        both call sites' comments claimed ``(-pi, pi]`` before this helper
+        existed -- so the two cases worth pinning are those landing exactly on
+        a half turn from either side: ``(x + pi) % 2pi - pi`` sends both to
+        ``-pi``.  Nothing downstream depends on the endpoint, but the
+        distinction between this and a plain ``% (2 * np.pi)``, which returns
+        [0, 2pi) and so gets the sign wrong for every angle in the lower half,
+        very much matters.
+        """
+        # (par_deg, rot_deg) -> expected rotTelPos in degrees. Each is
+        # par - rot - 90, wrapped.
+        cases = [
+            (90.0, 0.0, 0.0),
+            (0.0, 0.0, -90.0),
+            (180.0, 0.0, 90.0),
+            (0.0, 90.0, -180.0),  # unwrapped -180, stays -180
+            (0.0, -90.0, 0.0),
+            (270.0, 0.0, -180.0),  # unwrapped +180, comes back as -180
+            (359.0, 0.0, -91.0),  # unwrapped +269
+        ]
+        for par_deg, rot_deg, expected_deg in cases:
+            with self.subTest(par=par_deg, rot=rot_deg):
+                rtp = _rot_tel_pos_rad(self._visitInfo(par_deg, rot_deg))
+                self.assertGreaterEqual(rtp, -np.pi)
+                self.assertLess(rtp, np.pi)
+                self.assertAlmostEqual(np.degrees(rtp), expected_deg, places=9)
+
+    def testFullTurnsAreEquivalent(self) -> None:
+        """Adding a whole turn to either angle changes nothing."""
+        plain = _rot_tel_pos_rad(self._visitInfo(30.0, 15.0))
+        for par_deg, rot_deg in [(390.0, 15.0), (30.0, 375.0), (-330.0, 15.0)]:
+            with self.subTest(par=par_deg, rot=rot_deg):
+                self.assertAlmostEqual(
+                    _rot_tel_pos_rad(self._visitInfo(par_deg, rot_deg)),
+                    plain,
+                    places=9,
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()

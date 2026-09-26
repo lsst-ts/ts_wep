@@ -23,6 +23,7 @@ __all__ = [
     "CalcZernikesTaskConnections",
     "CalcZernikesTaskConfig",
     "CalcZernikesTask",
+    "blurClipZkTable",
 ]
 
 import abc
@@ -71,6 +72,44 @@ def lookupIntrinsicZernikes(
             registry.findDataset(datasetType, dataId2, collections=collections, timespan=dataId.timespan)
         )
     return refs
+
+
+def blurClipZkTable(zkTable: QTable) -> QTable:
+    """Sigma clip donuts whose blur (fwhm) is an outlier, then re-average.
+
+    Rows flagged as outliers have ``used`` set False and the ``average`` row is
+    recomputed over the survivors with an unweighted mean.  Requires
+    ``meta["estimatorInfo"]["fwhm"]``, one entry per non-average row, and
+    exactly one leading ``average`` row: the fwhm list is indexed with
+    ``useIdx - 1`` to account for it.
+
+    Note this deliberately recomputes the average with
+    `CombineZernikesMeanTask` rather than whatever combine task produced the
+    incoming average, since flipping ``used`` invalidates it.
+
+    Parameters
+    ----------
+    zkTable : astropy.table.QTable
+        Zernike table.  Modified in place, and also returned via the copy the
+        combine step makes.
+
+    Returns
+    -------
+    astropy.table.QTable
+        Zernike table where donuts with outlier donut blur values
+        have been changed to false and the average recomputed.
+    """
+    useIdx = np.where((zkTable["used"]) & (zkTable["label"] != "average"))[0]
+    # account for average row with "- 1" on index below
+    fwhmList = np.array(zkTable.meta["estimatorInfo"]["fwhm"])[useIdx - 1]
+    blurMask = sigma_clip(fwhmList, stdfunc="mad_std", sigma_lower=99).mask
+    dropIdx = useIdx[np.where(blurMask)[0]]
+    zkTable["used"][dropIdx] = False
+    zkTable.meta["estimatorInfo"]["blur_clipped"] = np.isin(np.arange(1, len(zkTable)), dropIdx).tolist()
+    # Calculate the average correctly
+    combineZernikesMean = CombineZernikesMeanTask().combineZernikes(zkTable)
+
+    return combineZernikesMean
 
 
 class CalcZernikesTaskConnections(
@@ -537,18 +576,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             Zernike table where donuts with outlier donut blur values
             have been changed to false and the average recomputed.
         """
-
-        useIdx = np.where((zkTable["used"]) & (zkTable["label"] != "average"))[0]
-        # account for average row with "- 1" on index below
-        fwhmList = np.array(zkTable.meta["estimatorInfo"]["fwhm"])[useIdx - 1]
-        blurMask = sigma_clip(fwhmList, stdfunc="mad_std", sigma_lower=99).mask
-        dropIdx = useIdx[np.where(blurMask)[0]]
-        zkTable["used"][dropIdx] = False
-        zkTable.meta["estimatorInfo"]["blur_clipped"] = np.isin(np.arange(1, len(zkTable)), dropIdx).tolist()
-        # Calculate the average correctly
-        combineZernikesMean = CombineZernikesMeanTask().combineZernikes(zkTable)
-
-        return combineZernikesMean
+        return blurClipZkTable(zkTable)
 
     def runQuantum(
         self,

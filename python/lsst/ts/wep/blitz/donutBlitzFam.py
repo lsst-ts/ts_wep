@@ -1,0 +1,1319 @@
+# This file is part of ts_wep.
+#
+# Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""The full-array-mode (FAM) blitz pipeline task.
+
+Where `DonutBlitzCornerTask` processes one visit's 8 corner wavefront
+sensors, this processes the 189 science detectors of an intra/extra **exposure
+pair** -- one quantum per ``group``.
+
+To be frugal with memory, the task avoids loading the entire focal plane at
+once.  So here the parent resolves *deferred* handles only and each forked
+worker does its own butler I/O, frees the pixels, and fits.  See `famPipeline`
+for the worker and for why children must reset the DB connection pool.
+"""
+
+__all__ = [
+    "DonutBlitzFamConnections",
+    "DonutBlitzFamConfig",
+    "DonutBlitzFamTask",
+]
+
+import logging
+import time
+from collections import Counter
+from typing import Any
+
+import batoid
+import numpy as np
+from astropy.table import Table
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+import lsst.pipe.base.connectionTypes as connectionTypes
+import lsst.sphgeom
+from lsst.ip.isr import IsrTaskLSST
+from lsst.meas.algorithms import (
+    MagnitudeLimit,
+    ReferenceObjectLoader,
+    SubtractBackgroundTask,
+)
+from lsst.meas.astrom import AstrometryTask, FitAffineWcsTask
+from lsst.pipe.base import (
+    InputQuantizedConnection,
+    NoWorkFound,
+    OutputQuantizedConnection,
+    QuantumContext,
+)
+from lsst.ts.wep.task.donutDetectDiameterTask import DonutDetectDiameterTask
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask
+
+from .blitzDetect import BlitzDetectTask
+from .catalogBuilder import _build_donut_catalog, _CatalogOptions, _CatalogTimings
+from .cutDonutStamps import CutDonutStampsTask
+from .dataStructures import FamDetectorResult
+from .famPipeline import _fam_detector_worker, _fam_pool_initializer
+from .forkPool import _dump_stacks_on_hang, _fork_map
+from .lsstCam import _LSSTCAM
+from .measureDonutCandidates import MeasureDonutCandidatesTask
+from .utils import (
+    _ANSI_BOLD,
+    _ANSI_CYAN,
+    _ANSI_GREEN,
+    _COW_STORE,
+    _CUTOUT_STAGE_KEYS,
+    CowStore,
+    FamDetectorInputs,
+    _colorize,
+    _resolve_color_log_enabled,
+    _rot_tel_pos_rad,
+)
+from .wavefrontFitting import WavefrontFittingTask
+
+# Detector purpose, from the `detector` dimension record. FAM fits the science
+# array only: on a +/-1.5 mm pair the corner wavefront sensors sit at 0 and
+# -/+3 mm, so half of them are in focus and half are too large for stampSize.
+_SCIENCE_PURPOSE = "SCIENCE"
+
+# The refcat lookup function below is called by the graph builder, not by the
+# task, so it has no `self.log`.
+_log = logging.getLogger(__name__)
+
+# On-sky radius, in degrees, of the circle used to cut the reference catalog
+# down to the shards the focal plane can actually reach. Science detector
+# corners reach 2.05 deg; the extra covers the loaders' 300 px pixelMargin
+# (~0.02 deg) and any pointing error, since over-including a shard costs one
+# wasted file read and under-including one would silently lose donuts.
+_FOCAL_PLANE_SEARCH_RADIUS_DEG = 2.2
+
+# htm7, matching the reference catalog's own dimension.
+_REFCAT_HTM_LEVEL = 7
+
+# Pipeline stages reported per detector and aggregated over them, in the order
+# they run: the shared cutout stages, spliced in from `_CUTOUT_STAGE_KEYS` so
+# this and corner mode cannot disagree about them, wrapped in the four this
+# task adds. `dispatch` and `io` have no corner-mode counterpart: a FAM worker
+# waits for a pool slot and then does its own butler reads, where corner mode's
+# parent has already loaded every pixel before it forks. `fit` likewise,
+# because FAM fits inside the same worker rather than in a second pool the
+# parent summarizes separately. `refcat` is per detector rather than per
+# exposure -- one load covers both sides of focus -- so it sits outside the
+# spliced-in cutout stages.
+_STAGE_KEYS = (
+    "dispatch",
+    "io",
+    "refcat",
+    *_CUTOUT_STAGE_KEYS,
+    "fit",
+    "wall",
+)
+
+# How many stragglers to name. With 189 detectors over a handful of cores the
+# slow tail sets the wall clock, and the aggregate mean cannot show whether the
+# pool was starved at the end or one CCD was pathological.
+_N_SLOWEST = 5
+
+# How much of a failed worker's `error` to put on its one-line summary. The
+# full string is up to `_ERROR_MAX_CHARS` and reaches the reader through the
+# separate per-failure warning above; this line has to stay one line.
+_ERROR_LOG_CHARS = 120
+
+
+def _detector_stage_times(r: FamDetectorResult) -> dict[str, float]:
+    """Per-stage elapsed times for one detector, in `_STAGE_KEYS` order.
+
+    A FAM worker runs the cutout pipeline once per exposure, so the seven
+    cutout stages are **summed over the pair** -- the two halves are not
+    independently interesting, and summing keeps the row comparable to
+    ``wall``. ``io`` is likewise already summed by the worker across the raw
+    reads and both per-exposure calibration reads.
+
+    NaN propagates deliberately: a detector that failed part way through has no
+    meaningful stage total, and reporting the one exposure that did finish
+    would read as a suspiciously fast detector rather than a broken one.
+
+    Parameters
+    ----------
+    r : `lsst.ts.wep.blitz.dataStructures.FamDetectorResult`
+        One `_fam_detector_worker` result.
+
+    Returns
+    -------
+    dict [str, float]
+        Seconds per stage, NaN for anything the worker never reached.
+    """
+    results = r.results
+    stages = {
+        "dispatch": r.dispatch_to_arrival,
+        "io": r.io_run,
+        # Per detector, not per exposure: one refcat load serves both sides of
+        # focus, so unlike the cutout stages below there is nothing to sum.
+        "refcat": r.refcat_run,
+        "fit": r.fit_run,
+        "wall": r.worker_wall,
+    }
+    for label, key in _CUTOUT_STAGE_KEYS.items():
+        stages[label] = np.sum([getattr(res, key) for res in results]) if results else float("nan")
+    return {key: stages[key] for key in _STAGE_KEYS}
+
+
+def _mean_std_max(values: list[float]) -> tuple[float, float, float]:
+    """Mean, standard deviation, and max of ``values``, ignoring NaN.
+
+    Returns all-NaN rather than warning when nothing is finite, which is the
+    all-detectors-failed case.
+    """
+    array = np.asarray(values, dtype=float)
+    if array.size == 0 or not np.isfinite(array).any():
+        return (float("nan"),) * 3
+    return (
+        np.nanmean(array),
+        np.nanstd(array),
+        np.nanmax(array),
+    )
+
+
+def _lookup_refcat_shards(datasetType, registry, quantumDataId, collections):
+    """Find the reference catalog shards this group's focal plane overlaps.
+
+    A ``PrerequisiteInput`` lookup function, called once per quantum during
+    graph generation. It exists because this task's quantum is dimensioned
+    ``(instrument, group, physical_filter)`` and **carries no spatial region**:
+    ``group`` is what makes the quantum an exposure *pair*, but only
+    ``visit``/``exposure`` are spatial, so the default spatial lookup has
+    nothing to constrain against and returns all 131072 htm7 shards on the sky
+    instead of the ~48 the field actually covers
+
+    Parameters
+    ----------
+    datasetType : `lsst.daf.butler.DatasetType`
+        The reference catalog dataset type, dimensioned ``htm7``.
+    registry : `lsst.daf.butler.Registry`
+        Registry to query. Available here because this runs at graph-generation
+        time, unlike `runQuantum` under ``run-qbb``.
+    quantumDataId : `lsst.daf.butler.DataCoordinate`
+        The quantum's data ID: instrument, group, physical_filter.
+    collections : `~collections.abc.Sequence` [ `str` ]
+        Input collections to search.
+
+    Returns
+    -------
+    refs : `list` [ `lsst.daf.butler.DatasetRef` ]
+        The overlapping shards, or every shard if the pointing could not be
+        determined -- degrading to the default behavior rather than silently
+        dropping the reference catalog.
+
+    Notes
+    -----
+    The region comes from the boresight on the group's ``exposure`` records
+    plus `_FOCAL_PLANE_SEARCH_RADIUS_DEG`, and
+    `lsst.sphgeom.HtmPixelization.envelope` turns it straight into shard
+    indices -- so nothing enumerates the 131072.
+    """
+    instrument = quantumDataId["instrument"]
+    group = quantumDataId["group"]
+
+    records = list(
+        registry.queryDimensionRecords(
+            "exposure",
+            where="instrument=:instrument and exposure.group=:group",
+            bind={"instrument": instrument, "group": group},
+        )
+    )
+    pixelization = lsst.sphgeom.HtmPixelization(_REFCAT_HTM_LEVEL)
+    ranges = lsst.sphgeom.RangeSet()
+    for record in records:
+        if record.tracking_ra is None or record.tracking_dec is None:
+            continue
+        ranges = ranges | pixelization.envelope(
+            lsst.sphgeom.Circle(
+                lsst.sphgeom.UnitVector3d(
+                    lsst.sphgeom.LonLat.fromDegrees(record.tracking_ra, record.tracking_dec)
+                ),
+                lsst.sphgeom.Angle.fromDegrees(_FOCAL_PLANE_SEARCH_RADIUS_DEG),
+            )
+        )
+    shards = [index for begin, end in ranges.ranges() for index in range(begin, end)]
+
+    if not shards:
+        _log.warning(
+            "group=%s: no boresight on the exposure records, so the reference "
+            "catalog could not be narrowed; falling back to every shard.",
+            group,
+        )
+        return list(registry.queryDatasets(datasetType, collections=collections, findFirst=True))
+
+    return list(
+        registry.queryDatasets(
+            datasetType,
+            collections=collections,
+            where="htm7 in (:shards)",
+            bind={"shards": shards},
+            findFirst=True,
+        )
+    )
+
+
+class DonutBlitzFamConnections(
+    pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "group", "physical_filter"),  # type: ignore
+):
+    """Pipeline connections for DonutBlitzFamTask.
+
+    Every pixel and calibration input is ``deferLoad=True``: the parent
+    resolves handles and reads nothing, so its memory stays flat regardless of
+    how many detectors the quantum covers.
+
+    Notes
+    -----
+    ``group`` is what makes the quantum a *pair*: ``exposure`` implies
+    ``group``, so a group-dimensioned quantum receives both exposures across
+    all detectors.
+
+    ``physical_filter`` is *required*, not incidental.  ``group`` does not
+    imply it (only ``exposure``/``visit`` do), so without it the
+    filter-dependent prerequisites arrive once per filter -- 8 ``flat`` and 6
+    ``intrinsicZernikes`` refs per detector rather than 1.  It also carries
+    ``band`` into the quantum data ID for free.
+
+    What it does *not* fix is the reference catalog: ``group`` carries no
+    spatial region either, so the htm7 lookup is unconstrained and every shard
+    on the sky arrives -- so ``refCat`` carries a `lookupFunction`
+    (`_lookup_refcat_shards`) that narrows it at graph-build time, where a
+    registry is available.
+    """
+
+    raws = connectionTypes.Input(
+        doc=(
+            "Raws of both exposures in this group, all detectors.  Deferred: the "
+            "workers read them, not the parent."
+        ),
+        name="raw",
+        storageClass="Exposure",
+        dimensions=("instrument", "exposure", "detector"),
+        multiple=True,
+        deferLoad=True,
+    )
+    ptc = connectionTypes.PrerequisiteInput(
+        name="ptc",
+        storageClass="PhotonTransferCurveDataset",
+        doc="Photon transfer curve calibration, one per detector.",
+        dimensions=["instrument", "detector"],
+        isCalibration=True,
+        multiple=True,
+        deferLoad=True,
+    )
+    flat = connectionTypes.PrerequisiteInput(
+        name="flat",
+        storageClass="ExposureF",
+        doc="Flat field calibration, one per detector.",
+        dimensions=["instrument", "detector", "physical_filter"],
+        isCalibration=True,
+        multiple=True,
+        deferLoad=True,
+    )
+    linearizer = connectionTypes.PrerequisiteInput(
+        name="linearizer",
+        storageClass="Linearizer",
+        doc="Linearity correction, one per detector.",
+        dimensions=["instrument", "detector"],
+        isCalibration=True,
+        multiple=True,
+        deferLoad=True,
+    )
+    crosstalk = connectionTypes.PrerequisiteInput(
+        name="crosstalk",
+        storageClass="CrosstalkCalib",
+        doc="Crosstalk coefficients, one per detector.",
+        dimensions=["instrument", "detector"],
+        isCalibration=True,
+        multiple=True,
+        deferLoad=True,
+    )
+    refCat = connectionTypes.PrerequisiteInput(
+        doc=(
+            "Reference catalog for both WCS fitting and donut selection.  Narrowed "
+            "to the shards this group's focal plane overlaps by "
+            "`_lookup_refcat_shards`, since a group-dimensioned quantum has no "
+            "region for the default spatial lookup to use.  Every surviving shard "
+            "handle then goes to every worker; `ReferenceObjectLoader` intersects "
+            "each shard's region with the detector's search box, so a worker still "
+            "reads only the ~2 that overlap it."
+        ),
+        name="the_monster_20250219",
+        storageClass="SimpleCatalog",
+        dimensions=("htm7",),
+        deferLoad=True,
+        multiple=True,
+        lookupFunction=_lookup_refcat_shards,
+    )
+    intrinsicZernikes = connectionTypes.PrerequisiteInput(
+        doc="Intrinsic Zernike calibration, one per detector.",
+        dimensions=("detector", "instrument", "physical_filter"),
+        storageClass="IsrCalib",
+        name="intrinsicZernikes",
+        multiple=True,
+        isCalibration=True,
+        minimum=0,
+        deferLoad=True,
+    )
+    famResults = connectionTypes.Output(
+        doc=(
+            "Per-donut catalog for the pair, covering both exposures: selection "
+            "metrics, fit results, Zernikes, and optionally stamp/model images.  "
+            "Same schema as corner mode's donutBlitzCornerResults, but a separate "
+            "dataset type: a dataset type carries one dimension set and one "
+            "meaning, and a future analysis of the ~3 mm donuts on the corner "
+            "sensors of these same exposures would collide with a shared one."
+        ),
+        name="donutBlitzFamResults",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit"),
+        # The group spans both visits of the pair; only the extra-focal one is
+        # written, so this must tolerate an unfilled predicted ref.
+        multiple=True,
+    )
+
+
+class DonutBlitzFamConfig(
+    pipeBase.PipelineTaskConfig,
+    pipelineConnections=DonutBlitzFamConnections,  # type: ignore
+):
+    """Configuration for DonutBlitzFamTask."""
+
+    isr: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=IsrTaskLSST,
+        doc="ISR subtask run on each science sensor exposure.",
+    )
+    subtractBackground: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=SubtractBackgroundTask,
+        doc="Background subtraction subtask run before donut detection.",
+    )
+    measureDiameter: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=DonutDetectDiameterTask,
+        doc="Donut diameter detection subtask.",
+    )
+    blitzDetect: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=BlitzDetectTask,
+        doc="Blitz donut detection subtask run on each exposure.",
+    )
+    astrometry: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=AstrometryTask,
+        doc="Astrometry subtask for WCS fitting.",
+    )
+    donutSelector: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=DonutSourceSelectorTask,
+        doc="Donut source selector subtask.",
+    )
+    measureCandidates: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=MeasureDonutCandidatesTask,
+        doc="Donut candidate measurement subtask.",
+    )
+    cutStamps: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=CutDonutStampsTask,
+        doc="Donut stamp cutting subtask.",
+    )
+    wavefrontFit: pexConfig.ConfigurableField = pexConfig.ConfigurableField(
+        target=WavefrontFittingTask,
+        doc="Wavefront fitting subtask using Danish algorithm.",
+    )
+    opticsModel: pexConfig.Field[str] = pexConfig.Field[str](
+        default="LSST_{band}",
+        doc=(
+            "Batoid optics model, as a name in batoid's data directory with "
+            "'{band}' standing in for the filter."
+        ),
+    )
+    maxFitScatter: pexConfig.Field[float] = pexConfig.Field[float](
+        doc="Maximum allowed on-sky scatter (arcsec) for WCS refit to be accepted.",
+        default=1.0,
+    )
+    astromRefFilter: pexConfig.Field[str] = pexConfig.Field[str](
+        doc=(
+            "Filter name to read from the reference catalog when fitting the "
+            "WCS. Aliased over every filter via anyFilterMapsToThis, so it is "
+            "what AstrometryTask resolves as its reference flux field."
+        ),
+        default="phot_g_mean",
+    )
+    photoRefFilter: pexConfig.Field[str] = pexConfig.Field[str](
+        doc=(
+            "Explicit filter name to read from the reference catalog for donut "
+            "selection (e.g. 'phot_g_mean'). Overrides photoRefFilterPrefix "
+            "when set."
+        ),
+        optional=True,
+    )
+    photoRefFilterPrefix: pexConfig.Field[str] = pexConfig.Field[str](
+        doc=(
+            "Filter prefix used for donut selection, combined with the exposure "
+            "band label as '{prefix}_{band}'. Used when photoRefFilter is not "
+            "set."
+        ),
+        default="monster_ComCam",
+    )
+    detectorOffset: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Magnitude of the detector-plane z shift that defocuses each "
+            "exposure, in meters.  Signed per exposure: +offset extra-focal, "
+            "-offset intra-focal.  Zero by default -- full-array mode defocuses "
+            "by moving the whole camera, see cameraOffset."
+        ),
+        default=0.0,
+    )
+    cameraOffset: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Magnitude of the camera z shift that defocuses each exposure, in "
+            "meters.  Signed per exposure as detectorOffset is.  This is the "
+            "full-array default; the nested detector moves with the camera, so "
+            "the sign convention agrees with corner mode's."
+        ),
+        default=_LSSTCAM.defocal_offset,
+    )
+    m2Offset: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Magnitude of the M2 z shift that defocuses each exposure, in "
+            "meters.  Signed per exposure as detectorOffset is.  For data taken "
+            "by moving M2 rather than the camera."
+        ),
+        default=0.0,
+    )
+    pairMatchTolerance: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Spatial donut pairing tolerance, as a fraction of the donut radius. "
+            "Only used on the fallback path -- when both exposures selected from "
+            "the reference catalog, the same star has the same id and is matched "
+            "exactly.  Applied after the radial defocus shift is divided out, so "
+            "one value is valid across the whole focal plane."
+        ),
+        default=0.25,
+    )
+    saveStamps: pexConfig.Field[bool] = pexConfig.Field[bool](
+        doc=(
+            "Include the un-binned `stamp` image column in the output catalog. "
+            "Off by default: at ~10k rows per pair it is the difference between "
+            "a ~30 MB table and a multi-GB one.  Turn it on for pilot runs."
+        ),
+        default=False,
+    )
+    saveWfImages: pexConfig.Field[bool] = pexConfig.Field[bool](
+        doc=(
+            "Include the binned `wf_img` and `model_img` columns.  Off by "
+            "default for the same reason as saveStamps.  With this on and "
+            "saveStamps off, donuts that no fit consumed get a NaN wf_img."
+        ),
+        default=False,
+    )
+    unitTimeout: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Seconds one detector may run before its worker is killed and the "
+            "detector recorded as lost, so a single pathological detector "
+            "costs itself rather than the quantum.  Much larger than the "
+            "corner-mode equivalent because the per-detector work is: the "
+            "slowest observed run averaged ~69s per wave (620s over 189 "
+            "detectors, 21 workers), and a crowded detector or a "
+            "wfEstimationMode pooling more donuts per fit is legitimately "
+            "slower still, so tuning this down toward nominal would drop "
+            "healthy work.  One timed-out detector adds at most this to the "
+            "pool and so stays well inside hangTimeout; a run in which every "
+            "detector times out trips hangTimeout instead, which is the right "
+            "outcome for a systemic failure.  None waits indefinitely."
+        ),
+        default=300.0,
+        optional=True,
+    )
+    hangTimeout: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Seconds the detector pool may run before the hang watchdog dumps "
+            "stacks and aborts the quantum, so that a pool blocked forever "
+            "fails loudly and gets retried instead of burning its walltime.  "
+            "The default is ~3x the slowest pool observed over a large run "
+            "(max 620s over 189 detectors, 21 workers on a Torino node).  "
+            "Raise it for a slower configuration -- fewer cores, or a "
+            "wfEstimationMode pooling more donuts per fit -- since tripping "
+            "it kills healthy work.  A backstop rather than the first line of "
+            "defence: unitTimeout bounds a single slow detector and names it, "
+            "which this cannot do from a side thread that has no idea which "
+            "detector is late."
+        ),
+        default=1800.0,
+    )
+    colorLog: pexConfig.Field[bool] = pexConfig.Field[bool](
+        doc=(
+            "Colorize select log messages with ANSI escape codes. If None "
+            "(the default), color is enabled only when stdout is an "
+            "interactive terminal."
+        ),
+        default=None,
+        optional=True,
+    )
+    wfEstimationMode: pexConfig.ChoiceField[str] = pexConfig.ChoiceField[str](
+        doc=(
+            "Wavefront estimation dispatch mode.  Every work unit lives on one "
+            "detector, so all four are computed inside that detector's worker."
+        ),
+        allowed={
+            "paired": (
+                "One star, both sides of focus.  The only mode that associates "
+                "donuts between the two exposures, and so the only one where a "
+                "donut can end up unmatched."
+            ),
+            "unpaired": "One star, one side of focus; each donut fit alone.",
+            "full_detector": (
+                "Every donut on the detector from one exposure, as one work unit: two per detector."
+            ),
+            "full_detector_pair": (
+                "Every donut on the detector from both exposures, as one joint "
+                "work unit.  Does not associate donuts -- each carries its own "
+                "defocal offsets, so the fit already knows which side of focus "
+                "each one is on."
+            ),
+        },
+        default="paired",
+    )
+
+    def setDefaults(self) -> None:
+        super().setDefaults()
+        self.isr.doAmpOffset = False
+        self.isr.ampOffset.doApplyAmpOffset = False
+        self.isr.doBrighterFatter = False
+        self.isr.doSaturation = True
+        self.isr.doStandardStatistics = False
+        self.isr.doInterpolate = False
+        self.isr.doVariance = False
+        self.isr.doDeferredCharge = False
+        self.isr.doDefect = False
+        self.isr.doApplyGains = True
+        self.isr.doBias = False
+        self.isr.doFlat = True
+        self.isr.doDark = False
+        self.isr.doLinearize = True
+        self.isr.doSuspect = False
+        self.isr.doSetBadRegions = False
+        self.isr.doBootstrap = False
+        self.isr.doCrosstalk = True
+        self.isr.crosstalk.doQuadraticCrosstalkCorrection = False
+        self.isr.doITLEdgeBleedMask = False
+        self.isr.qa.saveStats = False
+
+        self.astrometry.wcsFitter.retarget(FitAffineWcsTask)
+        self.astrometry.doMagnitudeOutlierRejection = False
+        self.astrometry.referenceSelector.doMagLimit = True
+        magLimit = MagnitudeLimit()
+        magLimit.minimum = 1
+        magLimit.maximum = 18
+        self.astrometry.referenceSelector.magLimit = magLimit
+        self.astrometry.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
+        self.astrometry.sourceSelector["science"].doRequirePrimary = False
+        self.astrometry.sourceSelector["science"].doIsolated = False
+        self.astrometry.sourceSelector["science"].doSignalToNoise = False
+        self.astrometry.sourceSelector["science"].doCentroidErrorLimit = False
+        self.astrometry.maxIter = 5
+        self.astrometry.matcher.maxOffsetPix = 1000
+
+        # Cap the references handed to the pattern matcher.  Essential for
+        # keeping the cost to refit the WCS near the galactic bulge.
+        self.astrometry.matcher.maxRefObjects = 2048
+
+        # Monster refcat uses full filter names (e.g. phot_g_mean), not band
+        # labels, so the default mag-limit policy lookup by band would fail.
+        self.donutSelector.useCustomMagLimit = True
+        # Note that eight detectors lie entirely outside 1.725 and yield
+        # nothing by design -- 189 detectors are read, 181 produce donuts.
+        self.donutSelector.maxFieldDist = 1.725
+        self.donutSelector.sourceLimit = 40
+        self.donutSelector.allowFluxless = True
+
+        # A science detector is ~2x the area of a corner sensor, plus we're
+        # less constrained for time here.
+        self.cutStamps.maxDonuts = 20
+
+        # 189 detectors x up to 40 groups each is ~10k lines of per-group
+        # narration, which buries the per-detector summaries `_runWorkers` logs
+        # instead. Those carry the same information in aggregate; failures and
+        # timeouts still warn.
+        self.wavefrontFit.logPerGroup = False
+
+
+class DonutBlitzFamTask(pipeBase.PipelineTask):
+    """Full-array-mode WEP task: one intra/extra exposure pair, 189 detectors.
+
+    One quantum per ``group``. `runQuantum` resolves deferred handles, works
+    out which exposure is which side of focus, restricts to the science array,
+    and forks a pool of workers -- one detector each, both exposures -- that do
+    their own butler I/O and their own Danish fits.  Results are assembled into
+    the same catalog schema corner mode emits and written against the
+    extra-focal visit.
+    """
+
+    ConfigClass = DonutBlitzFamConfig
+    _DefaultName = "donutBlitzFam"
+    config: DonutBlitzFamConfig
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.makeSubtask("isr")
+        self.makeSubtask("subtractBackground")
+        self.makeSubtask("measureDiameter")
+        self.makeSubtask("blitzDetect")
+        self.makeSubtask("astrometry")
+        self.makeSubtask("donutSelector")
+        self.makeSubtask("measureCandidates")
+        self.makeSubtask("cutStamps")
+        self.makeSubtask("wavefrontFit")
+        self._colorLogEnabled = _resolve_color_log_enabled(self.config.colorLog)
+
+    @property
+    def _extraFocalOffsets(self) -> tuple[float, float, float]:
+        """Optic z shifts of the extra-focal exposure, per `_OFFSET_OPTICS`."""
+        return (
+            +self.config.detectorOffset,
+            +self.config.cameraOffset,
+            +self.config.m2Offset,
+        )
+
+    @property
+    def _intraFocalOffsets(self) -> tuple[float, float, float]:
+        """Optic z shifts of the intra-focal exposure, per `_OFFSET_OPTICS`."""
+        # `-o if o else 0.0` rather than plain negation, to keep an unused
+        # component as 0.0 instead of -0.0 in logs and store keys.
+        return tuple(-o if o else 0.0 for o in self._extraFocalOffsets)  # type: ignore[return-value]
+
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ) -> None:
+        t_start = time.perf_counter()
+        group = butlerQC.quantum.dataId["group"]
+
+        # --- 1. the group must be a clean intra/extra pair ---
+        # Load-bearing: on a typical night most groups are singletons and a
+        # handful of non-cwfs groups hold three exposures, so a query that only
+        # constrained the day would otherwise reach here with the wrong shape.
+        raws_by_exp: dict[int, list] = {}
+        for ref in inputRefs.raws:
+            raws_by_exp.setdefault(ref.dataId["exposure"], []).append(ref)
+        exposures = sorted(raws_by_exp)
+        if len(exposures) != 2:
+            raise NoWorkFound(
+                f"group={group} holds {len(exposures)} exposure(s) {exposures}, "
+                "not an intra/extra pair; skipping."
+            )
+
+        # --- 2. which exposure is which side of focus ---
+        # Ascending exposure id: intra first.  But cross-check per quantum
+        # rather than trusting the convention silently.
+        intra_exp, extra_exp = exposures
+        self._checkDefocalOrder(raws_by_exp, intra_exp, extra_exp, group)
+
+        # --- 3. science array only ---
+        # Done task-side so a data query that forgot to exclude the corner
+        # wavefront sensors is still correct rather than quietly wrong.
+        det_purpose: dict[int, str] = {}
+        for ref in inputRefs.raws:
+            record = ref.dataId.records.get("detector")
+            det_purpose[ref.dataId["detector"]] = (
+                str(record.purpose) if record is not None else _SCIENCE_PURPOSE
+            )
+        dets_by_exp = {exp: {ref.dataId["detector"] for ref in refs} for exp, refs in raws_by_exp.items()}
+        all_dets = dets_by_exp[intra_exp] | dets_by_exp[extra_exp]
+        det_ids = sorted(d for d in all_dets if det_purpose.get(d) == _SCIENCE_PURPOSE)
+        # A detector missing from one side of the pair has nothing to be paired
+        # with, so drop it here rather than failing inside a worker.
+        both_sides = dets_by_exp[intra_exp] & dets_by_exp[extra_exp]
+        one_sided = [d for d in det_ids if d not in both_sides]
+        if one_sided:
+            self.log.warning(
+                "Dropping %d detector(s) present in only one exposure of the pair: %s",
+                len(one_sided),
+                one_sided,
+            )
+        det_ids = [d for d in det_ids if d in both_sides]
+        n_skipped = len(all_dets) - len(det_ids)
+        if not det_ids:
+            raise NoWorkFound(f"group={group}: no science detectors present in both exposures.")
+        self.log.info(
+            _colorize(
+                "DonutBlitzFamTask.runQuantum() group=%s intra=%d extra=%d "
+                "on %d science detector(s) (%d other/one-sided skipped)",
+                _ANSI_BOLD,
+                _ANSI_GREEN,
+                enabled=self._colorLogEnabled,
+            ),
+            group,
+            intra_exp,
+            extra_exp,
+            len(det_ids),
+            n_skipped,
+        )
+
+        # --- 4. resolve handles; no pixels are read in this process ---
+        t_resolve0 = time.perf_counter()
+        raw_handles: dict[int, dict[int, Any]] = {d: {} for d in det_ids}
+        for exp, refs in raws_by_exp.items():
+            for ref in refs:
+                det = ref.dataId["detector"]
+                if det in raw_handles:
+                    raw_handles[det][exp] = butlerQC.get(ref)
+        calib_handles = {
+            name: self._calibHandlesByDetector(butlerQC, inputRefs, name, raw_handles)
+            for name in ("ptc", "flat", "linearizer", "crosstalk", "intrinsicZernikes")
+        }
+        refcat_handles = list(butlerQC.get(inputRefs.refCat))
+        t_resolve = time.perf_counter() - t_resolve0
+
+        missing = {name: sorted(set(det_ids) - set(handles)) for name, handles in calib_handles.items()}
+        for name in ("ptc", "flat", "linearizer", "crosstalk"):
+            if missing[name]:
+                raise RuntimeError(f"Missing {name} calibration for detector(s) {missing[name]}")
+        if missing["intrinsicZernikes"]:
+            self.log.warning(
+                "No intrinsic Zernike calibration for %d detector(s); their "
+                "donuts are referenced against the nominal design optics at "
+                "their own field angle rather than measured intrinsics, so "
+                "their fitted deviations absorb any real static aberration the "
+                "design does not have.",
+                len(missing["intrinsicZernikes"]),
+            )
+        if not refcat_handles:
+            self.log.warning(
+                "No reference catalog shards provided; every detector will fall "
+                "back to blitz detection and spatial donut pairing."
+            )
+
+        band = str(butlerQC.quantum.dataId["band"])
+
+        # The rest of the exposure metadata is read as a *component* off one
+        # raw handle -- header only, no pixels. Everything downstream that
+        # needs the rotator angle is quantum-wide, so reading it once here is
+        # both cheapest and the only way to keep it consistent across workers.
+        visit_info = raw_handles[det_ids[0]][extra_exp].get(component="visitInfo")
+        if visit_info.id != extra_exp:
+            self.log.warning(
+                "Raw visitInfo.id=%d does not match its exposure id %d; the "
+                "catalog's visit_id column follows visitInfo.",
+                visit_info.id,
+                extra_exp,
+            )
+
+        rtp_rad = _rot_tel_pos_rad(visit_info)
+        rtp_deg = np.degrees(rtp_rad) if self.wavefrontFit.config.modelSpiderShadows else None
+        boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
+
+        photo_filter_name = (
+            self.config.photoRefFilter
+            if self.config.photoRefFilter is not None
+            else f"{self.config.photoRefFilterPrefix}_{band}"
+        )
+
+        # --- 5. populate the store the workers inherit by copy-on-write ---
+        self._populateCowStore(
+            det_ids=det_ids,
+            raw_handles=raw_handles,
+            calib_handles=calib_handles,
+            refcat_handles=refcat_handles,
+            intra_exp=intra_exp,
+            extra_exp=extra_exp,
+            band=band,
+            rtp_deg=rtp_deg,
+            boresight_alt_rad=boresight_alt_rad,
+            photo_filter_name=photo_filter_name,
+        )
+
+        # --- 6. fork ---
+        num_cores = butlerQC.resources.num_cores
+        results = self._runWorkers(det_ids, num_cores)
+
+        # --- 7. assemble and write ---
+        catalog = self._buildCatalog(
+            results=results,
+            visit_id=extra_exp,
+            intra_visit_id=intra_exp,
+            extra_visit_id=extra_exp,
+            exposure_group=str(group),
+            rtp_rad=rtp_rad,
+            photo_filter_name=photo_filter_name,
+            run_elapsed=time.perf_counter() - t_start,
+            butler_elapsed=t_resolve,
+            band=band,
+            # The extra-focal exposure's header, matching meta["ref_visit_id"]
+            # and already read above as a component for the rotator angle.
+            visit_info=visit_info,
+            instrument=str(butlerQC.quantum.dataId["instrument"]),
+        )
+
+        # Keyed to the extra-focal visit, 1:1 with groups. The intra ref is
+        # predicted but deliberately left unproduced.
+        visit_refs = {ref.dataId["visit"]: ref for ref in outputRefs.famResults}
+        target = visit_refs.get(extra_exp)
+        if target is None:
+            raise RuntimeError(
+                f"No predicted output ref for the extra-focal visit {extra_exp}; "
+                f"predicted {sorted(visit_refs)}."
+            )
+        butlerQC.put(Table(catalog), target)
+
+    def _calibHandlesByDetector(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        name: str,
+        raw_handles: dict,
+    ) -> dict:
+        """Resolve one calibration connection to one handle per detector.
+
+        Raises rather than silently keeping the last ref if a detector has more
+        than one.  Declaring ``physical_filter`` on the quantum is what
+        guarantees it does not: without it, ``flat`` and ``intrinsicZernikes``
+        arrive once per filter (8 and 6 per detector on the reference night),
+        and a plain detector-keyed dict would quietly flat-field with an
+        arbitrary band.  That failure produces plausible-looking wrong numbers
+        rather than an error, so it is worth an assertion rather than trust.
+        """
+        handles: dict[int, Any] = {}
+        for ref in getattr(inputRefs, name):
+            det = ref.dataId["detector"]
+            if det not in raw_handles:
+                continue
+            if det in handles:
+                raise RuntimeError(
+                    f"Multiple {name} refs for detector {det} in one quantum "
+                    f"({dict(ref.dataId.mapping)}); the quantum's dimensions are "
+                    "not narrowing this calibration to one per detector."
+                )
+            handles[det] = butlerQC.get(ref)
+        return handles
+
+    def _checkDefocalOrder(self, raws_by_exp: dict, intra_exp: int, extra_exp: int, group: Any) -> None:
+        """Warn if ``observation_reason`` contradicts the intra-first order.
+
+        The side of focus is assigned from the exposure id alone, because
+        ``observation_reason`` is free-form and cannot be relied on.  But when
+        it *is* populated and disagrees, every Zernike in the output has the
+        wrong sign, so it is worth saying so loudly.
+        """
+        reasons = {}
+        for exp in (intra_exp, extra_exp):
+            record = raws_by_exp[exp][0].dataId.records.get("exposure")
+            reasons[exp] = (getattr(record, "observation_reason", "") or "").lower()
+        if "intra" in reasons[extra_exp] or "extra" in reasons[intra_exp]:
+            self.log.warning(
+                "group=%s: observation_reason contradicts the intra-first "
+                "convention (exposure %d reason=%r taken as intra, %d reason=%r "
+                "taken as extra). Zernike signs depend on this.",
+                group,
+                intra_exp,
+                reasons[intra_exp],
+                extra_exp,
+                reasons[extra_exp],
+            )
+
+    def _populateCowStore(
+        self,
+        det_ids: list[int],
+        raw_handles: dict,
+        calib_handles: dict,
+        refcat_handles: list,
+        intra_exp: int,
+        extra_exp: int,
+        band: str,
+        rtp_deg: float | None,
+        boresight_alt_rad: float | None,
+        photo_filter_name: str,
+    ) -> None:
+        """Fill `_COW_STORE` with everything the workers need.
+
+        Subtasks, deferred handles, and the batoid telescope all go in here so
+        the children inherit them by copy-on-write instead of receiving them
+        through a pickle.
+        """
+        # AstrometryTask.solve() calls refObjLoader.getMetadataBox()
+        # unconditionally even when load_result is pre-supplied, and that
+        # method is pure geometry -- it never touches catalog data. So a stub
+        # satisfies it, and each worker builds its own real loader.
+        astrom_stub_loader = ReferenceObjectLoader(dataIds=[], refCats=[])
+        astrom_stub_loader.config.pixelMargin = 0
+        self.astrometry.setRefObjLoader(astrom_stub_loader)
+
+        # Handles, not objects: no pixels are read in this process, so each
+        # worker resolves its own detector's inputs. `intrinsic_zernikes` may
+        # legitimately be None -- runQuantum warns about those detectors and
+        # their fits fall back to the nominal design optics.
+        fam_detectors = {
+            det: FamDetectorInputs(
+                raws=raw_handles[det],
+                ptc=calib_handles["ptc"].get(det),
+                flat=calib_handles["flat"].get(det),
+                linearizer=calib_handles["linearizer"].get(det),
+                crosstalk=calib_handles["crosstalk"].get(det),
+                intrinsic_zernikes=calib_handles["intrinsicZernikes"].get(det),
+            )
+            for det in det_ids
+        }
+
+        # The telescope's 41 ms YAML load is band- and quantum-fixed, so it
+        # happens once here; the radial scales below cost two chief-ray traces
+        # each and are per-donut lookups in the workers, so the parent
+        # evaluates both sides of focus for them (see `CowStore.for_fam`).
+        _COW_STORE.adopt(
+            CowStore.for_fam(
+                isr_task=self.isr,
+                bkg_task=self.subtractBackground,
+                diam_task=self.measureDiameter,
+                detect_task=self.blitzDetect,
+                astrom_task=self.astrometry,
+                select_task=self.donutSelector,
+                measure_task=self.measureCandidates,
+                cut_task=self.cutStamps,
+                wf_fit_task=self.wavefrontFit,
+                wf_estimation_mode=self.config.wfEstimationMode,
+                max_fit_scatter=self.config.maxFitScatter,
+                astrom_ref_filter=self.config.astromRefFilter,
+                photo_ref_filter=photo_filter_name,
+                telescope=batoid.Optic.fromYaml(f"{self.config.opticsModel.format(band=band)}.yaml"),
+                fam_detectors=fam_detectors,
+                pair_match_tolerance=self.config.pairMatchTolerance,
+                save_stamps=self.config.saveStamps,
+                save_wf_images=self.config.saveWfImages,
+                band=band,
+                rtp_deg=rtp_deg,
+                boresight_alt_rad=boresight_alt_rad,
+                intra_exposure=intra_exp,
+                extra_exposure=extra_exp,
+                offsets_by_exposure={
+                    intra_exp: self._intraFocalOffsets,
+                    extra_exp: self._extraFocalOffsets,
+                },
+                refcat_handles=refcat_handles,
+                # `QuantumContext` does not expose its butler, but a resolved
+                # deferred handle does -- and the fork pool initializer needs
+                # it to reset the inherited connection pool. See
+                # `_fam_pool_initializer`.
+                butler=getattr(raw_handles[det_ids[0]][extra_exp], "butler", None),
+            )
+        )
+
+    def _runWorkers(self, det_ids: list[int], num_cores: int) -> list[FamDetectorResult]:
+        """Run `_fam_detector_worker` over every detector, forking if asked to.
+
+        ``num_cores`` comes from the execution environment (``pipetask
+        -n/--cores-per-quantum``, default 1), never from config, matching
+        `DonutBlitzCornerTask`.  One core runs inline with no pool at all.
+        """
+        t0 = time.perf_counter()
+        if num_cores == 1:
+            self.log.info("Running %d detector(s) inline", len(det_ids))
+            t_dispatch = time.time()
+            results = [_fam_detector_worker((d, t_dispatch)) for d in det_ids]
+        else:
+            n_workers = min(num_cores, len(det_ids))
+            self.log.info("Forking %d worker(s) over %d detector(s)", n_workers, len(det_ids))
+            # Unlike corner mode's pools these workers read from the butler,
+            # so the initializer is mandatory, not defensive: children sharing
+            # the parent's inherited psycopg2 SSL socket corrupt it. One fork
+            # per detector with at most n_workers alive, so at most n_workers
+            # detectors' pixels are resident at once. _fork_map ensures that
+            # one killed worker does not take down the entire pool/quantum.
+            t_dispatch = time.time()
+            with _dump_stacks_on_hang(self.config.hangTimeout, "FAM detector pool", self.log):
+                results, deaths = _fork_map(
+                    _fam_detector_worker,
+                    [(d, t_dispatch) for d in det_ids],
+                    n_workers,
+                    initializer=_fam_pool_initializer,
+                    unit_timeout=self.config.unitTimeout,
+                )
+            for unit, reason in deaths:
+                self.log.error("FAM worker for detector %s died: %s", unit[0], reason)
+                results.append(FamDetectorResult.dead(unit[0], reason))
+        elapsed = time.perf_counter() - t0
+
+        # A skip is an expected outcome (a dead CCD), a failure is not; keeping
+        # them apart stops the routine ones from training the eye to ignore the
+        # log line that matters.
+        skipped = [r for r in results if r.skipped]
+        failures = [r for r in results if r.error and not r.skipped]
+        if skipped:
+            self.log.info(
+                "%d detector(s) skipped with no work: %s",
+                len(skipped),
+                ", ".join(f"{r.det_name or r.det_id}" for r in skipped),
+            )
+        for r in failures:
+            self.log.warning(
+                "detector %s (%s) failed: %s",
+                r.det_id,
+                r.det_name or "?",
+                r.error,
+            )
+        # A pairing path silently falling back to spatial matching across the
+        # whole focal plane is a real condition worth seeing in the logs, not
+        # something to discover later in the Zernikes.
+        self._logWorkerSummaries(results)
+
+        paths = Counter(r.pair_path for r in results if not r.error)
+        self.log.info(
+            _colorize(
+                "Workers done in %.1fs: %d/%d detectors ok (%d skipped), %d donut(s), "
+                "%d fit group(s), pairing paths %s",
+                _ANSI_BOLD,
+                _ANSI_CYAN,
+                enabled=self._colorLogEnabled,
+            ),
+            elapsed,
+            # Skipped detectors are neither ok nor failed: they contributed no
+            # rows, so counting them as ok overstates the yield.
+            len(results) - len(failures) - len(skipped),
+            len(results),
+            len(skipped),
+            sum(len(r.donuts) for r in results),
+            sum(len(r.wf_results) for r in results),
+            dict(paths),
+        )
+        return results
+
+    def _logWorkerSummaries(self, results: list[FamDetectorResult]) -> None:
+        """Log one summary line per detector, then aggregates over them.
+
+        The per-detector line is modeled on `DonutBlitzCornerTask`'s, with
+        two differences that follow from FAM fusing the whole pipeline into one
+        worker: it carries an ``io`` stage, because each worker does its own
+        butler reads; and it carries the Danish ``fit`` result, because the fit
+        happens in the same process rather than in a separate pool the parent
+        can summarize on its own.  Between them they replace
+        `WavefrontFittingTask`'s per-group lines, which `setDefaults` turns off
+        here.
+
+        Lines are sorted by detector name: the pool returns detectors in
+        completion order, which is neither reproducible between runs nor useful
+        for finding a raft.  Skipped and failed detectors get a line too -- a
+        truncated one, since the full error is already logged above -- so that
+        a missing detector is visibly missing rather than absent.
+
+        The aggregates cover only the detectors that produced results.
+        """
+        if not results:
+            return
+
+        def name_of(r: dict) -> str:
+            return r.det_name or f"det{r.det_id}"
+
+        ok = []
+        for r in sorted(results, key=name_of):
+            name = name_of(r)
+            stages = _detector_stage_times(r)
+
+            if r.skipped or r.error:
+                self.log.info(
+                    "  %s: %s wall=%.2fs -- %s",
+                    name,
+                    "SKIPPED" if r.skipped else "FAILED",
+                    stages["wall"],
+                    r.error[:_ERROR_LOG_CHARS],
+                )
+                continue
+            ok.append(r)
+
+            # Cutout results are appended intra-first by the worker, so both of
+            # these read intra/extra.
+            scatter = "/".join(
+                "N/A" if res.scatter_arcsec is None else f'{res.scatter_arcsec:.2f}"' for res in r.results
+            )
+            donuts = "+".join(str(len(res.catalog)) for res in r.results)
+
+            wf = r.wf_results
+            if wf:
+                n_ok = sum(bool(g.success) for g in wf)
+                sizes = [g.group_size for g in wf]
+                # A group that never fit reports nfev=0, which is absent rather
+                # than a measurement of zero evaluations.
+                nfev_mean = _mean_std_max([g.fit_nfev or np.nan for g in wf])[0]
+                fit = f"fit={stages['fit']:.1f}s ({n_ok}/{len(wf)} ok, n={np.mean(sizes):.1f}" + (
+                    f", nfev={nfev_mean:.1f})" if np.isfinite(nfev_mean) else ")"
+                )
+            else:
+                fit = f"fit={stages['fit']:.2f}s (no groups)"
+
+            pieces = []
+            for key in _STAGE_KEYS:
+                if key in ("fit", "wall"):
+                    continue
+                piece = f"{key}={stages[key]:.2f}s"
+                # Scatter belongs to the WCS refit, so it hangs off that stage
+                # rather than standing as its own column, as in corner mode.
+                pieces.append(f"{piece} (scatter={scatter})" if key == "astrom" else piece)
+            pieces += [
+                f"donuts={donuts}",
+                f"pair={r.pair_path}",
+                fit,
+                f"wall={stages['wall']:.2f}s",
+            ]
+            self.log.info("  %s: %s", name, "  ".join(pieces))
+
+        if not ok:
+            return
+        self._logWorkerAggregates(ok)
+
+    def _logWorkerAggregates(self, ok: list[FamDetectorResult]) -> None:
+        """Log mean/std of every per-detector quantity over detectors that ran.
+
+        Split out from `_logWorkerSummaries` only for length; it is called with
+        the detectors that neither failed nor skipped, since a NaN-filled row
+        would otherwise widen every standard deviation with a number that means
+        "absent" rather than "slow".
+
+        ``dispatch`` is deliberately left out of the timing line.  Every task
+        is timed from the same dispatch epoch, so it is a queue wait that grows
+        with position in the queue rather than work done: its mean is set by
+        ``n_detectors / n_workers`` and its standard deviation by the spread
+        within one wave, and neither says anything about the detector.  It
+        stays on the per-detector lines, where the step from ~0 to nonzero
+        shows the pool size and the growth after that shows the pool draining.
+        """
+        n = len(ok)
+        stages = [_detector_stage_times(r) for r in ok]
+        self.log.info(
+            _colorize(
+                "Per-detector timing (n=%d): %s",
+                _ANSI_BOLD,
+                _ANSI_CYAN,
+                enabled=self._colorLogEnabled,
+            ),
+            n,
+            "  ".join(
+                "{}={:.2f}+/-{:.2f}s".format(key, *_mean_std_max([s[key] for s in stages])[:2])
+                for key in _STAGE_KEYS
+                if key != "dispatch"
+            ),
+        )
+
+        donuts = [sum(len(res.catalog) for res in r.results) for r in ok]
+        groups = [len(r.wf_results) for r in ok]
+        scatters = [res.scatter_arcsec for r in ok for res in r.results if res.scatter_arcsec is not None]
+        fits = [g.fit_elapsed for r in ok for g in r.wf_results]
+        self.log.info(
+            "Per-detector yield (n=%d): donuts=%.1f+/-%.1f  groups=%.1f+/-%.1f  "
+            'scatter=%.2f+/-%.2f"  per-group fit=%.1f+/-%.1fs (max %.1fs)',
+            n,
+            *_mean_std_max(donuts)[:2],
+            *_mean_std_max(groups)[:2],
+            *_mean_std_max(scatters)[:2],
+            *_mean_std_max(fits),
+        )
+
+        slowest = sorted(
+            ok,
+            key=lambda r: (r.worker_wall if np.isfinite(r.worker_wall) else 0.0),
+            reverse=True,
+        )[:_N_SLOWEST]
+        self.log.info(
+            "Slowest %d detector(s): %s",
+            len(slowest),
+            ", ".join(f"{r.det_name or r.det_id} {r.worker_wall:.1f}s" for r in slowest),
+        )
+
+    def _buildCatalog(
+        self,
+        results: list[FamDetectorResult],
+        visit_id: int,
+        intra_visit_id: int,
+        extra_visit_id: int,
+        exposure_group: str,
+        rtp_rad: float,
+        photo_filter_name: str,
+        run_elapsed: float,
+        butler_elapsed: float,
+        band: str,
+        visit_info: Any = None,
+        instrument: str = "",
+    ) -> Any:
+        """Flatten per-detector worker results into the catalog schema."""
+        cutout_results = [r for w in results for r in w.results]
+        wf_results = [r for w in results for r in w.wf_results]
+        donuts = [d for w in results for d in w.donuts]
+        unmatched = [d for w in results for d in w.unmatched_donuts]
+
+        n_ok = sum(r.success for r in wf_results)
+        self.log.info(
+            "WF results (%s): %d/%d group(s) succeeded",
+            self.config.wfEstimationMode,
+            n_ok,
+            len(wf_results),
+        )
+
+        return _build_donut_catalog(
+            results=cutout_results,
+            wf_results=wf_results,
+            donuts=donuts,
+            unmatched_donuts=unmatched,
+            visit_id=visit_id,
+            options=self._catalogOptions(band),
+            intra_visit_id=intra_visit_id,
+            extra_visit_id=extra_visit_id,
+            exposure_group=exposure_group,
+            timings=_CatalogTimings(
+                run_elapsed=run_elapsed,
+                butler_elapsed=butler_elapsed,
+                # Summed across workers, which run in parallel, so these
+                # are CPU time and not the wall clock corner mode reports
+                # -- documented on `_CatalogTimings` itself, and keyed off
+                # meta["mode"].  Each term is per detector: `cutout_run` is
+                # already accumulated over the two exposures inside the
+                # worker, and one refcat load serves both, which is why
+                # `refcat_run` lives on the worker instead of on each
+                # per-exposure cutout result (summing it would double-count).
+                refcat_elapsed=sum(w.refcat_run for w in results if np.isfinite(w.refcat_run)),
+                cutout_elapsed=sum(w.cutout_run for w in results if np.isfinite(w.cutout_run)),
+                danish_elapsed=sum(w.fit_run for w in results if np.isfinite(w.fit_run)),
+            ),
+            photo_filter_name=photo_filter_name,
+            astrom_filter_name=self.config.astromRefFilter,
+            rtp_rad=rtp_rad,
+            mode="fam",
+            visit_info=visit_info,
+            instrument=instrument,
+        )
+
+    def _catalogOptions(self, band: str) -> _CatalogOptions:
+        """Gather the config-derived scalars the output catalog needs.
+
+        Same function corner mode calls, deliberately: one schema for both
+        modes rather than two that drift.  The image flags differ -- full-array
+        mode has ~10k rows per pair, where they would dominate the file.
+        """
+        return _CatalogOptions(
+            stamp_size=self.cutStamps.config.stampSize,
+            binning=self.wavefrontFit.config.binning,
+            noll_indices=tuple(self.wavefrontFit.config.nollIndices),
+            aperture_margin_frac=self.measureCandidates.config.apertureMarginFrac,
+            bkg_inner_disc_frac=self.measureCandidates.config.bkgInnerDiscFrac,
+            bkg_annulus_inner_frac=self.measureCandidates.config.bkgAnnulusInnerFrac,
+            bkg_annulus_outer_frac=self.measureCandidates.config.bkgAnnulusOuterFrac,
+            max_donuts=self.cutStamps.config.maxDonuts,
+            wf_mode=self.config.wfEstimationMode,
+            save_stamps=self.config.saveStamps,
+            save_wf_images=self.config.saveWfImages,
+            bkg_order=self.wavefrontFit.config.bkgOrder,
+            optics_model=self.config.opticsModel.format(band=band),
+            mask_model=self.wavefrontFit.resolvedMaskModel(),
+        )
