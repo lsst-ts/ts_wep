@@ -154,6 +154,12 @@ class _CatalogOptions:
     save_wf_images : bool
         Include ``wf_img`` and ``model_img``. Dropped as a pair: a model with
         no data to compare it against is not useful.
+    optics_model : str
+        Batoid model the raytrace used, resolved for this visit's band rather
+        than the ``{band}`` template, since the template is not what ran.
+    mask_model : str
+        Pupil mask file the fit used, with symlinks resolved so a generic name
+        records as the concrete file.
     """
 
     stamp_size: int
@@ -168,6 +174,8 @@ class _CatalogOptions:
     save_stamps: bool = True
     save_wf_images: bool = True
     bkg_order: int = 0
+    optics_model: str = ""
+    mask_model: str = ""
 
     @property
     def nbkg(self) -> int:
@@ -765,6 +773,11 @@ def _build_donut_catalog(
     table.meta["obscuration"] = _LSSTCAM.obscuration
     table.meta["zk_r_outer"] = _LSSTCAM.zk_r_outer * u.m
     table.meta["zk_r_inner"] = _LSSTCAM.zk_r_inner * u.m
+    # Which optics and mask actually ran. Independently configurable, so two
+    # catalogs can differ in either, and neither is recoverable from the output
+    # otherwise -- a batoid Optic knows itself only as "LSST".
+    table.meta["optics_model"] = options.optics_model
+    table.meta["mask_model"] = options.mask_model
     table.meta["max_donuts"] = options.max_donuts
     table.meta["wf_mode"] = options.wf_mode
     # The values above carry their own units; these are the few facts a unit

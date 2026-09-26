@@ -66,14 +66,8 @@ class _LsstCamConstants:
 
     pixel_size: float = 1e-05
 
-    # Detector z shift producing the nominal 1.5 mm defocus, in meters.
-    #
-    # Not exactly 1.5e-3: the nominal offset is specified as a shift of the
-    # Detector in the batoid model, and the equivalent detector-plane offset
-    # that reproduces its Z4 is solved numerically, landing 1.5e-9 m short.
-    # Carrying the solved value keeps `donut_radius` and the reported
-    # `dfc_dist` consistent with that definition.
-    defocal_offset: float = 0.0014999985450571823
+    # Detector z shift producing the nominal defocus, in meters.
+    defocal_offset: float = 0.0015
 
     # Band -> effective wavelength in meters.
     wavelength: Mapping[str, float] = frozendict(

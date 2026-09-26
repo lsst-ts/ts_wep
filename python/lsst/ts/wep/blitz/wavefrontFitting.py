@@ -25,6 +25,7 @@ __all__ = ["WavefrontFittingConfig", "WavefrontFittingTask"]
 
 import contextlib
 import logging
+import os
 import signal
 import time
 from dataclasses import dataclass
@@ -41,7 +42,7 @@ from scipy.stats import median_abs_deviation
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
-from lsst.ts.wep.utils.ioUtils import readConfigYaml
+from lsst.ts.wep.utils.ioUtils import resolveRelativeConfigPath
 
 from .dataStructures import (
     _FIT_OUTCOMES,
@@ -66,11 +67,6 @@ from .utils import (
 # field-dependent optics term), so any value works; set to roughly the Rubin
 # field of view for a physically sensible default.
 _DANISH_FIELD_RADIUS_RAD = np.deg2rad(1.85)
-
-# Pupil mask model, as a nested obscuration dict danish understands.  Read
-# straight from the policy YAML via the lru_cached `readConfigYaml`, so the
-# geometry blitz fits with is the geometry that file declares.
-_MASK_PARAMS = readConfigYaml("policy:instruments/LsstCam.yaml")["maskParams"]
 
 
 def _jacobian_callable(model, jacobian_format: str):
@@ -358,6 +354,15 @@ class WavefrontFittingConfig(pexConfig.Config):
         default=False,
         doc="Include spider shadow modeling in Danish forward model.",
     )
+    maskModel: pexConfig.Field[str] = pexConfig.Field[str](
+        default="RubinObsc_v3.14_r_rtpp0_azp45_pp0d0.yaml",
+        doc=(
+            "Pupil mask model: a file name in the danish package's data "
+            "directory, or a 'policy:'-prefixed path relative to the ts_wep "
+            "policy directory. 'policy:masks/LsstCamLegacy.yaml' is the mask "
+            "used before danish shipped fitted models."
+        ),
+    )
     bkgOrder: pexConfig.Field[int] = pexConfig.Field[int](
         default=0,
         doc="Background polynomial order for Danish (-1=none, 0=constant).",
@@ -590,6 +595,29 @@ class WavefrontFittingTask(pipeBase.Task):
     _DefaultName = "wavefrontFitting"
     config: WavefrontFittingConfig
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        # Resolved once here rather than per group. A bad name raises here, in
+        # the parent, rather than in every worker.
+        self._mask_params = danish.load_mask_params(self._maskModelPath())
+
+    def _maskModelPath(self) -> str:
+        """Absolute path to the configured mask file."""
+        name = self.config.maskModel
+        if name.startswith("policy:"):
+            return resolveRelativeConfigPath(name)
+        return os.path.join(danish.datadir, name)
+
+    def resolvedMaskModel(self) -> str:
+        """The mask file name for the catalog, with symlinks followed.
+
+        ``RubinObsc.yaml`` is a symlink in the danish data directory, so the
+        configured name can outlive the file it pointed at when the run
+        happened. Recording the concrete target is what makes two catalogs
+        comparable after the fact.
+        """
+        return os.path.basename(os.path.realpath(self._maskModelPath()))
+
     def run(self, group: "_WfGroup") -> pipeBase.Struct:
         """Fit wavefront aberrations for a group of donuts.
 
@@ -734,7 +762,7 @@ class WavefrontFittingTask(pipeBase.Task):
         return factory_class(
             R_outer=_LSSTCAM.zk_r_outer,
             R_inner=_LSSTCAM.zk_r_inner,
-            mask_params=_MASK_PARAMS,
+            mask_params=self._mask_params,
             focal_length=_LSSTCAM.focal_length,
             pixel_scale=_LSSTCAM.pixel_size * self.config.binning,
             spider_angle=group.rtp,

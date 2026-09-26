@@ -435,6 +435,13 @@ class DonutBlitzFamConfig(
         target=WavefrontFittingTask,
         doc="Wavefront fitting subtask using Danish algorithm.",
     )
+    opticsModel: pexConfig.Field[str] = pexConfig.Field[str](
+        default="LSST_{band}",
+        doc=(
+            "Batoid optics model, as a name in batoid's data directory with "
+            "'{band}' standing in for the filter."
+        ),
+    )
     maxFitScatter: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Maximum allowed on-sky scatter (arcsec) for WCS refit to be accepted.",
         default=1.0,
@@ -851,6 +858,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             photo_filter_name=photo_filter_name,
             run_elapsed=time.perf_counter() - t_start,
             butler_elapsed=t_resolve,
+            band=band,
             # The extra-focal exposure's header, matching meta["ref_visit_id"]
             # and already read above as a component for the rotator angle.
             visit_info=visit_info,
@@ -985,7 +993,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 max_fit_scatter=self.config.maxFitScatter,
                 astrom_ref_filter=self.config.astromRefFilter,
                 photo_ref_filter=photo_filter_name,
-                telescope=batoid.Optic.fromYaml(f"LSST_{band}.yaml"),
+                telescope=batoid.Optic.fromYaml(f"{self.config.opticsModel.format(band=band)}.yaml"),
                 fam_detectors=fam_detectors,
                 pair_match_tolerance=self.config.pairMatchTolerance,
                 save_stamps=self.config.saveStamps,
@@ -1238,6 +1246,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         photo_filter_name: str,
         run_elapsed: float,
         butler_elapsed: float,
+        band: str,
         visit_info: Any = None,
         instrument: str = "",
     ) -> Any:
@@ -1261,7 +1270,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             donuts=donuts,
             unmatched_donuts=unmatched,
             visit_id=visit_id,
-            options=self._catalogOptions(),
+            options=self._catalogOptions(band),
             intra_visit_id=intra_visit_id,
             extra_visit_id=extra_visit_id,
             exposure_group=exposure_group,
@@ -1288,7 +1297,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             instrument=instrument,
         )
 
-    def _catalogOptions(self) -> _CatalogOptions:
+    def _catalogOptions(self, band: str) -> _CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.
 
         Same function corner mode calls, deliberately: one schema for both
@@ -1308,4 +1317,6 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             save_stamps=self.config.saveStamps,
             save_wf_images=self.config.saveWfImages,
             bkg_order=self.wavefrontFit.config.bkgOrder,
+            optics_model=self.config.opticsModel.format(band=band),
+            mask_model=self.wavefrontFit.resolvedMaskModel(),
         )

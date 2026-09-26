@@ -344,6 +344,13 @@ class DonutBlitzCornerConfig(
         target=DonutBlitzPlotTask,
         doc="Subtask that generates diagnostic plots for a blitz visit.",
     )
+    opticsModel: pexConfig.Field[str] = pexConfig.Field[str](
+        default="LSST_{band}",
+        doc=(
+            "Batoid optics model, as a name in batoid's data directory with "
+            "'{band}' standing in for the filter."
+        ),
+    )
     maxFitScatter: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Maximum allowed on-sky scatter (arcsec) for WCS refit to be accepted.",
         default=1.0,
@@ -783,7 +790,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             donuts=donuts,
             unmatched_donuts=unmatched_donuts,
             visit_id=visit_id,
-            options=self._catalogOptions(),
+            options=self._catalogOptions(band),
             intra_visit_id=visit_id,
             extra_visit_id=visit_id,
             exposure_group=exposure_group,
@@ -1038,7 +1045,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 max_fit_scatter=self.config.maxFitScatter,
                 astrom_ref_filter=self.config.astromRefFilter,
                 photo_ref_filter=photo_filter_name,
-                telescope=batoid.Optic.fromYaml(f"LSST_{band}.yaml"),
+                telescope=batoid.Optic.fromYaml(f"{self.config.opticsModel.format(band=band)}.yaml"),
                 corner_detectors=inputs.corner_detectors,
                 det_refcats=det_refcats,
             )
@@ -1202,7 +1209,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         )
         return wf_results
 
-    def _catalogOptions(self) -> _CatalogOptions:
+    def _catalogOptions(self, band: str) -> _CatalogOptions:
         """Gather the config-derived scalars the output catalog needs.
 
         Corner mode saves both image column sets by default: its row count is
@@ -1222,4 +1229,6 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             save_stamps=self.config.saveStamps,
             save_wf_images=True,
             bkg_order=self.wavefrontFit.config.bkgOrder,
+            optics_model=self.config.opticsModel.format(band=band),
+            mask_model=self.wavefrontFit.resolvedMaskModel(),
         )
