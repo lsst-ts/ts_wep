@@ -600,6 +600,10 @@ class WavefrontFittingTask(pipeBase.Task):
         # Resolved once here rather than per group. A bad name raises here, in
         # the parent, rather than in every worker.
         self._mask_params = danish.load_mask_params(self._maskModelPath())
+        # Keyed by the group attributes the factory depends on; see
+        # `_build_wf_factory`. Populated after the fork, so each worker keeps
+        # its own and nothing has to be picklable.
+        self._factory_cache: dict[tuple, danish.DonutFactory] = {}
 
     def _maskModelPath(self) -> str:
         """Absolute path to the configured mask file."""
@@ -747,13 +751,35 @@ class WavefrontFittingTask(pipeBase.Task):
         )
 
     def _build_wf_factory(self, group: "_WfGroup") -> "danish.DonutFactory":
-        """Build a Danish donut factory from config and group."""
+        """Build a Danish donut factory from config and group.
+
+        Cached on ``(band, rtp, alt)``, which is everything about a group the
+        factory depends on and all of which come from the visit rather than the
+        group -- so in practice one factory serves every group a worker fits.
+        That matters with ``doAoiThroughput``, where construction parses a 1 MB
+        throughput table: danish does not cache that, and full-array mode would
+        otherwise pay it per group, of which there are thousands.
+        """
+        key = (group.band, group.rtp, group.alt)
+        factory = self._factory_cache.get(key)
+        if factory is None:
+            factory = self._make_wf_factory(group)
+            self._factory_cache[key] = factory
+        return factory
+
+    def _make_wf_factory(self, group: "_WfGroup") -> "danish.DonutFactory":
+        """Construct a factory for this group, ignoring the cache."""
         factory_class = danish.DonutTriangleFactory if self.config.triangleMode else danish.DonutFactory
         factory_kwargs = {}
         if self.config.doAoiThroughput and group.band:
-            wavelength = _LSSTCAM.wavelength.get(group.band)
-            if wavelength:
-                factory_kwargs["bandpass_filter"] = wavelength
+            # danish keys its throughput table by band name, not by wavelength.
+            if group.band in _LSSTCAM.wavelength:
+                factory_kwargs["bandpass_filter"] = group.band
+            else:
+                self.log.warning(
+                    "Bandpass %r not supported for AOI throughput correction; skipping.",
+                    group.band,
+                )
             if group.alt is not None and np.isfinite(group.alt) and group.alt > 0:
                 airmass = np.clip((1.0 / np.sin(group.alt)), 1.0, 2.5)
                 factory_kwargs["airmass"] = airmass

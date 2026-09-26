@@ -41,6 +41,7 @@ import batoid
 import danish
 import numpy as np
 
+from lsst.ts.wep.blitz.dataStructures import _WfGroup
 from lsst.ts.wep.blitz.donutBlitzCorner import DonutBlitzCornerConfig
 from lsst.ts.wep.blitz.donutBlitzFam import DonutBlitzFamConfig
 from lsst.ts.wep.blitz.famPipeline import _RAD_PER_PIXEL
@@ -321,6 +322,76 @@ class TestConfigurableModels(unittest.TestCase):
         config.opticsModel = "Rubin_v1000_{band}"
         config.wavefrontFit.maskModel = "RubinObsc_v3.14_r_rtpp0_azp45_pp0d0.yaml"
         config.validate()
+
+
+class TestAoiThroughput(unittest.TestCase):
+    """`doAoiThroughput` reaches danish, and the factory is not rebuilt."""
+
+    def _group(self, band: str = "r", rtp: float = 12.5, alt: float = 1.1):
+        return _WfGroup(donuts=[], group_id="g", band=band, rtp=rtp, alt=alt)
+
+    def _task(self, **overrides):
+        config = WavefrontFittingTask.ConfigClass()
+        for key, value in overrides.items():
+            setattr(config, key, value)
+        return WavefrontFittingTask(config=config)
+
+    def testBandNameNotWavelengthReachesDanish(self) -> None:
+        """danish keys its throughput table by band name.
+
+        It does ``json.load(f)[bandpass_filter]`` against 'u'..'y', so a
+        wavelength raises `KeyError` -- the correction is either off or broken,
+        never quietly approximate.
+        """
+        factory = self._task(doAoiThroughput=True)._build_wf_factory(self._group())
+        self.assertEqual(factory.bandpass_filter, "r")
+        self.assertIsNotNone(factory.thruput_by_aoi)
+
+    def testOffByDefault(self) -> None:
+        """The correction is opt-in, so nothing is loaded unless asked."""
+        factory = self._task()._build_wf_factory(self._group())
+        self.assertIsNone(factory.bandpass_filter)
+        self.assertIsNone(factory.thruput_by_aoi)
+
+    def testAnUnsupportedBandWarnsRatherThanRaising(self) -> None:
+        """A band danish has no table for must not abort the fit.
+
+        The wavefront is still fittable without the throughput correction, so
+        the cost of continuing is a slightly wrong forward model where the cost
+        of raising is the whole visit.
+        """
+        task = self._task(doAoiThroughput=True)
+        with self.assertLogs(task.log.name, level="WARNING") as captured:
+            factory = task._build_wf_factory(self._group(band="q"))
+        self.assertIsNone(factory.bandpass_filter)
+        self.assertIn("not supported", "".join(captured.output))
+
+    def testFactoryIsReusedAcrossGroupsOfOneVisit(self) -> None:
+        """Band, rotator angle and altitude are per-visit, not per-group.
+
+        Building a factory with AOI on parses a 1 MB throughput table that
+        danish does not cache, so rebuilding it per group would cost thousands
+        of parses in full-array mode for thousands of identical objects.
+        """
+        task = self._task(doAoiThroughput=True)
+        factories = [task._build_wf_factory(self._group()) for _ in range(50)]
+        self.assertEqual(len(task._factory_cache), 1)
+        for factory in factories:
+            self.assertIs(factory, factories[0])
+
+    def testCacheKeyCoversEveryGroupInputTheFactoryUses(self) -> None:
+        """Ignoring any one of these would silently mis-model a group."""
+        task = self._task(doAoiThroughput=True)
+        base = task._build_wf_factory(self._group())
+        for label, group in (
+            ("band", self._group(band="i")),
+            ("rtp", self._group(rtp=-30.0)),
+            ("alt", self._group(alt=0.8)),
+        ):
+            with self.subTest(varying=label):
+                self.assertIsNot(task._build_wf_factory(group), base)
+        # The spider angle is the one that reaches the rendered image directly.
+        self.assertEqual(task._build_wf_factory(self._group(rtp=-30.0)).spider_angle, -30.0)
 
 
 class TestRescaleZkDomain(unittest.TestCase):
