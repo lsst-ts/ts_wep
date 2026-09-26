@@ -52,7 +52,7 @@ from .dataStructures import (
     WfGroupResult,
     _WfGroup,
 )
-from .lsstCam import _LSSTCAM
+from .lsstCam import _LSSTCAM, _rescale_zk_domain
 from .utils import (
     _COW_STORE,
     _ZK_JMAX,
@@ -809,17 +809,36 @@ class WavefrontFittingTask(pipeBase.Task):
             nrad=nrad,
             naz=int(2 * np.pi * nrad / (1 - eps)),
         )
-        # W_TA_defoc: off-axis + nominal intrinsics + defocus in one call
-        zk_ref = (
-            batoid.zernikeTA(
-                telescope_dz,
-                donut.thx_ccs,
-                donut.thy_ccs,
-                wavelength,
-                **zernikeTA_kwargs,
+        # zernikeTA normalizes on the traced model's own pupil, which is not
+        # necessarily the domain the danish factory is built on, so every array
+        # it produces is moved onto blitz's domain at the point of production.
+        # Rescaling here rather than at the point of use is what lets the
+        # arithmetic below mix the two legs without tracking whose domain is
+        # whose. A z shift leaves the pupil alone, so telescope_dz and
+        # telescope share these radii.
+        r_outer_from = telescope.pupilSize / 2
+
+        def _zk_ta_meters(optic: batoid.Optic) -> np.ndarray:
+            coef = (
+                batoid.zernikeTA(
+                    optic,
+                    donut.thx_ccs,
+                    donut.thy_ccs,
+                    wavelength,
+                    **zernikeTA_kwargs,
+                )
+                * wavelength
+            )  # meters, shape (_ZK_JMAX + 1,)
+            return _rescale_zk_domain(
+                coef,
+                r_outer_from=r_outer_from,
+                r_inner_from=eps * r_outer_from,
+                r_outer_to=_LSSTCAM.zk_r_outer,
+                r_inner_to=_LSSTCAM.zk_r_inner,
             )
-            * wavelength
-        )  # meters, shape (_ZK_JMAX + 1,)
+
+        # W_TA_defoc: off-axis + nominal intrinsics + defocus in one call
+        zk_ref = _zk_ta_meters(telescope_dz)
 
         # Swap the nominal design intrinsics for the measured ones at
         # calibrated indices. zk_opd_foc is the same raytrace as zk_ref minus
@@ -827,18 +846,14 @@ class WavefrontFittingTask(pipeBase.Task):
         # contribution intact and only the static aberration field is replaced
         # by W_meas. Both are evaluated at this donut's field angle, so neither
         # is on-axis.
+        #
+        # intrinsic_zk is added as supplied: the IntrinsicZernikes calibration
+        # carries no record of the radii it was normalized on, so there is no
+        # domain to convert from. Assuming one would be a guess with the same
+        # failure mode as the mismatch handled above.
         intrinsic_zk = donut.intrinsic_zk
         if intrinsic_zk is not None:
-            zk_opd_foc = (
-                batoid.zernikeTA(
-                    telescope,
-                    donut.thx_ccs,
-                    donut.thy_ccs,
-                    wavelength,
-                    **zernikeTA_kwargs,
-                )
-                * wavelength
-            )  # meters
+            zk_opd_foc = _zk_ta_meters(telescope)
             calib_noll = np.arange(4, _ZK_JMAX + 1)
             for i, j in enumerate(calib_noll):
                 if i < len(intrinsic_zk) and j <= _ZK_JMAX:
