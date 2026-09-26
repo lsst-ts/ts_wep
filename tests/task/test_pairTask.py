@@ -190,6 +190,23 @@ class TestPairTask(unittest.TestCase):
         task_output = task.run(visit_info_dict)
         self.assertEqual(len(task_output), 2)
 
+    def testExposurePairerRotationWraps(self) -> None:
+        """A 360 -> 0 deg rollover of the rotator is not a 360 deg change.
+
+        LATISS headers report boresightRotAngle = 360.000 on one exposure of a
+        pair and 0.000 on the next (e.g. 20211104 seq 950/951), which the
+        unwrapped difference read as 360 deg and rejected.
+        """
+        task = ExposurePairer(config=ExposurePairerConfig(rotationThreshold=1.0))
+        visit_info_dict = self._createVisitInfoDict(rot_deg_start=360.0, rot_sep_deg=-359.6)
+        task_output = task.run(visit_info_dict)
+        self.assertEqual(len(task_output), 1)
+        self.assertEqual((task_output[0].intra, task_output[0].extra), (0, 1))
+
+        # And a genuine 180 deg change is still rejected.
+        visit_info_dict = self._createVisitInfoDict(rot_deg_start=0.0, rot_sep_deg=180.0)
+        self.assertEqual(len(task.run(visit_info_dict)), 0)
+
     def testExposurePairerForceUniquePairs(self) -> None:
         task_config = ExposurePairerConfig()
         task = ExposurePairer(config=task_config)
