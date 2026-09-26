@@ -38,8 +38,11 @@ import copy
 import unittest
 
 import batoid
+import danish
 import numpy as np
 
+from lsst.ts.wep.blitz.donutBlitzCorner import DonutBlitzCornerConfig
+from lsst.ts.wep.blitz.donutBlitzFam import DonutBlitzFamConfig
 from lsst.ts.wep.blitz.famPipeline import _RAD_PER_PIXEL
 from lsst.ts.wep.blitz.lsstCam import _LSSTCAM, _rescale_zk_domain
 from lsst.ts.wep.blitz.utils import (
@@ -47,6 +50,7 @@ from lsst.ts.wep.blitz.utils import (
     _RADIAL_SCALE_WAVELENGTH,
     _defocused_telescope,
 )
+from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingTask
 from lsst.ts.wep.instrument import Instrument
 from lsst.ts.wep.utils.ioUtils import readConfigYaml
 
@@ -87,12 +91,11 @@ class TestHolderMatchesInstrument(unittest.TestCase):
         self.instrument = Instrument(configFile=_POLICY_FILE)
 
     def testScalarsAreBitwiseEqual(self) -> None:
-        """The six stored scalars and three derived ones.
+        """The scalars taken from the instrument YAML, plus focal_ratio.
 
-        `focal_ratio` and `donut_radius` are recomputed from
-        `_LSSTCAM.zk_r_outer` rather than from a diameter, and `donut_radius`
-        compounds `defocal_offset`, `focal_ratio` and `pixel_size`, so it is
-        the assertion most likely to catch a formula transcribed wrong.
+        `focal_ratio` is recomputed from `_LSSTCAM.zk_r_outer` rather than from
+        a diameter, so it is the one most likely to catch a formula transcribed
+        wrong.
         """
         inst = self.instrument
         for name, holder, instrument in (
@@ -101,9 +104,7 @@ class TestHolderMatchesInstrument(unittest.TestCase):
             ("obscuration", _LSSTCAM.obscuration, inst.obscuration),
             ("focal_length", _LSSTCAM.focal_length, inst.focalLength),
             ("pixel_size", _LSSTCAM.pixel_size, inst.pixelSize),
-            ("defocal_offset", _LSSTCAM.defocal_offset, inst.defocalOffset),
             ("focal_ratio", _LSSTCAM.focal_ratio, inst.focalRatio),
-            ("donut_radius", _LSSTCAM.donut_radius, inst.donutRadius),
         ):
             with self.subTest(constant=name):
                 self.assertEqual(
@@ -134,21 +135,6 @@ class TestHolderMatchesInstrument(unittest.TestCase):
         self.assertIn("r", _LSSTCAM.wavelength)
         self.assertEqual(_LSSTCAM.wavelength.get("r"), 6.194e-07)
         self.assertIsNone(_LSSTCAM.wavelength.get("not-a-band"))
-
-    def testMaskParamsMatchThePolicyFile(self) -> None:
-        """The mask blitz fits with is the one the policy YAML declares.
-
-        `readConfigYaml` is `lru_cache`d and `Instrument` reads through it too,
-        so this can be the very same object; compare the nested contents rather
-        than identity, and pin the element names so a file that lost an entry
-        fails rather than comparing equal to itself.
-        """
-        mask_params = readConfigYaml(_POLICY_FILE)["maskParams"]
-        self.assertEqual(mask_params, self.instrument.maskParams)
-        self.assertEqual(
-            sorted(mask_params),
-            ["Filter_entrance", "L1_entrance", "M1", "M2", "M3", "Spider_3D"],
-        )
 
     def testHolderIsImmutable(self) -> None:
         """`_LSSTCAM` is shared module state, including across forks.
@@ -206,6 +192,135 @@ class TestDerivedConstants(unittest.TestCase):
             _radial_scale_at(telescope, offsets, wavelength) for wavelength in _LSSTCAM.wavelength.values()
         ]
         self.assertLess((max(scales) - min(scales)) / min(scales), 1e-5)
+
+
+class TestConfigurableModels(unittest.TestCase):
+    """The mask and optics models are independent, resolvable config fields."""
+
+    def testMaskModelDefaultLoadsAndCoversTheFullField(self) -> None:
+        """The configured mask must load, and reach the edge of the field.
+
+        `thetaMax` is where a mask element stops being defined, so a model
+        cutting off inside the field would silently stop masking the outermost
+        donuts -- which are the aberrated ones the fit most depends on.
+        `donutBlitzFam` cuts at 1.725 deg, so that is the bar.
+        """
+        task = WavefrontFittingTask()
+        mask_params = task._mask_params
+        self.assertEqual(
+            sorted(mask_params),
+            [
+                "CameraBody",
+                "Filter_entrance",
+                "Filter_exit",
+                "L1_entrance",
+                "L1_exit",
+                "L2_entrance",
+                "L2_exit",
+                "L3_entrance",
+                "L3_exit",
+                "M1",
+                "M2",
+                "M3",
+                "Spider_3D",
+            ],
+        )
+        # Spider_3D describes strut geometry rather than an annulus, so it
+        # carries no field-angle validity range to check.
+        for name, element in mask_params.items():
+            if name == "Spider_3D":
+                continue
+            for side, params in element.items():
+                with self.subTest(element=name, side=side):
+                    self.assertGreaterEqual(params["thetaMax"], 1.725)
+
+    def testMaskModelIsResolvedOnceNotPerGroup(self) -> None:
+        """Held on the task, so forked workers inherit it rather than re-read.
+
+        Full-array mode builds a factory per group and there are thousands, so
+        a per-group file read would be paid thousands of times; the parent
+        constructs this subtask before it populates the copy-on-write store.
+        """
+        task = WavefrontFittingTask()
+        self.assertIs(task._mask_params, task._mask_params)
+
+    def testLegacyMaskIsSelectableAndUnchanged(self) -> None:
+        """The pre-danish mask must stay reproducible, bit for bit.
+
+        It is the only way to reproduce a fit made before the mask default
+        moved, so the file in ``policy/masks`` has to be exactly the block that
+        shipped in the instrument YAML rather than a re-derivation of it.
+        Reached through the same loader as danish's own files, via a
+        ``policy:`` prefix.
+        """
+        config = WavefrontFittingTask.ConfigClass()
+        config.maskModel = "policy:masks/LsstCamLegacy.yaml"
+        task = WavefrontFittingTask(config=config)
+
+        expected = readConfigYaml(_POLICY_FILE)["maskParams"]
+        self.assertEqual(task._mask_params, expected)
+        self.assertEqual(
+            sorted(task._mask_params),
+            ["Filter_entrance", "L1_entrance", "M1", "M2", "M3", "Spider_3D"],
+        )
+        self.assertEqual(task.resolvedMaskModel(), "LsstCamLegacy.yaml")
+
+    def testAnUnknownMaskModelFailsInTheParent(self) -> None:
+        """A typo must not reach the workers.
+
+        The mask is loaded when the subtask is built, which both parent tasks
+        do before forking, so a bad name is one exception rather than one per
+        worker -- and in full-array mode there are thousands.
+        """
+        config = WavefrontFittingTask.ConfigClass()
+        config.maskModel = "not-a-mask-file.yaml"
+        with self.assertRaises(FileNotFoundError):
+            WavefrontFittingTask(config=config)
+
+    def testResolvedMaskModelFollowsSymlinks(self) -> None:
+        """A generic mask name must record as the file it pointed at.
+
+        ``RubinObsc.yaml`` is a symlink in danish's data directory, so the
+        configured name alone does not say which mask a past run used -- the
+        link can be repointed. Recording the target is what lets two catalogs
+        be compared later.
+        """
+        config = WavefrontFittingTask.ConfigClass()
+        config.maskModel = "RubinObsc.yaml"
+        task = WavefrontFittingTask(config=config)
+        resolved = task.resolvedMaskModel()
+        self.assertNotEqual(resolved, "RubinObsc.yaml")
+        self.assertTrue(resolved.startswith("RubinObsc_v"))
+        # And the loaded params are the target's, not something else.
+        self.assertEqual(task._mask_params, danish.load_mask_params(resolved))
+
+    def testOpticsModelDefaultResolvesForEveryBand(self) -> None:
+        """An unexpanded ``{band}`` reaching batoid is the failure to avoid.
+
+        A model name that no code path resolves is exactly what made
+        `Instrument.batoidModelName` misleading, so pin that formatting the
+        default yields a loadable file in all six bands.
+        """
+        for config_class in (DonutBlitzCornerConfig, DonutBlitzFamConfig):
+            config = config_class()
+            self.assertIn("{band}", config.opticsModel)
+            for band in _BANDS:
+                with self.subTest(config=config_class.__name__, band=band):
+                    name = config.opticsModel.format(band=band)
+                    self.assertNotIn("{", name)
+                    batoid.Optic.fromYaml(f"{name}.yaml")
+
+    def testMaskAndOpticsAreNotCoupled(self) -> None:
+        """Setting one must not constrain the other.
+
+        Deliberate: the Zernike domain is fixed in `lsstCam` regardless of the
+        optics model, so the pairing is a physics question for whoever runs it
+        rather than something config can get wrong on its behalf.
+        """
+        config = DonutBlitzCornerConfig()
+        config.opticsModel = "Rubin_v1000_{band}"
+        config.wavefrontFit.maskModel = "RubinObsc_v3.14_r_rtpp0_azp45_pp0d0.yaml"
+        config.validate()
 
 
 class TestRescaleZkDomain(unittest.TestCase):

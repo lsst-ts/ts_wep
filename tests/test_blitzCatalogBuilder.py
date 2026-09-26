@@ -232,8 +232,9 @@ class TestCatalogOptions(unittest.TestCase):
         config.wfEstimationMode = "unpaired"
         config.saveStamps = False
         config.wavefrontFit.bkgOrder = 1
+        config.opticsModel = "Rubin_v1000_{band}"
 
-        options = DonutBlitzCornerTask(config=config)._catalogOptions()
+        options = DonutBlitzCornerTask(config=config)._catalogOptions("i")
 
         self.assertEqual(options.stamp_size, 215)
         self.assertEqual(options.max_donuts, 11)
@@ -248,6 +249,12 @@ class TestCatalogOptions(unittest.TestCase):
         # Corner mode's tables are small, so the WF images always come along.
         self.assertTrue(options.save_wf_images)
         self.assertEqual(options.bkg_order, 1)
+        # Resolved for the band, not the template: the recorded name has to be
+        # the model that ran, which is the whole point of recording it.
+        self.assertEqual(options.optics_model, "Rubin_v1000_i")
+        # The mask default is a concrete file, so resolving is a no-op here;
+        # what matters is that the field is wired to the subtask at all.
+        self.assertEqual(options.mask_model, config.wavefrontFit.maskModel)
 
 
 class TestRotateZkToEb(unittest.TestCase):
