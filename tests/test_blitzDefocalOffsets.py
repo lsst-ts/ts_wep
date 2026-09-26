@@ -36,6 +36,7 @@ and `_rot_tel_pos_rad`, the rotator angle both tasks feed to the CCS -> OCS
 Zernike rotation.
 """
 
+import copy
 import unittest
 from types import SimpleNamespace
 
@@ -241,6 +242,44 @@ class TestDefocalOffsets(unittest.TestCase):
         donut = _minimalDonut(defocal_offsets=None)
         with self.assertRaisesRegex(RuntimeError, "defocal_offsets"):
             task._prep_donut_for_danish(donut)
+
+    def testZkRefIsIndependentOfTheModelsPupilRadius(self) -> None:
+        """A pupil-only change must not move the reference wavefront.
+
+        `zernikeTA` normalizes on the traced model's own pupil, while the
+        danish factory is built on blitz's fixed radii, so an optics model
+        declaring a different `pupilSize` would otherwise have its coefficients
+        interpreted against the wrong domain -- ~183 nm of spurious Z4 for the
+        0.36% difference between 8.36 and 8.33, and constant with field angle,
+        so no amount of inspecting the aberration field would reveal it.
+
+        Forcing `pupilSize` on an otherwise identical telescope changes only
+        the fitting domain, so the correct answer is that nothing moves. Runs
+        through `_prep_donut_for_danish` rather than calling the rescale
+        directly, so it fails if either `zernikeTA` call site stops rescaling.
+        """
+        from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingTask
+
+        task = WavefrontFittingTask()
+        # Well off axis, so the aberration field is rich rather than near-pure
+        # defocus and a domain error cannot hide in a single coefficient.
+        donut = _minimalDonut(
+            thx_ccs=0.018,
+            thy_ccs=0.009,
+            defocal_offsets=_EXTRA_FOCAL_OFFSETS,
+        )
+
+        def zk_ref_with(telescope):
+            _COW_STORE.__dict__.clear()
+            _COW_STORE.telescope = telescope
+            return task._prep_donut_for_danish(donut).zk_ref
+
+        mismatched = copy.copy(self.telescope)
+        mismatched.pupilSize = 8.33
+
+        expected = zk_ref_with(self.telescope)
+        actual = zk_ref_with(mismatched)
+        np.testing.assert_allclose(actual[4:], expected[4:], atol=1e-9, rtol=0.0)
 
 
 class TestRotTelPos(unittest.TestCase):
