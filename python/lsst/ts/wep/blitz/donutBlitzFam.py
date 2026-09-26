@@ -435,15 +435,6 @@ class DonutBlitzFamConfig(
         target=WavefrontFittingTask,
         doc="Wavefront fitting subtask using Danish algorithm.",
     )
-    instConfigFile: pexConfig.Field[str] = pexConfig.Field[str](
-        doc=(
-            "Path to an instrument configuration file to override the default. "
-            "If begins with 'policy:' the path is relative to the ts_wep policy "
-            "directory. If not provided, the default instrument for the camera "
-            "will be loaded."
-        ),
-        optional=True,
-    )
     maxFitScatter: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Maximum allowed on-sky scatter (arcsec) for WCS refit to be accepted.",
         default=1.0,

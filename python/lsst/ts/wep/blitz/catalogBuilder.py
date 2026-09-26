@@ -344,6 +344,12 @@ _META_NOTES = {
         " is extra-focal and negative intra-focal"
     ),
     "noll_indices": ("which Noll indices were fitted (distinct from the layout of the zk_* columns)"),
+    "zk_r_outer": (
+        "the annulus every zk_* column is normalized on, with zk_r_inner, in"
+        " meters; coefficients are only comparable between catalogs sharing"
+        " these radii. The IntrinsicZernikes calibration feeding zk_intrinsic_*"
+        " declares no domain of its own, so those columns assume it matches"
+    ),
 }
 
 
@@ -752,8 +758,13 @@ def _build_donut_catalog(
     table.meta["bkg_inner_disc_frac"] = options.bkg_inner_disc_frac
     table.meta["bkg_annulus_inner_frac"] = options.bkg_annulus_inner_frac
     table.meta["bkg_annulus_outer_frac"] = options.bkg_annulus_outer_frac
-    # Global instrument constant, so it lives in meta.
+    # Global instrument constants, so they live in meta. The two radii make
+    # the zk_* columns self-describing: a Zernike coefficient is meaningless
+    # without the annulus it is normalized on, and a reader comparing two
+    # catalogs has no other way to tell whether they are on the same footing.
     table.meta["obscuration"] = _LSSTCAM.obscuration
+    table.meta["zk_r_outer"] = _LSSTCAM.zk_r_outer * u.m
+    table.meta["zk_r_inner"] = _LSSTCAM.zk_r_inner * u.m
     table.meta["max_donuts"] = options.max_donuts
     table.meta["wf_mode"] = options.wf_mode
     # The values above carry their own units; these are the few facts a unit

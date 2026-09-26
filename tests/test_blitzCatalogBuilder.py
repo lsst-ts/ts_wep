@@ -51,6 +51,7 @@ from lsst.ts.wep.blitz.donutBlitzCorner import (
     DonutBlitzCornerConfig,
     DonutBlitzCornerTask,
 )
+from lsst.ts.wep.blitz.lsstCam import _LSSTCAM
 from lsst.ts.wep.blitz.utils import _OFFSET_OPTICS, _ZK_JMAX
 from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingConfig
 
@@ -778,6 +779,26 @@ class TestBuildDonutCatalog(unittest.TestCase):
             0.3,
         )
 
+    def testMetaRecordsTheZernikeNormalizationAnnulus(self) -> None:
+        """The zk_* columns are meaningless without the radii they sit on.
+
+        A coefficient normalized on a 4.18 m annulus and one normalized on
+        4.165 m are different numbers for the same wavefront, so a reader
+        comparing catalogs -- across optics models, or against an external
+        wavefront -- needs the domain recorded rather than assumed. Carries
+        units, since the values are lengths and everything else in meta does.
+        """
+        table = _build_donut_catalog([_result()], [], [_donut()], [], 99, _options())
+        self.assertEqual(table.meta["zk_r_outer"].to_value(u.m), _LSSTCAM.zk_r_outer)
+        self.assertEqual(table.meta["zk_r_inner"].to_value(u.m), _LSSTCAM.zk_r_inner)
+        # The inner radius must be the obscuration applied to the outer one,
+        # not an independent number that could disagree with it.
+        self.assertAlmostEqual(
+            table.meta["zk_r_inner"] / table.meta["zk_r_outer"],
+            table.meta["obscuration"],
+        )
+        self.assertIn("zk_r_outer", table.meta["notes"])
+
     def testIntrinsicsSurviveAnUnfittedRow(self) -> None:
         """Intrinsics come off the donut when no fit claimed the row.
 
@@ -920,6 +941,10 @@ class TestBuildDonutCatalog(unittest.TestCase):
         det_entry = meta["det_meta"]["R00_SW0_42"]
         self.assertAlmostEqual(det_entry["astrom_scatter"].to_value(u.arcsec), 0.3)
         self.assertAlmostEqual(det_entry["isr_run"].to_value(u.s), 1.25)
+        # The Zernike domain is only useful on a catalog read back cold, which
+        # is exactly the path that would drop it.
+        self.assertAlmostEqual(meta["zk_r_outer"].to_value(u.m), _LSSTCAM.zk_r_outer)
+        self.assertAlmostEqual(meta["zk_r_inner"].to_value(u.m), _LSSTCAM.zk_r_inner)
         # The notes ride along, so a catalog read back cold still explains the
         # keys whose units cannot.
         self.assertIn("date", meta["notes"])
@@ -1037,9 +1062,7 @@ class TestBuildDetectorImageTable(unittest.TestCase):
 
     def testDetectorsWithoutAViewAreAbsentNotPlaceheld(self) -> None:
         """A dead worker's detector has no image, and no row either."""
-        table = _build_detector_image_table(
-            [_result_with_view("R00_SW0"), _result("R00_SW1")], 42, "LSSTCam"
-        )
+        table = _build_detector_image_table([_result_with_view("R00_SW0"), _result("R00_SW1")], 42, "LSSTCam")
         self.assertEqual(table["det_name"].tolist(), ["R00_SW0"])
 
     def testRoundTripsThroughArrowWithDtypesIntact(self) -> None:
@@ -1100,9 +1123,7 @@ class TestBuildOverlayTable(unittest.TestCase):
         self.assertEqual(len(table), 13)
 
     def testNoRefcatEmitsNoRefcatRows(self) -> None:
-        table = _build_overlay_table(
-            [_result_with_view(view=_view(refcat=None))], 42, "LSSTCam"
-        )
+        table = _build_overlay_table([_result_with_view(view=_view(refcat=None))], 42, "LSSTCam")
         self.assertNotIn("refcat", set(table["kind"].tolist()))
         self.assertEqual({"detection", "selection"}, set(table["kind"].tolist()))
 
