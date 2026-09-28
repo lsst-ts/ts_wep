@@ -1223,7 +1223,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
         slowest = sorted(
             ok,
-            key=lambda r: (r.worker_wall if np.isfinite(r.worker_wall) else 0.0),
+            key=lambda r: r.worker_wall if np.isfinite(r.worker_wall) else 0.0,
             reverse=True,
         )[:_N_SLOWEST]
         self.log.info(
