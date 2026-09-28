@@ -22,17 +22,23 @@
 """Diagnostic plots regenerated from the ``donutBlitzCornerResults`` table."""
 
 __all__ = [
+    "DonutBlitzPlotOutputConnections",
     "DonutBlitzPlotConnections",
     "DonutBlitzPlotConfig",
     "DonutBlitzPlotTask",
 ]
 
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable, Table
+
+if TYPE_CHECKING:
+    # matplotlib is imported inside the methods that draw, so importing it here
+    # for the annotations alone would undo that.
+    from matplotlib.figure import Figure
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -438,7 +444,7 @@ class _WfDonut:
 class _WfGroup:
     """One plot row's worth of fit output, rebuilt from the flat catalog.
 
-    This is the shape `_saveWfDiagnosticPlot`'s drawing code was written
+    This is the shape `_makeWfDiagnosticPlot`'s drawing code is written
     against -- one fit, its donuts, and the Zernike deviations it produced.
     `_wf_groups_from_catalog` inverts `_buildCatalog` to recover it.
 
@@ -1166,8 +1172,55 @@ def _wf_row_pairs(
     return {c: pairs + [(None, None)] * (max_rows - len(pairs)) for c, pairs in row_pairs.items()}
 
 
-class DonutBlitzPlotConnections(
+class DonutBlitzPlotOutputConnections(
     pipeBase.PipelineTaskConnections,
+    dimensions=("instrument", "visit"),  # type: ignore
+):
+    """The three plot datasets, declared once for both of their producers.
+
+    Inherited by `DonutBlitzPlotConnections` and by
+    `DonutBlitzCornerConnections`, which reach the same writer --
+    `DonutBlitzPlotTask.putPlots` -- from their respective ``runQuantum``.
+    A pipeline may therefore contain one of those tasks or the other, never
+    both: two producers of one dataset type is exactly what pipeline
+    validation is there to reject.
+
+    The ``Plot`` storage class holds a `matplotlib.figure.Figure` and
+    serializes it to PNG.  It is write-only, so these come back out of the
+    butler as artifacts rather than through ``butler.get``.
+    """
+
+    donutDiagPlot = connectionTypes.Output(
+        doc=(
+            "Per-detector donut stamps with their selection and fit stats: one "
+            "section per detector, accepted donuts beside rejected ones."
+        ),
+        name="donutBlitzCornerDonutPlot",
+        storageClass="Plot",
+        dimensions=("instrument", "visit"),
+    )
+    wfDiagPlot = connectionTypes.Output(
+        doc=(
+            "Wavefront fits as a 2x2 grid of corners, one row per fit, each row "
+            "showing data, model, residual and Zernikes on both sides of focus."
+        ),
+        name="donutBlitzCornerWfPlot",
+        storageClass="Plot",
+        dimensions=("instrument", "visit"),
+    )
+    selectionDiagPlot = connectionTypes.Output(
+        doc=(
+            "Focal-plane view of donut selection: each corner sensor's binned "
+            "post-ISR image overlaid with the stages of the selection funnel."
+        ),
+        name="donutBlitzCornerSelectionPlot",
+        storageClass="Plot",
+        dimensions=("instrument", "visit"),
+    )
+
+
+class DonutBlitzPlotConnections(
+    DonutBlitzPlotOutputConnections,
     dimensions=("instrument", "visit"),  # type: ignore
 ):
     """Pipeline connections for DonutBlitzPlotTask."""
@@ -1232,6 +1285,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
     butler) or be called as a subtask of ``DonutBlitzCornerTask`` when
     ``savePlots=True``.
 
+    `run` builds figures and `putPlots` writes them, which is what lets the
+    two contexts share one implementation: as a subtask the parent owns the
+    quantum context and hands it to `putPlots`, and standalone this task's own
+    ``runQuantum`` does the same with its own.
+
     Runs written before that dataset type was renamed hold their catalog as
     ``donutBlitzResults``; point this task at one with
     ``-c donutBlitzPlot:connections.cornerResults=donutBlitzResults``.
@@ -1264,19 +1322,59 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             handle = inputs.get(name)
             return None if handle is None else handle.get(**load)
 
-        self.run(
-            catalog,
-            detector_images=_optional("detectorImages"),
-            selection_overlays=_optional("selectionOverlays"),
+        self.putPlots(
+            butlerQC,
+            outputRefs,
+            self.run(
+                catalog,
+                detector_images=_optional("detectorImages"),
+                selection_overlays=_optional("selectionOverlays"),
+            ),
         )
+
+    def putPlots(
+        self,
+        butlerQC: QuantumContext,
+        outputRefs: OutputQuantizedConnection,
+        plots: pipeBase.Struct,
+    ) -> None:
+        """Write whichever figures `run` built.
+
+        The one writer of the plot datasets, reached both from this task's
+        ``runQuantum`` and from `DonutBlitzCornerTask`'s, so that a figure
+        built as a subtask lands in the butler on the same terms as one built
+        standalone.
+
+        A figure is None when that plot had nothing to draw, and a ref is
+        absent when the caller's config switched the dataset off; both are
+        ordinary outcomes, not errors.
+
+        Parameters
+        ----------
+        butlerQC : QuantumContext
+            The caller's quantum context -- this task never owns one of its
+            own when running as a subtask.
+        outputRefs : OutputQuantizedConnection
+            The caller's output refs, holding whichever of the three plot
+            connections its config left in place.
+        plots : lsst.pipe.base.Struct
+            As returned by `run`.
+        """
+        for name in ("donutDiagPlot", "wfDiagPlot", "selectionDiagPlot"):
+            figure = getattr(plots, name, None)
+            ref = getattr(outputRefs, name, None)
+            if figure is None or ref is None:
+                continue
+            butlerQC.put(figure, ref)
+            self.log.info("Wrote %s", ref.datasetType.name)
 
     def run(
         self,
         catalog: Table,
         detector_images: Table | None = None,
         selection_overlays: Table | None = None,
-    ) -> None:
-        """Generate the diagnostic plots for one blitz visit.
+    ) -> pipeBase.Struct:
+        """Build the diagnostic plots for one blitz visit.
 
         The two optional tables are what the focal-plane selection plot needs.
         Both paths into this method supply them the same way: as a subtask,
@@ -1295,18 +1393,27 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             Per-detector binned images, from ``_build_detector_image_table``.
         selection_overlays : QTable, optional
             Long-form selection sources, from ``_build_overlay_table``.
+
+        Returns
+        -------
+        result : lsst.pipe.base.Struct
+            ``donutDiagPlot``, ``wfDiagPlot`` and ``selectionDiagPlot``, each
+            a `matplotlib.figure.Figure` or None where that plot had nothing
+            to draw.  `putPlots` persists them.
         """
         catalog = QTable(catalog)
-        self._saveDonutDiagnosticPlot(catalog)
-        self._saveWfDiagnosticPlot(catalog)
-        self._saveFocalPlanePlot(
-            catalog,
-            None if detector_images is None else QTable(detector_images),
-            None if selection_overlays is None else QTable(selection_overlays),
+        return pipeBase.Struct(
+            donutDiagPlot=self._makeDonutDiagnosticPlot(catalog),
+            wfDiagPlot=self._makeWfDiagnosticPlot(catalog),
+            selectionDiagPlot=self._makeFocalPlanePlot(
+                catalog,
+                None if detector_images is None else QTable(detector_images),
+                None if selection_overlays is None else QTable(selection_overlays),
+            ),
         )
 
-    def _saveDonutDiagnosticPlot(self, catalog: QTable) -> None:
-        """Save a single diagnostic PNG with one section per detector.
+    def _makeDonutDiagnosticPlot(self, catalog: QTable) -> "Figure | None":
+        """One figure with a section per detector.
 
         Layout per detector:
           - Left column: stats text (timing, WCS scatter, donut count, errors)
@@ -1320,12 +1427,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             in ``catalog.meta["det_meta"]``, keyed by
             ``f"{det_name}_{visit_id}"``; visit-level scalars are in
             ``catalog.meta``.
+
+        Returns
+        -------
+        figure : matplotlib.figure.Figure or None
+            None when no detector has donuts to show.
         """
         from matplotlib.figure import Figure
         from matplotlib.gridspec import GridSpec
 
         if len(catalog) == 0:
-            return
+            return None
 
         meta = catalog.meta
         run_elapsed = _meta_value(meta, "run_elapsed", u.s)
@@ -1341,7 +1453,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         n_dets = len(dets_with_data)
         if n_dets == 0:
-            return
+            return None
 
         layout = _DONUT_LAYOUT
         fig_w = (
@@ -1351,7 +1463,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         )
         fig_h = n_dets * layout.row_h + layout.legend_h + layout.suptitle_h
 
-        fig = Figure(figsize=(fig_w, fig_h), layout="constrained")
+        fig = Figure(figsize=(fig_w, fig_h), dpi=200, layout="constrained")
         fig.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.0, wspace=0.0)
         butler_str = f"  butler={butler_elapsed:.1f}s" if butler_elapsed > 0 else ""
         fig.suptitle(
@@ -1452,9 +1564,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             columnspacing=2.0,
         )
 
-        fname = f"donut_diag_{visit_id}.png"
-        fig.savefig(fname, dpi=200, bbox_inches="tight")
-        self.log.info("Saved diagnostic plot: %s", fname)
+        return fig
 
     def _drawDonutStamp(self, ax, row, style: _StampStyle, det_meta: dict, rejected=False) -> None:
         """One catalog row's cutout, with aperture and refcat overlays.
@@ -1712,8 +1822,8 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         else:
             ax_bar.axis("off")
 
-    def _saveWfDiagnosticPlot(self, catalog: QTable) -> None:
-        """Save a WF diagnostic PNG modeled on the AOS donut-fits layout.
+    def _makeWfDiagnosticPlot(self, catalog: QTable) -> "Figure | None":
+        """A WF diagnostic figure modeled on the AOS donut-fits layout.
 
         Layout: 2×2 grid of corners (R00, R04, R40, R44).
         Within each corner: one row per fit result.
@@ -1724,12 +1834,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         ----------
         catalog : QTable
             Per-donut table from ``_buildCatalog``.
+
+        Returns
+        -------
+        figure : matplotlib.figure.Figure or None
+            None when no fit left anything to draw.
         """
         from matplotlib.figure import Figure
         from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
         if len(catalog) == 0:
-            return
+            return None
 
         meta = catalog.meta
         visit_id = meta["ref_visit_id"]
@@ -1744,7 +1859,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         if not plottable and not unfitted:
             self.log.info("No WF results with model images; skipping WF diagnostic plot.")
-            return
+            return None
 
         corners = list(CORNER_PAIRS)
         det_id_of = _det_id_by_name(catalog)
@@ -1768,7 +1883,10 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         fig_w = 2 * corner_w + 0.3
         fig_h = 2 * max_rows * layout.row_h + 0.4
 
-        fig = Figure(figsize=(fig_w, fig_h))
+        # The canvas is padded to max_rows and never cropped, so every plot
+        # for a given config stays pixel-comparable however many rows are
+        # populated.
+        fig = Figure(figsize=(fig_w, fig_h), dpi=300)
         outer = GridSpec(
             2,
             2,
@@ -1820,21 +1938,15 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             f"danish={danish_elapsed:.1f}s  proc_total={proc_total:.1f}s",
             fontsize=7,
         )
-        fname = f"wf_diag_{visit_id}.png"
-        # No bbox_inches="tight" here: it crops to drawn content, so the output
-        # size would still shift with the number of populated rows even though
-        # the layout is padded to max_rows. A fixed canvas keeps every plot for
-        # a given config pixel-comparable.
-        fig.savefig(fname, dpi=300)
-        self.log.info("Saved WF diagnostic plot: %s", fname)
+        return fig
 
-    def _saveFocalPlanePlot(
+    def _makeFocalPlanePlot(
         self,
         catalog: QTable,
         detector_images: QTable | None,
         overlays: QTable | None,
-    ) -> None:
-        """Save the focal-plane selection plot per detector.
+    ) -> "Figure | None":
+        """The focal-plane selection plot, one panel per detector.
 
         One panel per corner sensor, each rotated by its own ``n_quarter`` so
         the eight panels together read as the focal plane, arranged as a 2x2 of
@@ -1854,13 +1966,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             Per-detector binned images.  None or empty skips the plot.
         overlays : QTable or None
             Long-form selection sources.  None draws images and donuts only.
+
+        Returns
+        -------
+        figure : matplotlib.figure.Figure or None
+            None when there are no detector images to draw on.
         """
         from matplotlib.figure import Figure
 
         image_rows = _detector_image_rows(detector_images)
         if not image_rows:
             self.log.info("No detector images supplied; skipping focal-plane selection plot.")
-            return
+            return None
 
         # This plot's own meta, not the catalog's: the catalog is empty (and so
         # meta-less) exactly when every donut was rejected, which is a case
@@ -1871,7 +1988,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         n_quarter_by_det = {name: int(row["n_quarter"]) for name, row in image_rows.items()}
 
         layout = _FP_LAYOUT
-        fig = Figure(figsize=(layout.fig_side, layout.fig_side))
+        fig = Figure(figsize=(layout.fig_side, layout.fig_side), dpi=200)
         axs = {
             name: fig.add_axes(rect)
             for name, rect in _focal_plane_axes_rects(n_quarter_by_det, layout).items()
@@ -1902,9 +2019,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         self._drawPairLinks(fig, axs, image_rows, _pair_links(catalog))
         self._drawFocalPlaneLegend(fig, overlays)
 
-        fname = f"selection_diag_{visit_id}.png"
-        fig.savefig(fname, dpi=200)
-        self.log.info("Saved focal-plane selection plot: %s", fname)
+        return fig
 
     def _drawFocalPlanePanel(self, ax, row, det_rows: QTable, points: dict, layout: _FpLayout) -> None:
         """One detector: its rotated image, the selection overlays, the donuts.
