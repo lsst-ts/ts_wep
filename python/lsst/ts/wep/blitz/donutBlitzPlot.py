@@ -21,6 +21,8 @@
 
 """Diagnostic plots regenerated from the ``donutBlitzCornerResults`` table."""
 
+from __future__ import annotations
+
 __all__ = [
     "DonutBlitzPlotOutputConnections",
     "DonutBlitzPlotConnections",
@@ -43,7 +45,6 @@ if TYPE_CHECKING:
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
-from lsst.summit.utils.plotting import stretchDataMidTone
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -277,6 +278,110 @@ _ZK_FAMILY_BANDS = (
 )
 
 
+# The midtone stretch's two tuning constants, carried over with the algorithm:
+# `_MTF_TARGET_BACKGROUND` is the display level the sky is mapped to, and
+# `_MTF_CLIPPING_FACTOR` how many normalized MADs from the median the clipped
+# end sits.
+_MTF_TARGET_BACKGROUND = 0.25
+_MTF_CLIPPING_FACTOR = -2.8
+
+# Makes the median absolute deviation a consistent estimator of the standard
+# deviation for normally distributed data.
+_MADN_SCALE = 1.4826
+
+
+def _midtone_transfer(image: np.ndarray, balance: float) -> np.ndarray:
+    """The midtones transfer function, on data already normalized to [0, 1].
+
+    The rational form is singular at 0, 0.5 and 1, where its limits are 0, 0.5
+    and 1 respectively. Those are substituted wherever the expression came out
+    non-finite rather than tested for up front, since an exact float comparison
+    would miss the near misses that overflow too.
+    """
+    M = np.full(image.shape, balance)
+    limits = (image == 0.5) * 0.5 * (1 - (image == 0)) + (image == 1)
+    result = (M - 1) * image / ((2 * M - 1) * image - M)
+    singular = ~np.isfinite(result)
+    result[singular] = limits[singular]
+    return result
+
+
+def _stretch_midtone(data: np.ndarray) -> np.ndarray:
+    """Stretch an image for display via the midtones transfer function.
+
+    The black point and midtones balance are picked from the data's own median
+    and MAD, so the sky lands at `_MTF_TARGET_BACKGROUND` whatever the exposure
+    level -- which is what shows a faint donut on a bright sky without
+    per-panel tuning.
+
+    Reimplemented from ``lsst.summit.utils.plotting.stretchDataMidTone``
+    (verified to agree exactly) rather than imported. summit_utils is not among
+    ts_wep's declared EUPS dependencies, and importing any part of it executes
+    ``lsst.summit.utils.__init__``, which reaches spectractor and atmospec and
+    so unconditionally imports ``matplotlib.pyplot``: 5100 modules and ~7s,
+    for one array function. Keeping pyplot out also keeps this module's
+    matplotlib imports where they are, inside the drawing methods.
+
+    Parameters
+    ----------
+    data : `np.ndarray`
+        Image to stretch. Must be finite; the call site clips and fills the
+        NaNs that post-ISR saturation leaves behind.
+
+    Returns
+    -------
+    `np.ndarray`
+        The stretched image, in [0, 1].
+
+    Notes
+    -----
+    Unlike the summit_utils original this takes an array only, not any
+    image-like -- the one call site has an array in hand.
+    """
+    data = np.asarray(data, dtype=float)
+
+    # Normalize to [0, 1], subtracting a negative pedestal first so the
+    # division cannot flip signs.
+    pedestal = np.min(data)
+    if pedestal >= 0.0:
+        normalized = data / np.max(data)
+    else:
+        normalized = (data - pedestal) / np.max(data - pedestal)
+
+    median = np.median(normalized)
+    madn = _MADN_SCALE * np.median(np.abs(normalized.ravel() - median))
+
+    # Only the end the sky is nearer gets clipped: a low median means a dark
+    # background and the black point rises to meet it, and conversely for a
+    # bright one. A zero MAD (a constant image) clips neither, there being no
+    # scale to measure against.
+    above_half = median > 0.5
+    clip_low = (
+        min(1.0, max(0.0, median + _MTF_CLIPPING_FACTOR * madn)) if (not above_half and madn != 0) else 0.0
+    )
+    clip_high = (
+        min(1.0, max(0.0, median - _MTF_CLIPPING_FACTOR * madn)) if (above_half and madn != 0) else 1.0
+    )
+
+    # The balance that carries the clipped median onto the target background.
+    if not above_half:
+        offset = median - clip_low
+        balance = (
+            (_MTF_TARGET_BACKGROUND - 1)
+            * offset
+            / ((2 * _MTF_TARGET_BACKGROUND - 1) * offset - _MTF_TARGET_BACKGROUND)
+        )
+    else:
+        headroom = clip_high - median - 1
+        balance = (
+            headroom * _MTF_TARGET_BACKGROUND / (2 * headroom * _MTF_TARGET_BACKGROUND - (clip_high - median))
+        )
+
+    scaled = (normalized - clip_low) / (clip_high - clip_low)
+    clipped = np.clip(scaled * (normalized >= clip_low) + (normalized > clip_high), 0.0, 1.0)
+    return _midtone_transfer(clipped, balance)
+
+
 def _hex_to_rgb(color: str) -> tuple[float, float, float]:
     """A ``#rrggbb`` string as an RGB triple in 0-1."""
     return tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))  # type: ignore[return-value]
@@ -350,7 +455,7 @@ class _StampStyle:
     bkg_annulus_outer_frac: float
 
     @classmethod
-    def from_catalog(cls, catalog: QTable) -> "_StampStyle":
+    def from_catalog(cls, catalog: QTable) -> _StampStyle:
         """Resolve the stamp column and read the visit-level scalars.
 
         The unbinned ``stamp`` column is optional (see corner mode's
@@ -413,7 +518,7 @@ class _WfFitInfo:
     fwhm: float
 
     @classmethod
-    def not_fitted(cls) -> "_WfFitInfo":
+    def not_fitted(cls) -> _WfFitInfo:
         """The stand-in for a donut no fit consumed.
 
         ``nfev=0`` is what the bar label tests to print "x0" rather than
@@ -462,7 +567,7 @@ class _WfGroup:
     # empty (`_NO_ZK`) for a record with no fit.
     zk_dev: np.ndarray
 
-    def exploded(self) -> list["_WfGroup"]:
+    def exploded(self) -> list[_WfGroup]:
         """One single-donut copy of this group per donut it holds.
 
         For modes whose groups do not pair intra with extra: the group's
@@ -513,7 +618,7 @@ class _RowHalf:
     bar_label: str
 
     @classmethod
-    def from_group(cls, group: "_WfGroup | None", defocal: str, det_hdr: str) -> "_RowHalf":
+    def from_group(cls, group: _WfGroup | None, defocal: str, det_hdr: str) -> _RowHalf:
         """Pick the ``defocal`` donut out of ``group``, flat for drawing.
 
         ``group`` is None for a padded layout row.  A paired group holds both
@@ -836,9 +941,7 @@ def _focal_plane_axes_rects(
             rects[second] = (bx, by, long, short)
 
     # Into figure fractions, which is what `add_axes` wants.
-    return {
-        name: (rx / side, ry / side, rw / side, rh / side) for name, (rx, ry, rw, rh) in rects.items()
-    }
+    return {name: (rx / side, ry / side, rw / side, rh / side) for name, (rx, ry, rw, rh) in rects.items()}
 
 
 def _pair_links(catalog: QTable) -> list[tuple[tuple[str, float, float], tuple[str, float, float]]]:
@@ -1412,7 +1515,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             ),
         )
 
-    def _makeDonutDiagnosticPlot(self, catalog: QTable) -> "Figure | None":
+    def _makeDonutDiagnosticPlot(self, catalog: QTable) -> Figure | None:
         """One figure with a section per detector.
 
         Layout per detector:
@@ -1822,7 +1925,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         else:
             ax_bar.axis("off")
 
-    def _makeWfDiagnosticPlot(self, catalog: QTable) -> "Figure | None":
+    def _makeWfDiagnosticPlot(self, catalog: QTable) -> Figure | None:
         """A WF diagnostic figure modeled on the AOS donut-fits layout.
 
         Layout: 2×2 grid of corners (R00, R04, R40, R44).
@@ -1945,7 +2048,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         catalog: QTable,
         detector_images: QTable | None,
         overlays: QTable | None,
-    ) -> "Figure | None":
+    ) -> Figure | None:
         """The focal-plane selection plot, one panel per detector.
 
         One panel per corner sensor, each rotated by its own ``n_quarter`` so
@@ -2007,8 +2110,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             self._drawFocalPlanePanel(ax, row, det_rows, _overlay_points(overlays, det_name), layout)
 
         fig.suptitle(
-            f"Donut selection  visit={visit_id}  "
-            f"binning={int(next(iter(image_rows.values()))['binning'])}",
+            f"Donut selection  visit={visit_id}  binning={int(next(iter(image_rows.values()))['binning'])}",
             fontsize=11,
         )
         # The axes are already at their final rectangles from `add_axes`, so
@@ -2032,12 +2134,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         n_quarter = int(row["n_quarter"])
         height, width = image.shape
         display = np.rot90(image, -n_quarter).T
-        # `stretchDataMidTone` takes plain min/median/max, so the NaNs that
-        # post-ISR saturation leaves behind would collapse the whole panel to a
-        # single value. Substitute the median, which the stretch maps to its own
-        # target background.
+        # `_stretch_midtone` takes plain min/median/max, so the NaNs that
+        # post-ISR saturation leaves behind would collapse the whole panel to
+        # a single value. Substitute the median, which the stretch maps to its
+        # own target background.
         vmin, vmax, median = np.nanquantile(display, [0.005, 0.995, 0.5])
-        display = stretchDataMidTone(np.nan_to_num(np.clip(display, vmin, vmax), nan=median))
+        display = _stretch_midtone(np.nan_to_num(np.clip(display, vmin, vmax), nan=median))
 
         # aspect="auto" is intentional, as "equal" would re-derive the box
         # from the data's 2.036:1 and shrink the axes inside its rectangle,
