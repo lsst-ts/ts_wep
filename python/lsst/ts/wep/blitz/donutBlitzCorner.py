@@ -66,7 +66,7 @@ from .catalogBuilder import (
 from .cutDonutStamps import CutDonutStampsTask
 from .cutoutPipeline import _cutout_corner_detector
 from .dataStructures import CutoutResult, WfGroupResult
-from .donutBlitzPlot import DonutBlitzPlotTask
+from .donutBlitzPlot import DonutBlitzPlotOutputConnections, DonutBlitzPlotTask
 from .forkPool import _dump_stacks_on_hang, _fork_map
 from .lsstCam import _LSSTCAM
 from .measureDonutCandidates import MeasureDonutCandidatesTask
@@ -182,10 +182,14 @@ class _CornerInputs:
 
 
 class DonutBlitzCornerConnections(
-    pipeBase.PipelineTaskConnections,
+    DonutBlitzPlotOutputConnections,
     dimensions=("instrument", "visit"),  # type: ignore
 ):
-    """Pipeline connections for DonutBlitzCornerTask."""
+    """Pipeline connections for DonutBlitzCornerTask.
+
+    The three plot outputs are inherited rather than restated: the `plot`
+    subtask writes them here exactly as it does when it runs standalone.
+    """
 
     raws = connectionTypes.Input(
         doc=(
@@ -296,6 +300,10 @@ class DonutBlitzCornerConnections(
         if config is not None and not config.doSelectionOutput:
             del self.detectorImages
             del self.selectionOverlays
+        if config is not None and not config.savePlots:
+            del self.donutDiagPlot
+            del self.wfDiagPlot
+            del self.selectionDiagPlot
 
 
 class DonutBlitzCornerConfig(
@@ -392,10 +400,12 @@ class DonutBlitzCornerConfig(
     )
     savePlots: pexConfig.Field[bool] = pexConfig.Field[bool](
         doc=(
-            "Generate diagnostic PNGs for each visit. "
-            "Set False in production to skip plot generation and deliver "
-            "Zernikes faster; plots can be generated later by calling "
-            "plot.run() with the in-memory results."
+            "Build and write the visit's three diagnostic plot datasets. Off in "
+            "production, where the cost buys nothing and Zernikes are wanted as "
+            "soon as they exist; DonutBlitzPlotTask can draw the same plots "
+            "later from the catalog, and from the selection datasets too if "
+            "doSelectionOutput persisted them. Also deletes the plot output "
+            "connections, so a pipeline run with this off predicts no plots."
         ),
         default=False,
     )
@@ -650,6 +660,11 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             butlerQC.put(outputs.detectorImages, outputRefs.detectorImages)
             butlerQC.put(outputs.selectionOverlays, outputRefs.selectionOverlays)
 
+        if self.config.savePlots:
+            # Written through the subtask that drew them, so a figure lands in
+            # the butler identically whether it was built here or standalone.
+            self.plot.putPlots(butlerQC, outputRefs, outputs.plots)
+
         if self.config.doZernikesOutput:
             # A ref is predicted for every corner detector the query
             # covers, but only the extra-focal ones are keys here: the
@@ -819,8 +834,9 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         detector_images = _build_detector_image_table(results, visit_id, instrument)
         selection_overlays = _build_overlay_table(results, visit_id, instrument)
 
+        plots = None
         if self.config.savePlots:
-            self.plot.run(catalog, detector_images, selection_overlays)
+            plots = self.plot.run(catalog, detector_images, selection_overlays)
             self.log.info("Diagnostic plot: %.3fs", time.perf_counter() - t_plot0)
 
         # Built from the finished catalog rather than from wf_results, so the
@@ -847,6 +863,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             zernikes=zernikes,
             detectorImages=Table(detector_images),
             selectionOverlays=Table(selection_overlays),
+            plots=plots,
         )
 
     def _indexInputs(

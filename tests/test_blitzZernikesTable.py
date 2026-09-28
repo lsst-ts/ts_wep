@@ -636,6 +636,23 @@ class TestTaskWiring(unittest.TestCase):
         # corner detector and fills only the extra-focal ones.
         self.assertTrue(zernikes.multiple)
 
+    def testPlotConnectionsAbsentWhenSavePlotsDisabled(self) -> None:
+        config = DonutBlitzCornerConfig()
+        self.assertFalse(config.savePlots)
+        outputs = DonutBlitzCornerConnections(config=config).outputs
+        for name in ("donutDiagPlot", "wfDiagPlot", "selectionDiagPlot"):
+            self.assertNotIn(name, outputs)
+
+    def testPlotConnectionsPresentWhenSavePlotsEnabled(self) -> None:
+        config = DonutBlitzCornerConfig()
+        config.savePlots = True
+        connections = DonutBlitzCornerConnections(config=config)
+        for name in ("donutDiagPlot", "wfDiagPlot", "selectionDiagPlot"):
+            self.assertIn(name, connections.outputs)
+            plot = getattr(connections, name)
+            self.assertEqual(plot.storageClass, "Plot")
+            self.assertEqual(set(plot.dimensions), {"instrument", "visit"})
+
     def testCombineDefaultsToDeviationClipping(self) -> None:
         """The other two families are absent; clipping them cannot work."""
         config = DonutBlitzCornerConfig()

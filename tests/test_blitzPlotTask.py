@@ -26,15 +26,15 @@ breaks when a column is renamed.  These tests build the catalog through the
 builder rather than by hand, so the two stay pinned to the same schema.
 """
 
-import os
-import tempfile
 import unittest
 from dataclasses import replace
+from types import SimpleNamespace
 
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable
 
+import lsst.pipe.base as pipeBase
 from lsst.ts.wep.blitz.catalogBuilder import (
     _build_detector_image_table,
     _build_donut_catalog,
@@ -273,32 +273,77 @@ def _catalog():
 class TestDonutBlitzPlotTask(unittest.TestCase):
     """The plot task reads a builder-produced catalog end to end."""
 
-    def testPlotsAreWrittenFromABuilderCatalog(self) -> None:
-        catalog = _catalog()
+    def testFiguresAreBuiltFromABuilderCatalog(self) -> None:
+        plots = DonutBlitzPlotTask(config=DonutBlitzPlotConfig()).run(_catalog())
+        self.assertIsNotNone(plots.donutDiagPlot)
+        self.assertIsNotNone(plots.wfDiagPlot)
+        # The catalog alone carries no detector images, so there is nothing for
+        # the focal-plane plot to draw on.
+        self.assertIsNone(plots.selectionDiagPlot)
+
+    def testEmptyCatalogYieldsNoFigures(self) -> None:
+        plots = DonutBlitzPlotTask(config=DonutBlitzPlotConfig()).run(
+            _build_donut_catalog([], [], [], [], _VISIT_ID, _options())
+        )
+        self.assertIsNone(plots.donutDiagPlot)
+        self.assertIsNone(plots.wfDiagPlot)
+        self.assertIsNone(plots.selectionDiagPlot)
+
+
+class TestPutPlots(unittest.TestCase):
+    """The persistence step both entry points share."""
+
+    class _FakeQC:
+        """Records what would be written, in put order."""
+
+        def __init__(self):
+            self.puts = []
+
+        def put(self, obj, ref):
+            self.puts.append((obj, ref.datasetType.name))
+
+    @staticmethod
+    def _ref(name):
+        return SimpleNamespace(datasetType=SimpleNamespace(name=name))
+
+    def testWritesEveryFigureThatHasARef(self) -> None:
         task = DonutBlitzPlotTask(config=DonutBlitzPlotConfig())
-        cwd = os.getcwd()
-        with tempfile.TemporaryDirectory() as tmp:
-            try:
-                os.chdir(tmp)
-                task.run(catalog)
-                written = sorted(os.listdir(tmp))
-            finally:
-                os.chdir(cwd)
+        butlerQC = self._FakeQC()
+        task.putPlots(
+            butlerQC,
+            SimpleNamespace(
+                donutDiagPlot=self._ref("donutBlitzCornerDonutPlot"),
+                wfDiagPlot=self._ref("donutBlitzCornerWfPlot"),
+                selectionDiagPlot=self._ref("donutBlitzCornerSelectionPlot"),
+            ),
+            pipeBase.Struct(donutDiagPlot="d", wfDiagPlot="w", selectionDiagPlot="s"),
+        )
         self.assertEqual(
-            written,
-            [f"donut_diag_{_VISIT_ID}.png", f"wf_diag_{_VISIT_ID}.png"],
+            butlerQC.puts,
+            [
+                ("d", "donutBlitzCornerDonutPlot"),
+                ("w", "donutBlitzCornerWfPlot"),
+                ("s", "donutBlitzCornerSelectionPlot"),
+            ],
         )
 
-    def testEmptyCatalogWritesNothing(self) -> None:
+    def testSkipsAFigureThatWasNotDrawnAndARefTheConfigDeleted(self) -> None:
+        """The two ordinary ways a plot goes unwritten, neither an error.
+
+        A None figure is a plot that had nothing to draw; a missing ref is a
+        connection the caller's config deleted.
+        """
         task = DonutBlitzPlotTask(config=DonutBlitzPlotConfig())
-        cwd = os.getcwd()
-        with tempfile.TemporaryDirectory() as tmp:
-            try:
-                os.chdir(tmp)
-                task.run(_build_donut_catalog([], [], [], [], _VISIT_ID, _options()))
-                self.assertEqual(os.listdir(tmp), [])
-            finally:
-                os.chdir(cwd)
+        butlerQC = self._FakeQC()
+        task.putPlots(
+            butlerQC,
+            SimpleNamespace(
+                donutDiagPlot=self._ref("donutBlitzCornerDonutPlot"),
+                selectionDiagPlot=self._ref("donutBlitzCornerSelectionPlot"),
+            ),
+            pipeBase.Struct(donutDiagPlot="d", wfDiagPlot="w", selectionDiagPlot=None),
+        )
+        self.assertEqual(butlerQC.puts, [("d", "donutBlitzCornerDonutPlot")])
 
 
 class TestDonutRowsByDetector(unittest.TestCase):
@@ -571,7 +616,7 @@ class TestWfGroupsFromCatalog(unittest.TestCase):
     def testExplodedKeepsTheGroupScalarsPerDonut(self) -> None:
         """The non-paired layout path, which the fixture's mode does not use.
 
-        ``_saveWfDiagnosticPlot`` calls this for every mode whose groups do not
+        ``_makeWfDiagnosticPlot`` calls this for every mode whose groups do not
         pair intra with extra, so it is worth pinning even though a paired
         fixture never reaches it.
         """
@@ -832,52 +877,40 @@ class TestFocalPlanePlot(unittest.TestCase):
             _build_overlay_table(results, _VISIT_ID, "LSSTCam"),
         )
 
-    def _write(self, catalog, images, overlays):
+    def _run(self, catalog, images, overlays):
         task = DonutBlitzPlotTask(config=DonutBlitzPlotConfig())
-        cwd = os.getcwd()
-        with tempfile.TemporaryDirectory() as tmp:
-            try:
-                os.chdir(tmp)
-                task.run(catalog, detector_images=images, selection_overlays=overlays)
-                return sorted(os.listdir(tmp))
-            finally:
-                os.chdir(cwd)
+        return task.run(catalog, detector_images=images, selection_overlays=overlays)
 
-    def testCatalogAloneStillWritesTheOtherTwoPlots(self) -> None:
+    def testCatalogAloneStillBuildsTheOtherTwoPlots(self) -> None:
         """The standalone-degradation contract.
 
         Run without ``doSelectionOutput`` and this task gets the catalog only;
         the focal-plane plot is skipped and the other two are unaffected.
         """
-        self.assertEqual(
-            self._write(_catalog(), None, None),
-            [f"donut_diag_{_VISIT_ID}.png", f"wf_diag_{_VISIT_ID}.png"],
-        )
+        plots = self._run(_catalog(), None, None)
+        self.assertIsNone(plots.selectionDiagPlot)
+        self.assertIsNotNone(plots.donutDiagPlot)
+        self.assertIsNotNone(plots.wfDiagPlot)
 
-    def testSelectionPlotIsWrittenWhenTheTablesArePresent(self) -> None:
+    def testSelectionPlotIsBuiltWhenTheTablesArePresent(self) -> None:
         results = [_result_with_view("R00_SW0", 2), _result_with_view("R00_SW1", 4)]
         images, overlays = self._tables(results)
-        self.assertEqual(
-            self._write(_catalog(), images, overlays),
-            [
-                f"donut_diag_{_VISIT_ID}.png",
-                f"selection_diag_{_VISIT_ID}.png",
-                f"wf_diag_{_VISIT_ID}.png",
-            ],
-        )
+        plots = self._run(_catalog(), images, overlays)
+        self.assertIsNotNone(plots.selectionDiagPlot)
+        self.assertIsNotNone(plots.donutDiagPlot)
+        self.assertIsNotNone(plots.wfDiagPlot)
 
     def testADetectorMissingFromTheImageTableLeavesItsCellBlank(self) -> None:
         """Only R00, but the figure still spans the whole focal plane."""
         images, overlays = self._tables([_result_with_view("R00_SW0", 2)])
         self.assertEqual(images["det_name"].tolist(), ["R00_SW0"])
-        written = self._write(_catalog(), images, overlays)
-        self.assertIn(f"selection_diag_{_VISIT_ID}.png", written)
+        self.assertIsNotNone(self._run(_catalog(), images, overlays).selectionDiagPlot)
 
     def testOverlaysAreOptional(self) -> None:
         """Images without overlays draw pixels and donuts, not nothing."""
         results = [_result_with_view("R00_SW0", 2), _result_with_view("R00_SW1", 4)]
         images, _ = self._tables(results)
-        self.assertIn(f"selection_diag_{_VISIT_ID}.png", self._write(_catalog(), images, None))
+        self.assertIsNotNone(self._run(_catalog(), images, None).selectionDiagPlot)
 
     def testNoRefcatStillProducesOverlayRowsForTheOtherStages(self) -> None:
         results = [_result_with_view("R00_SW0", 2, refcat=False)]
