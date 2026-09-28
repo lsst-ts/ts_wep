@@ -17,6 +17,15 @@ Version History
 
 .. towncrier release notes start
 
+v17.14.1 (2026-09-28)
+=====================
+
+Bug Fixes
+---------
+
+- Fixed ``ExposurePairer`` rejecting pairs across a 360 -> 0 degree rollover of the rotator angle. The rotation-threshold check now uses the shortest-arc difference; LATISS headers can report ``boresightRotAngle`` of 360.000 on one exposure of a CWFS pair and 0.000 on the next, which the unwrapped difference read as a 360 degree change. (`RSO-957 <https://rubinobs.atlassian.net//browse/RSO-957>`_)
+
+
 v17.14.0 (2026-09-23)
 =====================
 
