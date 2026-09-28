@@ -37,6 +37,7 @@ from astropy.table import QTable, Table
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
+from lsst.summit.utils.plotting import stretchDataMidTone
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -1916,35 +1917,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         n_quarter = int(row["n_quarter"])
         height, width = image.shape
         display = np.rot90(image, -n_quarter).T
+        # `stretchDataMidTone` takes plain min/median/max, so the NaNs that
+        # post-ISR saturation leaves behind would collapse the whole panel to a
+        # single value. Substitute the median, which the stretch maps to its own
+        # target background.
+        vmin, vmax, median = np.nanquantile(display, [0.005, 0.995, 0.5])
+        display = stretchDataMidTone(np.nan_to_num(np.clip(display, vmin, vmax), nan=median))
 
-        # nanpercentile because post-ISR saturation leaves NaNs. The fallback
-        # covers a uniform or all-NaN panel, where vmin == vmax renders flat.
-        finite = display[np.isfinite(display)]
-        if finite.size:
-            vmin, vmax = np.nanpercentile(finite, [1, 99])
-        else:
-            vmin, vmax = 0.0, 1.0
-        if not vmax > vmin:
-            vmin, vmax = float(vmin), float(vmin) + 1.0
-        # origin="upper", and it is load-bearing rather than a default left in
-        # place. The display transform is `rot90(arr, -n_quarter).T`, and that
-        # transpose is a *reflection*, not a rotation -- it inverts handedness.
-        # Drawing the result with y increasing upward leaves the inversion in,
-        # so every panel comes out mirrored: the most-vignetted corner points
-        # toward the focal-plane center instead of away from it, on all eight
-        # sensors. Row-downward display supplies the compensating flip.
-        # Verified against the camera: under "upper" the maximum-field cell of
-        # all 8 corner sensors lands in the panel corner farthest from the
-        # figure center, and under "lower" none of them do. The stamp plots
-        # above are unaffected -- they draw an already-CCS stamp about its own
-        # center, with no absolute detector frame to be handed-ness relative
-        # to. aspect="auto", so the image fills the rectangle
-        # `_focal_plane_axes_rects` assigned it. "equal" would re-derive the
-        # box from the data's 2.036:1 and shrink the axes inside its rectangle,
-        # putting the leftover back into the seams -- which is the bug being
-        # fixed. The 1.8% stretch that buys exact tiling is deliberate; see
-        # `_FP_PANEL_ASPECT`.
-        ax.imshow(display, origin="upper", cmap="gray", vmin=vmin, vmax=vmax, aspect="auto")
+        # aspect="auto" is intentional, as "equal" would re-derive the box
+        # from the data's 2.036:1 and shrink the axes inside its rectangle,
+        # putting the leftover back into the seams. The 1.8% stretch that buys
+        # exact tiling is deliberate; see `_FP_PANEL_ASPECT`.
+        ax.imshow(display, origin="upper", cmap="Greys_r", aspect="auto")
 
         def to_display(x_det, y_det):
             """Detector-frame coordinates to panel's display coordinates."""
