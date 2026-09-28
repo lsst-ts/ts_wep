@@ -714,9 +714,7 @@ class TestBinnedCoord(unittest.TestCase):
 
     def testBinningAndOriginAreReadFromTheRow(self) -> None:
         """Never assumed, so an older run's plot cannot mis-scale."""
-        r, c = _binned_coord(
-            100.0, 200.0, {"binning": 2, "bbox_min_x": 10, "bbox_min_y": 20}
-        )
+        r, c = _binned_coord(100.0, 200.0, {"binning": 2, "bbox_min_x": 10, "bbox_min_y": 20})
         self.assertAlmostEqual(float(c), (100.0 - 10 - 0.5) / 2)
         self.assertAlmostEqual(float(r), (200.0 - 20 - 0.5) / 2)
 
@@ -775,9 +773,7 @@ class TestFocalPlaneAxesRects(unittest.TestCase):
         ext = self._inches()
         for corner, _, _, first, second in _FP_MOSAIC:
             with self.subTest(corner=corner):
-                self.assertAlmostEqual(
-                    self._gap(ext[first], ext[second]), self.layout.gap_intra, places=6
-                )
+                self.assertAlmostEqual(self._gap(ext[first], ext[second]), self.layout.gap_intra, places=6)
 
     def testInterCornerGapsAreEqualBothDirections(self) -> None:
         """Horizontal and vertical, which single ``wspace`` could not do."""
@@ -790,9 +786,7 @@ class TestFocalPlaneAxesRects(unittest.TestCase):
             ("R40_SW0", "R44_SW0"),
         ):
             with self.subTest(pair=(a, b)):
-                self.assertAlmostEqual(
-                    self._gap(ext[a], ext[b]), self.layout.gap_inter, places=6
-                )
+                self.assertAlmostEqual(self._gap(ext[a], ext[b]), self.layout.gap_inter, places=6)
 
     def testPanelsAreExactlyTheForcedAspect(self) -> None:
         """2:1, not the sensors' true 2.036:1.
