@@ -576,13 +576,17 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if len(intrinsicZernikes) == 0:
             intrinsicZernikesExtra = None
             intrinsicZernikesIntra = None
+            intrinsicMetadata = None
         elif len(intrinsicZernikes) == 1:
             intrinsicZernikesExtra = intrinsicZernikes[0]
             intrinsicZernikesIntra = intrinsicZernikes[0]
+            intrinsicMetadata = [inputRefs.intrinsicZernikes[0]] * 2
         else:
             detectors = [ref.dataId["detector"] for ref in inputRefs.intrinsicZernikes]
+            intrinsicMetadata = [inputRefs.intrinsicZernikes[0], inputRefs.intrinsicZernikes[1]]
             if detectors[0] < detectors[1]:
                 intrinsicZernikes.reverse()
+                intrinsicMetadata.reverse()
             intrinsicZernikesIntra, intrinsicZernikesExtra = intrinsicZernikes
 
         outputs = self.run(
@@ -591,6 +595,17 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             intrinsicZernikesIntra=intrinsicZernikesIntra,
             numCores=butlerQC.resources.num_cores,
         )
+        # Add provenance in the metadata recording which intrinsic Zernike
+        # calibration datasets were used for each defocal type.
+        if intrinsicMetadata is not None:
+            for defocal, intrinsic_ref in zip(["intra", "extra"], intrinsicMetadata):
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = intrinsic_ref.run
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = str(intrinsic_ref.id)
+        else:
+            for defocal in ["intra", "extra"]:
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = "None"
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = "None"
+        # Write the outputs to the output collection
         butlerQC.put(outputs, outputRefs)
 
     @timeMethod
