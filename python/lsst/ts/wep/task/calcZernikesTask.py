@@ -656,13 +656,17 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if len(intrinsicZernikes) == 0:
             intrinsicZernikesExtra = None
             intrinsicZernikesIntra = None
+            intrinsicMetadata = None
         elif len(intrinsicZernikes) == 1:
             intrinsicZernikesExtra = intrinsicZernikes[0]
             intrinsicZernikesIntra = intrinsicZernikes[0]
+            intrinsicMetadata = [inputRefs.intrinsicZernikes[0]] * 2
         else:
             detectors = [ref.dataId["detector"] for ref in inputRefs.intrinsicZernikes]
+            intrinsicMetadata = [inputRefs.intrinsicZernikes[0], inputRefs.intrinsicZernikes[1]]
             if detectors[0] < detectors[1]:
                 intrinsicZernikes.reverse()
+                intrinsicMetadata.reverse()
             intrinsicZernikesIntra, intrinsicZernikesExtra = intrinsicZernikes
 
         runStart = time.perf_counter()
@@ -675,6 +679,21 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         runFinished = time.perf_counter()
         self.log.info(f"{taskName}: run() took {runFinished - runStart:.3f} s")
 
+        # Add provenance in the metadata recording which intrinsic Zernike
+        # calibration datasets were used for each defocal type.
+        metaAddStart = time.perf_counter()
+        if intrinsicMetadata is not None:
+            for defocal, intrinsic_ref in zip(["intra", "extra"], intrinsicMetadata):
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = intrinsic_ref.run
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = str(intrinsic_ref.id)
+        else:
+            for defocal in ["intra", "extra"]:
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = "None"
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = "None"
+        metaAddFinished = time.perf_counter()
+        self.log.info(f"{taskName}: runQuantum metadata update took {metaAddFinished - metaAddStart:.3f} s")
+
+        # Write the outputs to the output collection
         putStart = time.perf_counter()
         butlerQC.put(outputs, outputRefs)
         putFinished = time.perf_counter()
