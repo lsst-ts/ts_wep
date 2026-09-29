@@ -26,6 +26,7 @@ from __future__ import annotations
 __all__ = ["WavefrontFittingConfig", "WavefrontFittingTask"]
 
 import contextlib
+import hashlib
 import logging
 import os
 import signal
@@ -189,6 +190,15 @@ def _dense_dev(zk_dev: np.ndarray, noll_indices: Sequence[int]) -> np.ndarray:
         if k < len(zk_dev):
             out[j] = zk_dev[k]
     return out
+
+
+def _fileDigest(path: str) -> str | None:
+    """SHA-256 of a file's contents, or `None` if it cannot be read."""
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
 
 
 def _build_wf_groups(
@@ -627,14 +637,60 @@ class WavefrontFittingTask(pipeBase.Task):
         return os.path.join(danish.datadir, name)
 
     def resolvedMaskModel(self) -> str:
-        """The mask file name for the catalog, with symlinks followed.
+        """The specific mask file name to record in the catalog.
 
-        ``RubinObsc.yaml`` is a symlink in the danish data directory, so the
-        configured name can outlive the file it pointed at when the run
-        happened. Recording the concrete target is what makes two catalogs
-        comparable after the fact.
+        ``RubinObsc.yaml`` is a generic alias for whichever versioned mask is
+        current -- in danish's source tree it is a symlink, and it has been
+        repointed across releases (v3.14 through danish 1.2, v1000 from 1.3).
+        The configured name therefore does not say which mask a past run used,
+        so the catalog records the versioned name instead, which is what lets
+        two catalogs be compared after the fact.
+
+        The alias resolves two ways, because packaging does not preserve the
+        symlink: ``setuptools`` dereferences it, so an installed danish has
+        ``RubinObsc.yaml`` as a regular file holding a byte-for-byte copy of
+        its former target, which still ships under its own name. A symlink is
+        followed directly; a dereferenced copy is matched to its twin by
+        content digest. When neither applies -- a mask with no versioned
+        sibling, such as a ``policy:`` file -- the configured name is already
+        the specific one and is returned as is.
         """
-        return os.path.basename(os.path.realpath(self._maskModelPath()))
+        path = self._maskModelPath()
+        # Compare basenames, not whole paths: realpath also rewrites parent
+        # directories that are themselves links, which says nothing about
+        # whether this file is one.
+        target = os.path.basename(os.path.realpath(path))
+        if target != os.path.basename(path):
+            return target
+        return os.path.basename(self._matchMaskModelByContent(path))
+
+    @staticmethod
+    def _matchMaskModelByContent(path: str) -> str:
+        """Find the versioned sibling whose contents ``path`` duplicates.
+
+        Returns ``path`` itself when there is no such sibling. Candidates are
+        restricted to names extending ``path``'s stem with a suffix -- for
+        ``RubinObsc.yaml``, the ``RubinObsc_*.yaml`` files -- so an unrelated
+        mask that merely happens to have equal contents cannot be substituted.
+        """
+        directory, name = os.path.split(path)
+        stem, ext = os.path.splitext(name)
+        try:
+            siblings = sorted(os.listdir(directory))
+        except OSError:
+            return path
+
+        candidates = [s for s in siblings if s != name and s.startswith(f"{stem}_") and s.endswith(ext)]
+        if not candidates:
+            return path
+
+        digest = _fileDigest(path)
+        if digest is None:
+            return path
+        for candidate in candidates:
+            if _fileDigest(os.path.join(directory, candidate)) == digest:
+                return os.path.join(directory, candidate)
+        return path
 
     def run(self, group: _WfGroup) -> pipeBase.Struct:
         """Fit wavefront aberrations for a group of donuts.
