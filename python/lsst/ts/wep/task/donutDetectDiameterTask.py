@@ -978,7 +978,9 @@ class DonutDetectDiameterTask(pipeBase.Task):
             argmaxAtEdge=edgeAligned,
             curveInfo=curveInfo,
         )
-        if not curves:
+        # `dGrid` is set by the same iteration that appends the first curve, so
+        # this is also the "no usable curves" exit.
+        if dGrid is None:
             return result
 
         combined = np.median(np.vstack(curves), axis=0)
