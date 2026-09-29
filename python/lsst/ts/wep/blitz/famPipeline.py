@@ -424,8 +424,7 @@ def _fam_detector_worker(args: tuple) -> FamDetectorResult:
         # intra/extra label to set: the side is the offsets, and is recoverable
         # from visit_id.
         by_exp = {}
-        for result in results:
-            exp = result.visit_id
+        for exp, result in zip((intra_exp, extra_exp), results, strict=True):
             offsets = offsets_by_exp[exp]
             accepted = result.catalog
             for d in accepted + result.rejected_catalog:

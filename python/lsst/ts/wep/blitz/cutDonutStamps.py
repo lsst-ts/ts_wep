@@ -336,6 +336,8 @@ class CutDonutStampsTask(pipeBase.Task):
         stamp = np.array(image[rmin:rmax, cmin:cmax])
         stamp_ccs = np.rot90(stamp, k=-context.n_quarter).T
 
+        nearby_photo: list[tuple[float, float, float]]
+        nearby_astrom: list[tuple[float, float, float]]
         if refcat_arrays is None:
             nearby_photo, nearby_astrom = [], []
         else:

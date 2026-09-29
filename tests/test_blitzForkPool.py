@@ -551,6 +551,7 @@ class TestDecodeResult(unittest.TestCase):
     """The framing, exercised directly at every boundary."""
 
     def testRoundTrip(self) -> None:
+        value: object
         for value in ({"a": 1}, None, [], b"bytes", 0):
             with self.subTest(value=value):
                 payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)

@@ -319,7 +319,7 @@ def build_zernikes_tables(
             continue
 
         sw0, sw1 = CORNER_PAIRS[corner]
-        det_names_by_side = {"extra": None, "intra": None}
+        det_names_by_side: dict[str, str | None] = {"extra": None, "intra": None}
         det_id = None
         table = _init_table(noll_indices)
         fwhm: list[float] = []

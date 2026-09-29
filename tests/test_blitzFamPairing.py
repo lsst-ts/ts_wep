@@ -101,6 +101,8 @@ def _defocused_angles(thx, thy):
 class FamPairingTestCase(unittest.TestCase):
     """Shared setup: the batoid telescope the radial scale is derived from."""
 
+    telescope: batoid.Optic
+
     @classmethod
     def setUpClass(cls) -> None:
         # The pairing *looks up* the radial scales rather than computing
