@@ -186,6 +186,10 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
 
+        # Check for fit failures and replace Zernikes
+        # with NaNs for those donuts
+        zkTable = self._checkFitFailures(zkTable, donutQualityTable)
+
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
 

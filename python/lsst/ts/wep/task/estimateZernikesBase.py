@@ -79,11 +79,12 @@ def estimate_zk_pair(
         # Don't let a single bad donut pair abort the whole task. Log the
         # failure with a full traceback and return NaN Zernikes flagged as a
         # fit failure so this pair is dropped downstream.
-        log.exception(
+        log.warning(
             "Zernike estimation failed for Extra Donut %s, Intra Donut %s; "
             "flagging pair as a fit failure and continuing.",
             donutExtra.donut_id,
             donutIntra.donut_id,
+            exc_info=True,
         )
         return _failedZkResult(wfEstimator)
     log.info(
@@ -112,9 +113,10 @@ def estimate_zk_single(
         # Don't let a single bad donut abort the whole task. Log the failure
         # with a full traceback and return NaN Zernikes flagged as a fit
         # failure so this donut is dropped downstream.
-        log.exception(
+        log.warning(
             "Zernike estimation failed for Donut %s; flagging as a fit failure and continuing.",
             donut.donut_id,
+            exc_info=True,
         )
         return _failedZkResult(wfEstimator)
     log.info(f"Zernike estimation completed for Donut {donut.donut_id}")

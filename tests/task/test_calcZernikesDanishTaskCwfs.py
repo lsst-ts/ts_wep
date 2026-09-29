@@ -26,9 +26,11 @@ from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
 enforce_single_threading()
 
+import astropy.units as u
+import lsst.pipe.base as pipeBase
 import lsst.utils.tests
 import numpy as np
-from astropy.table import vstack
+from astropy.table import QTable, vstack
 from lsst.daf.butler import Butler
 from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import (
@@ -401,6 +403,75 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertCountEqual(
             [WfAlgorithmName.Danish.value] * len(self.donutStampsExtra), zkCalc.meta["estimatorInfo"]["algo"]
         )
+
+    def testCheckFitFailures(self) -> None:
+        """Test _checkFitFailures directly.
+
+        This method was factored out of run() so it can be reused by
+        CalcZernikesUnpairedTask, so it is exercised here in isolation.
+        """
+        nollIndices = self.task.nollIndices
+
+        def makeTable(nDonuts: int, fitSuccess: list[bool] | None = None) -> QTable:
+            # Leading "average" row plus nDonuts donut rows, with every
+            # Zernike/deviation entry filled with a finite sentinel value.
+            zkTable = self.task.initZkTable()
+            for _ in range(nDonuts):
+                zkTable.add_row()
+            for j in nollIndices:
+                zkTable[f"Z{j}"] = 1.0 * u.nm
+                zkTable[f"Z{j}_deviation"] = 2.0 * u.nm
+            zkTable.meta["estimatorInfo"] = {}
+            if fitSuccess is not None:
+                zkTable.meta["estimatorInfo"]["fit_success"] = fitSuccess
+            return zkTable
+
+        donutQualityTable = QTable()
+
+        # No fit_success info: table returned unchanged.
+        zkTable = makeTable(nDonuts=3)
+        result = self.task._checkFitFailures(zkTable, donutQualityTable)
+        self.assertIs(result, zkTable)
+        for j in nollIndices:
+            self.assertTrue(np.all(np.isfinite(result[f"Z{j}"])))
+            self.assertTrue(np.all(np.isfinite(result[f"Z{j}_deviation"])))
+
+        # All donuts succeed: nothing is NaN'd out.
+        zkTable = makeTable(nDonuts=3, fitSuccess=[True, True, True])
+        result = self.task._checkFitFailures(zkTable, donutQualityTable)
+        for j in nollIndices:
+            self.assertTrue(np.all(np.isfinite(result[f"Z{j}"])))
+            self.assertTrue(np.all(np.isfinite(result[f"Z{j}_deviation"])))
+
+        # Partial failures: only the failed donut rows are replaced with NaN.
+        fitSuccess = [True, False, True, False]
+        zkTable = makeTable(nDonuts=4, fitSuccess=fitSuccess)
+        result = self.task._checkFitFailures(zkTable, donutQualityTable)
+        for j in nollIndices:
+            for i, success in enumerate(fitSuccess):
+                row = i + 1  # +1 to skip the leading average row
+                if success:
+                    self.assertTrue(np.isfinite(result[f"Z{j}"][row]))
+                    self.assertTrue(np.isfinite(result[f"Z{j}_deviation"][row]))
+                else:
+                    self.assertTrue(np.isnan(result[f"Z{j}"][row]))
+                    self.assertTrue(np.isnan(result[f"Z{j}_deviation"][row]))
+            # The average row (index 0) is never touched.
+            self.assertTrue(np.isfinite(result[f"Z{j}"][0]))
+
+        # All donuts fail: an empty result Struct is returned, carrying the
+        # quality table through and marking every donut as not blur clipped.
+        nDonuts = 3
+        zkTable = makeTable(nDonuts=nDonuts, fitSuccess=[False] * nDonuts)
+        result = self.task._checkFitFailures(zkTable, donutQualityTable)
+        self.assertIsInstance(result, pipeBase.Struct)
+        self.assertIs(result.donutQualityTable, donutQualityTable)
+        self.assertEqual(zkTable.meta["estimatorInfo"]["blur_clipped"], [False] * nDonuts)
+        # The returned Zernike table is the one we passed in.
+        self.assertIs(result.zernikes, zkTable)
+        # The raw/average outputs are all NaN.
+        self.assertTrue(np.all(np.isnan(result.outputZernikesAvg)))
+        self.assertTrue(np.all(np.isnan(result.outputZernikesRaw)))
 
     def testBlurClip(self) -> None:
         # Get sample zernike table

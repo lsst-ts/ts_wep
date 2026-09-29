@@ -44,6 +44,52 @@ class _ConcreteTask(EstimateZernikesBaseTask):
         return WfAlgorithmName.TIE
 
 
+# The classes below are defined at module level (not as MagicMocks) so they can
+# be pickled and sent to worker processes when numCores > 1.
+class _FakeDonut:
+    """Picklable donut stub with the attributes the estimator touches.
+
+    A donut is flagged "bad" by giving it ``wep_im=None``; the fake
+    estimator raises on such donuts to exercise the failure path.
+    """
+
+    def __init__(self, donut_id: int, bad: bool = False) -> None:
+        self.donut_id = donut_id
+        self.wep_im = None if bad else f"image-{donut_id}"
+
+
+class _FakeDonutStamps(list):
+    """List of donut stubs that also carries the metadata attribute
+    ``_get_obs_conditions`` expects."""
+
+    metadata = {
+        "BORESIGHT_ROT_ANGLE_RAD": 0.1,
+        "BORESIGHT_PAR_ANGLE_RAD": 0.3,
+        "BORESIGHT_ALT_RAD": 1.0,
+    }
+
+
+class _FakeWfEstimator:
+    """Picklable stand-in for WfEstimator.
+
+    Returns zero Zernikes for good donuts and raises when the extra-focal
+    image is None, mimicking a single failed fit among successes. A bad
+    donut is therefore placed on the extra-focal side (in single-donut mode
+    that side carries the only image, so the same rule applies).
+    """
+
+    def __init__(self, nollIndices: range = range(4, 23)) -> None:
+        self.nollIndices = np.array(list(nollIndices))
+        self.history: dict = {}
+
+    def estimateZk(
+        self, wepImExtra: object, wepImIntra: object = None, obs: object = None
+    ) -> tuple[np.ndarray, dict]:
+        if wepImExtra is None:
+            raise ValueError("Cannot compute zernike with failed rays.")
+        return np.zeros(len(self.nollIndices)), {"fit_success": True, "fwhm": 1.0}
+
+
 class TestEstimateZernikesBaseConfig(unittest.TestCase):
     def testTimeoutDefault(self) -> None:
         config = EstimateZernikesBaseConfig()
@@ -243,7 +289,7 @@ class TestEstimateZkFailureHandling(unittest.TestCase):
         obs = ObservingConditions()
         args = (self._makeDonut(1), self._makeDonut(2), obs, wfEst)
 
-        with self.assertLogs(level="ERROR") as cm:
+        with self.assertLogs(level="WARNING") as cm:
             zk, zkMeta, history = estimate_zk_pair(args)
 
         self.assertEqual(len(zk), len(wfEst.nollIndices))
@@ -258,7 +304,7 @@ class TestEstimateZkFailureHandling(unittest.TestCase):
         obs = ObservingConditions()
         args = (self._makeDonut(1), obs, wfEst)
 
-        with self.assertLogs(level="ERROR"):
+        with self.assertLogs(level="WARNING"):
             zk, zkMeta, history = estimate_zk_single(args)
 
         self.assertEqual(len(zk), len(wfEst.nollIndices))
@@ -279,6 +325,47 @@ class TestEstimateZkFailureHandling(unittest.TestCase):
         np.testing.assert_array_equal(zk, expectedZk)
         self.assertTrue(zkMeta["fit_success"])
         self.assertEqual(history, {"foo": "bar"})
+
+
+class TestMultiCoreFailureHandling(unittest.TestCase):
+    """A single bad donut must not crash a real multiprocessing run."""
+
+    def testEstimateFromPairsMultiCoreToleratesBadDonut(self) -> None:
+        task = _ConcreteTask()
+        wfEst = _FakeWfEstimator()
+
+        # Three pairs; the middle extra-focal donut is bad and will raise.
+        donutStampsExtra = _FakeDonutStamps([_FakeDonut(0), _FakeDonut(1, bad=True), _FakeDonut(2)])
+        donutStampsIntra = _FakeDonutStamps([_FakeDonut(10), _FakeDonut(11), _FakeDonut(12)])
+
+        zkArray, zkMeta = task.estimateFromPairs(donutStampsExtra, donutStampsIntra, wfEst, numCores=2)
+
+        # One row per pair, one column per Noll index. The whole task
+        # completed instead of crashing on the bad pair.
+        self.assertEqual(zkArray.shape, (3, len(wfEst.nollIndices)))
+
+        # Only the bad pair is flagged and NaN'd; the others succeeded.
+        self.assertEqual(zkMeta["fit_success"], [True, False, True])
+        self.assertFalse(np.any(np.isnan(zkArray[0])))
+        self.assertTrue(np.all(np.isnan(zkArray[1])))
+        self.assertFalse(np.any(np.isnan(zkArray[2])))
+
+    def testEstimateFromIndivStampsMultiCoreToleratesBadDonut(self) -> None:
+        task = _ConcreteTask()
+        wfEst = _FakeWfEstimator()
+
+        # Three extra-focal single donuts (the middle one is bad and will
+        # raise) and no intra-focal stamps.
+        donutStampsExtra = _FakeDonutStamps([_FakeDonut(0), _FakeDonut(1, bad=True), _FakeDonut(2)])
+        donutStampsIntra = _FakeDonutStamps([])
+
+        zkArray, zkMeta = task.estimateFromIndivStamps(donutStampsExtra, donutStampsIntra, wfEst, numCores=2)
+
+        self.assertEqual(zkArray.shape, (3, len(wfEst.nollIndices)))
+        self.assertEqual(zkMeta["fit_success"], [True, False, True])
+        self.assertTrue(np.all(np.isnan(zkArray[1])))
+        self.assertFalse(np.any(np.isnan(zkArray[0])))
+        self.assertFalse(np.any(np.isnan(zkArray[2])))
 
 
 class TestCollateZkMeta(unittest.TestCase):

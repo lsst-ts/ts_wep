@@ -573,6 +573,40 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             return f"{className} ({label})"
         return className
 
+    def _checkFitFailures(self, zkTable: QTable, donutQualityTable: QTable) -> QTable | pipeBase.Struct:
+        """Check for fit failures in the Zernike estimation and replace
+        Zernikes with NaNs for those donuts.
+
+        Parameters
+        ----------
+        zkTable : astropy.table.QTable
+            Zernike table.
+        donutQualityTable : astropy.table.QTable
+            Donut quality table.
+
+        Returns
+        -------
+        astropy.table.QTable
+            Zernike table where donuts with fit failures have been changed
+            to NaN.
+        """
+
+        # If we have a fit failure recorded then replace Zernikes
+        # with NaNs for those donuts so we don't use them in combining.
+        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
+            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
+            if np.sum(fitSuccess) == 0:
+                self.log.info("All donuts had fit failures. Returning empty results.")
+                # all donuts are fit failures, so none are blur clipped
+                zkTable.meta["estimatorInfo"]["blur_clipped"] = [False] * (len(zkTable) - 1)
+                return self.empty(qualityTable=donutQualityTable, zernikeTable=zkTable)
+            failIdx = np.where(~np.array(fitSuccess))[0]
+            for j in self.nollIndices:
+                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
+                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+
+        return zkTable
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
@@ -706,19 +740,9 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
 
-        # If we have a fit failure recorded then replace Zernikes
-        # with NaNs for those donuts so we don't use them in combining.
-        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
-            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
-            if np.sum(fitSuccess) == 0:
-                self.log.info("All donuts had fit failures. Returning empty results.")
-                # all donuts are fit failures, so none are blur clipped
-                zkTable.meta["estimatorInfo"]["blur_clipped"] = [False] * (len(zkTable) - 1)
-                return self.empty(qualityTable=donutQualityTable, zernikeTable=zkTable)
-            failIdx = np.where(~np.array(fitSuccess))[0]
-            for j in self.nollIndices:
-                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
-                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+        # Check for fit failures and replace Zernikes
+        # with NaNs for those donuts
+        zkTable = self._checkFitFailures(zkTable, donutQualityTable)
 
         # Combine Zernikes
         zkTable = self.combineZernikes.run(zkTable).combinedTable
