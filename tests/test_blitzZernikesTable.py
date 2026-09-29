@@ -21,9 +21,13 @@
 
 """The per-corner `zernikes` compatibility table."""
 
+from __future__ import annotations
+
 import os
 import tempfile
 import unittest
+from collections.abc import Iterator, Sequence
+from typing import Any
 
 import astropy.units as u
 import numpy as np
@@ -50,14 +54,14 @@ _EXTRA_SNR = {1: 900.0, 2: 500.0, 3: 100.0}
 _INTRA_SNR = {11: 800.0, 12: 400.0}
 
 
-def _donut(det_name, det_id, donut_id, snr, **overrides):
+def _donut(det_name: str, det_id: int, donut_id: int, snr: float, **overrides: Any) -> Donut:
     """One donut of the R00 fixture.
 
     Field angles and centroid vary with ``donut_id`` so that a test can tell
     which donut a row was populated from -- a fixture where every donut looked
     alike could not catch an intra/extra transposition.
     """
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         det_name=det_name,
         stamp=np.ones((167, 167), dtype=np.float32),
         thx_ccs=0.01 * donut_id,
@@ -88,15 +92,15 @@ def _donut(det_name, det_id, donut_id, snr, **overrides):
     return Donut(**kwargs)
 
 
-def _fixture_donuts():
+def _fixture_donuts() -> tuple[list[Donut], list[Donut]]:
     """The R00 fixture: extra-focal A,B,C and intra-focal P,Q."""
     extra = [_donut("R00_SW0", 191, i, snr) for i, snr in _EXTRA_SNR.items()]
     intra = [_donut("R00_SW1", 192, i, snr) for i, snr in _INTRA_SNR.items()]
     return extra, intra
 
 
-def _options(**overrides) -> _CatalogOptions:
-    kwargs = dict(
+def _options(**overrides: Any) -> _CatalogOptions:
+    kwargs: dict[str, Any] = dict(
         stamp_size=167,
         binning=2,
         noll_indices=_NOLL,
@@ -113,7 +117,14 @@ def _options(**overrides) -> _CatalogOptions:
     return _CatalogOptions(**kwargs)
 
 
-def _catalog(groups, unmatched=(), mode="paired", zk_um=1.0, fwhm=None, success=None):
+def _catalog(
+    groups: dict[str, list[Donut]],
+    unmatched: Sequence[Donut] = (),
+    mode: str = "paired",
+    zk_um: float | dict[str, float] = 1.0,
+    fwhm: dict[str, float] | None = None,
+    success: dict[str, bool] | None = None,
+) -> QTable:
     """A per-donut catalog with ``groups`` mapping group_id -> member donuts.
 
     ``zk_um`` may be a scalar (all deviations that value) or a dict keyed by
@@ -124,7 +135,7 @@ def _catalog(groups, unmatched=(), mode="paired", zk_um=1.0, fwhm=None, success=
     fwhm = fwhm or {}
     success = success or {}
 
-    wf_results = []
+    wf_results: list[WfGroupResult] = []
     for gid, members in groups.items():
         value = zk_um[gid] if isinstance(zk_um, dict) else zk_um
         ok = success.get(gid, True)
@@ -173,9 +184,9 @@ def _catalog(groups, unmatched=(), mode="paired", zk_um=1.0, fwhm=None, success=
     )
 
 
-def _build(catalog, mode="paired", **overrides):
+def _build(catalog: QTable, mode: str = "paired", **overrides: Any) -> dict[int, QTable]:
     """Run the builder with the defaults these tests share."""
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         noll_indices=_NOLL,
         wf_mode=mode,
         combine_zernikes=CombineZernikesSigmaClipTask(),
@@ -186,7 +197,7 @@ def _build(catalog, mode="paired", **overrides):
     return build_zernikes_tables(catalog, **kwargs)
 
 
-def _paired_groups():
+def _paired_groups() -> tuple[dict[str, list[Donut]], list[Donut]]:
     """Groups as `_build_wf_groups` makes them in paired mode: A-P, B-Q."""
     extra, intra = _fixture_donuts()
     a, b, c = extra
@@ -194,17 +205,17 @@ def _paired_groups():
     return {"R00_1_11": [a, p], "R00_2_12": [b, q]}, [c]
 
 
-def _unpaired_groups():
+def _unpaired_groups() -> tuple[dict[str, list[Donut]], list[Donut]]:
     extra, intra = _fixture_donuts()
     return {f"{d.det_name}_{d.donut_id}": [d] for d in extra + intra}, []
 
 
-def _full_detector_groups():
+def _full_detector_groups() -> tuple[dict[str, list[Donut]], list[Donut]]:
     extra, intra = _fixture_donuts()
     return {"R00_SW0": extra, "R00_SW1": intra}, []
 
 
-def _full_corner_groups():
+def _full_corner_groups() -> tuple[dict[str, list[Donut]], list[Donut]]:
     extra, intra = _fixture_donuts()
     return {"R00": extra + intra}, []
 
@@ -213,7 +224,7 @@ def _data_rows(table: QTable) -> QTable:
     return table[table["label"] != "average"]
 
 
-def _xy(row, column, unit):
+def _xy(row: Any, column: str, unit: u.UnitBase) -> tuple[float, float]:
     """One structured (x, y) cell as a plain float pair.
 
     ``float()`` on a dimensional Quantity raises, so the unit has to be
@@ -531,7 +542,7 @@ class TestConsumerContract(unittest.TestCase):
         average_row = table[table["label"] == "average"][0]
         return np.array([average_row[col].to(u.um).value for col in z_columns])
 
-    def _all_mode_tables(self):
+    def _all_mode_tables(self) -> Iterator[tuple[str, QTable]]:
         for mode, (groups, unmatched) in (
             ("paired", _paired_groups()),
             ("unpaired", _unpaired_groups()),

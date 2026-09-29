@@ -34,8 +34,11 @@ exact no-op when the domains already agree, which is the case for the default
 optics model, and that it removes the artifact when they do not.
 """
 
+from __future__ import annotations
+
 import copy
 import unittest
+from typing import Any
 
 import batoid
 import danish
@@ -62,7 +65,9 @@ _POLICY_FILE = "policy:instruments/LsstCam.yaml"
 _BANDS = ("u", "g", "r", "i", "z", "y")
 
 
-def _radial_scale_at(telescope, offsets, wavelength: float) -> float:
+def _radial_scale_at(
+    telescope: batoid.Optic, offsets: tuple[float, float, float], wavelength: float
+) -> float:
     """`_defocal_radial_scale`, but at a caller-chosen wavelength.
 
     Reproduced here rather than adding a parameter to the real function, which
@@ -70,7 +75,7 @@ def _radial_scale_at(telescope, offsets, wavelength: float) -> float:
     production code pins it and only this test varies it.
     """
 
-    def chief_ray_x(optic):
+    def chief_ray_x(optic: batoid.Optic) -> float:
         ray = batoid.RayVector.fromStop(
             0.0,
             0.0,
@@ -327,10 +332,10 @@ class TestConfigurableModels(unittest.TestCase):
 class TestAoiThroughput(unittest.TestCase):
     """`doAoiThroughput` reaches danish, and the factory is not rebuilt."""
 
-    def _group(self, band: str = "r", rtp: float = 12.5, alt: float = 1.1):
+    def _group(self, band: str = "r", rtp: float = 12.5, alt: float = 1.1) -> _WfGroup:
         return _WfGroup(donuts=[], group_id="g", band=band, rtp=rtp, alt=alt)
 
-    def _task(self, **overrides):
+    def _task(self, **overrides: Any) -> WavefrontFittingTask:
         config = WavefrontFittingTask.ConfigClass()
         for key, value in overrides.items():
             setattr(config, key, value)

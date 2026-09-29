@@ -30,16 +30,19 @@ field, where the radial defocus shift is ~27 px and an uncorrected tolerance
 would quietly stop pairing whole rafts.
 """
 
+from __future__ import annotations
+
 import time
 import unittest
 import unittest.mock
+from typing import Any
 
 import batoid
 import numpy as np
 
 from lsst.pipe.base import NoWorkFound, UnprocessableDataError
 from lsst.ts.wep.blitz import famPipeline
-from lsst.ts.wep.blitz.dataStructures import Donut
+from lsst.ts.wep.blitz.dataStructures import Donut, FamDetectorResult, _WfGroup
 from lsst.ts.wep.blitz.donutBlitzFam import DonutBlitzFamConfig, DonutBlitzFamTask
 from lsst.ts.wep.blitz.famPipeline import (
     _RAD_PER_PIXEL,
@@ -53,7 +56,14 @@ _EXTRA_OFFSETS = (0.0, +1.5e-3, 0.0)
 _DONUT_RADIUS = 65.5  # px, at 1.5 mm camera defocus
 
 
-def _donut(donut_id, visit_id, offsets, thx=0.0, thy=0.0, snr=500.0):
+def _donut(
+    donut_id: int,
+    visit_id: int,
+    offsets: tuple[float, float, float],
+    thx: float = 0.0,
+    thy: float = 0.0,
+    snr: float = 500.0,
+) -> Donut:
     """A Donut carrying only the fields pairing and grouping look at."""
     return Donut(
         det_name="R01_S00",
@@ -83,7 +93,7 @@ def _donut(donut_id, visit_id, offsets, thx=0.0, thy=0.0, snr=500.0):
     )
 
 
-def _defocused_angles(thx, thy):
+def _defocused_angles(thx: float, thy: float) -> tuple[tuple[float, float], tuple[float, float]]:
     """Where a star at in-focus ``(thx, thy)`` lands on each side of focus.
 
     This is the input the pairing actually receives: the measured field angle
@@ -291,12 +301,14 @@ class TestPairDonuts(FamPairingTestCase):
 class TestFamGrouping(FamPairingTestCase):
     """`_fam_group_donuts` across the four dispatch modes."""
 
-    def _sides(self, n_intra=3, n_extra=3):
+    def _sides(self, n_intra: int = 3, n_extra: int = 3) -> tuple[list[Donut], list[Donut]]:
         intra = [_donut(k, 1, _INTRA_OFFSETS, thx=0.001 * k) for k in range(n_intra)]
         extra = [_donut(k, 2, _EXTRA_OFFSETS, thx=0.001 * k) for k in range(n_extra)]
         return intra, extra
 
-    def _group(self, mode, intra, extra):
+    def _group(
+        self, mode: str, intra: list[Donut], extra: list[Donut]
+    ) -> tuple[list[_WfGroup], list[Donut], str]:
         return _fam_group_donuts(
             mode=mode,
             det_name="R01_S00",
@@ -416,25 +428,25 @@ class TestWorkerNeverDies(unittest.TestCase):
     fails too.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         self._saved = dict(_COW_STORE.__dict__)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         _COW_STORE.__dict__.clear()
         _COW_STORE.__dict__.update(self._saved)
 
-    def _run_with_store_raising(self, exc):
+    def _run_with_store_raising(self, exc: BaseException) -> FamDetectorResult:
         """Make the worker's first ``_COW_STORE`` read raise ``exc``."""
 
         class Raiser:
-            def __getattr__(self, name):
+            def __getattr__(self, name: str) -> Any:
                 raise exc
 
         # Swap the module global itself: the worker reads it by name.
         with unittest.mock.patch.object(famPipeline, "_COW_STORE", Raiser()):
             return famPipeline._fam_detector_worker((42, time.time()))
 
-    def testNoWorkFoundIsSkippedNotRaised(self):
+    def testNoWorkFoundIsSkippedNotRaised(self) -> None:
         out = self._run_with_store_raising(
             UnprocessableDataError("Back-side bias voltage is turned off for R20_S20")
         )
@@ -442,23 +454,23 @@ class TestWorkerNeverDies(unittest.TestCase):
         self.assertIn("UnprocessableDataError", out.error)
         self.assertEqual(out.det_id, 42)
 
-    def testOrdinaryExceptionIsAFailureNotASkip(self):
+    def testOrdinaryExceptionIsAFailureNotASkip(self) -> None:
         out = self._run_with_store_raising(RuntimeError("boom"))
         self.assertFalse(out.skipped)
         self.assertIn("RuntimeError", out.error)
 
-    def testBareBaseExceptionStillReturns(self):
+    def testBareBaseExceptionStillReturns(self) -> None:
         # Anything that is not KeyboardInterrupt/SystemExit must come back as
         # a result rather than killing the child.
         out = self._run_with_store_raising(BaseException("naked"))
         self.assertFalse(out.skipped)
         self.assertIn("BaseException", out.error)
 
-    def testKeyboardInterruptStillPropagates(self):
+    def testKeyboardInterruptStillPropagates(self) -> None:
         with self.assertRaises(KeyboardInterrupt):
             self._run_with_store_raising(KeyboardInterrupt())
 
-    def testUnprocessableDataErrorIsNotAnException(self):
+    def testUnprocessableDataErrorIsNotAnException(self) -> None:
         # The whole trap: `except Exception` cannot catch this, which is why
         # the guard in the worker has to be written against BaseException.
         self.assertTrue(issubclass(UnprocessableDataError, NoWorkFound))

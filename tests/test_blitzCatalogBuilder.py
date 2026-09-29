@@ -21,7 +21,11 @@
 
 """The output catalog builder, shared by corner and full-array mode."""
 
+from __future__ import annotations
+
 import unittest
+from collections.abc import Sequence
+from typing import Any
 
 import astropy.units as u
 import numpy as np
@@ -58,9 +62,9 @@ from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingConfig
 _IMAGE_COLUMNS = ("stamp", "wf_img", "model_img")
 
 
-def _donut(det_name="R00_SW0", det_id=191, donut_id=1, **overrides):
+def _donut(det_name: str = "R00_SW0", det_id: int = 191, donut_id: int = 1, **overrides: Any) -> Donut:
     """A Donut with plausible scalars and a small stamp."""
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         det_name=det_name,
         stamp=np.ones((167, 167), dtype=np.float32),
         thx_ccs=0.01,
@@ -92,14 +96,14 @@ def _donut(det_name="R00_SW0", det_id=191, donut_id=1, **overrides):
     return Donut(**kwargs)
 
 
-def _result(det_name="R00_SW0", rejected=(), **overrides):
+def _result(det_name: str = "R00_SW0", rejected: Sequence[Donut] = (), **overrides: Any) -> CutoutResult:
     """A per-detector cutout result, as the workers return.
 
     Every stage timing is 0.0 rather than NaN so that a test overriding one
     reads a plain number back; the NaN conventions are `CutoutResult`'s own
     classmethods' business, not this fixture's.
     """
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         det_name=det_name,
         catalog=[],
         rejected_catalog=list(rejected),
@@ -125,9 +129,9 @@ def _result(det_name="R00_SW0", rejected=(), **overrides):
     return CutoutResult(**kwargs)
 
 
-def _wf_donut(donut, group_id="g", **overrides):
+def _wf_donut(donut: Donut, group_id: str = "g", **overrides: Any) -> WfDonutResult:
     """A successful `WfDonutResult` for ``donut``, keyed to match it."""
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         donut_id=donut.donut_id,
         det_name=donut.det_name,
         visit_id=donut.visit_id,
@@ -155,7 +159,7 @@ def _wf_donut(donut, group_id="g", **overrides):
     return WfDonutResult(**kwargs)
 
 
-def _wf_group(donuts, group_id="g", success=True):
+def _wf_group(donuts: Sequence[WfDonutResult], group_id: str = "g", success: bool = True) -> WfGroupResult:
     """A `WfGroupResult` carrying ``donuts``.
 
     Only ``donut_results`` is read by `_build_donut_catalog` -- the group's own
@@ -170,8 +174,8 @@ def _wf_group(donuts, group_id="g", success=True):
     return out
 
 
-def _options(**overrides) -> _CatalogOptions:
-    kwargs = dict(
+def _options(**overrides: Any) -> _CatalogOptions:
+    kwargs: dict[str, Any] = dict(
         stamp_size=167,
         binning=2,
         noll_indices=tuple(range(4, 20)),
@@ -266,7 +270,7 @@ class TestRotateZkToEb(unittest.TestCase):
     carries the positive m alternates.
     """
 
-    def _zk(self, **slots) -> np.ndarray:
+    def _zk(self, **slots: float) -> np.ndarray:
         """One row over Noll 0..11, zero except the given slots."""
         row = np.zeros((1, 12))
         for j, value in slots.items():
@@ -1025,7 +1029,7 @@ _VIEW_BINNING = 4
 _VIEW_SHAPE = (200, 408)
 
 
-def _source_set(n, seed, with_mag=True):
+def _source_set(n: int, seed: int, with_mag: bool = True) -> SourceSet:
     rng = np.random.default_rng(seed)
     height, width = _VIEW_SHAPE
     return SourceSet(
@@ -1036,7 +1040,12 @@ def _source_set(n, seed, with_mag=True):
     )
 
 
-def _view(shape=None, refcat=_source_set(6, 1), detections=None, selections=None):
+def _view(
+    shape: tuple[int, int] | None = None,
+    refcat: SourceSet | None = _source_set(6, 1),
+    detections: SourceSet | None = None,
+    selections: SourceSet | None = None,
+) -> DetectorView:
     height, width = shape or _VIEW_SHAPE
     hb, wb = height // _VIEW_BINNING, width // _VIEW_BINNING
     return DetectorView(
@@ -1052,7 +1061,9 @@ def _view(shape=None, refcat=_source_set(6, 1), detections=None, selections=None
     )
 
 
-def _result_with_view(det_name="R00_SW0", view=None, **overrides):
+def _result_with_view(
+    det_name: str = "R00_SW0", view: DetectorView | None = None, **overrides: Any
+) -> CutoutResult:
     result = _result(det_name=det_name, **overrides)
     result.view = _view() if view is None else view
     return result

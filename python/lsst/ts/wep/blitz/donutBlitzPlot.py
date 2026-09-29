@@ -30,17 +30,22 @@ __all__ = [
     "DonutBlitzPlotTask",
 ]
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import astropy.units as u
 import numpy as np
-from astropy.table import QTable, Table
+import numpy.typing as npt
+from astropy.table import QTable, Row, Table
 
 if TYPE_CHECKING:
     # matplotlib is imported inside the methods that draw, so importing it here
     # for the annotations alone would undo that.
+    from matplotlib.axes import Axes
+    from matplotlib.colors import LinearSegmentedColormap
     from matplotlib.figure import Figure
+    from matplotlib.gridspec import GridSpecFromSubplotSpec
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -387,7 +392,7 @@ def _hex_to_rgb(color: str) -> tuple[float, float, float]:
     return tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))  # type: ignore[return-value]
 
 
-def _diverging_cmap(name: str, stops: tuple, colors: tuple):
+def _diverging_cmap(name: str, stops: tuple, colors: tuple) -> LinearSegmentedColormap:
     """A `LinearSegmentedColormap` from normalized stops and hex colors."""
     from matplotlib.colors import LinearSegmentedColormap
 
@@ -736,7 +741,7 @@ def _detector_stats_lines(det_name: str, det_id: int, n_donuts: int, det_stats: 
     return lines
 
 
-def _donut_annotation(row, rejected: bool) -> str:
+def _donut_annotation(row: Row, rejected: bool) -> str:
     """The three-line stats caption drawn above one donut stamp.
 
     A ``?`` in place of a number means the value is non-finite, which is how a
@@ -775,7 +780,13 @@ def _donut_annotation(row, rejected: bool) -> str:
     return f"{parts['snr']}  {rej_str}\n{parts['if']}  {parts['of']}  {parts['osm']}\n{donut_id_str}"
 
 
-def _rot90_display(row_idx, col_idx, height: int, width: int, n_quarter: int):
+def _rot90_display(
+    row_idx: npt.ArrayLike,
+    col_idx: npt.ArrayLike,
+    height: int,
+    width: int,
+    n_quarter: int,
+) -> tuple[np.ndarray, np.ndarray]:
     """Map array indices through to display coords.
 
     The whole-detector counterpart of `_stamp_transform`, which applies the
@@ -816,7 +827,7 @@ def _rot90_display(row_idx, col_idx, height: int, width: int, n_quarter: int):
     return r, c
 
 
-def _binned_coord(x_det, y_det, row):
+def _binned_coord(x_det: npt.ArrayLike, y_det: npt.ArrayLike, row: Row) -> tuple[np.ndarray, np.ndarray]:
     """Scale detector-frame coordinates into one row's binned image indices.
 
     Returns ``(row_idx, col_idx)`` -- numpy order, ready for `_rot90_display`.
@@ -1037,7 +1048,9 @@ def _detector_image_rows(detector_images: QTable | None) -> dict[str, Any]:
     return {str(row["det_name"]): row for row in detector_images}
 
 
-def _stamp_transform(row, style: _StampStyle, det_meta: dict):
+def _stamp_transform(
+    row: Row, style: _StampStyle, det_meta: dict
+) -> Callable[[float, float], tuple[float, float]]:
     """Build the detector-frame to stamp-display-coordinate mapping for a row.
 
     Returns a function of ``(dx, dy)`` in unbinned detector pixels, giving
@@ -1072,7 +1085,7 @@ def _stamp_transform(row, style: _StampStyle, det_meta: dict):
     res_x = x_det - round(x_det)
     res_y = y_det - round(y_det)
 
-    def to_display(dx, dy):
+    def to_display(dx: float, dy: float) -> tuple[float, float]:
         r, c = dy + res_y, dx + res_x
         for _ in range(n_quarter):
             r, c = c, -r
@@ -1421,7 +1434,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # `minimum=0` means these may not have been produced at all, in which
         # case they are absent from `inputs` rather than None -- so ask the
         # dict, not the attribute.
-        def _optional(name):
+        def _optional(name: str) -> QTable | None:
             handle = inputs.get(name)
             return None if handle is None else handle.get(**load)
 
@@ -1669,7 +1682,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         return fig
 
-    def _drawDonutStamp(self, ax, row, style: _StampStyle, det_meta: dict, rejected=False) -> None:
+    def _drawDonutStamp(
+        self, ax: Axes, row: Row, style: _StampStyle, det_meta: dict, rejected: bool = False
+    ) -> None:
         """One catalog row's cutout, with aperture and refcat overlays.
 
         Reads the stamp out of ``row`` (whichever of the two stamp columns
@@ -1764,7 +1779,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             annotation_clip=False,
         )
 
-    def _drawRefcatOverlays(self, ax, row, style: _StampStyle, det_meta: dict) -> None:
+    def _drawRefcatOverlays(self, ax: Axes, row: Row, style: _StampStyle, det_meta: dict) -> None:
         """Mark the nearby photometric and astrometric refcat sources.
 
         Both overlays are drawn in the stamp's rotated display frame, which is
@@ -1796,7 +1811,15 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                         zorder=4,
                     )
 
-    def _drawWfImage(self, ax, img, cmap, vmin, vmax, label="") -> None:
+    def _drawWfImage(
+        self,
+        ax: Axes,
+        img: np.ndarray,
+        cmap: LinearSegmentedColormap,
+        vmin: float,
+        vmax: float,
+        label: str = "",
+    ) -> None:
         """One binned image or fitted model under a caller-chosen colormap.
 
         Takes the array and its scaling from the caller, since a row draws
@@ -1817,7 +1840,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         if label:
             ax.set_title(label, fontsize=5, pad=1)
 
-    def _drawZkBar(self, ax, zk_dev, inset_label="") -> None:
+    def _drawZkBar(self, ax: Axes, zk_dev: np.ndarray, inset_label: str = "") -> None:
         """Vertical bar chart of Zernikes in µm, ±1 µm, no tick labels.
 
         ``zk_dev`` is Noll-indexed (element j is Noll j) and in µm; it may be
@@ -1851,7 +1874,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=0.6),
             )
 
-    def _drawWfRowHalf(self, fig, inner, row_idx: int, col_start: int, half: _RowHalf) -> None:
+    def _drawWfRowHalf(
+        self,
+        fig: Figure,
+        inner: GridSpecFromSubplotSpec,
+        row_idx: int,
+        col_start: int,
+        half: _RowHalf,
+    ) -> None:
         """Draw one side of focus on one row: image, model, residual, bar.
 
         Four grid columns starting at ``col_start``.  A blank half still claims
@@ -1967,7 +1997,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         corners = list(CORNER_PAIRS)
         det_id_of = _det_id_by_name(catalog)
 
-        def _det_label(name):
+        def _det_label(name: str) -> str:
             """Detector header, with the id only when the detector has rows.
 
             The 2x2 corner grid is always drawn in full, but a detector that
@@ -2123,7 +2153,9 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
 
         return fig
 
-    def _drawFocalPlanePanel(self, ax, row, det_rows: QTable, points: dict, layout: _FpLayout) -> None:
+    def _drawFocalPlanePanel(
+        self, ax: Axes, row: Row, det_rows: QTable, points: dict, layout: _FpLayout
+    ) -> None:
         """One detector: its rotated image, the selection overlays, the donuts.
 
         Everything is drawn in the *displayed* frame, which is the binned image
@@ -2147,7 +2179,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # exact tiling is deliberate; see `_FP_PANEL_ASPECT`.
         ax.imshow(display, origin="upper", cmap="Greys_r", aspect="auto")
 
-        def to_display(x_det, y_det):
+        def to_display(x_det: npt.ArrayLike, y_det: npt.ArrayLike) -> tuple[np.ndarray, np.ndarray]:
             """Detector-frame coordinates to panel's display coordinates."""
             r, c = _binned_coord(x_det, y_det, row)
             return _rot90_display(r, c, height, width, n_quarter)
@@ -2267,7 +2299,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ha="left",
             )
 
-    def _drawFieldLimit(self, ax, row, n_quarter: int) -> float:
+    def _drawFieldLimit(self, ax: Axes, row: Row, n_quarter: int) -> float:
         """Shade and outline the region the vignetting cut excludes.
 
         ``field_dist`` is a grid on the same pixel grid as the image, so it
@@ -2312,7 +2344,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         )
         return float(excluded.mean())
 
-    def _drawPairLinks(self, fig, axs: dict, image_rows: dict, links: list) -> None:
+    def _drawPairLinks(
+        self,
+        fig: Figure,
+        axs: dict,
+        image_rows: dict,
+        links: list[tuple[tuple[str, float, float], tuple[str, float, float]]],
+    ) -> None:
         """Join each intra/extra donut pair with a line across the two panels.
 
         Empty outside ``paired`` mode -- see `_pair_links`.  A link whose
@@ -2321,7 +2359,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         """
         from matplotlib.patches import ConnectionPatch
 
-        def _xy(det_name, x_det, y_det):
+        def _xy(det_name: str, x_det: float, y_det: float) -> tuple[np.ndarray, np.ndarray]:
             """One donut's position in its own panel's display coordinates."""
             row = image_rows[det_name]
             image = np.asarray(row["image"])
@@ -2350,11 +2388,11 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 )
             )
 
-    def _drawFocalPlaneLegend(self, fig, overlays: QTable | None) -> None:
+    def _drawFocalPlaneLegend(self, fig: Figure, overlays: QTable | None) -> None:
         """One shared legend for the selection funnel and the donut markers."""
         from matplotlib.lines import Line2D
 
-        def marker(color, label, marker="o"):
+        def marker(color: str, label: str, marker: str = "o") -> Line2D:
             return Line2D(
                 [0],
                 [0],

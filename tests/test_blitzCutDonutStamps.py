@@ -29,6 +29,8 @@ from it. These tests pin that, and pin the donut's own magnitudes being carried
 across from the selections table on the refcat path and left NaN off it.
 """
 
+from __future__ import annotations
+
 import unittest
 
 import numpy as np
@@ -40,6 +42,7 @@ from lsst.ts.wep.blitz.cutDonutStamps import (
     CutDonutStampsConfig,
     CutDonutStampsTask,
 )
+from lsst.ts.wep.blitz.dataStructures import Donut
 from lsst.ts.wep.blitz.utils import _REFCAT_COLUMNS
 
 # Detector-frame positions of the two selected donuts, far enough apart that
@@ -52,7 +55,7 @@ _NEIGHBOR_XY = (104.0, 100.0)
 _STAMP_SIZE = 21
 
 
-def _exposure():
+def _exposure() -> afwImage.ExposureF:
     """A flat, unmasked exposure on a real detector (FIELD_ANGLE is needed)."""
     detector = LsstCam().getCamera()["R22_S11"]
     exposure = afwImage.ExposureF(detector.getBBox())
@@ -63,7 +66,7 @@ def _exposure():
     return exposure
 
 
-def _measurements(with_refcat_values: bool, d1_xy=_D1_XY) -> QTable:
+def _measurements(with_refcat_values: bool, d1_xy: tuple[float, float] = _D1_XY) -> QTable:
     """The two selected donuts, as the measurement task would hand them over.
 
     ``with_refcat_values`` distinguishes the two upstream paths, but only in
@@ -99,7 +102,7 @@ def _measurements(with_refcat_values: bool, d1_xy=_D1_XY) -> QTable:
     return table
 
 
-def _refcat(d1_xy=_D1_XY) -> QTable:
+def _refcat(d1_xy: tuple[float, float] = _D1_XY) -> QTable:
     """Both donuts plus the unselected neighbour, as ids 10, 20 and 30."""
     return QTable(
         {
@@ -112,7 +115,7 @@ def _refcat(d1_xy=_D1_XY) -> QTable:
     )
 
 
-def _run(measurements, refcat):
+def _run(measurements: QTable, refcat: QTable | None) -> dict[int, Donut]:
     config = CutDonutStampsConfig()
     config.stampSize = _STAMP_SIZE
     task = CutDonutStampsTask(config=config)
@@ -121,7 +124,7 @@ def _run(measurements, refcat):
 
 
 class TestNeighborSelfExclusion(unittest.TestCase):
-    def test_donut_excluded_from_its_own_neighbors(self):
+    def test_donut_excluded_from_its_own_neighbors(self) -> None:
         """Only the unselected id-30 source is a neighbour of donut 10."""
         donuts = _run(_measurements(with_refcat_values=True), _refcat())
 
@@ -133,14 +136,14 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(dy, 0.0)
         self.assertAlmostEqual(mag, 18.0)
 
-    def test_isolated_donut_has_no_neighbors(self):
+    def test_isolated_donut_has_no_neighbors(self) -> None:
         """An isolated donut's neighbour list is empty, not holding itself."""
         donuts = _run(_measurements(with_refcat_values=True), _refcat())
 
         self.assertEqual(donuts[20].nearby_photo, [])
         self.assertEqual(donuts[20].nearby_astrom, [])
 
-    def test_own_magnitudes_carried_from_selections(self):
+    def test_own_magnitudes_carried_from_selections(self) -> None:
         donuts = _run(_measurements(with_refcat_values=True), _refcat())
 
         self.assertAlmostEqual(donuts[10].photo_mag, 14.0)
@@ -148,7 +151,7 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(donuts[20].photo_mag, 15.0)
         self.assertAlmostEqual(donuts[20].astrom_mag, 15.2)
 
-    def test_own_sky_position_carried_from_selections(self):
+    def test_own_sky_position_carried_from_selections(self) -> None:
         """Radians in, radians on the Donut; degrees are the builder's job."""
         donuts = _run(_measurements(with_refcat_values=True), _refcat())
 
@@ -157,7 +160,7 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(np.degrees(donuts[20].coord_ra), 30.1)
         self.assertAlmostEqual(np.degrees(donuts[20].coord_dec), -20.1)
 
-    def test_blitz_path_has_no_refcat_information(self):
+    def test_blitz_path_has_no_refcat_information(self) -> None:
         """No refcat: no neighbours, magnitudes or position -- NaN, not zero.
 
         The columns are still *present*: `_REFCAT_COLUMNS` is NaN-filled
@@ -185,7 +188,7 @@ class TestRefcatColumnsAreRequired(unittest.TestCase):
     producing NaN donuts.
     """
 
-    def test_each_column_is_load_bearing(self):
+    def test_each_column_is_load_bearing(self) -> None:
         for column in _REFCAT_COLUMNS:
             with self.subTest(column=column):
                 measurements = _measurements(with_refcat_values=True)
@@ -206,7 +209,7 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
     # (100.0) differs measurably from the reported x_det (100.3).
     _FRACTIONAL_D1_XY = (100.3, 100.0)
 
-    def _neighbor_of_donut_10(self):
+    def _neighbor_of_donut_10(self) -> tuple[Donut, tuple[float, float, float]]:
         d1_xy = self._FRACTIONAL_D1_XY
         donuts = _run(
             _measurements(with_refcat_values=True, d1_xy=d1_xy),
@@ -216,13 +219,13 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
         self.assertEqual(len(donut.nearby_photo), 1)
         return donut, donut.nearby_photo[0]
 
-    def test_offset_is_from_x_det(self):
+    def test_offset_is_from_x_det(self) -> None:
         donut, (dx, dy, _) = self._neighbor_of_donut_10()
 
         self.assertAlmostEqual(dx, _NEIGHBOR_XY[0] - self._FRACTIONAL_D1_XY[0])
         self.assertAlmostEqual(dy, 0.0)
 
-    def test_offset_is_not_from_the_rounded_centroid(self):
+    def test_offset_is_not_from_the_rounded_centroid(self) -> None:
         """Stated explicitly, so a drift to the rounded centroid shows."""
         donut, (dx, _, _) = self._neighbor_of_donut_10()
         rounded = _NEIGHBOR_XY[0] - round(self._FRACTIONAL_D1_XY[0])
@@ -230,14 +233,14 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
         self.assertAlmostEqual(rounded, 4.0)  # guard the fixture itself
         self.assertNotAlmostEqual(dx, rounded)
 
-    def test_offset_composes_with_x_det(self):
+    def test_offset_composes_with_x_det(self) -> None:
         """The actual contract: x_det + dx is the neighbour's detector x."""
         donut, (dx, dy, _) = self._neighbor_of_donut_10()
 
         self.assertAlmostEqual(donut.x_det + dx, _NEIGHBOR_XY[0])
         self.assertAlmostEqual(donut.y_det + dy, _NEIGHBOR_XY[1])
 
-    def test_rounding_residual_recovers_the_stamp_grid(self):
+    def test_rounding_residual_recovers_the_stamp_grid(self) -> None:
         """Adding ``x_det - round(x_det)`` back puts the offset on the grid.
 
         This is the property `donutBlitzPlot._xform` relies on to draw
@@ -257,7 +260,7 @@ class TestNearbyOffsetOrigin(unittest.TestCase):
         # assertion above is not vacuous.
         self.assertNotAlmostEqual(dx, round(dx))
 
-    def test_stamp_membership_uses_the_rounded_centroid(self):
+    def test_stamp_membership_uses_the_rounded_centroid(self) -> None:
         """A fractional centroid must not change which sources are in the box.
 
         Membership is pinned to the rounded centroid, because that is what the

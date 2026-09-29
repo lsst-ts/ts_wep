@@ -26,13 +26,17 @@ breaks when a column is renamed.  These tests build the catalog through the
 builder rather than by hand, so the two stay pinned to the same schema.
 """
 
+from __future__ import annotations
+
 import unittest
+from collections.abc import Sequence
 from dataclasses import replace
 from types import SimpleNamespace
+from typing import Any
 
 import astropy.units as u
 import numpy as np
-from astropy.table import QTable
+from astropy.table import QTable, Row
 
 import lsst.pipe.base as pipeBase
 from lsst.ts.wep.blitz.catalogBuilder import (
@@ -68,6 +72,7 @@ from lsst.ts.wep.blitz.donutBlitzPlot import (
     _RowHalf,
     _wf_groups_from_catalog,
     _wf_row_pairs,
+    _WfGroup,
 )
 from lsst.ts.wep.blitz.utils import _CUTOUT_STAGE_KEYS, _ZK_JMAX, CORNER_PAIRS
 
@@ -81,8 +86,8 @@ _EXTRA_OFFSETS = (+1.5e-3, 0.0, 0.0)
 _INTRA_OFFSETS = (-1.5e-3, 0.0, 0.0)
 
 
-def _donut(det_name, donut_id, **overrides):
-    kwargs = dict(
+def _donut(det_name: str, donut_id: int, **overrides: Any) -> Donut:
+    kwargs: dict[str, Any] = dict(
         det_name=det_name,
         stamp=np.random.default_rng(donut_id)
         .normal(100.0, 5.0, (_STAMP_SIZE, _STAMP_SIZE))
@@ -113,7 +118,7 @@ def _donut(det_name, donut_id, **overrides):
     return Donut(**kwargs)
 
 
-def _result(det_name, rejected=()):
+def _result(det_name: str, rejected: Sequence[Donut] = ()) -> CutoutResult:
     return CutoutResult(
         det_name=det_name,
         catalog=[],
@@ -137,7 +142,7 @@ def _result(det_name, rejected=()):
     )
 
 
-def _wf_result(donuts, group_id):
+def _wf_result(donuts: list[Donut], group_id: str) -> WfGroupResult:
     """One joint fit over ``donuts``, with images the plot task can draw."""
     rng = np.random.default_rng(0)
     out = WfGroupResult.empty(group_id, n_zk=_ZK_JMAX + 1)
@@ -180,7 +185,7 @@ _VIEW_BINNING = 4
 _VIEW_BBOX = (200, 408)
 
 
-def _source_set(n, seed, width, height, with_mag=True):
+def _source_set(n: int, seed: int, width: int, height: int, with_mag: bool = True) -> SourceSet:
     rng = np.random.default_rng(seed)
     return SourceSet(
         x_det=rng.uniform(0, width, n),
@@ -190,7 +195,12 @@ def _source_set(n, seed, width, height, with_mag=True):
     )
 
 
-def _view(det_name, n_quarter, refcat=True, field_dist=None):
+def _view(
+    det_name: str,
+    n_quarter: int,
+    refcat: bool = True,
+    field_dist: np.ndarray | None = None,
+) -> DetectorView:
     """A `DetectorView` shaped like a real corner sensor's, cheap to draw.
 
     ``field_dist`` defaults to a plane rising with x, which is not the real arc
@@ -215,13 +225,13 @@ def _view(det_name, n_quarter, refcat=True, field_dist=None):
     )
 
 
-def _result_with_view(det_name, n_quarter, **kwargs):
+def _result_with_view(det_name: str, n_quarter: int, **kwargs: Any) -> CutoutResult:
     result = replace(_result(det_name), n_quarter=n_quarter)
     result.view = _view(det_name, n_quarter, **kwargs)
     return result
 
 
-def _options():
+def _options() -> _CatalogOptions:
     return _CatalogOptions(
         stamp_size=_STAMP_SIZE,
         binning=_BINNING,
@@ -235,7 +245,7 @@ def _options():
     )
 
 
-def _catalog():
+def _catalog() -> QTable:
     """A catalog covering every row class the plot task branches on.
 
     One fitted pair across the two detectors of a corner, one candidate no fit
@@ -296,14 +306,14 @@ class TestPutPlots(unittest.TestCase):
     class _FakeQC:
         """Records what would be written, in put order."""
 
-        def __init__(self):
-            self.puts = []
+        def __init__(self) -> None:
+            self.puts: list[tuple[Any, str]] = []
 
-        def put(self, obj, ref):
+        def put(self, obj: Any, ref: Any) -> None:
             self.puts.append((obj, ref.datasetType.name))
 
     @staticmethod
-    def _ref(name):
+    def _ref(name: str) -> SimpleNamespace:
         return SimpleNamespace(datasetType=SimpleNamespace(name=name))
 
     def testWritesEveryFigureThatHasARef(self) -> None:
@@ -376,7 +386,7 @@ class TestDonutRowsByDetector(unittest.TestCase):
 class TestDetectorStatsLines(unittest.TestCase):
     """The monospace stats block for one detector's panel."""
 
-    def _stats(self):
+    def _stats(self) -> dict[str, Any]:
         return _catalog().meta["det_meta"][f"R00_SW0_{_VISIT_ID}"]
 
     def testEveryCutoutStageGetsALineAndScatterHangsOffAstrom(self) -> None:
@@ -424,7 +434,7 @@ class TestDetectorStatsLines(unittest.TestCase):
 class TestDonutAnnotation(unittest.TestCase):
     """The three-line caption above one donut stamp."""
 
-    def _row(self, det_name="R00_SW0", donut_id=1):
+    def _row(self, det_name: str = "R00_SW0", donut_id: int = 1) -> Row:
         catalog = _catalog()
         names = np.asarray(catalog["det_name"], dtype=str)
         rows = catalog[(names == det_name) & (catalog["donut_id"] == donut_id)]
@@ -533,7 +543,7 @@ class TestWfRowPairs(unittest.TestCase):
 class TestRowHalf(unittest.TestCase):
     """The per-side flattening the WF drawing code consumes."""
 
-    def _group(self):
+    def _group(self) -> _WfGroup:
         plottable, _ = _wf_groups_from_catalog(_catalog())
         return plottable[0]
 
@@ -745,7 +755,7 @@ class TestFocalPlaneAxesRects(unittest.TestCase):
         self.layout = _FP_LAYOUT
         self.rects = _focal_plane_axes_rects(self.n_quarter, self.layout)
 
-    def _inches(self):
+    def _inches(self) -> dict[str, tuple[float, float, float, float]]:
         """Rects as ``(x0, x1, y0, y1)`` in inches, which is what gaps mean."""
         side = self.layout.fig_side
         return {
@@ -754,7 +764,7 @@ class TestFocalPlaneAxesRects(unittest.TestCase):
         }
 
     @staticmethod
-    def _gap(a, b):
+    def _gap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
         ax0, ax1, ay0, ay1 = a
         bx0, bx1, by0, by1 = b
         return max(bx0 - ax1, ax0 - bx1, by0 - ay1, ay0 - by1)
@@ -865,13 +875,13 @@ class TestPairLinks(unittest.TestCase):
 class TestFocalPlanePlot(unittest.TestCase):
     """Focal-plane selection plot, driven through the real table builders."""
 
-    def _tables(self, results):
+    def _tables(self, results: list[CutoutResult]) -> tuple[QTable, QTable]:
         return (
             _build_detector_image_table(results, _VISIT_ID, "LSSTCam"),
             _build_overlay_table(results, _VISIT_ID, "LSSTCam"),
         )
 
-    def _run(self, catalog, images, overlays):
+    def _run(self, catalog: QTable, images: QTable | None, overlays: QTable | None) -> pipeBase.Struct:
         task = DonutBlitzPlotTask(config=DonutBlitzPlotConfig())
         return task.run(catalog, detector_images=images, selection_overlays=overlays)
 
@@ -964,7 +974,7 @@ class TestFocalPlaneOrientation(unittest.TestCase):
                     field,
                 )
 
-    def _panel_extremes(self, det_name):
+    def _panel_extremes(self, det_name: str) -> tuple[tuple[float, float], tuple[float, float]]:
         """Figure-space positions of a panel's min- and max-field pixels.
 
         Rendered by the real `_drawFocalPlanePanel` and read back through the
@@ -1007,7 +1017,7 @@ class TestFocalPlaneOrientation(unittest.TestCase):
         display = np.rot90(field, -n_quarter).T
         dw = display.shape[1]
 
-        def to_figure(flat):
+        def to_figure(flat: int | np.integer) -> tuple[float, float]:
             y, x = divmod(int(flat), dw)
             # Array index straight through the axes' own transform: the y
             # direction is whatever the panel's `set_ylim` made it, so nothing

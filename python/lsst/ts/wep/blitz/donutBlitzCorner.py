@@ -28,6 +28,7 @@ __all__ = [
 ]
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,6 +39,7 @@ from astropy.table import Table
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
+from lsst.daf.butler import DatasetRef
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import (
     MagnitudeLimit,
@@ -93,7 +95,7 @@ from .wavefrontFitting import (
 from .zernikesTable import build_zernikes_tables
 
 
-def _exposure_group(refs) -> str:
+def _exposure_group(refs: Iterable[DatasetRef]) -> str:
     """The butler ``group`` of the exposure these raw refs came from.
 
     Corner mode's quantum is visit-dimensioned, so unlike full-array mode it

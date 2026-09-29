@@ -44,7 +44,7 @@ from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.pipe.base import NoWorkFound
 
 from .cutoutPipeline import _cutout_one_exposure
-from .dataStructures import _ERROR_MAX_CHARS, FamDetectorResult, _WfGroup
+from .dataStructures import _ERROR_MAX_CHARS, Donut, FamDetectorResult, _WfGroup
 from .lsstCam import _LSSTCAM
 from .utils import (
     _COW_STORE,
@@ -259,7 +259,7 @@ def _fam_group_donuts(
         Pairing path taken, or ``"n/a"`` for the modes that do not pair.
     """
 
-    def _group(donuts, gid):
+    def _group(donuts: list[Donut], gid: str) -> _WfGroup:
         return _WfGroup(donuts=donuts, group_id=gid, band=band, rtp=rtp_deg, alt=alt_rad)
 
     if mode == "paired":

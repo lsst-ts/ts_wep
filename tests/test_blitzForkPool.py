@@ -52,6 +52,8 @@ process running the tests (including the test runner's own), and the firing
 path of `_dump_stacks_on_hang`, which ends in `os._exit`.
 """
 
+from __future__ import annotations
+
 import os
 import pickle
 import signal
@@ -59,7 +61,10 @@ import threading
 import time
 import unittest
 import unittest.mock
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
+from types import FrameType
+from typing import NoReturn, TypeVar
 
 from lsst.ts.wep.blitz.forkPool import (
     _INCOMPLETE,
@@ -75,63 +80,65 @@ from lsst.ts.wep.blitz.forkPool import (
 # before it.
 _INITIALIZER_CALLS: list[int] = []
 
+_T = TypeVar("_T")
 
-def _double(unit):
+
+def _double(unit: int) -> int:
     return unit * 2
 
 
-def _identity(unit):
+def _identity(unit: _T) -> _T:
     return unit
 
 
-def _returnNone(unit):
+def _returnNone(unit: int) -> None:
     return None
 
 
-def _suicide(unit):
+def _suicide(unit: str) -> None:
     """Die before `_fork_map` has anything to write for this unit."""
     os.kill(os.getpid(), signal.SIGKILL)
 
 
-def _dieIfThree(unit):
+def _dieIfThree(unit: int) -> int:
     if unit == 3:
         os.kill(os.getpid(), signal.SIGKILL)
     return unit * 10
 
 
-def _raiseValueError(unit):
+def _raiseValueError(unit: str) -> NoReturn:
     raise ValueError("worker blew up")
 
 
-def _raiseIfOne(unit):
+def _raiseIfOne(unit: int) -> int:
     if unit == 1:
         raise ValueError("worker blew up")
     return unit
 
 
-def _raiseBaseException(unit):
+def _raiseBaseException(unit: int) -> NoReturn:
     # Not an `Exception`: the child's guard is written against `BaseException`
     # because the pipeline's own control-flow exceptions (`NoWorkFound` and
     # friends) sit outside `Exception`.
     raise SystemExit(7)
 
 
-def _returnUnpicklable(unit):
-    def notPicklable():
+def _returnUnpicklable(unit: int) -> Callable[[], None]:
+    def notPicklable() -> None:
         pass
 
     return notPicklable
 
 
-def _recordInitializer():
+def _recordInitializer() -> None:
     _INITIALIZER_CALLS.append(os.getpid())
 
 
-def _reportInitializerCalls(unit):
+def _reportInitializerCalls(unit: int) -> tuple[int, int]:
     return (unit, len(_INITIALIZER_CALLS))
 
 
-def _timeInterval(unit):
+def _timeInterval(unit: int) -> tuple[int, float, float]:
     """Occupy a worker slot for a measurable span, and report when."""
     start = time.monotonic()
     time.sleep(0.15)
@@ -145,19 +152,19 @@ def _timeInterval(unit):
 _LONG_SLEEP = 6.0
 
 
-def _sleepPastAnyDeadline(unit):
+def _sleepPastAnyDeadline(unit: _T) -> _T:
     """Alive, healthy and far too slow -- the hypothesis (a) failure."""
     time.sleep(_LONG_SLEEP)
     return unit
 
 
-def _sleepIfZero(unit):
+def _sleepIfZero(unit: int) -> int:
     if unit == 0:
         time.sleep(_LONG_SLEEP)
     return unit * 10
 
 
-def _leakGrandchildHoldingWriteEnd(unit):
+def _leakGrandchildHoldingWriteEnd(unit: int) -> int:
     """Do the work, write it in full, then leave the pipe held open anyway.
 
     The hypothesis (b) failure, and the reason a timeout may not wait for EOF
@@ -175,7 +182,7 @@ def _leakGrandchildHoldingWriteEnd(unit):
     return unit * 2
 
 
-def _bigPayload(unit):
+def _bigPayload(unit: object) -> bytes:
     # Comfortably more than both the 64 KiB pipe capacity and `_READ_CHUNK`, so
     # the parent has to accumulate the result over many reads while the child
     # blocks in `os.write` waiting for it.
@@ -183,7 +190,7 @@ def _bigPayload(unit):
 
 
 @contextmanager
-def _silencedStderr():
+def _silencedStderr() -> Iterator[None]:
     """Redirect the real fd 2 for the duration, forked children included.
 
     The workers that fail on purpose print a traceback by design. Patching
@@ -202,7 +209,7 @@ def _silencedStderr():
 
 
 @contextmanager
-def _killDuringWrite(afterBytes: int | None):
+def _killDuringWrite(afterBytes: int | None) -> Iterator[None]:
     """Patch `os.write` so a child dies mid-result, at a chosen point.
 
     The patch is installed in the parent and inherited through the fork, which
@@ -216,7 +223,7 @@ def _killDuringWrite(afterBytes: int | None):
     """
     realWrite = os.write
 
-    def fakeWrite(fd, data):
+    def fakeWrite(fd: int, data: bytes) -> int:
         if len(data) == _RESULT_HEADER.size:
             return realWrite(fd, data)
         written = realWrite(fd, data if afterBytes is None else data[:afterBytes])
@@ -243,7 +250,7 @@ def _reapStrays() -> None:
 
 
 @contextmanager
-def _failIfSlower(seconds: float):
+def _failIfSlower(seconds: float) -> Iterator[None]:
     """Turn "this call never returns" into a failure instead of a wedged suite.
 
     A `SIGALRM` handler that raises is enough here, and that is itself worth
@@ -259,7 +266,7 @@ def _failIfSlower(seconds: float):
     alarm.
     """
 
-    def raiseTimeout(signum, frame):
+    def raiseTimeout(signum: int, frame: FrameType | None) -> NoReturn:
         raise TimeoutError(f"_fork_map did not return within {seconds}s")
 
     previous = signal.signal(signal.SIGALRM, raiseTimeout)
@@ -272,7 +279,7 @@ def _failIfSlower(seconds: float):
         _reapStrays()
 
 
-def _maxConcurrent(intervals) -> int:
+def _maxConcurrent(intervals: Iterable[tuple[int, float, float]]) -> int:
     """Peak overlap among ``(start, end)`` spans."""
     edges = [(start, 1) for _, start, _ in intervals]
     edges += [(end, -1) for _, _, end in intervals]

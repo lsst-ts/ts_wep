@@ -28,20 +28,24 @@ non-empty token for every mode, so an empty ``pair_path`` in a persisted
 catalog means a bug rather than "not applicable".
 """
 
+from __future__ import annotations
+
 import unittest
 from types import SimpleNamespace
+from typing import Any
 
+from lsst.ts.wep.blitz.dataStructures import Donut, _WfGroup
 from lsst.ts.wep.blitz.wavefrontFitting import _build_wf_groups
 
 _NON_PAIRING_MODES = ("unpaired", "full_detector", "full_corner")
 
 
-def _donut(det_name, donut_id, snr):
+def _donut(det_name: str, donut_id: int, snr: float) -> Any:
     """A stand-in for `Donut`: grouping reads only these three attributes."""
     return SimpleNamespace(det_name=det_name, donut_id=donut_id, snr=snr)
 
 
-def _groups(mode, results_by_det):
+def _groups(mode: str, results_by_det: dict[str, list[Donut]]) -> tuple[list[_WfGroup], list[Donut], str]:
     return _build_wf_groups(mode, results_by_det, "r", None, None)
 
 

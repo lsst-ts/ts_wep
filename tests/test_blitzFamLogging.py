@@ -33,6 +33,8 @@ exactly when someone is reading the log, and `np.nanmean` of nothing warns and
 returns NaN rather than raising.
 """
 
+from __future__ import annotations
+
 import unittest
 import unittest.mock
 
@@ -53,7 +55,7 @@ from lsst.ts.wep.blitz.donutBlitzFam import (
 from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingConfig
 
 
-def _cutout_result(visit_id, n_donuts=3, scatter=0.6, base=1.0):
+def _cutout_result(visit_id: int, n_donuts: int = 3, scatter: float = 0.6, base: float = 1.0) -> CutoutResult:
     """One exposure's cutout result, with the fields the summary reads."""
     return CutoutResult(
         visit_id=visit_id,
@@ -76,7 +78,9 @@ def _cutout_result(visit_id, n_donuts=3, scatter=0.6, base=1.0):
     )
 
 
-def _wf_result(success=True, group_size=2, nfev=6, elapsed=5.0):
+def _wf_result(
+    success: bool = True, group_size: int = 2, nfev: int = 6, elapsed: float = 5.0
+) -> WfGroupResult:
     """One fit group's result, with the fields the summary reads."""
     out = WfGroupResult.empty("g", n_zk=19)
     out.group_size = group_size
@@ -87,14 +91,14 @@ def _wf_result(success=True, group_size=2, nfev=6, elapsed=5.0):
 
 
 def _worker_result(
-    det_id=1,
-    det_name="R01_S00",
-    n_groups=2,
-    base=1.0,
-    error="",
-    skipped=False,
-    with_results=True,
-):
+    det_id: int = 1,
+    det_name: str = "R01_S00",
+    n_groups: int = 2,
+    base: float = 1.0,
+    error: str = "",
+    skipped: bool = False,
+    with_results: bool = True,
+) -> FamDetectorResult:
     """A `_fam_detector_worker` return value, as the parent sees it."""
     results = [_cutout_result(1000, base=base), _cutout_result(1001, base=base)] if with_results else []
     return FamDetectorResult(
@@ -126,13 +130,13 @@ class FamLoggingTestCase(unittest.TestCase):
         # tty.
         self.task._colorLogEnabled = False
 
-    def logLines(self, results):
+    def logLines(self, results: list[FamDetectorResult]) -> list[str]:
         """`_logWorkerSummaries` output, as fully formatted strings."""
         with self.assertLogs(self.task.log.name, level="INFO") as cm:
             self.task._logWorkerSummaries(results)
         return [record.getMessage() for record in cm.records]
 
-    def detectorLines(self, lines):
+    def detectorLines(self, lines: list[str]) -> list[str]:
         """Just the indented per-detector lines."""
         return [line for line in lines if line.startswith("  ")]
 
