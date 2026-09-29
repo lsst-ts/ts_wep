@@ -53,8 +53,8 @@ import astropy.units as u
 import numpy as np
 from astropy.table import QTable
 
-from lsst.pipe.base import Task
 from lsst.ts.wep.task.calcZernikesTask import blurClipZkTable, pos2f_dtype
+from lsst.ts.wep.task.combineZernikesBase import CombineZernikesBaseTask
 from lsst.utils.logging import LsstLogAdapter
 
 if TYPE_CHECKING:
@@ -280,7 +280,7 @@ def build_zernikes_tables(
     catalog: QTable,
     noll_indices: Sequence[int],
     wf_mode: str,
-    combine_zernikes: Task,
+    combine_zernikes: CombineZernikesBaseTask,
     visit_id: int,
     cam_name: str = "",
     visit_info: VisitInfo | None = None,
@@ -301,7 +301,7 @@ def build_zernikes_tables(
     wf_mode : `str`
         The ``wfEstimationMode`` the fits ran under.  Selects the row label
         prefix; the row *content* rules do not branch on it.
-    combine_zernikes : `lsst.pipe.base.Task`
+    combine_zernikes : `CombineZernikesBaseTask`
         The combine subtask, run per corner to fill the average row.
     visit_id : `int`
         The visit these tables are for.
@@ -397,7 +397,7 @@ def build_zernikes_tables(
 def _finalize_table(
     table: QTable,
     deviation_columns: Sequence[str],
-    combine_zernikes: Task,
+    combine_zernikes: CombineZernikesBaseTask,
     do_blur_clip: bool,
     blur_clip_min_rows: int,
 ) -> QTable:

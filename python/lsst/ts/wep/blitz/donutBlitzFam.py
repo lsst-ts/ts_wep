@@ -674,6 +674,16 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     ConfigClass = DonutBlitzFamConfig
     _DefaultName = "donutBlitzFam"
     config: DonutBlitzFamConfig
+    # Set by makeSubtask, so declared here for the type checker.
+    isr: IsrTaskLSST
+    subtractBackground: SubtractBackgroundTask
+    measureDiameter: DonutDetectDiameterTask
+    blitzDetect: BlitzDetectTask
+    astrometry: AstrometryTask
+    donutSelector: DonutSourceSelectorTask
+    measureCandidates: MeasureDonutCandidatesTask
+    cutStamps: CutDonutStampsTask
+    wavefrontFit: WavefrontFittingTask
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -711,7 +721,10 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         outputRefs: OutputQuantizedConnection,
     ) -> None:
         t_start = time.perf_counter()
-        group = butlerQC.quantum.dataId["group"]
+        quantumDataId = butlerQC.quantum.dataId
+        if quantumDataId is None:
+            raise RuntimeError("Quantum has no dataId.")
+        group = quantumDataId["group"]
 
         # --- 1. the group must be a clean intra/extra pair ---
         # Load-bearing: on a typical night most groups are singletons and a
@@ -808,7 +821,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 "back to blitz detection and spatial donut pairing."
             )
 
-        band = str(butlerQC.quantum.dataId["band"])
+        band = str(quantumDataId["band"])
 
         # The rest of the exposure metadata is read as a *component* off one
         # raw handle -- header only, no pixels. Everything downstream that
@@ -866,7 +879,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             # The extra-focal exposure's header, matching meta["ref_visit_id"]
             # and already read above as a component for the rotator angle.
             visit_info=visit_info,
-            instrument=str(butlerQC.quantum.dataId["instrument"]),
+            instrument=str(quantumDataId["instrument"]),
         )
 
         # Keyed to the extra-focal visit, 1:1 with groups. The intra ref is

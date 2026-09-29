@@ -582,6 +582,19 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
     ConfigClass = DonutBlitzCornerConfig
     _DefaultName = "donutBlitzCorner"
     config: DonutBlitzCornerConfig
+    # Set by makeSubtask, so declared here for the type checker.
+    isr: IsrTaskLSST
+    subtractBackground: SubtractBackgroundTask
+    measureDiameter: DonutDetectDiameterTask
+    blitzDetect: BlitzDetectTask
+    astrometry: AstrometryTask
+    donutSelector: DonutSourceSelectorTask
+    measureCandidates: MeasureDonutCandidatesTask
+    cutStamps: CutDonutStampsTask
+    wavefrontFit: WavefrontFittingTask
+    plot: DonutBlitzPlotTask
+    # Only built when doZernikesOutput, but every use is under that config.
+    combineZernikes: CombineZernikesSigmaClipTask
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -640,6 +653,9 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             " ".join(f"{name}={butler_times[name]:.3f}s" for name in _BUTLER_INPUTS),
             butler_elapsed,
         )
+        quantumDataId = butlerQC.quantum.dataId
+        if quantumDataId is None:
+            raise RuntimeError("Quantum has no dataId.")
         t_run0 = time.perf_counter()
         outputs = self.run(
             raws=fetched["raws"],
@@ -653,7 +669,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             butler_times=butler_times,
             num_cores=butlerQC.resources.num_cores,
             exposure_group=_exposure_group(inputRefs.raws),
-            instrument=str(butlerQC.quantum.dataId["instrument"]),
+            instrument=str(quantumDataId["instrument"]),
         )
         self.log.info("run() execution: %.3fs", time.perf_counter() - t_run0)
         butlerQC.put(outputs.cornerResults, outputRefs.cornerResults)
