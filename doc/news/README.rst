@@ -21,7 +21,7 @@ Each developer now has to create the news fragments for the changes they have ma
 The news fragments are then automatically integrated into the release notes by the ``towncrier`` tool.
 
 You can test how the content will be integrated into the release notes by running ``towncrier build --draft --version=v<X.XX.X>``.
-Note that you have to run it from the root repository directory (i.e. ``ts_ess_common``).
+Note that you have to run it from the root repository directory (i.e. ``ts_wep``).
 
 In order to update the release notes file for real, the person responsible for the release should run:
 
