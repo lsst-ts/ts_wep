@@ -279,28 +279,34 @@ def _cutout_one_exposure(
     scatter_arcsec = None
     wcs = None
     wcs_err = ""
-    try:
-        astrom_result = astrom_task.solve(
-            exposure=post_isr,
-            sourceCat=_build_afw_source_cat(blitz_detections, post_isr.getWcs()),
-            load_result=refcat_load_result,
-        )
-        scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
-        if scatter_arcsec < max_fit_scatter:
-            wcs = post_isr.getWcs()
-        else:
-            wcs_err = f'scatter {scatter_arcsec:.2f}" >= {max_fit_scatter}"'
-    except Exception as exc:
-        wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
-        _log.warning(
-            _colorize(
-                "Astrometry solve failed for %s; falling back to blitz detections: %s",
-                _ANSI_BOLD,
-                _ANSI_YELLOW,
-            ),
-            det_name,
-            wcs_err,
-        )
+    if refcat_load_result is None:
+        # Skipped explicitly rather than by letting solve() fail on the stub
+        # loader: the caller already warned about the missing shards, and both
+        # branches below need a refcat anyway.
+        wcs_err = "no reference catalog for this detector"
+    else:
+        try:
+            astrom_result = astrom_task.solve(
+                exposure=post_isr,
+                sourceCat=_build_afw_source_cat(blitz_detections, post_isr.getWcs()),
+                load_result=refcat_load_result,
+            )
+            scatter_arcsec = astrom_result.scatterOnSky.asArcseconds()
+            if scatter_arcsec < max_fit_scatter:
+                wcs = post_isr.getWcs()
+            else:
+                wcs_err = f'scatter {scatter_arcsec:.2f}" >= {max_fit_scatter}"'
+        except Exception as exc:
+            wcs_err = f"astrometry solve failed: {type(exc).__name__}: {exc}"
+            _log.warning(
+                _colorize(
+                    "Astrometry solve failed for %s; falling back to blitz detections: %s",
+                    _ANSI_BOLD,
+                    _ANSI_YELLOW,
+                ),
+                det_name,
+                wcs_err,
+            )
 
     # --- catalog selection ---
     t5 = time.perf_counter()
