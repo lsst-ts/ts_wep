@@ -42,13 +42,23 @@ families of column are absent:
   columns" guard instead of silently averaging nonsense.
 """
 
+from __future__ import annotations
+
 __all__ = ["build_zernikes_tables"]
+
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable
 
+from lsst.pipe.base import Task
 from lsst.ts.wep.task.calcZernikesTask import blurClipZkTable, pos2f_dtype
+from lsst.utils.logging import LsstLogAdapter
+
+if TYPE_CHECKING:
+    from lsst.afw.image import VisitInfo
 
 from .lsstCam import _LSSTCAM
 from .utils import CORNER_BY_DET_NAME, CORNER_DEFOCAL_BY_DET_NAME, CORNER_PAIRS
@@ -126,7 +136,7 @@ def _side_values(rows: QTable) -> dict:
     }
 
 
-def _init_table(noll_indices) -> QTable:
+def _init_table(noll_indices: Sequence[int]) -> QTable:
     """An empty table of the output schema, with its leading average row.
 
     Follows `CalcZernikesTask.initZkTable`, minus the columns this output does
@@ -165,7 +175,14 @@ def _init_table(noll_indices) -> QTable:
     return table
 
 
-def _table_metadata(noll_indices, det_names_by_side, visit_id, cam_name, band, visit_info) -> dict:
+def _table_metadata(
+    noll_indices: Sequence[int],
+    det_names_by_side: dict[str, str | None],
+    visit_id: int,
+    cam_name: str,
+    band: str,
+    visit_info: VisitInfo | None,
+) -> dict:
     """Metadata for one corner's table, following ``createZkTableMetadata``.
 
     ``opd_columns`` and ``intrinsic_columns`` are deliberately empty; see the
@@ -261,15 +278,15 @@ def _extra_focal_det_id(rows: QTable) -> int | None:
 
 def build_zernikes_tables(
     catalog: QTable,
-    noll_indices,
+    noll_indices: Sequence[int],
     wf_mode: str,
-    combine_zernikes,
+    combine_zernikes: Task,
     visit_id: int,
     cam_name: str = "",
-    visit_info=None,
+    visit_info: VisitInfo | None = None,
     do_blur_clip: bool = True,
     blur_clip_min_rows: int = 3,
-    log=None,
+    log: LsstLogAdapter | None = None,
 ) -> dict[int, QTable]:
     """Build one ``zernikes`` table per corner from the per-donut catalog.
 
@@ -379,8 +396,8 @@ def build_zernikes_tables(
 
 def _finalize_table(
     table: QTable,
-    deviation_columns,
-    combine_zernikes,
+    deviation_columns: Sequence[str],
+    combine_zernikes: Task,
     do_blur_clip: bool,
     blur_clip_min_rows: int,
 ) -> QTable:

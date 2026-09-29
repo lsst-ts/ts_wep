@@ -21,6 +21,8 @@
 
 """Danish wavefront fitting: donut grouping, the fit task, and its worker."""
 
+from __future__ import annotations
+
 __all__ = ["WavefrontFittingConfig", "WavefrontFittingTask"]
 
 import contextlib
@@ -28,8 +30,10 @@ import logging
 import os
 import signal
 import time
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import partial
+from types import FrameType
 from typing import Any, NamedTuple
 
 import batoid
@@ -69,7 +73,7 @@ from .utils import (
 _DANISH_FIELD_RADIUS_RAD = np.deg2rad(1.85)
 
 
-def _jacobian_callable(model, jacobian_format: str):
+def _jacobian_callable(model: Any, jacobian_format: str) -> Callable[..., Any]:
     """The Jacobian to hand `least_squares`, per `jacobianFormat`.
 
     `least_squares` calls `jac(x, *args)` and its own `kwargs` argument goes to
@@ -86,7 +90,7 @@ class _WfFitTimeoutError(Exception):
 
 
 @contextlib.contextmanager
-def _fit_timeout(seconds):
+def _fit_timeout(seconds: float) -> Iterator[None]:
     """SIGALRM-based timeout context manager.
 
     Works on any POSIX platform, macOS included; it is Windows that has no
@@ -96,7 +100,7 @@ def _fit_timeout(seconds):
     own main thread) but would break if fitting moved to a thread pool.
     """
 
-    def _handler(_signum, _frame):
+    def _handler(_signum: int, _frame: FrameType | None) -> None:
         raise _WfFitTimeoutError(f"WF fit exceeded {seconds:.0f}s timeout")
 
     old = signal.signal(signal.SIGALRM, _handler)
@@ -109,8 +113,12 @@ def _fit_timeout(seconds):
 
 
 def _bkg_free_model(
-    model_img: np.ndarray, danish_model, fit_params, donut_idx: int, bkg_order: int
-) -> np.ndarray:
+    model_img: np.ndarray | None,
+    danish_model: Any,
+    fit_params: dict[str, Any] | None,
+    donut_idx: int,
+    bkg_order: int,
+) -> np.ndarray | None:
     """Return model_img with the fitted background subtracted.
 
     fit_params is the dict returned by model.unpack_params(), or None on fit
@@ -169,7 +177,7 @@ def _blend_frac(
     return np.sum(np.abs(resid[faint_mask & sig_mask])) / total_model_flux
 
 
-def _dense_dev(zk_dev: np.ndarray, noll_indices) -> np.ndarray:
+def _dense_dev(zk_dev: np.ndarray, noll_indices: Sequence[int]) -> np.ndarray:
     """Return deviations in meters, dense over Noll 0..``_ZK_JMAX``.
 
     Indices that were not fitted are ``np.nan``, except Noll 0..3, which are
@@ -183,7 +191,13 @@ def _dense_dev(zk_dev: np.ndarray, noll_indices) -> np.ndarray:
     return out
 
 
-def _build_wf_groups(mode, results_by_det, band: str, rtp_deg: float | None, boresight_alt_rad: float | None):
+def _build_wf_groups(
+    mode: str,
+    results_by_det: dict[str, list[Donut]],
+    band: str,
+    rtp_deg: float | None,
+    boresight_alt_rad: float | None,
+) -> tuple[list[_WfGroup], list[Donut], str]:
     """Build `_WfGroup` work units from per-detector catalogs, for corner mode.
 
     Runs in the parent process after every detector has returned, because
@@ -308,7 +322,7 @@ _log = logging.getLogger(__name__)
 _DZ_MODEL_KEYS = ("fluxes", "dxs", "dys", "fwhm", "wavefront_params", "bkgs")
 
 
-def _wf_fitting_worker(group: "_WfGroup") -> WfGroupResult:
+def _wf_fitting_worker(group: _WfGroup) -> WfGroupResult:
     """Wavefront fitting worker for multiprocessing pool.
 
     Retrieves the WavefrontFittingTask from _COW_STORE and calls it on the
@@ -428,7 +442,7 @@ class WavefrontFittingConfig(pexConfig.Config):
         ),
     )
 
-    def validate(self):
+    def validate(self) -> None:
         super().validate()
         # `_run_lstsq_fit` supplies these itself, so setting them here would
         # pass a duplicate keyword argument to least_squares.
@@ -530,7 +544,7 @@ class _LstsqFitResult:
     # Which of the mutually exclusive fit paths produced this result.
     outcome: FitOutcome = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.outcome or self.outcome not in _FIT_OUTCOMES:
             raise ValueError(
                 f"outcome must be one of {tuple(o for o in _FIT_OUTCOMES if o)}; got {self.outcome!r}"
@@ -544,7 +558,7 @@ class _LstsqFitResult:
         elapsed: float,
         error: str,
         outcome: FitOutcome,
-    ) -> "_LstsqFitResult":
+    ) -> _LstsqFitResult:
         """Result for a fit that did not produce a wavefront.
 
         The three failure paths through `_run_lstsq_fit` -- a raise from the
@@ -595,7 +609,7 @@ class WavefrontFittingTask(pipeBase.Task):
     _DefaultName = "wavefrontFitting"
     config: WavefrontFittingConfig
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # Resolved once here rather than per group. A bad name raises here, in
         # the parent, rather than in every worker.
@@ -622,7 +636,7 @@ class WavefrontFittingTask(pipeBase.Task):
         """
         return os.path.basename(os.path.realpath(self._maskModelPath()))
 
-    def run(self, group: "_WfGroup") -> pipeBase.Struct:
+    def run(self, group: _WfGroup) -> pipeBase.Struct:
         """Fit wavefront aberrations for a group of donuts.
 
         Parameters
@@ -750,7 +764,7 @@ class WavefrontFittingTask(pipeBase.Task):
             )
         )
 
-    def _build_wf_factory(self, group: "_WfGroup") -> "danish.DonutFactory":
+    def _build_wf_factory(self, group: _WfGroup) -> danish.DonutFactory:
         """Build a Danish donut factory from config and group.
 
         Cached on ``(band, rtp, alt)``, which is everything about a group the
@@ -767,7 +781,7 @@ class WavefrontFittingTask(pipeBase.Task):
             self._factory_cache[key] = factory
         return factory
 
-    def _make_wf_factory(self, group: "_WfGroup") -> "danish.DonutFactory":
+    def _make_wf_factory(self, group: _WfGroup) -> danish.DonutFactory:
         """Construct a factory for this group, ignoring the cache."""
         factory_class = danish.DonutTriangleFactory if self.config.triangleMode else danish.DonutFactory
         factory_kwargs: dict[str, Any] = {}
@@ -802,7 +816,7 @@ class WavefrontFittingTask(pipeBase.Task):
             return None
         return danish.systematic_loss(alpha)
 
-    def _prep_donut_for_danish(self, donut: "Donut") -> _DanishDonutInputs:
+    def _prep_donut_for_danish(self, donut: Donut) -> _DanishDonutInputs:
         """Prepare a Donut for Danish fitting.
 
         Bins the stamp and forces it to an odd pixel size, estimates background
@@ -922,7 +936,16 @@ class WavefrontFittingTask(pipeBase.Task):
             bkg_std=bkg_std,
         )
 
-    def _run_lstsq_fit(self, model, x0, bounds, imgs, bkg_vars, timeout, label):
+    def _run_lstsq_fit(
+        self,
+        model: Any,
+        x0: np.ndarray,
+        bounds: list[list[float]],
+        imgs: list[np.ndarray],
+        bkg_vars: list[float],
+        timeout: float,
+        label: str,
+    ) -> _LstsqFitResult:
         """Run a DZMultiDonutModel least-squares fit with a uniform result.
 
         Handles the ``wfInitialGuessOnly`` path, SIGALRM timeout, and all

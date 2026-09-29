@@ -36,9 +36,12 @@ and `_rot_tel_pos_rad`, the rotator angle both tasks feed to the CCS -> OCS
 Zernike rotation.
 """
 
+from __future__ import annotations
+
 import copy
 import unittest
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
 
 import batoid
 import numpy as np
@@ -62,12 +65,15 @@ from lsst.ts.wep.blitz.utils import (
     _rot_tel_pos_rad,
 )
 
+if TYPE_CHECKING:
+    from lsst.ts.wep.blitz.dataStructures import Donut
 
-def _minimalDonut(**overrides):
+
+def _minimalDonut(**overrides: Any) -> Donut:
     """A Donut carrying just enough to reach the defocal-offset lookup."""
     from lsst.ts.wep.blitz.dataStructures import Donut
 
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         det_name="R00_SW0",
         stamp=np.ones((167, 167), dtype=float),
         thx_ccs=0.0,
@@ -192,7 +198,7 @@ class TestDefocalOffsets(unittest.TestCase):
         extra = (0.0, dz, 0.0)
         intra = (0.0, -dz, 0.0)
 
-        def traced_x(offsets, theta_deg):
+        def traced_x(offsets: tuple[float, float, float], theta_deg: float) -> float:
             telescope = _defocused_telescope(self.telescope, offsets)
             ray = batoid.RayVector.fromStop(
                 0.0,
@@ -269,7 +275,7 @@ class TestDefocalOffsets(unittest.TestCase):
             defocal_offsets=_EXTRA_FOCAL_OFFSETS,
         )
 
-        def zk_ref_with(telescope):
+        def zk_ref_with(telescope: batoid.Optic) -> np.ndarray:
             _COW_STORE.__dict__.clear()
             _COW_STORE.telescope = telescope
             return task._prep_donut_for_danish(donut).zk_ref
@@ -285,7 +291,7 @@ class TestDefocalOffsets(unittest.TestCase):
 class TestRotTelPos(unittest.TestCase):
     """`_rot_tel_pos_rad` wraps to [-pi, pi) rather than to [0, 2pi)."""
 
-    def _visitInfo(self, par_deg: float, rot_deg: float):
+    def _visitInfo(self, par_deg: float, rot_deg: float) -> Any:
         """A stand-in carrying only the two angles the helper reads.
 
         Real `lsst.geom.Angle` objects rather than floats, so the test

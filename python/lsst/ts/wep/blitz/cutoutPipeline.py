@@ -29,6 +29,7 @@ __all__ = []
 
 import logging
 import time
+from typing import Any
 
 import numpy as np
 from astropy.table import QTable
@@ -37,8 +38,9 @@ import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
 import lsst.geom
 import lsst.meas.base as measBase
-from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
+from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS, Detector
 from lsst.afw.geom import SkyWcs
+from lsst.afw.image import Exposure
 
 from .dataStructures import CutoutResult, DetectorView, SourceSet
 from .utils import (
@@ -117,7 +119,9 @@ def _source_set(table: QTable | None, mag_column: str) -> SourceSet | None:
     )
 
 
-def _field_distance_grid(detector, bbox, binning: int, shape: tuple[int, int]) -> np.ndarray:
+def _field_distance_grid(
+    detector: Detector, bbox: lsst.geom.Box2I, binning: int, shape: tuple[int, int]
+) -> np.ndarray:
     """Field distance [deg] at binned pixel centers, shaped like `shape`."""
     try:
         mapping = detector.getTransform(PIXELS, FIELD_ANGLE).getMapping()
@@ -136,7 +140,7 @@ def _field_distance_grid(detector, bbox, binning: int, shape: tuple[int, int]) -
 
 
 def _detector_view(
-    post_isr,
+    post_isr: Exposure,
     refcat: QTable | None,
     blitz_detections: QTable | None,
     selections: QTable | None,
@@ -171,9 +175,9 @@ def _detector_view(
 
 
 def _cutout_one_exposure(
-    raw,
+    raw: Exposure,
     calibs: IsrCalibs,
-    refcat_load_result,
+    refcat_load_result: Any,
     det_name: str,
     max_fit_scatter: float,
     astrom_ref_filter: str,

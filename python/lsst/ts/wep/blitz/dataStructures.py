@@ -21,6 +21,8 @@
 
 """Records passed between the blitz pipeline stages."""
 
+from __future__ import annotations
+
 __all__ = [
     "CutoutResult",
     "DetectorView",
@@ -242,7 +244,7 @@ class CutoutResult:
     # draws, or None where they were not built. Defaulted so the two
     # classmethods below, which both construct results for detectors that
     # produced nothing, do not have to name it.
-    view: "DetectorView | None" = None
+    view: DetectorView | None = None
 
     @classmethod
     def no_detections(
@@ -253,7 +255,7 @@ class CutoutResult:
         bkg_run: float,
         diam_run: float,
         detect_run: float,
-    ) -> "CutoutResult":
+    ) -> CutoutResult:
         """Result for a detector on which blitz detection found nothing.
 
         The four stages that did run are reported; the three below them never
@@ -281,7 +283,7 @@ class CutoutResult:
         )
 
     @classmethod
-    def dead(cls, det_name: str, reason: str) -> "CutoutResult":
+    def dead(cls, det_name: str, reason: str) -> CutoutResult:
         """Stand-in for a detector whose worker was killed outright.
 
         `_cutout_one_exposure` reports its own failures in ``wcs_refit_error``
@@ -462,7 +464,7 @@ class WfGroupResult:
     fit_outcome: FitOutcome
 
     @classmethod
-    def empty(cls, group_id: str, n_zk: int) -> "WfGroupResult":
+    def empty(cls, group_id: str, n_zk: int) -> WfGroupResult:
         """Result for a group with no donuts in it.
 
         Nothing was fit, so every fit field takes its no-fit value and
@@ -490,7 +492,7 @@ class WfGroupResult:
         )
 
     @classmethod
-    def dead(cls, group: _WfGroup, reason: str, n_zk: int) -> "WfGroupResult":
+    def dead(cls, group: _WfGroup, reason: str, n_zk: int) -> WfGroupResult:
         """Stand-in for a fit group whose worker was killed outright.
 
         No Python runs in a process the kernel has already destroyed, so the
@@ -581,7 +583,7 @@ class FamDetectorResult:
     pair_path: str = "n/a"
 
     @classmethod
-    def started(cls, det_id: int, dispatch_to_arrival: float) -> "FamDetectorResult":
+    def started(cls, det_id: int, dispatch_to_arrival: float) -> FamDetectorResult:
         """The result a worker starts from and fills in as it goes.
 
         Every phase timing is NaN and every list empty, so a worker that dies
@@ -607,7 +609,7 @@ class FamDetectorResult:
         )
 
     @classmethod
-    def dead(cls, det_id: int, reason: str) -> "FamDetectorResult":
+    def dead(cls, det_id: int, reason: str) -> FamDetectorResult:
         """Stand-in for a detector whose worker was killed outright.
 
         `_fam_detector_worker` catches `BaseException` so that it always

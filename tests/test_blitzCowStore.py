@@ -32,9 +32,12 @@ boundary. That makes two things worth pinning that no other test covers:
   set, and a field left over from the previous mode.
 """
 
+from __future__ import annotations
+
 import os
 import pickle
 import unittest
+from typing import Any
 
 from lsst.ts.wep.blitz import cutoutPipeline, famPipeline
 from lsst.ts.wep.blitz.utils import (
@@ -53,9 +56,9 @@ _EXTRA = (0.0, +1.5e-3, 0.0)
 _STUB_TELESCOPE = "stub-telescope"
 
 
-def _corner_store(**overrides):
+def _corner_store(**overrides: Any) -> CowStore:
     """A corner store filled with stubs, since nothing here runs a subtask."""
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         isr_task="isr",
         bkg_task="bkg",
         diam_task="diam",

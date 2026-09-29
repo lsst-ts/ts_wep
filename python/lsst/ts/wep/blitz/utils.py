@@ -21,11 +21,13 @@
 
 """Constants and helpers shared by more than one blitz module."""
 
+from __future__ import annotations
+
 __all__ = []
 
 import sys
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import batoid
 import galsim
@@ -34,6 +36,11 @@ import numpy as np
 from lsst.ts.wep.utils import binArray
 
 from .lsstCam import _LSSTCAM
+
+if TYPE_CHECKING:
+    from lsst.afw.image import VisitInfo
+
+    from .dataStructures import Donut
 
 _EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
 _INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
@@ -201,7 +208,7 @@ def _defocal_radial_scale(telescope: batoid.Optic, offsets: _Offsets) -> float:
     """
     wavelength = _RADIAL_SCALE_WAVELENGTH
 
-    def _chief_ray_x(optic):
+    def _chief_ray_x(optic: batoid.Optic) -> float:
         ray = batoid.RayVector.fromStop(
             0.0,
             0.0,
@@ -216,7 +223,7 @@ def _defocal_radial_scale(telescope: batoid.Optic, offsets: _Offsets) -> float:
     return _chief_ray_x(_defocused_telescope(telescope, offsets)) / _chief_ray_x(telescope)
 
 
-def _rot_tel_pos_rad(visit_info) -> float:
+def _rot_tel_pos_rad(visit_info: VisitInfo) -> float:
     """Rotator angle relative to the telescope, wrapped to [-pi, pi).
 
     Both blitz tasks need this and neither can avoid computing it: the
@@ -374,7 +381,7 @@ class CowStore:
     butler: Any
 
     @classmethod
-    def uninitialized(cls) -> "CowStore":
+    def uninitialized(cls) -> CowStore:
         """Return a store with its fields declared but none of them set.
 
         Bypasses the generated ``__init__`` deliberately: the two per-mode
@@ -404,7 +411,7 @@ class CowStore:
         corner_detectors: dict[str, CornerDetectorInputs],
         det_refcats: dict[str, Any],
         build_detector_view: bool = True,
-    ) -> "CowStore":
+    ) -> CowStore:
         """Build the store corner modes cutout and fit workers read.
 
         ``build_detector_view`` defaults True here and is required in
@@ -461,7 +468,7 @@ class CowStore:
         offsets_by_exposure: dict[int, _Offsets],
         refcat_handles: list,
         butler: Any,
-    ) -> "CowStore":
+    ) -> CowStore:
         """Build the store the full-array per-detector workers read.
 
         ``radial_scale_by_offsets`` is derived here rather than passed in: the
@@ -508,7 +515,7 @@ class CowStore:
         store.butler = butler
         return store
 
-    def adopt(self, other: "CowStore") -> None:
+    def adopt(self, other: CowStore) -> None:
         """Become ``other`` in place, discarding whatever was here before.
 
         Never rebind `_COW_STORE` instead of calling this: the worker modules
@@ -586,7 +593,7 @@ def _resolve_donut_radius(donut_radius: float | None) -> float:
     return donut_radius
 
 
-def _dense_intrinsic(donut) -> np.ndarray:
+def _dense_intrinsic(donut: Donut) -> np.ndarray:
     """Return intrinsic Zernikes in meters, dense over Noll 0..``_ZK_JMAX``.
 
     Indices with no supplied value are 0.0; ``Donut.intrinsic_zk`` is in µm and

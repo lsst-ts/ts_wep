@@ -51,6 +51,7 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connectionTypes
 import lsst.sphgeom
+from lsst.daf.butler import DataCoordinate, DatasetRef, DatasetType, Registry
 from lsst.ip.isr import IsrTaskLSST
 from lsst.meas.algorithms import (
     MagnitudeLimit,
@@ -192,7 +193,12 @@ def _mean_std_max(values: Sequence[float]) -> tuple[float, float, float]:
     )
 
 
-def _lookup_refcat_shards(datasetType, registry, quantumDataId, collections):
+def _lookup_refcat_shards(
+    datasetType: DatasetType,
+    registry: Registry,
+    quantumDataId: DataCoordinate,
+    collections: Sequence[str],
+) -> list[DatasetRef]:
     """Find the reference catalog shards this group's focal plane overlaps.
 
     A ``PrerequisiteInput`` lookup function, called once per quantum during

@@ -25,13 +25,16 @@ Both modes emit the same schema, so this lives in one place rather than in each
 task.
 """
 
+from __future__ import annotations
+
 __all__ = []
 
 import importlib
 import logging
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import astropy.units as u
 import numpy as np
@@ -39,7 +42,7 @@ from astropy.table import QTable
 
 from lsst.ts.wep.utils import getNollPairs
 
-from .dataStructures import _NULL_WF_DONUT
+from .dataStructures import _NULL_WF_DONUT, Donut
 from .lsstCam import _LSSTCAM
 from .utils import (
     _CUTOUT_STAGE_KEYS,
@@ -50,6 +53,9 @@ from .utils import (
     _dense_intrinsic,
     _rotate_zk,
 )
+
+if TYPE_CHECKING:
+    from lsst.afw.image import VisitInfo
 
 _log = logging.getLogger(__name__)
 
@@ -67,10 +73,10 @@ _OVERLAY_KINDS = (
 
 
 def _rotate_zk_to_eb(
-    zk_list,
-    thx,
-    thy,
-):
+    zk_list: Sequence[u.Quantity | np.ndarray],
+    thx: np.ndarray,
+    thy: np.ndarray,
+) -> list[u.Quantity | np.ndarray]:
     """Transform Noll-indexed Zernikes to an E/B (cosine/sine) basis.
 
     Rotates each spin-m Zernike doublet by m*phi, phi = atan2(thy, thx),
@@ -239,7 +245,9 @@ class _CatalogTimings:
     danish_elapsed: float = 0.0
 
 
-def _encode_nearby(entries):
+def _encode_nearby(
+    entries: Sequence[tuple[float, float, float]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return (dx, dy, mag) arrays of length ``_MAX_NEARBY`` for one donut.
 
     The offsets are relative to the donut's detector-frame centroid (``x_det``,
@@ -260,7 +268,7 @@ def _encode_nearby(entries):
     return x, y, mag
 
 
-def _defocal_offset_array(donut) -> np.ndarray:
+def _defocal_offset_array(donut: Donut) -> np.ndarray:
     """Return one donut's optic z shifts as a length-3 array of meters."""
     offsets = donut.defocal_offsets
     if offsets is None:
@@ -268,7 +276,7 @@ def _defocal_offset_array(donut) -> np.ndarray:
     return np.asarray(offsets, dtype=float)
 
 
-def _observation_meta(visit_info) -> dict:
+def _observation_meta(visit_info: VisitInfo | None) -> dict:
     """Return the observation keys for ``meta``, read off a `VisitInfo`."""
     if visit_info is None:
         return {
@@ -529,7 +537,7 @@ def _build_donut_catalog(
     # side detected more pass selection but have no partner, so they appear in
     # both lists. Keyed dedupe keeps one row per donut -- they stay candidates,
     # they just never got fitted.
-    def donut_key(d):
+    def donut_key(d: Donut) -> tuple[int, str, int]:
         return (d.visit_id, d.det_name, d.donut_id)
 
     all_donuts = []

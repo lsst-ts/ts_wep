@@ -21,13 +21,15 @@
 
 """Stamp cutting and donut quality rejection."""
 
+from __future__ import annotations
+
 __all__ = ["CutDonutStampsConfig", "CutDonutStampsTask"]
 
 from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-from astropy.table import QTable
+from astropy.table import QTable, Row
 
 import lsst.geom
 import lsst.pex.config as pexConfig
@@ -60,7 +62,7 @@ class _ExposureContext:
     sat_bit: int
 
     @classmethod
-    def from_exposure(cls, exposure: Exposure) -> "_ExposureContext":
+    def from_exposure(cls, exposure: Exposure) -> _ExposureContext:
         """Read the per-exposure values off a post-ISR exposure."""
         detector = exposure.getDetector()
         return cls(
@@ -95,7 +97,7 @@ class _RefcatArrays:
     astrom_mag: npt.NDArray[np.float64]
 
     @classmethod
-    def from_table(cls, refcat: QTable | None) -> "_RefcatArrays | None":
+    def from_table(cls, refcat: QTable | None) -> _RefcatArrays | None:
         """Extract the arrays, or `None` if there is no refcat."""
         if refcat is None:
             return None
@@ -109,7 +111,7 @@ class _RefcatArrays:
 
     def nearby(
         self,
-        donut_id,
+        donut_id: int,
         x_det: float,
         y_det: float,
         half: int,
@@ -295,7 +297,7 @@ class CutDonutStampsTask(pipeBase.Task):
 
     def _cut_stamp(
         self,
-        row,
+        row: Row,
         context: _ExposureContext,
         refcat_arrays: _RefcatArrays | None,
         donut_radius: float,
