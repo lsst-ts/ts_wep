@@ -560,3 +560,54 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         if "FINAL_SELECT" in qualityTable.colnames:
             # All donuts should have FINAL_SELECT=False
             self.assertTrue(np.all(~qualityTable["FINAL_SELECT"]))
+
+    def testIntrinsicProvenanceMetadata(self) -> None:
+        """runQuantum records the intrinsic Zernike inputs' run and UUID in
+        the output ``zernikes`` metadata.
+
+        The AstropyQTable formatter does not add butler provenance the way the
+        parquet formatter does for the blitz results, so runQuantum copies the
+        run collection and dataset id of each intrinsic Zernike calibration
+        into ``zernikes.meta`` by hand.
+        """
+        from typing import Any
+        from unittest.mock import MagicMock
+
+        # Real DatasetRefs for the two CWFS intrinsic calibrations, in
+        # detector order (191 -> extra-focal chip, 192 -> intra-focal chip).
+        # runQuantum resolves extra/intra ordering from these refs.
+        intrinsicRefs = [
+            self.registry.findDataset(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdExtra | {"detector": det},
+                collections=["LSSTCam/aos/intrinsic"],
+            )
+            for det in (191, 192)
+        ]
+
+        # Fake QuantumContext: get() returns the task inputs, put() captures
+        # the outputs so we can inspect the stored table metadata.
+        inputs = {
+            "donutStampsExtra": self.donutStampsExtra,
+            "donutStampsIntra": self.donutStampsIntra,
+            "intrinsicZernikes": self.intrinsicZernikes,
+        }
+        captured: dict[str, Any] = {}
+        butlerQC = MagicMock()
+        butlerQC.get.return_value = inputs
+        butlerQC.resources.num_cores = 1
+        butlerQC.put.side_effect = lambda outputs, refs: captured.update(outputs=outputs)
+
+        inputRefs = MagicMock()
+        inputRefs.intrinsicZernikes = intrinsicRefs
+        outputRefs = MagicMock()
+
+        self.task.runQuantum(butlerQC, inputRefs, outputRefs)
+
+        meta = captured["outputs"].zernikes.meta
+        # Detector 191 is the extra-focal chip, 192 the intra-focal one, so
+        # the provenance for each defocal type points at the matching ref.
+        self.assertEqual(meta["butler_intrinsic_extra_run"], intrinsicRefs[0].run)
+        self.assertEqual(meta["butler_intrinsic_extra_uuid"], str(intrinsicRefs[0].id))
+        self.assertEqual(meta["butler_intrinsic_intra_run"], intrinsicRefs[1].run)
+        self.assertEqual(meta["butler_intrinsic_intra_uuid"], str(intrinsicRefs[1].id))
