@@ -37,7 +37,11 @@ optics model, and that it removes the artifact when they do not.
 from __future__ import annotations
 
 import copy
+import os
+import shutil
+import tempfile
 import unittest
+import unittest.mock
 from typing import Any
 
 import batoid
@@ -283,13 +287,17 @@ class TestConfigurableModels(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             WavefrontFittingTask(config=config)
 
-    def testResolvedMaskModelFollowsSymlinks(self) -> None:
-        """A generic mask name must record as the file it pointed at.
+    def testResolvedMaskModelNamesTheVersionedMask(self) -> None:
+        """A generic mask name must record as the versioned file behind it.
 
-        ``RubinObsc.yaml`` is a symlink in danish's data directory, so the
-        configured name alone does not say which mask a past run used -- the
-        link can be repointed. Recording the target is what lets two catalogs
-        be compared later.
+        ``RubinObsc.yaml`` is an alias for whichever versioned mask is current,
+        and it has been repointed across danish releases, so the configured
+        name alone does not say which mask a past run used. Recording the
+        versioned name is what lets two catalogs be compared later.
+
+        This must hold however danish was installed. In a source checkout the
+        alias is a symlink; in an installed danish setuptools has dereferenced
+        it into a copy, and the versioned twin is identified by content.
         """
         config = WavefrontFittingTask.ConfigClass()
         config.maskModel = "RubinObsc.yaml"
@@ -297,8 +305,49 @@ class TestConfigurableModels(unittest.TestCase):
         resolved = task.resolvedMaskModel()
         self.assertNotEqual(resolved, "RubinObsc.yaml")
         self.assertTrue(resolved.startswith("RubinObsc_v"))
-        # And the loaded params are the target's, not something else.
+        # And the loaded params are the versioned file's, not something else.
         self.assertEqual(task._mask_params, danish.load_mask_params(resolved))
+
+    def testResolvedMaskModelMatchesADereferencedAlias(self) -> None:
+        """The alias must resolve without a symlink to follow.
+
+        Packaging turns the alias into a plain copy, which is what Jenkins and
+        any pip/conda install see, so exercise that layout explicitly rather
+        than depending on how the danish under test happens to be installed.
+        Goes through ``resolvedMaskModel`` rather than the matching helper
+        alone, because the two differ: ``realpath`` also rewrites parent
+        directories, and a temporary directory is itself often reached through
+        a link.
+        """
+        versioned_name = "RubinObsc_v1000_r_rtpp0_azp45_pp0d0.yaml"
+        with tempfile.TemporaryDirectory() as tmp:
+            versioned = os.path.join(tmp, versioned_name)
+            shutil.copyfile(os.path.join(danish.datadir, "RubinObsc.yaml"), versioned)
+            shutil.copyfile(versioned, os.path.join(tmp, "RubinObsc.yaml"))
+
+            config = WavefrontFittingTask.ConfigClass()
+            config.maskModel = "RubinObsc.yaml"
+            with unittest.mock.patch.object(danish, "datadir", tmp):
+                task = WavefrontFittingTask(config=config)
+                self.assertEqual(task.resolvedMaskModel(), versioned_name)
+
+    def testResolvedMaskModelKeepsAnAliasWithNoVersionedTwin(self) -> None:
+        """A name with nothing to resolve to must be recorded as it is.
+
+        Only the ``RubinObsc`` family is versioned; the per-instrument masks
+        are already specific. Falling back to the configured name keeps those
+        working instead of reporting a near-miss sibling.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copyfile(
+                os.path.join(danish.datadir, "RubinObsc.yaml"),
+                os.path.join(tmp, "RubinObsc.yaml"),
+            )
+            config = WavefrontFittingTask.ConfigClass()
+            config.maskModel = "RubinObsc.yaml"
+            with unittest.mock.patch.object(danish, "datadir", tmp):
+                task = WavefrontFittingTask(config=config)
+                self.assertEqual(task.resolvedMaskModel(), "RubinObsc.yaml")
 
     def testOpticsModelDefaultResolvesForEveryBand(self) -> None:
         """An unexpanded ``{band}`` reaching batoid is the failure to avoid.
