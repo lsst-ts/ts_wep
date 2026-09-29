@@ -770,7 +770,7 @@ class WavefrontFittingTask(pipeBase.Task):
     def _make_wf_factory(self, group: "_WfGroup") -> "danish.DonutFactory":
         """Construct a factory for this group, ignoring the cache."""
         factory_class = danish.DonutTriangleFactory if self.config.triangleMode else danish.DonutFactory
-        factory_kwargs = {}
+        factory_kwargs: dict[str, Any] = {}
         if self.config.doAoiThroughput and group.band:
             # danish keys its throughput table by band name, not by wavelength.
             if group.band in _LSSTCAM.wavelength:

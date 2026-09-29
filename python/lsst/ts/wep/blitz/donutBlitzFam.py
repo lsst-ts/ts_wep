@@ -40,6 +40,7 @@ __all__ = [
 import logging
 import time
 from collections import Counter
+from collections.abc import Sequence
 from typing import Any
 
 import batoid
@@ -175,7 +176,7 @@ def _detector_stage_times(r: FamDetectorResult) -> dict[str, float]:
     return {key: stages[key] for key in _STAGE_KEYS}
 
 
-def _mean_std_max(values: list[float]) -> tuple[float, float, float]:
+def _mean_std_max(values: Sequence[float]) -> tuple[float, float, float]:
     """Mean, standard deviation, and max of ``values``, ignoring NaN.
 
     Returns all-NaN rather than warning when nothing is finite, which is the
@@ -183,7 +184,7 @@ def _mean_std_max(values: list[float]) -> tuple[float, float, float]:
     """
     array = np.asarray(values, dtype=float)
     if array.size == 0 or not np.isfinite(array).any():
-        return (float("nan"),) * 3
+        return (float("nan"), float("nan"), float("nan"))
     return (
         np.nanmean(array),
         np.nanstd(array),
@@ -1115,7 +1116,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         if not results:
             return
 
-        def name_of(r: dict) -> str:
+        def name_of(r: FamDetectorResult) -> str:
             return r.det_name or f"det{r.det_id}"
 
         ok = []

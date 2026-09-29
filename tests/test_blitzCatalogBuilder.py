@@ -647,7 +647,7 @@ class TestBuildDonutCatalog(unittest.TestCase):
         self.assertTrue(np.isnan(table["coord_dec"][0].to_value(u.deg)))
 
     def testImageColumnsAreOptionalAndIndependent(self) -> None:
-        args = ([_result()], [], [_donut()], [], 42)
+        args: tuple[list, list, list, list, int] = ([_result()], [], [_donut()], [], 42)
         cases = {
             (True, True): ("stamp", "wf_img", "model_img"),
             (True, False): ("stamp",),

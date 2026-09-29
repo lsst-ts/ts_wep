@@ -499,7 +499,9 @@ class CowStore:
         store.extra_exposure = extra_exposure
         store.offsets_by_exposure = offsets_by_exposure
         store.radial_scale_by_offsets = {
-            tuple(float(o) for o in offsets): _defocal_radial_scale(telescope, offsets)
+            (float(offsets[0]), float(offsets[1]), float(offsets[2])): _defocal_radial_scale(
+                telescope, offsets
+            )
             for offsets in offsets_by_exposure.values()
         }
         store.refcat_handles = refcat_handles

@@ -933,6 +933,8 @@ class TestFocalPlaneOrientation(unittest.TestCase):
     the figure center than its least-vignetted one.
     """
 
+    panels: dict[str, tuple[int, np.ndarray]]
+
     @classmethod
     def setUpClass(cls) -> None:
         from lsst.afw.cameraGeom import FIELD_ANGLE, PIXELS
