@@ -753,7 +753,7 @@ class WavefrontFittingTask(pipeBase.Task):
             fluxes=[[0.0, np.inf]] * n,
             dxs=[[-np.inf, np.inf]] * n,
             dys=[[-np.inf, np.inf]] * n,
-            fwhm=[0.1, 5.0],
+            fwhm=[0.3, 5.0],
             bkgs=[[[-np.inf, np.inf]] * model.nbkg] * n,
             wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
         )
