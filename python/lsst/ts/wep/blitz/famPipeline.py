@@ -463,7 +463,10 @@ def _fam_detector_worker(args: tuple) -> FamDetectorResult:
         wf_fit_task = _COW_STORE.wf_fit_task
         wf_results = []
         for group in groups:
-            r = wf_fit_task.run(group)
+            # Unwrap the Struct `run` returns, as `_wf_fitting_worker` does in
+            # corner mode: downstream consumers (`_shed_images` here,
+            # `_buildCatalog` in the task) expect bare `WfGroupResult` records.
+            r = wf_fit_task.run(group).result
             wf_results.append(r)
         out.wf_results = wf_results
         out.fit_run = time.perf_counter() - t2
