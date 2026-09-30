@@ -751,8 +751,14 @@ class WavefrontFittingTask(pipeBase.Task):
         )
         bounds = model.pack_params(
             fluxes=[[0.0, np.inf]] * n,
-            dxs=[[-np.inf, np.inf]] * n,
-            dys=[[-np.inf, np.inf]] * n,
+            # +/- 60 arcsec. Effectively infinite next to a ~26" donut, but it
+            # keeps a diverging centroid from driving danish's Kolmogorov draw
+            # past galsim's maximum_fft_size (a shift near 200" needs an FFT
+            # over 8192 on a side, which raises).
+            dxs=[[-60.0, 60.0]] * n,
+            dys=[[-60.0, 60.0]] * n,
+            # Arcsec. The floor is likewise an FFT guard: maxk goes as 1/fwhm,
+            # so a fwhm under ~0.013" blows the same limit.
             fwhm=[0.3, 5.0],
             bkgs=[[[-np.inf, np.inf]] * model.nbkg] * n,
             wavefront_params=[[-np.inf, np.inf]] * len(dz_terms),
