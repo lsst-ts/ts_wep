@@ -40,9 +40,10 @@ from typing import Any
 import batoid
 import numpy as np
 
+import lsst.pipe.base as pipeBase
 from lsst.pipe.base import NoWorkFound, UnprocessableDataError
 from lsst.ts.wep.blitz import famPipeline
-from lsst.ts.wep.blitz.dataStructures import Donut, FamDetectorResult, _WfGroup
+from lsst.ts.wep.blitz.dataStructures import Donut, FamDetectorResult, WfGroupResult, _WfGroup
 from lsst.ts.wep.blitz.donutBlitzFam import DonutBlitzFamConfig, DonutBlitzFamTask
 from lsst.ts.wep.blitz.famPipeline import (
     _RAD_PER_PIXEL,
@@ -50,6 +51,7 @@ from lsst.ts.wep.blitz.famPipeline import (
     _pair_donuts,
 )
 from lsst.ts.wep.blitz.utils import _COW_STORE, _defocal_radial_scale
+from lsst.ts.wep.blitz.wavefrontFitting import WavefrontFittingTask
 
 _INTRA_OFFSETS = (0.0, -1.5e-3, 0.0)
 _EXTRA_OFFSETS = (0.0, +1.5e-3, 0.0)
@@ -475,6 +477,35 @@ class TestWorkerNeverDies(unittest.TestCase):
         # the guard in the worker has to be written against BaseException.
         self.assertTrue(issubclass(UnprocessableDataError, NoWorkFound))
         self.assertFalse(issubclass(UnprocessableDataError, Exception))
+
+
+class TestWfFitResultIsUnwrapped(unittest.TestCase):
+    """``WavefrontFittingTask.run`` returns a Struct; FAM must unwrap it.
+
+    FAM stores what ``run`` hands back and then treats it as a bare
+    `WfGroupResult`, so forgetting ``.result`` costs the whole quantum.  An
+    empty group pins the contract without a telescope, butler or Danish fit --
+    ``run`` returns before any of those.
+    """
+
+    def setUp(self) -> None:
+        self.task = WavefrontFittingTask()
+        self.group = _WfGroup(donuts=[], group_id="R22_S11_empty", band="r", rtp=0.0, alt=None)
+
+    def testRunReturnsAStructWrappingTheResult(self) -> None:
+        out = self.task.run(self.group)
+        self.assertIsInstance(out, pipeBase.Struct)
+        self.assertIsInstance(out.result, WfGroupResult)
+
+    def testTheStructItselfLacksTheFieldsFamReads(self) -> None:
+        # The exact shape of the bug: these raise AttributeError on the
+        # wrapper, which is what reached production as
+        # "'Struct' object has no attribute 'success'".
+        out = self.task.run(self.group)
+        self.assertFalse(hasattr(out, "success"))
+        self.assertFalse(hasattr(out, "donut_results"))
+        self.assertTrue(hasattr(out.result, "success"))
+        self.assertTrue(hasattr(out.result, "donut_results"))
 
 
 if __name__ == "__main__":
