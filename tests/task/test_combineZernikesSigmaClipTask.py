@@ -35,7 +35,7 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
     def setUp(self) -> None:
         self.config = CombineZernikesSigmaClipTaskConfig()
         self.config.stdMin = 0.005
-        self.task = CombineZernikesSigmaClipTask()
+        self.task = CombineZernikesSigmaClipTask(config=self.config)
 
     def prepareTestTable(self) -> Table:
         label = ["average"] + [f"pair{i}" for i in range(101)]
@@ -71,6 +71,63 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         self.assertEqual(2.0, task.sigmaClipKwargs["sigma"])
         self.assertEqual(0.005, task.stdMin)
         self.assertEqual(5, task.maxZernClip)
+
+    def prepareTightClusterTable(self, deviations_nm: list) -> Table:
+        """Build a single-corner table with the given per-donut deviations.
+
+        The deviation values are given in nm (the unit the Zernike columns are
+        stored in) so that the nm->um conversion inside the task is exercised.
+        Intrinsics are set to zero, so the opd and deviation columns match.
+        """
+        nDonuts = len(deviations_nm)
+        label = ["average"] + [f"pair{i}" for i in range(nDonuts)]
+        used = [True] + nDonuts * [False]
+        table = Table([label, used], names=["label", "used"])
+
+        nollIndices = np.arange(4, 12)
+        table.meta["noll_indices"] = nollIndices
+        table.meta["opd_columns"] = [f"Z{j}" for j in nollIndices]
+        table.meta["intrinsic_columns"] = [f"Z{j}_intrinsic" for j in nollIndices]
+        table.meta["deviation_columns"] = [f"Z{j}_deviation" for j in nollIndices]
+
+        for j in nollIndices:
+            table[f"Z{j}"] = np.array([np.nan] + list(deviations_nm)) * u.nm
+            table[f"Z{j}_intrinsic"] = np.array([np.nan] + nDonuts * [0.0]) * u.nm
+            table[f"Z{j}_deviation"] = np.array([np.nan] + list(deviations_nm)) * u.nm
+
+        return table
+
+    def testStdMinGate(self) -> None:
+        # A tight cluster (~0.7 um) with a single donut offset by ~0.045 um.
+        # The donut-to-donut scatter is ~0.018 um, which sits between the two
+        # stdMin values tested below. stdMin is documented in um, while the
+        # Zernike columns are stored in nm, so this also guards the nm->um
+        # conversion in the task: without it the gate would compare a ~18 nm
+        # scatter against a nm-scale threshold and never behave as intended.
+        deviations_nm = [700.0, 705.0, 698.0, 702.0, 745.0]
+
+        # With a small stdMin the offset donut exceeds the clip threshold and
+        # is rejected.
+        self.config.stdMin = 0.005
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        outTable = task.combineZernikes(self.prepareTightClusterTable(deviations_nm))
+        usedPairs = outTable["used"][outTable["label"] != "average"].tolist()
+        self.assertEqual(usedPairs, [True, True, True, True, False])
+
+        # Raising stdMin above the cluster scatter suppresses clipping
+        # entirely, so the well-measured donut is kept.
+        self.config.stdMin = 0.1
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        outTable = task.combineZernikes(self.prepareTightClusterTable(deviations_nm))
+        usedPairs = outTable["used"][outTable["label"] != "average"].tolist()
+        self.assertEqual(usedPairs, [True, True, True, True, True])
+
+        # A genuine large outlier is still rejected even with the high stdMin,
+        # because its deviation dominates the (robust) scatter estimate.
+        deviations_nm = [700.0, 705.0, 698.0, 702.0, 2000.0]
+        outTable = task.combineZernikes(self.prepareTightClusterTable(deviations_nm))
+        usedPairs = outTable["used"][outTable["label"] != "average"].tolist()
+        self.assertEqual(usedPairs, [True, True, True, True, False])
 
     def testCombineZernikes(self) -> None:
         inTable = self.prepareTestTable()
