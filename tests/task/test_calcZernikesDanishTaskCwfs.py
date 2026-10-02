@@ -26,9 +26,11 @@ from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
 enforce_single_threading()
 
+import astropy.units as u
+import lsst.pipe.base as pipeBase
 import lsst.utils.tests
 import numpy as np
-from astropy.table import vstack
+from astropy.table import QTable, vstack
 from lsst.daf.butler import Butler
 from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import (
@@ -401,6 +403,95 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertCountEqual(
             [WfAlgorithmName.Danish.value] * len(self.donutStampsExtra), zkCalc.meta["estimatorInfo"]["algo"]
         )
+
+    def testFinalizeZernikes(self) -> None:
+        """Test that _finalizeZernikes masks fit failures, combines, blur
+        clips, and builds the output Struct (empty when all donuts fail)."""
+        task = self.task
+
+        # Prepare the state createZkTable/_finalizeZernikes rely on, then
+        # estimate once and reuse the raw coefficients for every case.
+        task.stampsExtra = self.donutStampsExtra
+        task.stampsIntra = self.donutStampsIntra
+        task.intrinsicZernikesExtra, task.intrinsicZernikesIntra = self.intrinsicZernikes
+        zkCoeffRaw = task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra)
+
+        nollIndices = task.nollIndices
+        nNoll = len(nollIndices.list())
+        nDonuts = len(task.createZkTable(zkCoeffRaw)) - 1  # exclude leading average row
+        self.assertGreater(nDonuts, 0)
+
+        def freshTable(fitSuccess: list[bool] | None = None) -> QTable:
+            # Rebuild a pristine table for each case since _finalizeZernikes
+            # mutates its input. Start from the real estimator metadata and
+            # drop blur_clipped so its presence cleanly signals that blur
+            # clipping ran inside _finalizeZernikes.
+            zkTable = task.createZkTable(zkCoeffRaw)
+            zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
+            zkTable.meta["estimatorInfo"].pop("blur_clipped", None)
+            if fitSuccess is None:
+                zkTable.meta["estimatorInfo"].pop("fit_success", None)
+            else:
+                zkTable.meta["estimatorInfo"]["fit_success"] = list(fitSuccess)
+            return zkTable
+
+        # No fit_success info: nothing is masked, the table is combined, and a
+        # populated Struct is returned with the quality table passed through.
+        qualityTable = QTable()
+        result = task._finalizeZernikes(zkCoeffRaw, freshTable(), qualityTable)
+        self.assertIsInstance(result, pipeBase.Struct)
+        self.assertIs(result.donutQualityTable, qualityTable)
+        self.assertIn("average", list(result.zernikes["label"]))
+        self.assertEqual(result.outputZernikesAvg.shape, (1, nNoll))
+        self.assertTrue(np.all(np.isfinite(result.outputZernikesAvg)))
+        self.assertEqual(result.outputZernikesRaw.shape, np.atleast_2d(zkCoeffRaw.zernikes).shape)
+
+        # All donuts succeed: no donut row is NaN'd, and because doBlurClip is
+        # on by default with fwhm present, blur clipping runs.
+        self.assertTrue(task.doBlurClip)
+        result = task._finalizeZernikes(zkCoeffRaw, freshTable([True] * nDonuts), QTable())
+        self.assertIsInstance(result, pipeBase.Struct)
+        self.assertIn("blur_clipped", result.zernikes.meta["estimatorInfo"])
+        for j in nollIndices:
+            self.assertTrue(np.all(np.isfinite(result.zernikes[f"Z{j}"][1:])))
+
+        # Partial failure: only the failed donut rows are replaced with NaN,
+        # while the combined average stays finite thanks to the good donuts.
+        if nDonuts >= 2:
+            fitSuccess = [True] * nDonuts
+            fitSuccess[-1] = False  # fail the last donut
+            result = task._finalizeZernikes(zkCoeffRaw, freshTable(fitSuccess), QTable())
+            self.assertIsInstance(result, pipeBase.Struct)
+            self.assertTrue(np.all(np.isfinite(result.outputZernikesAvg)))
+            for j in nollIndices:
+                for i, success in enumerate(fitSuccess):
+                    row = i + 1  # +1 to skip the leading average row
+                    if success:
+                        self.assertTrue(np.isfinite(result.zernikes[f"Z{j}"][row]))
+                    else:
+                        self.assertTrue(np.isnan(result.zernikes[f"Z{j}"][row]))
+                        self.assertTrue(np.isnan(result.zernikes[f"Z{j}_deviation"][row]))
+
+        # All donuts fail: an empty result Struct is returned, carrying the
+        # quality and Zernike tables through and marking every donut as not
+        # blur clipped, with all-NaN average and raw outputs.
+        qualityTable = QTable()
+        zkTable = freshTable([False] * nDonuts)
+        result = task._finalizeZernikes(zkCoeffRaw, zkTable, qualityTable)
+        self.assertIsInstance(result, pipeBase.Struct)
+        self.assertIs(result.donutQualityTable, qualityTable)
+        self.assertIs(result.zernikes, zkTable)
+        self.assertEqual(zkTable.meta["estimatorInfo"]["blur_clipped"], [False] * nDonuts)
+        self.assertTrue(np.all(np.isnan(result.outputZernikesAvg)))
+        self.assertTrue(np.all(np.isnan(result.outputZernikesRaw)))
+
+        # Blur clipping is skipped when doBlurClip is off.
+        task.doBlurClip = False
+        try:
+            result = task._finalizeZernikes(zkCoeffRaw, freshTable([True] * nDonuts), QTable())
+            self.assertNotIn("blur_clipped", result.zernikes.meta["estimatorInfo"])
+        finally:
+            task.doBlurClip = True
 
     def testBlurClip(self) -> None:
         # Get sample zernike table
