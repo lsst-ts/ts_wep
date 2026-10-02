@@ -254,6 +254,21 @@ class TestGenerateDonutDirectDetectTask(lsst.utils.tests.TestCase):
             expected_metakeys,
         )
 
+        # Test run with a fully saturated exposure: constant pixel values with
+        # the SAT bit set everywhere (what ISR produces for a frame taken with
+        # the lights on). Background subtraction cannot fit a zero-variance
+        # image, so the task must bail out early with an empty catalog rather
+        # than raise.
+        exposure_sat = exposure_S11.clone()
+        exposure_sat.image.array[:] = 1.0e5
+        exposure_sat.variance.array[:] = 1.0e5
+        exposure_sat.mask.array[:] |= exposure_sat.mask.getPlaneBitMask("SAT")
+
+        taskOutSat = self.task.run(exposure_sat, self.camera)
+        self.assertEqual(len(taskOutSat.donutCatalog), 0)
+        self.assertCountEqual(taskOutSat.donutCatalog.columns, expected_columns)
+        self.assertCountEqual(taskOutSat.donutCatalog.meta.keys(), expected_metakeys)
+
         # Run detection with different sources in each exposure
         exposure_S10 = self.butler.get(
             "post_isr_image",

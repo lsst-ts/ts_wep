@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 import abc
+import time
 from itertools import zip_longest
 from typing import Any, Sequence, cast
 
@@ -550,13 +551,40 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
 
         return combineZernikesMean
 
+    def _getTaskNameOrLabel(self) -> str:
+        """Identify this task for log messages.
+
+        Uses the runtime class so that subclasses which inherit ``runQuantum``
+        (e.g. ``CalcZernikesNeuralTask``) report themselves rather than the
+        base class, plus the configured task label where it is available and
+        differs from the class name.
+
+        Returns
+        -------
+        prefix : `str`
+            Either ``"ClassName"`` or ``"ClassName (taskLabel)"``.
+        """
+        className = type(self).__name__
+        try:
+            label = self.getName()
+        except Exception:  # logging must never break the task
+            label = None
+        if label and label != className:
+            return f"{className} ({label})"
+        return className
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ) -> None:
+        taskName = self._getTaskNameOrLabel()
+
+        loadStart = time.perf_counter()
         inputs = butlerQC.get(inputRefs)
+        loadFinished = time.perf_counter()
+        self.log.info(f"{taskName}: runQuantum read took {loadFinished - loadStart:.3f} s")
 
         # The lookup function returns the intrinsic Zernike calibrations in
         # [extra, intra] order: a single shared calibration for full-array
@@ -585,13 +613,20 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
                 intrinsicZernikes.reverse()
             intrinsicZernikesIntra, intrinsicZernikesExtra = intrinsicZernikes
 
+        runStart = time.perf_counter()
         outputs = self.run(
             **inputs,
             intrinsicZernikesExtra=intrinsicZernikesExtra,
             intrinsicZernikesIntra=intrinsicZernikesIntra,
             numCores=butlerQC.resources.num_cores,
         )
+        runFinished = time.perf_counter()
+        self.log.info(f"{taskName}: run() took {runFinished - runStart:.3f} s")
+
+        putStart = time.perf_counter()
         butlerQC.put(outputs, outputRefs)
+        putFinished = time.perf_counter()
+        self.log.info(f"{taskName}: runQuantum writes took {putFinished - putStart:.3f} s")
 
     @timeMethod
     def run(
