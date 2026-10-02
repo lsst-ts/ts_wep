@@ -247,23 +247,23 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
         # A matching wavenetSha256 verifies and records the hash, tagged with
         # the config field and file basename.
         config.wavenetSha256 = expected
-        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)  # type: ignore[arg-type]
         self.assertEqual(stub.modelHashes, [f"wavenetPath:{basename}={expected}"])
 
         # An empty digest skips verification but still records the hash.
         config.wavenetSha256 = ""
-        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)  # type: ignore[arg-type]
         self.assertEqual(stub.modelHashes, [f"wavenetPath:{basename}={expected}"])
 
         # A mismatched digest raises.
         config.wavenetSha256 = "0" * 64
         with self.assertRaises(RuntimeError):
-            CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+            CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)  # type: ignore[arg-type]
 
         # With all model paths None (random weights), nothing is recorded.
         config.wavenetPath = None
         config.wavenetSha256 = ""
-        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)
+        CalcZernikesNeuralTask._recordAndVerifyModelChecksums(stub)  # type: ignore[arg-type]
         self.assertEqual(stub.modelHashes, [])
 
     def testModelSha256MismatchRaises(self) -> None:
@@ -493,7 +493,7 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             zernikes = np.zeros((1, len(self.task.nollIndices)))
             return zernikes, DonutStamps([]), zernikes
 
-        self.task.calcZernikesFromExposure = no_donut_result
+        self.task.calcZernikesFromExposure = no_donut_result  # type: ignore[method-assign,assignment]
         values = self.task.run(
             exposure,
             intrinsicZernikesExtra=intrinsicZernikes,
@@ -529,8 +529,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             zernikes = np.zeros((1, len(self.task.nollIndices)))
             return zernikes, FakeDonutStamps(), zernikes
 
-        self.task.calcZernikesFromExposure = zero_zernike_result
-        self.task.createDonutQualityTable = lambda _donuts: QTable({"SN": [np.nan]})
+        self.task.calcZernikesFromExposure = zero_zernike_result  # type: ignore[method-assign,assignment]
+        self.task.createDonutQualityTable = lambda _donuts: QTable({"SN": [np.nan]})  # type: ignore[method-assign,assignment]
         values = self.task.run(
             exposure,
             intrinsicZernikesExtra=intrinsicZernikes,
@@ -573,8 +573,8 @@ class TestCalcZernikesNeuralTask(lsst.utils.tests.TestCase):
             aggregate_zernikes[0, 0] = 1.23
             return aggregate_zernikes, FakeDonutStamps(), raw_zernikes
 
-        self.task.calcZernikesFromExposure = zero_raw_offset_aggregate_result
-        self.task.createDonutQualityTable = lambda _donuts: QTable({"SN": [np.nan]})
+        self.task.calcZernikesFromExposure = zero_raw_offset_aggregate_result  # type: ignore[method-assign,assignment]
+        self.task.createDonutQualityTable = lambda _donuts: QTable({"SN": [np.nan]})  # type: ignore[method-assign,assignment]
         values = self.task.run(
             exposure,
             intrinsicZernikesExtra=intrinsicZernikes,
