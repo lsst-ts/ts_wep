@@ -130,6 +130,14 @@ class GenerateDonutDirectDetectTaskConfig(
     edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Size of detector edge margin in pixels", dtype=int, default=80
     )
+    maxSaturatedFraction: pexConfig.Field = pexConfig.Field(
+        doc="If more than this fraction of the exposure's pixels carry the SAT "
+        + "mask bit, skip detection and return an empty donut catalog. A fully "
+        + "saturated frame has zero pixel variance, which makes the background "
+        + "fit raise instead of returning no sources.",
+        dtype=float,
+        default=0.5,
+    )
 
 
 class GenerateDonutDirectDetectTask(pipeBase.PipelineTask):
@@ -300,6 +308,23 @@ That means that the provided exposure is very close to focus"
             )
             self.log.warning(f"Cannot create template: {s}")
             self.log.warning("Returning empty donut catalog")
+            donutCatUpd = self.emptyTable()
+            donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
+            return pipeBase.Struct(donutCatalog=donutCatUpd)
+
+        # A (nearly) fully saturated exposure -- e.g. a 30 s in-focus
+        # acquisition taken with the dome lights on -- has constant pixel
+        # values after ISR, so its variance is zero and the Chebyshev
+        # background fit below raises "No valid points to fit" instead of
+        # finding no sources. Treat it like any exposure with no usable donuts.
+        satBit = exposure.mask.getPlaneBitMask("SAT")
+        satFraction = np.mean((exposure.mask.array & satBit) != 0)
+        if satFraction > self.config.maxSaturatedFraction:
+            self.log.warning(
+                f"{satFraction:.1%} of pixels are saturated "
+                f"(> maxSaturatedFraction={self.config.maxSaturatedFraction}). "
+                "Returning empty donut catalog."
+            )
             donutCatUpd = self.emptyTable()
             donutCatUpd = addVisitInfoToCatTable(exposure, donutCatUpd)
             return pipeBase.Struct(donutCatalog=donutCatUpd)
