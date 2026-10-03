@@ -21,6 +21,7 @@
 
 import os
 import unittest
+from typing import Callable
 
 import numpy as np
 
@@ -219,7 +220,8 @@ class TestZernikeUtils(TestCase):
         np.testing.assert_array_equal(floats, makeDense(floats, vals))
 
         # Test bad indices
-        for func in [makeSparse, makeDense]:
+        funcs: list[Callable] = [makeSparse, makeDense]
+        for func in funcs:
             with self.assertRaises(ValueError):
                 func([1, 2, 3], [3, 4, 5])
             with self.assertRaises(ValueError):

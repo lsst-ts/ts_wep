@@ -204,7 +204,7 @@ class TestDanishAlgorithm(unittest.TestCase):
         img, backgroundStd = dan.prepImage(intra, zkStart, instrument)
 
         # Background noise estimate is a positive scalar
-        self.assertTrue(np.isscalar(backgroundStd) or backgroundStd.ndim == 0)
+        self.assertTrue(np.isscalar(backgroundStd) or backgroundStd.ndim == 0)  # type: ignore[attr-defined]
         self.assertGreater(backgroundStd, 0)
 
         # The returned image is 2D and odd-sized in both dimensions

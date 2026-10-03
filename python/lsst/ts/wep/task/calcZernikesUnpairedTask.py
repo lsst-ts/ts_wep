@@ -123,7 +123,7 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         butlerQC.put(outputs, outputRefs)
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         donutStamps: DonutStamps,
         intrinsicZernikes: IntrinsicZernikes,

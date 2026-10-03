@@ -144,8 +144,8 @@ class TestGetObsConditions(unittest.TestCase):
 
         expected_rtp = Angle(q - rsp - np.pi / 2, "rad")
         expected_alt = Angle(alt, "rad")
-        self.assertAlmostEqual(result.rtp.rad, expected_rtp.rad)
-        self.assertAlmostEqual(result.altitude.rad, expected_alt.rad)
+        self.assertAlmostEqual(result.rtp.rad, expected_rtp.rad)  # type: ignore[union-attr]
+        self.assertAlmostEqual(result.altitude.rad, expected_alt.rad)  # type: ignore[union-attr]
 
     def testMissingKeysYieldsNoneFields(self) -> None:
         stamps = self._makeStamps({})
@@ -164,7 +164,7 @@ class TestGetObsConditions(unittest.TestCase):
             result = self.task._get_obs_conditions(stamps)
 
         self.assertIsNone(result.rtp)
-        self.assertAlmostEqual(result.altitude.rad, 0.8)
+        self.assertAlmostEqual(result.altitude.rad, 0.8)  # type: ignore[union-attr]
 
     def _makeInstrument(self, maskParamsFile: str | None, maskParams: dict | None = None) -> MagicMock:
         # Only the attributes touched by _logMaskVersions are needed.

@@ -59,7 +59,7 @@ class TestInstrument(unittest.TestCase):
 
     def testBadDefocalOffset(self) -> None:
         with self.assertRaises(ValueError):
-            Instrument(defocalOffset="bad")
+            Instrument(defocalOffset="bad")  # type: ignore[arg-type]
 
     def testBadPixelSize(self) -> None:
         with self.assertRaises(ValueError):
@@ -67,13 +67,13 @@ class TestInstrument(unittest.TestCase):
 
     def testBadWavelength(self) -> None:
         with self.assertRaises(TypeError):
-            Instrument(wavelength="bad")
+            Instrument(wavelength="bad")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             Instrument(wavelength={"u": 500e-9})
 
     def testBadBatoidModelName(self) -> None:
         with self.assertRaises(TypeError):
-            Instrument(batoidModelName=-1)
+            Instrument(batoidModelName=-1)  # type: ignore[arg-type]
 
     def testBadRefBand(self) -> None:
         with self.assertRaises(ValueError):
@@ -95,14 +95,14 @@ class TestInstrument(unittest.TestCase):
             inst.batoidModelName = None
             inst.batoidOffsetOptic = "Detector"
         with self.assertRaises(TypeError):
-            Instrument(batoidOffsetOptic=1)
+            Instrument(batoidOffsetOptic=1)  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             Instrument(batoidOffsetOptic="fake")
         # A bad element inside a list is also rejected
         with self.assertRaises(ValueError):
             Instrument(batoidOffsetOptic=["Detector", "fake"])
         with self.assertRaises(TypeError):
-            Instrument(batoidOffsetOptic=["Detector", 1])
+            Instrument(batoidOffsetOptic=["Detector", 1])  # type: ignore[list-item]
 
     def testBadBatoidOffsetValue(self) -> None:
         with self.assertRaises(RuntimeError):
@@ -248,11 +248,11 @@ class TestInstrument(unittest.TestCase):
 
     def testBadMaskParams(self) -> None:
         with self.assertRaises(TypeError):
-            Instrument(maskParams="bad")
+            Instrument(maskParams="bad")  # type: ignore[arg-type]
 
     def testBadMaskParamsFile(self) -> None:
         with self.assertRaises(TypeError):
-            Instrument(maskParamsFile=42)
+            Instrument(maskParamsFile=42)  # type: ignore[arg-type]
 
     def testDefaultMaskParams(self) -> None:
         # With no maskParams and no maskParamsFile, fall back to the simple

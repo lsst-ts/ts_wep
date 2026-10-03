@@ -52,11 +52,11 @@ class TestImage(unittest.TestCase):
 
     def testBadDefocalType(self) -> None:
         with self.assertRaises(TypeError):
-            Image(np.zeros((160, 160)), (0, 0), 1)
+            Image(np.zeros((160, 160)), (0, 0), 1)  # type: ignore[arg-type]
 
     def testBadBandLabel(self) -> None:
         with self.assertRaises(TypeError):
-            Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel=1)
+            Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel=1)  # type: ignore[arg-type]
 
     def testBandLabelStringNotInEnum(self) -> None:
         image = Image(np.zeros((160, 160)), (0, 0), "intra", bandLabel="NOT_AN_ENUMERATION")
@@ -64,7 +64,7 @@ class TestImage(unittest.TestCase):
 
     def testBadPlaneType(self) -> None:
         with self.assertRaises(TypeError):
-            Image(np.zeros((160, 160)), (0, 0), "intra", planeType=1)
+            Image(np.zeros((160, 160)), (0, 0), "intra", planeType=1)  # type: ignore[arg-type]
 
     def testBadBlendOffsets(self) -> None:
         with self.assertRaises(ValueError):
