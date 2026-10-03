@@ -22,6 +22,7 @@
 import os
 import unittest
 
+import galsim
 import numpy as np
 
 from lsst.ts.wep.utils import (
@@ -30,6 +31,7 @@ from lsst.ts.wep.utils import (
     createZernikeBasis,
     createZernikeGradBasis,
     getModulePath,
+    getNollPairs,
     getPsfGradPerZernike,
     getZernikeParity,
     makeDense,
@@ -255,6 +257,43 @@ class TestZernikeUtils(TestCase):
             checkNollIndices(np.array([4, 5, 20, 21]))
         with self.assertRaises(ValueError):
             checkNollIndices(np.array([4, 5, 6, 20]))
+
+    def testGetNollPairs(self) -> None:
+        # Noll 1..11 by hand.  Note the cosine member comes first in every
+        # doublet even though which of the two indices carries the positive
+        # m alternates: Noll 2 is +1 but Noll 5 is -2.
+        pairs, singles = getNollPairs(11)
+        self.assertEqual(pairs, [(2, 3, 1, 1), (6, 5, 2, 2), (8, 7, 3, 1), (10, 9, 3, 3)])
+        self.assertEqual(singles, [1, 4, 11])
+
+        pairs, singles = getNollPairs(22)
+        self.assertEqual(
+            pairs,
+            [
+                (2, 3, 1, 1),
+                (6, 5, 2, 2),
+                (8, 7, 3, 1),
+                (10, 9, 3, 3),
+                (12, 13, 4, 2),
+                (14, 15, 4, 4),
+                (16, 17, 5, 1),
+                (18, 19, 5, 3),
+                (20, 21, 5, 5),
+            ],
+        )
+        self.assertEqual(singles, [1, 4, 11, 22])
+
+        # Every index 1..jmax appears exactly once, and the split matches
+        # what galsim says about each index's azimuthal degree.
+        for jmax in (11, 22, 66):
+            pairs, singles = getNollPairs(jmax)
+            seen = [j for jCos, jSin, _, _ in pairs for j in (jCos, jSin)] + singles
+            self.assertEqual(sorted(seen), list(range(1, jmax + 1)))
+            for j in singles:
+                self.assertEqual(galsim.zernike.noll_to_zern(j)[1], 0)
+            for jCos, jSin, n, mAbs in pairs:
+                self.assertEqual(galsim.zernike.noll_to_zern(jCos), (n, mAbs))
+                self.assertEqual(galsim.zernike.noll_to_zern(jSin), (n, -mAbs))
 
 
 if __name__ == "__main__":
