@@ -44,7 +44,7 @@ from lsst.ts.wep.utils import (
 )
 
 
-def _failedZkResult(wfEstimator: WfEstimator) -> tuple[np.array, dict, dict]:
+def _failedZkResult(wfEstimator: WfEstimator, error_message: str) -> tuple[np.array, dict, dict]:
     """Build the fallback result for a donut whose Zernike estimation failed.
 
     Returns NaN Zernikes (one per Noll index) flagged with
@@ -56,6 +56,9 @@ def _failedZkResult(wfEstimator: WfEstimator) -> tuple[np.array, dict, dict]:
     ----------
     wfEstimator : WfEstimator
         The wavefront estimator, used to determine the number of Noll indices.
+    error_message : str
+        The error message from the exception that caused the failure. This is
+        logged for debugging purposes.
 
     Returns
     -------
@@ -63,7 +66,7 @@ def _failedZkResult(wfEstimator: WfEstimator) -> tuple[np.array, dict, dict]:
         NaN Zernike array, metadata dict flagging the failure, empty history.
     """
     zk = np.full(len(wfEstimator.nollIndices), np.nan)
-    return zk, {"fit_success": False}, {}
+    return zk, {"fit_success": False, "exception_status": error_message}, {}
 
 
 def estimate_zk_pair(
@@ -75,7 +78,7 @@ def estimate_zk_pair(
     log.info(f"Calculating Zernikes for Extra Donut {donutExtra.donut_id}, Intra Donut {donutIntra.donut_id}")
     try:
         zk, zkMeta = wfEstimator.estimateZk(donutExtra.wep_im, donutIntra.wep_im, obs)
-    except Exception:
+    except Exception as e:
         # Don't let a single bad donut pair abort the whole task. Log the
         # failure with a full traceback and return NaN Zernikes flagged as a
         # fit failure so this pair is dropped downstream.
@@ -86,7 +89,7 @@ def estimate_zk_pair(
             donutIntra.donut_id,
             exc_info=True,
         )
-        return _failedZkResult(wfEstimator)
+        return _failedZkResult(wfEstimator, str(e))
     log.info(
         f"Zernike estimation completed for Extra Donut {donutExtra.donut_id}, "
         f"Intra Donut {donutIntra.donut_id}"
@@ -109,7 +112,7 @@ def estimate_zk_single(
     log.info(f"Calculating Zernikes for Donut {donut.donut_id}")
     try:
         zk, zkMeta = wfEstimator.estimateZk(donut.wep_im, None, obs)
-    except Exception:
+    except Exception as e:
         # Don't let a single bad donut abort the whole task. Log the failure
         # with a full traceback and return NaN Zernikes flagged as a fit
         # failure so this donut is dropped downstream.
@@ -118,7 +121,7 @@ def estimate_zk_single(
             donut.donut_id,
             exc_info=True,
         )
-        return _failedZkResult(wfEstimator)
+        return _failedZkResult(wfEstimator, str(e))
     log.info(f"Zernike estimation completed for Donut {donut.donut_id}")
     # Log number of function evaluations if available (currently only danish)
     if (nfev := zkMeta.get("lstsq_nfev")) is not None:

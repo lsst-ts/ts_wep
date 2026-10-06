@@ -283,9 +283,8 @@ class TestEstimateZkFailureHandling(unittest.TestCase):
 
     def testPairFailureReturnsNaNsFlaggedAsFailure(self) -> None:
         wfEst = self._makeWfEstimator()
-        wfEst.estimateZk.side_effect = ValueError(
-            "Cannot compute zernike with Gaussian Quadrature with failed rays."
-        )
+        errorMessage = "Cannot compute zernike with Gaussian Quadrature with failed rays."
+        wfEst.estimateZk.side_effect = ValueError(errorMessage)
         obs = ObservingConditions()
         args = (self._makeDonut(1), self._makeDonut(2), obs, wfEst)
 
@@ -295,12 +294,14 @@ class TestEstimateZkFailureHandling(unittest.TestCase):
         self.assertEqual(len(zk), len(wfEst.nollIndices))
         self.assertTrue(np.all(np.isnan(zk)))
         self.assertFalse(zkMeta["fit_success"])
+        self.assertEqual(zkMeta["exception_status"], errorMessage)
         self.assertEqual(history, {})
         self.assertTrue(any("failed" in msg for msg in cm.output))
 
     def testSingleFailureReturnsNaNsFlaggedAsFailure(self) -> None:
         wfEst = self._makeWfEstimator()
-        wfEst.estimateZk.side_effect = ValueError("failed rays")
+        errorMessage = "failed rays"
+        wfEst.estimateZk.side_effect = ValueError(errorMessage)
         obs = ObservingConditions()
         args = (self._makeDonut(1), obs, wfEst)
 
@@ -310,6 +311,7 @@ class TestEstimateZkFailureHandling(unittest.TestCase):
         self.assertEqual(len(zk), len(wfEst.nollIndices))
         self.assertTrue(np.all(np.isnan(zk)))
         self.assertFalse(zkMeta["fit_success"])
+        self.assertEqual(zkMeta["exception_status"], errorMessage)
         self.assertEqual(history, {})
 
     def testPairSuccessPassesThrough(self) -> None:
@@ -350,6 +352,13 @@ class TestMultiCoreFailureHandling(unittest.TestCase):
         self.assertTrue(np.all(np.isnan(zkArray[1])))
         self.assertFalse(np.any(np.isnan(zkArray[2])))
 
+        # The bad pair reports only fit_success, so _collateZkMeta must
+        # NaN-fill its fwhm to stay aligned with the successful pairs.
+        self.assertEqual(len(zkMeta["fwhm"]), 3)
+        self.assertEqual(zkMeta["fwhm"][0], 1.0)
+        self.assertTrue(np.isnan(zkMeta["fwhm"][1]))
+        self.assertEqual(zkMeta["fwhm"][2], 1.0)
+
     def testEstimateFromIndivStampsMultiCoreToleratesBadDonut(self) -> None:
         task = _ConcreteTask()
         wfEst = _FakeWfEstimator()
@@ -366,6 +375,13 @@ class TestMultiCoreFailureHandling(unittest.TestCase):
         self.assertTrue(np.all(np.isnan(zkArray[1])))
         self.assertFalse(np.any(np.isnan(zkArray[0])))
         self.assertFalse(np.any(np.isnan(zkArray[2])))
+
+        # The bad donut reports only fit_success, so _collateZkMeta must
+        # NaN-fill its fwhm to stay aligned with the successful donuts.
+        self.assertEqual(len(zkMeta["fwhm"]), 3)
+        self.assertEqual(zkMeta["fwhm"][0], 1.0)
+        self.assertTrue(np.isnan(zkMeta["fwhm"][1]))
+        self.assertEqual(zkMeta["fwhm"][2], 1.0)
 
 
 class TestCollateZkMeta(unittest.TestCase):

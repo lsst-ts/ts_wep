@@ -183,7 +183,7 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
 
         # Save the outputs in the table
         zkTable = self.createZkTable(zkCoeffRaw)
-        zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
+        zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
 
         zkStruct = self._finalizeZernikes(zkCoeffRaw, zkTable, donutQualityTable)
 
