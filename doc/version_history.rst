@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v17.15.0 (2026-10-06)
+=====================
+
+Bug Fixes
+---------
+
+- Fix ``CalcZernikesNeuralTask.empty()`` after RSO-663: ``initZkTable()`` now always includes an average row, so assigning ``ood_score = []`` raised ``ValueError: Inconsistent data column lengths`` whenever TARTS detected donuts but could not produce usable Zernikes (or found none). Empty outputs now use a length-1 NaN OOD column and mark the average row unused, matching Danish empty-table behavior. (`DM-55506 <https://rubinobs.atlassian.net//browse/DM-55506>`_)
+- `GenerateDonutDirectDetectTask` now returns an empty donut catalog for exposures in which more than `maxSaturatedFraction` (default 0.5) of the pixels are saturated, instead of failing in background subtraction with `No valid points to fit. Variance is likely zero`. Fully saturated in-focus acquisition frames (e.g. taken with the dome lights on) otherwise take the whole visit's `cutOutDonutsCwfsPairTask` / `calcZernikesTask` quanta down with them. (`RSO-1001 <https://rubinobs.atlassian.net//browse/RSO-1001>`_)
+
+
 v17.14.1 (2026-09-28)
 =====================
 
