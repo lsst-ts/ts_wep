@@ -17,7 +17,7 @@ Version History
 
 .. towncrier release notes start
 
-v17.15.0 (2026-10-06)
+v17.14.2 (2026-10-06)
 =====================
 
 Bug Fixes
