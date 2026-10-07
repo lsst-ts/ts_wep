@@ -27,7 +27,6 @@ __all__ = [
 
 from typing import Sequence
 
-import numpy as np
 from astropy.table import QTable
 
 import lsst.pipe.base as pipeBase
@@ -184,17 +183,8 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
 
         # Save the outputs in the table
         zkTable = self.createZkTable(zkCoeffRaw)
-        zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
+        zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
 
-        # Combine Zernikes
-        zkTable = self.combineZernikes.run(zkTable).combinedTable
+        zkStruct = self._finalizeZernikes(zkCoeffRaw, zkTable, donutQualityTable)
 
-        avg = zkTable[zkTable["label"] == "average"]
-        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
-
-        return pipeBase.Struct(
-            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
-            outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
-            zernikes=zkTable,
-            donutQualityTable=donutQualityTable,
-        )
+        return zkStruct

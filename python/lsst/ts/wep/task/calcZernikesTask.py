@@ -573,6 +573,58 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             return f"{className} ({label})"
         return className
 
+    def _finalizeZernikes(
+        self, zkCoeffRaw: pipeBase.Struct, zkTable: QTable, donutQualityTable: QTable
+    ) -> pipeBase.Struct:
+        """Finish processing the Zernike table by checking for fit failures,
+        combining Zernikes, and applying blur clipping.
+
+        Parameters
+        ----------
+        zkCoeffRaw : np.ndarray
+            Raw Zernike coefficients.
+        zkTable : astropy.table.QTable
+            Zernike table.
+        donutQualityTable : astropy.table.QTable
+            Donut quality table.
+
+        Returns
+        -------
+        lsst.pipe.base.Struct
+            Struct with outputZernikesAvg, outputZernikesRaw,
+            zernikes, and donutQualityTable.
+        """
+        # If we have a fit failure recorded then replace Zernikes
+        # with NaNs for those donuts so we don't use them in combining.
+        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
+            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
+            if np.sum(fitSuccess) == 0:
+                self.log.info("All donuts had fit failures. Returning empty results.")
+                # all donuts are fit failures, so none are blur clipped
+                zkTable.meta["estimatorInfo"]["blur_clipped"] = [False] * (len(zkTable) - 1)
+                return self.empty(qualityTable=donutQualityTable, zernikeTable=zkTable)
+            failIdx = np.where(~np.array(fitSuccess))[0]
+            for j in self.nollIndices:
+                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
+                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+
+        # Combine Zernikes
+        zkTable = self.combineZernikes.run(zkTable).combinedTable
+
+        # Implement Blur Clip
+        if self.doBlurClip and ("fwhm" in zkTable.meta["estimatorInfo"].keys()):
+            zkTable = self.blurClip(zkTable)
+
+        avg = zkTable[zkTable["label"] == "average"]
+        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
+
+        return pipeBase.Struct(
+            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
+            outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
+            zernikes=zkTable,
+            donutQualityTable=donutQualityTable,
+        )
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
@@ -706,33 +758,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
 
-        # If we have a fit failure recorded then replace Zernikes
-        # with NaNs for those donuts so we don't use them in combining.
-        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
-            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
-            if np.sum(fitSuccess) == 0:
-                self.log.info("All donuts had fit failures. Returning empty results.")
-                # all donuts are fit failures, so none are blur clipped
-                zkTable.meta["estimatorInfo"]["blur_clipped"] = [False] * (len(zkTable) - 1)
-                return self.empty(qualityTable=donutQualityTable, zernikeTable=zkTable)
-            failIdx = np.where(~np.array(fitSuccess))[0]
-            for j in self.nollIndices:
-                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
-                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+        zkStruct = self._finalizeZernikes(zkCoeffRaw, zkTable, donutQualityTable)
 
-        # Combine Zernikes
-        zkTable = self.combineZernikes.run(zkTable).combinedTable
-
-        # Implement Blur Clip
-        if self.doBlurClip and ("fwhm" in zkTable.meta["estimatorInfo"].keys()):
-            zkTable = self.blurClip(zkTable)
-
-        avg = zkTable[zkTable["label"] == "average"]
-        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
-
-        return pipeBase.Struct(
-            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
-            outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
-            zernikes=zkTable,
-            donutQualityTable=donutQualityTable,
-        )
+        return zkStruct
