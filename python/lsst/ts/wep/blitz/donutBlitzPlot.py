@@ -56,6 +56,24 @@ from lsst.pipe.base import (
     QuantumContext,
 )
 
+try:
+    # rubintv_production is not among ts_wep's declared EUPS dependencies --
+    # donut_viz does not declare it either -- so it is imported softly: the
+    # package must still import, and its tests still run, wherever RubinTV
+    # is not deployed. doRubinTVUpload defaults off and is the only thing
+    # that needs it; see DonutBlitzPlotTask.__init__.
+    from lsst.rubintv.production.formatters import (  # type: ignore[import-untyped]
+        makePlotFile,
+    )
+    from lsst.rubintv.production.locationConfig import (  # type: ignore[import-untyped]
+        getAutomaticLocationConfig,
+    )
+    from lsst.rubintv.production.uploaders import (  # type: ignore[import-untyped]
+        MultiUploader,
+    )
+except ImportError:
+    MultiUploader = None  # type: ignore[assignment,misc]
+
 from .utils import (
     _CUTOUT_STAGE_KEYS,
     _MAX_NEARBY,
@@ -1392,6 +1410,58 @@ class DonutBlitzPlotConfig(
         default=None,
         optional=True,
     )
+    doRubinTVUpload: pexConfig.Field[bool] = pexConfig.Field[bool](
+        doc=(
+            "Also upload the figures to RubinTV, in addition to writing them "
+            "to the butler. Requires rubintv_production, which is not a "
+            "declared dependency: enabling it without that package is an "
+            "error at construction rather than a silent no-op.\n"
+            "\n"
+            "Uploads whichever plots were produced, so when running as a "
+            "subtask of DonutBlitzCornerTask this does nothing on its own -- "
+            "that task's savePlots=False deletes the plot connections and no "
+            "figure is ever built. Set both."
+        ),
+        default=False,
+    )
+
+
+# Butler dataset -> RubinTV plot name. The names are deliberately the ones
+# donut_viz' non-blitz tasks already upload under: blitz is an alternative
+# pipeline producing the same views, and RubinTV should show one stable entry
+# per view rather than one per pipeline. The corollary is that a blitz and a
+# non-blitz run over the same visit would overwrite each other's uploads.
+_RUBINTV_PLOT_NAMES = {
+    "donutDiagPlot": "fp_donut_gallery",
+    "wfDiagPlot": "donut_fits",
+    "selectionDiagPlot": "fp_selection_plot",
+}
+
+
+def _day_obs_seq_num_from_visit_id(visit: int) -> tuple[int, int]:
+    """Split a visit id into its dayObs and seqNum.
+
+    Reimplemented from ``lsst.donut.viz.utilities`` rather than imported:
+    donut_viz depends on ts_wep, so importing it here would invert that.
+    """
+    return visit // 100_000 % 1_000_000 + 20_000_000, visit % 100_000
+
+
+def _instrument_channel_name(instrument: str) -> str:
+    """The RubinTV channel for an instrument.
+
+    Reimplemented from ``lsst.donut.viz.utilities`` for the same reason as
+    `_day_obs_seq_num_from_visit_id`.
+    """
+    channels = {
+        "LSSTCam": "lsstcam_aos",
+        "LSSTCamSim": "lsstcam_sim_aos",
+        "LSSTComCam": "comcam_aos",
+        "LSSTComCamSim": "comcam_sim_aos",
+    }
+    if instrument not in channels:
+        raise ValueError(f"Unknown instrument {instrument}")
+    return channels[instrument]
 
 
 class DonutBlitzPlotTask(pipeBase.PipelineTask):
@@ -1418,6 +1488,14 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._colorLogEnabled = _resolve_color_log_enabled(self.config.colorLog)
+        self.uploader = None
+        if self.config.doRubinTVUpload:
+            if MultiUploader is None:
+                raise RuntimeError(
+                    "doRubinTVUpload is set but rubintv_production is not available; "
+                    "set up that package or leave the upload off."
+                )
+            self.uploader = MultiUploader()
 
     def runQuantum(
         self,
@@ -1483,6 +1561,43 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 continue
             butlerQC.put(figure, ref)
             self.log.info("Wrote %s", ref.datasetType.name)
+            if self.uploader is not None:
+                self._uploadToRubinTV(figure, ref, name)
+
+    def _uploadToRubinTV(self, figure: Figure, ref: Any, name: str) -> None:
+        """Upload one already-written figure to RubinTV.
+
+        Called after the butler write, so the dataset is safe whatever
+        happens here; a failed upload is logged and swallowed rather than
+        failing the quantum, since the Zernikes are the point of the run and
+        the figure is already persisted.
+        """
+        uploader = self.uploader
+        if uploader is None:  # pragma: no cover - guarded by the caller
+            return
+        try:
+            visit = int(ref.dataId["visit"])
+            instrument = str(ref.dataId["instrument"])
+            dayObs, seqNum = _day_obs_seq_num_from_visit_id(visit)
+            plotName = _RUBINTV_PLOT_NAMES[name]
+
+            locationConfig = getAutomaticLocationConfig()
+            plotFile = makePlotFile(locationConfig, instrument, dayObs, seqNum, plotName, "png")
+            figure.savefig(plotFile)
+            uploader.uploadPerSeqNumPlot(
+                instrument=_instrument_channel_name(instrument),
+                plotName=plotName,
+                dayObs=dayObs,
+                seqNum=seqNum,
+                filename=plotFile,
+            )
+            self.log.info("Uploaded %s to RubinTV as %s", ref.datasetType.name, plotName)
+        except Exception:
+            self.log.warning(
+                "RubinTV upload of %s failed; the butler dataset was still written.",
+                ref.datasetType.name,
+                exc_info=True,
+            )
 
     def run(
         self,
