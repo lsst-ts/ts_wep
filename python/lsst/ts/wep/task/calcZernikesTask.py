@@ -203,7 +203,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.intrinsicZernikesExtra: IntrinsicZernikes | None = None
         self.intrinsicZernikesIntra: IntrinsicZernikes | None = None
 
-    def _unpackStampData(self, stamp: DonutStamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
+    def _unpackStampData(self, stamp: DonutStamp | None) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
         """Unpack data from the stamp object, handling None stamps.
 
         Parameters

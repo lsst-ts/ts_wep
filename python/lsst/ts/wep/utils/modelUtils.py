@@ -223,6 +223,8 @@ def forwardModelPair(
     # Flatten surface brightness?
     if flat:
         mapper.createImageMasks(intraStamp, zkCoeff, isBinary=False)
+        assert intraStamp.mask is not None  # for mypy; set by createImageMasks
+        assert intraStamp.maskBlends is not None  # for mypy; set by createImageMasks
         intraStamp.image = np.clip(intraStamp.mask + intraStamp.maskBlends, 0, 1)
     # Normalize the flux
     intraStamp.image *= fluxIntra * (1 + sum(blendRatiosIntra)) / intraStamp.image.sum()
@@ -262,6 +264,8 @@ def forwardModelPair(
     # Flatten surface brightness?
     if flat:
         mapper.createImageMasks(extraStamp, zkCoeff, isBinary=False)
+        assert extraStamp.mask is not None  # for mypy; set by createImageMasks
+        assert extraStamp.maskBlends is not None  # for mypy; set by createImageMasks
         extraStamp.image = np.clip(extraStamp.mask + extraStamp.maskBlends, 0, 1)
     # Normalize the flux
     extraStamp.image *= fluxExtra * (1 + sum(blendRatiosExtra)) / extraStamp.image.sum()

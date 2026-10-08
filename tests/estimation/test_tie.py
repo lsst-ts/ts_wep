@@ -36,7 +36,7 @@ class TestTieAlgorithm(unittest.TestCase):
 
     def testBadMaxIter(self) -> None:
         with self.assertRaises(TypeError):
-            TieAlgorithm(maxIter=10.2)
+            TieAlgorithm(maxIter=10.2)  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             TieAlgorithm(maxIter=-1)
 
@@ -50,7 +50,7 @@ class TestTieAlgorithm(unittest.TestCase):
 
     def testBadCenterBinary(self) -> None:
         with self.assertRaises(TypeError):
-            TieAlgorithm(centerBinary="fake")
+            TieAlgorithm(centerBinary="fake")  # type: ignore[arg-type]
 
     def testBadConvergeTol(self) -> None:
         with self.assertRaises(ValueError):
@@ -58,7 +58,7 @@ class TestTieAlgorithm(unittest.TestCase):
 
     def testBadMaskKwargs(self) -> None:
         with self.assertRaises(TypeError):
-            TieAlgorithm(maskKwargs="fake")
+            TieAlgorithm(maskKwargs="fake")  # type: ignore[arg-type]
 
     def testAccuracy(self) -> None:
         for seed in [12345, 23451, 34512, 45123, 51234]:

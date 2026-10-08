@@ -22,7 +22,7 @@
 __all__ = ["TieAlgorithm"]
 
 import inspect
-from typing import Iterable
+from typing import Iterable, cast
 
 import numpy as np
 from scipy.ndimage import gaussian_filter
@@ -608,6 +608,7 @@ class TieAlgorithm(WfAlgorithm):
 
         # Replace the image with the pupil mask
         # (Convolving with Gaussian gives better results)
+        assert pupil.mask is not None  # for mypy; set by createPupilMasks
         pupil.image = gaussian_filter(
             pupil.mask.astype(float),
             self.modelPupilKernelSize,
@@ -822,7 +823,10 @@ class TieAlgorithm(WfAlgorithm):
                 )
 
             # Compensate images using the Zernikes
-            intraComp: Image = (
+            # (pupil is only used when the corresponding image is missing, in
+            # which case it is a valid Image rather than None).
+            intraComp: Image = cast(
+                Image,
                 pupil
                 if intraCent is None
                 else imageMapper.mapImageToPupil(
@@ -831,9 +835,10 @@ class TieAlgorithm(WfAlgorithm):
                     nollIndices,
                     masks=None if i == 0 else intraComp.masks,  # noqa: F821
                     **self.maskKwargs,
-                )
+                ),
             )
-            extraComp: Image = (
+            extraComp: Image = cast(
+                Image,
                 pupil
                 if extraCent is None
                 else imageMapper.mapImageToPupil(
@@ -842,10 +847,12 @@ class TieAlgorithm(WfAlgorithm):
                     nollIndices,
                     masks=None if i == 0 else extraComp.masks,  # noqa: F821
                     **self.maskKwargs,
-                )
+                ),
             )
 
             # Apply a common pupil mask to each
+            assert intraComp.mask is not None  # for mypy
+            assert extraComp.mask is not None  # for mypy
             mask = (intraComp.mask >= 1) & (extraComp.mask >= 1)
             intraComp.image *= mask
             extraComp.image *= mask

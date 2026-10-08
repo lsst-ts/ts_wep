@@ -34,7 +34,7 @@ class TestEnumUtils(unittest.TestCase):
         # We cannot access these using the band strings
         self.assertTrue(bandDict[BandLabel.LSST_R] == 2)
         with self.assertRaises(KeyError):
-            bandDict["r"]
+            bandDict["r"]  # type: ignore[index]
 
         # Convert this dictionary to an EnumDict
         bandDict2 = EnumDict(BandLabel, bandDict)

@@ -189,7 +189,7 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         detectorWcs = exposure.getWcs()
         edgeMargin = self.config.edgeMargin
         filterName = exposure.filter.bandLabel
-        filterList = self.config.catalogFilterList
+        filterList = list(self.config.catalogFilterList)
         # Check that specified filter exists in catalogs
         if self.config.photoRefFilter is not None and self.config.photoRefFilterPrefix is not None:
             raise ValueError("photoRefFilter and photoRefFilterPrefix cannot both be set.")
