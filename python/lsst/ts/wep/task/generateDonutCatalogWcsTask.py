@@ -202,13 +202,15 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             # Match detector layout to reference catalog
             self.log.info("Running Donut Selector")
             donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
-            refSelection, blendCentersX, blendCentersY = runSelection(
-                refObjLoader,
-                detector,
-                detectorWcs,
-                filterName,
-                donutSelectorTask,
-                edgeMargin,
+            refSelection, blendCentersX, blendCentersY, blendMags, blendSeparations, blendMagDiffs = (
+                runSelection(
+                    refObjLoader,
+                    detector,
+                    detectorWcs,
+                    filterName,
+                    donutSelectorTask,
+                    edgeMargin,
+                )
             )
             # Create list of filters to include in final catalog
             availableRefFilters = [
@@ -238,6 +240,9 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
             refSelection = None
             blendCentersX = None
             blendCentersY = None
+            blendMags = None
+            blendSeparations = None
+            blendMagDiffs = None
 
             # Record failure in task metadata
             self.metadata["refCatalogsPresent"] = False
@@ -248,7 +253,14 @@ class GenerateDonutCatalogWcsTask(pipeBase.PipelineTask):
         sortFilterIdx = filterList.index(filterName)
 
         fieldObjects = donutCatalogToAstropy(
-            refSelection, filterList, blendCentersX, blendCentersY, sortFilterIdx=sortFilterIdx
+            refSelection,
+            filterList,
+            blendCentersX,
+            blendCentersY,
+            blendMags=blendMags,
+            blendSeparations=blendSeparations,
+            blendMagDiffs=blendMagDiffs,
+            sortFilterIdx=sortFilterIdx,
         )
         fieldObjects["detector"] = np.array([detector.getName()] * len(fieldObjects), dtype=str)
 
