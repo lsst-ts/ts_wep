@@ -1,0 +1,19 @@
+Add a ``doRubinTVUpload`` config field to ``DonutBlitzPlotTask``, which uploads the three
+blitz diagnostic figures to RubinTV in addition to writing them to the butler.
+
+The upload happens in ``putPlots``, the single writer both entry points already share, so
+a figure is published identically whether it was drawn standalone or as a subtask of
+``DonutBlitzCornerTask``. Uploading had to live here rather than in donut_viz because the
+``Plot`` storage class is write-only -- the figures cannot be read back out of the butler
+to be uploaded by a later task.
+
+The plot names are the ones donut_viz' non-blitz tasks already publish under
+(``fp_donut_gallery``, ``donut_fits``, ``fp_selection_plot``), following the existing
+convention that one view gets one stable RubinTV entry whichever pipeline produced it.
+
+``rubintv_production`` is imported softly and the field defaults off, so ts_wep still
+imports and tests where RubinTV is not deployed; enabling the field without that package
+raises at construction rather than failing mid-run. An upload that fails is logged and
+swallowed -- the butler write has already happened by then, and the Zernikes are the point
+of the run. Note the field is a no-op unless ``savePlots`` is also on, since that is what
+decides whether a figure is built at all.
