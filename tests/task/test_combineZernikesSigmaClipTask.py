@@ -83,6 +83,64 @@ class TestCombineZernikesSigmaClipTask(unittest.TestCase):
         # Check used
         self.assertTrue(outTable["used"].tolist() == 99 * [True] + 3 * [False])
 
+    def testCombineDeviationOnlyTable(self) -> None:
+        """A table carrying only the deviation family must still combine.
+
+        The means are driven by the ``*_columns`` metadata rather than by
+        ``noll_indices``, so a table that omits the OPD and intrinsic families
+        entirely -- as the blitz ``zernikes`` output does, since a joint
+        fit has no single intrinsic to report -- combines instead of
+        raising KeyError on the absent columns.
+        """
+        full = self.prepareTestTable()
+        deviationColumns = list(full.meta["deviation_columns"])
+        inTable = full[["label", "used"] + deviationColumns]
+        inTable.meta = dict(full.meta)
+        inTable.meta["opd_columns"] = []
+        inTable.meta["intrinsic_columns"] = []
+
+        outTable = self.task.combineZernikes(inTable)
+
+        avg = outTable[outTable["label"] == "average"]
+        self.assertTrue(np.allclose([avg[col] for col in deviationColumns], 2.0))
+        self.assertTrue(outTable["used"].tolist() == 99 * [True] + 3 * [False])
+
+    def testDeviationOnlyMatchesFullTable(self) -> None:
+        """Dropping the unused families must not perturb the deviation result.
+
+        Guards the column-list iteration against a reordering bug: ``_setAvg``
+        touches one column at a time, so the deviation averages and ``used``
+        flags have to come out identical whether or not the other two families
+        are present.
+        """
+        full = self.task.combineZernikes(self.prepareTestTable())
+
+        source = self.prepareTestTable()
+        deviationColumns = list(source.meta["deviation_columns"])
+        trimmed = source[["label", "used"] + deviationColumns]
+        trimmed.meta = dict(source.meta)
+        trimmed.meta["opd_columns"] = []
+        trimmed.meta["intrinsic_columns"] = []
+        deviationOnly = self.task.combineZernikes(trimmed)
+
+        self.assertEqual(full["used"].tolist(), deviationOnly["used"].tolist())
+        for col in deviationColumns:
+            np.testing.assert_allclose(full[col], deviationOnly[col], equal_nan=True)
+
+    def testEmptyClipFamilyRaises(self) -> None:
+        """Clipping on a family the table does not carry fails loudly.
+
+        Without the guard this reaches a 2-D slice of a 1-D array and raises an
+        opaque IndexError instead.
+        """
+        source = self.prepareTestTable()
+        source.meta["opd_columns"] = []
+        self.config.zkClipType = "opd"
+        task = CombineZernikesSigmaClipTask(config=self.config)
+        with self.assertRaises(ValueError) as cm:
+            task.combineZernikes(source)
+        self.assertIn("opd_columns", str(cm.exception))
+
     def testCombineZernikesEffectiveMaxZernClip(self) -> None:
         inTable = self.prepareTestTable()
         inTable[1]["Z7_deviation"] = 1e2

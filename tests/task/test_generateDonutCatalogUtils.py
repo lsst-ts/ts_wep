@@ -121,6 +121,8 @@ class TestGenerateDonutCatalogUtils(unittest.TestCase):
         # change unblendedSeparation so no stars are blended
         donutSelectorConfig.magMax = 18.0
         donutSelectorConfig.unblendedSeparation = 1
+        # Must stay <= unblendedSeparation; nothing blends at 1 px anyway.
+        donutSelectorConfig.minBlendedSeparation = 1
         donutSelectorTask = DonutSourceSelectorTask(config=donutSelectorConfig)
         donutCatFull, blendX, blendY = runSelection(
             refObjLoader, detector, wcs, "g", donutSelectorTask, edgeMargin
