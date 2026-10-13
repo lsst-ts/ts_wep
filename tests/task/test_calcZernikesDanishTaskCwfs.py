@@ -675,6 +675,9 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             )
             for det in (191, 192)
         ]
+        intrinsicExtra, intrinsicIntra = intrinsicRefs
+        assert intrinsicExtra is not None
+        assert intrinsicIntra is not None
 
         # Fake QuantumContext: get() returns the task inputs, put() captures
         # the outputs so we can inspect the stored table metadata.
@@ -698,7 +701,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         meta = captured["outputs"].zernikes.meta
         # Detector 191 is the extra-focal chip, 192 the intra-focal one, so
         # the provenance for each defocal type points at the matching ref.
-        self.assertEqual(meta["butler_intrinsic_extra_run"], intrinsicRefs[0].run)
-        self.assertEqual(meta["butler_intrinsic_extra_uuid"], str(intrinsicRefs[0].id))
-        self.assertEqual(meta["butler_intrinsic_intra_run"], intrinsicRefs[1].run)
-        self.assertEqual(meta["butler_intrinsic_intra_uuid"], str(intrinsicRefs[1].id))
+        self.assertEqual(meta["butler_intrinsic_extra_run"], intrinsicExtra.run)
+        self.assertEqual(meta["butler_intrinsic_extra_uuid"], str(intrinsicExtra.id))
+        self.assertEqual(meta["butler_intrinsic_intra_run"], intrinsicIntra.run)
+        self.assertEqual(meta["butler_intrinsic_intra_uuid"], str(intrinsicIntra.id))
