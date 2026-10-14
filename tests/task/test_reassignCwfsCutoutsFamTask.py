@@ -78,7 +78,7 @@ class TestReassignCwfsCutoutsFamTaskConnections(unittest.TestCase):
         connections = self._makeConnections(customQG=False)
         adjuster = FakeQuantaAdjuster([self.intraDataId, self.extraDataId])
 
-        connections.adjust_all_quanta(adjuster)
+        connections.adjust_all_quanta(adjuster)  # type: ignore[arg-type]
 
         # The intra-focal quantum (visit=100, detector=192) is dropped...
         self.assertEqual(adjuster.removed, [self.intraDataId])
@@ -90,7 +90,7 @@ class TestReassignCwfsCutoutsFamTaskConnections(unittest.TestCase):
         connections = self._makeConnections(customQG=True)
         adjuster = FakeQuantaAdjuster([self.intraDataId, self.extraDataId])
 
-        connections.adjust_all_quanta(adjuster)
+        connections.adjust_all_quanta(adjuster)  # type: ignore[arg-type]
 
         # With a custom quantum graph builder, the intra-focal quantum is
         # dropped but not reassigned since the builder already handles that.
@@ -101,7 +101,7 @@ class TestReassignCwfsCutoutsFamTaskConnections(unittest.TestCase):
         connections = self._makeConnections(customQG=False)
         adjuster = FakeQuantaAdjuster([self.extraDataId])
 
-        connections.adjust_all_quanta(adjuster)
+        connections.adjust_all_quanta(adjuster)  # type: ignore[arg-type]
 
         self.assertEqual(adjuster.removed, [])
         self.assertEqual(adjuster.added, [])
@@ -118,7 +118,7 @@ class TestReassignCwfsCutoutsFamTaskConnections(unittest.TestCase):
         adjuster = FakeQuantaAdjuster([self.extraDataId, strayIntraDataId])
 
         with self.assertRaises(RuntimeError):
-            connections.adjust_all_quanta(adjuster)
+            connections.adjust_all_quanta(adjuster)  # type: ignore[arg-type]
 
 
 class TestReassignCwfsCutoutsFamTask(unittest.TestCase):

@@ -44,7 +44,7 @@ class TestCombineZernikesBaseTask(unittest.TestCase):
         # Without a combineZernikes method the class
         # should not be built
         with self.assertRaises(TypeError):
-            CombineZernikesBaseTask()
+            CombineZernikesBaseTask()  # type: ignore[abstract]
 
     def testSubclassWorks(self) -> None:
         class TestCombineClass(CombineZernikesBaseTask):

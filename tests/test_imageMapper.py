@@ -115,7 +115,7 @@ class TestImageMapper(unittest.TestCase):
 
     def testBadOpticalModel(self) -> None:
         with self.assertRaises(TypeError):
-            ImageMapper(opticalModel=1)
+            ImageMapper(opticalModel=1)  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             ImageMapper(opticalModel="bad")
 
@@ -179,7 +179,7 @@ class TestImageMapper(unittest.TestCase):
         mapper.createPupilMasks(image, isBinary=True)
 
         # Get the difference in the masks
-        diff = maskPupilBatoid.astype(float) - image.mask.astype(float)
+        diff = maskPupilBatoid.astype(float) - image.mask.astype(float)  # type: ignore[union-attr]
 
         # Apply binary opening to remove sub-pixel artifacts at the edges of
         # the masks. Two iterations are needed because the analytic mask and
@@ -216,13 +216,13 @@ class TestImageMapper(unittest.TestCase):
             maskImageBatoid = batoidImage > 0
 
             # Get the difference in the masks
-            diff = maskImageBatoid.astype(float) - image.mask.astype(float)
+            diff = maskImageBatoid.astype(float) - image.mask.astype(float)  # type: ignore[union-attr]
 
             # Binary opening to remove small artifacts at edges of masks
             diff = binary_opening(diff)
 
             # Calculate the fractional difference
-            fracDiff = np.abs(diff).sum() / image.mask.sum()
+            fracDiff = np.abs(diff).sum() / image.mask.sum()  # type: ignore[union-attr]
 
             self.assertLess(fracDiff, 0.01)
 
@@ -330,7 +330,7 @@ class TestImageMapper(unittest.TestCase):
             # and the reconstructed pupil
             diff = pupilRecon.image - pupil
 
-            self.assertLess(diff.sum() / pupil.sum(), 0.02)
+            self.assertLess(diff.sum() / pupil.sum(), 0.02)  # type: ignore[union-attr]
             self.assertLess(diff.max(), 1)
 
     def testMaskBlends(self) -> None:
@@ -363,13 +363,13 @@ class TestImageMapper(unittest.TestCase):
         mask0 = image.mask
         mapper.createImageMasks(image, doMaskBlends=True)
         mask1 = image.mask
-        self.assertTrue(0 < mask1.sum() < mask0.sum())
+        self.assertTrue(0 < mask1.sum() < mask0.sum())  # type: ignore[union-attr]
 
         mapper.createPupilMasks(image, doMaskBlends=False, ignorePlane=True)
         mask0 = image.mask
         mapper.createPupilMasks(image, doMaskBlends=True, ignorePlane=True)
         mask1 = image.mask
-        self.assertTrue(0 < mask1.sum() < mask0.sum())
+        self.assertTrue(0 < mask1.sum() < mask0.sum())  # type: ignore[union-attr]
 
         self.assertTrue(
             0
@@ -407,8 +407,8 @@ class TestImageMapper(unittest.TestCase):
         mapper.createImageMasks(image, isBinary=True, dilate=1)
         mask1 = image.mask
         self.assertGreater(
-            mask1.sum(),
-            mask0.sum(),
+            mask1.sum(),  # type: ignore[union-attr]
+            mask0.sum(),  # type: ignore[union-attr]
         )
 
         mapper.createPupilMasks(image, isBinary=True, ignorePlane=True)
@@ -416,8 +416,8 @@ class TestImageMapper(unittest.TestCase):
         mapper.createPupilMasks(image, isBinary=True, dilate=1, ignorePlane=True)
         mask1 = image.mask
         self.assertGreater(
-            mask1.sum(),
-            mask0.sum(),
+            mask1.sum(),  # type: ignore[union-attr]
+            mask0.sum(),  # type: ignore[union-attr]
         )
 
     def testDilateBlends(self) -> None:
@@ -455,8 +455,8 @@ class TestImageMapper(unittest.TestCase):
         mapper.createImageMasks(image, doMaskBlends=True, dilateBlends=1)
         mask1 = image.mask
         self.assertLess(
-            mask1.sum(),
-            mask0.sum(),
+            mask1.sum(),  # type: ignore[union-attr]
+            mask0.sum(),  # type: ignore[union-attr]
         )
 
         mapper.createPupilMasks(image, doMaskBlends=True, ignorePlane=True)
@@ -469,8 +469,8 @@ class TestImageMapper(unittest.TestCase):
         )
         mask1 = image.mask
         self.assertLess(
-            mask1.sum(),
-            mask0.sum(),
+            mask1.sum(),  # type: ignore[union-attr]
+            mask0.sum(),  # type: ignore[union-attr]
         )
 
     def testCreateBlendMask(self) -> None:
@@ -524,7 +524,7 @@ class TestImageMapper(unittest.TestCase):
                     dilateBlends=1,
                     isPupilMask=isPupilMask,
                 )
-                self.assertGreater(blendMask.sum(), mask0.sum())
+                self.assertGreater(blendMask.sum(), mask0.sum())  # type: ignore[union-attr]
             except AssertionError:
                 raise AssertionError(f"Failed on test of isIntra={isIntra}, isPupilMask={isPupilMask}")
 
@@ -552,7 +552,7 @@ class TestImageMapper(unittest.TestCase):
             # Get the source mask in order to simulate blended image
             mapper.createImageMasks(image, doMaskBlends=False)
             mask0 = image.mask
-            image.image = np.array(mask0.copy(), dtype=np.float64)
+            image.image = np.array(mask0.copy(), dtype=np.float64)  # type: ignore[union-attr]
             image.image += shift(image.image, image.blendOffsets[0, ::-1])
 
             # Add some noise
@@ -649,6 +649,7 @@ class TestImageMapper(unittest.TestCase):
             # Determine per-optic shifts (batoidOffsetValue if set, else the
             # scalar defocalOffset applied to each offset optic)
             offsetOptics = inst.batoidOffsetOptic
+            assert offsetOptics is not None  # for mypy
             defocalSign = -1 if dfType == "intra" else 1
             if inst.batoidOffsetValue is None:
                 offsetValues = [defocalSign * inst.defocalOffset] * len(offsetOptics)

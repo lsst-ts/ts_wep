@@ -161,6 +161,9 @@ class CutOutDonutsScienceSensorTask(CutOutDonutsBaseTask):
     ConfigClass = CutOutDonutsScienceSensorTaskConfig
     _DefaultName = "CutOutDonutsScienceSensorTask"
     config: CutOutDonutsScienceSensorTaskConfig
+    # The pairer subtask is configurable (ExposurePairer, TablePairer, or
+    # GroupPairer); its run() signature varies by target, so type as Any.
+    pairer: Any
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

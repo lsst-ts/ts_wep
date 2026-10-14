@@ -225,7 +225,7 @@ class Image:
             raise TypeError("planeType must be a PlaneType Enum, or one of the corresponding strings.")
 
     @property
-    def blendOffsets(self) -> Union[np.ndarray, None]:
+    def blendOffsets(self) -> np.ndarray:
         """The blend offsets array for the image."""
         return self._blendOffsets
 

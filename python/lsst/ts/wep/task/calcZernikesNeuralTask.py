@@ -1343,7 +1343,7 @@ class CalcZernikesNeuralTask(CalcZernikesTask):
         return struct
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         exposure: afwImage.Exposure,
         intrinsicZernikesExtra: IntrinsicZernikes | None = None,

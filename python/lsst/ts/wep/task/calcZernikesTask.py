@@ -203,7 +203,7 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         self.intrinsicZernikesExtra: IntrinsicZernikes | None = None
         self.intrinsicZernikesIntra: IntrinsicZernikes | None = None
 
-    def _unpackStampData(self, stamp: DonutStamp) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
+    def _unpackStampData(self, stamp: DonutStamp | None) -> tuple[u.Quantity, u.Quantity, u.Quantity]:
         """Unpack data from the stamp object, handling None stamps.
 
         Parameters
@@ -573,6 +573,58 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
             return f"{className} ({label})"
         return className
 
+    def _finalizeZernikes(
+        self, zkCoeffRaw: pipeBase.Struct, zkTable: QTable, donutQualityTable: QTable
+    ) -> pipeBase.Struct:
+        """Finish processing the Zernike table by checking for fit failures,
+        combining Zernikes, and applying blur clipping.
+
+        Parameters
+        ----------
+        zkCoeffRaw : np.ndarray
+            Raw Zernike coefficients.
+        zkTable : astropy.table.QTable
+            Zernike table.
+        donutQualityTable : astropy.table.QTable
+            Donut quality table.
+
+        Returns
+        -------
+        lsst.pipe.base.Struct
+            Struct with outputZernikesAvg, outputZernikesRaw,
+            zernikes, and donutQualityTable.
+        """
+        # If we have a fit failure recorded then replace Zernikes
+        # with NaNs for those donuts so we don't use them in combining.
+        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
+            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
+            if np.sum(fitSuccess) == 0:
+                self.log.info("All donuts had fit failures. Returning empty results.")
+                # all donuts are fit failures, so none are blur clipped
+                zkTable.meta["estimatorInfo"]["blur_clipped"] = [False] * (len(zkTable) - 1)
+                return self.empty(qualityTable=donutQualityTable, zernikeTable=zkTable)
+            failIdx = np.where(~np.array(fitSuccess))[0]
+            for j in self.nollIndices:
+                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
+                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+
+        # Combine Zernikes
+        zkTable = self.combineZernikes.run(zkTable).combinedTable
+
+        # Implement Blur Clip
+        if self.doBlurClip and ("fwhm" in zkTable.meta["estimatorInfo"].keys()):
+            zkTable = self.blurClip(zkTable)
+
+        avg = zkTable[zkTable["label"] == "average"]
+        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
+
+        return pipeBase.Struct(
+            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
+            outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
+            zernikes=zkTable,
+            donutQualityTable=donutQualityTable,
+        )
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
@@ -604,13 +656,17 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if len(intrinsicZernikes) == 0:
             intrinsicZernikesExtra = None
             intrinsicZernikesIntra = None
+            intrinsicMetadata = None
         elif len(intrinsicZernikes) == 1:
             intrinsicZernikesExtra = intrinsicZernikes[0]
             intrinsicZernikesIntra = intrinsicZernikes[0]
+            intrinsicMetadata = [inputRefs.intrinsicZernikes[0]] * 2
         else:
             detectors = [ref.dataId["detector"] for ref in inputRefs.intrinsicZernikes]
+            intrinsicMetadata = [inputRefs.intrinsicZernikes[0], inputRefs.intrinsicZernikes[1]]
             if detectors[0] < detectors[1]:
                 intrinsicZernikes.reverse()
+                intrinsicMetadata.reverse()
             intrinsicZernikesIntra, intrinsicZernikesExtra = intrinsicZernikes
 
         runStart = time.perf_counter()
@@ -623,6 +679,21 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         runFinished = time.perf_counter()
         self.log.info(f"{taskName}: run() took {runFinished - runStart:.3f} s")
 
+        # Add provenance in the metadata recording which intrinsic Zernike
+        # calibration datasets were used for each defocal type.
+        metaAddStart = time.perf_counter()
+        if intrinsicMetadata is not None:
+            for defocal, intrinsicRef in zip(["intra", "extra"], intrinsicMetadata):
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = intrinsicRef.run
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = str(intrinsicRef.id)
+        else:
+            for defocal in ["intra", "extra"]:
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = None
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = None
+        metaAddFinished = time.perf_counter()
+        self.log.info(f"{taskName}: runQuantum metadata update took {metaAddFinished - metaAddStart:.3f} s")
+
+        # Write the outputs to the output collection
         putStart = time.perf_counter()
         butlerQC.put(outputs, outputRefs)
         putFinished = time.perf_counter()
@@ -706,33 +777,6 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         zkTable = self.createZkTable(zkCoeffRaw)
         zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
 
-        # If we have a fit failure recorded then replace Zernikes
-        # with NaNs for those donuts so we don't use them in combining.
-        if "fit_success" in zkTable.meta["estimatorInfo"].keys():
-            fitSuccess = zkTable.meta["estimatorInfo"]["fit_success"]
-            if np.sum(fitSuccess) == 0:
-                self.log.info("All donuts had fit failures. Returning empty results.")
-                # all donuts are fit failures, so none are blur clipped
-                zkTable.meta["estimatorInfo"]["blur_clipped"] = [False] * (len(zkTable) - 1)
-                return self.empty(qualityTable=donutQualityTable, zernikeTable=zkTable)
-            failIdx = np.where(~np.array(fitSuccess))[0]
-            for j in self.nollIndices:
-                zkTable[f"Z{j}"][failIdx + 1] = np.nan  # +1 to skip average row
-                zkTable[f"Z{j}_deviation"][failIdx + 1] = np.nan
+        zkStruct = self._finalizeZernikes(zkCoeffRaw, zkTable, donutQualityTable)
 
-        # Combine Zernikes
-        zkTable = self.combineZernikes.run(zkTable).combinedTable
-
-        # Implement Blur Clip
-        if self.doBlurClip and ("fwhm" in zkTable.meta["estimatorInfo"].keys()):
-            zkTable = self.blurClip(zkTable)
-
-        avg = zkTable[zkTable["label"] == "average"]
-        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
-
-        return pipeBase.Struct(
-            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
-            outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
-            zernikes=zkTable,
-            donutQualityTable=donutQualityTable,
-        )
+        return zkStruct

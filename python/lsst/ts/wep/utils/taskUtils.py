@@ -223,7 +223,7 @@ def getCameraFromButlerName(camName: str) -> Camera:
 
 def getTaskInstrument(
     camName: str,
-    detectorName: str,
+    detectorName: str | None,
     instConfigFile: str | None = None,
 ) -> Instrument:
     """Get the instrument to use for the task.
@@ -273,7 +273,7 @@ def getTaskInstrument(
 
 def createTemplateForDetector(
     detector: Detector,
-    defocalType: DefocalType,
+    defocalType: DefocalType | str,
     bandLabel: BandLabel | str = BandLabel.REF,
     instrument: Instrument | None = None,
     opticalModel: str = "offAxis",
@@ -347,6 +347,7 @@ def createTemplateForDetector(
     # Create the Donut template
     if isBinary:
         imageMapper.createImageMasks(dummyImage, isBinary=True)
+        assert dummyImage.mask is not None  # for mypy; set by createImageMasks
         template = dummyImage.mask.astype(int)
     else:
         template = imageMapper.mapPupilToImage(dummyImage)

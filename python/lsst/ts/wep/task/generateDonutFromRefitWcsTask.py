@@ -345,7 +345,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
         return donutCatalog[inBounds]
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         astromRefCat: typing.List[afwTable.SimpleCatalog],
         exposure: afwImage.Exposure,
@@ -469,7 +469,7 @@ class GenerateDonutFromRefitWcsTask(GenerateDonutCatalogWcsTask):
                     edgeMargin,
                 )
                 # Create list of filters to include in final catalog
-                filterList = self.config.catalogFilterList
+                filterList = list(self.config.catalogFilterList)
                 availableRefFilters = [
                     col[:-5] for col in refSelection.schema.getNames() if col.endswith("_flux")
                 ]

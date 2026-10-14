@@ -33,7 +33,7 @@ class TestWfAlgorithm(unittest.TestCase):
 
     def testMustSubclass(self) -> None:
         with self.assertRaises(TypeError) as err:
-            WfAlgorithm()
+            WfAlgorithm()  # type: ignore[abstract]
 
         error_message = str(err.exception)
         # Try to future proof against type error message changes

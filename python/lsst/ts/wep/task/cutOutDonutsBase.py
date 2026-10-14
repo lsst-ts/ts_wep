@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 from copy import copy
-from typing import Any
+from typing import Any, cast
 
 import astropy.units as u
 import numpy as np
@@ -770,7 +770,12 @@ reducing the amount of donut mask dilation to {self.bkgDilationIter}"
             snQuant.append(self.calculateSN(donutStamp))
 
             # Store entropy-based measure of donut quality
-            eff, entro = donutCheck.isEffDonut(donutStamp.stamp_im.image.array)
+            # donutCheck was created with returnEntro=True, so a tuple is
+            # always returned.
+            eff, entro = cast(
+                "tuple[bool, float]",
+                donutCheck.isEffDonut(donutStamp.stamp_im.image.array),
+            )
             isEffective.append(eff)
             stampsEntropy.append(entro)
 

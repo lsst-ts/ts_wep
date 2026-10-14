@@ -155,7 +155,7 @@ class Instrument:
         defocalOffset: float | None = None,
         pixelSize: float | None = None,
         refBand: BandLabel | str | None = None,
-        wavelength: float | dict | None = None,
+        wavelength: float | dict | EnumDict | None = None,
         batoidModelName: str | None = None,
         batoidOffsetOptic: str | Sequence[str] | None = None,
         batoidOffsetValue: float | Sequence[float] | None = None,
@@ -658,7 +658,7 @@ class Instrument:
             return self._wavelength
 
     @wavelength.setter
-    def wavelength(self, value: float | dict | None) -> None:
+    def wavelength(self, value: float | dict | EnumDict | None) -> None:
         """Set the effective wavelength(s).
 
         Parameters
@@ -685,6 +685,7 @@ class Instrument:
             raise TypeError("wavelength must be a float, dictionary, or None.")
 
         # Save wavelength info in a BandLabel EnumDict
+        enumDictValue: EnumDict | None
         if isinstance(value, dict) or isinstance(value, EnumDict):
             enumDictValue = EnumDict(BandLabel, value)
             try:
@@ -693,12 +694,13 @@ class Instrument:
                 raise ValueError(
                     "The wavelength dictionary must contain a wavelength for the reference band."
                 )
-            value = enumDictValue
         elif value is not None:
-            value = EnumDict(BandLabel, {BandLabel.REF: value, self.refBand: value})
+            enumDictValue = EnumDict(BandLabel, {BandLabel.REF: value, self.refBand: value})
+        else:
+            enumDictValue = None
 
         # Set the new value
-        self._wavelength = value
+        self._wavelength: EnumDict | None = enumDictValue
 
         # Clear relevant caches
         self._getIntrinsicZernikesCached.cache_clear()
@@ -892,7 +894,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType | None,
+        defocalType: DefocalType | str | None,
         band: BandLabel | str,
         jmax: int,
     ) -> np.ndarray:
@@ -962,7 +964,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType | None = None,
+        defocalType: DefocalType | str | None = None,
         band: BandLabel | str = BandLabel.REF,
         nollIndices: Sequence[int] = tuple(np.arange(4, 79)),
     ) -> np.ndarray:
@@ -1009,7 +1011,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType | None,
+        defocalType: DefocalType | str | None,
         band: BandLabel | str,
         jmax: int,
     ) -> np.ndarray:
@@ -1087,7 +1089,7 @@ class Instrument:
         self,
         xAngle: float,
         yAngle: float,
-        defocalType: DefocalType | None,
+        defocalType: DefocalType | str | None,
         band: BandLabel | str = BandLabel.REF,
         nollIndicesModel: Sequence = tuple(np.arange(4, 79)),
         nollIndicesIntr: Sequence = tuple(np.arange(4, 79)),

@@ -28,6 +28,7 @@ import pandas as pd
 from scipy.spatial.distance import cdist
 
 from lsst.ts.wep.centroid import CentroidFindFactory
+from lsst.ts.wep.centroid.centroidConvolveTemplate import CentroidConvolveTemplate
 from lsst.ts.wep.deblend.deblendAdapt import DeblendAdapt
 from lsst.ts.wep.utils import CentroidFindType
 
@@ -90,6 +91,7 @@ class DonutDetector(object):
         """
 
         centroidFinder = CentroidFindFactory.createCentroidFind(CentroidFindType.ConvolveTemplate)
+        assert isinstance(centroidFinder, CentroidConvolveTemplate)  # for mypy
         if binaryChoice == "centroid":
             binaryExp = centroidFinder.getImgBinary(copy(expArray))
 

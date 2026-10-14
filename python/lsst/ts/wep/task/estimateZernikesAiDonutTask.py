@@ -67,6 +67,7 @@ class EstimateZernikesAiDonutTask(EstimateZernikesBaseTask):
     """Estimate Zernike coefficients using the AiDonut algorithm."""
 
     ConfigClass = EstimateZernikesAiDonutConfig
+    config: EstimateZernikesAiDonutConfig
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

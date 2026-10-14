@@ -98,13 +98,13 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
             defocalType=DefocalType.Extra,
             bandLabel="ref",
         )
-        peakNormalize([stamp])
+        peakNormalize([stamp])  # type: ignore[arg-type]
         self.assertAlmostEqual(float(stamp.wep_im.image.max()), 1.0)
         self.assertAlmostEqual(float(stamp.wep_im.image[0, 1]), 1.0 / 15.0)
 
         stamp.wep_im.image = np.zeros((4, 4))
         with self.assertRaises(ValueError):
-            peakNormalize([stamp])
+            peakNormalize([stamp])  # type: ignore[arg-type]
 
     def testIsrAppliesTheFullCalibrationSet(self) -> None:
         """Regression guard: ISR must apply defects, flat, linearize, crosstalk
@@ -220,7 +220,7 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         }
 
         stamps = _FakeStamps([_FakeStamp(), _FakeStamp()])
-        table = task._makeZkTable(zernikes, wfEstInfo, stamps, stamps)
+        table = task._makeZkTable(zernikes, wfEstInfo, stamps, stamps)  # type: ignore[arg-type]
 
         self.assertEqual(len(table), 3)  # average + 2 pairs
         self.assertEqual(list(table["label"]), ["average", "pair1", "pair2"])
@@ -254,7 +254,7 @@ class TestLatissMonolithTaskConfig(lsst.utils.tests.TestCase):
         zernikes = np.full((1, len(NOLL_INDICES)), 0.1)
         wfEstInfo = {"chi_square": [100.0], "fwhm": [1.5], "lstsq_nfev": [10], "fit_success": [True]}
         stamps = _FakeStamps([_FakeStamp()])
-        table = task._makeZkTable(zernikes, wfEstInfo, stamps, stamps)
+        table = task._makeZkTable(zernikes, wfEstInfo, stamps, stamps)  # type: ignore[arg-type]
         # The fit succeeded but is rejected by the quality cut, so it is not
         # used and the average is NaN.
         self.assertTrue(table["fit_success"][1])

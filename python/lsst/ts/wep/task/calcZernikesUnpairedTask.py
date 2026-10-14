@@ -27,7 +27,6 @@ __all__ = [
 
 from typing import Sequence
 
-import numpy as np
 from astropy.table import QTable
 
 import lsst.pipe.base as pipeBase
@@ -42,6 +41,8 @@ from lsst.pipe.base import (
 from lsst.ts.wep.task.calcZernikesTask import CalcZernikesTask, CalcZernikesTaskConfig
 from lsst.ts.wep.task.donutStamps import DonutStamps
 from lsst.utils.timer import timeMethod
+
+extra_focal_ids = set([191, 195, 199, 203])
 
 
 def lookupIntrinsicZernikes(
@@ -119,11 +120,35 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         the unpaired nature of the inputs.
         """
         inputs = butlerQC.get(inputRefs)
-        outputs = self.run(**inputs)
+        # Pop the intrinsic Zernike calibration out of ``inputs`` so it is not
+        # also forwarded via ``**inputs`` and so we can record its provenance
+        # in the output metadata by hand (the AstropyQTable formatter does not
+        # add it the way the parquet formatter does for the blitz results).
+        intrinsicZernikes = inputs.pop("intrinsicZernikes")
+        intrinsicMetadata = None
+        if len(intrinsicZernikes) > 0:
+            intrinsicZernikes = intrinsicZernikes[0]
+            intrinsicMetadata = inputRefs.intrinsicZernikes[0]
+        else:
+            intrinsicZernikes = None
+
+        outputs = self.run(**inputs, intrinsicZernikes=intrinsicZernikes)
+
+        # The defocal type of the single input matches that of its donut
+        # stamps, so take it from the stamp metadata rather than mapping the
+        # calibration's detector id (which is empty when no calibration was
+        # found).
+        defocal = inputs["donutStamps"].metadata["DFC_TYPE"]
+        if intrinsicMetadata is not None:
+            outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = intrinsicMetadata.run
+            outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = str(intrinsicMetadata.id)
+        else:
+            outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = None
+            outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = None
         butlerQC.put(outputs, outputRefs)
 
     @timeMethod
-    def run(
+    def run(  # type: ignore[override]
         self,
         donutStamps: DonutStamps,
         intrinsicZernikes: IntrinsicZernikes,
@@ -184,17 +209,8 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
 
         # Save the outputs in the table
         zkTable = self.createZkTable(zkCoeffRaw)
-        zkTable.meta["estimatorInfo"] = zkCoeffRaw.wfEstInfo
+        zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
 
-        # Combine Zernikes
-        zkTable = self.combineZernikes.run(zkTable).combinedTable
+        zkStruct = self._finalizeZernikes(zkCoeffRaw, zkTable, donutQualityTable)
 
-        avg = zkTable[zkTable["label"] == "average"]
-        outputZernikesAvg = np.array([avg[col].to_value("um")[0] for col in avg.meta["opd_columns"]])
-
-        return pipeBase.Struct(
-            outputZernikesAvg=np.atleast_2d(np.array(outputZernikesAvg)),
-            outputZernikesRaw=np.atleast_2d(np.array(zkCoeffRaw.zernikes)),
-            zernikes=zkTable,
-            donutQualityTable=donutQualityTable,
-        )
+        return zkStruct

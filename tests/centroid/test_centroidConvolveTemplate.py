@@ -130,7 +130,7 @@ class TestCentroidConvolveTemplate(unittest.TestCase):
             cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut, nDonuts=-2)
 
         with self.assertRaises(AssertionError, msg=nDonutsAssertMsg):
-            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut, nDonuts=1.5)
+            cX, cY, rad = self.centroidConv.getCenterAndRfromTemplateConv(singleDonut, nDonuts=1.5)  # type: ignore[arg-type]
 
     def testGetCenterAndRFromTemplateConvKMeans(self) -> None:
         singleDonut, doubleDonut, eff_radius = self._createData(20, 40, 160)

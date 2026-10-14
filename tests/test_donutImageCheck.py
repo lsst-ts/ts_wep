@@ -55,9 +55,9 @@ class TestDonutImageCheck(unittest.TestCase):
         # change that to True
         self.donutImgCheck.returnEntro = True
         # first check that now two outputs are present
-        self.assertTrue(len(self.donutImgCheck.isEffDonut(donutImg)) == 2)
+        self.assertTrue(len(self.donutImgCheck.isEffDonut(donutImg)) == 2)  # type: ignore[arg-type]
         # then test that the values are what is expected
-        effective, entro = self.donutImgCheck.isEffDonut(donutImg)
+        effective, entro = self.donutImgCheck.isEffDonut(donutImg)  # type: ignore[misc]
 
         self.assertTrue(effective)
         np.testing.assert_allclose(

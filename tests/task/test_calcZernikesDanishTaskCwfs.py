@@ -26,9 +26,11 @@ from lsst.ts.wep.utils.testUtils import enforce_single_threading
 
 enforce_single_threading()
 
+import astropy.units as u
+import lsst.pipe.base as pipeBase
 import lsst.utils.tests
 import numpy as np
-from astropy.table import vstack
+from astropy.table import QTable, vstack
 from lsst.daf.butler import Butler
 from lsst.ip.isr import IntrinsicZernikes
 from lsst.ts.wep.task import (
@@ -402,6 +404,95 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
             [WfAlgorithmName.Danish.value] * len(self.donutStampsExtra), zkCalc.meta["estimatorInfo"]["algo"]
         )
 
+    def testFinalizeZernikes(self) -> None:
+        """Test that _finalizeZernikes masks fit failures, combines, blur
+        clips, and builds the output Struct (empty when all donuts fail)."""
+        task = self.task
+
+        # Prepare the state createZkTable/_finalizeZernikes rely on, then
+        # estimate once and reuse the raw coefficients for every case.
+        task.stampsExtra = self.donutStampsExtra
+        task.stampsIntra = self.donutStampsIntra
+        task.intrinsicZernikesExtra, task.intrinsicZernikesIntra = self.intrinsicZernikes
+        zkCoeffRaw = task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra)
+
+        nollIndices = task.nollIndices
+        nNoll = len(nollIndices.list())
+        nDonuts = len(task.createZkTable(zkCoeffRaw)) - 1  # exclude leading average row
+        self.assertGreater(nDonuts, 0)
+
+        def freshTable(fitSuccess: list[bool] | None = None) -> QTable:
+            # Rebuild a pristine table for each case since _finalizeZernikes
+            # mutates its input. Start from the real estimator metadata and
+            # drop blur_clipped so its presence cleanly signals that blur
+            # clipping ran inside _finalizeZernikes.
+            zkTable = task.createZkTable(zkCoeffRaw)
+            zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
+            zkTable.meta["estimatorInfo"].pop("blur_clipped", None)
+            if fitSuccess is None:
+                zkTable.meta["estimatorInfo"].pop("fit_success", None)
+            else:
+                zkTable.meta["estimatorInfo"]["fit_success"] = list(fitSuccess)
+            return zkTable
+
+        # No fit_success info: nothing is masked, the table is combined, and a
+        # populated Struct is returned with the quality table passed through.
+        qualityTable = QTable()
+        result = task._finalizeZernikes(zkCoeffRaw, freshTable(), qualityTable)
+        self.assertIsInstance(result, pipeBase.Struct)
+        self.assertIs(result.donutQualityTable, qualityTable)
+        self.assertIn("average", list(result.zernikes["label"]))
+        self.assertEqual(result.outputZernikesAvg.shape, (1, nNoll))
+        self.assertTrue(np.all(np.isfinite(result.outputZernikesAvg)))
+        self.assertEqual(result.outputZernikesRaw.shape, np.atleast_2d(zkCoeffRaw.zernikes).shape)
+
+        # All donuts succeed: no donut row is NaN'd, and because doBlurClip is
+        # on by default with fwhm present, blur clipping runs.
+        self.assertTrue(task.doBlurClip)
+        result = task._finalizeZernikes(zkCoeffRaw, freshTable([True] * nDonuts), QTable())
+        self.assertIsInstance(result, pipeBase.Struct)
+        self.assertIn("blur_clipped", result.zernikes.meta["estimatorInfo"])
+        for j in nollIndices:
+            self.assertTrue(np.all(np.isfinite(result.zernikes[f"Z{j}"][1:])))
+
+        # Partial failure: only the failed donut rows are replaced with NaN,
+        # while the combined average stays finite thanks to the good donuts.
+        if nDonuts >= 2:
+            fitSuccess = [True] * nDonuts
+            fitSuccess[-1] = False  # fail the last donut
+            result = task._finalizeZernikes(zkCoeffRaw, freshTable(fitSuccess), QTable())
+            self.assertIsInstance(result, pipeBase.Struct)
+            self.assertTrue(np.all(np.isfinite(result.outputZernikesAvg)))
+            for j in nollIndices:
+                for i, success in enumerate(fitSuccess):
+                    row = i + 1  # +1 to skip the leading average row
+                    if success:
+                        self.assertTrue(np.isfinite(result.zernikes[f"Z{j}"][row]))
+                    else:
+                        self.assertTrue(np.isnan(result.zernikes[f"Z{j}"][row]))
+                        self.assertTrue(np.isnan(result.zernikes[f"Z{j}_deviation"][row]))
+
+        # All donuts fail: an empty result Struct is returned, carrying the
+        # quality and Zernike tables through and marking every donut as not
+        # blur clipped, with all-NaN average and raw outputs.
+        qualityTable = QTable()
+        zkTable = freshTable([False] * nDonuts)
+        result = task._finalizeZernikes(zkCoeffRaw, zkTable, qualityTable)
+        self.assertIsInstance(result, pipeBase.Struct)
+        self.assertIs(result.donutQualityTable, qualityTable)
+        self.assertIs(result.zernikes, zkTable)
+        self.assertEqual(zkTable.meta["estimatorInfo"]["blur_clipped"], [False] * nDonuts)
+        self.assertTrue(np.all(np.isnan(result.outputZernikesAvg)))
+        self.assertTrue(np.all(np.isnan(result.outputZernikesRaw)))
+
+        # Blur clipping is skipped when doBlurClip is off.
+        task.doBlurClip = False
+        try:
+            result = task._finalizeZernikes(zkCoeffRaw, freshTable([True] * nDonuts), QTable())
+            self.assertNotIn("blur_clipped", result.zernikes.meta["estimatorInfo"])
+        finally:
+            task.doBlurClip = True
+
     def testBlurClip(self) -> None:
         # Get sample zernike table
         zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes).zernikes
@@ -560,3 +651,107 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         if "FINAL_SELECT" in qualityTable.colnames:
             # All donuts should have FINAL_SELECT=False
             self.assertTrue(np.all(~qualityTable["FINAL_SELECT"]))
+
+    def _findIntrinsicRefs(self, detectors: tuple[int, ...]) -> list:
+        """Resolve the real DatasetRefs for the given intrinsic-calibration
+        detectors, asserting each one exists."""
+        refs = [
+            self.registry.findDataset(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdExtra | {"detector": det},
+                collections=["LSSTCam/aos/intrinsic"],
+            )
+            for det in detectors
+        ]
+        for ref in refs:
+            assert ref is not None
+        return refs
+
+    def _runQuantumCapture(self, intrinsicRefs: list, mockRun: bool = False) -> pipeBase.Struct:
+        """Drive ``runQuantum`` with a faked QuantumContext and return the
+        captured output struct.
+
+        ``intrinsicRefs`` is the list of DatasetRefs the lookup function would
+        return (two for CWFS, one when a single shared calibration is used, or
+        empty when none is available). Set ``mockRun`` to replace ``run`` with
+        a stub returning an empty ``zernikes`` table; needed for the
+        no-calibration case, where the real ``run`` raises because LSSTCam
+        requires a calibration.
+        """
+        from typing import Any
+        from unittest.mock import MagicMock
+
+        intrinsicCalibs = [IntrinsicZernikes(table=self.butler.get(ref)) for ref in intrinsicRefs]
+
+        # Fake QuantumContext: get() returns the task inputs, put() captures
+        # the outputs so we can inspect the stored table metadata.
+        inputs = {
+            "donutStampsExtra": self.donutStampsExtra,
+            "donutStampsIntra": self.donutStampsIntra,
+            "intrinsicZernikes": intrinsicCalibs,
+        }
+        captured: dict[str, Any] = {}
+        butlerQC = MagicMock()
+        butlerQC.get.return_value = inputs
+        butlerQC.resources.num_cores = 1
+        butlerQC.put.side_effect = lambda outputs, refs: captured.update(outputs=outputs)
+
+        inputRefs = MagicMock()
+        inputRefs.intrinsicZernikes = intrinsicRefs
+        outputRefs = MagicMock()
+
+        if mockRun:
+            self.task.run = MagicMock(  # type: ignore[method-assign]
+                return_value=pipeBase.Struct(zernikes=QTable())
+            )
+
+        self.task.runQuantum(butlerQC, inputRefs, outputRefs)
+        return captured["outputs"]
+
+    def testIntrinsicProvenanceMetadata(self) -> None:
+        """runQuantum records the per-detector intrinsic Zernike inputs' run
+        and UUID in the output ``zernikes`` metadata.
+
+        The AstropyQTable formatter does not add butler provenance the way the
+        parquet formatter does for the blitz results, so runQuantum copies the
+        run collection and dataset id of each intrinsic Zernike calibration
+        into ``zernikes.meta`` by hand. Detector 191 is the extra-focal chip
+        and 192 the intra-focal one, so the provenance for each defocal type
+        points at the matching ref.
+        """
+        intrinsicRefs = self._findIntrinsicRefs((191, 192))
+        intrinsicExtra, intrinsicIntra = intrinsicRefs
+
+        outputs = self._runQuantumCapture(intrinsicRefs)
+
+        meta = outputs.zernikes.meta
+        self.assertEqual(meta["butler_intrinsic_extra_run"], intrinsicExtra.run)
+        self.assertEqual(meta["butler_intrinsic_extra_uuid"], str(intrinsicExtra.id))
+        self.assertEqual(meta["butler_intrinsic_intra_run"], intrinsicIntra.run)
+        self.assertEqual(meta["butler_intrinsic_intra_uuid"], str(intrinsicIntra.id))
+
+    def testIntrinsicProvenanceMetadataSingleCalibration(self) -> None:
+        """When the lookup returns a single shared calibration (full-array
+        mode), runQuantum records the same ref's run and UUID under both the
+        extra- and intra-focal provenance keys.
+        """
+        (intrinsicRef,) = self._findIntrinsicRefs((191,))
+
+        outputs = self._runQuantumCapture([intrinsicRef])
+
+        meta = outputs.zernikes.meta
+        for defocal in ("extra", "intra"):
+            self.assertEqual(meta[f"butler_intrinsic_{defocal}_run"], intrinsicRef.run)
+            self.assertEqual(meta[f"butler_intrinsic_{defocal}_uuid"], str(intrinsicRef.id))
+
+    def testIntrinsicProvenanceMetadataNoCalibration(self) -> None:
+        """When no intrinsic Zernike calibration is available, runQuantum
+        records the provenance keys as ``None`` for both defocal types rather
+        than leaving them absent.
+        """
+        outputs = self._runQuantumCapture([], mockRun=True)
+
+        meta = outputs.zernikes.meta
+        for defocal in ("extra", "intra"):
+            self.assertIsNone(meta[f"butler_intrinsic_{defocal}_run"])
+            self.assertIsNone(meta[f"butler_intrinsic_{defocal}_uuid"])

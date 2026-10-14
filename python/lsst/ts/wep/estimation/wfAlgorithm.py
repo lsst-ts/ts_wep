@@ -291,7 +291,8 @@ class WfAlgorithm(ABC):
         # Get the intrinsic Zernikes?
         if startWithIntrinsic or returnWfDev:
             zkIntrinsicI1 = instrument.getIntrinsicZernikes(
-                *I1.fieldAngle,
+                I1.fieldAngle[0],
+                I1.fieldAngle[1],
                 band=I1.bandLabel,
                 nollIndices=nollIndices,
             )
@@ -299,7 +300,8 @@ class WfAlgorithm(ABC):
                 None
                 if I2 is None
                 else instrument.getIntrinsicZernikes(
-                    *I2.fieldAngle,
+                    I2.fieldAngle[0],
+                    I2.fieldAngle[1],
                     band=I2.bandLabel,
                     nollIndices=nollIndices,
                 )

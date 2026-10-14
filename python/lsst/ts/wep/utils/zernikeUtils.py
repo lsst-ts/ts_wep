@@ -181,7 +181,7 @@ def zernikeEval(
     zkCoeff: np.ndarray,
     jmin: int = 4,
     obscuration: float = 0.612,
-) -> None:
+) -> np.ndarray:
     """Evaluate the Zernike series.
 
     This function is evaluated at the provided u and v coordinates, where

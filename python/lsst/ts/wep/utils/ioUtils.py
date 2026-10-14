@@ -38,6 +38,7 @@ import inspect
 import os
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Union
 
 import numpy as np
@@ -93,7 +94,7 @@ def computeSha256(path: str, chunkSize: int = 1 << 20) -> str:
     return hasher.hexdigest()
 
 
-def verifyModelChecksum(key: str, path: str, expectedSha256: str) -> str:
+def verifyModelChecksum(key: str, path: str, expectedSha256: str | None) -> str:
     """Compute a model file's SHA-256 and verify it against an expected value.
 
     Parameters
@@ -244,7 +245,7 @@ def readConfigYaml(path: str, recurseImports: bool = True) -> dict:
     return config
 
 
-def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
+def mergeConfigWithFile(configFile: Union[str, Path, None], **kwargs: Any) -> dict:
     """Merge the passed keyword arguments with the values stored in the file.
 
     If configFile is not provided, the keyword arguments are returned verbatim.
@@ -276,7 +277,7 @@ def mergeConfigWithFile(configFile: Union[str, None], **kwargs: Any) -> dict:
     if configFile is None:
         fileConfig = dict()
     else:
-        fileConfig = readConfigYaml(configFile)
+        fileConfig = readConfigYaml(str(configFile))
 
     # Determine if the configFile contains keywords not present in kwargs
     extraKeys = set(fileConfig.keys()) - set(kwargs.keys())

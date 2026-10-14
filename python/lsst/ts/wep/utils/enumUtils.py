@@ -32,6 +32,7 @@ __all__ = [
 ]
 
 from collections import UserDict
+from collections.abc import Mapping
 from enum import Enum
 from typing import Any, Type
 
@@ -39,7 +40,7 @@ from typing import Any, Type
 class EnumDict(UserDict):
     """A dictionary that aliases Enums and their corresponding values."""
 
-    def __init__(self, enum: Type[Enum], regularDict: dict | None = None) -> None:
+    def __init__(self, enum: Type[Enum], regularDict: Mapping | None = None) -> None:
         super().__init__()
         self._enum = enum
         if regularDict is not None:
