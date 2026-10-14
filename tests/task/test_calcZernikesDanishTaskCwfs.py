@@ -651,3 +651,107 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         if "FINAL_SELECT" in qualityTable.colnames:
             # All donuts should have FINAL_SELECT=False
             self.assertTrue(np.all(~qualityTable["FINAL_SELECT"]))
+
+    def _findIntrinsicRefs(self, detectors: tuple[int, ...]) -> list:
+        """Resolve the real DatasetRefs for the given intrinsic-calibration
+        detectors, asserting each one exists."""
+        refs = [
+            self.registry.findDataset(
+                "intrinsic_aberrations_temp",
+                dataId=self.dataIdExtra | {"detector": det},
+                collections=["LSSTCam/aos/intrinsic"],
+            )
+            for det in detectors
+        ]
+        for ref in refs:
+            assert ref is not None
+        return refs
+
+    def _runQuantumCapture(self, intrinsicRefs: list, mockRun: bool = False) -> pipeBase.Struct:
+        """Drive ``runQuantum`` with a faked QuantumContext and return the
+        captured output struct.
+
+        ``intrinsicRefs`` is the list of DatasetRefs the lookup function would
+        return (two for CWFS, one when a single shared calibration is used, or
+        empty when none is available). Set ``mockRun`` to replace ``run`` with
+        a stub returning an empty ``zernikes`` table; needed for the
+        no-calibration case, where the real ``run`` raises because LSSTCam
+        requires a calibration.
+        """
+        from typing import Any
+        from unittest.mock import MagicMock
+
+        intrinsicCalibs = [IntrinsicZernikes(table=self.butler.get(ref)) for ref in intrinsicRefs]
+
+        # Fake QuantumContext: get() returns the task inputs, put() captures
+        # the outputs so we can inspect the stored table metadata.
+        inputs = {
+            "donutStampsExtra": self.donutStampsExtra,
+            "donutStampsIntra": self.donutStampsIntra,
+            "intrinsicZernikes": intrinsicCalibs,
+        }
+        captured: dict[str, Any] = {}
+        butlerQC = MagicMock()
+        butlerQC.get.return_value = inputs
+        butlerQC.resources.num_cores = 1
+        butlerQC.put.side_effect = lambda outputs, refs: captured.update(outputs=outputs)
+
+        inputRefs = MagicMock()
+        inputRefs.intrinsicZernikes = intrinsicRefs
+        outputRefs = MagicMock()
+
+        if mockRun:
+            self.task.run = MagicMock(  # type: ignore[method-assign]
+                return_value=pipeBase.Struct(zernikes=QTable())
+            )
+
+        self.task.runQuantum(butlerQC, inputRefs, outputRefs)
+        return captured["outputs"]
+
+    def testIntrinsicProvenanceMetadata(self) -> None:
+        """runQuantum records the per-detector intrinsic Zernike inputs' run
+        and UUID in the output ``zernikes`` metadata.
+
+        The AstropyQTable formatter does not add butler provenance the way the
+        parquet formatter does for the blitz results, so runQuantum copies the
+        run collection and dataset id of each intrinsic Zernike calibration
+        into ``zernikes.meta`` by hand. Detector 191 is the extra-focal chip
+        and 192 the intra-focal one, so the provenance for each defocal type
+        points at the matching ref.
+        """
+        intrinsicRefs = self._findIntrinsicRefs((191, 192))
+        intrinsicExtra, intrinsicIntra = intrinsicRefs
+
+        outputs = self._runQuantumCapture(intrinsicRefs)
+
+        meta = outputs.zernikes.meta
+        self.assertEqual(meta["butler_intrinsic_extra_run"], intrinsicExtra.run)
+        self.assertEqual(meta["butler_intrinsic_extra_uuid"], str(intrinsicExtra.id))
+        self.assertEqual(meta["butler_intrinsic_intra_run"], intrinsicIntra.run)
+        self.assertEqual(meta["butler_intrinsic_intra_uuid"], str(intrinsicIntra.id))
+
+    def testIntrinsicProvenanceMetadataSingleCalibration(self) -> None:
+        """When the lookup returns a single shared calibration (full-array
+        mode), runQuantum records the same ref's run and UUID under both the
+        extra- and intra-focal provenance keys.
+        """
+        (intrinsicRef,) = self._findIntrinsicRefs((191,))
+
+        outputs = self._runQuantumCapture([intrinsicRef])
+
+        meta = outputs.zernikes.meta
+        for defocal in ("extra", "intra"):
+            self.assertEqual(meta[f"butler_intrinsic_{defocal}_run"], intrinsicRef.run)
+            self.assertEqual(meta[f"butler_intrinsic_{defocal}_uuid"], str(intrinsicRef.id))
+
+    def testIntrinsicProvenanceMetadataNoCalibration(self) -> None:
+        """When no intrinsic Zernike calibration is available, runQuantum
+        records the provenance keys as ``None`` for both defocal types rather
+        than leaving them absent.
+        """
+        outputs = self._runQuantumCapture([], mockRun=True)
+
+        meta = outputs.zernikes.meta
+        for defocal in ("extra", "intra"):
+            self.assertIsNone(meta[f"butler_intrinsic_{defocal}_run"])
+            self.assertIsNone(meta[f"butler_intrinsic_{defocal}_uuid"])

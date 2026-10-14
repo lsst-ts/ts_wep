@@ -340,7 +340,7 @@ class TestMultiCoreFailureHandling(unittest.TestCase):
         donutStampsExtra = _FakeDonutStamps([_FakeDonut(0), _FakeDonut(1, bad=True), _FakeDonut(2)])
         donutStampsIntra = _FakeDonutStamps([_FakeDonut(10), _FakeDonut(11), _FakeDonut(12)])
 
-        zkArray, zkMeta = task.estimateFromPairs(donutStampsExtra, donutStampsIntra, wfEst, numCores=2)
+        zkArray, zkMeta = task.estimateFromPairs(donutStampsExtra, donutStampsIntra, wfEst, numCores=2)  # type: ignore[arg-type]
 
         # One row per pair, one column per Noll index. The whole task
         # completed instead of crashing on the bad pair.
@@ -368,7 +368,7 @@ class TestMultiCoreFailureHandling(unittest.TestCase):
         donutStampsExtra = _FakeDonutStamps([_FakeDonut(0), _FakeDonut(1, bad=True), _FakeDonut(2)])
         donutStampsIntra = _FakeDonutStamps([])
 
-        zkArray, zkMeta = task.estimateFromIndivStamps(donutStampsExtra, donutStampsIntra, wfEst, numCores=2)
+        zkArray, zkMeta = task.estimateFromIndivStamps(donutStampsExtra, donutStampsIntra, wfEst, numCores=2)  # type: ignore[arg-type]
 
         self.assertEqual(zkArray.shape, (3, len(wfEst.nollIndices)))
         self.assertEqual(zkMeta["fit_success"], [True, False, True])
@@ -399,7 +399,7 @@ class TestCollateZkMeta(unittest.TestCase):
 
     def testMissingKeysFilledAndAligned(self) -> None:
         # Second donut failed and only reported fit_success=False.
-        metas = [
+        metas: list[dict] = [
             {"fit_success": True, "fwhm": 1.0, "chi_square": 3.0},
             {"fit_success": False},
         ]
@@ -414,7 +414,7 @@ class TestCollateZkMeta(unittest.TestCase):
 
     def testFitSuccessDefaultsTrueWhenAbsent(self) -> None:
         # A donut that never reported fit_success did not hit the failure path.
-        metas = [
+        metas: list[dict] = [
             {"fwhm": 1.0},
             {"fit_success": False},
         ]
