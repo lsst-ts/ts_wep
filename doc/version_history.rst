@@ -17,6 +17,30 @@ Version History
 
 .. towncrier release notes start
 
+v17.15.0 (2026-10-14)
+=====================
+
+New Features
+------------
+
+- Added provenance information for intrinsic Zernikes calibration dataset into zernikes tables metadata. (`RSO-828 <https://rubinobs.atlassian.net//browse/RSO-828>`_)
+
+
+Bug Fixes
+---------
+
+- Handle per-donut Zernike estimation failures without crashing the whole task.
+  When ``estimateZk`` raises for a single donut (or donut pair), e.g. a batoid "failed rays" error, the failure is now logged with a traceback and that donut returns NaN Zernikes flagged with ``fit_success=False`` so it is dropped downstream, rather than aborting estimation for every donut in the exposure.
+  Per-donut metadata dicts are now collated by taking the union of their keys (filling missing values, defaulting ``fit_success`` to ``True``) so that successful and failed donuts, which report different keys, stay aligned in the output metadata.
+  The post-estimation processing (masking fit failures, combining Zernikes, blur clipping, and building the output struct) is consolidated into a shared ``CalcZernikesTask._finalizeZernikes`` method used by both ``CalcZernikesTask`` and ``CalcZernikesUnpairedTask``, which also enables blur clipping for the unpaired task. (`RSO-945 <https://rubinobs.atlassian.net//browse/RSO-945>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Cleaned up mypy errors that appear on USDF. (`RSO-529 <https://rubinobs.atlassian.net//browse/RSO-529>`_)
+
+
 v17.14.2 (2026-10-06)
 =====================
 
@@ -72,7 +96,7 @@ New Features
 
 - Added ``LatissMonolithTask``, a self-contained LATISS wavefront estimation task that runs ``IsrTaskLSST``, ``QuickFrameMeasurementTask``, ``CutOutDonutsScienceSensorTask`` and ``EstimateZernikesDanishTask`` in a single quantum per CWFS pair, keyed on the extra-focal visit. The intra-focal raw is attached to that quantum at graph-build time by ``adjust_all_quanta``, so a data query naming both exposures of the pair is all that is needed.
 
-  LATISS alignment sequence utilizes one bright donut per exposure near the boresight, which requires custom settings for ts_wep; the Zernike fit uses Danish. 
+  LATISS alignment sequence utilizes one bright donut per exposure near the boresight, which requires custom settings for ts_wep; the Zernike fit uses Danish.
 
   A LATISS-specific step before the fit is peak normalization of the stamps, since Danish's flux and sky-level parameters are scale dependent.
 
@@ -155,7 +179,7 @@ v17.7.0 (2026-07-07)
 New Features
 ------------
 
-- Added rotTelPos information into call for getIntrinsicZernikes in CalcZernikesTask. (`DM-53391 <https://rubinobs.atlassian.net//browse/DM-53391>`_)
+- Added rotTelPos information into call for getIntrinsicZernikes in CalcZernikesTask. (`DM-55391 <https://rubinobs.atlassian.net//browse/DM-55391>`_)
 - Added model images to always be included in zernikes table metadata for danish estimates. (`RSO-800 <https://rubinobs.atlassian.net//browse/RSO-800>`_)
 
 
