@@ -26,6 +26,7 @@ import numpy as np
 import pytest
 from astropy.table import QTable
 
+import lsst.pipe.base as pipeBase
 import lsst.utils.tests
 from lsst.daf.butler import Butler
 from lsst.ip.isr import IntrinsicZernikes
@@ -291,6 +292,81 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     self.assertIsInstance(struct.outputZernikesRaw, np.ndarray)
                     self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
                     self.assertIsInstance(struct.zernikes, QTable)
+
+    def _runQuantumCapture(self, intrinsicRefs: list, mockRun: bool = False) -> pipeBase.Struct:
+        """Drive ``runQuantum`` with a faked QuantumContext and return the
+        captured output struct.
+
+        The unpaired task takes a single ``donutStamps`` input (extra-focal
+        here) and the intrinsic Zernike calibration(s) resolved by the lookup
+        function; ``intrinsicRefs`` is the list of DatasetRefs that lookup
+        would return (empty when no calibration is available). Set ``mockRun``
+        to replace ``run`` with a stub returning an empty ``zernikes`` table;
+        needed for the no-calibration case, where the real ``run`` fails
+        downstream on the all-NaN table rather than exercising provenance.
+        """
+        from typing import Any
+        from unittest.mock import MagicMock
+
+        donutStamps = self.butler.get("donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName])
+        intrinsicCalibs = [IntrinsicZernikes(table=self.butler.get(ref)) for ref in intrinsicRefs]
+
+        # Fake QuantumContext: get() returns the task inputs, put() captures
+        # the outputs so we can inspect the stored table metadata.
+        inputs = {
+            "donutStamps": donutStamps,
+            "intrinsicZernikes": intrinsicCalibs,
+        }
+        captured: dict[str, Any] = {}
+        butlerQC = MagicMock()
+        butlerQC.get.return_value = inputs
+        butlerQC.resources.num_cores = 1
+        butlerQC.put.side_effect = lambda outputs, refs: captured.update(outputs=outputs)
+
+        inputRefs = MagicMock()
+        inputRefs.intrinsicZernikes = intrinsicRefs
+        outputRefs = MagicMock()
+
+        task = CalcZernikesUnpairedTask()
+        if mockRun:
+            task.run = MagicMock(  # type: ignore[method-assign]
+                return_value=pipeBase.Struct(zernikes=QTable())
+            )
+        task.runQuantum(butlerQC, inputRefs, outputRefs)
+        return captured["outputs"]
+
+    def testIntrinsicProvenanceMetadata(self) -> None:
+        """runQuantum records the single intrinsic Zernike input's run and UUID
+        in the output ``zernikes`` metadata.
+
+        The AstropyQTable formatter does not add butler provenance the way the
+        parquet formatter does for the blitz results, so runQuantum copies the
+        run collection and dataset id of the intrinsic Zernike calibration into
+        ``zernikes.meta`` by hand, under the defocal type of the input stamps
+        (``extra`` here, since the input is the extra-focal donuts).
+        """
+        intrinsicRef = self.registry.findDataset(
+            "intrinsic_aberrations_temp",
+            dataId=self.dataIdExtra,
+            collections=["LSSTCam/aos/intrinsic"],
+        )
+        assert intrinsicRef is not None
+
+        outputs = self._runQuantumCapture([intrinsicRef])
+
+        meta = outputs.zernikes.meta
+        self.assertEqual(meta["butler_intrinsic_extra_run"], intrinsicRef.run)
+        self.assertEqual(meta["butler_intrinsic_extra_uuid"], str(intrinsicRef.id))
+
+    def testIntrinsicProvenanceMetadataNoCalibration(self) -> None:
+        """When no intrinsic Zernike calibration is available, runQuantum still
+        records the provenance keys for the input's defocal type as ``None``.
+        """
+        outputs = self._runQuantumCapture([], mockRun=True)
+
+        meta = outputs.zernikes.meta
+        self.assertIsNone(meta["butler_intrinsic_extra_run"])
+        self.assertIsNone(meta["butler_intrinsic_extra_uuid"])
 
     def testRaiseErrorNoneStamps(self) -> None:
         with self.assertRaises(ValueError) as cm:

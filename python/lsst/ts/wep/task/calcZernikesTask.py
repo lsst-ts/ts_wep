@@ -683,13 +683,13 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         # calibration datasets were used for each defocal type.
         metaAddStart = time.perf_counter()
         if intrinsicMetadata is not None:
-            for defocal, intrinsic_ref in zip(["intra", "extra"], intrinsicMetadata):
-                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = intrinsic_ref.run
-                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = str(intrinsic_ref.id)
+            for defocal, intrinsicRef in zip(["intra", "extra"], intrinsicMetadata):
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = intrinsicRef.run
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = str(intrinsicRef.id)
         else:
             for defocal in ["intra", "extra"]:
-                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = "None"
-                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = "None"
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_run"] = None
+                outputs.zernikes.meta[f"butler_intrinsic_{defocal}_uuid"] = None
         metaAddFinished = time.perf_counter()
         self.log.info(f"{taskName}: runQuantum metadata update took {metaAddFinished - metaAddStart:.3f} s")
 
