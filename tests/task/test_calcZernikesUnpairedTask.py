@@ -375,3 +375,41 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         self.assertEqual(
             str(cm.exception), "No metadata in either DonutStamps object. Cannot create Zk table metadata."
         )
+
+    def testSingleDetector(self) -> None:
+        """Test runQuantum with a single detector's extra-focal donuts and the
+        intrinsic Zernike calibration(s) resolved by the lookup function.
+        """
+        from typing import Any
+        from unittest.mock import MagicMock
+
+        intrinsicRef = self.registry.findDataset(
+            "intrinsic_aberrations_temp",
+            dataId=self.dataIdExtra,
+            collections=["LSSTCam/aos/intrinsic"],
+        )
+        assert intrinsicRef is not None
+
+        donutStamps = self.butler.get("donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName])
+        intrinsicCalibs = IntrinsicZernikes(table=self.butler.get(intrinsicRef))
+
+        # Fake QuantumContext: get() returns the task inputs, put() captures
+        # the outputs so we can inspect the stored table metadata.
+        inputs = {
+            "donutStamps": donutStamps,
+            "intrinsicZernikes": intrinsicCalibs,
+        }
+        captured: dict[str, Any] = {}
+        butlerQC = MagicMock()
+        butlerQC.get.return_value = inputs
+        butlerQC.resources.num_cores = 1
+        butlerQC.put.side_effect = lambda outputs, refs: captured.update(outputs=outputs)
+
+        inputRefs = MagicMock()
+        inputRefs.intrinsicZernikes = intrinsicRef
+        outputRefs = MagicMock()
+
+        task = CalcZernikesUnpairedTask()
+        task.runQuantum(butlerQC, inputRefs, outputRefs)
+
+        self.assertTrue(isinstance(captured["outputs"], pipeBase.Struct))
