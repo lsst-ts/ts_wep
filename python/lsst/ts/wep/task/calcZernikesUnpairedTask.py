@@ -127,8 +127,11 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         intrinsicZernikes = inputs.pop("intrinsicZernikes")
         intrinsicMetadata = None
         if isinstance(intrinsicZernikes, list):
-            intrinsicZernikes = intrinsicZernikes[0]
-            intrinsicMetadata = inputRefs.intrinsicZernikes[0]
+            if len(intrinsicZernikes) > 0:
+                intrinsicMetadata = inputRefs.intrinsicZernikes[0]
+                intrinsicZernikes = intrinsicZernikes[0]
+            else:
+                intrinsicZernikes = None
         # intrinsicZernikes could also be a single object, not a list
         # in that case, we just use it directly and get the metadata from
         # the single inputRefs element
