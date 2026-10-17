@@ -44,6 +44,8 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
     def setUp(self) -> None:
         self.config = GenerateDonutCatalogWcsTaskConfig()
         self.config.donutSelector.unblendedSeparation = 1
+        # Must stay <= unblendedSeparation; nothing blends at 1 px anyway.
+        self.config.donutSelector.minBlendedSeparation = 1
         self.config.catalogFilterList = ["g"]
         self.task = GenerateDonutCatalogWcsTask(config=self.config)
 
