@@ -269,6 +269,17 @@ class TestDonutStampSelectorTask(lsst.utils.tests.TestCase):
         self.assertEqual(len(donutStampsSelect), selected.sum())
         self.assertEqual(len(donutStampsSelect), donutsQuality["FINAL_SELECT"].sum())
 
+        # The per-stamp quality metadata must be propagated to the selected
+        # stamps (and sliced down to the selected donuts). In particular MAG
+        # was previously dropped, which left intra_mag/extra_mag as NaN in the
+        # downstream Zernike table produced by CalcZernikesTask.
+        for metakey in ["MAG", "SN", "ENTROPY", "FRAC_BAD_PIX", "MAX_POWER_GRAD"]:
+            self.assertIn(metakey, list(donutStampsSelect.metadata))
+            np.testing.assert_array_equal(
+                donutStampsSelect.metadata.getArray(metakey),
+                np.asarray(donutStampsIntra.metadata.getArray(metakey))[selected],
+            )
+
     def testPipelineRun(self) -> None:
         # Config specifies maxSelect=1, so the Zernike table should only have
         # 2 rows (average, and pair 1)
