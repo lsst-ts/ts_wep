@@ -124,13 +124,15 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
         try:
             self.log.info("Running Donut Selector")
             donutSelectorTask = self.donutSelector if self.config.doDonutSelection is True else None
-            refSelection, blendCentersX, blendCentersY = runSelection(
-                refObjLoader,
-                detector,
-                detectorWcs,
-                filterName,
-                donutSelectorTask,
-                edgeMargin,
+            refSelection, blendCentersX, blendCentersY, blendMags, blendSeparations, blendMagDiffs = (
+                runSelection(
+                    refObjLoader,
+                    detector,
+                    detectorWcs,
+                    filterName,
+                    donutSelectorTask,
+                    edgeMargin,
+                )
             )
 
         # Except RuntimeError caused when no reference catalog
@@ -144,7 +146,18 @@ class GenerateDonutCatalogOnlineTask(pipeBase.Task):
             refSelection = None
             blendCentersX = None
             blendCentersY = None
+            blendMags = None
+            blendSeparations = None
+            blendMagDiffs = None
 
-        fieldObjects = donutCatalogToAstropy(refSelection, filterName, blendCentersX, blendCentersY)
+        fieldObjects = donutCatalogToAstropy(
+            refSelection,
+            filterName,
+            blendCentersX,
+            blendCentersY,
+            blendMags=blendMags,
+            blendSeparations=blendSeparations,
+            blendMagDiffs=blendMagDiffs,
+        )
         fieldObjects["detector"] = np.array([detector.getName()] * len(fieldObjects), dtype=str)
         return pipeBase.Struct(donutCatalog=fieldObjects)
