@@ -138,7 +138,11 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         elif intrinsicZernikes is not None:
             intrinsicMetadata = inputRefs.intrinsicZernikes
 
-        outputs = self.run(**inputs, intrinsicZernikes=intrinsicZernikes)
+        outputs = self.run(
+            **inputs,
+            intrinsicZernikes=intrinsicZernikes,
+            numCores=butlerQC.resources.num_cores,
+        )
 
         # The defocal type of the single input matches that of its donut
         # stamps, so take it from the stamp metadata rather than mapping the
