@@ -293,7 +293,9 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
                     self.assertIsInstance(struct.outputZernikesAvg, np.ndarray)
                     self.assertIsInstance(struct.zernikes, QTable)
 
-    def _runQuantumCapture(self, intrinsicRefs: list, mockRun: bool = False) -> pipeBase.Struct:
+    def _runQuantumCapture(
+        self, intrinsicRefs: list, mockRun: bool = False, single: bool = False
+    ) -> pipeBase.Struct:
         """Drive ``runQuantum`` with a faked QuantumContext and return the
         captured output struct.
 
@@ -303,7 +305,10 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         would return (empty when no calibration is available). Set ``mockRun``
         to replace ``run`` with a stub returning an empty ``zernikes`` table;
         needed for the no-calibration case, where the real ``run`` fails
-        downstream on the all-NaN table rather than exercising provenance.
+        downstream on the all-NaN table rather than exercising provenance. Set
+        ``single`` to pass the (single) calibration and its ref as bare objects
+        rather than one-element lists, as butler does for a connection without
+        ``multiple=True``.
         """
         from typing import Any
         from unittest.mock import MagicMock
@@ -311,11 +316,16 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         donutStamps = self.butler.get("donutStampsExtra", dataId=self.dataIdExtra, collections=[self.runName])
         intrinsicCalibs = [IntrinsicZernikes(table=self.butler.get(ref)) for ref in intrinsicRefs]
 
+        if single:
+            intrinsicInput, intrinsicRefInput = intrinsicCalibs[0], intrinsicRefs[0]
+        else:
+            intrinsicInput, intrinsicRefInput = intrinsicCalibs, intrinsicRefs
+
         # Fake QuantumContext: get() returns the task inputs, put() captures
         # the outputs so we can inspect the stored table metadata.
         inputs = {
             "donutStamps": donutStamps,
-            "intrinsicZernikes": intrinsicCalibs,
+            "intrinsicZernikes": intrinsicInput,
         }
         captured: dict[str, Any] = {}
         butlerQC = MagicMock()
@@ -324,7 +334,7 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         butlerQC.put.side_effect = lambda outputs, refs: captured.update(outputs=outputs)
 
         inputRefs = MagicMock()
-        inputRefs.intrinsicZernikes = intrinsicRefs
+        inputRefs.intrinsicZernikes = intrinsicRefInput
         outputRefs = MagicMock()
 
         task = CalcZernikesUnpairedTask()
@@ -375,3 +385,22 @@ class TestCalcZernikeUnpaired(lsst.utils.tests.TestCase):
         self.assertEqual(
             str(cm.exception), "No metadata in either DonutStamps object. Cannot create Zk table metadata."
         )
+
+    def testSingleDetector(self) -> None:
+        """runQuantum records provenance when butler passes the intrinsic
+        Zernike calibration as a single object rather than a list (the unpaired
+        connection has no ``multiple=True``, so this reflects
+        the real-pipeline case).
+        """
+        intrinsicRef = self.registry.findDataset(
+            "intrinsic_aberrations_temp",
+            dataId=self.dataIdExtra,
+            collections=["LSSTCam/aos/intrinsic"],
+        )
+        assert intrinsicRef is not None
+
+        outputs = self._runQuantumCapture([intrinsicRef], single=True)
+
+        meta = outputs.zernikes.meta
+        self.assertEqual(meta["butler_intrinsic_extra_run"], intrinsicRef.run)
+        self.assertEqual(meta["butler_intrinsic_extra_uuid"], str(intrinsicRef.id))

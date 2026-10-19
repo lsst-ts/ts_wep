@@ -126,13 +126,23 @@ class CalcZernikesUnpairedTask(CalcZernikesTask):
         # add it the way the parquet formatter does for the blitz results).
         intrinsicZernikes = inputs.pop("intrinsicZernikes")
         intrinsicMetadata = None
-        if len(intrinsicZernikes) > 0:
-            intrinsicZernikes = intrinsicZernikes[0]
-            intrinsicMetadata = inputRefs.intrinsicZernikes[0]
-        else:
-            intrinsicZernikes = None
+        if isinstance(intrinsicZernikes, list):
+            if len(intrinsicZernikes) > 0:
+                intrinsicMetadata = inputRefs.intrinsicZernikes[0]
+                intrinsicZernikes = intrinsicZernikes[0]
+            else:
+                intrinsicZernikes = None
+        # intrinsicZernikes could also be a single object, not a list
+        # in that case, we just use it directly and get the metadata from
+        # the single inputRefs element
+        elif intrinsicZernikes is not None:
+            intrinsicMetadata = inputRefs.intrinsicZernikes
 
-        outputs = self.run(**inputs, intrinsicZernikes=intrinsicZernikes)
+        outputs = self.run(
+            **inputs,
+            intrinsicZernikes=intrinsicZernikes,
+            numCores=butlerQC.resources.num_cores,
+        )
 
         # The defocal type of the single input matches that of its donut
         # stamps, so take it from the stamp metadata rather than mapping the
