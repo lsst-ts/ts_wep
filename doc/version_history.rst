@@ -17,6 +17,16 @@ Version History
 
 .. towncrier release notes start
 
+v17.15.1 (2026-10-19)
+=====================
+
+Bug Fixes
+---------
+
+- Fixed runQuantum in calcZernikesUnpairedTask to run on a single detector in which there will not be a list of intrinsicZernikes inputs, only a single object. (`RSO-1107 <https://rubinobs.atlassian.net//browse/RSO-1107>`_)
+- Propagate the ``MAG`` metadata through ``DonutStampSelectorTask`` so that the ``intra_mag`` and ``extra_mag`` columns of the Zernike table produced by ``CalcZernikesTask`` are populated instead of being filled with NaNs. (`RSO-1110 <https://rubinobs.atlassian.net//browse/RSO-1110>`_)
+
+
 v17.15.0 (2026-10-14)
 =====================
 

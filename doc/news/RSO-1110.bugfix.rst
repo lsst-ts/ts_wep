@@ -1,1 +1,0 @@
-Propagate the ``MAG`` metadata through ``DonutStampSelectorTask`` so that the ``intra_mag`` and ``extra_mag`` columns of the Zernike table produced by ``CalcZernikesTask`` are populated instead of being filled with NaNs.
