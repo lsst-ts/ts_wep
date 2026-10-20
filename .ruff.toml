@@ -10,3 +10,7 @@ max-doc-length = 79
 convention = "numpy"
 [lint.isort]
 known-first-party = ["lsst"]
+# `tests/` is not a package, so pytest puts each test's own directory on
+# sys.path and a sibling test imports as a bare top-level module. Without this
+# those imports sort as third-party, landing among numpy and astropy.
+known-local-folder = ["test_*"]

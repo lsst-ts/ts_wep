@@ -1,0 +1,225 @@
+# This file is part of ts_wep.
+#
+# Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""Aperture photometry and quality metrics for candidate donuts."""
+
+__all__ = ["MeasureDonutCandidatesConfig", "MeasureDonutCandidatesTask"]
+
+import numpy as np
+from astropy.table import QTable
+
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
+from lsst.afw.image import Exposure
+
+from .lsstCam import _LSSTCAM
+
+
+class MeasureDonutCandidatesConfig(pexConfig.Config):
+    """Config for donut candidate flux measurement and quality selection."""
+
+    apertureMarginFrac: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Fractional margin added to both edges of the main photometric "
+            "annulus, to tolerate PSF blur and centroiding error: the outer "
+            "edge grows to radius * (1 + apertureMarginFrac) and the inner "
+            "edge shrinks to radius * obscuration * (1 - apertureMarginFrac). "
+            "Unlike the bkg*Frac fields below, this is the margin itself, not "
+            "an absolute multiple of the nominal donut radius."
+        ),
+        default=0.05,
+    )
+    # Two background regions are sampled, and each has an "inner" radius, so
+    # keep the names apart: this one bounds the filled disc inside the central
+    # obscuration, bkgAnnulusInnerFrac bounds the annulus outside the donut.
+    bkgInnerDiscFrac: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Outer edge of the inner background/blend-check disc, which sits "
+            "inside the central obscuration, as a multiple of "
+            "``radius * obscuration``. Held back from the obscuration edge so "
+            "background is not sampled right against the donut's inner rim."
+        ),
+        default=0.67,
+    )
+    bkgAnnulusInnerFrac: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Inner edge of the outer background/blend-check annulus, as a "
+            "multiple of the nominal donut radius."
+        ),
+        default=1.25,
+    )
+    bkgAnnulusOuterFrac: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Outer edge of the outer background/blend-check annulus, as a "
+            "multiple of the nominal donut radius. Also sets the half-width "
+            "of the photometry/quality-metric cutout window."
+        ),
+        default=1.4,
+    )
+
+
+class MeasureDonutCandidatesTask(pipeBase.Task):
+    """Measure aperture flux and quality metrics for candidate donuts.
+
+    For each candidate centroid, measures aperture flux and per-pixel noise
+    over annular masks built once per call, then derives the ``inner_frac``,
+    ``outer_frac``, ``outer_sector_minmax_frac`` and ``snr`` metrics from
+    them.
+
+    Measurement only: no row is dropped, no ordering is imposed, and no
+    threshold is applied. `CutDonutStampsTask` is what cuts on these metrics
+    and truncates to its own ``maxDonuts``; a candidate too close to the
+    detector edge to cut a background annulus gets ``nan`` metrics and is
+    left in place for it to reject.
+
+    The donut radius and obscuration come from the module-level instrument
+    (`_LSSTCAM`), not config -- they are fixed geometry, not tunable.
+    """
+
+    ConfigClass = MeasureDonutCandidatesConfig
+    _DefaultName = "measureDonutCandidates"
+    config: MeasureDonutCandidatesConfig
+
+    def run(
+        self,
+        exposure: Exposure,
+        selections: QTable,
+        donut_radius: float | None = None,
+    ) -> pipeBase.Struct:
+        """Measure aperture flux and quality metrics for candidate donuts.
+
+        Parameters
+        ----------
+        exposure : Exposure
+            Background-subtracted post-ISR science exposure, in un-binned
+            pixel coordinates.
+        selections : QTable
+            Catalog-selected (or blitz-detection) centroids with columns
+            ``centroid_x``, ``centroid_y``, ``donut_id``.
+        donut_radius : float or None, optional
+            Measured donut radius in un-binned pixels, or None/NaN if
+            unmeasured. If None, the nominal `_LSSTCAM.donut_radius` is used.
+
+        Returns
+        -------
+        pipeBase.Struct
+            ``measurements`` : QTable
+                A copy of ``selections`` with measurement columns added
+                (``flux``, ``inner_frac``, ``outer_frac``,
+                ``outer_sector_minmax_frac``, ``snr``, plus raw ``*_flux``,
+                ``bkg_std``, ``bkg``). No rows are dropped and no ordering is
+                imposed -- selection and culling happen downstream. An empty
+                input is returned unmodified, without measurement columns.
+        """
+        if len(selections) == 0:
+            return pipeBase.Struct(measurements=selections)
+        return pipeBase.Struct(
+            measurements=self._measureFlux(selections, exposure, donut_radius=donut_radius)
+        )
+
+    def _measureFlux(
+        self, selections: QTable, exposure: Exposure, donut_radius: float | None = None
+    ) -> QTable:
+        """Measure aperture flux and per-pixel noise for each detected donut.
+
+        For each peak a local background is estimated from an annular region
+        (inner pupil + outer sky), subtracted, then flux is summed over the
+        main annular aperture. Per-pixel noise is estimated from the IQR of
+        first-differences in the background region.
+
+        Returns a copy of ``selections`` with the measurement columns added;
+        peaks too close to the image border get ``nan`` values. The input
+        table is left unmodified.
+        """
+        if donut_radius is None:
+            donut_radius = _LSSTCAM.donut_radius
+        radius = donut_radius
+        obscuration = _LSSTCAM.obscuration
+        cfg = self.config
+
+        arr = exposure.image.array
+        half = round(radius * cfg.bkgAnnulusOuterFrac)
+
+        coords = np.arange(-half, half + 1, dtype=float)
+        gy, gx = coords[:, None], coords[None, :]
+        r = np.hypot(gx, gy)
+        sector_angle = np.arctan2(gy, gx)
+
+        margin = cfg.apertureMarginFrac
+        main_mask = (r < radius * (1 + margin)) & (r > radius * obscuration * (1 - margin))
+        inner_mask = r < radius * obscuration * cfg.bkgInnerDiscFrac
+        outer_mask = (r > radius * cfg.bkgAnnulusInnerFrac) & (r < radius * cfg.bkgAnnulusOuterFrac)
+        bkg_mask = inner_mask | outer_mask
+        n_main = np.sum(main_mask)
+        outer_sector_masks = [
+            outer_mask
+            & (sector_angle >= -np.pi + k * np.pi / 4)
+            & (sector_angle < -np.pi + (k + 1) * np.pi / 4)
+            for k in range(8)
+        ]
+
+        flux_list, inner_flux_list, outer_flux_list, bkg_std_list = [], [], [], []
+        outer_sector_minmax_list = []
+        bkg_list = []
+
+        for row, col in zip(selections["centroid_y"], selections["centroid_x"]):
+            rmin, rmax = round(row) - half, round(row) + half + 1
+            cmin, cmax = round(col) - half, round(col) + half + 1
+
+            if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
+                flux_list.append(np.nan)
+                inner_flux_list.append(np.nan)
+                outer_flux_list.append(np.nan)
+                outer_sector_minmax_list.append(np.nan)
+                bkg_std_list.append(np.nan)
+                bkg_list.append(np.nan)
+                continue
+
+            stamp = arr[rmin:rmax, cmin:cmax]
+            bkg = np.nanmedian(stamp[bkg_mask])
+            bkg_list.append(bkg)
+            stamp_sub = stamp - bkg
+
+            flux_list.append(np.sum(stamp_sub[main_mask]))
+            inner_flux_list.append(np.sum(stamp_sub[inner_mask]))
+            outer_flux_list.append(np.sum(stamp_sub[outer_mask]))
+            sector_fluxes = [np.sum(stamp_sub[m]) for m in outer_sector_masks]
+            outer_sector_minmax_list.append(max(sector_fluxes) - min(sector_fluxes))
+
+            diff = (stamp_sub - np.roll(stamp_sub, 1, axis=0))[bkg_mask]
+            q75, q25 = np.nanpercentile(diff, [75, 25])
+            bkg_std_list.append((q75 - q25) / 1.349 / np.sqrt(2))
+
+        selections = selections.copy()  # avoid modifying the input in place
+        selections["flux"] = flux_list
+        selections["inner_flux"] = inner_flux_list
+        selections["outer_flux"] = outer_flux_list
+        selections["outer_sector_minmax_flux"] = outer_sector_minmax_list
+        selections["bkg_std"] = bkg_std_list
+        selections["bkg"] = bkg_list
+        with np.errstate(invalid="ignore", divide="ignore"):
+            selections["snr"] = (selections["flux"] / selections["bkg_std"]) / np.sqrt(n_main)
+            selections["inner_frac"] = selections["inner_flux"] / selections["flux"]
+            selections["outer_frac"] = selections["outer_flux"] / selections["flux"]
+            selections["outer_sector_minmax_frac"] = (
+                selections["outer_sector_minmax_flux"] / selections["flux"]
+            )
+        return selections
