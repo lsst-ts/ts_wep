@@ -234,7 +234,14 @@ class TestGenerateDonutCatalogWcsTask(TestCase):
         )
         self.assertCountEqual(
             outputTable.meta.keys(),
-            ["blend_centroid_x", "blend_centroid_y", "visit_info"],
+            [
+                "blend_centroid_x",
+                "blend_centroid_y",
+                "visit_info",
+                "blend_mag",
+                "blend_separation",
+                "blend_mag_diff",
+            ],
         )
         true_ra = [
             6.281628787,
