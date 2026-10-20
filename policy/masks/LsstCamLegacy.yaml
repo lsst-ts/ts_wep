@@ -1,0 +1,126 @@
+# Pupil mask model for LSSTCam as used before danish shipped fitted mask
+# models, kept so a fit can be reproduced against it.
+#
+# Same format danish's own mask files use (see danish/data/RubinObsc_*.yaml):
+# element -> side -> {clear, thetaMin, thetaMax, center, radius}, where center
+# and radius are polynomials in field angle, in meters, and the angles are in
+# degrees.  Selected via WavefrontFittingConfig.maskModel as
+# "policy:masks/LsstCamLegacy.yaml".
+#
+# Six elements against the 13 in danish's v3.14 model: the lens and filter exit
+# surfaces and the camera body are absent, and thetaMax stops at 1.85 rather
+# than 2.0.  Both are why it is not the default.
+Filter_entrance:
+  outer:
+    center: [-125.288, 610.349, -1010.79, 559.213]
+    clear: true
+    radius: [131.412, -650.589, 1083.28, -592.067]
+    thetaMax: 1.85
+    thetaMin: 1.731
+L1_entrance:
+  outer:
+    center: [-0.048216, -0.0306358, -1.58219, 0.0647055]
+    clear: true
+    radius: [0.0423097, -0.146989, 0.262746, 6.59546]
+    thetaMax: 1.732
+    thetaMin: 1.726
+M1:
+  inner:
+    center: [-3.87388e-07, -2.8971e-07, -0.00479205, -7.99935e-08]
+    clear: false
+    radius: [9.70741e-09, -2.59729e-08, -1.32368e-08, 2.558]
+    thetaMax: 1.85
+    thetaMin: 0.0
+  outer:
+    center: [5.94968e-11, -5.34043e-09, 7.82344e-08, -3.86466e-07]
+    clear: true
+    radius: [1.06259e-12, 1.27949e-12, 6.02422e-13, 4.18]
+    thetaMax: 1.85
+    thetaMin: 0.0
+M2:
+  inner:
+    center: [-0.000217218, 1.05809e-05, -0.291126, 1.30227e-06]
+    clear: false
+    radius: [8.82205e-06, 0.000781438, 8.22495e-06, 2.3709]
+    thetaMax: 1.85
+    thetaMin: 0.653
+  outer:
+    center: [-0.000159006, 0.00157387, -0.291945, -3.46377e-05]
+    clear: true
+    radius: [-3.60097e-05, 0.000464994, 0.000350099, 4.49688]
+    thetaMax: 1.818
+    thetaMin: 1.095
+M3:
+  inner:
+    center: [-0.000739706, -0.00139309, -0.935256, -0.00127361]
+    clear: false
+    radius: [-0.000211642, -0.00055108, -0.00136606, 1.22153]
+    thetaMax: 1.85
+    thetaMin: 1.784
+  outer:
+    center: [-0.00111808, -0.00616835, -0.793911, -4.46707e-05]
+    clear: true
+    radius: [0.000135497, -0.000513756, 0.00237774, 5.21539]
+    thetaMax: 1.79
+    thetaMin: 1.399
+Spider_3D:
+- angle: 45.0
+  length: 10.0
+  r0: [0.4, 0.0, 6.98]
+  v0: [0.0, 1.0, 0.0]
+  width: 0.05
+- angle: 45.0
+  length: 10.0
+  r0: [-0.4, 0.0, 6.98]
+  v0: [0.0, 1.0, 0.0]
+  width: 0.05
+- angle: 45.0
+  length: 10.0
+  r0: [0.0, 0.4, 6.98]
+  v0: [1.0, 0.0, 0.0]
+  width: 0.05
+- angle: 45.0
+  length: 10.0
+  r0: [0.0, -0.4, 6.98]
+  v0: [1.0, 0.0, 0.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [0.4, 2.5, 8.13]
+  v0: [0.0, 2.792, -1.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [-0.4, 2.5, 8.13]
+  v0: [0.0, 2.792, -1.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [0.4, -2.5, 8.13]
+  v0: [0.0, 2.792, 1.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [-0.4, -2.5, 8.13]
+  v0: [0.0, 2.792, 1.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [2.5, 0.4, 8.13]
+  v0: [2.792, 0.0, -1.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [2.5, -0.4, 8.13]
+  v0: [2.792, 0.0, -1.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [-2.5, 0.4, 8.13]
+  v0: [2.792, 0.0, 1.0]
+  width: 0.05
+- angle: 45.0
+  length: 5.0
+  r0: [-2.5, -0.4, 8.13]
+  v0: [2.792, 0.0, 1.0]
+  width: 0.05
