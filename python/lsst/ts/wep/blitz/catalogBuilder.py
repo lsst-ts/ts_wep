@@ -27,6 +27,8 @@ task.
 
 from __future__ import annotations
 
+from lsst.ts.wep.blitz import CutoutResult, WfGroupResult
+
 __all__ = []
 
 import importlib
@@ -370,10 +372,10 @@ _META_NOTES = {
 
 
 def _build_donut_catalog(
-    results: list,
-    wf_results: list,
-    donuts: list,
-    unmatched_donuts: list,
+    results: list[CutoutResult],
+    wf_results: list[WfGroupResult],
+    donuts: list[Donut],
+    unmatched_donuts: list[Donut],
     visit_id: int,
     options: _CatalogOptions,
     intra_visit_id: int | None = None,
@@ -495,8 +497,8 @@ def _build_donut_catalog(
 
     # Build lookup: (donut_id, det_name, visit_id) -> wf donut entry.
     wf_by_id: dict = {}
-    for r in wf_results:
-        for wd in r.donut_results:
+    for wfr in wf_results:
+        for wd in wfr.donut_results:
             wf_by_id[(wd.donut_id, wd.det_name, wd.visit_id)] = wd
 
     # Build lookup: "{det_name}_{visit_id}" -> per-detector metadata from
