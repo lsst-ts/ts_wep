@@ -269,7 +269,11 @@ class CutDonutStampsTask(pipeBase.Task):
         # brightest-first and can early-exit once both buckets are full,
         # without depending on the upstream measurement task's row order.
         if len(measurements) > 1:
-            measurements = measurements[np.argsort(measurements["flux"])[::-1]]
+            flux = measurements["flux"]
+            order = np.lexsort(
+                (-flux, np.isnan(flux)),  # keep NaN at back
+            )
+            measurements = measurements[order]
 
         max_donuts = self.config.maxDonuts
         max_reject = self.config.maxRejectDonuts
