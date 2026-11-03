@@ -1,0 +1,2 @@
+Fixed ``saveHistory=True`` failing with ``ValueError: TaskMetadata does not support values of type`` when estimating Zernikes from unpaired donuts.
+The TIE history now stores the model pupil as its pixel array rather than as an ``Image`` object, and ``convertHistoryToMetadata`` falls back to a string representation for any other type that ``TaskMetadata`` cannot store.
