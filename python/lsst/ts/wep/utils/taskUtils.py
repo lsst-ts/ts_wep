@@ -396,6 +396,14 @@ def convertHistoryToMetadata(history: dict) -> pipeBase.TaskMetadata:
             "dtype": history.dtype.name,
             "values": history.flatten().tolist(),
         }
+    elif isinstance(history, Image):
+        # Image objects are not supported by TaskMetadata, so save the
+        # underlying pixel array instead.
+        history = convertHistoryToMetadata(history.image)
+    elif not isinstance(history, (str, int, float, bool, list, tuple)):
+        # Anything else TaskMetadata cannot store is stringified rather
+        # than raising, so that saveHistory=True never fails a pipeline.
+        history = str(history)
 
     return history
 

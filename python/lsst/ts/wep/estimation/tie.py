@@ -490,8 +490,8 @@ class TieAlgorithm(WfAlgorithm):
             - "zkStartMean" - the mean of the starting Zernikes. Note these
                               Zernikes are added to zkBest to estimate the
                               full OPD.
-            - "pupil" - model pupil image, in the case where only one image
-                        was passed to the estimator.
+            - "pupil" - model pupil image array, in the case where only one
+                        image was passed to the estimator.
             - "nollIndices" - array of Noll indices corresponding to the
                               estimated Zernikes values.
 
@@ -761,7 +761,7 @@ class TieAlgorithm(WfAlgorithm):
                 "zkStartIntra": None if intra is None else zkStartIntra.copy(),
                 "zkStartExtra": None if extra is None else zkStartExtra.copy(),
                 "zkStartMean": zkStartMean.copy(),
-                "pupil": None if pupil is None else pupil.copy(),
+                "pupil": None if pupil is None else pupil.image.copy(),
                 "nollIndices": nollIndices.copy(),
             }
 

@@ -33,12 +33,15 @@ from lsst.afw.image import VisitInfo
 from lsst.daf.butler import Butler
 from lsst.meas.algorithms import ReferenceObjectLoader
 from lsst.ts.wep import Instrument
+from lsst.ts.wep.image import Image
 from lsst.ts.wep.task.generateDonutCatalogUtils import (
     addVisitInfoToCatTable,
     donutCatalogToAstropy,
 )
 from lsst.ts.wep.utils import (
     convertDictToVisitInfo,
+    convertHistoryToMetadata,
+    convertMetadataToHistory,
     createTemplateForDetector,
     getCameraFromButlerName,
     getModulePath,
@@ -276,3 +279,32 @@ class TestTaskUtils(unittest.TestCase):
         )
         self.assertEqual(roundTripVisitInfo.observatory, testExposure.visitInfo.observatory)
         self.assertEqual(roundTripVisitInfo.era, testExposure.visitInfo.era)
+
+    def testConvertHistoryToMetadataNones(self) -> None:
+        # None values must survive the round trip rather than raising,
+        # see SSW-280.
+        history = {
+            "intraInit": [0],
+            "extraInit": [1],
+            "zkStartExtra": None,
+            "nested": {"pupil": None},
+        }
+        roundTrip = convertMetadataToHistory(convertHistoryToMetadata(history))
+        self.assertEqual(roundTrip, history)
+
+    def testConvertHistoryToMetadataImage(self) -> None:
+        # Image objects are not supported by TaskMetadata, so they should
+        # be stored as their underlying pixel array.
+        image = Image(
+            image=np.arange(9, dtype=float).reshape(3, 3),
+            fieldAngle=(0.0, 0.0),
+            defocalType="intra",
+        )
+        roundTrip = convertMetadataToHistory(convertHistoryToMetadata({"pupil": image}))
+        np.testing.assert_allclose(roundTrip["pupil"], image.image)
+
+    def testConvertHistoryToMetadataUnsupportedType(self) -> None:
+        # Arbitrary unsupported objects are stringified instead of raising,
+        # so that saveHistory=True never fails a pipeline.
+        roundTrip = convertMetadataToHistory(convertHistoryToMetadata({"obj": object()}))
+        self.assertIsInstance(roundTrip["obj"], str)
