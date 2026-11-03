@@ -32,6 +32,7 @@ __all__ = [
     "makeSparse",
     "makeDense",
     "checkNollIndices",
+    "getNollPairs",
 ]
 
 from typing import Optional
@@ -690,3 +691,38 @@ def checkNollIndices(nollIndices: np.ndarray) -> None:
     for j in nollIndices:
         if j in pairs and pairs[j] not in nollIndices:
             raise ValueError(f"Noll index {j} is missing azimuthal pair, Noll index {pairs[j]}.")
+
+
+def getNollPairs(jmax: int) -> tuple[list, list]:
+    """Split Noll indices 1..jmax into azimuthal pairs and singles.
+
+    Assumes jmax is pair-complete, i.e. no doublet is truncated by it.
+
+    Parameters
+    ----------
+    jmax : int
+        The maximum Noll index, inclusive.
+
+    Returns
+    -------
+    list
+        The (n, |m|) doublets as ``(j_cos, j_sin, n, |m|)`` tuples. The
+        cosine member is always first, regardless of which of the two
+        consecutive Noll indices carries the positive m.
+    list
+        The Noll indices with m == 0, which have no partner.
+    """
+    pairs, singles = [], []
+    j = 1
+    while j <= jmax:
+        n, m = galsim.zernike.noll_to_zern(j)
+        if m == 0:
+            singles.append(j)
+            j += 1
+            continue
+        if m > 0:
+            pairs.append((j, j + 1, n, m))
+        else:
+            pairs.append((j + 1, j, n, abs(m)))
+        j += 2
+    return pairs, singles
