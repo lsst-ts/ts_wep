@@ -180,7 +180,7 @@ class CutDonutStampsConfig(pexConfig.Config):
         default=0.1,
     )
     minStampSnr: pexConfig.Field[float] = pexConfig.Field[float](
-        doc="Reject a donut if its per-stamp SNR falls below this.",
+        doc="Reject a donut if its SNR falls below this.",
         default=100.0,
     )
     maxDonuts: pexConfig.Field[int] = pexConfig.Field[int](
@@ -353,12 +353,12 @@ class CutDonutStampsTask(pipeBase.Task):
 
         rejected_sat = bool(np.any(context.mask[rmin:rmax, cmin:cmax] & context.sat_bit))
         rejected_inner_frac = bool(
-            np.isfinite(row["inner_frac"]) and abs(row["inner_frac"]) > self.config.innerFracThreshold
+            not np.isfinite(row["inner_frac"]) or abs(row["inner_frac"]) > self.config.innerFracThreshold
         )
         rejected_outer_frac = bool(
-            np.isfinite(row["outer_frac"]) and abs(row["outer_frac"]) > self.config.outerFracThreshold
+            not np.isfinite(row["outer_frac"]) or abs(row["outer_frac"]) > self.config.outerFracThreshold
         )
-        rejected_snr = bool(np.isfinite(row["snr"]) and row["snr"] < self.config.minStampSnr)
+        rejected_snr = bool(not np.isfinite(row["snr"]) or row["snr"] < self.config.minStampSnr)
         rejected = rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr
 
         return Donut(
