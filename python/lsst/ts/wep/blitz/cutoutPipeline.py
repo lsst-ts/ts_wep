@@ -29,7 +29,6 @@ __all__ = []
 
 import logging
 import time
-from typing import Any
 
 import numpy as np
 from astropy.table import QTable
@@ -49,6 +48,7 @@ from .utils import (
     _COW_STORE,
     _REFCAT_COLUMNS,
     IsrCalibs,
+    RefcatLoad,
     _colorize,
     _resolve_donut_radius,
 )
@@ -177,7 +177,7 @@ def _detector_view(
 def _cutout_one_exposure(
     raw: Exposure,
     calibs: IsrCalibs,
-    refcat_load_result: Any,
+    refcat_load_result: RefcatLoad | None,
     det_name: str,
     max_fit_scatter: float,
     astrom_ref_filter: str,
@@ -204,7 +204,7 @@ def _cutout_one_exposure(
         This detector's materialized calibrations. Corner mode takes them
         straight from the store; a full-array worker resolves its own handles
         into one of these first.
-    refcat_load_result
+    refcat_load_result : `lsst.ts.wep.blitz.utils.RefcatLoad` or None
         Pre-loaded reference catalog for this detector, or None to skip the WCS
         refit and refcat-based selection.
     det_name : str
@@ -316,7 +316,10 @@ def _cutout_one_exposure(
     selection_source = None
     select_task = _COW_STORE.select_task
 
-    if wcs is not None:
+    # `wcs` is assigned only on the branch above where the load was not None,
+    # so the second test cannot fail here; it is what makes that coupling
+    # visible to the reader and to mypy, which tracks the two independently.
+    if wcs is not None and refcat_load_result is not None:
         try:
             refcat = refcat_load_result.refCat.copy(deep=True)
             afwTable.updateRefCentroids(wcs, refcat)

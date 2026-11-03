@@ -39,6 +39,7 @@ from .lsstCam import _LSSTCAM
 
 if TYPE_CHECKING:
     from lsst.afw.image import VisitInfo
+    from lsst.afw.table import SimpleCatalog
 
     from .dataStructures import Donut
 
@@ -257,6 +258,18 @@ def _rot_tel_pos_rad(visit_info: VisitInfo) -> float:
     ) % (2 * np.pi) - np.pi
 
 
+@dataclass(frozen=True)
+class RefcatLoad:
+    """Loaded reference catalog.
+
+    `ReferenceObjectLoader.loadPixelBox` returns a `lsst.pipe.base.Struct`
+    carrying exactly these two fields.  Repack here to enable type checking.
+    """
+
+    refCat: SimpleCatalog
+    fluxField: str
+
+
 @dataclass
 class IsrCalibs:
     """The four materialized calibrations ISR needs for one exposure.
@@ -364,7 +377,7 @@ class CowStore:
     build_detector_view: bool
     # --- Corner mode only.
     corner_detectors: dict[str, CornerDetectorInputs]
-    det_refcats: dict[str, Any]
+    det_refcats: dict[str, RefcatLoad | None]
     # --- Full-array mode only.
     fam_detectors: dict[int, FamDetectorInputs]
     pair_match_tolerance: float
@@ -409,7 +422,7 @@ class CowStore:
         photo_ref_filter: str,
         telescope: batoid.Optic,
         corner_detectors: dict[str, CornerDetectorInputs],
-        det_refcats: dict[str, Any],
+        det_refcats: dict[str, RefcatLoad | None],
         build_detector_view: bool = True,
     ) -> CowStore:
         """Build the store corner modes cutout and fit workers read.

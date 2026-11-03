@@ -83,6 +83,7 @@ from .utils import (
     CornerDetectorInputs,
     CowStore,
     IsrCalibs,
+    RefcatLoad,
     _colorize,
     _resolve_color_log_enabled,
     _rot_tel_pos_rad,
@@ -998,7 +999,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             by_name[iz_det_name] = iz
         return by_name
 
-    def _loadRefcats(self, ref_cat: list, raw_by_name: dict) -> dict:
+    def _loadRefcats(self, ref_cat: list, raw_by_name: dict) -> dict[str, RefcatLoad | None]:
         """Load one refcat per detector, and stub the astrometry task.
 
         Done in the parent so the shards are loaded once and inherited by the
@@ -1018,7 +1019,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             )
             loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
 
-        det_refcats: dict = {}
+        det_refcats: dict[str, RefcatLoad | None] = {}
         for name, raw in raw_by_name.items():
             raw_wcs = raw.getWcs()
             raw_bbox = raw.getBBox()
@@ -1026,12 +1027,13 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             load_result = None
             if loader is not None:
                 try:
-                    load_result = loader.loadPixelBox(
+                    struct = loader.loadPixelBox(
                         bbox=raw_bbox,
                         wcs=raw_wcs,
                         filterName=self.config.astromRefFilter,
                         epoch=raw_epoch,
                     )
+                    load_result = RefcatLoad(refCat=struct.refCat, fluxField=struct.fluxField)
                 except Exception as exc:
                     self.log.warning("Failed to load refcat for %s: %s", name, exc)
             det_refcats[name] = load_result
@@ -1051,7 +1053,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
     def _populateCowStore(
         self,
         inputs: _CornerInputs,
-        det_refcats: dict,
+        det_refcats: dict[str, RefcatLoad | None],
         band: str,
         photo_filter_name: str,
     ) -> None:

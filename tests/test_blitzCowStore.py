@@ -79,7 +79,7 @@ def _corner_store(**overrides: Any) -> CowStore:
                 calibs=IsrCalibs(ptc="ptc", flat="flat", linearizer="lin", crosstalk="ct"),
             )
         },
-        det_refcats={"R00_SW0": "refcat"},
+        det_refcats={"R00_SW0": None},
     )
     kwargs.update(overrides)
     return CowStore.for_corner(**kwargs)

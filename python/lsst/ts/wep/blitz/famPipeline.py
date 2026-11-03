@@ -49,6 +49,7 @@ from .lsstCam import _LSSTCAM
 from .utils import (
     _COW_STORE,
     IsrCalibs,
+    RefcatLoad,
 )
 
 _log = logging.getLogger(__name__)
@@ -335,7 +336,7 @@ def _fam_detector_worker(args: tuple) -> FamDetectorResult:
         # so handing it all of the visit's shard handles still reads only the
         # ~2 that overlap.
         t_refcat0 = time.perf_counter()
-        load_result = None
+        load_result: RefcatLoad | None = None
         refcat_handles = _COW_STORE.refcat_handles
         if refcat_handles:
             ref_raw = raws[extra_exp]
@@ -345,12 +346,14 @@ def _fam_detector_worker(args: tuple) -> FamDetectorResult:
             )
             loader.config.pixelMargin = 300  # extra tolerance for uncertain WCS
             try:
-                load_result = loader.loadPixelBox(
+                struct = loader.loadPixelBox(
                     bbox=ref_raw.getBBox(),
                     wcs=ref_raw.getWcs(),
                     filterName=_COW_STORE.astrom_ref_filter,
                     epoch=ref_raw.getInfo().getVisitInfo().date.toAstropy(),
                 )
+                load_result = RefcatLoad(refCat=struct.refCat, fluxField=struct.fluxField)
+                del struct
             except Exception as exc:
                 _log.warning("Failed to load refcat for %s: %s", det_name, exc)
             # ref_raw is a live reference to one of the raws; drop it so the
