@@ -201,6 +201,15 @@ def _fork_map(
     open_pipes = 0
 
     def spawn(index: int) -> None:
+        """Fork one worker for a single unit and wire up its pipe.
+
+        Parameters
+        ----------
+        index : `int`
+            Position in ``arg_list`` of the unit this worker runs. Used both
+            to select the argument passed to `func` and to key the per-unit
+            bookkeeping (buffers, start time, pid) in the enclosing scope.
+        """
         nonlocal open_pipes
         read_fd, write_fd = os.pipe()
         pid = os.fork()
@@ -344,7 +353,21 @@ _INCOMPLETE = object()
 
 
 def _decode_result(buffer: bytearray) -> Any:
-    """Unpickle one framed result, or `_INCOMPLETE` if it is not all there."""
+    """Unpickle one framed result, or `_INCOMPLETE` if it is not all there.
+
+    Parameters
+    ----------
+    buffer : `bytearray`
+        Raw bytes drained from a worker's pipe: the `_RESULT_HEADER` length
+        frame followed by the pickled body, possibly truncated by a kill.
+
+    Returns
+    -------
+    result : `Any`
+        The unpickled return value of the unit, or the sentinel `_INCOMPLETE`
+        when the header is missing, the body length disagrees with the
+        declared length, or the body fails to unpickle.
+    """
     if len(buffer) < _RESULT_HEADER.size:
         return _INCOMPLETE
     (declared,) = _RESULT_HEADER.unpack_from(buffer)
@@ -364,6 +387,25 @@ def _describe_exit(status: int, received: int, timeout: float | None = None) -> 
     takes precedence over `status`, which would otherwise report the sweep's
     own SIGKILL as an OOM kill and send the reader after a memory problem that
     was never involved.
+
+    Parameters
+    ----------
+    status : `int`
+        The raw status word from `os.waitpid` for the worker, inspected with
+        the `os.WIF*` helpers.
+    received : `int`
+        Number of bytes drained from the worker's pipe. A non-zero value is
+        reported as a discarded partial result.
+    timeout : `float` or `None`, optional
+        The unit deadline the worker overran, when a timeout is what ended
+        it. Takes precedence over `status`. `None` (the default) means the
+        worker was not killed by the deadline sweep.
+
+    Returns
+    -------
+    detail : `str`
+        A human-readable explanation of why the worker produced no usable
+        result, suitable for a `_WorkerDeath` reason.
     """
     if timeout is not None:
         # `:g` rather than a fixed precision: sub-second deadlines are
@@ -435,6 +477,12 @@ def _dump_stacks_on_hang(timeout: float | None, label: str, log: Any = None) -> 
         Named in the log line so the dump can be tied back to a call site.
     log : optional
         Logger for the "armed" message. Nothing is logged when omitted.
+
+    Yields
+    ------
+    `None`
+        Control returns to the guarded block. The watchdog runs on a daemon
+        thread for the duration and is disarmed when the block exits.
     """
     if timeout is None or timeout <= 0:
         yield
@@ -444,6 +492,13 @@ def _dump_stacks_on_hang(timeout: float | None, label: str, log: Any = None) -> 
     done = threading.Event()
 
     def watch() -> None:
+        """Wait out the deadline, then dump stacks and abort on a hang.
+
+        Runs on the daemon watchdog thread. Returns quietly if the guarded
+        block signals `done` before `timeout` elapses; otherwise it dumps
+        every thread's traceback to stderr, kills any child processes, and
+        calls `os._exit(1)` to abort the process.
+        """
         if done.wait(timeout):
             return
         print(

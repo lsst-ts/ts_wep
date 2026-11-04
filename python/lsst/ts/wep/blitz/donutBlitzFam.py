@@ -182,6 +182,17 @@ def _mean_std_max(values: Sequence[float]) -> tuple[float, float, float]:
 
     Returns all-NaN rather than warning when nothing is finite, which is the
     all-detectors-failed case.
+
+    Parameters
+    ----------
+    values : `~collections.abc.Sequence` [ `float` ]
+        The values to summarize; NaN entries are ignored.
+
+    Returns
+    -------
+    tuple [float, float, float]
+        The mean, standard deviation, and maximum over the finite values,
+        or all-NaN when none are finite.
     """
     array = np.asarray(values, dtype=float)
     if array.size == 0 or not np.isfinite(array).any():
@@ -598,6 +609,15 @@ class DonutBlitzFamConfig(
     )
 
     def setDefaults(self) -> None:
+        """Set the subtask config defaults this task relies on.
+
+        Tunes the ISR, astrometry and donut-selector subtasks for
+        full-array-mode wavefront sensing: a minimal ISR, an affine WCS fit
+        with a bounded reference set, custom magnitude limits matching the
+        monster reference catalog's full filter names, a larger stamp count
+        suited to the science detectors, and per-group fit logging turned off
+        in favor of the aggregated per-detector summaries.
+        """
         super().setDefaults()
         self.isr.doAmpOffset = False
         self.isr.ampOffset.doApplyAmpOffset = False
@@ -686,6 +706,13 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
     wavefrontFit: WavefrontFittingTask
 
     def __init__(self, **kwargs: Any) -> None:
+        """Construct the task and its subtasks.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Keyword arguments forwarded to `lsst.pipe.base.PipelineTask`.
+        """
         super().__init__(**kwargs)
         self.makeSubtask("isr")
         self.makeSubtask("subtractBackground")
@@ -700,7 +727,14 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
     @property
     def _extraFocalOffsets(self) -> tuple[float, float, float]:
-        """Optic z shifts of the extra-focal exposure, per `_OFFSET_OPTICS`."""
+        """Optic z shifts of the extra-focal exposure, per `_OFFSET_OPTICS`.
+
+        Returns
+        -------
+        tuple [float, float, float]
+            The signed ``(detector, camera, m2)`` z offsets in meters for the
+            extra-focal side of the pair.
+        """
         return (
             +self.config.detectorOffset,
             +self.config.cameraOffset,
@@ -709,7 +743,15 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
 
     @property
     def _intraFocalOffsets(self) -> tuple[float, float, float]:
-        """Optic z shifts of the intra-focal exposure, per `_OFFSET_OPTICS`."""
+        """Optic z shifts of the intra-focal exposure, per `_OFFSET_OPTICS`.
+
+        Returns
+        -------
+        tuple [float, float, float]
+            The signed ``(detector, camera, m2)`` z offsets in meters for the
+            intra-focal side of the pair, each the negation of its extra-focal
+            counterpart.
+        """
         # `-o if o else 0.0` rather than plain negation, to keep an unused
         # component as 0.0 instead of -0.0 in logs and store keys.
         return tuple(-o if o else 0.0 for o in self._extraFocalOffsets)  # type: ignore[return-value]
@@ -720,6 +762,34 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ) -> None:
+        """Resolve this group's handles, fork the detector pool, and write.
+
+        Checks the group is a clean intra/extra pair, assigns each exposure a
+        side of focus, restricts to the science array, resolves deferred input
+        handles without reading pixels, populates the copy-on-write store the
+        workers inherit, forks one worker per detector, then assembles the
+        results into the output catalog and persists it against the
+        extra-focal visit.
+
+        Parameters
+        ----------
+        butlerQC : `lsst.pipe.base.QuantumContext`
+            The quantum context used to resolve input handles and put outputs.
+        inputRefs : `lsst.pipe.base.InputQuantizedConnection`
+            References to this quantum's input datasets.
+        outputRefs : `lsst.pipe.base.OutputQuantizedConnection`
+            References to this quantum's output datasets.
+
+        Raises
+        ------
+        RuntimeError
+            If the quantum has no data ID, if any detector is missing a
+            required ISR calibration, or if no predicted output ref exists for
+            the extra-focal visit.
+        NoWorkFound
+            If the group is not a two-exposure pair, or if no science detector
+            is present in both exposures.
+        """
         t_start = time.perf_counter()
         quantumDataId = butlerQC.quantum.dataId
         if quantumDataId is None:
@@ -909,6 +979,31 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         and a plain detector-keyed dict would quietly flat-field with an
         arbitrary band.  That failure produces plausible-looking wrong numbers
         rather than an error, so it is worth an assertion rather than trust.
+
+        Parameters
+        ----------
+        butlerQC : `lsst.pipe.base.QuantumContext`
+            The quantum context used to resolve each ref to a handle.
+        inputRefs : `lsst.pipe.base.InputQuantizedConnection`
+            References to this quantum's input datasets; the connection named
+            by ``name`` is read off it.
+        name : `str`
+            The calibration connection name to resolve (e.g. ``"ptc"``).
+        raw_handles : `dict`
+            Maps detector id to its resolved raw handles; used to restrict the
+            calibration handles to the detectors being processed.
+
+        Returns
+        -------
+        handles : `dict`
+            One resolved calibration handle per detector id.
+
+        Raises
+        ------
+        RuntimeError
+            If more than one ref for a detector is present, indicating the
+            quantum's dimensions are not narrowing the calibration to one per
+            detector.
         """
         handles: dict[int, Any] = {}
         for ref in getattr(inputRefs, name):
@@ -931,6 +1026,17 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         ``observation_reason`` is free-form and cannot be relied on.  But when
         it *is* populated and disagrees, every Zernike in the output has the
         wrong sign, so it is worth saying so loudly.
+
+        Parameters
+        ----------
+        raws_by_exp : `dict`
+            Maps exposure id to its list of raw dataset refs.
+        intra_exp : `int`
+            Exposure id taken as intra-focal (the lower of the pair).
+        extra_exp : `int`
+            Exposure id taken as extra-focal (the higher of the pair).
+        group : `Any`
+            The group dimension value, for the warning message.
         """
         reasons = {}
         for exp in (intra_exp, extra_exp):
@@ -966,6 +1072,31 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         Subtasks, deferred handles, and the batoid telescope all go in here so
         the children inherit them by copy-on-write instead of receiving them
         through a pickle.
+
+        Parameters
+        ----------
+        det_ids : `list` [ `int` ]
+            The science detector ids to process, present in both exposures.
+        raw_handles : `dict`
+            Maps detector id to a dict of exposure id to resolved raw handle.
+        calib_handles : `dict`
+            Maps calibration name to a dict of detector id to resolved handle.
+        refcat_handles : `list`
+            Resolved reference catalog shard handles, one per overlapping
+            shard; may be empty.
+        intra_exp : `int`
+            Intra-focal exposure id.
+        extra_exp : `int`
+            Extra-focal exposure id.
+        band : `str`
+            Exposure band, used to resolve the batoid optics model.
+        rtp_deg : `float` or `None`
+            Rotator telescope position in degrees, or None when spider-shadow
+            modeling is disabled.
+        boresight_alt_rad : `float` or `None`
+            Boresight altitude in radians.
+        photo_filter_name : `str`
+            Reference-catalog filter column used for donut selection.
         """
         # AstrometryTask.solve() calls refObjLoader.getMetadataBox()
         # unconditionally even when load_result is pre-supplied, and that
@@ -1039,6 +1170,20 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         ``num_cores`` comes from the execution environment (``pipetask
         -n/--cores-per-quantum``, default 1), never from config, matching
         `DonutBlitzCornerTask`.  One core runs inline with no pool at all.
+
+        Parameters
+        ----------
+        det_ids : `list` [ `int` ]
+            The science detector ids to process, one work unit each.
+        num_cores : `int`
+            Number of worker processes; 1 runs every detector inline.
+
+        Returns
+        -------
+        results : `list` [ \
+`lsst.ts.wep.blitz.dataStructures.FamDetectorResult` ]
+            One result per detector, including `FamDetectorResult.dead`
+            stand-ins for any worker that was killed.
         """
         t0 = time.perf_counter()
         if num_cores == 1:
@@ -1131,11 +1276,29 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         a missing detector is visibly missing rather than absent.
 
         The aggregates cover only the detectors that produced results.
+
+        Parameters
+        ----------
+        results : `list` [ \
+`lsst.ts.wep.blitz.dataStructures.FamDetectorResult` ]
+            The per-detector worker results to log.
         """
         if not results:
             return
 
         def name_of(r: FamDetectorResult) -> str:
+            """Return a detector's display name, falling back to its id.
+
+            Parameters
+            ----------
+            r : `lsst.ts.wep.blitz.dataStructures.FamDetectorResult`
+                One worker result.
+
+            Returns
+            -------
+            str
+                The detector name, or ``"det{id}"`` when the name is unset.
+            """
             return r.det_name or f"det{r.det_id}"
 
         ok = []
@@ -1209,6 +1372,12 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         within one wave, and neither says anything about the detector.  It
         stays on the per-detector lines, where the step from ~0 to nonzero
         shows the pool size and the growth after that shows the pool draining.
+
+        Parameters
+        ----------
+        ok : `list` [ \
+`lsst.ts.wep.blitz.dataStructures.FamDetectorResult` ]
+            The detectors that neither failed nor skipped.
         """
         n = len(ok)
         stages = [_detector_stage_times(r) for r in ok]
@@ -1267,7 +1436,43 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         visit_info: Any = None,
         instrument: str = "",
     ) -> Any:
-        """Flatten per-detector worker results into the catalog schema."""
+        """Flatten per-detector worker results into the catalog schema.
+
+        Parameters
+        ----------
+        results : `list` [ \
+`lsst.ts.wep.blitz.dataStructures.FamDetectorResult` ]
+            The per-detector worker results to flatten.
+        visit_id : `int`
+            Visit id written to the catalog's ``visit_id`` column (the
+            extra-focal exposure).
+        intra_visit_id : `int`
+            Intra-focal exposure id, for the catalog meta.
+        extra_visit_id : `int`
+            Extra-focal exposure id, for the catalog meta.
+        exposure_group : `str`
+            Butler ``group`` of the pair, for the catalog meta.
+        rtp_rad : `float`
+            Rotator telescope position in radians.
+        photo_filter_name : `str`
+            Reference-catalog filter column used for donut selection.
+        run_elapsed : `float`
+            Total `runQuantum` wall time in seconds.
+        butler_elapsed : `float`
+            Handle-resolution wall time in seconds.
+        band : `str`
+            Exposure band, used to resolve the batoid optics model.
+        visit_info : `Any`, optional
+            The extra-focal exposure's visit info, for the catalog meta.
+        instrument : `str`, optional
+            Butler ``instrument`` dimension, for the catalog meta.
+
+        Returns
+        -------
+        `Any`
+            The assembled per-donut catalog, as returned by
+            `_build_donut_catalog`.
+        """
         cutout_results = [r for w in results for r in w.results]
         wf_results = [r for w in results for r in w.wf_results]
         donuts = [d for w in results for d in w.donuts]
@@ -1320,6 +1525,16 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         Same function corner mode calls, deliberately: one schema for both
         modes rather than two that drift.  The image flags differ -- full-array
         mode has ~10k rows per pair, where they would dominate the file.
+
+        Parameters
+        ----------
+        band : `str`
+            Exposure band, used to resolve the batoid optics model name.
+
+        Returns
+        -------
+        `_CatalogOptions`
+            The config-derived scalars the output catalog needs.
         """
         return _CatalogOptions(
             stamp_size=self.cutStamps.config.stampSize,

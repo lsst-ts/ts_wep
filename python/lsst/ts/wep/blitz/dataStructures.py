@@ -55,7 +55,64 @@ _FIT_STATUS_ABSENT = -99
 
 @dataclass
 class Donut:
-    """One cut donut stamp with its selection/quality metrics."""
+    """One cut donut stamp with its selection/quality metrics.
+
+    Attributes
+    ----------
+    det_name : str
+        Detector name.
+    stamp : numpy.ndarray or None
+        The cut stamp pixels, in the camera coordinate system (CCS).
+    thx_ccs, thy_ccs : float
+        Field angle of the donut in CCS, in radians.
+    flux : float
+        Measured flux, the brightness ordering key.
+    band : str
+        Exposure band label.
+    det_id : int
+        Detector identifier.
+    visit_id : int
+        Visit identifier of the exposure the donut came from.
+    x_det, y_det : float
+        Un-rounded centroid in detector pixels.
+    donut_id : int
+        Donut id -- a refcat source id on the refcat path, a per-detector
+        1..N counter on the blitz-detection path.
+    inner_frac, outer_frac : float
+        Inner/outer flux-fraction geometry metrics.
+    outer_sector_minmax_frac : float
+        Outer-sector min/max flux-fraction metric.
+    donut_radius : float
+        Measured donut radius in un-binned pixels.
+    snr : float
+        Stamp signal-to-noise ratio.
+    bkg, bkg_std : float
+        Local background level and its standard deviation.
+    n_quarter : int
+        Detector orientation as a count of 90-degree rotations, relating
+        the CCS stamp to ``x_det``/``y_det``.
+    photo_mag, astrom_mag : float
+        The donut's own refcat magnitudes, NaN on the blitz-detection
+        path where there is no refcat.
+    nearby_photo, nearby_astrom : list of tuple of float
+        Neighboring refcat sources inside the stamp box as ``(dx, dy,
+        mag)``, offset from ``(x_det, y_det)`` and excluding this donut
+        itself.
+    coord_ra, coord_dec : float, optional
+        Refcat sky position in radians, NaN on the blitz-detection path.
+        A finite value means the donut was matched to a catalog source.
+    intrinsic_zk : numpy.ndarray or None, optional
+        Intrinsic Zernike coefficients for this field position, or None.
+    defocal_offsets : tuple of float or None, optional
+        The signed optic z shifts in meters that put this donut off
+        focus, ordered ``(detector, camera, m2)``.
+    rejected_sat, rejected_inner_frac, rejected_outer_frac : bool, optional
+        Per-cut rejection flags; True means the donut failed that cut.
+    rejected_snr : bool, optional
+        SNR rejection flag; True means the donut failed the SNR cut.
+    rejected : bool, optional
+        True if any quality cut rejected the donut.
+    """
 
     det_name: str
     stamp: npt.NDArray[np.float64] | None  #  CCS
@@ -137,6 +194,13 @@ class SourceSet:
     mag: npt.NDArray[np.float32]
 
     def __len__(self) -> int:
+        """Return the number of sources in the set.
+
+        Returns
+        -------
+        int
+            The count of sources, i.e. the length of ``x_det``.
+        """
         return len(self.x_det)
 
 
@@ -203,6 +267,44 @@ class CutoutResult:
     `lsst.ts.wep.blitz.utils._CUTOUT_STAGE_KEYS`, which is where their order
     comes from -- everything reporting them iterates that mapping rather than
     spelling them out.
+
+    Attributes
+    ----------
+    det_name : str
+        Detector name.
+    catalog : list of Donut
+        Accepted donuts.
+    rejected_catalog : list of Donut
+        Donuts that failed a selection or quality cut.
+    isr_run, bkg_run, diam_run, detect_run : float
+        Per-stage wall-clock in seconds; NaN for a stage that never ran.
+    wcs_refit_run, catalog_select_run, stamp_cut_run : float
+        Per-stage wall-clock in seconds; NaN for a stage that never ran.
+    scatter_arcsec : float or None
+        On-sky scatter of the refit WCS in arcseconds, None where no
+        refit ran.
+    wcs_refit_error, cat_select_error : str
+        Error messages from the WCS refit and catalog selection, empty on
+        success.
+    selection_source : str
+        Where this detector's donut ids came from, and so whether they
+        are comparable across the two exposures of a pair.
+    n_quarter : int
+        Detector orientation, relating the CCS stamp to
+        ``x_det``/``y_det``.
+    wcs : lsst.afw.geom.SkyWcs or None
+        The WCS actually used, or None.
+    pair_path : str, optional
+        Which pairing algorithm ran; overwritten by the grouping stage.
+    visit_id : int or None, optional
+        The exposure this result covers, set by full-array mode; None in
+        corner mode.
+    dispatch_to_arrival : float, optional
+        Dispatch-to-arrival latency of the work unit, set in corner mode
+        only.
+    view : DetectorView or None, optional
+        The binned image and overlay sources for the focal-plane plot, or
+        None where not built.
     """
 
     det_name: str
@@ -262,6 +364,21 @@ class CutoutResult:
         ran and stay NaN.  ``selection_source`` is ``"no_detections"``, which
         is distinct from the selector running and rejecting everything
         (``"blitz_failed"``).
+
+        Parameters
+        ----------
+        det_name : str
+            Detector name.
+        n_quarter : int
+            Detector orientation as a count of 90-degree rotations.
+        isr_run, bkg_run, diam_run, detect_run : float
+            Wall-clock in seconds for the four stages that did run.
+
+        Returns
+        -------
+        CutoutResult
+            A result with empty catalogs, the four reported timings, and
+            every later stage NaN.
         """
         return cls(
             det_name=det_name,
@@ -303,6 +420,12 @@ class CutoutResult:
             Detector whose worker died.
         reason : `str`
             Cause, from `_fork_map`'s `_WorkerDeath`.
+
+        Returns
+        -------
+        CutoutResult
+            A result with empty catalogs, every timing NaN, and
+            ``selection_source="worker_died"``.
         """
         return cls(
             det_name=det_name,
@@ -354,6 +477,47 @@ class WfDonutResult:
     on the same detector twice, once per side of focus, so ``(donut_id,
     det_name)`` alone is ambiguous there. Corner mode has one visit per
     quantum, so including it changes nothing.
+
+    Attributes
+    ----------
+    donut_id : int
+        Donut id; with ``det_name`` and ``visit_id`` the catalog key.
+    det_name : str
+        Detector name.
+    visit_id : int
+        Visit the fitted donut came from.
+    zk_dev : numpy.ndarray
+        Dense Noll 0..``_ZK_JMAX`` wavefront deviations in meters, NaN
+        where unfit.
+    zk_intrinsic : numpy.ndarray
+        Dense Noll 0..``_ZK_JMAX`` intrinsic Zernikes in meters.
+    img, model_img : numpy.ndarray or None
+        The binned data and model images, or None.
+    fit_success : bool
+        Whether ``least_squares`` converged.
+    fit_elapsed, setup_elapsed : float
+        Fit and setup wall-clock in seconds.
+    fit_nfev, fit_njev : int
+        Function and Jacobian evaluation counts.
+    fit_cost, fit_optimality : float
+        Final cost and first-order optimality of the fit.
+    fit_outcome : FitOutcome
+        Which mutually exclusive fit path produced this result.
+    fit_dx, fit_dy : float
+        Fitted centroid offsets in arcseconds.
+    fit_flux : float
+        Fitted flux.
+    fit_fwhm : float
+        Fitted seeing FWHM in arcseconds.
+    blend_frac : float
+        Fraction of the stamp flux attributed to blends.
+    group_id : str
+        Id of the fit group this donut belonged to, empty if none.
+    group_size : int
+        Number of donuts in the group.
+    fit_bkg : numpy.ndarray or None, optional
+        Danish's fitted background coefficients, length ``model.nbkg``;
+        None where no fit produced them, empty at ``bkgOrder=-1``.
     """
 
     donut_id: int
@@ -415,6 +579,22 @@ _NULL_WF_DONUT = WfDonutResult(
 
 @dataclass
 class _WfGroup:
+    """One set of donuts to be fit jointly, as assembled before fitting.
+
+    Attributes
+    ----------
+    donuts : list of Donut
+        The group's donuts, ordered; each carries its own ``det_name``.
+    group_id : str
+        Id shared by every member and carried onto their results.
+    band : str
+        Band the group's donuts were observed in.
+    rtp : float or None
+        Boresight rotation (spider angle) in degrees, or None.
+    alt : float or None
+        Boresight altitude in radians, or None.
+    """
+
     donuts: list[Donut]  # donut dicts, ordered; each carries its own "det_name" key
     group_id: str
     band: str
@@ -441,6 +621,39 @@ class WfGroupResult:
     ``imgs`` and ``model_imgs`` are dropped by `_shed_images` in full-array
     mode when the config says not to save them, since they dominate the size of
     what a worker pickles home.
+
+    Attributes
+    ----------
+    group_id : str
+        Id shared by every member of the group.
+    group_size : int
+        Number of donuts in the group.
+    zk_dev : numpy.ndarray
+        Sparse wavefront deviations, one entry per fitted Noll index, in
+        meters.
+    success : bool
+        Whether the joint fit converged.
+    donut_results : list of WfDonutResult
+        The per-donut half of the fit, one per group member.
+    det_names : list of str
+        Each member's detector, in the same order as ``donut_results``.
+    imgs : list of numpy.ndarray
+        The per-member data images.
+    model_imgs : list of numpy.ndarray or None
+        The per-member model images, or None when dropped to save size.
+    fit_elapsed : float
+        Fit wall-clock in seconds.
+    fit_nfev, fit_njev : int
+        Function and Jacobian evaluation counts.
+    fit_cost, fit_optimality : float
+        Final cost and first-order optimality of the fit.
+    fit_status : int
+        ``least_squares`` termination status, or ``_FIT_STATUS_ABSENT``
+        for a group that never fit.
+    fit_message, fit_error : str
+        The solver's termination message and any error string.
+    fit_outcome : FitOutcome
+        Which mutually exclusive fit path ran; subsumes ``success``.
     """
 
     group_id: str
@@ -470,6 +683,20 @@ class WfGroupResult:
         Nothing was fit, so every fit field takes its no-fit value and
         ``fit_outcome`` is ``""`` -- the same spelling `_NULL_WF_DONUT` uses
         for "no fit consumed this".
+
+        Parameters
+        ----------
+        group_id : str
+            Id for the empty group.
+        n_zk : int
+            Length of the Zernike vector, so the NaN ``zk_dev`` matches
+            its siblings and the output table stays rectangular.
+
+        Returns
+        -------
+        WfGroupResult
+            A result with no donuts, all-NaN Zernikes, and every fit
+            field at its no-fit value.
         """
         return cls(
             group_id=group_id,
@@ -516,6 +743,12 @@ class WfGroupResult:
         n_zk : `int`
             Length of the Zernike vector, so the NaN row matches its siblings
             and the output table stays rectangular.
+
+        Returns
+        -------
+        WfGroupResult
+            A failed result carrying the group's donuts as
+            `_NULL_WF_DONUT` copies with ``fit_outcome="exception"``.
         """
         out = cls.empty(group.group_id, n_zk)
         out.group_size = len(group.donuts)
@@ -559,6 +792,36 @@ class FamDetectorResult:
     separates the expected no-work outcome -- a dead CCD, which ip_isr raises
     `NoWorkFound` for -- from a genuine fault; both leave ``error`` set, so
     test ``skipped`` first.
+
+    Attributes
+    ----------
+    det_id : int
+        Detector identifier.
+    det_name : str
+        Detector name; empty until the worker has read a raw.
+    results : list of CutoutResult
+        The pair of cutout results, intra-focal first.
+    wf_results : list of WfGroupResult
+        One per fit group.
+    donuts : list of Donut
+        Accepted donuts, both sides of focus.
+    unmatched_donuts : list of Donut
+        Donuts with no partner on the other side.
+    error : str
+        Failure message, empty on success.
+    skipped : bool
+        True for an expected no-work outcome such as a dead CCD.
+    pid : int
+        The worker process id, or -1 when the parent synthesized the
+        record.
+    dispatch_to_arrival : float
+        Dispatch-to-arrival latency of the work unit, in seconds.
+    io_run, refcat_run, cutout_run, fit_run, worker_wall : float
+        Per-detector phase wall-clock in seconds; NaN for a phase the
+        worker never reached. ``refcat_run`` covers both sides of focus.
+    pair_path : str, optional
+        Which pairing algorithm ran; ``"n/a"`` for a detector that
+        failed or was skipped before grouping.
     """
 
     det_id: int
@@ -589,6 +852,19 @@ class FamDetectorResult:
         Every phase timing is NaN and every list empty, so a worker that dies
         part way through reports exactly the phases it reached.  `pid` is the
         worker's own, which is what ties a log line to a process.
+
+        Parameters
+        ----------
+        det_id : int
+            Detector this worker is processing.
+        dispatch_to_arrival : float
+            Dispatch-to-arrival latency of the work unit, in seconds.
+
+        Returns
+        -------
+        FamDetectorResult
+            A fresh result with empty lists, NaN timings and the worker's
+            own pid, ready to be filled in as the worker progresses.
         """
         return cls(
             det_id=det_id,
@@ -627,6 +903,12 @@ class FamDetectorResult:
             Detector whose worker died.
         reason : `str`
             Cause, from `_fork_map`'s `_WorkerDeath`.
+
+        Returns
+        -------
+        FamDetectorResult
+            A result with ``error`` set and ``pid`` -1, marking it as a
+            fault the parent synthesized on the worker's behalf.
         """
         out = cls.started(det_id, float("nan"))
         out.error = f"worker died: {reason}"[:_ERROR_MAX_CHARS]

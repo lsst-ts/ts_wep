@@ -80,6 +80,20 @@ def _jacobian_callable(model: Any, jacobian_format: str) -> Callable[..., Any]:
     `least_squares` calls `jac(x, *args)` and its own `kwargs` argument goes to
     `fun` as well as `jac`, so the format cannot be forwarded through it --
     `model.chi` would reject it. Bind it here instead.
+
+    Parameters
+    ----------
+    model : `danish.DZMultiDonutModel`
+        Model supplying the ``jac`` and ``jac_sparse`` methods.
+    jacobian_format : `str`
+        Jacobian storage format, one of ``"dense"``, ``"csr"`` or ``"csc"``.
+
+    Returns
+    -------
+    jac : `collections.abc.Callable`
+        Callable of the form ``jac(x, *args)`` for `least_squares`:
+        ``model.jac`` for the dense format, otherwise ``model.jac_sparse``
+        bound to the requested sparse format.
     """
     if jacobian_format == "dense":
         return model.jac
@@ -87,6 +101,8 @@ def _jacobian_callable(model: Any, jacobian_format: str) -> Callable[..., Any]:
 
 
 class _WfFitTimeoutError(Exception):
+    """Raised when a single WF fit exceeds its SIGALRM timeout."""
+
     pass
 
 
@@ -99,9 +115,41 @@ def _fit_timeout(seconds: float) -> Iterator[None]:
     ``ValueError: signal only works in main thread of the main interpreter``,
     so this is usable from the WF pool (each forked worker runs the fit on its
     own main thread) but would break if fitting moved to a thread pool.
+
+    Parameters
+    ----------
+    seconds : `float`
+        Timeout in seconds. Rounded up to at least 1 second for the
+        ``signal.alarm`` call.
+
+    Yields
+    ------
+    `None`
+        Control returns to the ``with`` body; the alarm is cleared and the
+        previous handler restored on exit.
+
+    Raises
+    ------
+    _WfFitTimeoutError
+        Raised inside the context body when the timeout elapses before it
+        completes.
     """
 
     def _handler(_signum: int, _frame: FrameType | None) -> None:
+        """SIGALRM handler that aborts the fit by raising.
+
+        Parameters
+        ----------
+        _signum : `int`
+            Signal number delivered by the OS (unused).
+        _frame : `types.FrameType` or `None`
+            Interrupted stack frame (unused).
+
+        Raises
+        ------
+        _WfFitTimeoutError
+            Always raised, to unwind the in-progress fit.
+        """
         raise _WfFitTimeoutError(f"WF fit exceeded {seconds:.0f}s timeout")
 
     old = signal.signal(signal.SIGALRM, _handler)
@@ -126,6 +174,28 @@ def _bkg_free_model(
     failure.  For bkgOrder <= 0 (constant or no background) this is a cheap
     scalar subtraction.  For bkgOrder > 0 we re-evaluate the model with zeroed
     backgrounds, relying on Danish's cached optics component.
+
+    Parameters
+    ----------
+    model_img : `numpy.ndarray` or `None`
+        Model image to strip the background from. ``None`` is passed through.
+    danish_model : `danish.DZMultiDonutModel`
+        Model used to re-evaluate with zeroed backgrounds when
+        ``bkg_order > 0``.
+    fit_params : `dict` [`str`, `Any`] or `None`
+        Parameters from ``model.unpack_params()``, or ``None`` on fit
+        failure.
+    donut_idx : `int`
+        Index of the donut within the group, selecting its background term.
+    bkg_order : `int`
+        Background polynomial order (``-1``=none, ``0``=constant, ``>0``
+        higher order).
+
+    Returns
+    -------
+    img : `numpy.ndarray` or `None`
+        ``model_img`` with the fitted background subtracted, or ``model_img``
+        unchanged (including ``None``) when no subtraction applies.
     """
     if model_img is None:
         return None
@@ -166,6 +236,27 @@ def _blend_frac(
     """Fraction of significant residual flux in model-faint pixels.
 
     Normalized by the total model flux.
+
+    Parameters
+    ----------
+    resid : `numpy.ndarray`
+        Residual image (data minus model). ``None`` yields ``nan``.
+    model_img_bkg_free : `numpy.ndarray`
+        Background-free model image defining which pixels are model-faint.
+        ``None`` yields ``nan``.
+    bkg_std : `float`
+        Background noise standard deviation. Non-finite or non-positive
+        values yield ``nan``.
+    faint_frac : `float`, optional
+        Fraction of the model peak below which a pixel counts as faint.
+    sig_thresh : `float`, optional
+        Residual significance threshold in units of ``bkg_std``.
+
+    Returns
+    -------
+    frac : `float`
+        Significant residual flux in faint pixels divided by the total model
+        flux, or ``nan`` when it cannot be computed.
     """
     if resid is None or model_img_bkg_free is None or not np.isfinite(bkg_std) or bkg_std <= 0:
         return float("nan")
@@ -183,6 +274,20 @@ def _dense_dev(zk_dev: np.ndarray, noll_indices: Sequence[int]) -> np.ndarray:
 
     Indices that were not fitted are ``np.nan``, except Noll 0..3, which are
     0.0: they are carried for indexing only and are never fitted.
+
+    Parameters
+    ----------
+    zk_dev : `numpy.ndarray`
+        Fitted deviations in meters, one per entry of ``noll_indices``.
+    noll_indices : `collections.abc.Sequence` [`int`]
+        Noll indices that were fitted, aligned with ``zk_dev``.
+
+    Returns
+    -------
+    out : `numpy.ndarray`
+        Dense array of shape ``(_ZK_JMAX + 1,)`` in meters, with fitted
+        deviations placed at their Noll index, ``nan`` elsewhere, and 0.0 at
+        Noll 0..3.
     """
     out = np.full(_ZK_JMAX + 1, np.nan)
     out[0:4] = 0.0
@@ -193,7 +298,19 @@ def _dense_dev(zk_dev: np.ndarray, noll_indices: Sequence[int]) -> np.ndarray:
 
 
 def _fileDigest(path: str) -> str | None:
-    """SHA-256 of a file's contents, or `None` if it cannot be read."""
+    """SHA-256 of a file's contents, or `None` if it cannot be read.
+
+    Parameters
+    ----------
+    path : `str`
+        Path to the file to digest.
+
+    Returns
+    -------
+    digest : `str` or `None`
+        Hex SHA-256 digest of the file contents, or ``None`` if the file
+        cannot be read.
+    """
     try:
         with open(path, "rb") as f:
             return hashlib.sha256(f.read()).hexdigest()
@@ -339,6 +456,17 @@ def _wf_fitting_worker(group: _WfGroup) -> WfGroupResult:
     group, unwrapping the `pipeBase.Struct` it returns: what crosses the fork
     boundary is the record itself, and a Struct around it would only make every
     caller reach through it.
+
+    Parameters
+    ----------
+    group : `_WfGroup`
+        The group of donuts to fit.
+
+    Returns
+    -------
+    result : `WfGroupResult`
+        The fit result for the group, unwrapped from the
+        `lsst.pipe.base.Struct` that `WavefrontFittingTask.run` returns.
     """
     task = _COW_STORE.wf_fit_task
     return task.run(group).result
@@ -453,6 +581,17 @@ class WavefrontFittingConfig(pexConfig.Config):
     )
 
     def validate(self) -> None:
+        """Validate the configuration after the parent's checks.
+
+        Raises
+        ------
+        lsst.pex.config.FieldValidationError
+            Raised if ``lstsqKwargs`` sets a keyword the task supplies itself
+            (``fun``, ``x0``, ``jac``, ``args``, ``bounds``); if a sparse
+            ``jacobianFormat`` is combined with ``tr_solver='exact'``; if any
+            ``nollIndices`` entry lies outside ``4.._ZK_JMAX``; or if
+            ``nollIndices`` omits either half of a +/-m Zernike pair.
+        """
         super().validate()
         # `_run_lstsq_fit` supplies these itself, so setting them here would
         # pass a duplicate keyword argument to least_squares.
@@ -515,6 +654,22 @@ class _DanishDonutInputs(NamedTuple):
     A `NamedTuple` rather than a dataclass: `WavefrontFittingTask.run` builds
     one per group member and immediately transposes them into the per-field
     lists `danish.DZMultiDonutModel` wants, so the tuple-ness is used.
+
+    Attributes
+    ----------
+    img : `numpy.typing.NDArray` [`numpy.float64`]
+        The ``(npix, npix)`` donut stamp, binned and forced to odd size.
+    angle_rad : `numpy.typing.NDArray` [`numpy.float64`]
+        Field angle ``[thx_ccs, thy_ccs]`` in radians.
+    zk_ref : `numpy.typing.NDArray` [`numpy.float64`]
+        Reference Zernikes in meters, Noll-indexed, shape
+        ``(_ZK_JMAX + 1,)``. ``W_TA_defoc`` at uncalibrated indices, and
+        ``W_TA_defoc + (W_meas - zk_opd_foc)`` at calibrated ones.
+    bkg_var : `float`
+        Background variance, ``bkg_std ** 2``; taken by danish's ``chi``.
+    bkg_std : `float`
+        Background noise standard deviation, from the pixel-difference MAD of
+        the stamp; taken by `_blend_frac`.
     """
 
     img: npt.NDArray[np.float64]  # (npix, npix), binned and forced to odd size
@@ -533,6 +688,49 @@ class _DanishDonutInputs(NamedTuple):
 
 @dataclass
 class _LstsqFitResult:
+    """All outputs from `_run_lstsq_fit` as first-class typed fields.
+
+    Attributes
+    ----------
+    zk_dev : `numpy.typing.NDArray` [`numpy.float64`]
+        Fitted wavefront deviations in meters, one per fitted Noll index.
+    model_imgs : `list` [`numpy.typing.NDArray` [`numpy.float64`] or `None`]
+        Forward-model image per donut, or ``None`` on failure.
+    blend_fracs : `list` [`float`]
+        Blend fraction per donut from `_blend_frac`.
+    success : `bool`
+        Whether the fit succeeded.
+    elapsed : `float`
+        Seconds spent in the fit.
+    fluxes : `list` [`float`]
+        Fitted flux per donut.
+    dxs : `list` [`float`]
+        Fitted x centroid offset per donut, in arcsec.
+    dys : `list` [`float`]
+        Fitted y centroid offset per donut, in arcsec.
+    bkgs : `list` [`numpy.typing.NDArray` [`numpy.float64`] or `None`]
+        Fitted background coefficients per donut, or ``None`` on failure.
+    fwhm : `float`
+        Fitted atmospheric seeing FWHM in arcsec, shared across the group.
+    nfev : `int`, optional
+        Number of residual-function evaluations.
+    cost : `float`, optional
+        Final least-squares cost; ``nan`` when unavailable.
+    optimality : `float`, optional
+        First-order optimality measure; ``nan`` when unavailable.
+    njev : `int`, optional
+        Number of Jacobian evaluations.
+    status : `int`, optional
+        `scipy.optimize.least_squares` termination status, or
+        ``_FIT_STATUS_ABSENT`` when no fit ran.
+    message : `str`, optional
+        Termination message from the solver.
+    error : `str`, optional
+        Error description on failure.
+    outcome : `FitOutcome`, optional
+        Which mutually exclusive fit path produced this result.
+    """
+
     # All outputs from _run_lstsq_fit as first-class typed fields.
     zk_dev: npt.NDArray[np.float64]
     model_imgs: list[npt.NDArray[np.float64] | None]
@@ -555,6 +753,13 @@ class _LstsqFitResult:
     outcome: FitOutcome = ""
 
     def __post_init__(self) -> None:
+        """Validate ``outcome`` after dataclass initialization.
+
+        Raises
+        ------
+        ValueError
+            Raised if ``outcome`` is empty or not one of ``_FIT_OUTCOMES``.
+        """
         if not self.outcome or self.outcome not in _FIT_OUTCOMES:
             raise ValueError(
                 f"outcome must be one of {tuple(o for o in _FIT_OUTCOMES if o)}; got {self.outcome!r}"
@@ -590,6 +795,13 @@ class _LstsqFitResult:
             What went wrong, for the catalog and the log.
         outcome : `FitOutcome`
             Says which path failed.
+
+        Returns
+        -------
+        result : `_LstsqFitResult`
+            A result with NaN Zernikes and per-donut values, ``success`` set
+            to ``False``, and the given ``elapsed``, ``error`` and
+            ``outcome``.
         """
         return cls(
             zk_dev=np.full(n_zk, np.nan),
@@ -620,6 +832,19 @@ class WavefrontFittingTask(pipeBase.Task):
     config: WavefrontFittingConfig
 
     def __init__(self, **kwargs: Any) -> None:
+        """Construct the task and resolve the mask model once.
+
+        Parameters
+        ----------
+        **kwargs : `Any`
+            Keyword arguments forwarded to `lsst.pipe.base.Task`.
+
+        Raises
+        ------
+        Exception
+            Propagated from ``danish.load_mask_params`` if the configured
+            mask model name cannot be resolved or loaded.
+        """
         super().__init__(**kwargs)
         # Resolved once here rather than per group. A bad name raises here, in
         # the parent, rather than in every worker.
@@ -630,7 +855,15 @@ class WavefrontFittingTask(pipeBase.Task):
         self._factory_cache: dict[tuple, danish.DonutFactory] = {}
 
     def _maskModelPath(self) -> str:
-        """Absolute path to the configured mask file."""
+        """Absolute path to the configured mask file.
+
+        Returns
+        -------
+        path : `str`
+            Absolute path to the mask file: resolved relative to the ts_wep
+            policy directory for a ``policy:``-prefixed name, otherwise joined
+            with the danish package data directory.
+        """
         name = self.config.maskModel
         if name.startswith("policy:"):
             return resolveRelativeConfigPath(name)
@@ -654,6 +887,14 @@ class WavefrontFittingTask(pipeBase.Task):
         content digest. When neither applies -- a mask with no versioned
         sibling, such as a ``policy:`` file -- the configured name is already
         the specific one and is returned as is.
+
+        Returns
+        -------
+        name : `str`
+            Basename of the versioned mask file to record in the catalog:
+            the symlink target when ``path`` is a link, the content-matched
+            versioned sibling when it is a dereferenced copy, or the
+            configured basename when neither applies.
         """
         path = self._maskModelPath()
         # Compare basenames, not whole paths: realpath also rewrites parent
@@ -672,6 +913,17 @@ class WavefrontFittingTask(pipeBase.Task):
         restricted to names extending ``path``'s stem with a suffix -- for
         ``RubinObsc.yaml``, the ``RubinObsc_*.yaml`` files -- so an unrelated
         mask that merely happens to have equal contents cannot be substituted.
+
+        Parameters
+        ----------
+        path : `str`
+            Path to the mask file whose versioned sibling is sought.
+
+        Returns
+        -------
+        match : `str`
+            Path to the versioned sibling with identical contents, or
+            ``path`` itself when none is found.
         """
         directory, name = os.path.split(path)
         stem, ext = os.path.splitext(name)
@@ -835,6 +1087,17 @@ class WavefrontFittingTask(pipeBase.Task):
         That matters with ``doAoiThroughput``, where construction parses a 1 MB
         throughput table: danish does not cache that, and full-array mode would
         otherwise pay it per group, of which there are thousands.
+
+        Parameters
+        ----------
+        group : `_WfGroup`
+            Group supplying the ``(band, rtp, alt)`` cache key and the
+            attributes the factory depends on.
+
+        Returns
+        -------
+        factory : `danish.DonutFactory`
+            The cached or newly built factory for this group.
         """
         key = (group.band, group.rtp, group.alt)
         factory = self._factory_cache.get(key)
@@ -844,7 +1107,20 @@ class WavefrontFittingTask(pipeBase.Task):
         return factory
 
     def _make_wf_factory(self, group: _WfGroup) -> danish.DonutFactory:
-        """Construct a factory for this group, ignoring the cache."""
+        """Construct a factory for this group, ignoring the cache.
+
+        Parameters
+        ----------
+        group : `_WfGroup`
+            Group supplying ``band``, ``rtp`` (spider angle) and ``alt`` for
+            the optional AOI throughput correction.
+
+        Returns
+        -------
+        factory : `danish.DonutFactory`
+            A newly constructed `danish.DonutTriangleFactory` or
+            `danish.DonutFactory`, per ``config.triangleMode``.
+        """
         factory_class = danish.DonutTriangleFactory if self.config.triangleMode else danish.DonutFactory
         factory_kwargs: dict[str, Any] = {}
         if self.config.doAoiThroughput and group.band:
@@ -872,7 +1148,15 @@ class WavefrontFittingTask(pipeBase.Task):
         )
 
     def _build_loss_fn(self) -> Any:
-        """Return a danish loss function from config, None for chi-squared."""
+        """Return a danish loss function from config, None for chi-squared.
+
+        Returns
+        -------
+        loss_fn : `Any`
+            ``danish.systematic_loss(alpha)`` when
+            ``config.systematicLossAlpha > 0``, otherwise ``None`` to select
+            plain chi-squared.
+        """
         alpha = self.config.systematicLossAlpha
         if alpha <= 0:
             return None
@@ -899,6 +1183,12 @@ class WavefrontFittingTask(pipeBase.Task):
         `_DanishDonutInputs`
             The binned stamp, field angle, reference Zernikes and background
             level.  See that class for what each field means.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if the donut has no stamp, if its band has no configured
+            wavelength, or if it has no ``defocal_offsets``.
         """
         binning = self.config.binning
 
@@ -949,6 +1239,19 @@ class WavefrontFittingTask(pipeBase.Task):
         r_outer_from = telescope.pupilSize / 2
 
         def _zk_ta_meters(optic: batoid.Optic) -> np.ndarray:
+            """Raytrace ``optic`` to Zernikes in meters on blitz's domain.
+
+            Parameters
+            ----------
+            optic : `batoid.Optic`
+                Telescope model to raytrace at this donut's field angle.
+
+            Returns
+            -------
+            coef : `numpy.ndarray`
+                Zernike coefficients in meters, shape ``(_ZK_JMAX + 1,)``,
+                rescaled onto the danish factory's pupil domain.
+            """
             coef = (
                 batoid.zernikeTA(
                     optic,

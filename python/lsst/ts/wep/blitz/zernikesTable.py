@@ -96,6 +96,13 @@ def _empty_side_values() -> dict:
     one-sided corner) and where it has several (a joint fit), since in neither
     case is there one field position or centroid that the row can honestly
     report.
+
+    Returns
+    -------
+    `dict`
+        Column values for one side of focus, with all-NaN ``field`` and
+        ``centroid`` structured entries, NaN ``mag`` and ``sn``, and an
+        empty ``donut_id`` string.
     """
     return {
         "field": np.array((np.nan, np.nan), dtype=pos2f_dtype),
@@ -113,6 +120,19 @@ def _side_values(rows: QTable) -> dict:
     yield `_empty_side_values`.  See the module docstring: a joint fit has no
     single field point, so reporting one donut's as the row's would imply a
     precision the fit does not have.
+
+    Parameters
+    ----------
+    rows : `astropy.table.QTable`
+        The catalog rows for one side of focus of one fit group.
+
+    Returns
+    -------
+    `dict`
+        Column values for the side: ``field`` and ``centroid`` structured
+        (x, y) entries, ``mag``, ``sn``, and ``donut_id``.  When ``rows``
+        does not contain exactly one donut, the result of
+        `_empty_side_values` is returned instead.
     """
     if len(rows) != 1:
         return _empty_side_values()
@@ -144,6 +164,18 @@ def _init_table(noll_indices: Sequence[int]) -> QTable:
     task fills it; exactly one leading average row is required, since
     `blurClipZkTable` indexes the per-row fwhm list with ``useIdx - 1`` and the
     fit-failure NaN-out uses ``failIdx + 1``.
+
+    Parameters
+    ----------
+    noll_indices : sequence of `int`
+        The Noll indices that were fitted, one ``Z{j}_deviation`` column
+        added per index.
+
+    Returns
+    -------
+    `astropy.table.QTable`
+        An empty table of the output schema whose only row is the leading
+        all-NaN ``average`` row.
     """
     dtype: list[tuple] = [("label", "<U12"), ("used", np.bool_)]
     for side in _SIDES:
@@ -188,6 +220,30 @@ def _table_metadata(
     ``opd_columns`` and ``intrinsic_columns`` are deliberately empty; see the
     module docstring.  All three keys are present regardless, because
     `CombineZernikesSigmaClipTask` selects one of them by config.
+
+    Parameters
+    ----------
+    noll_indices : sequence of `int`
+        The Noll indices that were fitted, written to
+        ``meta["noll_indices"]`` and used to name the deviation columns.
+    det_names_by_side : `dict` [`str`, `str` or `None`]
+        Detector name for each side of focus (``"intra"``/``"extra"``),
+        or `None` if that side contributed no donuts.
+    visit_id : `int`
+        The visit these tables are for.
+    cam_name : `str`
+        Camera name for ``meta["cam_name"]``.
+    band : `str`
+        Photometric band for each side's metadata entry.
+    visit_info : `lsst.afw.image.VisitInfo` or `None`
+        Read for the boresight angles and mjd; omitted when `None`.
+
+    Returns
+    -------
+    `dict`
+        The table metadata, with one entry per side of focus plus the
+        ``cam_name``, ``noll_indices``, ``opd_columns``,
+        ``intrinsic_columns``, and ``deviation_columns`` keys.
     """
     meta: dict = {}
     dfc_dist = _LSSTCAM.defocal_offset * 1e3
@@ -236,6 +292,18 @@ def _groups_by_corner(catalog: QTable) -> dict[str, dict[str, QTable]]:
     of its first recognized detector, which is what makes
     ``full_detector`` work: its groups span a single detector rather than
     a corner pair.
+
+    Parameters
+    ----------
+    catalog : `astropy.table.QTable`
+        The per-donut catalog.
+
+    Returns
+    -------
+    `dict` [`str`, `dict` [`str`, `astropy.table.QTable`]]
+        One entry per corner, each mapping ``group_id`` to the catalog
+        rows for that fit group.  Corners with no groups map to an empty
+        dict.
     """
     by_corner: dict[str, dict[str, QTable]] = {corner: {} for corner in CORNER_PAIRS}
     if len(catalog) == 0:
@@ -264,6 +332,17 @@ def _extra_focal_det_id(rows: QTable) -> int | None:
     either side answers for the pair: an intra-focal row gives it away as
     ``det_id - 1``.  That matters because a corner whose SW0 detector
     contributed no donuts still needs a key to be written under.
+
+    Parameters
+    ----------
+    rows : `astropy.table.QTable`
+        The catalog rows for one fit group of a corner.
+
+    Returns
+    -------
+    `int` or `None`
+        The extra-focal (SW0) detector id, or `None` if no recognized
+        corner detector is found among the rows.
     """
     for det_name, det_id in zip(
         np.asarray(rows["det_name"], dtype=str), np.asarray(rows["det_id"], dtype=int)
@@ -404,6 +483,27 @@ def _finalize_table(
     """NaN out failed fits, fill the average row, then blur clip.
 
     Mirrors the tail of `CalcZernikesTask.run`.
+
+    Parameters
+    ----------
+    table : `astropy.table.QTable`
+        The per-corner table, with its leading average row and one data
+        row per fit group.
+    deviation_columns : sequence of `str`
+        The ``Z{j}_deviation`` column names to NaN out for failed fits.
+    combine_zernikes : `CombineZernikesBaseTask`
+        The combine subtask, run to fill the average row.
+    do_blur_clip : `bool`
+        Sigma clip donuts with outlier blur.
+    blur_clip_min_rows : `int`
+        Minimum data rows for blur clipping to run.
+
+    Returns
+    -------
+    `astropy.table.QTable`
+        The finalized table, with failed fits NaN'd out, the average row
+        filled (or left NaN and marked unused when no fit succeeded), and
+        blur clipping applied when enabled.
     """
     fit_success = np.asarray(table.meta["estimatorInfo"]["fit_success"], dtype=bool)
     n_rows = len(fit_success)

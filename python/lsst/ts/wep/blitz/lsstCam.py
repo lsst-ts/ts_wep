@@ -39,7 +39,23 @@ from frozendict import frozendict
 
 @dataclass(frozen=True)
 class _LsstCamConstants:
-    """LSSTCam geometry for blitz."""
+    """LSSTCam geometry for blitz.
+
+    Attributes
+    ----------
+    zk_r_outer : float
+        Radius the Zernike coefficients are normalized on, in meters.
+    obscuration : float
+        Fractional pupil central obscuration.
+    focal_length : float
+        Effective focal length in meters.
+    pixel_size : float
+        Detector pixel size in meters.
+    defocal_offset : float
+        Detector z shift producing the nominal defocus, in meters.
+    wavelength : typing.Mapping[str, float]
+        Mapping from band name to effective wavelength in meters.
+    """
 
     # Radius the Zernike coefficients are normalized on, in meters.  Named for
     # that role because it is the load-bearing one: it is what the danish
@@ -83,12 +99,26 @@ class _LsstCamConstants:
 
     @property
     def zk_r_inner(self) -> float:
-        """Inner radius the coefficients are normalized on, in meters."""
+        """Inner radius the coefficients are normalized on, in meters.
+
+        Returns
+        -------
+        float
+            Inner normalization radius, ``zk_r_outer * obscuration``, in
+            meters.
+        """
         return self.zk_r_outer * self.obscuration
 
     @property
     def focal_ratio(self) -> float:
-        """The f-number."""
+        """The f-number.
+
+        Returns
+        -------
+        float
+            The focal ratio (f-number), ``focal_length / (2 *
+            zk_r_outer)``.
+        """
         return self.focal_length / (2 * self.zk_r_outer)
 
     @property
@@ -97,6 +127,11 @@ class _LsstCamConstants:
 
         A fallback: callers prefer the per-exposure radius measured by
         `DonutDetectDiameterTask` and come here when that could not be formed.
+
+        Returns
+        -------
+        float
+            Nominal donut radius in un-binned pixels.
         """
         r_meters = self.defocal_offset / np.sqrt(4 * self.focal_ratio**2 - 1)
         return r_meters / self.pixel_size

@@ -108,6 +108,12 @@ def _common_frame_angles(donuts: list) -> np.ndarray:
     chief-ray traces, and the parent evaluated both sides of focus for every
     worker before forking.
 
+    Parameters
+    ----------
+    donuts : list of Donut
+        Donuts to map. Each must carry its ``defocal_offsets`` so the
+        matching radial scale factor can be looked up.
+
     Returns
     -------
     np.ndarray
@@ -236,6 +242,31 @@ def _fam_group_donuts(
     ``group_id`` carries ``det_name`` so it stays unique across the quantum's
     detectors.
 
+    Parameters
+    ----------
+    mode : str
+        WF estimation mode. One of ``"paired"``, ``"unpaired"``,
+        ``"full_detector"``, or ``"full_detector_pair"`` (see ``Modes``).
+    det_name : str
+        Detector name, carried into each ``group_id`` to keep it unique
+        across the quantum's detectors.
+    intra, extra : list of Donut
+        Accepted donuts from the intra- and extra-focal exposures. Each
+        must already carry its ``defocal_offsets``.
+    tol_frac : float
+        Spatial match tolerance as a fraction of the donut radius. Used
+        only by the ``paired`` mode.
+    intra_source, extra_source : str
+        ``selection_source`` from each exposure's cutout result. Used only
+        by the ``paired`` mode to choose the pairing path.
+    band : str
+        Photometric band of the exposures, attached to each group.
+    rtp_deg : float or None
+        Rotator telescope position angle in degrees, attached to each
+        group.
+    alt_rad : float or None
+        Boresight altitude in radians, attached to each group.
+
     Modes
     -----
     ``paired``
@@ -258,9 +289,29 @@ def _fam_group_donuts(
         Non-empty only for ``paired``.
     path : str
         Pairing path taken, or ``"n/a"`` for the modes that do not pair.
+
+    Raises
+    ------
+    ValueError
+        If ``mode`` is not one of the recognised FAM WF modes.
     """
 
     def _group(donuts: list[Donut], gid: str) -> _WfGroup:
+        """Wrap donuts into a `_WfGroup` with this detector's metadata.
+
+        Parameters
+        ----------
+        donuts : list of Donut
+            Donuts to place in the group.
+        gid : str
+            Group id, unique across the quantum's detectors.
+
+        Returns
+        -------
+        _WfGroup
+            Work unit carrying ``donuts`` plus the enclosing call's
+            ``band``, ``rtp_deg``, and ``alt_rad``.
+        """
         return _WfGroup(donuts=donuts, group_id=gid, band=band, rtp=rtp_deg, alt=alt_rad)
 
     if mode == "paired":
@@ -519,6 +570,13 @@ def _shed_images(out: FamDetectorResult) -> None:
 
     The images are the dominant contributors to the size of the result, so
     trimming them when possible can significantly improve performance.
+
+    Parameters
+    ----------
+    out : `lsst.ts.wep.blitz.dataStructures.FamDetectorResult`
+        Detector result to trim in place. Image arrays are dropped from its
+        ``wf_results`` unless ``save_wf_images`` is set, and from its cutout
+        ``results`` stamps unless ``save_stamps`` is set.
     """
     if not _COW_STORE.save_wf_images:
         for r in out.wf_results:
