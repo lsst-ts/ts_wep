@@ -132,6 +132,14 @@ class DonutSourceSelectorTaskConfig(pexConfig.Config):
     )
 
     def validate(self) -> None:
+        """Validate the config field values.
+
+        Raises
+        ------
+        lsst.pex.config.FieldValidationError
+            If ``sourceLimit`` is neither -1 nor a positive integer, or if
+            ``minBlendedSeparation`` exceeds ``unblendedSeparation``.
+        """
         super().validate()
         if self.sourceLimit != -1 and self.sourceLimit <= 0:
             raise pexConfig.FieldValidationError(
@@ -251,6 +259,14 @@ class DonutSourceSelectorTask(pipeBase.Task):
                 - selected : `numpy.ndarray` of `bool`
                     Boolean array of sources that were selected, same length as
                     sourceCat.
+                - blendCentersX : `list` of `numpy.ndarray` or `None`
+                    Per-selected-source x positions of the accepted blend
+                    neighbors, in the same order as the selected sources, for
+                    building a deblend mask.  Empty arrays where a source was
+                    kept unblended; ``None`` when the catalog was empty.
+                - blendCentersY : `list` of `numpy.ndarray` or `None`
+                    Per-selected-source y positions of the accepted blend
+                    neighbors, matching ``blendCentersX``.
 
         Raises
         ------
@@ -390,6 +406,15 @@ class DonutSourceSelectorTask(pipeBase.Task):
             chunk size rather than the size of the catalog.  Candidates are
             visited in ascending sorted order -- brightest first, or center-out
             when flux-less -- which the blend arbitration below relies on.
+
+            Yields
+            ------
+            sortedIndex : int
+                The candidate's position in the sorted arrays.
+            neighborIndices : list [int]
+                Sorted-order indices of every source (candidate or not)
+                within ``unblendedSeparation`` of the candidate, including
+                the candidate itself.
             """
             for start in range(0, len(candidates), queryChunkSize):
                 chunk = candidates[start : start + queryChunkSize]

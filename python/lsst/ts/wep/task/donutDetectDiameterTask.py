@@ -146,6 +146,12 @@ def _shiftSubtractNoise(image: np.ndarray) -> float:
     MeasureDonutCandidatesTask._measureFlux in lsst.ts.wep.blitz), applied to
     the whole binned image rather than to a stamp's background annulus.
 
+    Parameters
+    ----------
+    image : np.ndarray
+        2D image to estimate the noise of; rows are differenced, so the
+        per-column fixed offset is cancelled.
+
     Returns
     -------
     float
@@ -160,7 +166,35 @@ def _shiftSubtractNoise(image: np.ndarray) -> float:
 
 
 def makeDiameterLadder(dMin: float, dMax: float, innerFrac: float = 0.61, k: int = 3) -> np.ndarray:
-    """kth-root-of-(1/innerFrac) geometric ladder, clipped to [dMin, dMax]."""
+    """kth-root-of-(1/innerFrac) geometric ladder, clipped to [dMin, dMax].
+
+    Builds a geometric sequence of diameters whose common ratio is
+    ``(1 / innerFrac) ** (1 / k)``, so that every ``k`` rungs the diameter
+    grows by the inner/outer obscuration ratio. This spaces the ladder so
+    that each annulus template's outer radius lands on another rung's
+    inner radius, which the correlation bank relies on.
+
+    Parameters
+    ----------
+    dMin : float
+        Smallest diameter in the ladder, in (binned) pixels.
+    dMax : float
+        Largest diameter the ladder may reach, in (binned) pixels.
+    innerFrac : float, optional
+        Inner/outer diameter ratio (central obscuration) of the donut.
+    k : int, optional
+        Root order; larger ``k`` gives finer diameter sampling.
+
+    Returns
+    -------
+    np.ndarray
+        Monotonically increasing diameters from ``dMin`` up to ``dMax``.
+
+    Raises
+    ------
+    ValueError
+        If ``k`` is less than 1.
+    """
     if k < 1:
         raise ValueError("k must be >= 1")
     ratio = (1.0 / innerFrac) ** (1.0 / k)
@@ -188,6 +222,22 @@ class DiskCorrelationBank:
         innerFrac: float = 0.61,
         backgroundSteps: int = 2,
     ) -> None:
+        """Precompute disk templates and their FFTs for one binned shape.
+
+        Parameters
+        ----------
+        binnedShape : collections.abc.Sequence [int]
+            Shape ``(ny, nx)`` of the binned images this bank correlates.
+        diameters : np.ndarray
+            Disk diameters (binned px) to build templates for; sorted on
+            construction.
+        innerFrac : float, optional
+            Inner/outer diameter ratio of the donut, locating each
+            annulus's inner disk on the ladder.
+        backgroundSteps : int, optional
+            Number of ladder steps above each annulus whose outer collar is
+            included in the background support.
+        """
         self.binnedShape = tuple(int(s) for s in binnedShape)
         self.diameters = np.sort(np.asarray(diameters, dtype=float))
         self.innerFrac = innerFrac
@@ -251,11 +301,43 @@ class DiskCorrelationBank:
         signal = disk(d_i) - disk(d_ii) [the annulus] background = disk(d_ii) +
         (disk(d_oi) - disk(d_i)) [hole + outer collar]
                    = disk(d_oi) - signal
+
+        Parameters
+        ----------
+        disks : list [np.ndarray]
+            The anti-aliased disk templates, in ladder order.
+        i : int
+            Index of the annulus's outer disk.
+        ii : int
+            Index of the annulus's inner disk.
+        oi : int
+            Index of the outer background disk, or < 0 when there is none
+            (the inner hole alone is then used as background).
+
+        Returns
+        -------
+        signal : np.ndarray
+            The annulus indicator, on a common centered grid.
+        background : np.ndarray
+            The background indicator (inner hole plus outer collar), on the
+            same grid as ``signal``.
         """
         big = disks[oi] if oi >= 0 else disks[i]
         H, W = big.shape
 
         def centerPad(a: np.ndarray) -> np.ndarray:
+            """Center-pad ``a`` into a zeroed ``(H, W)`` grid.
+
+            Parameters
+            ----------
+            a : np.ndarray
+                Template to embed, no larger than ``(H, W)``.
+
+            Returns
+            -------
+            np.ndarray
+                ``a`` placed at the center of a zeroed ``(H, W)`` array.
+            """
             out = np.zeros((H, W), dtype=float)
             h, w = a.shape
             r0 = (H - h) // 2
@@ -306,6 +388,8 @@ class DiskCorrelationBank:
 
 
 class DonutDetectDiameterConfig(pexConfig.Config):
+    """Configuration for `DonutDetectDiameterTask`."""
+
     edgeMargin: pexConfig.Field = pexConfig.Field(
         doc="Width of detector edge region to exclude, in full-res pixels.",
         dtype=int,
@@ -409,6 +493,14 @@ class DonutDetectDiameterConfig(pexConfig.Config):
     )
 
     def validate(self) -> None:
+        """Validate the config field values.
+
+        Raises
+        ------
+        lsst.pex.config.FieldValidationError
+            If ``rootOrder`` is less than 1, ``dMaxFull`` does not exceed
+            ``dMinFull``, or ``detectionBinning`` is less than 1.
+        """
         super().validate()
         if self.rootOrder < 1:
             raise pexConfig.FieldValidationError(self.__class__.rootOrder, self, "rootOrder must be >= 1")
@@ -484,6 +576,15 @@ class DonutDetectDiameterTask(pipeBase.Task):
     config: DonutDetectDiameterConfig
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Construct the task and the binned diameter ladder.
+
+        Parameters
+        ----------
+        *args : tuple
+            Positional arguments forwarded to `lsst.pipe.base.Task`.
+        **kwargs : dict
+            Keyword arguments forwarded to `lsst.pipe.base.Task`.
+        """
         super().__init__(*args, **kwargs)
         cfg = self.config
 
@@ -495,6 +596,22 @@ class DonutDetectDiameterTask(pipeBase.Task):
     # --- helpers --------------------------------------------------------
 
     def _getBank(self, binnedShape: Sequence[int]) -> DiskCorrelationBank:
+        """Return a correlation bank for ``binnedShape``, rebuilding if needed.
+
+        The bank is cached and reused across calls, so a run of same-shape
+        exposures pays the template-FFT cost only once.
+
+        Parameters
+        ----------
+        binnedShape : collections.abc.Sequence [int]
+            Shape ``(ny, nx)`` of the binned image to correlate.
+
+        Returns
+        -------
+        DiskCorrelationBank
+            A bank matching ``binnedShape``, the cached one when its shape
+            already agrees.
+        """
         if self._bank is None or self._bank.binnedShape != tuple(binnedShape):
             self._bank = DiskCorrelationBank(
                 binnedShape,
@@ -506,6 +623,11 @@ class DonutDetectDiameterTask(pipeBase.Task):
 
     def _prepImage(self, exposure: Exposure) -> tuple[np.ndarray, Box2I]:
         """Edge-trim, bad-pixel-fill, and bin.
+
+        Parameters
+        ----------
+        exposure : lsst.afw.image.Exposure
+            Post-ISR exposure to prepare for correlation.
 
         Returns
         -------
@@ -575,6 +697,15 @@ class DonutDetectDiameterTask(pipeBase.Task):
 
         Parameters
         ----------
+        diskCorr : list [np.ndarray]
+            Per-diameter ``<image, disk_i>`` correlation maps from
+            `DiskCorrelationBank.correlate`.
+        diskCorrSq : list [np.ndarray]
+            Per-diameter ``<image**2, disk_i>`` correlation maps, supplying
+            the local image energy.
+        bank : DiskCorrelationBank
+            The correlation bank holding the template norms and region
+            indices.
         pixelNoise : float or None
             Robust per-binned-pixel noise sigma. None (or non-finite) yields
             `snr = None`, for callers that only want the shape score.
@@ -660,6 +791,18 @@ class DonutDetectDiameterTask(pipeBase.Task):
         _selectPeaks for per-peak declustering. The per-diameter rho maps are
         retained (rhoMaps / rhoDiametersBinned) so the sizing step can reuse
         them rather than recomputing the whole _annulusTerms pass per peak.
+
+        Parameters
+        ----------
+        diskCorr : list [np.ndarray]
+            Per-diameter ``<image, disk_i>`` correlation maps.
+        diskCorrSq : list [np.ndarray]
+            Per-diameter ``<image**2, disk_i>`` correlation maps.
+        bank : DiskCorrelationBank
+            The correlation bank for these maps.
+        pixelNoise : float or None
+            Robust per-binned-pixel noise sigma; None yields an all-NaN
+            ``snrAtWinner``.
 
         Returns
         -------
@@ -877,6 +1020,19 @@ class DonutDetectDiameterTask(pipeBase.Task):
         """
 
         def localMax(amap: np.ndarray) -> np.floating:
+            """Return the max of ``amap`` in the window box about (y, x).
+
+            Parameters
+            ----------
+            amap : np.ndarray
+                A single-diameter rho response map.
+
+            Returns
+            -------
+            numpy.floating
+                The maximum over the ``(2*window + 1)`` box about (y, x),
+                or the pixel value itself when ``window <= 0``.
+            """
             if window <= 0:
                 return amap[y, x]
             y0, y1 = max(0, y - window), min(amap.shape[0], y + window + 1)
@@ -892,6 +1048,19 @@ class DonutDetectDiameterTask(pipeBase.Task):
         log-diameter. NaN if fewer than 3 points; grid value if peak is at an
         edge (unrefinable). The refinement offset is clamped to [-1, 1] grid
         steps so a near-flat noisy triplet can't extrapolate wildly.
+
+        Parameters
+        ----------
+        diametersBinned : np.ndarray
+            Diameters (binned px) at which ``curve`` is sampled.
+        curve : np.ndarray
+            The sizing-curve value at each diameter in ``diametersBinned``.
+
+        Returns
+        -------
+        float
+            Diameter (binned px) at the refined curve peak, the grid value
+            at an edge peak, or NaN with fewer than 3 points.
         """
         if len(curve) < 3:
             return np.nan
@@ -922,6 +1091,16 @@ class DonutDetectDiameterTask(pipeBase.Task):
 
         Sizing reuses the per-diameter rho maps from _likenessMap (rhoMaps /
         rhoDiametersBinned) rather than recomputing them per peak.
+
+        Parameters
+        ----------
+        peaks : list [tuple [int, int]]
+            Candidate ``(y, x)`` peaks in the binned frame, from
+            `_selectPeaks`.
+        rhoMaps : list [np.ndarray]
+            Per-diameter rho response maps from `_likenessMap`.
+        rhoDiametersBinned : np.ndarray
+            Binned diameters aligned with ``rhoMaps``.
 
         Returns
         -------
@@ -994,6 +1173,50 @@ class DonutDetectDiameterTask(pipeBase.Task):
         return result
 
     def run(self, exposure: Exposure) -> pipeBase.Struct:
+        """Detect donuts and estimate the exposure's donut diameter.
+
+        Bins and cleans the exposure, correlates it against the disk-template
+        bank, builds the likeness and SNR maps, selects and quality-cuts
+        peaks, and pools their sizing curves into one exposure diameter.
+
+        Parameters
+        ----------
+        exposure : lsst.afw.image.Exposure
+            Post-ISR exposure to detect donuts in.
+
+        Returns
+        -------
+        lsst.pipe.base.Struct
+            detections : astropy.table.QTable
+                One row per surviving peak, with ``id``, ``centroid_x`` and
+                ``centroid_y`` (full-res px), per-detection ``diameter``,
+                ``likeness``, ``snr``, ``peak_diameter`` and the diagnostic
+                ``curve_argmax_edge`` flag.
+            diameter : float
+                The combined exposure donut diameter in full-res px, NaN if
+                unmeasurable.
+            diameterScatter : float
+                Per-detection fractional scatter, NaN with fewer than 2
+                detections.
+            sizingCurves : dict
+                The per-detection and combined sizing curves (see
+                `_exposureDiameter`).
+            binnedImage : np.ndarray
+                The binned, bad-pixel-filled image correlated.
+            likeness, snr, argDiameter : np.ndarray
+                The likeness map, the matched-filter SNR at the winning
+                diameter, and the per-pixel winning diameter (binned px).
+            pixelNoise : float
+                The robust per-binned-pixel noise sigma.
+            diskCorr, diskCorrSq : list [np.ndarray]
+                The raw image and image-squared correlation maps.
+            diametersBinned, diametersFull : np.ndarray
+                The diameter ladder in binned and full-res px.
+            bbox : lsst.geom.Box2I
+                The edge-eroded bounding box the binned frame maps into.
+            binning : int
+                The detection binning factor applied.
+        """
         binnedImage, bbox = self._prepImage(exposure)
         bank = self._getBank(binnedImage.shape)
         pixelNoise = _shiftSubtractNoise(binnedImage)
