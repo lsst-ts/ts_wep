@@ -89,6 +89,34 @@ def _rotate_zk_to_eb(
     NaN handling: an output doublet is defined only if BOTH members are
     finite and phi is valid; otherwise both slots are NaN. m==0 terms pass
     through (NaN preserved).
+
+    Parameters
+    ----------
+    zk_list : collections.abc.Sequence
+        Sequence of Zernike coefficient arrays, each either an
+        `astropy.units.Quantity` or `numpy.ndarray` of shape
+        ``[nrow, n_noll]``. The Noll index runs along the second axis
+        (column 0 is the unused j=0 slot). Units, if present, are
+        preserved on the corresponding output array.
+    thx : numpy.ndarray
+        Field angle x-components, one per row of each ``zk`` array, used
+        to compute the rotation azimuth ``phi = atan2(thy, thx)``.
+    thy : numpy.ndarray
+        Field angle y-components, matching ``thx``.
+
+    Returns
+    -------
+    list
+        List of rotated Zernike arrays, one per entry in ``zk_list``,
+        each with the same shape, dtype family, and units as its input.
+        Doublets rotated into the E/B basis; m==0 slots pass through
+        unchanged.
+
+    Raises
+    ------
+    ValueError
+        If any entry in ``zk_list`` is not 2D with shape
+        ``[nrow, n_noll]``.
     """
     phi = np.arctan2(thy, thx)
     phi_bad = ~np.isfinite(phi) | ((thx == 0.0) & (thy == 0.0))
@@ -190,6 +218,13 @@ class _CatalogOptions:
         """Number of danish background coefficients.
 
         The ``fit_bkg`` column's width; 0 means no column at all.
+
+        Returns
+        -------
+        int
+            The count of background coefficients, ``(bkg_order + 1) *
+            (bkg_order + 2) // 2``, or 0 when ``bkg_order < 0`` (danish
+            models no background and the column is dropped).
         """
         if self.bkg_order < 0:
             return 0
@@ -197,12 +232,26 @@ class _CatalogOptions:
 
     @property
     def zk_deviation_jmax(self) -> int:
-        """Highest fitted Noll index; deviations are cut off here."""
+        """Highest fitted Noll index; deviations are cut off here.
+
+        Returns
+        -------
+        int
+            The maximum of ``noll_indices``, the last column of the
+            deviation array.
+        """
         return max(self.noll_indices)
 
     @property
     def wf_img_size(self) -> int:
-        """Binned WF image side, forced odd (see `_prep_donut_for_danish`)."""
+        """Binned WF image side, forced odd (see `_prep_donut_for_danish`).
+
+        Returns
+        -------
+        int
+            The binned stamp side ``stamp_size // binning``, decremented
+            by one when that is even so the result is always odd.
+        """
         binned = self.stamp_size // self.binning
         return binned if binned % 2 == 1 else binned - 1
 
@@ -258,6 +307,21 @@ def _encode_nearby(
     a NaN magnitude sort last. The brightest ``_MAX_NEARBY`` are kept and
     shorter lists are NaN-padded. True pre-truncation counts are captured
     separately (see n_nearby_*).
+
+    Parameters
+    ----------
+    entries : collections.abc.Sequence
+        Sequence of ``(dx, dy, mag)`` tuples, one per nearby source: the
+        detector-frame offset from the donut centroid and the source
+        magnitude.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        Three float arrays ``(dx, dy, mag)``, each of length
+        ``_MAX_NEARBY``, holding the brightest neighbors sorted
+        brightest-first and NaN-padded where there are fewer than
+        ``_MAX_NEARBY``.
     """
     x = np.full(_MAX_NEARBY, np.nan, dtype=float)
     y = np.full(_MAX_NEARBY, np.nan, dtype=float)
@@ -271,7 +335,19 @@ def _encode_nearby(
 
 
 def _defocal_offset_array(donut: Donut) -> np.ndarray:
-    """Return one donut's optic z shifts as a length-3 array of meters."""
+    """Return one donut's optic z shifts as a length-3 array of meters.
+
+    Parameters
+    ----------
+    donut : `lsst.ts.wep.blitz.dataStructures.Donut`
+        The donut record whose ``defocal_offsets`` are read.
+
+    Returns
+    -------
+    numpy.ndarray
+        The signed optic z shifts in meters, ordered as ``_OFFSET_OPTICS``.
+        All-NaN of that length when the donut carries no offsets.
+    """
     offsets = donut.defocal_offsets
     if offsets is None:
         return np.full(len(_OFFSET_OPTICS), np.nan, dtype=float)
@@ -279,7 +355,22 @@ def _defocal_offset_array(donut: Donut) -> np.ndarray:
 
 
 def _observation_meta(visit_info: VisitInfo | None) -> dict:
-    """Return the observation keys for ``meta``, read off a `VisitInfo`."""
+    """Return the observation keys for ``meta``, read off a `VisitInfo`.
+
+    Parameters
+    ----------
+    visit_info : lsst.afw.image.VisitInfo or None
+        Exposure header metadata. When None every value is filled with
+        its NaN/None placeholder so the schema stays complete.
+
+    Returns
+    -------
+    dict
+        The observation keys ``date``, ``exposure_time``,
+        ``boresight_alt``, ``boresight_az``, ``boresight_rot_angle`` and
+        ``boresight_par_angle``, each an `astropy.units.Quantity` (or an
+        `astropy.time.Time` for ``date``).
+    """
     if visit_info is None:
         return {
             "date": None,
@@ -309,6 +400,13 @@ def _software_versions() -> dict:
 
     Best effort: a package that cannot report a version gets ``""`` rather
     than sinking the catalog.
+
+    Returns
+    -------
+    dict
+        The keys ``ts_wep_version``, ``danish_version`` and
+        ``batoid_version``, each the imported package's version string, or
+        ``""`` where the version could not be read.
     """
     out = {}
     for key, module in (
@@ -420,6 +518,12 @@ def _build_donut_catalog(
     timings : `_CatalogTimings`, optional
         Visit-level wall-clock numbers for ``meta``. Defaults to all-zero, so a
         caller that times nothing still produces a schema-complete table.
+    photo_filter_name : str, optional
+        Reference-catalog filter used for photometry, written to
+        ``meta["photo_filter_name"]``.
+    astrom_filter_name : str, optional
+        Reference-catalog filter used for astrometry, written to
+        ``meta["astrom_filter_name"]``.
     rtp_rad : float
         Camera rotator angle on sky (rotTelPos) in radians, used to rotate the
         Zernikes from the camera into the optical coordinate system.  Written

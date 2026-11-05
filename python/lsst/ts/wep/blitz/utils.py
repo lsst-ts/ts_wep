@@ -210,6 +210,19 @@ def _defocal_radial_scale(telescope: batoid.Optic, offsets: _Offsets) -> float:
     wavelength = _RADIAL_SCALE_WAVELENGTH
 
     def _chief_ray_x(optic: batoid.Optic) -> float:
+        """Trace the reference chief ray and return its focal-plane x.
+
+        Parameters
+        ----------
+        optic : batoid.Optic
+            The telescope (in-focus or defocused) to trace through.
+
+        Returns
+        -------
+        float
+            The x coordinate, in meters, where the chief ray at
+            ``_RADIAL_SCALE_REF_THETA`` lands on the focal plane.
+        """
         ray = batoid.RayVector.fromStop(
             0.0,
             0.0,
@@ -264,6 +277,13 @@ class RefcatLoad:
 
     `ReferenceObjectLoader.loadPixelBox` returns a `lsst.pipe.base.Struct`
     carrying exactly these two fields.  Repack here to enable type checking.
+
+    Attributes
+    ----------
+    refCat : lsst.afw.table.SimpleCatalog
+        The loaded reference catalog.
+    fluxField : str
+        Name of the flux column to use from ``refCat``.
     """
 
     refCat: SimpleCatalog
@@ -279,6 +299,17 @@ class IsrCalibs:
     different times: corner mode in the parent, where its calibrations are
     already objects, and full-array mode in each worker, once it has resolved
     its own deferred handles.
+
+    Attributes
+    ----------
+    ptc : Any
+        Photon transfer curve calibration.
+    flat : Any
+        Flat-field calibration.
+    linearizer : Any
+        Linearity calibration.
+    crosstalk : Any
+        Crosstalk calibration.
     """
 
     ptc: Any
@@ -293,6 +324,13 @@ class CornerDetectorInputs:
 
     Corner mode does its butler I/O in the parent, so these are materialized
     objects that the worker uses directly.
+
+    Attributes
+    ----------
+    raw : Any
+        The materialized raw exposure for this corner sensor.
+    calibs : IsrCalibs
+        The four calibrations ISR needs for this exposure.
     """
 
     raw: Any
@@ -313,6 +351,22 @@ class FamDetectorInputs:
     calibration never has to cross a fork. It is optional because a detector
     may legitimately have no intrinsic calibration, in which case the parent
     warns and the fit references the nominal design optics instead.
+
+    Attributes
+    ----------
+    raws : dict of int to Any
+        Exposure id to deferred raw handle, one per exposure of the pair.
+    ptc : Any
+        Photon transfer curve calibration (deferred handle).
+    flat : Any
+        Flat-field calibration (deferred handle).
+    linearizer : Any
+        Linearity calibration (deferred handle).
+    crosstalk : Any
+        Crosstalk calibration (deferred handle).
+    intrinsic_zernikes : Any or None
+        Intrinsic Zernike calibration for this detector, or None when the
+        detector has no intrinsic calibration.
     """
 
     raws: dict[int, Any]  # exposure id -> deferred handle
@@ -353,6 +407,73 @@ class CowStore:
     ``**kwargs`` helper. The duplication is deliberate -- the point of the
     dataclass is that mypy checks both call sites, and ``**kwargs`` is exactly
     the hole that would reopen.
+
+    Attributes
+    ----------
+    isr_task : Any
+        ISR subtask. Shared by both modes.
+    bkg_task : Any
+        Background-subtraction subtask. Shared by both modes.
+    diam_task : Any
+        Donut diameter sizing subtask. Shared by both modes.
+    detect_task : Any
+        Donut detection subtask. Shared by both modes.
+    astrom_task : Any
+        Astrometry/WCS-refit subtask. Shared by both modes.
+    select_task : Any
+        Donut selection subtask. Shared by both modes.
+    measure_task : Any
+        Measurement subtask. Shared by both modes.
+    cut_task : Any
+        Stamp-cutting subtask. Shared by both modes.
+    wf_fit_task : Any
+        Wavefront-fitting subtask. Shared by both modes.
+    wf_estimation_mode : str
+        Wavefront estimation mode. Shared by both modes.
+    max_fit_scatter : float
+        Maximum allowed fit scatter, from ``config.maxFitScatter``. Shared
+        by both modes.
+    astrom_ref_filter : str
+        Reference-catalog filter used for astrometry. Shared by both modes.
+    photo_ref_filter : str
+        Reference-catalog filter used for photometry. Shared by both modes.
+    telescope : batoid.Optic
+        The in-focus telescope. Shared by both modes.
+    build_detector_view : bool
+        Whether the cutout workers build a `DetectorView` for the
+        focal-plane selection plot. True in corner mode (cheap), False in
+        full-array mode (expensive).
+    corner_detectors : dict of str to CornerDetectorInputs
+        Per-detector raw exposure and calibrations. Corner mode only.
+    det_refcats : dict of str to (RefcatLoad or None)
+        Per-detector loaded reference catalog, or None. Corner mode only.
+    fam_detectors : dict of int to FamDetectorInputs
+        Per-detector deferred handles. Full-array mode only.
+    pair_match_tolerance : float
+        Tolerance for pairing intra and extra donuts. Full-array mode only.
+    save_stamps : bool
+        Whether to save donut stamps. Full-array mode only.
+    save_wf_images : bool
+        Whether to save wavefront images. Full-array mode only.
+    band : str
+        The observing band. Full-array mode only.
+    rtp_deg : float or None
+        rotTelPos in degrees, or None. Full-array mode only.
+    boresight_alt_rad : float or None
+        Boresight altitude in radians, or None. Full-array mode only.
+    intra_exposure : int
+        Exposure id of the intra-focal exposure. Full-array mode only.
+    extra_exposure : int
+        Exposure id of the extra-focal exposure. Full-array mode only.
+    offsets_by_exposure : dict of int to _Offsets
+        Exposure id to its offset triplet. Full-array mode only.
+    radial_scale_by_offsets : dict of _Offsets to float
+        Offset triplet to its defocal radial scale, derived in `for_fam`.
+        Full-array mode only.
+    refcat_handles : list
+        Reference-catalog deferred handles. Full-array mode only.
+    butler : Any
+        The butler used to resolve handles. Full-array mode only.
     """
 
     # --- Subtasks, shared by both modes.
@@ -400,6 +521,11 @@ class CowStore:
         Bypasses the generated ``__init__`` deliberately: the two per-mode
         constructors below are the only sanctioned way to fill a store, and
         each sets a different subset of the fields.
+
+        Returns
+        -------
+        CowStore
+            A store instance with no fields set.
         """
         return object.__new__(cls)
 
@@ -430,6 +556,49 @@ class CowStore:
         ``build_detector_view`` defaults True here and is required in
         `for_fam`: the focal-plane selection plot is a corner-mode feature, so
         this is the mode that wants it.
+
+        Parameters
+        ----------
+        isr_task : Any
+            ISR subtask.
+        bkg_task : Any
+            Background-subtraction subtask.
+        diam_task : Any
+            Donut diameter sizing subtask.
+        detect_task : Any
+            Donut detection subtask.
+        astrom_task : Any
+            Astrometry/WCS-refit subtask.
+        select_task : Any
+            Donut selection subtask.
+        measure_task : Any
+            Measurement subtask.
+        cut_task : Any
+            Stamp-cutting subtask.
+        wf_fit_task : Any
+            Wavefront-fitting subtask.
+        wf_estimation_mode : str
+            Wavefront estimation mode.
+        max_fit_scatter : float
+            Maximum allowed fit scatter.
+        astrom_ref_filter : str
+            Reference-catalog filter used for astrometry.
+        photo_ref_filter : str
+            Reference-catalog filter used for photometry.
+        telescope : batoid.Optic
+            The in-focus telescope.
+        corner_detectors : dict of str to CornerDetectorInputs
+            Per-detector raw exposure and calibrations.
+        det_refcats : dict of str to (RefcatLoad or None)
+            Per-detector loaded reference catalog, or None.
+        build_detector_view : bool, optional
+            Whether the cutout workers build a `DetectorView` for the
+            focal-plane selection plot. (the default is True)
+
+        Returns
+        -------
+        CowStore
+            The populated store for corner-mode workers.
         """
         store = cls.uninitialized()
         store.isr_task = isr_task
@@ -487,6 +656,66 @@ class CowStore:
         ``radial_scale_by_offsets`` is derived here rather than passed in: the
         parent knows every triplet a worker can ask about, because a donut only
         ever carries back what ``offsets_by_exposure`` gave it.
+
+        Parameters
+        ----------
+        isr_task : Any
+            ISR subtask.
+        bkg_task : Any
+            Background-subtraction subtask.
+        diam_task : Any
+            Donut diameter sizing subtask.
+        detect_task : Any
+            Donut detection subtask.
+        astrom_task : Any
+            Astrometry/WCS-refit subtask.
+        select_task : Any
+            Donut selection subtask.
+        measure_task : Any
+            Measurement subtask.
+        cut_task : Any
+            Stamp-cutting subtask.
+        wf_fit_task : Any
+            Wavefront-fitting subtask.
+        wf_estimation_mode : str
+            Wavefront estimation mode.
+        max_fit_scatter : float
+            Maximum allowed fit scatter.
+        astrom_ref_filter : str
+            Reference-catalog filter used for astrometry.
+        photo_ref_filter : str
+            Reference-catalog filter used for photometry.
+        telescope : batoid.Optic
+            The in-focus telescope.
+        fam_detectors : dict of int to FamDetectorInputs
+            Per-detector deferred handles.
+        pair_match_tolerance : float
+            Tolerance for pairing intra and extra donuts.
+        save_stamps : bool
+            Whether to save donut stamps.
+        save_wf_images : bool
+            Whether to save wavefront images.
+        band : str
+            The observing band.
+        rtp_deg : float or None
+            rotTelPos in degrees, or None.
+        boresight_alt_rad : float or None
+            Boresight altitude in radians, or None.
+        intra_exposure : int
+            Exposure id of the intra-focal exposure.
+        extra_exposure : int
+            Exposure id of the extra-focal exposure.
+        offsets_by_exposure : dict of int to _Offsets
+            Exposure id to its offset triplet.
+        refcat_handles : list
+            Reference-catalog deferred handles.
+        butler : Any
+            The butler used to resolve handles.
+
+        Returns
+        -------
+        CowStore
+            The populated store for full-array per-detector workers.
         """
         store = cls.uninitialized()
         store.isr_task = isr_task
@@ -538,6 +767,11 @@ class CowStore:
         Clearing rather than merging is also what keeps a `Task` instance safe
         to reuse across quanta -- a field the previous mode set and this one
         does not goes back to raising `AttributeError`.
+
+        Parameters
+        ----------
+        other : CowStore
+            The store whose fields replace this store's fields.
         """
         self.__dict__.clear()
         self.__dict__.update(other.__dict__)
@@ -552,6 +786,17 @@ def _resolve_color_log_enabled(color_log: bool | None) -> bool:
 
     If ``color_log`` is None, color is enabled only when stdout is attached
     to an interactive terminal.
+
+    Parameters
+    ----------
+    color_log : bool or None
+        The colorLog config value: True/False to force, or None to
+        auto-detect from the terminal.
+
+    Returns
+    -------
+    bool
+        Whether color output is enabled.
     """
     if color_log is None:
         return sys.stdout.isatty()
@@ -616,6 +861,17 @@ def _dense_intrinsic(donut: Donut) -> np.ndarray:
     `WavefrontFittingTask` because `_build_donut_catalog` needs the same
     conversion: intrinsics are a function of field position, so a donut no fit
     consumed still has them, and the catalog falls back to this for that row.
+
+    Parameters
+    ----------
+    donut : Donut
+        The donut whose ``intrinsic_zk`` (µm, Noll 4 onward) is converted.
+
+    Returns
+    -------
+    numpy.ndarray
+        Dense Noll-indexed intrinsic Zernikes in meters, length
+        ``_ZK_JMAX + 1``, with unset slots 0.0.
     """
     out = np.zeros(_ZK_JMAX + 1)
     raw = donut.intrinsic_zk  # µm, Noll 4.._ZK_JMAX
@@ -633,6 +889,18 @@ def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:
     center. Shared by `_prep_donut_for_danish` and `_buildCatalog` so that
     donuts which never reached a fit (paired-mode surplus) still get a WF
     image on the same pixel grid as the fitted ones.
+
+    Parameters
+    ----------
+    stamp : numpy.ndarray
+        The donut stamp to bin.
+    binning : int
+        Binning factor; binning is applied only when greater than 1.
+
+    Returns
+    -------
+    numpy.ndarray
+        The binned stamp, trimmed to an odd pixel size.
     """
     img = stamp.astype(float)
     if binning > 1:
@@ -657,6 +925,20 @@ def _rotate_zk(zk: np.ndarray, theta: float) -> np.ndarray:
     NaN slots (Noll indices below 4, indices that were not fitted, unfit
     donuts) rotate as zero and are then restored, so the output is defined
     exactly where the input was.
+
+    Parameters
+    ----------
+    zk : numpy.ndarray
+        Dense Noll-indexed coefficients, shape ``(nrow, njmax + 1)``, no
+        wider than ``_ZK_JMAX + 1``.
+    theta : float
+        Frame rotation in radians.
+
+    Returns
+    -------
+    numpy.ndarray
+        The rotated coefficients, same shape as ``zk``, with NaN slots
+        preserved.
     """
     rot = galsim.zernike.zernikeRotMatrix(_ZK_JMAX, theta)
     padded = np.zeros((len(zk), _ZK_JMAX + 1))

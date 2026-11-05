@@ -37,7 +37,25 @@ from .lsstCam import _LSSTCAM
 
 
 def _build_annular_template(radius: float, inner_frac: float) -> np.ndarray:
-    """Return a binary annular stamp for cross-correlation donut detection."""
+    """Build a binary annular stamp for cross-correlation donut detection.
+
+    Parameters
+    ----------
+    radius : float
+        Outer radius of the annulus, in pixels. Also sets the half-width
+        of the (square) output stamp.
+    inner_frac : float
+        Inner radius of the annulus expressed as a fraction of ``radius``.
+        Pixels with radial distance below ``radius * inner_frac`` are set
+        to zero, carving out the central hole of the donut.
+
+    Returns
+    -------
+    numpy.ndarray
+        Square array of shape ``(2 * round(radius) + 1, 2 * round(radius)
+        + 1)`` with values of ``1.0`` inside the annulus and ``0.0``
+        elsewhere.
+    """
     r_int = round(radius)
     coords = np.arange(-r_int, r_int + 1, dtype=float)
     r = np.hypot(coords[None, :], coords[:, None])

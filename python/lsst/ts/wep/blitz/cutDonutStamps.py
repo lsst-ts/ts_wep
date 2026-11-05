@@ -49,6 +49,27 @@ class _ExposureContext:
     a method taking explicit inputs rather than a closure over `run`'s locals.
     Frozen because nothing downstream of the extraction may rebind any of it;
     the two arrays are views into the exposure's pixels and are only read.
+
+    Attributes
+    ----------
+    detector : lsst.afw.cameraGeom.Detector
+        The exposure's detector, used for the pixel-to-field-angle
+        transform and the detector name.
+    band : str
+        The exposure's band label.
+    visit_id : int
+        The exposure's visit identifier.
+    det_id : int
+        The detector identifier.
+    n_quarter : int
+        The detector's orientation as a count of 90-degree rotations, the
+        ``k`` applied to put stamps in CCS.
+    image : numpy.ndarray
+        The exposure's image pixels, a read-only view.
+    mask : numpy.ndarray
+        The exposure's mask-plane pixels, a read-only view.
+    sat_bit : int
+        The bitmask the SAT mask plane sets, tested for ``rejected_sat``.
     """
 
     detector: Detector
@@ -63,7 +84,20 @@ class _ExposureContext:
 
     @classmethod
     def from_exposure(cls, exposure: Exposure) -> _ExposureContext:
-        """Read the per-exposure values off a post-ISR exposure."""
+        """Read the per-exposure values off a post-ISR exposure.
+
+        Parameters
+        ----------
+        exposure : Exposure
+            Background-subtracted post-ISR science exposure to read the
+            detector, band, visit id, orientation, pixels and SAT bit from.
+
+        Returns
+        -------
+        _ExposureContext
+            The per-exposure values shared by every stamp cut from this
+            exposure.
+        """
         detector = exposure.getDetector()
         return cls(
             detector=detector,
@@ -88,6 +122,20 @@ class _RefcatArrays:
     `None` on the blitz-detection path, where there is no refcat at all -- so a
     caller holding `None` skips the query entirely and every donut gets empty
     neighbor lists.
+
+    Attributes
+    ----------
+    x : numpy.ndarray
+        Reference-source centroid x-positions, in detector pixels.
+    y : numpy.ndarray
+        Reference-source centroid y-positions, in detector pixels.
+    donut_id : numpy.ndarray
+        Reference-source ids, used to exclude each donut from its own
+        neighbor list.
+    photo_mag : numpy.ndarray
+        Reference-source photometric magnitudes.
+    astrom_mag : numpy.ndarray
+        Reference-source astrometric magnitudes.
     """
 
     x: npt.NDArray[np.float64]
@@ -98,7 +146,20 @@ class _RefcatArrays:
 
     @classmethod
     def from_table(cls, refcat: QTable | None) -> _RefcatArrays | None:
-        """Extract the arrays, or `None` if there is no refcat."""
+        """Extract the arrays, or `None` if there is no refcat.
+
+        Parameters
+        ----------
+        refcat : QTable or None
+            Full reference catalog with ``centroid_x``, ``centroid_y``,
+            ``donut_id``, ``photo_mag`` and ``astrom_mag`` columns, or
+            None on the blitz-detection path.
+
+        Returns
+        -------
+        _RefcatArrays or None
+            The extracted column arrays, or None when ``refcat`` is None.
+        """
         if refcat is None:
             return None
         return cls(
@@ -120,7 +181,7 @@ class _RefcatArrays:
 
         Parameters
         ----------
-        donut_id
+        donut_id : int
             The donut's own refcat id, excluded from its own neighbor lists.
         x_det, y_det : float
             The donut's un-rounded centroid, in detector pixels.
@@ -310,7 +371,7 @@ class CutDonutStampsTask(pipeBase.Task):
 
         Parameters
         ----------
-        row
+        row : astropy.table.Row
             One row of the measurements table; see `run`.
         context : _ExposureContext
             The per-exposure values shared by every stamp in this call.
