@@ -24,6 +24,8 @@ Important Pipeline Tasks:
 * `task.CutOutDonutsScienceSensorTask` cuts out donuts stamps in image from LSSTFam or ComCam sensors when provided input exposures and source catalog.
 * `task.CutOutDonutsCwfsTask` cuts out donuts stamps in image from LSSTCam corner wavefront sensors when provided input exposures and source catalog.
 * `task.CalcZernikesTask` calculates the Zernikes polynomials from donut stamps already stored in a butler repository.
+* `blitz.DonutBlitzCornerTask` runs the full corner-wavefront-sensor pipeline -- detection, selection, cutout, and Zernike fitting -- as a single visit-level task.
+* `blitz.DonutBlitzFamTask` runs the same end-to-end pipeline for the full-array-mode science sensors over an intra/extra-focal exposure pair.
 
 Important enums:
 
@@ -154,6 +156,56 @@ This module has the tasks to run WEP as a pipeline with Gen 3 LSST DM middleware
 * **ReassignCwfsCutoutsTaskConfig**: Configuration for ReassignCwfsCutoutsTask.
 * **ReassignCwfsCutoutsTaskConnections**: Connections for ReassignCwfsCutoutsTask.
 
+.. _WEP_modules_wep_blitz:
+
+wep.blitz
+-------------
+
+.. mermaid:: ../uml/blitzClass.mmd
+    :caption: Class diagram of wep.blitz
+
+This module is a self-contained, LSSTCam-only wavefront estimation pipeline that fuses donut detection, source selection, stamp cutting, and Danish wavefront fitting into a single Gen 3 middleware task per operating mode.
+Unlike the staged ``wep.task`` pipeline, which hands intermediate data products (catalogs, stamps) through the butler between separate tasks, blitz runs the whole chain in one quantum and parallelizes the per-detector and per-fit-group work across a fork-based process pool.
+It emits a single per-donut catalog carrying selection metrics, fit results, Zernikes, stamp/model images, and all metadata needed to regenerate diagnostic plots.
+
+Top-level pipeline tasks:
+
+* **DonutBlitzCornerTask**: Visit-level task that runs the end-to-end pipeline on whichever of the 8 corner wavefront sensors are present. All butler I/O happens in the parent process, and the loaded calibrations and reference catalogs are inherited by forked workers via copy-on-write.
+* **DonutBlitzCornerConfig** / **DonutBlitzCornerConnections**: Configuration and connections setup for ``DonutBlitzCornerTask``.
+* **DonutBlitzFamTask**: Full-array-mode counterpart that processes the 189 science detectors of an intra/extra-focal exposure pair, one quantum per exposure ``group``. To bound memory, the parent resolves only deferred butler handles and each forked worker does its own I/O, fits, and frees the pixels.
+* **DonutBlitzFamConfig** / **DonutBlitzFamConnections**: Configuration and connections setup for ``DonutBlitzFamTask``.
+* **DonutBlitzPlotTask**: Subtask that draws the donut, wavefront, and focal-plane diagnostic plots, either inline during a run or standalone from a persisted ``donutBlitzCornerResults`` catalog.
+* **DonutBlitzPlotConfig** / **DonutBlitzPlotConnections** / **DonutBlitzPlotOutputConnections**: Configuration and connections setup for ``DonutBlitzPlotTask``.
+
+Pipeline stages (run as subtasks within the top-level tasks):
+
+* **BlitzDetectTask**: Template cross-correlation donut detection on a post-ISR exposure.
+* **BlitzDetectConfig**: Configuration setup for ``BlitzDetectTask``.
+* **MeasureDonutCandidatesTask**: Aperture photometry and quality metrics for candidate donuts.
+* **MeasureDonutCandidatesConfig**: Configuration setup for ``MeasureDonutCandidatesTask``.
+* **CutDonutStampsTask**: Cuts donut stamps and evaluates saturation, flux-fraction, and SNR rejection criteria.
+* **CutDonutStampsConfig**: Configuration setup for ``CutDonutStampsTask``.
+* **WavefrontFittingTask**: Danish wavefront fitting, including donut grouping into joint fits and the per-group fitting worker.
+* **WavefrontFittingConfig**: Configuration setup for ``WavefrontFittingTask``.
+
+Data structures passed between stages (in ``dataStructures``):
+
+* **Donut**: One cut donut stamp with its selection and quality metrics.
+* **CutoutResult**: One exposure of one detector, as the cutout pipeline returns it.
+* **DetectorView** / **SourceSet**: One detector's binned image and the per-stage overlay sources for the focal-plane selection plot.
+* **WfDonutResult** / **WfGroupResult**: The per-donut and per-group halves of a wavefront fit.
+* **FamDetectorResult**: The full-array per-detector work-unit envelope, bundling the cutout results, fit results, and timings a worker returns.
+
+Internal support modules:
+
+* **catalogBuilder**: Assembles the per-donut output catalog and the focal-plane image and overlay tables shared by both modes.
+* **cutoutPipeline**: The per-detector cutout pipeline (ISR, background subtraction, detection, WCS refit, selection, stamp cutting) run inside each worker.
+* **famPipeline**: The full-array worker and the donut-pairing/grouping logic it uses.
+* **zernikesTable**: Rebuilds the legacy per-corner ``zernikes`` table from blitz's per-donut catalog for consumers of the non-blitz corner pipeline.
+* **forkPool**: A fork-per-work-unit process pool plus the hang watchdog that guards it, surviving workers killed outright (e.g. by an OOM cgroup kill).
+* **lsstCam**: A frozen inventory of the LSSTCam geometry and model facts blitz depends on; imports nothing from blitz.
+* **utils**: Constants and helpers shared by more than one blitz module, including the copy-on-write store that passes preloaded inputs to forked workers.
+
 .. _WEP_modules_wep_utils:
 
 wep.utils
@@ -190,6 +242,9 @@ This section is autogenerated from docstrings.
     :no-inheritance-diagram:
 
 .. automodapi:: lsst.ts.wep.task
+    :no-inheritance-diagram:
+
+.. automodapi:: lsst.ts.wep.blitz
     :no-inheritance-diagram:
 
 .. automodapi:: lsst.ts.wep.utils
