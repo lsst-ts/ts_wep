@@ -62,6 +62,21 @@ _VIEW_BINNING = 4
 def _build_afw_source_cat(blitz_detections: QTable, wcs: SkyWcs) -> afwTable.SourceCatalog:
     """Convert blitz-detect QTable into a minimal afwTable.SourceCatalog
     suitable for AstrometryTask.run().
+
+    Parameters
+    ----------
+    blitz_detections : QTable
+        Blitz detections with ``centroid_x`` and ``centroid_y`` columns,
+        one row per detected donut.
+    wcs : lsst.afw.geom.SkyWcs
+        The exposure WCS, used to assign each centroid a sky position.
+
+    Returns
+    -------
+    lsst.afw.table.SourceCatalog
+        A contiguous minimal source catalog with one record per detection,
+        carrying id, sky coordinates and centroid, ready for
+        ``AstrometryTask``.
     """
     schema = afwTable.SourceTable.makeMinimalSchema()
     measBase.SingleFrameMeasurementTask(schema=schema)
@@ -103,6 +118,12 @@ def _source_set(table: QTable | None, mag_column: str) -> SourceSet | None:
         detection), which yields all-NaN.  A named column that is absent also
         yields all-NaN rather than raising, since the blitz path NaN-fills the
         refcat columns anyway (see `_REFCAT_COLUMNS`).
+
+    Returns
+    -------
+    `lsst.ts.wep.blitz.dataStructures.SourceSet` or None
+        The stage's centroids, ids and magnitudes, or None when ``table``
+        is None.
     """
     if table is None:
         return None
@@ -122,7 +143,28 @@ def _source_set(table: QTable | None, mag_column: str) -> SourceSet | None:
 def _field_distance_grid(
     detector: Detector, bbox: lsst.geom.Box2I, binning: int, shape: tuple[int, int]
 ) -> np.ndarray:
-    """Field distance [deg] at binned pixel centers, shaped like `shape`."""
+    """Field distance [deg] at binned pixel centers, shaped like `shape`.
+
+    Parameters
+    ----------
+    detector : lsst.afw.cameraGeom.Detector
+        The detector whose pixel-to-field-angle transform is evaluated.
+    bbox : lsst.geom.Box2I
+        The exposure bounding box, supplying the un-binned pixel origin.
+    binning : int
+        The factor the image was binned by, mapping binned pixel index to
+        un-binned position (with a half-pixel center offset).
+    shape : tuple of int
+        The ``(ny, nx)`` shape of the binned image, and of the returned
+        grid.
+
+    Returns
+    -------
+    numpy.ndarray
+        Field distance in degrees at each binned pixel center, shape
+        ``shape`` and dtype float32. All-NaN when the transform is
+        unavailable.
+    """
     try:
         mapping = detector.getTransform(PIXELS, FIELD_ANGLE).getMapping()
         # Binned pixel j covers un-binned [b*j, b*j + b - 1], so its center is
@@ -153,6 +195,25 @@ def _detector_view(
 
     The ``.copy()`` matters: without it the array is a view onto the binned
     image's buffer, whose base would be pickled along with it.
+
+    Parameters
+    ----------
+    post_isr : lsst.afw.image.Exposure
+        The background-subtracted post-ISR exposure, binned for the view.
+    refcat : QTable or None
+        The reference catalog consulted for this detector, or None off the
+        refcat path (kept None so an empty overlay does not imply a
+        consulted catalog).
+    blitz_detections : QTable or None
+        The blitz detections for this detector.
+    selections : QTable or None
+        The sources the donut selector kept.
+
+    Returns
+    -------
+    `lsst.ts.wep.blitz.dataStructures.DetectorView`
+        The binned image, geometry, overlay source sets and per-pixel
+        field-distance grid for the focal-plane plot.
     """
     bbox = post_isr.getBBox()
     binned = afwMath.binImage(post_isr.image, _VIEW_BINNING)

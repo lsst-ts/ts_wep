@@ -148,6 +148,28 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         Returns a copy of ``selections`` with the measurement columns added;
         peaks too close to the image border get ``nan`` values. The input
         table is left unmodified.
+
+        Parameters
+        ----------
+        selections : QTable
+            Catalog-selected (or blitz-detection) centroids with columns
+            ``centroid_x``, ``centroid_y``, ``donut_id``.
+        exposure : Exposure
+            Background-subtracted post-ISR science exposure, in un-binned
+            pixel coordinates.
+        donut_radius : float or None, optional
+            Measured donut radius in un-binned pixels, or None/NaN if
+            unmeasured. If None, the nominal ``_LSSTCAM.donut_radius`` is
+            used.
+
+        Returns
+        -------
+        QTable
+            A copy of ``selections`` with measurement columns added
+            (``flux``, ``inner_flux``, ``outer_flux``,
+            ``outer_sector_minmax_flux``, ``bkg_std``, ``bkg``, ``snr``,
+            ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``).
+            Peaks too close to the image border get ``nan`` values.
         """
         if donut_radius is None:
             donut_radius = _LSSTCAM.donut_radius

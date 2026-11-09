@@ -137,6 +137,26 @@ class _DonutLayout:
     `_WfLayout`.  Grid *indices* derived from these (the accepted/rejected
     column offsets) stay local to the method that builds the GridSpec: they
     are not tunable, they are consequences.
+
+    Attributes
+    ----------
+    stamps_per_row : int
+        Accepted donut stamps drawn per detector row.
+    rejected_per_row : int
+        Rejected donut stamps drawn per detector row.
+    stamp_col_w : float
+        Width of one stamp column, in inches.
+    stats_col_w : float
+        Width of the left-hand stats column, in inches.
+    row_h : float
+        Height of one whole detector section, in inches.
+    legend_h : float
+        Height reserved at the bottom for the legend, in inches.
+    spacer_w : float
+        Width of the spacer column between the accepted and rejected
+        stamps, in inches.
+    suptitle_h : float
+        Height reserved at the top for the suptitle, in inches.
     """
 
     stamps_per_row: int
@@ -150,7 +170,13 @@ class _DonutLayout:
 
     @property
     def n_cols(self) -> int:
-        """Grid columns: stats, accepted stamps, spacer, rejected stamps."""
+        """Grid columns: stats, accepted stamps, spacer, rejected stamps.
+
+        Returns
+        -------
+        int
+            Total grid column count for the donut diagnostic plot.
+        """
         return 1 + self.stamps_per_row + 1 + self.rejected_per_row
 
 
@@ -161,6 +187,15 @@ class _WfLayout:
     ``row_h`` here is the height of one *donut* row within a corner block, of
     which a corner stacks ``max_rows``; the donut plot's ``row_h`` is the
     height of a whole *detector* section.  Same name, different unit of work.
+
+    Attributes
+    ----------
+    cell : float
+        Side of one unit cell within a corner block, in inches.
+    row_h : float
+        Height of one donut row within a corner block, in inches.
+    hpad : float
+        Vertical padding between the corner blocks, in inches.
     """
 
     cell: float
@@ -302,6 +337,18 @@ def _midtone_transfer(image: np.ndarray, balance: float) -> np.ndarray:
     and 1 respectively. Those are substituted wherever the expression came out
     non-finite rather than tested for up front, since an exact float comparison
     would miss the near misses that overflow too.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Data already normalized to [0, 1].
+    balance : float
+        Midtones balance controlling the strength of the transfer.
+
+    Returns
+    -------
+    numpy.ndarray
+        The transferred image, same shape as ``image``.
     """
     M = np.full(image.shape, balance)
     limits = (image == 0.5) * 0.5 * (1 - (image == 0)) + (image == 1)
@@ -388,12 +435,38 @@ def _stretch_midtone(data: np.ndarray) -> np.ndarray:
 
 
 def _hex_to_rgb(color: str) -> tuple[float, float, float]:
-    """A ``#rrggbb`` string as an RGB triple in 0-1."""
+    """A ``#rrggbb`` string as an RGB triple in 0-1.
+
+    Parameters
+    ----------
+    color : str
+        Hex color string of the form ``#rrggbb``.
+
+    Returns
+    -------
+    tuple [`float`, `float`, `float`]
+        The red, green and blue components, each in [0, 1].
+    """
     return tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))  # type: ignore[return-value]
 
 
 def _diverging_cmap(name: str, stops: tuple, colors: tuple) -> LinearSegmentedColormap:
-    """A `LinearSegmentedColormap` from normalized stops and hex colors."""
+    """A `LinearSegmentedColormap` from normalized stops and hex colors.
+
+    Parameters
+    ----------
+    name : str
+        Name given to the created colormap.
+    stops : tuple
+        Normalized positions in [0, 1], one per color.
+    colors : tuple
+        Hex color strings (``#rrggbb``), one per stop.
+
+    Returns
+    -------
+    matplotlib.colors.LinearSegmentedColormap
+        The colormap interpolating through ``colors`` at ``stops``.
+    """
     from matplotlib.colors import LinearSegmentedColormap
 
     return LinearSegmentedColormap.from_list(name, list(zip(stops, [_hex_to_rgb(c) for c in colors])))
@@ -468,6 +541,17 @@ class _StampStyle:
         which is why `px_scale` exists: every other quantity here is in
         unbinned pixels and has to scale by 1/binning to match.
 
+        Parameters
+        ----------
+        catalog : astropy.table.QTable
+            Per-donut table whose ``meta`` carries the visit-level scalars
+            and whose columns resolve the stamp column.
+
+        Returns
+        -------
+        `_StampStyle`
+            The resolved stamp column and visit-level drawing scalars.
+
         Raises
         ------
         RuntimeError
@@ -496,6 +580,18 @@ class _StampStyle:
 
         ``donut_radius`` is the row's own measured radius, already scaled into
         the drawn image's pixels.
+
+        Parameters
+        ----------
+        donut_radius : float
+            The row's measured donut radius, in the drawn image's pixels.
+
+        Returns
+        -------
+        list of tuple
+            ``(radius, color, style)`` per circle, where ``radius`` is a
+            `float` in drawn-image pixels and ``color`` and ``style`` are
+            `str`.
         """
         inside = donut_radius * self.obscuration
         return [
@@ -516,6 +612,16 @@ class _WfFitInfo:
     that no fit produced (an unfitted surplus donut) still carries one of
     these, filled with the not-fitted values, so the drawing code needs no
     special case: see `not_fitted`.
+
+    Attributes
+    ----------
+    elapsed : float
+        Wall-clock seconds the fit took.
+    nfev : int
+        Number of function evaluations the fit used; 0 for an unfitted
+        donut.
+    fwhm : float
+        Fitted blur FWHM, in arcseconds.
     """
 
     elapsed: float
@@ -528,6 +634,11 @@ class _WfFitInfo:
 
         ``nfev=0`` is what the bar label tests to print "x0" rather than
         "ok"/"fail", so it is load-bearing, not merely an empty default.
+
+        Returns
+        -------
+        `_WfFitInfo`
+            A record carrying NaN timings and ``nfev=0``.
         """
         return cls(elapsed=float("nan"), nfev=0, fwhm=float("nan"))
 
@@ -539,6 +650,22 @@ class _WfDonut:
     ``model_img`` is None when the fitter produced none, which the drawing
     code distinguishes from an all-NaN array: None means "draw nothing here",
     and it is also what makes the residual panel and Zernike bar drop out.
+
+    Attributes
+    ----------
+    donut_id : int
+        Catalog identifier of this donut.
+    det_name : str
+        Name of the detector the donut sits on.
+    defocal : str
+        ``"intra"`` or ``"extra"``, used for layout only (intra left, extra
+        right); see `_pair_up`.
+    img : numpy.ndarray
+        The binned donut image.
+    model_img : numpy.ndarray or None
+        The fitted model image, or None when the fitter produced none.
+    blend_frac : float
+        Fraction of the donut flux attributed to blends.
     """
 
     donut_id: int
@@ -561,6 +688,21 @@ class _WfGroup:
     Both a real fit and an unfitted surplus donut are represented as one of
     these; the latter has ``success=False``, a `_WfFitInfo.not_fitted`, one
     donut with no model, and no Zernikes.
+
+    Attributes
+    ----------
+    det_names : list [`str`]
+        Names of the detectors this group's donuts sit on.
+    success : bool
+        Whether the fit succeeded; False for an unfitted surplus donut.
+    fit_info : `_WfFitInfo`
+        The fit's scalar timings and blur.
+    donuts : list [`_WfDonut`]
+        The donuts in this group.
+    zk_dev : numpy.ndarray
+        Noll-indexed deviations in micron, element j being Noll j, truncated
+        at the highest fitted index -- so this may be shorter than the drawn
+        range, or empty (`_NO_ZK`) for a record with no fit.
     """
 
     det_names: list[str]
@@ -577,6 +719,11 @@ class _WfGroup:
 
         For modes whose groups do not pair intra with extra: the group's
         scalars are shared by every donut in it, so each copy keeps them.
+
+        Returns
+        -------
+        list [`_WfGroup`]
+            One copy of this group per donut, each holding a single donut.
         """
         return [replace(self, donuts=[donut]) for donut in self.donuts]
 
@@ -630,6 +777,21 @@ class _RowHalf:
         defocal types and each half picks out its own; an exploded or unfitted
         group holds a single donut, matching only the side it belongs to -- so
         a miss is normal and yields a blank half, not an error.
+
+        Parameters
+        ----------
+        group : `_WfGroup` or None
+            The fit group to draw, or None for a padded (blank) layout row.
+        defocal : str
+            Which side of focus this half draws, ``"intra"`` or ``"extra"``.
+        det_hdr : str
+            Column header, non-empty only on a corner's first row.
+
+        Returns
+        -------
+        `_RowHalf`
+            The flattened inputs for drawing this side of focus; a blank half
+            (``img=None``) when ``group`` is None or holds no matching donut.
         """
         fit_info = group.fit_info if group is not None else _WfFitInfo.not_fitted()
         success = group.success if group is not None else False
@@ -657,6 +819,20 @@ def _meta_value(meta: dict, key: str, unit: u.UnitBase) -> float:
     ("run=%.1fs"), so they are stripped at the read the same way the column
     Quantities are.  A missing key degrades to NaN, which the callers already
     render as "N/A" rather than raising mid-plot.
+
+    Parameters
+    ----------
+    meta : dict
+        Catalog meta mapping, whose values are Quantities.
+    key : str
+        Key to read from ``meta``.
+    unit : astropy.units.UnitBase
+        Unit the scalar is returned in.
+
+    Returns
+    -------
+    float
+        The value in ``unit``, or NaN when ``key`` is absent.
     """
     value = meta.get(key)
     return np.nan if value is None else value.to_value(unit)
@@ -686,6 +862,11 @@ def _donut_rows_by_detector(catalog: QTable) -> list[tuple[str, QTable, QTable]]
     Splits on ``candidate`` rather than on whether a fit consumed the donut:
     this plot is about donut *selection*, so a candidate no fit used still
     belongs in the accepted panel, having passed every cut the plot reports.
+
+    Parameters
+    ----------
+    catalog : astropy.table.QTable
+        Per-donut table carrying ``det_name`` and ``candidate`` columns.
 
     Returns
     -------
@@ -721,6 +902,11 @@ def _detector_stats_lines(det_name: str, det_id: int, n_donuts: int, det_stats: 
         One ``catalog.meta["det_meta"]`` entry, or ``{}`` for a detector with
         no entry -- every read below tolerates the absence, reporting NaN or
         omitting the line.
+
+    Returns
+    -------
+    list [`str`]
+        One formatted line per stats entry, ready to join with newlines.
     """
     scatter_val = _meta_value(det_stats, "astrom_scatter", u.arcsec)
     scatter_str = f'{scatter_val:.3f}"' if np.isfinite(scatter_val) else "N/A"
@@ -753,6 +939,18 @@ def _donut_annotation(row: Row, rejected: bool) -> str:
     the row's own ``rejected_*`` columns, which an accepted row simply has none
     of.  It stays in the signature because the caller's colour choice pairs
     with this caption, and a future change here is likely to want it.
+
+    Parameters
+    ----------
+    row : astropy.table.Row
+        One catalog row whose selection stats and rejection flags are read.
+    rejected : bool
+        Whether the donut was rejected; unused in the text itself (see above).
+
+    Returns
+    -------
+    str
+        The three-line stats caption for the donut stamp.
     """
     values = [
         ("snr", row["snr"], 0),
@@ -842,6 +1040,20 @@ def _binned_coord(x_det: npt.ArrayLike, y_det: npt.ArrayLike, row: Row) -> tuple
 
     Binning and origin are read off the row rather than assumed, so a plot
     regenerated from a run with different settings still lands correctly.
+
+    Parameters
+    ----------
+    x_det, y_det : array_like
+        Detector-frame coordinates, in unbinned pixels.
+    row : astropy.table.Row
+        One catalog row carrying ``binning``, ``bbox_min_x`` and
+        ``bbox_min_y``.
+
+    Returns
+    -------
+    tuple
+        ``(row_idx, col_idx)`` as `numpy.ndarray`, in numpy order, ready for
+        `_rot90_display`.
     """
     b = int(row["binning"])
     offset = (b - 1) / 2
@@ -969,6 +1181,12 @@ def _pair_links(catalog: QTable) -> list[tuple[tuple[str, float, float], tuple[s
     Not filtered on fit success: pairing happens before fitting, so a pair
     whose fit failed was still a pair, and seeing it is the point of the plot.
 
+    Parameters
+    ----------
+    catalog : astropy.table.QTable
+        Per-donut table carrying ``group_id``, ``det_name``, ``x_det`` and
+        ``y_det``; read from ``catalog.meta`` for the ``wf_mode``.
+
     Returns
     -------
     list of tuple
@@ -1008,6 +1226,14 @@ def _overlay_points(overlays: QTable | None, det_name: str) -> dict[str, tuple]:
     here does not distinguish a stage that never ran from one that ran and
     found nothing -- read ``has_refcat`` on the image table for that.
 
+    Parameters
+    ----------
+    overlays : astropy.table.QTable or None
+        Long-form per-source overlay table carrying ``det_name``, ``kind``,
+        ``x_det``, ``y_det`` and ``mag``.  None or empty yields ``{}``.
+    det_name : str
+        Detector to pull sources for.
+
     Returns
     -------
     dict [`str`, tuple]
@@ -1042,6 +1268,17 @@ def _detector_image_rows(detector_images: QTable | None) -> dict[str, Any]:
     The inversion of `_build_detector_image_table`, in the spirit of
     `_wf_groups_from_catalog`: the table is the transport, this is the shape
     the drawing code wants.
+
+    Parameters
+    ----------
+    detector_images : astropy.table.QTable or None
+        Per-detector image table carrying a ``det_name`` column.  None or
+        empty yields ``{}``.
+
+    Returns
+    -------
+    dict [`str`, `astropy.table.Row`]
+        Detector name to its image-table row.
     """
     if detector_images is None or len(detector_images) == 0:
         return {}
@@ -1075,6 +1312,22 @@ def _stamp_transform(
     converts between the two, and is applied before the rotation because it is
     a correction in the detector frame.  Sub-pixel, but it is the difference
     between a marker on the source and one up to half a pixel off it.
+
+    Parameters
+    ----------
+    row : astropy.table.Row
+        One catalog row, read for its detector name, visit and centroid.
+    style : `_StampStyle`
+        Visit-level drawing parameters; ``px_scale`` scales the output.
+    det_meta : dict
+        ``catalog.meta["det_meta"]``, read for this detector's ``n_quarter``
+        orientation.
+
+    Returns
+    -------
+    callable
+        A function of ``(dx, dy)`` in unbinned detector pixels returning
+        ``(x, y)`` in the drawn stamp's coordinates.
     """
     # Orientation is per detector, and keyed by the row's own visit rather
     # than the table's: full-array mode has one entry per detector per side of
@@ -1086,6 +1339,18 @@ def _stamp_transform(
     res_y = y_det - round(y_det)
 
     def to_display(dx: float, dy: float) -> tuple[float, float]:
+        """Map a detector-frame offset to drawn stamp coordinates.
+
+        Parameters
+        ----------
+        dx, dy : float
+            Offset from the centroid, in unbinned detector pixels.
+
+        Returns
+        -------
+        tuple [`float`, `float`]
+            ``(x, y)`` in the drawn stamp's coordinates.
+        """
         r, c = dy + res_y, dx + res_x
         for _ in range(n_quarter):
             r, c = c, -r
@@ -1201,6 +1466,17 @@ def _corner_of(group: _WfGroup) -> str:
     Falls back to the first corner rather than raising: the 2x2 grid has to be
     drawn regardless, and a group whose detectors are all unrecognized is a
     catalog problem this plot should not die on.
+
+    Parameters
+    ----------
+    group : `_WfGroup`
+        The group whose corner is wanted.
+
+    Returns
+    -------
+    str
+        The corner raft name, falling back to the first corner when none of
+        the group's detectors is recognized.
     """
     for name in group.det_names:
         if str(name) in CORNER_BY_DET_NAME:
@@ -1215,6 +1491,17 @@ def _pair_up(groups: list[_WfGroup]) -> list[tuple]:
     Only for modes whose groups carry no intra/extra pairing of their own: the
     pairing here is cosmetic, so rows are matched by position and the shorter
     side padded with ``None`` to keep every donut visible.
+
+    Parameters
+    ----------
+    groups : list [`_WfGroup`]
+        Single-donut groups to lay out.
+
+    Returns
+    -------
+    list of tuple
+        ``(intra, extra)`` plot rows, each element a `_WfGroup` or ``None``
+        where that side ran short.
     """
     intras = [g for g in groups if g.donuts[0].defocal == "intra"]
     extras = [g for g in groups if g.donuts[0].defocal == "extra"]
@@ -1416,6 +1703,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
     config: DonutBlitzPlotConfig
 
     def __init__(self, **kwargs: Any) -> None:
+        """Construct the task and resolve log colorization.
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Forwarded to `lsst.pipe.base.PipelineTask`.
+        """
         super().__init__(**kwargs)
         self._colorLogEnabled = _resolve_color_log_enabled(self.config.colorLog)
 
@@ -1425,6 +1719,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ) -> None:
+        """Read the catalog and optional tables, then build and write plots.
+
+        Parameters
+        ----------
+        butlerQC : lsst.pipe.base.QuantumContext
+            Quantum context used to fetch inputs and persist outputs.
+        inputRefs : lsst.pipe.base.InputQuantizedConnection
+            References to this quantum's inputs.
+        outputRefs : lsst.pipe.base.OutputQuantizedConnection
+            References to this quantum's outputs.
+        """
         inputs = butlerQC.get(inputRefs)
         # Meta carries the visit-level scalars every plot labels itself with,
         # so it must survive the read.
@@ -1435,6 +1740,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # case they are absent from `inputs` rather than None -- so ask the
         # dict, not the attribute.
         def _optional(name: str) -> QTable | None:
+            """Fetch an optional input table, or None when it was not made.
+
+            Parameters
+            ----------
+            name : str
+                Input connection name to look up in ``inputs``.
+
+            Returns
+            -------
+            astropy.table.QTable or None
+                The loaded table, or None when the input is absent.
+            """
             handle = inputs.get(name)
             return None if handle is None else handle.get(**load)
 
@@ -1785,6 +2102,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         Both overlays are drawn in the stamp's rotated display frame, which is
         what `_stamp_transform` builds; the two differ only in marker, colour
         and label offset.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes holding the donut stamp to overlay.
+        row : astropy.table.Row
+            One catalog row carrying the ``nearby_*`` refcat columns.
+        style : `_StampStyle`
+            Visit-level drawing parameters.
+        det_meta : dict
+            ``catalog.meta["det_meta"]``, read for this detector's
+            orientation via `_stamp_transform`.
         """
         to_display = _stamp_transform(row, style, det_meta)
         # The label y offsets differ in sign so a photometric and an
@@ -1825,6 +2154,19 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         Takes the array and its scaling from the caller, since a row draws
         image, model and residual with shared limits.  Distinct from
         `_drawDonutStamp`, which reads a catalog row.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes to draw into.
+        img : numpy.ndarray
+            The binned image or fitted model to draw.
+        cmap : matplotlib.colors.LinearSegmentedColormap
+            Colormap applied to the image.
+        vmin, vmax : float
+            Lower and upper limits of the color scale.
+        label : str, optional
+            Panel title; omitted when empty.
         """
         ax.imshow(
             img,
@@ -1850,6 +2192,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         Always spans `_ZK_BAR_MIN`..`_ZK_BAR_MAX` regardless of the configured
         ``nollIndices`` so plots stay comparable across configs; indices that
         were not fitted plot as zero rather than dropping out.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes to draw the bar chart into.
+        zk_dev : numpy.ndarray
+            Noll-indexed deviations in micron (element j is Noll j); may be
+            shorter than `_ZK_BAR_MAX` or empty.
+        inset_label : str, optional
+            Timing/status text inset in the panel's corner; omitted when
+            empty.
         """
         bar_noll = list(range(_ZK_BAR_MIN, _ZK_BAR_MAX + 1))
         values = [zk_dev[j] if j < len(zk_dev) and np.isfinite(zk_dev[j]) else 0.0 for j in bar_noll]
@@ -1892,6 +2245,19 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         The image and model share one colour scale so they are visually
         comparable; the residual gets its own, and a symmetric colormap, since
         its scale is unrelated and usually much smaller.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            Figure the panels are added to.
+        inner : matplotlib.gridspec.GridSpecFromSubplotSpec
+            The corner's inner grid the panels draw into.
+        row_idx : int
+            Grid row of this plot row within the corner.
+        col_start : int
+            Grid column of this half's first (image) panel.
+        half : `_RowHalf`
+            The flattened inputs for this side of focus.
         """
         if half.img is None:
             for offset in range(4):
@@ -2003,6 +2369,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             The 2x2 corner grid is always drawn in full, but a detector that
             was not processed (or contributed no donuts) is absent from the
             catalog and so has no id to report.
+
+            Parameters
+            ----------
+            name : str
+                Detector name.
+
+            Returns
+            -------
+            str
+                ``"name (id)"``, or just the name when the detector has no
+                rows.
             """
             det_id = det_id_of.get(name)
             return name if det_id is None else f"{name} ({det_id})"
@@ -2161,6 +2538,21 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         Everything is drawn in the *displayed* frame, which is the binned image
         rotated by ``n_quarter``, so every overlay goes through
         `_binned_coord` then `_rot90_display`.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes for this detector's panel.
+        row : astropy.table.Row
+            This detector's image-table row, carrying its image and
+            orientation.
+        det_rows : astropy.table.QTable
+            The catalog rows for this detector, for the accepted/rejected
+            donut markers.
+        points : dict
+            Overlay sources by ``kind``, as `_overlay_points` returns.
+        layout : `_FpLayout`
+            Figure geometry, read for ``max_sources``.
         """
         image = np.asarray(row["image"], dtype=float)
         n_quarter = int(row["n_quarter"])
@@ -2180,7 +2572,18 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         ax.imshow(display, origin="upper", cmap="Greys_r", aspect="auto")
 
         def to_display(x_det: npt.ArrayLike, y_det: npt.ArrayLike) -> tuple[np.ndarray, np.ndarray]:
-            """Detector-frame coordinates to panel's display coordinates."""
+            """Detector-frame coordinates to panel's display coordinates.
+
+            Parameters
+            ----------
+            x_det, y_det : array_like
+                Detector-frame coordinates, in unbinned pixels.
+
+            Returns
+            -------
+            tuple [`numpy.ndarray`, `numpy.ndarray`]
+                ``(x_display, y_display)`` in the rotated panel frame.
+            """
             r, c = _binned_coord(x_det, y_det, row)
             return _rot90_display(r, c, height, width, n_quarter)
 
@@ -2310,6 +2713,17 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         while as a shaded region it shows at a glance that over half of each
         intra-focal sensor is unusable.
 
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes for this detector's panel.
+        row : astropy.table.Row
+            This detector's image-table row, carrying ``field_dist`` and
+            ``max_field_dist``.
+        n_quarter : int
+            Quarter turns applied to the panel, matching the image's
+            rotation.
+
         Returns
         -------
         float
@@ -2356,11 +2770,37 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         Empty outside ``paired`` mode -- see `_pair_links`.  A link whose
         either end is on a detector with no panel is skipped rather than
         half-drawn.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            Figure the link artists are added to.
+        axs : dict
+            Detector name to its `matplotlib.axes.Axes` panel.
+        image_rows : dict
+            Detector name to its image-table row, as `_detector_image_rows`
+            returns.
+        links : list of tuple
+            ``((det_name, x_det, y_det), (det_name, x_det, y_det))`` per pair,
+            as `_pair_links` returns.
         """
         from matplotlib.patches import ConnectionPatch
 
         def _xy(det_name: str, x_det: float, y_det: float) -> tuple[np.ndarray, np.ndarray]:
-            """One donut's position in its own panel's display coordinates."""
+            """One donut's position in its own panel's display coordinates.
+
+            Parameters
+            ----------
+            det_name : str
+                Detector the donut sits on.
+            x_det, y_det : float
+                Detector-frame coordinates, in unbinned pixels.
+
+            Returns
+            -------
+            tuple [`numpy.ndarray`, `numpy.ndarray`]
+                ``(x_display, y_display)`` in that panel's data coordinates.
+            """
             row = image_rows[det_name]
             image = np.asarray(row["image"])
             r, c = _binned_coord(x_det, y_det, row)
@@ -2389,10 +2829,35 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             )
 
     def _drawFocalPlaneLegend(self, fig: Figure, overlays: QTable | None) -> None:
-        """One shared legend for the selection funnel and the donut markers."""
+        """One shared legend for the selection funnel and the donut markers.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            Figure the legend is added to.
+        overlays : astropy.table.QTable or None
+            Selection overlays; when None or empty the funnel entries are
+            omitted from the legend.
+        """
         from matplotlib.lines import Line2D
 
         def marker(color: str, label: str, marker: str = "o") -> Line2D:
+            """Build one hollow-marker legend handle.
+
+            Parameters
+            ----------
+            color : str
+                Marker edge color.
+            label : str
+                Legend label.
+            marker : str, optional
+                Matplotlib marker style.
+
+            Returns
+            -------
+            matplotlib.lines.Line2D
+                A line-free handle carrying just the marker.
+            """
             return Line2D(
                 [0],
                 [0],

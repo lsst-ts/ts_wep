@@ -108,6 +108,17 @@ def _exposure_group(refs: Iterable[DatasetRef]) -> str:
     Returns ``""`` when the data IDs are not expanded (``hasFull()`` False),
     which is the only way the implied dimension can be missing; the group is
     metadata for the output table, not something worth failing a quantum over.
+
+    Parameters
+    ----------
+    refs : collections.abc.Iterable [lsst.daf.butler.DatasetRef]
+        The raw dataset refs of one corner set, all sharing an exposure.
+
+    Returns
+    -------
+    str
+        The butler ``group`` dimension value, or ``""`` when the data IDs
+        are not expanded.
     """
     for ref in refs:
         if ref.dataId.hasFull():
@@ -297,6 +308,15 @@ class DonutBlitzCornerConnections(
     )
 
     def __init__(self, *, config: Any = None) -> None:
+        """Drop the output connections the config disables.
+
+        Parameters
+        ----------
+        config : DonutBlitzCornerConfig or None, optional
+            The task config. When it disables Zernike, selection or plot
+            outputs, the corresponding connections are removed so a
+            pipeline run predicts only the datasets it will write.
+        """
         super().__init__(config=config)
         if config is not None and not config.doZernikesOutput:
             del self.zernikes
@@ -519,6 +539,13 @@ class DonutBlitzCornerConfig(
     )
 
     def setDefaults(self) -> None:
+        """Set the subtask config defaults this task relies on.
+
+        Tunes the ISR, astrometry and donut-selector subtasks for corner
+        wavefront sensing: a minimal ISR, an affine WCS fit with a bounded
+        reference set, and custom magnitude limits matching the monster
+        reference catalog's full filter names.
+        """
         super().setDefaults()
         self.isr.doAmpOffset = False
         self.isr.ampOffset.doApplyAmpOffset = False
@@ -598,6 +625,13 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
     combineZernikes: CombineZernikesSigmaClipTask
 
     def __init__(self, **kwargs: Any) -> None:
+        """Construct the task and its subtasks.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Keyword arguments forwarded to `lsst.pipe.base.PipelineTask`.
+        """
         super().__init__(**kwargs)
         self.makeSubtask("isr")
         self.makeSubtask("subtractBackground")
@@ -619,6 +653,22 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ) -> None:
+        """Fetch this quantum's inputs, run the task, and write its outputs.
+
+        Narrows the per-detector calibration refs to the detectors the raws
+        actually cover, fetches each input dataset type separately so the
+        I/O can be timed per type, then calls `run` and persists whichever
+        outputs the config enables.
+
+        Parameters
+        ----------
+        butlerQC : lsst.pipe.base.QuantumContext
+            The quantum context used to fetch inputs and put outputs.
+        inputRefs : lsst.pipe.base.InputQuantizedConnection
+            References to this quantum's input datasets.
+        outputRefs : lsst.pipe.base.OutputQuantizedConnection
+            References to this quantum's output datasets.
+        """
         self.log.info(
             _colorize(
                 "DonutBlitzCornerTask.runQuantum() on exposure %d",
@@ -725,9 +775,13 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             is accepted; processing covers exactly the detectors supplied here.
             Calibrations must be complete for every detector present.
         ptc : list of lsst.ip.isr.PhotonTransferCurveDataset
+            Photon transfer curve calibrations, one per detector.
         flat : list of lsst.afw.image.ExposureF
+            Flat-field calibrations, one per detector.
         linearizer : list of lsst.ip.isr.Linearizer
+            Linearity corrections, one per detector.
         crosstalk : list of lsst.ip.isr.CrosstalkCalib
+            Crosstalk coefficients, one per detector.
         ref_cat : list of DeferredDatasetHandle or SimpleCatalog
             Shards used for both WCS fitting and donut selection, loaded once
             per detector.  The WCS fit reads ``astromRefFilter`` (resolved as
@@ -740,13 +794,25 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             Total butlerQC.get() wall time in seconds, for logging and plot.
         butler_times : dict, optional
             Per-dataset butlerQC.get() times keyed by dataset type name.
-        num_cores : int
+        num_cores : int, optional
+            Number of cores for the cutout and wavefront pools; 1 runs
+            everything inline.
         exposure_group : str, optional
             Butler ``group`` of the corner exposure, for output meta.
         instrument : str, optional
             Butler ``instrument`` dimension, for output meta.  Taken from the
             dataId rather than ``visit_info.instrumentLabel`` because the
             dimension is authoritative where the header field can be blank.
+
+        Returns
+        -------
+        lsst.pipe.base.Struct
+            Struct with fields ``donuts`` (selected donuts),
+            ``wfResults`` (per-group fit results), ``cornerResults`` (the
+            per-donut catalog), ``zernikes`` (per-corner tables, empty
+            unless ``doZernikesOutput``), ``detectorImages`` and
+            ``selectionOverlays`` (focal-plane plot inputs), and ``plots``
+            (the diagnostic figures, None unless ``savePlots``).
         """
         self.log.info(
             _colorize(
@@ -900,6 +966,25 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         the parent, so what there is to index here is materialized exposures
         and calibrations rather than deferred handles.
 
+        Parameters
+        ----------
+        raws : list of lsst.afw.image.Exposure
+            Corner wavefront sensor raws, any subset of the 8 detectors.
+        ptc : list of lsst.ip.isr.PhotonTransferCurveDataset
+            Photon transfer curve calibrations.
+        flat : list of lsst.afw.image.ExposureF
+            Flat-field calibrations.
+        linearizer : list of lsst.ip.isr.Linearizer
+            Linearity corrections.
+        crosstalk : list of lsst.ip.isr.CrosstalkCalib
+            Crosstalk coefficients.
+
+        Returns
+        -------
+        _CornerInputs
+            The per-detector inputs indexed by detector name, valid by
+            construction.
+
         Raises
         ------
         RuntimeError
@@ -978,6 +1063,20 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
 
         The calibrations are the one input arriving keyed by detector *id*
         rather than name, which is why they are indexed apart from the rest.
+
+        Parameters
+        ----------
+        intrinsic_zernikes : list or None
+            The intrinsic Zernike calibrations, one per corner detector, or
+            None/empty when absent.
+        det_name_by_id : dict [int, str]
+            Detector id to name, covering exactly the raws present; a
+            calibration for any other detector is dropped.
+
+        Returns
+        -------
+        dict
+            The calibrations indexed by detector name.
         """
         if intrinsic_zernikes:
             self.log.info("Loaded %d intrinsic Zernike calibration(s).", len(intrinsic_zernikes))
@@ -1007,6 +1106,21 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         workers need no butler.  A shard load that fails is a warning and a
         ``None`` entry, not an abort: that detector falls back to blitz
         detection, the same as when no refcat was supplied at all.
+
+        Parameters
+        ----------
+        ref_cat : list
+            Reference catalog shards (deferred handles), or empty to skip
+            the WCS refit and refcat-based selection entirely.
+        raw_by_name : dict
+            The raw exposures by detector name, supplying each detector's
+            WCS, bounding box and epoch for the box load.
+
+        Returns
+        -------
+        dict [str, `lsst.ts.wep.blitz.utils.RefcatLoad` or None]
+            One loaded refcat per detector name, or None where the shard
+            load failed or no shards were supplied.
         """
         loader = None
         if not ref_cat:
@@ -1063,6 +1177,18 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         store population can be diffed.  Corner mode's is far shorter, because
         its workers inherit materialized exposures rather than handles and both
         its pools read the same store.
+
+        Parameters
+        ----------
+        inputs : _CornerInputs
+            The indexed per-detector inputs, supplying the materialized
+            corner detectors the workers inherit.
+        det_refcats : dict [str, `lsst.ts.wep.blitz.utils.RefcatLoad` or None]
+            One loaded refcat per detector name, or None where absent.
+        band : str
+            Exposure band, used to resolve the batoid optics model.
+        photo_filter_name : str
+            Reference-catalog filter column used for donut selection.
         """
         # The telescope is band- and quantum-fixed, and its 41 ms YAML load is
         # the part worth doing once here rather than per donut in a worker;
@@ -1095,6 +1221,19 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         nothing else: `_fork_map` returns it under ``deaths`` and it becomes a
         `CutoutResult.dead` here, so the result list still covers every
         detector asked for.
+
+        Parameters
+        ----------
+        det_names : tuple of str
+            The detectors to cut stamps on, one work unit each.
+        num_cores : int
+            Number of worker processes; 1 runs every detector inline.
+
+        Returns
+        -------
+        list of `lsst.ts.wep.blitz.dataStructures.CutoutResult`
+            One result per detector, including `CutoutResult.dead`
+            stand-ins for any worker that was killed.
         """
         self.log.info(
             "Running cutout workers on %d corner detectors with %d core(s)",
@@ -1150,6 +1289,17 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         selected-donut list, because it is already walking every result in the
         order the catalog wants them.  Splitting the two apart would mean two
         walks and a reader hunting for where `donuts` is built.
+
+        Parameters
+        ----------
+        results : list of `lsst.ts.wep.blitz.dataStructures.CutoutResult`
+            The per-detector cutout results to log and flatten.
+
+        Returns
+        -------
+        list of `lsst.ts.wep.blitz.dataStructures.Donut`
+            The selected donuts concatenated across every result, in
+            result order.
         """
         donuts = []
         for r in results:
@@ -1186,6 +1336,15 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         handed, and the intrinsics are a function of field position rather than
         of whether a donut passed selection.  Full-array mode likewise
         annotates both lists.
+
+        Parameters
+        ----------
+        results : list of `lsst.ts.wep.blitz.dataStructures.CutoutResult`
+            The per-detector cutout results whose donuts are annotated in
+            place.
+        intrinsic_zernikes_by_name : dict
+            Intrinsic Zernike calibrations by detector name; a detector
+            with no calibration leaves ``intrinsic_zk`` None.
         """
         for r in results:
             calib = intrinsic_zernikes_by_name.get(r.det_name)
@@ -1211,6 +1370,19 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         A single group runs inline even on many cores: the fork would cost more
         than it saves.  As in the cutout pool a killed worker becomes a dead
         record rather than taking the quantum with it.
+
+        Parameters
+        ----------
+        groups : list
+            The wavefront fit groups to fit, one work unit each.
+        num_cores : int
+            Number of worker processes; 1 (or a single group) runs inline.
+
+        Returns
+        -------
+        list of `lsst.ts.wep.blitz.dataStructures.WfGroupResult`
+            One result per group, including `WfGroupResult.dead`
+            stand-ins for any worker that was killed.
         """
         mode = self.config.wfEstimationMode
         self.log.info("WF dispatch (%s): %d work unit(s)", mode, len(groups))
@@ -1252,6 +1424,16 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         Corner mode saves both image column sets by default: its row count is
         small enough that they cost tens of MB, and the diagnostic plots want
         them.
+
+        Parameters
+        ----------
+        band : str
+            Exposure band, used to resolve the batoid optics model name.
+
+        Returns
+        -------
+        _CatalogOptions
+            The config-derived scalars the output catalog needs.
         """
         return _CatalogOptions(
             stamp_size=self.cutStamps.config.stampSize,
