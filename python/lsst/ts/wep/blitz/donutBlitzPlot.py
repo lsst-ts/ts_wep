@@ -630,7 +630,7 @@ class _WfFitInfo:
 
     @classmethod
     def not_fitted(cls) -> _WfFitInfo:
-        """The stand-in for a donut no fit consumed.
+        """The stand-in for a donut that no fit consumed.
 
         ``nfev=0`` is what the bar label tests to print "x0" rather than
         "ok"/"fail", so it is load-bearing, not merely an empty default.
@@ -1378,7 +1378,7 @@ def _wf_groups_from_catalog(catalog: QTable) -> tuple[list[_WfGroup], list[_WfGr
     plottable : list [`_WfGroup`]
         Fits that produced a model, ordered by ``group_id``.
     unfitted : list [`_WfGroup`]
-        Candidate donuts no fit consumed, each alone in its own group, in
+        Candidate donuts that no fit consumed, each alone in its own group, in
         catalog order.  Kept separate because the layout places them below
         the fitted rows rather than interleaved.
     """
