@@ -1,0 +1,6 @@
+Fixed ``CalcZernikesTask.empty`` so the ``average`` row of the Zernike
+table is always marked ``used=False``, including the all-donuts-fail
+path where an existing table is passed through. This keeps the
+invariant that an all-NaN average row is never flagged as ``used``, so
+downstream consumers (e.g. MTAOS) can reject it via the flag rather
+than inspecting the coefficient values.

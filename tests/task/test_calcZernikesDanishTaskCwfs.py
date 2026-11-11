@@ -538,6 +538,48 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         # The average row should be marked as not used
         self.assertFalse(zkTable["used"][0])
 
+    def testAllNaNAverageMarkedNotUsed(self) -> None:
+        """Test that when donuts are selected but every fit fails, the
+        average Zernikes are all NaN and the average row is marked as not
+        used.
+
+        Unlike ``testEmptyMarksAverageRowNotUsed`` (which exercises the
+        no-donut-selected path), this covers the all-fit-failure path where
+        ``_finalizeZernikes`` returns an empty result while carrying the
+        populated donut table through. The invariant guarded here -- an
+        all-NaN average row is never flagged ``used`` -- lets downstream
+        consumers (e.g. MTAOS) reject an all-NaN average via the ``used``
+        flag rather than inspecting the coefficient values.
+        """
+        task = self.task
+
+        # Prepare the state _finalizeZernikes relies on and estimate once.
+        task.stampsExtra = self.donutStampsExtra
+        task.stampsIntra = self.donutStampsIntra
+        task.intrinsicZernikesExtra, task.intrinsicZernikesIntra = self.intrinsicZernikes
+        zkCoeffRaw = task.estimateZernikes.run(self.donutStampsExtra, self.donutStampsIntra)
+
+        # Build a table and force every donut to be a fit failure so the
+        # combined average is never computed and stays all NaN.
+        zkTable = task.createZkTable(zkCoeffRaw)
+        nDonuts = len(zkTable) - 1  # exclude the leading average row
+        self.assertGreater(nDonuts, 0)
+        zkTable.meta["estimatorInfo"] = dict(zkCoeffRaw.wfEstInfo)
+        zkTable.meta["estimatorInfo"]["fit_success"] = [False] * nDonuts
+
+        result = task._finalizeZernikes(zkCoeffRaw, zkTable, QTable())
+        zk = result.zernikes
+        avgMask = zk["label"] == "average"
+
+        # Exactly one average row, and the average Zernikes are all NaN.
+        self.assertEqual(np.count_nonzero(avgMask), 1)
+        self.assertTrue(np.all(np.isnan(result.outputZernikesAvg)))
+        for j in task.nollIndices:
+            self.assertTrue(np.isnan(zk[f"Z{j}"][avgMask][0]))
+
+        # The invariant MTAOS relies on: all-NaN average => used is False.
+        self.assertFalse(bool(zk["used"][avgMask][0]))
+
     def testTriangleModeConfiguration(self) -> None:
         """Test that the triangleMode configuration option is respected."""
         # Create a config with triangle mode enabled
