@@ -93,6 +93,12 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
             columns = zkTable.meta["deviation_columns"]
         else:
             raise ValueError(f"Unknown zkClipType: {self.zkClipType}")
+        if len(columns) == 0:
+            raise ValueError(
+                f"zkClipType={self.zkClipType!r} selects "
+                f"meta['{self.zkClipType}_columns'], which is empty for this table. "
+                "Set zkClipType to a family the table actually carries."
+            )
         subTable = zkTable[zkTable["label"] != "average"][columns]
         zernikeArray = np.array([subTable[col] for col in columns]).T
 
@@ -126,10 +132,14 @@ class CombineZernikesSigmaClipTask(CombineZernikesBaseTask):
         self.metadata["maxZernClip"] = self.maxZernClip
         self.metadata["effMaxZernClip"] = effMaxZernClip
 
-        # Calculate means
-        for j in zkTable.meta["noll_indices"]:
-            self._setAvg(zkTable, f"Z{j}", np.nanmean, useIdx=keepIdx)
-            self._setAvg(zkTable, f"Z{j}_intrinsic", np.nanmean, useIdx=keepIdx)
-            self._setAvg(zkTable, f"Z{j}_deviation", np.nanmean, useIdx=keepIdx)
+        # Calculate means. Driven by the column lists rather than by
+        # noll_indices so that a table carrying only one of the three families
+        # combines rather than raising KeyError on the absent ones.
+        for col in (
+            zkTable.meta["opd_columns"]
+            + zkTable.meta["intrinsic_columns"]
+            + zkTable.meta["deviation_columns"]
+        ):
+            self._setAvg(zkTable, col, np.nanmean, useIdx=keepIdx)
 
         return zkTable

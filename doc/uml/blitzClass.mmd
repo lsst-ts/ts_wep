@@ -1,0 +1,42 @@
+classDiagram
+
+DonutBlitzCornerTask *-- DonutBlitzCornerConfig
+DonutBlitzCornerConfig *-- DonutBlitzCornerConnections
+DonutBlitzCornerConfig *-- BlitzDetectTask
+DonutBlitzCornerConfig *-- MeasureDonutCandidatesTask
+DonutBlitzCornerConfig *-- CutDonutStampsTask
+DonutBlitzCornerConfig *-- WavefrontFittingTask
+DonutBlitzCornerConfig *-- DonutBlitzPlotTask
+DonutBlitzCornerTask ..> CutoutResult
+DonutBlitzCornerTask ..> WfGroupResult
+
+DonutBlitzFamTask *-- DonutBlitzFamConfig
+DonutBlitzFamConfig *-- DonutBlitzFamConnections
+DonutBlitzFamConfig *-- BlitzDetectTask
+DonutBlitzFamConfig *-- MeasureDonutCandidatesTask
+DonutBlitzFamConfig *-- CutDonutStampsTask
+DonutBlitzFamConfig *-- WavefrontFittingTask
+DonutBlitzFamConfig *-- DonutBlitzPlotTask
+DonutBlitzFamTask ..> FamDetectorResult
+
+DonutBlitzPlotTask *-- DonutBlitzPlotConfig
+DonutBlitzPlotConfig *-- DonutBlitzPlotConnections
+DonutBlitzPlotOutputConnections <|-- DonutBlitzPlotConnections
+DonutBlitzPlotOutputConnections <|-- DonutBlitzCornerConnections
+DonutBlitzPlotOutputConnections <|-- DonutBlitzFamConnections
+
+BlitzDetectTask *-- BlitzDetectConfig
+MeasureDonutCandidatesTask *-- MeasureDonutCandidatesConfig
+CutDonutStampsTask *-- CutDonutStampsConfig
+WavefrontFittingTask *-- WavefrontFittingConfig
+
+CutDonutStampsTask ..> Donut
+WavefrontFittingTask ..> WfGroupResult
+
+CutoutResult *-- Donut
+CutoutResult *-- DetectorView
+DetectorView *-- SourceSet
+WfGroupResult *-- WfDonutResult
+FamDetectorResult *-- CutoutResult
+FamDetectorResult *-- WfGroupResult
+FamDetectorResult *-- Donut
