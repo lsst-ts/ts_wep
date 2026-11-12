@@ -583,12 +583,13 @@ def _build_donut_catalog(
         ``zk_deviation_ocs`` and ``zk_intrinsic_ocs`` in the optical coordinate
         system.  The deviations stop at the highest fitted Noll index, the
         intrinsics run to ``_ZK_JMAX``.  Deviation slots below Noll 4 are 0.0
-        on fitted rows and NaN on rows no fit consumed; intrinsic slots below
-        Noll 4 are always 0.0.
+        on fitted rows and NaN on rows that no fit consumed; intrinsic slots
+        below Noll 4 are always 0.0.
 
-        The two differ in how they treat a row no fit consumed.  Deviations are
-        all-NaN there, because there is no measurement.  Intrinsics are still
-        populated: they are a function of field position, not of the fit.
+        The two differ in how they treat a row that no fit consumed.
+        Deviations are all-NaN there, because there is no measurement.
+        Intrinsics are still populated: they are a function of field
+        position, not of the fit.
 
         Visit-level scalars are stored in ``table.meta``; per-detector scalars
         in ``table.meta["det_meta"]``, keyed by ``f"{det_name}_{visit_id}"``.
@@ -680,10 +681,11 @@ def _build_donut_catalog(
         # they become the zk_*_ccs array columns after the loop.
         zk_deviation_rows.append(wd.zk_dev[: zk_deviation_jmax + 1])
         # Deviations only exist where a fit ran, but intrinsics are a function
-        # of field position alone, so a row no fit consumed still has them --
-        # take them off the donut rather than inheriting `_NULL_WF_DONUT`'s
-        # all-NaN. Donuts whose intrinsic calib was missing have
-        # `intrinsic_zk is None` and get zeros, as an unsupplied index does.
+        # of field position alone, so a row that no fit consumed still has
+        # them -- take them off the donut rather than inheriting
+        # `_NULL_WF_DONUT`'s all-NaN. Donuts whose intrinsic calib was missing
+        # have `intrinsic_zk is None` and get zeros, as an unsupplied index
+        # does.
         zk_intrinsic_rows.append(wd.zk_intrinsic if wd is not _NULL_WF_DONUT else _dense_intrinsic(d))
 
         # Image columns are skipped entirely when not saving, so we do not pay
@@ -698,7 +700,7 @@ def _build_donut_catalog(
 
         wf_img = model_img = None
         if options.save_wf_images:
-            # Donuts no fit consumed (surplus) have no WF image from the
+            # Donuts that no fit consumed (surplus) have no WF image from the
             # fitter, so bin their stamp here with the same prep the fitter
             # would have applied. Keeps them plottable as data-only rows.
             if wd.img is not None:
@@ -799,7 +801,7 @@ def _build_donut_catalog(
     # coefficients: [:, j] is Noll j across donuts and [i] is donut i's
     # coefficient vector. Slots below Noll 4 are carried for indexing only:
     # 0.0 for intrinsics, and for deviations 0.0 on fitted rows (`_dense_dev`)
-    # but NaN on rows no fit consumed (`_NULL_WF_DONUT` is all-NaN).
+    # but NaN on rows that no fit consumed (`_NULL_WF_DONUT` is all-NaN).
     zk_deviation_um = np.array(zk_deviation_rows) * 1e6
     zk_intrinsic_um = np.array(zk_intrinsic_rows) * 1e6
     # Camera coordinate system, i.e. as fit.

@@ -31,7 +31,7 @@ import logging
 import os
 import signal
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass
 from functools import partial
 from types import FrameType
@@ -107,7 +107,7 @@ class _WfFitTimeoutError(Exception):
 
 
 @contextlib.contextmanager
-def _fit_timeout(seconds: float) -> Iterator[None]:
+def _fit_timeout(seconds: float) -> Generator[None]:
     """SIGALRM-based timeout context manager.
 
     Works on any POSIX platform, macOS included; it is Windows that has no
