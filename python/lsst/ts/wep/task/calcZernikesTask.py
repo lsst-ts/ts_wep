@@ -511,9 +511,14 @@ class CalcZernikesTask(pipeBase.PipelineTask, metaclass=abc.ABCMeta):
         if zernikeTable is None:
             zkTable = self.initZkTable()
             zkTable.meta = self.createZkTableMetadata()
-            zkTable["used"][zkTable["label"] == "average"] = False  # Mark average row as not used
         else:
             zkTable = zernikeTable
+
+        # An empty result has no usable average, so always mark the average
+        # row as not used. This holds the invariant that an all-NaN average
+        # row is never flagged "used", letting downstream consumers (e.g.
+        # MTAOS) reject it via the "used" flag rather than inspecting values.
+        zkTable["used"][zkTable["label"] == "average"] = False
 
         return pipeBase.Struct(
             outputZernikesRaw=np.atleast_2d(np.full(len(self.nollIndices), np.nan)),
