@@ -379,7 +379,8 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         # Check that the used column in the table is all False except for average row
         for i in range(1, len(zkCalc)):
             self.assertFalse(zkCalc["used"][i])
-        self.assertTrue(zkCalc["used"][0])  # Average row should still be True
+        # Average row should also be False since all donuts failed to fit
+        self.assertFalse(zkCalc["used"][0])
 
         # Check that all metadata values are still populated even with fit failures
         self.assertIn("estimatorInfo", zkCalc.meta)
@@ -403,6 +404,31 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertCountEqual(
             [WfAlgorithmName.Danish.value] * len(self.donutStampsExtra), zkCalc.meta["estimatorInfo"]["algo"]
         )
+
+    def testSuccessfulFitMarksAverageRowUsed(self) -> None:
+        """Test that an end-to-end run with successful fits marks the
+        average row as used.
+
+        This is the positive counterpart to
+        ``testFitFailureWithMaxIterations``: it exercises the full ``run``
+        path (rather than ``_finalizeZernikes`` directly) and confirms the
+        invariant in the other direction -- when at least one donut fits
+        successfully the combined average is finite and the average row is
+        flagged ``used`` so downstream consumers (e.g. MTAOS) accept it.
+        """
+        zkCalc = self.task.run(self.donutStampsExtra, self.donutStampsIntra, *self.intrinsicZernikes).zernikes
+
+        # At least one donut must have fit successfully for this to be a
+        # meaningful positive case.
+        fit_success = zkCalc.meta["estimatorInfo"]["fit_success"]
+        self.assertGreater(np.sum(fit_success), 0)
+
+        # The leading row is the average, it is marked used, and its
+        # Zernikes are finite (not the all-NaN empty result).
+        self.assertEqual(zkCalc["label"][0], "average")
+        self.assertTrue(zkCalc["used"][0])
+        for j in self.task.nollIndices:
+            self.assertTrue(np.isfinite(zkCalc[f"Z{j}"][0]))
 
     def testFinalizeZernikes(self) -> None:
         """Test that _finalizeZernikes masks fit failures, combines, blur
@@ -454,6 +480,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         self.assertIn("blur_clipped", result.zernikes.meta["estimatorInfo"])
         for j in nollIndices:
             self.assertTrue(np.all(np.isfinite(result.zernikes[f"Z{j}"][1:])))
+        self.assertTrue(result.zernikes["used"][0])  # average row is used
 
         # Partial failure: only the failed donut rows are replaced with NaN,
         # while the combined average stays finite thanks to the good donuts.
@@ -471,6 +498,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
                     else:
                         self.assertTrue(np.isnan(result.zernikes[f"Z{j}"][row]))
                         self.assertTrue(np.isnan(result.zernikes[f"Z{j}_deviation"][row]))
+            self.assertTrue(result.zernikes["used"][0])  # average row is used
 
         # All donuts fail: an empty result Struct is returned, carrying the
         # quality and Zernike tables through and marking every donut as not
@@ -682,6 +710,7 @@ class TestCalcZernikesDanishTaskCwfs(lsst.utils.tests.TestCase):
         # Verify the Zernikes table only has the average row with NaN values
         self.assertEqual(len(zkTable), 1)
         self.assertEqual(zkTable["label"][0], "average")
+        self.assertEqual(zkTable["used"][0], False)  # Average row should not be used
 
         # Check that all Zernike coefficients in the average row are NaN
         for j in task.nollIndices:
