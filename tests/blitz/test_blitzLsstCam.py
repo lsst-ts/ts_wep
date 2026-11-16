@@ -434,8 +434,13 @@ class TestAoiThroughput(unittest.TestCase):
             self.assertIs(factory, factories[0])
 
     def testCacheKeyCoversEveryGroupInputTheFactoryUses(self) -> None:
-        """Ignoring any one of these would silently mis-model a group."""
-        task = self._task(doAoiThroughput=True)
+        """Ignoring any one of these would silently mis-model a group.
+
+        ``rtp`` only reaches the factory as the spider angle when
+        ``modelSpiderShadows`` is on, so it is enabled here -- that is exactly
+        the regime in which rtp is an input the factory uses.
+        """
+        task = self._task(doAoiThroughput=True, modelSpiderShadows=True)
         base = task._build_wf_factory(self._group())
         for label, group in (
             ("band", self._group(band="i")),
