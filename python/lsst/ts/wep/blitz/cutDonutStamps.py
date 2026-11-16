@@ -325,6 +325,16 @@ class CutDonutStampsTask(pipeBase.Task):
 
         context = _ExposureContext.from_exposure(exposure)
         refcat_arrays = _RefcatArrays.from_table(refcat)
+        # Check refcat and log here instead of in _RefcatArrays.from_table,
+        # because that method doesn't have access to the exposure context
+        # for logging.
+        if refcat_arrays is None:
+            self.log.info(
+                "No refcat info available for sources in detector %s, "
+                "visit %d; nearby-source lists will be empty",
+                context.det_id,
+                context.visit_id,
+            )
 
         # Sort candidates flux-descending up front so the fill loop below keeps
         # brightest-first and can early-exit once both buckets are full,

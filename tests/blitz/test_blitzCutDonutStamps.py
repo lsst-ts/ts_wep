@@ -160,6 +160,19 @@ class TestNeighborSelfExclusion(unittest.TestCase):
         self.assertAlmostEqual(np.degrees(donuts[20].coord_ra), 30.1)
         self.assertAlmostEqual(np.degrees(donuts[20].coord_dec), -20.1)
 
+    def test_no_refcat_logs_the_detector_and_visit(self) -> None:
+        """The blitz-detection path says why the nearby lists came back empty.
+
+        The visit id is the one set on the fixture exposure; it names which
+        exposure the warning is about rather than leaving an empty list
+        unexplained.
+        """
+        with self.assertLogs(level="INFO") as captured:
+            _run(_measurements(with_refcat_values=False), None)
+        messages = "\n".join(captured.output)
+        self.assertIn("No refcat info available", messages)
+        self.assertIn("12345", messages)
+
     def test_blitz_path_has_no_refcat_information(self) -> None:
         """No refcat: no neighbours, magnitudes or position -- NaN, not zero.
 
