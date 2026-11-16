@@ -48,6 +48,7 @@ from .dataStructures import _ERROR_MAX_CHARS, Donut, FamDetectorResult, _WfGroup
 from .lsstCam import _LSSTCAM
 from .utils import (
     _COW_STORE,
+    _ZK_JMAX,
     IsrCalibs,
     RefcatLoad,
 )
@@ -485,7 +486,12 @@ def _fam_detector_worker(args: tuple) -> FamDetectorResult:
                 d.defocal_offsets = offsets
                 if intrinsic_calib is not None:
                     d.intrinsic_zk = np.squeeze(
-                        intrinsic_calib.getIntrinsicZernikes(np.degrees(d.thx_ccs), np.degrees(d.thy_ccs))
+                        intrinsic_calib.getIntrinsicZernikes(
+                            np.degrees(d.thx_ccs),
+                            np.degrees(d.thy_ccs),
+                            rotTelPos=_COW_STORE.rtp_deg,
+                            noll_indices=np.arange(4, _ZK_JMAX + 1),
+                        )
                     )
                 else:
                     d.intrinsic_zk = None

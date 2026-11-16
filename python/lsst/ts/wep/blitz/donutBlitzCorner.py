@@ -79,6 +79,7 @@ from .utils import (
     _COW_STORE,
     _CUTOUT_STAGE_KEYS,
     _INTRA_FOCAL_DET_IDS,
+    _ZK_JMAX,
     CORNER_DET_NAMES,
     CornerDetectorInputs,
     CowStore,
@@ -848,7 +849,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         visit_info = next(iter(inputs.raw_by_name.values())).getInfo().getVisitInfo()
         boresight_alt_rad = visit_info.boresightAzAlt.getLatitude().asRadians()
         rtp_rad = _rot_tel_pos_rad(visit_info)
-        rtp_deg = np.degrees(rtp_rad) if self.wavefrontFit.config.modelSpiderShadows else None
+        rtp_deg = np.degrees(rtp_rad)
 
         self._populateCowStore(inputs, det_refcats, band, photo_filter_name)
 
@@ -856,7 +857,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         results = self._runCutoutPool(inputs.det_names, num_cores)
         cutout_elapsed = time.perf_counter() - t_stage0
         donuts = self._logCutoutSummaries(results)
-        self._annotateDonuts(results, intrinsic_zernikes_by_name)
+        self._annotateDonuts(results, rtp_deg, intrinsic_zernikes_by_name)
 
         mode = self.config.wfEstimationMode
         results_by_det = {r.det_name: r.catalog for r in results}
@@ -1332,7 +1333,9 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
             donuts.extend(r.catalog)
         return donuts
 
-    def _annotateDonuts(self, results: list[CutoutResult], intrinsic_zernikes_by_name: dict) -> None:
+    def _annotateDonuts(
+        self, results: list[CutoutResult], rtp_deg: float, intrinsic_zernikes_by_name: dict
+    ) -> None:
         """Annotate each donut with its defocal offsets and intrinsics.
 
         Rejected donuts are annotated alongside the selected ones in both
@@ -1348,6 +1351,8 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         results : list of `lsst.ts.wep.blitz.dataStructures.CutoutResult`
             The per-detector cutout results whose donuts are annotated in
             place.
+        rtp_deg : float
+            The telescope's rotTelPos in degrees.
         intrinsic_zernikes_by_name : dict
             Intrinsic Zernike calibrations by detector name; a detector
             with no calibration leaves ``intrinsic_zk`` None.
@@ -1365,6 +1370,8 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                         calib.getIntrinsicZernikes(
                             np.degrees(d.thx_ccs),
                             np.degrees(d.thy_ccs),
+                            rotTelPos=rtp_deg,
+                            noll_indices=np.arange(4, _ZK_JMAX + 1),
                         )
                     )
                 else:

@@ -1137,13 +1137,14 @@ class WavefrontFittingTask(pipeBase.Task):
                 factory_kwargs["airmass"] = airmass
             else:
                 factory_kwargs["airmass"] = 1.2
+        rtp = group.rtp if self.config.modelSpiderShadows else None
         return factory_class(
             R_outer=_LSSTCAM.zk_r_outer,
             R_inner=_LSSTCAM.zk_r_inner,
             mask_params=self._mask_params,
             focal_length=_LSSTCAM.focal_length,
             pixel_scale=_LSSTCAM.pixel_size * self.config.binning,
-            spider_angle=group.rtp,
+            spider_angle=rtp,
             **factory_kwargs,
         )
 
