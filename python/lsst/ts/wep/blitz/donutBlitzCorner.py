@@ -283,7 +283,6 @@ class DonutBlitzCornerConnections(
         name="zernikes",
         storageClass="AstropyQTable",
         dimensions=("visit", "detector", "instrument"),
-        # Only the extra-focal visits are ever written...h
         multiple=True,
     )
     detectorImages = connectionTypes.Output(
@@ -604,7 +603,12 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
     selection, and stamp cutting on whichever corner detector raws are present,
     in parallel using a multiprocessing pool.  Reference catalogs are loaded in
     the parent process before forking and inherited by workers via
-    copy-on-write.
+    copy-on-write.  A second pool runs the wavefront fitting, also parallelized
+    by wavefront group.  The outputs are a per-donut catalog with all the
+    selection and fitting results, plus optional per-corner Zernike tables and
+    the detector-image and selection-overlay tables that feed the focal-plane
+    selection plot.  See the config for how to disable the Zernike and
+    selection outputs, or to save the diagnostic plots.
     """
 
     ConfigClass = DonutBlitzCornerConfig
@@ -766,7 +770,9 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         instrument: str = "",
     ) -> pipeBase.Struct:
         """Run ISR, WCS refit, catalog selection, and stamp cutting on the
-        corner raws that are present, in parallel.
+        corner raws that are present, in parallel. The cutouts run in one
+        pool over the corner detectors; a second pool then fits the
+        wavefronts, parallelized by wavefront group.
 
         Parameters
         ----------
