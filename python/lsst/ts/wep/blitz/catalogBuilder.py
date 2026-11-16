@@ -186,10 +186,12 @@ class _CatalogOptions:
         the width of the ``fit_bkg`` column via ``nbkg``; at -1 danish models
         no background and the column is dropped.
     save_stamps : bool
-        Include the un-binned ``stamp`` column. Much the largest column.
+        Include the un-binned ``stamp`` column. Returned as a 2D array per
+        row, so dominates the size if included.
     save_wf_images : bool
         Include ``wf_img`` and ``model_img``. Dropped as a pair: a model with
-        no data to compare it against is not useful.
+        no data to compare it against is not useful. If binning is 1
+        the wf_img is the same as the stamp.
     optics_model : str
         Batoid model the raytrace used, resolved for this visit's band rather
         than the ``{band}`` template, since the template is not what ran.
@@ -661,6 +663,7 @@ def _build_donut_catalog(
         all_donuts.append((d, candidate))
 
     if not all_donuts:
+        _log.info(f"No donuts to catalog for visit {visit_id}; returning empty table")
         return QTable()
 
     stamp_size = options.stamp_size
@@ -935,6 +938,7 @@ def _build_detector_image_table(
     """
     views = [(r, r.view) for r in results if r.view is not None]
     if not views:
+        _log.info(f"No detector views to catalog for visit {visit_id}; returning empty table")
         return QTable()
 
     # The `image` column is fixed-shape, so every row must agree. They do by
@@ -1048,6 +1052,7 @@ def _build_overlay_table(results: list, visit_id: int, instrument: str = "") -> 
             mags.extend(sources.mag.tolist())
 
     if not det_names:
+        _log.info(f"No overlay sources to catalog for visit {visit_id}; returning empty table")
         return QTable()
 
     table = QTable(

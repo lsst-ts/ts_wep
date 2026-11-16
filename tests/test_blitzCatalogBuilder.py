@@ -377,6 +377,18 @@ class TestBuildDonutCatalog(unittest.TestCase):
         table = _build_donut_catalog([], [], [], [], 1, _options())
         self.assertEqual(len(table), 0)
 
+    def testEmptyInputLogsTheVisitAtInfo(self) -> None:
+        """The empty-table early return says which visit it was for.
+
+        A visit that cataloged no donuts is otherwise silent, so the log line
+        is the only record that the builder ran at all.
+        """
+        with self.assertLogs(level="INFO") as captured:
+            _build_donut_catalog([], [], [], [], 7, _options())
+        self.assertEqual(len(captured.records), 1)
+        self.assertEqual(captured.records[0].levelname, "INFO")
+        self.assertIn("7", captured.records[0].getMessage())
+
     def testOneRowPerDonutIncludingRejected(self) -> None:
         accepted = _donut(donut_id=1)
         rejected = _donut(donut_id=2, rejected=True, rejected_snr=True)
@@ -1078,6 +1090,14 @@ class TestBuildDetectorImageTable(unittest.TestCase):
         self.assertEqual(len(table), 0)
         self.assertEqual(list(table.columns), [])
 
+    def testNoViewsLogsTheVisitAtInfo(self) -> None:
+        """The empty-table early return names the visit it was for."""
+        with self.assertLogs(level="INFO") as captured:
+            _build_detector_image_table([_result()], 7, "LSSTCam")
+        self.assertEqual(len(captured.records), 1)
+        self.assertEqual(captured.records[0].levelname, "INFO")
+        self.assertIn("7", captured.records[0].getMessage())
+
     def testDetectorsWithoutAViewAreAbsentNotPlaceheld(self) -> None:
         """A dead worker's detector has no image, and no row either."""
         table = _build_detector_image_table([_result_with_view("R00_SW0"), _result("R00_SW1")], 42, "LSSTCam")
@@ -1175,6 +1195,15 @@ class TestBuildOverlayTable(unittest.TestCase):
         empty = _view(refcat=None, detections=_source_set(0, 5), selections=_source_set(0, 6))
         table = _build_overlay_table([_result_with_view(view=empty)], 42, "LSSTCam")
         self.assertEqual(len(table), 0)
+
+    def testNoSourcesLogsTheVisitAtInfo(self) -> None:
+        """The empty-table early return names the visit it was for."""
+        empty = _view(refcat=None, detections=_source_set(0, 5), selections=_source_set(0, 6))
+        with self.assertLogs(level="INFO") as captured:
+            _build_overlay_table([_result_with_view(view=empty)], 7, "LSSTCam")
+        self.assertEqual(len(captured.records), 1)
+        self.assertEqual(captured.records[0].levelname, "INFO")
+        self.assertIn("7", captured.records[0].getMessage())
 
 
 if __name__ == "__main__":
