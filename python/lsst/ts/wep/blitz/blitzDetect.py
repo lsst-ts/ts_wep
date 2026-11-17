@@ -140,14 +140,16 @@ class BlitzDetectTask(pipeBase.Task):
             arr = exposure[trimmed_bbox].image.array
 
         # Detect on the histogram equalized image
-        heq = np.digitize(arr, np.nanquantile(arr, np.linspace(0, 1, 256)))
+        heq = np.digitize(np.nan_to_num(arr), np.nanquantile(arr, np.linspace(0, 1, 256)))
         det = correlate(heq.astype(float), template, mode="same")
         peaks = peak_local_max(
             det,
             min_distance=int(config.peakMinDistanceFactor * binned_donut_radius),
             exclude_border=int(config.peakExcludeBorderFactor * binned_donut_radius),
         )
-        peaks = peaks * float(binning)
+        # Convert binned coordinates back to un-binned coordinates
+        # Use extra shift to move to the center of the binned pixel
+        peaks = peaks * float(binning) + (binning - 1) / 2
         return pipeBase.Struct(
             detections=QTable(
                 {
