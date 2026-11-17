@@ -95,6 +95,12 @@ from .wavefrontFitting import WavefrontFittingTask
 # -/+3 mm, so half of them are in focus and half are too large for stampSize.
 _SCIENCE_PURPOSE = "SCIENCE"
 
+# LSSTCam science array is detector ids 0-188; 189-204 are the corner raft
+# guider and wavefront sensors.  Used only to classify a raw whose `detector`
+# dimension record is missing a purpose, so the absence cannot silently admit
+# a corner sensor into the science-only selection.
+_N_SCIENCE_DETECTORS = 189
+
 # The refcat lookup function below is called by the graph builder, not by the
 # task, so it has no `self.log`.
 _log = logging.getLogger(__name__)
@@ -550,10 +556,14 @@ class DonutBlitzFamConfig(
             "detectors, 21 workers), and a crowded detector or a "
             "wfEstimationMode pooling more donuts per fit is legitimately "
             "slower still, so tuning this down toward nominal would drop "
-            "healthy work.  One timed-out detector adds at most this to the "
-            "pool and so stays well inside hangTimeout; a run in which every "
-            "detector times out trips hangTimeout instead, which is the right "
-            "outcome for a systemic failure.  None waits indefinitely."
+            "healthy work.  Detectors run in waves of n_workers, so each "
+            "timed-out detector costs its wave at most this much of the "
+            "pool's wall-clock budget; the pool absorbs about "
+            "hangTimeout/unitTimeout of them (6 at the defaults) before the "
+            "cumulative time trips hangTimeout and the quantum is aborted.  "
+            "The bound on absorbed degradation is that ratio, not the "
+            "detector count, and tripping it is the right outcome once that "
+            "many detectors are failing.  None waits indefinitely."
         ),
         default=300.0,
         optional=True,
@@ -814,17 +824,24 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
         # Ascending exposure id: intra first.  But cross-check per quantum
         # rather than trusting the convention silently.
         intra_exp, extra_exp = exposures
-        self._checkDefocalOrder(raws_by_exp, intra_exp, extra_exp, group)
+        # Kept to stamp onto the catalog meta below, so a suspected sign flip
+        # is checkable straight off the output rather than only in the logs.
+        defocal_order_suspect = self._checkDefocalOrder(raws_by_exp, intra_exp, extra_exp, group)
 
         # --- 3. science array only ---
         # Done task-side so a data query that forgot to exclude the corner
-        # wavefront sensors is still correct rather than quietly wrong.
+        # wavefront sensors is still correct rather than quietly wrong.  Trust
+        # the detector record's purpose when present; when it is missing, fall
+        # back to the fixed LSSTCam numbering rather than assuming SCIENCE, so
+        # a missing record cannot admit a corner sensor into the selection.
         det_purpose: dict[int, str] = {}
         for ref in inputRefs.raws:
+            det = ref.dataId["detector"]
             record = ref.dataId.records.get("detector")
-            det_purpose[ref.dataId["detector"]] = (
-                str(record.purpose) if record is not None else _SCIENCE_PURPOSE
-            )
+            if record is not None:
+                det_purpose[det] = str(record.purpose)
+            elif det < _N_SCIENCE_DETECTORS:
+                det_purpose[det] = _SCIENCE_PURPOSE
         dets_by_exp = {exp: {ref.dataId["detector"] for ref in refs} for exp, refs in raws_by_exp.items()}
         all_dets = dets_by_exp[intra_exp] | dets_by_exp[extra_exp]
         det_ids = sorted(d for d in all_dets if det_purpose.get(d) == _SCIENCE_PURPOSE)
@@ -951,6 +968,10 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             visit_info=visit_info,
             instrument=str(quantumDataId["instrument"]),
         )
+        # True when observation_reason contradicted the intra-first order, so
+        # every Zernike sign in this catalog is suspect.  The warning is also
+        # logged; this makes it visible to anyone reading the catalog meta.
+        catalog.meta["defocal_order_suspect"] = defocal_order_suspect
 
         # Keyed to the extra-focal visit, 1:1 with groups. The intra ref is
         # predicted but deliberately left unproduced.
@@ -1019,7 +1040,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             handles[det] = butlerQC.get(ref)
         return handles
 
-    def _checkDefocalOrder(self, raws_by_exp: dict, intra_exp: int, extra_exp: int, group: Any) -> None:
+    def _checkDefocalOrder(self, raws_by_exp: dict, intra_exp: int, extra_exp: int, group: Any) -> bool:
         """Warn if ``observation_reason`` contradicts the intra-first order.
 
         The side of focus is assigned from the exposure id alone, because
@@ -1037,12 +1058,20 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
             Exposure id taken as extra-focal (the higher of the pair).
         group : `Any`
             The group dimension value, for the warning message.
+
+        Returns
+        -------
+        `bool`
+            `True` if ``observation_reason`` contradicts the intra-first
+            convention, so the caller can also flag it on the output catalog
+            rather than leaving it only in the logs.
         """
         reasons = {}
         for exp in (intra_exp, extra_exp):
             record = raws_by_exp[exp][0].dataId.records.get("exposure")
             reasons[exp] = (getattr(record, "observation_reason", "") or "").lower()
-        if "intra" in reasons[extra_exp] or "extra" in reasons[intra_exp]:
+        contradicted = "intra" in reasons[extra_exp] or "extra" in reasons[intra_exp]
+        if contradicted:
             self.log.warning(
                 "group=%s: observation_reason contradicts the intra-first "
                 "convention (exposure %d reason=%r taken as intra, %d reason=%r "
@@ -1053,6 +1082,7 @@ class DonutBlitzFamTask(pipeBase.PipelineTask):
                 extra_exp,
                 reasons[extra_exp],
             )
+        return contradicted
 
     def _populateCowStore(
         self,

@@ -35,6 +35,7 @@ returns NaN rather than raising.
 
 from __future__ import annotations
 
+import types
 import unittest
 import unittest.mock
 
@@ -337,6 +338,58 @@ class TestAggregates(FamLoggingTestCase):
         with unittest.mock.patch.object(self.task.log, "info") as info:
             self.task._logWorkerSummaries([])
         info.assert_not_called()
+
+
+def _raw_ref(reason: str | None, *, has_record: bool = True) -> types.SimpleNamespace:
+    """A raw dataset ref exposing just ``dataId.records['exposure']``.
+
+    `_checkDefocalOrder` reads only ``observation_reason`` off that record, so
+    nothing heavier than a namespace is needed. ``reason=None`` is a record
+    present with no reason set; ``has_record=False`` is no exposure record at
+    all, which ``records.get`` resolves to ``None``.
+    """
+    records = {"exposure": types.SimpleNamespace(observation_reason=reason)} if has_record else {}
+    return types.SimpleNamespace(dataId=types.SimpleNamespace(records=records))
+
+
+class TestDefocalOrderCheck(FamLoggingTestCase):
+    """`_checkDefocalOrder`: the bool behind meta['defocal_order_suspect'].
+
+    The side of focus is taken from the ascending exposure id; this guards the
+    one case that silently flips every Zernike sign -- an observation_reason
+    that disagrees with that convention -- and the value it returns is what the
+    task stamps onto the output catalog meta.
+    """
+
+    def _check(self, intra_reason: str | None, extra_reason: str | None) -> bool:
+        """Run the check with intra=1000, extra=1001 carrying these reasons."""
+        raws_by_exp = {1000: [_raw_ref(intra_reason)], 1001: [_raw_ref(extra_reason)]}
+        return self.task._checkDefocalOrder(raws_by_exp, 1000, 1001, "g")
+
+    def testConsistentOrderIsNotSuspect(self) -> None:
+        """Intra labelled intra, extra labelled extra: nothing to flag."""
+        self.assertFalse(self._check("intrafocal", "extrafocal"))
+
+    def testContradictingReasonIsSuspectAndWarns(self) -> None:
+        """Swapped labels flip every sign, so flag True and say so loudly."""
+        with self.assertLogs(self.task.log.name, level="WARNING") as cm:
+            suspect = self._check("extrafocal", "intrafocal")
+        self.assertTrue(suspect)
+        self.assertIn("contradicts the intra-first", "\n".join(cm.output))
+
+    def testEitherSideContradictingIsEnough(self) -> None:
+        """A single mislabelled side is enough to make the order suspect."""
+        with self.assertLogs(self.task.log.name, level="WARNING"):
+            self.assertTrue(self._check("extra", ""))
+        with self.assertLogs(self.task.log.name, level="WARNING"):
+            self.assertTrue(self._check("", "intra"))
+
+    def testMissingOrEmptyReasonIsNotSuspect(self) -> None:
+        """observation_reason is free-form and often blank: absence != flip."""
+        self.assertFalse(self._check(None, None))
+        self.assertFalse(self._check("", ""))
+        raws = {1000: [_raw_ref(None, has_record=False)], 1001: [_raw_ref(None, has_record=False)]}
+        self.assertFalse(self.task._checkDefocalOrder(raws, 1000, 1001, "g"))
 
 
 class TestPerGroupLogGating(unittest.TestCase):
