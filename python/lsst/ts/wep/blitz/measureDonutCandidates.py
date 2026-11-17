@@ -203,10 +203,15 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         bkg_list = []
 
         for row, col in zip(selections["centroid_y"], selections["centroid_x"]):
-            rmin, rmax = round(row) - half, round(row) + half + 1
-            cmin, cmax = round(col) - half, round(col) + half + 1
+            # A non-finite centroid (e.g. a detection that never centroided)
+            # has no stamp to measure, and round() raises on NaN; treat it like
+            # an out-of-border peak and emit NaNs rather than crash the loop.
+            finite = np.isfinite(row) and np.isfinite(col)
+            if finite:
+                rmin, rmax = round(row) - half, round(row) + half + 1
+                cmin, cmax = round(col) - half, round(col) + half + 1
 
-            if rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
+            if not finite or rmin < 0 or rmax > arr.shape[0] or cmin < 0 or cmax > arr.shape[1]:
                 flux_list.append(np.nan)
                 inner_flux_list.append(np.nan)
                 outer_flux_list.append(np.nan)
