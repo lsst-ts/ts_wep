@@ -432,7 +432,7 @@ class TestDetectorStatsLines(unittest.TestCase):
 
 
 class TestDonutAnnotation(unittest.TestCase):
-    """The three-line caption above one donut stamp."""
+    """The four-line caption above one donut stamp."""
 
     def _row(self, det_name: str = "R00_SW0", donut_id: int = 1) -> Row:
         catalog = _catalog()
@@ -442,10 +442,12 @@ class TestDonutAnnotation(unittest.TestCase):
 
     def testFiniteMeasurementsAreFormattedToTheirPlaces(self) -> None:
         text = _donut_annotation(self._row(), rejected=False)
-        snr_line, frac_line, id_line = text.split("\n")
-        # _donut() builds snr=500, inner=0.01, outer=0.02, osm=0.03.
+        snr_line, frac_line, mag_line, id_line = text.split("\n")
+        # _donut() builds snr=500, inner=0.01, outer=0.02, osm=0.03, mag=14,
+        # thx_ccs=0.01 rad, thy_ccs=0.02 rad -> fa=hypot(thx, thy) in degrees.
         self.assertEqual(snr_line.strip(), "snr=500")
         self.assertEqual(frac_line.split(), ["if=0.010", "of=0.020", "osm=0.030"])
+        self.assertEqual(mag_line.split(), ["mag=14.00", "fa=1.28"])
         self.assertEqual(id_line, "id=1")
 
     def testNonFiniteReadsAsQuestionMarkNotZero(self) -> None:
@@ -474,7 +476,7 @@ class TestDonutAnnotation(unittest.TestCase):
         """id=0 means "no id assigned", so the line is left blank."""
         row = self._row()
         row["donut_id"] = 0
-        self.assertEqual(_donut_annotation(row, rejected=False).split("\n")[2], "")
+        self.assertEqual(_donut_annotation(row, rejected=False).split("\n")[3], "")
 
 
 class TestWfRowPairs(unittest.TestCase):
@@ -626,7 +628,7 @@ class TestWfGroupsFromCatalog(unittest.TestCase):
     def testExplodedKeepsTheGroupScalarsPerDonut(self) -> None:
         """The non-paired layout path, which the fixture's mode does not use.
 
-        ``_makeWfDiagnosticPlot`` calls this for every mode whose groups do not
+        ``makeWfDiagnosticPlot`` calls this for every mode whose groups do not
         pair intra with extra, so it is worth pinning even though a paired
         fixture never reaches it.
         """

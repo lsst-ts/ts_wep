@@ -681,7 +681,7 @@ class _WfDonut:
 class _WfGroup:
     """One plot row's worth of fit output, rebuilt from the flat catalog.
 
-    This is the shape `_makeWfDiagnosticPlot`'s drawing code is written
+    This is the shape `makeWfDiagnosticPlot`'s drawing code is written
     against -- one fit, its donuts, and the Zernike deviations it produced.
     `_wf_groups_from_catalog` inverts `_buildCatalog` to recover it.
 
@@ -860,7 +860,7 @@ def _donut_rows_by_detector(catalog: QTable) -> list[tuple[str, QTable, QTable]]
     """Split the catalog per detector into accepted and rejected rows.
 
     Splits on ``candidate`` rather than on whether a fit consumed the donut:
-    this plot is about donut *selection*, so a candidate no fit used still
+    this plot is about donut *selection*, so a candidate that no fit used still
     belongs in the accepted panel, having passed every cut the plot reports.
 
     Parameters
@@ -928,12 +928,16 @@ def _detector_stats_lines(det_name: str, det_id: int, n_donuts: int, det_stats: 
 
 
 def _donut_annotation(row: Row, rejected: bool) -> str:
-    """The three-line stats caption drawn above one donut stamp.
+    """The four-line stats caption drawn above one donut stamp.
 
     A ``?`` in place of a number means the value is non-finite, which is how a
     measurement the cutout never made reads -- distinct from a real measurement
     that happens to be zero.  Returns the string rather than drawing it, so it
     is testable without a figure.
+
+    ``mag`` is the donut's photometric magnitude and reads ``?`` for a blitz
+    detection, which has no photometry; ``fa`` is its field-angle magnitude
+    ``hypot(thx_ccs, thy_ccs)`` in degrees.
 
     ``rejected`` is unused in the text itself: the rejection *flags* come off
     the row's own ``rejected_*`` columns, which an accepted row simply has none
@@ -950,13 +954,16 @@ def _donut_annotation(row: Row, rejected: bool) -> str:
     Returns
     -------
     str
-        The three-line stats caption for the donut stamp.
+        The four-line stats caption for the donut stamp.
     """
+    field_angle_deg = np.hypot(row["thx_ccs"].to_value(u.deg), row["thy_ccs"].to_value(u.deg))
     values = [
         ("snr", row["snr"], 0),
         ("if", row["inner_frac"], 3),
         ("of", row["outer_frac"], 3),
         ("osm", row["outer_sector_minmax_frac"], 3),
+        ("mag", row["photo_mag"].to_value(u.mag), 2),
+        ("fa", field_angle_deg, 2),
     ]
     parts = {
         name: (f"{name}={value:.{places}f}" if np.isfinite(value) else f"{name}=?")
@@ -975,7 +982,12 @@ def _donut_annotation(row: Row, rejected: bool) -> str:
     rej_str = f"[{'|'.join(flags)}]" if flags else ""
     donut_id = row["donut_id"]
     donut_id_str = f"id={donut_id}" if donut_id != 0 else ""
-    return f"{parts['snr']}  {rej_str}\n{parts['if']}  {parts['of']}  {parts['osm']}\n{donut_id_str}"
+    return (
+        f"{parts['snr']}  {rej_str}\n"
+        f"{parts['if']}  {parts['of']}  {parts['osm']}\n"
+        f"{parts['mag']}  {parts['fa']}\n"
+        f"{donut_id_str}"
+    )
 
 
 def _rot90_display(
@@ -1836,22 +1848,22 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         """
         catalog = QTable(catalog)
         return pipeBase.Struct(
-            donutDiagPlot=self._makeDonutDiagnosticPlot(catalog),
-            wfDiagPlot=self._makeWfDiagnosticPlot(catalog),
-            selectionDiagPlot=self._makeFocalPlanePlot(
+            donutDiagPlot=self.makeDonutDiagnosticPlot(catalog),
+            wfDiagPlot=self.makeWfDiagnosticPlot(catalog),
+            selectionDiagPlot=self.makeFocalPlanePlot(
                 catalog,
                 None if detector_images is None else QTable(detector_images),
                 None if selection_overlays is None else QTable(selection_overlays),
             ),
         )
 
-    def _makeDonutDiagnosticPlot(self, catalog: QTable) -> Figure | None:
+    def makeDonutDiagnosticPlot(self, catalog: QTable) -> Figure | None:
         """One figure with a section per detector.
 
         Layout per detector:
           - Left column: stats text (timing, WCS scatter, donut count, errors)
           - Remaining columns: donut stamps (up to maxDonuts), each annotated
-            with flux and field angle
+            with its SNR, shape-fraction cuts, magnitude, field angle and id
 
         Parameters
         ----------
@@ -2321,7 +2333,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         else:
             ax_bar.axis("off")
 
-    def _makeWfDiagnosticPlot(self, catalog: QTable) -> Figure | None:
+    def makeWfDiagnosticPlot(self, catalog: QTable) -> Figure | None:
         """A WF diagnostic figure modeled on the AOS donut-fits layout.
 
         Layout: 2×2 grid of corners (R00, R04, R40, R44).
@@ -2450,7 +2462,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         )
         return fig
 
-    def _makeFocalPlanePlot(
+    def makeFocalPlanePlot(
         self,
         catalog: QTable,
         detector_images: QTable | None,
