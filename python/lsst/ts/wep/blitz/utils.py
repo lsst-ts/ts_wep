@@ -388,9 +388,9 @@ class CowStore:
     invalidate between quanta.
 
     Because a field without a default is not a class attribute either, reading
-    one this mode never set raises `AttributeError` -- the equivalent of the
-    `KeyError` the string-keyed dict used to give, with no ``Optional``
-    standing in for "wrong mode".
+    a corner-mode-only field while in full-array mode (or vice versa) raises
+    `AttributeError` -- the equivalent of the `KeyError` the string-keyed dict
+    used to give, with no ``Optional`` standing in for "wrong mode".
 
     Keys are snake_case throughout: the store is not framework-introspected,
     so the submodule's rule applies.  Scalars mirror their camelCase config
