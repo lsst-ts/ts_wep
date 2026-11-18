@@ -219,7 +219,9 @@ def _bkg_free_model(
         kw = {k: v for k, v in fit_params.items() if k not in ("bkgs", "bkg")}
         kw[bkg_key] = zero_bkgs
         result = danish_model.model(**kw)
-        if isinstance(result, list):
+        # The multi-donut model returns a (nstar, npix, npix) stack (an
+        # ndarray, not a list); the single-donut model returns one image.
+        if is_multi:
             return result[donut_idx]
         return result
     except Exception:
@@ -542,7 +544,8 @@ class WavefrontFittingConfig(pexConfig.Config):
             "All three give bit-identical Jacobian *values*; "
             "they differ only in how those values are stored. A sparse "
             "Jacobian also requires an iterative tr_solver: scipy rejects it "
-            "under tr_solver='exact', which `validate` checks for."
+            "under tr_solver='exact', which `validate` checks for. The "
+            "sparse formats require danish >= 1.3.0."
         ),
         allowed={
             "dense": "model.jac -- a dense ndarray.",
