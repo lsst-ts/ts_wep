@@ -61,20 +61,19 @@ if TYPE_CHECKING:
     from lsst.afw.image import VisitInfo
 
 from .lsstCam import _LSSTCAM
-from .utils import CORNER_BY_DET_NAME, CORNER_DEFOCAL_BY_DET_NAME, CORNER_PAIRS
+from .utils import (
+    CORNER_BY_DET_NAME,
+    CORNER_DEFOCAL_BY_DET_NAME,
+    CORNER_PAIRS,
+    CORNER_WF_MODE_LABEL_PREFIX,
+)
 
-# Label prefix per `wfEstimationMode`. A row is only a "pair" in paired
-# mode; in the others it is one donut or a joint fit, and calling those
-# "pair" would misdescribe them. Safe to vary because every reader in
-# ts_wep tests `label == "average"` or `label != "average"` -- nothing
-# matches on the prefix. Keep these short: the column is <U12, so the
-# prefix plus the index must fit.
-_LABEL_PREFIX = {
-    "paired": "pair",
-    "unpaired": "donut",
-    "full_detector": "group",
-    "full_corner": "group",
-}
+# Row-label prefix per `wfEstimationMode`. Shares `utils.CORNER_WF_MODES` with
+# the corner task's ChoiceField, so the labels here cannot drift from the
+# config's allowed modes and `build_zernikes_tables` can index this directly
+# with no fallback. A reader only ever tests `label == "average"`; nothing
+# matches on the prefix.
+_LABEL_PREFIX = CORNER_WF_MODE_LABEL_PREFIX
 
 # The two sides of focus, as the column-name prefixes the schema uses.
 _SIDES = ("intra", "extra")
@@ -409,7 +408,7 @@ def build_zernikes_tables(
         the catalog are omitted entirely rather than written empty.
     """
     noll_indices = [int(j) for j in noll_indices]
-    prefix = _LABEL_PREFIX.get(wf_mode, "group")
+    prefix = _LABEL_PREFIX[wf_mode]
     deviation_columns = [f"Z{j}_deviation" for j in noll_indices]
     band = str(catalog["band"][0]) if len(catalog) > 0 else ""
 

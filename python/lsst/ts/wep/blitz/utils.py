@@ -65,6 +65,37 @@ CORNER_DEFOCAL_BY_DET_NAME = {
     name: ("extra" if name == sw0 else "intra") for sw0, sw1 in CORNER_PAIRS.values() for name in (sw0, sw1)
 }
 
+# Corner-mode wavefront dispatch modes, the single source of truth for both
+# the corner task's `wfEstimationMode` ChoiceField and the per-row label
+# prefix the `zernikes` table uses. Each entry is (allowed-doc, label-prefix):
+# `DonutBlitzCornerConfig` builds its ``allowed`` from the docs and
+# `zernikesTable` builds `_LABEL_PREFIX` from the prefixes, so the two cannot
+# drift and `build_zernikes_tables` can index the prefix map directly with no
+# fallback. A row is only a "pair" in paired mode; the others are one donut or
+# a joint fit, where "pair" would misdescribe them. Keep the prefixes short:
+# the table's label column is <U12, so the prefix plus the index must fit.
+CORNER_WF_MODES: dict[str, tuple[str, str]] = {
+    "paired": (
+        "Pair donuts from SW0/SW1 by SNR rank and dispatch as intra/extra pairs.",
+        "pair",
+    ),
+    "unpaired": (
+        "Dispatch individual donuts independently.",
+        "donut",
+    ),
+    "full_corner": (
+        "Dispatch all donuts from a corner (SW0+SW1, whichever are present) as one work unit.",
+        "group",
+    ),
+    "full_detector": (
+        "Dispatch all donuts on each detector as one work unit (8 fits per visit).",
+        "group",
+    ),
+}
+# Derived views: the ChoiceField ``allowed`` dict and the label-prefix map.
+CORNER_WF_MODE_ALLOWED = {mode: doc for mode, (doc, _) in CORNER_WF_MODES.items()}
+CORNER_WF_MODE_LABEL_PREFIX = {mode: prefix for mode, (_, prefix) in CORNER_WF_MODES.items()}
+
 # ANSI escape codes for colorizing log messages (see colorLog config field).
 _ANSI_RESET = "\033[0m"
 _ANSI_BOLD = "\033[1m"

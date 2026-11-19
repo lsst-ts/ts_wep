@@ -81,6 +81,7 @@ from .utils import (
     _INTRA_FOCAL_DET_IDS,
     _ZK_JMAX,
     CORNER_DET_NAMES,
+    CORNER_WF_MODE_ALLOWED,
     CornerDetectorInputs,
     CowStore,
     IsrCalibs,
@@ -527,15 +528,13 @@ class DonutBlitzCornerConfig(
         default=3,
     )
     wfEstimationMode: pexConfig.ChoiceField[str] = pexConfig.ChoiceField[str](
-        doc="Wavefront estimation dispatch mode.",
-        allowed={
-            "paired": "Pair donuts from SW0/SW1 by SNR rank and dispatch as intra/extra pairs.",
-            "unpaired": "Dispatch individual donuts independently.",
-            "full_corner": (
-                "Dispatch all donuts from a corner (SW0+SW1, whichever are present) as one work unit."
-            ),
-            "full_detector": "Dispatch all donuts on each detector as one work unit (8 fits per visit).",
-        },
+        doc=(
+            "Wavefront estimation dispatch mode. The allowed values are "
+            "sourced from `utils.CORNER_WF_MODES`, which also defines the "
+            "per-row label prefix the `zernikes` table writes for each mode, "
+            "so a mode added there shows up in both places at once."
+        ),
+        allowed=CORNER_WF_MODE_ALLOWED,
         default="paired",
     )
 
