@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import unittest
+from typing import Any
 
 import numpy as np
 
@@ -44,7 +45,7 @@ class _FakeMultiDonutModel:
         self.nbkg = nbkg
         self.stack = np.arange(nstar * npix * npix, dtype=float).reshape(nstar, npix, npix)
 
-    def model(self, **kwargs) -> np.ndarray:
+    def model(self, **kwargs: Any) -> np.ndarray:
         return self.stack
 
 
