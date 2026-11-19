@@ -110,6 +110,10 @@ class Donut:
         Per-cut rejection flags; True means the donut failed that cut.
     rejected_snr : bool, optional
         SNR rejection flag; True means the donut failed the SNR cut.
+    rejected_nan_intrinsics : bool, optional
+        Non-finite-intrinsics flag; True means the donut's measured intrinsic
+        Zernikes were not all finite (field-angle extrapolation can return
+        NaN past the first terms), so it was kept out of wavefront fitting.
     rejected : bool, optional
         True if any quality cut rejected the donut.
     """
@@ -163,6 +167,7 @@ class Donut:
     rejected_inner_frac: bool = False
     rejected_outer_frac: bool = False
     rejected_snr: bool = False
+    rejected_nan_intrinsics: bool = False
     rejected: bool = False
 
 

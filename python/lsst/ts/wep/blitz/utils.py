@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from lsst.afw.image import VisitInfo
     from lsst.afw.table import SimpleCatalog
 
-    from .dataStructures import Donut
+    from .dataStructures import CutoutResult, Donut
 
 _EXTRA_FOCAL_DET_IDS = frozenset({191, 195, 199, 203})
 _INTRA_FOCAL_DET_IDS = frozenset({192, 196, 200, 204})
@@ -880,6 +880,50 @@ def _dense_intrinsic(donut: Donut) -> np.ndarray:
         for idx in range(min(len(raw), n_slots)):
             out[idx + 4] = raw[idx] * 1e-6
     return out
+
+
+def _reject_nan_intrinsic_donuts(result: CutoutResult) -> int:
+    """Move accepted donuts with non-finite intrinsics out of the fit.
+
+    Field-angle extrapolation can return intrinsic Zernikes that are finite
+    for the first few terms and NaN beyond.  Left in the accepted catalog such
+    a donut would enter a wavefront group, and its NaN would ride into the
+    joint model's reference wavefront -- where it makes the fit return at its
+    initial guess (``fwhm=1.0``, zero deviation) while still reporting success.
+    Flag these ``rejected_nan_intrinsics`` and move them to the rejected
+    catalog, so they are still cataloged but never fit.
+
+    Donuts already rejected are left alone, and ``intrinsic_zk is None``
+    (uncalibrated) is not a rejection -- only a present-but-non-finite array
+    is.
+
+    Parameters
+    ----------
+    result : CutoutResult
+        One exposure of one detector; its ``catalog`` and ``rejected_catalog``
+        are mutated in place.
+
+    Returns
+    -------
+    int
+        How many donuts were moved to the rejected catalog.
+    """
+    kept: list[Donut] = []
+    newly_rejected: list[Donut] = []
+    for donut in result.catalog:
+        zk = donut.intrinsic_zk
+        if zk is not None and not np.all(np.isfinite(zk)):
+            donut.rejected_nan_intrinsics = True
+            donut.rejected = True
+            newly_rejected.append(donut)
+        else:
+            kept.append(donut)
+    # Slice-assign so the accepted-catalog list object (which callers alias)
+    # is filtered in place; a dataclass `==` over the donuts' array fields
+    # rules out list.remove here.
+    result.catalog[:] = kept
+    result.rejected_catalog.extend(newly_rejected)
+    return len(newly_rejected)
 
 
 def _bin_stamp_odd(stamp: np.ndarray, binning: int) -> np.ndarray:

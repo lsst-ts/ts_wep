@@ -772,6 +772,7 @@ def _build_donut_catalog(
             "rejected_inner_frac": d.rejected_inner_frac,
             "rejected_outer_frac": d.rejected_outer_frac,
             "rejected_snr": d.rejected_snr,
+            "rejected_nan_intrinsics": d.rejected_nan_intrinsics,
             # --- fit results --- group_*: a property of the joint fit,
             # replicated onto every row of the group. Dedupe on group_id before
             # averaging or summing these.

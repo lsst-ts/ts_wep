@@ -102,6 +102,28 @@ class _RecordingCalib:
         return np.full((1, len(noll_indices)), 7.0)
 
 
+class _FieldDependentNanCalib:
+    """Intrinsics that extrapolate to NaN only off one side of the field.
+
+    A real field-angle extrapolation failure strikes some field points and not
+    others.  Here any donut at negative ``field_x`` comes back with NaN past
+    the first four terms; the rest stay finite, so one detector can carry both
+    a healthy and a poisoned donut.
+    """
+
+    def getIntrinsicZernikes(
+        self,
+        field_x: float,
+        field_y: float,
+        rotTelPos: float = 0.0,
+        noll_indices: Any = None,
+    ) -> np.ndarray:
+        zk = np.full((1, len(noll_indices)), 7.0)
+        if field_x < 0.0:
+            zk[0, 4:] = np.nan
+        return zk
+
+
 class TestAnnotateDonutsIntrinsics(unittest.TestCase):
     """`_annotateDonuts` evaluates intrinsics at the rotated field point.
 
@@ -145,6 +167,40 @@ class TestAnnotateDonutsIntrinsics(unittest.TestCase):
         self._annotate(results, 23.0, {})
 
         self.assertIsNone(donut.intrinsic_zk)
+
+
+class TestAnnotateDonutsRejectsNanIntrinsics(unittest.TestCase):
+    """`_annotateDonuts` keeps NaN-intrinsics donuts out of the fit.
+
+    Field-angle extrapolation can return intrinsics that are finite for the
+    first terms and NaN beyond.  Such a donut must leave the accepted catalog
+    -- otherwise its NaN rides into the joint model's reference wavefront and
+    the fit returns at its initial guess (``fwhm=1.0``, zero deviation) while
+    still reporting success -- but it must stay cataloged as a rejected row.
+    """
+
+    def _annotate(self, results: list[Any], rtp_deg: float, calib_by_name: dict) -> None:
+        DonutBlitzCornerTask._annotateDonuts(object(), results, rtp_deg, calib_by_name)
+
+    def test_nan_intrinsics_donut_moves_to_rejected(self) -> None:
+        # `good` is at positive field_x (finite intrinsics); `bad` at negative
+        # field_x (NaN tail), per `_FieldDependentNanCalib`.
+        good = _minimalDonut(donut_id=1, thx_ccs=0.018, thy_ccs=0.009)
+        bad = _minimalDonut(donut_id=2, thx_ccs=-0.01, thy_ccs=0.02)
+        result = SimpleNamespace(det_name="R00_SW0", catalog=[good, bad], rejected_catalog=[])
+
+        self._annotate([result], 23.0, {"R00_SW0": _FieldDependentNanCalib()})
+
+        # `bad` left the accepted catalog and is flagged; `good` stayed clean.
+        # Identity checks: a dataclass `==` over the donuts' array fields is
+        # ambiguous.
+        self.assertEqual(len(result.catalog), 1)
+        self.assertIs(result.catalog[0], good)
+        self.assertEqual(len(result.rejected_catalog), 1)
+        self.assertIs(result.rejected_catalog[0], bad)
+        self.assertTrue(bad.rejected_nan_intrinsics)
+        self.assertTrue(bad.rejected)
+        self.assertFalse(good.rejected_nan_intrinsics)
 
 
 if __name__ == "__main__":

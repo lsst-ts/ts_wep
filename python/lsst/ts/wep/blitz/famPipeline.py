@@ -51,6 +51,7 @@ from .utils import (
     _ZK_JMAX,
     IsrCalibs,
     RefcatLoad,
+    _reject_nan_intrinsic_donuts,
 )
 
 _log = logging.getLogger(__name__)
@@ -495,7 +496,11 @@ def _fam_detector_worker(args: tuple) -> FamDetectorResult:
                     )
                 else:
                     d.intrinsic_zk = None
-            by_exp[exp] = accepted
+            # Keep donuts whose intrinsics extrapolated to NaN out of the fit:
+            # the NaN would silently poison the joint model. Moves them to the
+            # rejected catalog in place, so `accepted` is already filtered.
+            _reject_nan_intrinsic_donuts(result)
+            by_exp[exp] = result.catalog
 
         # --- group and fit, in this process ---
         groups, unmatched, path = _fam_group_donuts(

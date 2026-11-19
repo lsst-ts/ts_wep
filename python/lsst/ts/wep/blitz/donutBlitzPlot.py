@@ -976,6 +976,7 @@ def _donut_annotation(row: Row, rejected: bool) -> str:
             ("inner", row["rejected_inner_frac"]),
             ("outer", row["rejected_outer_frac"]),
             ("snr", row["rejected_snr"]),
+            ("nan_zk", row["rejected_nan_intrinsics"]),
         )
         if flagged
     ]

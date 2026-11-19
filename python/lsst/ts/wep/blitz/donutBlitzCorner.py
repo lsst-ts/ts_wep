@@ -86,6 +86,7 @@ from .utils import (
     IsrCalibs,
     RefcatLoad,
     _colorize,
+    _reject_nan_intrinsic_donuts,
     _resolve_color_log_enabled,
     _rot_tel_pos_rad,
 )
@@ -858,6 +859,10 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         cutout_elapsed = time.perf_counter() - t_stage0
         donuts = self._logCutoutSummaries(results)
         self._annotateDonuts(results, rtp_deg, intrinsic_zernikes_by_name)
+        # `_annotateDonuts` may have moved NaN-intrinsics donuts to the
+        # rejected catalog; drop them from the candidate list so they are
+        # cataloged as rejected rather than as unfit candidates.
+        donuts = [d for d in donuts if not d.rejected_nan_intrinsics]
 
         mode = self.config.wfEstimationMode
         results_by_det = {r.det_name: r.catalog for r in results}
@@ -1376,6 +1381,11 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                     )
                 else:
                     d.intrinsic_zk = None
+            # Keep donuts whose intrinsics extrapolated to NaN out of the fit:
+            # the NaN would silently poison the joint model. Moves them to the
+            # rejected catalog in place, so `r.catalog` is filtered before it
+            # reaches `_build_wf_groups`.
+            _reject_nan_intrinsic_donuts(r)
 
     def _runWfPool(self, groups: list, num_cores: int) -> list[WfGroupResult]:
         """Fit every wavefront group, forking if asked to.
