@@ -28,10 +28,7 @@ import pandas as pd
 
 from lsst.daf.butler import Butler
 from lsst.pex.config import FieldValidationError
-from lsst.ts.wep.task.donutSourceSelectorTask import (
-    DonutSourceSelectorTask,
-    DonutSourceSelectorTaskConfig,
-)
+from lsst.ts.wep.task.donutSourceSelectorTask import DonutSourceSelectorTask, DonutSourceSelectorTaskConfig
 from lsst.ts.wep.utils import getModulePath, readConfigYaml
 
 
@@ -377,6 +374,125 @@ class TestDonutSourceSelectorTask(unittest.TestCase):
         # Ascending magnitude order again: x=460 is brighter than x=200.
         self.assertBlendCentersEqual(testCatStruct.blendCentersX, [[460.0, 200.0]])
         self.assertBlendCentersEqual(testCatStruct.blendCentersY, [[200.0, 200.0]])
+
+    def testFluxlessRaisesWhenDisabled(self) -> None:
+        # A catalog without a flux field must raise when allowFluxless is
+        # False (the default), rather than silently selecting on geometry.
+        minimalCat, detector = self._createTestCat()
+        fluxlessCat = minimalCat.drop(columns=["g_flux"])
+
+        self.config.allowFluxless = False
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        with self.assertRaisesRegex(RuntimeError, "allowFluxless is False"):
+            self.task.selectSources(fluxlessCat, detector, self.filterName)
+
+    def testFluxlessSelection(self) -> None:
+        # Flux-less catalog: magnitude cuts are skipped, sources are ordered
+        # center-out, isolation/blending is decided purely on separation, and
+        # no blend centers are produced.  For this detector the field-distance
+        # (center-out) order of the four sources is x = 360, 190, 140, 100.
+        minimalCat, detector = self._createTestCat()
+        fluxlessCat = minimalCat.drop(columns=["g_flux"])
+
+        self.config.allowFluxless = True
+        self.config.minBlendedSeparation = 0
+
+        # Nothing within 30 px of anything else -> all four kept, no blends,
+        # even though no flux is present to apply magnitude cuts.
+        self.config.unblendedSeparation = 30
+        self.config.maxBlended = 0
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(fluxlessCat, detector, self.filterName)
+        self.assertListEqual(list(testCatStruct.selected), [True, True, True, True])
+        self.assertBlendCentersEqual(testCatStruct.blendCentersX, [[]] * 4)
+        self.assertBlendCentersEqual(testCatStruct.blendCentersY, [[]] * 4)
+
+        # Widen the radius so the first three donuts overlap.  With maxBlended
+        # 0 (full isolation required) only the isolated far donut survives; the
+        # three members of the cluster are all rejected.
+        self.config.unblendedSeparation = 100
+        self.config.maxBlended = 0
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(fluxlessCat, detector, self.filterName)
+        self.assertListEqual(list(testCatStruct.selected), [False, False, False, True])
+        self.assertBlendCentersEqual(testCatStruct.blendCentersX, [[]])
+        self.assertBlendCentersEqual(testCatStruct.blendCentersY, [[]])
+
+        # unblendedSeparation 70 leaves only adjacent pairs {100,140},
+        # {140,190} overlapping.  maxBlended 1 lets a one-neighbor donut
+        # through, and the more central member of each overlap wins: x=190
+        # (more central than x=140) and the isolated x=360 are kept.
+        self.config.unblendedSeparation = 70
+        self.config.maxBlended = 1
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(fluxlessCat, detector, self.filterName)
+        self.assertListEqual(list(testCatStruct.selected), [False, False, True, True])
+
+        # minBlendedSeparation rejects a candidate outright when a neighbor is
+        # closer than it, regardless of maxBlended.  x=190's nearest neighbor
+        # (x=140) is 50 px away: a floor of 45 allows it, 55 rejects it.
+        self.config.unblendedSeparation = 100
+        self.config.maxBlended = 5
+        self.config.minBlendedSeparation = 45
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(fluxlessCat, detector, self.filterName)
+        self.assertListEqual(list(testCatStruct.selected), [False, False, True, True])
+
+        self.config.minBlendedSeparation = 55
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(fluxlessCat, detector, self.filterName)
+        self.assertListEqual(list(testCatStruct.selected), [False, False, False, True])
+
+        # sourceLimit keeps the most central survivors first: with everything
+        # isolated and a limit of 1, the single kept source is the most
+        # central one (x=360), not the first in catalog order.
+        self.config.unblendedSeparation = 30
+        self.config.minBlendedSeparation = 0
+        self.config.maxBlended = 0
+        self.config.sourceLimit = 1
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.selectSources(fluxlessCat, detector, self.filterName)
+        self.assertListEqual(list(testCatStruct.selected), [False, False, False, True])
+
+    def testFluxlessRunIgnoresFilterName(self) -> None:
+        # The flux-less path never consults the filter, so run() succeeds even
+        # with a filter that has no flux field or policy entry, returning the
+        # empty-array blend centers of the geometry-only mode.
+        minimalCat, detector = self._createTestCat()
+        fluxlessCat = minimalCat.drop(columns=["g_flux"])
+
+        self.config.allowFluxless = True
+        self.config.unblendedSeparation = 30
+        self.config.minBlendedSeparation = 0
+        self.task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+        testCatStruct = self.task.run(fluxlessCat, detector, "nonexistentFilter")
+        self.assertListEqual(list(testCatStruct.selected), [True, True, True, True])
+        self.assertBlendCentersEqual(testCatStruct.blendCentersX, [[]] * 4)
+        self.assertBlendCentersEqual(testCatStruct.blendCentersY, [[]] * 4)
+
+    def testFluxUsedRegardlessOfAllowFluxless(self) -> None:
+        # When flux is present it is always used, so allowFluxless must not
+        # change the result: the flux-driven selection and blend centers are
+        # identical whether the flag is True or False.
+        minimalCat, detector = self._createTestCat()
+
+        self.config.useCustomMagLimit = True
+        self.config.unblendedSeparation = 100
+        self.config.minBlendedSeparation = 0
+        self.config.isolatedMagDiff = 0.0
+
+        results = {}
+        for allowFluxless in (False, True):
+            self.config.allowFluxless = allowFluxless
+            task = DonutSourceSelectorTask(config=self.config, name="Test Task")
+            struct = task.selectSources(minimalCat, detector, self.filterName)
+            results[allowFluxless] = (
+                list(struct.selected),
+                [list(centers) for centers in struct.blendCentersX],
+            )
+        self.assertEqual(results[True], results[False])
+        # Sanity check: the flux path really ran (brightest-of-cluster kept).
+        self.assertListEqual(results[True][0], [False, False, True, True])
 
     def testTaskRun(self) -> None:
         minimalCat, detector = self._createTestCat()
