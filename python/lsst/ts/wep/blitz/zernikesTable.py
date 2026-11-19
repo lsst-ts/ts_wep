@@ -178,9 +178,13 @@ def _init_table(noll_indices: Sequence[int]) -> QTable:
         all-NaN ``average`` row.
     """
     dtype: list[tuple] = [("label", "<U12"), ("used", np.bool_)]
+    # Add the position based structured (x, y) columns first
+    # These need their units added specially once the table
+    # is created, because QTable does not unit-check structured dtypes
     for side in _SIDES:
         dtype.append((f"{side}_field", pos2f_dtype))
         dtype.append((f"{side}_centroid", pos2f_dtype))
+    # Then the scalar columns
     for side in _SIDES:
         dtype.append((f"{side}_mag", "<f4"))
         dtype.append((f"{side}_sn", "<f4"))
