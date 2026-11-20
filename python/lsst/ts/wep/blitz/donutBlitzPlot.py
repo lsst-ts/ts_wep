@@ -961,7 +961,7 @@ def _donut_annotation(row: Row, rejected: bool) -> str:
         ("snr", row["snr"], 0),
         ("if", row["inner_frac"], 3),
         ("of", row["outer_frac"], 3),
-        ("osm", row["outer_sector_minmax_frac"], 3),
+        ("asym", row["outer_asym"], 3),
         ("mag", row["photo_mag"].to_value(u.mag), 2),
         ("fa", field_angle_deg, 2),
     ]
@@ -975,6 +975,7 @@ def _donut_annotation(row: Row, rejected: bool) -> str:
             ("sat", row["rejected_sat"]),
             ("inner", row["rejected_inner_frac"]),
             ("outer", row["rejected_outer_frac"]),
+            ("asym", row["rejected_outer_asym"]),
             ("snr", row["rejected_snr"]),
             ("nan_zk", row["rejected_nan_intrinsics"]),
         )
@@ -985,7 +986,7 @@ def _donut_annotation(row: Row, rejected: bool) -> str:
     donut_id_str = f"id={donut_id}" if donut_id != 0 else ""
     return (
         f"{parts['snr']}  {rej_str}\n"
-        f"{parts['if']}  {parts['of']}  {parts['osm']}\n"
+        f"{parts['if']}  {parts['of']}  {parts['asym']}\n"
         f"{parts['mag']}  {parts['fa']}\n"
         f"{donut_id_str}"
     )

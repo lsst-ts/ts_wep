@@ -81,7 +81,7 @@ def _donut(
         donut_id=donut_id,
         inner_frac=0.0,
         outer_frac=0.0,
-        outer_sector_minmax_frac=0.0,
+        outer_asym=0.0,
         donut_radius=_DONUT_RADIUS,
         snr=snr,
         bkg=0.0,

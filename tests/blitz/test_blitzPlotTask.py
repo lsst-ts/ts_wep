@@ -103,7 +103,7 @@ def _donut(det_name: str, donut_id: int, **overrides: Any) -> Donut:
         donut_id=donut_id,
         inner_frac=0.01,
         outer_frac=0.02,
-        outer_sector_minmax_frac=0.03,
+        outer_asym=0.03,
         donut_radius=60.0,
         snr=500.0,
         bkg=10.0,
@@ -443,10 +443,10 @@ class TestDonutAnnotation(unittest.TestCase):
     def testFiniteMeasurementsAreFormattedToTheirPlaces(self) -> None:
         text = _donut_annotation(self._row(), rejected=False)
         snr_line, frac_line, mag_line, id_line = text.split("\n")
-        # _donut() builds snr=500, inner=0.01, outer=0.02, osm=0.03, mag=14,
+        # _donut() builds snr=500, inner=0.01, outer=0.02, asym=0.03, mag=14,
         # thx_ccs=0.01 rad, thy_ccs=0.02 rad -> fa=hypot(thx, thy) in degrees.
         self.assertEqual(snr_line.strip(), "snr=500")
-        self.assertEqual(frac_line.split(), ["if=0.010", "of=0.020", "osm=0.030"])
+        self.assertEqual(frac_line.split(), ["if=0.010", "of=0.020", "asym=0.030"])
         self.assertEqual(mag_line.split(), ["mag=14.00", "fa=1.28"])
         self.assertEqual(id_line, "id=1")
 

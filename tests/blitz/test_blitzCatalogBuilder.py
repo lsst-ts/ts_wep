@@ -78,7 +78,7 @@ def _donut(det_name: str = "R00_SW0", det_id: int = 191, donut_id: int = 1, **ov
         donut_id=donut_id,
         inner_frac=0.01,
         outer_frac=0.02,
-        outer_sector_minmax_frac=0.03,
+        outer_asym=0.03,
         donut_radius=60.0,
         snr=500.0,
         bkg=10.0,

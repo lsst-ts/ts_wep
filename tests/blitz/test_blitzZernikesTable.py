@@ -75,7 +75,7 @@ def _donut(det_name: str, det_id: int, donut_id: int, snr: float, **overrides: A
         donut_id=donut_id,
         inner_frac=0.01,
         outer_frac=0.02,
-        outer_sector_minmax_frac=0.03,
+        outer_asym=0.03,
         donut_radius=60.0,
         snr=snr,
         bkg=10.0,

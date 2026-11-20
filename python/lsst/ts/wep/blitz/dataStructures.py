@@ -80,8 +80,10 @@ class Donut:
         1..N counter on the blitz-detection path.
     inner_frac, outer_frac : float
         Inner/outer flux-fraction geometry metrics.
-    outer_sector_minmax_frac : float
-        Outer-sector min/max flux-fraction metric.
+    outer_asym : float
+        Azimuthal asymmetry of the outer background annulus: the spread
+        between its brightest and faintest octant, as a fraction of the
+        donut's flux. Large for a blend or a close neighbor.
     donut_radius : float
         Measured donut radius in un-binned pixels.
     snr : float
@@ -108,6 +110,9 @@ class Donut:
         focus, ordered ``(detector, camera, m2)``.
     rejected_sat, rejected_inner_frac, rejected_outer_frac : bool, optional
         Per-cut rejection flags; True means the donut failed that cut.
+    rejected_outer_asym : bool, optional
+        Outer-asymmetry rejection flag; True means the donut failed the
+        ``outer_asym`` cut.
     rejected_snr : bool, optional
         SNR rejection flag; True means the donut failed the SNR cut.
     rejected_nan_intrinsics : bool, optional
@@ -131,7 +136,7 @@ class Donut:
     donut_id: int
     inner_frac: float
     outer_frac: float
-    outer_sector_minmax_frac: float
+    outer_asym: float
     donut_radius: float
     snr: float
     bkg: float
@@ -166,6 +171,7 @@ class Donut:
     rejected_sat: bool = False
     rejected_inner_frac: bool = False
     rejected_outer_frac: bool = False
+    rejected_outer_asym: bool = False
     rejected_snr: bool = False
     rejected_nan_intrinsics: bool = False
     rejected: bool = False

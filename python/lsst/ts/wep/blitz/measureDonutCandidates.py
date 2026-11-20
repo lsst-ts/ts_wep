@@ -81,8 +81,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
 
     For each candidate centroid, measures aperture flux and per-pixel noise
     over annular masks built once per call, then derives the ``inner_frac``,
-    ``outer_frac``, ``outer_sector_minmax_frac`` and ``snr`` metrics from
-    them.
+    ``outer_frac``, ``outer_asym`` and ``snr`` metrics from them.
 
     Measurement only: no row is dropped, no ordering is imposed, and no
     threshold is applied. `CutDonutStampsTask` is what cuts on these metrics
@@ -123,11 +122,11 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         pipeBase.Struct
             ``measurements`` : QTable
                 A copy of ``selections`` with measurement columns added
-                (``flux``, ``inner_frac``, ``outer_frac``,
-                ``outer_sector_minmax_frac``, ``snr``, plus raw ``*_flux``,
-                ``bkg_std``, ``bkg``). No rows are dropped and no ordering is
-                imposed -- selection and culling happen downstream. An empty
-                input is returned unmodified, without measurement columns.
+                (``flux``, ``inner_frac``, ``outer_frac``, ``outer_asym``,
+                ``snr``, plus raw ``*_flux``, ``bkg_std``, ``bkg``). No rows
+                are dropped and no ordering is imposed -- selection and
+                culling happen downstream. An empty input is returned
+                unmodified, without measurement columns.
         """
         if len(selections) == 0:
             return pipeBase.Struct(measurements=selections)
@@ -166,10 +165,10 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         -------
         QTable
             A copy of ``selections`` with measurement columns added
-            (``flux``, ``inner_flux``, ``outer_flux``,
-            ``outer_sector_minmax_flux``, ``bkg_std``, ``bkg``, ``snr``,
-            ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``).
-            Peaks too close to the image border get ``nan`` values.
+            (``flux``, ``inner_flux``, ``outer_flux``, ``outer_asym_flux``,
+            ``bkg_std``, ``bkg``, ``snr``, ``inner_frac``, ``outer_frac``,
+            ``outer_asym``). Peaks too close to the image border get ``nan``
+            values.
         """
         if donut_radius is None:
             donut_radius = _LSSTCAM.donut_radius
@@ -191,7 +190,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         outer_mask = (r > radius * cfg.bkgAnnulusInnerFrac) & (r < radius * cfg.bkgAnnulusOuterFrac)
         bkg_mask = inner_mask | outer_mask
         n_main = np.sum(main_mask)
-        outer_sector_masks = [
+        sector_masks = [
             outer_mask
             & (sector_angle >= -np.pi + k * np.pi / 4)
             & (sector_angle < -np.pi + (k + 1) * np.pi / 4)
@@ -199,7 +198,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         ]
 
         flux_list, inner_flux_list, outer_flux_list, bkg_std_list = [], [], [], []
-        outer_sector_minmax_list = []
+        outer_asym_list = []
         bkg_list = []
 
         for row, col in zip(selections["centroid_y"], selections["centroid_x"]):
@@ -215,7 +214,7 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
                 flux_list.append(np.nan)
                 inner_flux_list.append(np.nan)
                 outer_flux_list.append(np.nan)
-                outer_sector_minmax_list.append(np.nan)
+                outer_asym_list.append(np.nan)
                 bkg_std_list.append(np.nan)
                 bkg_list.append(np.nan)
                 continue
@@ -228,8 +227,8 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
             flux_list.append(np.sum(stamp_sub[main_mask]))
             inner_flux_list.append(np.sum(stamp_sub[inner_mask]))
             outer_flux_list.append(np.sum(stamp_sub[outer_mask]))
-            sector_fluxes = [np.sum(stamp_sub[m]) for m in outer_sector_masks]
-            outer_sector_minmax_list.append(max(sector_fluxes) - min(sector_fluxes))
+            sector_fluxes = [np.sum(stamp_sub[m]) for m in sector_masks]
+            outer_asym_list.append(max(sector_fluxes) - min(sector_fluxes))
 
             diff = (stamp_sub - np.roll(stamp_sub, 1, axis=0))[bkg_mask]
             q75, q25 = np.nanpercentile(diff, [75, 25])
@@ -239,14 +238,12 @@ class MeasureDonutCandidatesTask(pipeBase.Task):
         selections["flux"] = flux_list
         selections["inner_flux"] = inner_flux_list
         selections["outer_flux"] = outer_flux_list
-        selections["outer_sector_minmax_flux"] = outer_sector_minmax_list
+        selections["outer_asym_flux"] = outer_asym_list
         selections["bkg_std"] = bkg_std_list
         selections["bkg"] = bkg_list
         with np.errstate(invalid="ignore", divide="ignore"):
             selections["snr"] = (selections["flux"] / selections["bkg_std"]) / np.sqrt(n_main)
             selections["inner_frac"] = selections["inner_flux"] / selections["flux"]
             selections["outer_frac"] = selections["outer_flux"] / selections["flux"]
-            selections["outer_sector_minmax_frac"] = (
-                selections["outer_sector_minmax_flux"] / selections["flux"]
-            )
+            selections["outer_asym"] = selections["outer_asym_flux"] / selections["flux"]
         return selections

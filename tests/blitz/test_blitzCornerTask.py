@@ -55,7 +55,7 @@ def _minimalDonut(**overrides: Any) -> Donut:
         donut_id=1,
         inner_frac=0.0,
         outer_frac=0.0,
-        outer_sector_minmax_frac=0.0,
+        outer_asym=0.0,
         donut_radius=60.0,
         snr=100.0,
         bkg=0.0,

@@ -240,6 +240,14 @@ class CutDonutStampsConfig(pexConfig.Config):
         doc="Reject a donut if |outer_frac| exceeds this.",
         default=0.1,
     )
+    outerAsymThreshold: pexConfig.Field[float] = pexConfig.Field[float](
+        doc=(
+            "Reject a donut if outer_asym exceeds this -- that is, if the "
+            "outer background annulus is azimuthally lopsided by more than "
+            "this fraction of the donut's flux."
+        ),
+        default=1.0,
+    )
     minStampSnr: pexConfig.Field[float] = pexConfig.Field[float](
         doc="Reject a donut if its SNR falls below this.",
         default=100.0,
@@ -294,8 +302,8 @@ class CutDonutStampsTask(pipeBase.Task):
         measurements : QTable
             Measured candidates from the measurement task, with columns
             ``donut_id``, ``centroid_x``, ``centroid_y``, ``flux``,
-            ``inner_frac``, ``outer_frac``, ``outer_sector_minmax_frac``,
-            ``snr``, ``bkg_std``, ``bkg``, plus every column in
+            ``inner_frac``, ``outer_frac``, ``outer_asym``, ``snr``,
+            ``bkg_std``, ``bkg``, plus every column in
             `lsst.ts.wep.blitz.utils._REFCAT_COLUMNS` -- present whichever
             selection path ran, NaN-valued on the blitz-detection one.
             Photometric metrics are carried onto the Donut objects as-is; only
@@ -424,13 +432,18 @@ class CutDonutStampsTask(pipeBase.Task):
 
         rejected_sat = bool(np.any(context.mask[rmin:rmax, cmin:cmax] & context.sat_bit))
         rejected_inner_frac = bool(
-            not np.isfinite(row["inner_frac"]) or abs(row["inner_frac"]) > self.config.innerFracThreshold
+            not np.isfinite(val := row["inner_frac"]) or abs(val) > self.config.innerFracThreshold
         )
         rejected_outer_frac = bool(
-            not np.isfinite(row["outer_frac"]) or abs(row["outer_frac"]) > self.config.outerFracThreshold
+            not np.isfinite(val := row["outer_frac"]) or abs(val) > self.config.outerFracThreshold
+        )
+        rejected_outer_asym = bool(
+            not np.isfinite(val := row["outer_asym"]) or val > self.config.outerAsymThreshold
         )
         rejected_snr = bool(not np.isfinite(row["snr"]) or row["snr"] < self.config.minStampSnr)
-        rejected = rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr
+        rejected = (
+            rejected_sat or rejected_inner_frac or rejected_outer_frac or rejected_snr or rejected_outer_asym
+        )
 
         return Donut(
             det_name=context.detector.getName(),
@@ -446,7 +459,7 @@ class CutDonutStampsTask(pipeBase.Task):
             donut_id=row["donut_id"],
             inner_frac=row["inner_frac"],
             outer_frac=row["outer_frac"],
-            outer_sector_minmax_frac=row["outer_sector_minmax_frac"],
+            outer_asym=row["outer_asym"],
             donut_radius=donut_radius,
             snr=row["snr"],
             bkg=row["bkg"],
@@ -465,6 +478,7 @@ class CutDonutStampsTask(pipeBase.Task):
             rejected_sat=rejected_sat,
             rejected_inner_frac=rejected_inner_frac,
             rejected_outer_frac=rejected_outer_frac,
+            rejected_outer_asym=rejected_outer_asym,
             rejected_snr=rejected_snr,
             rejected=rejected,
         )

@@ -84,7 +84,7 @@ def _measurements(with_refcat_values: bool, d1_xy: tuple[float, float] = _D1_XY)
             "flux": np.array([500.0, 400.0]),
             "inner_frac": np.array([0.0, 0.0]),
             "outer_frac": np.array([0.0, 0.0]),
-            "outer_sector_minmax_frac": np.array([0.0, 0.0]),
+            "outer_asym": np.array([0.0, 0.0]),
             "snr": np.array([1e4, 1e4]),
             "bkg_std": np.array([1.0, 1.0]),
             "bkg": np.array([0.0, 0.0]),
