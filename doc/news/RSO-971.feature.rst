@@ -1,0 +1,4 @@
+Adds the blitz subpackage to ts.wep.  The blitz approach is to take raw exposures to Zernikes in a single task (with many subtasks).  Both corner mode and full-array mode are implemented.
+Speeds up the existing DonutSourceSelectorTask from ~1s to ~20ms.
+Adds the DonutDetectDiameterTask riffing off an idea from Craig Lage, but optimized for speed.
+Adds blitz plotting code.

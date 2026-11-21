@@ -12,10 +12,11 @@ See the docs: <https://ts-wep.lsst.io/>
 - python: 3.7.8
 - scientific pipeline (`newinstall.sh` from `master` branch)
 
-## Needed Package
+## Needed Packages
 
 - lsst_distrib (tag: `w_latest`)
 - [git-lfs](https://git-lfs.com/)
+- [danish](https://github.com/jmeyers314/danish) (version >= 1.2, >= 1.4 preferred)
 - [galsim](https://github.com/GalSim-developers/GalSim) (version >= 2.3; should be available from science pipelines v2.0.0 and up)
 - [batoid](https://jmeyers314.github.io/batoid/overview.html) (version >= 0.6.0)
 - [black](https://github.com/psf/black) (optional)
