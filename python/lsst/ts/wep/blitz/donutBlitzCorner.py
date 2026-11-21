@@ -882,7 +882,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
         run_elapsed = t_plot0 - t_run0
         self.log.info(
             _colorize(
-                "Timing summary: butler=%.1fs  refcat=%.1fs  cutout=%.1fs  danish=%.1fs  total=%.1fs",
+                "Timing summary: butler=%.3fs  refcat=%.3fs  cutout=%.3fs  danish=%.3fs  total=%.3fs",
                 _ANSI_BOLD,
                 _ANSI_CYAN,
                 enabled=self._colorLogEnabled,
@@ -1430,7 +1430,7 @@ class DonutBlitzCornerTask(pipeBase.PipelineTask):
                 wf_results.append(WfGroupResult.dead(group, reason, n_zk))
         elapsed_fits = [r.fit_elapsed for r in wf_results]
         self.log.info(
-            "WF results (%s): %d/%d succeeded  wall=%.1fs  fit_total=%.1fs  fit_mean=%.1fs",
+            "WF results (%s): %d/%d succeeded  wall=%.2fs  fit_total=%.2fs  fit_mean=%.3fs",
             mode,
             sum(r.success for r in wf_results),
             len(wf_results),

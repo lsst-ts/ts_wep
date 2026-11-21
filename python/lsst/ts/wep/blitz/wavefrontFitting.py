@@ -1387,7 +1387,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 )
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
-                self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
+                self.log.warning("WF %s FAILED in %.3fs: %s", label, elapsed, exc)
                 return _LstsqFitResult.failed(
                     n_zk=len(noll_indices),
                     n_donuts=n,
@@ -1423,7 +1423,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 ]
                 if self.config.logPerGroup:
                     self.log.info(
-                        "WF %s success=%s nfev=%d elapsed=%.1fs",
+                        "WF %s success=%s nfev=%d elapsed=%.3fs",
                         label,
                         bool(result.success),
                         result.nfev,
@@ -1460,7 +1460,7 @@ class WavefrontFittingTask(pipeBase.Task):
                 )
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
-                self.log.warning("WF %s FAILED in %.1fs: %s", label, elapsed, exc)
+                self.log.warning("WF %s FAILED in %.3fs: %s", label, elapsed, exc)
                 return _LstsqFitResult.failed(
                     n_zk=len(noll_indices),
                     n_donuts=n,

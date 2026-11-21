@@ -89,7 +89,7 @@ _COLOR_HEXAFOIL = "#D55E00"
 # `_COLOR_PHOTO_REFCAT` is reused for the refcat overlay: it already means
 # exactly that on the donut stamps, so the two plots agree. The rest stay
 # within the Okabe-Ito palette.
-_COLOR_DETECTION = "#0072B2"
+_COLOR_DETECTION = "#E69F00"
 _COLOR_SELECTION = "#CC79A7"
 _COLOR_ACCEPTED = "#009E73"
 # Deliberately *not* `_COLOR_PHOTO_REFCAT`, which the refcat overlay already
@@ -97,15 +97,27 @@ _COLOR_ACCEPTED = "#009E73"
 # circles it crosses. Yellow is the palette's most distinct remaining entry and
 # reads against both the grey image and the other overlays.
 _COLOR_PAIR_LINK = "#F0E442"
-_COLOR_FIELD_LIMIT = "#E69F00"
+# Neutral, not a palette hue: the dimming wash over the excluded region is what
+# carries the meaning, so this curve only marks where that wash starts and
+# should not compete with the overlays.
+_COLOR_FIELD_LIMIT = "#FFFFFF"
+
+# Opacity of the black wash over the vignetting-excluded region, and the
+# z-order it draws at. Above the image, below the overlay markers (collections
+# default to 1), so the pixels dim but the donut markers on top of them stay
+# full strength.
+_FIELD_LIMIT_VEIL_ALPHA = 0.35
+_FIELD_LIMIT_VEIL_ZORDER = 0.5
 
 # The funnel's marker style per stage, as
 # ``(kind, color, marker, size, alpha, linewidth)``, widest stage first so the
 # narrow ones draw on top. Size grows along the funnel so the stages nest as
-# visibly concentric rings rather than competing at one scale.
+# visibly concentric rings rather than competing at one scale. The detection
+# stage is a square so it separates from the refcat circles it sits inside by
+# shape as well as by color.
 _FP_FUNNEL_STYLES = (
     ("refcat", _COLOR_PHOTO_REFCAT, "o", 15.0, 0.55, 0.9),
-    ("detection", _COLOR_DETECTION, "o", 46.0, 0.85, 0.7),
+    ("detection", _COLOR_DETECTION, "s", 46.0, 0.85, 0.9),
     ("selection", _COLOR_SELECTION, "o", 78.0, 0.95, 0.9),
 )
 
@@ -807,7 +819,7 @@ class _RowHalf:
             fwhm=fit_info.fwhm,
             blend_frac=donut.blend_frac if donut else float("nan"),
             zk_dev=group.zk_dev if group is not None else _NO_ZK,
-            bar_label=f"t={fit_info.elapsed:.1f}s {status} nfev={fit_info.nfev}",
+            bar_label=f"t={fit_info.elapsed:.2f}s {status} nfev={fit_info.nfev}",
         )
 
 
@@ -2453,13 +2465,13 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         proc_total = refcat_elapsed + cutout_elapsed + danish_elapsed
         bt = butler_times or {}
         butler_line = (
-            "  ".join(f"{k}={v:.1f}s" for k, v in bt.items() if v > 0.0) or f"total={butler_elapsed:.1f}s"
+            "  ".join(f"{k}={v:.2f}s" for k, v in bt.items() if v > 0.0) or f"total={butler_elapsed:.2f}s"
         )
         fig.suptitle(
             f"WF fits  visit={visit_id}  mode={wf_mode}\n"
             f"butler.get:  {butler_line}\n"
-            f"refcat={refcat_elapsed:.1f}s  cutout={cutout_elapsed:.1f}s  "
-            f"danish={danish_elapsed:.1f}s  proc_total={proc_total:.1f}s",
+            f"refcat={refcat_elapsed:.2f}s  cutout={cutout_elapsed:.2f}s  "
+            f"danish={danish_elapsed:.2f}s  proc_total={proc_total:.2f}s",
             fontsize=7,
         )
         return fig
@@ -2679,7 +2691,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # ascending would undo the flip the `imshow` above depends on, which is
         # how the mirrored version of this plot came about.
         ax.set_ylim(display.shape[0] - 0.5, -0.5)
-        excluded_frac = self._drawFieldLimit(ax, row, n_quarter)
+        self._drawFieldLimit(ax, row, n_quarter)
 
         det_name = str(row["det_name"])
         defocal = CORNER_DEFOCAL_BY_DET_NAME.get(det_name, "")
@@ -2687,11 +2699,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         # det_id is -1 for a detector that produced no donuts, since the table
         # reads it off one of them; omit it rather than print the placeholder.
         label = f"{det_name} ({det_id}) {defocal}" if det_id >= 0 else f"{det_name} {defocal}"
-        # How much of this sensor the vignetting cut removes. Worth stating as
-        # a number: it is ~53% on an intra-focal sensor against ~5% on an
-        # extra-focal one, which is a big asymmetry to leave to the eye.
-        if np.isfinite(excluded_frac) and excluded_frac > 0:
-            label += f"  [{100 * excluded_frac:.0f}% vignetted]"
         ax.text(
             0.02,
             0.98,
@@ -2716,12 +2723,12 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
                 ha="left",
             )
 
-    def _drawFieldLimit(self, ax: Axes, row: Row, n_quarter: int) -> float:
-        """Shade and outline the region the vignetting cut excludes.
+    def _drawFieldLimit(self, ax: Axes, row: Row, n_quarter: int) -> None:
+        """Dim and outline the region the vignetting cut excludes.
 
         ``field_dist`` is a grid on the same pixel grid as the image, so it
         takes the same rotation and needs no coordinate transform of its own.
-        Shading it rather than outlining a boundary curve is what makes the
+        Dimming it rather than outlining a boundary curve is what makes the
         cut legible: the boundary is an arc of ~31000 px radius across a 4072
         px sensor, so as a line it is an unremarkable near-straight chord,
         while as a shaded region it shows at a glance that over half of each
@@ -2737,31 +2744,29 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
         n_quarter : int
             Quarter turns applied to the panel, matching the image's
             rotation.
-
-        Returns
-        -------
-        float
-            Fraction of the detector excluded, for the panel's label.  NaN when
-            the grid is unavailable.
         """
         field_dist = np.asarray(row["field_dist"].to_value(u.deg), dtype=float)
         limit = float(row["max_field_dist"].to_value(u.deg))
         if not np.isfinite(field_dist).any():
-            return float("nan")
+            return
 
         excluded = np.rot90(field_dist, -n_quarter).T > limit
         if not excluded.any():
-            return 0.0
+            return
 
-        # Hatched overlay rather than a flat tint: the underlying pixels stay
-        # readable, which matters because donuts do land in this region and get
-        # cut, and seeing them is the point.
-        ax.contourf(
-            excluded.astype(float),
-            levels=[0.5, 1.5],
-            colors="none",
-            hatches=["////"],
-            extend="neither",
+        # A translucent black wash rather than an opaque fill or a hatch: the
+        # underlying pixels stay readable, which matters because donuts do land
+        # in this region and get cut, and seeing them is the point. Drawn as an
+        # RGBA image on the panel's own pixel grid, so it needs no extent of
+        # its own and its edge follows the mask exactly.
+        veil = np.zeros(excluded.shape + (4,), dtype=float)
+        veil[..., 3] = np.where(excluded, _FIELD_LIMIT_VEIL_ALPHA, 0.0)
+        ax.imshow(
+            veil,
+            origin="upper",
+            aspect="auto",
+            interpolation="nearest",
+            zorder=_FIELD_LIMIT_VEIL_ZORDER,
         )
         ax.contour(
             excluded.astype(float),
@@ -2770,7 +2775,6 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             linewidths=1.2,
             linestyles="--",
         )
-        return float(excluded.mean())
 
     def _drawPairLinks(
         self,
@@ -2890,7 +2894,7 @@ class DonutBlitzPlotTask(pipeBase.PipelineTask):
             handles += [
                 marker(color, label, marker=mk)
                 for (_, color, mk, _, _, _), label in zip(
-                    _FP_FUNNEL_STYLES, ("refcat", "blitz detection", "selected")
+                    _FP_FUNNEL_STYLES, ("refcat", "detected", "selected")
                 )
             ]
         handles += [
